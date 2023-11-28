@@ -121,7 +121,7 @@ class GeGLU(Module):
     Attributes:
         features: the number of output features (default: None).
     """
-    output_dim: int = None
+    output_dim: int = -1
 
     @compact
     def __call__(self, inputs: Array) -> Array:
@@ -133,7 +133,7 @@ class GeGLU(Module):
         Returns:
             The transformed input.
         """
-        if self.output_dim is None:
+        if self.output_dim == -1:
           output_dim = inputs.shape[-1]
         else:
             output_dim = self.output_dim
