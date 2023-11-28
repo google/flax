@@ -54,9 +54,9 @@ class ActivationTest(parameterized.TestCase):
 
   def test_geglu_with_dim_contraction(self):
     rng = random.key(0)
-    x = jnp.array([[0.123,0.234], [0.456,0.789]])
-    act = nn.GeGLU(1)
-    expected_result = jnp.array([[0.00224223], [0.0307451 ]])
+    x = jnp.ones((4, 6, 5))
+    act = nn.GeGLU(3)
+    expected_shape = (4, 6, 3)
     y, _ = act.init_with_output(rng, x)
     assert_array_almost_equal(y, expected_result)
 
