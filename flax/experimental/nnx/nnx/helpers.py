@@ -80,9 +80,9 @@ class Dict(Module, tp.Mapping[str, A]):
 
 
 class Sequence(Module, tp.Generic[A]):
-  def __init__(self, iterable: tp.Iterable[A]):
+  def __init__(self, layers: tp.Iterable[A]):
     i = 0
-    for i, value in enumerate(iterable):
+    for i, value in enumerate(layers):
       setattr(self, str(i), value)
     self._length = i + 1
 

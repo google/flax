@@ -21,7 +21,7 @@ from types import MappingProxyType
 
 @dataclasses.dataclass
 class FlagsContext(threading.local):
-  flags_stack: tp.List[MappingProxyType[str, tp.Hashable]] = dataclasses.field(
+  flags_stack: tp.List[MappingProxyType[str, tp.Any]] = dataclasses.field(
     default_factory=lambda: [MappingProxyType({})]
   )
 
@@ -29,10 +29,10 @@ class FlagsContext(threading.local):
 FLAGS_CONTEXT = FlagsContext()
 
 
-class Flags(tp.Mapping[str, tp.Hashable]):
+class Flags(tp.Mapping[str, tp.Any]):
   __slots__ = ()
 
-  def __getitem__(self, name: str) -> tp.Hashable:
+  def __getitem__(self, name: str) -> tp.Any:
     current_flags = FLAGS_CONTEXT.flags_stack[-1]
     if name not in current_flags:
       raise ValueError(f'Unknown Flag: {name}')
@@ -50,7 +50,7 @@ class Flags(tp.Mapping[str, tp.Hashable]):
     return name in FLAGS_CONTEXT.flags_stack[-1]
 
   @contextmanager
-  def __call__(self, **kwargs: tp.Hashable):
+  def __call__(self, **kwargs: tp.Any):
     current_flags = FLAGS_CONTEXT.flags_stack[-1]
     FLAGS_CONTEXT.flags_stack.append(
       MappingProxyType(dict(current_flags, **kwargs))
@@ -60,9 +60,7 @@ class Flags(tp.Mapping[str, tp.Hashable]):
     finally:
       FLAGS_CONTEXT.flags_stack.pop()
 
-  def get(
-    self, name: str, default: tp.Hashable = None
-  ) -> tp.Optional[tp.Hashable]:
+  def get(self, name: str, default: tp.Any = None) -> tp.Optional[tp.Any]:
     return FLAGS_CONTEXT.flags_stack[-1].get(name, default)
 
 

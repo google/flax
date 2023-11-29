@@ -12,7 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Copyright 2023 The Flax Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from __future__ import annotations
+
 import typing as tp
+from types import MappingProxyType
 
 import jax
 import jax.numpy as jnp
@@ -20,7 +36,7 @@ import numpy as np
 from jax import lax
 
 from flax.experimental import nnx
-from flax.experimental.nnx.nnx import rnglib
+from flax.experimental.nnx.nnx import rnglib, variables
 from flax.experimental.nnx.nnx.module import Module
 from flax.experimental.nnx.nnx.nn import dtypes, initializers
 
@@ -28,6 +44,8 @@ Array = jax.Array
 KeyArray = jax.Array
 Shape = tp.Tuple[int, ...]
 Dtype = tp.Any  # this could be a real type?
+Axis = int
+Size = int
 PrecisionLike = tp.Union[
   None,
   str,
@@ -75,6 +93,198 @@ def _conv_dimension_numbers(input_shape):
   rhs_spec = (ndim - 1, ndim - 2) + tuple(range(0, ndim - 2))
   out_spec = lhs_spec
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
+
+
+def _normalize_axes(axes: tuple[int, ...], ndim: int) -> tuple[int, ...]:
+  # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
+  return tuple(sorted(ax if ax >= 0 else ndim + ax for ax in axes))
+
+
+def _canonicalize_tuple(x: tp.Sequence[int] | int) -> tuple[int, ...]:
+  if isinstance(x, tp.Iterable):
+    return tuple(x)
+  else:
+    return (x,)
+
+
+class LinearGeneral(Module):
+  """A linear transformation with flexible axes.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> # equivalent to `nn.Linear(features=4)`
+    >>> layer = nn.LinearGeneral(features=4)
+    >>> # output features (4, 5)
+    >>> layer = nn.LinearGeneral(features=(4, 5))
+    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
+    >>> jax.tree_map(jnp.shape, params)
+    {'params': {'bias': (4, 5), 'kernel': (3, 4, 5)}}
+    >>> # apply transformation on the the second and last axes
+    >>> layer = nn.LinearGeneral(features=(4, 5), axis=(1, -1))
+    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3, 6, 7)))
+    >>> jax.tree_map(jnp.shape, params)
+    {'params': {'bias': (4, 5), 'kernel': (3, 7, 4, 5)}}
+
+  Attributes:
+    features: int or tuple with number of output features.
+    axis: int or tuple with axes to apply the transformation on. For instance,
+      (-2, -1) will apply the transformation to the last two axes.
+    batch_dims: tuple with batch axes.
+    use_bias: whether to add a bias to the output (default: True).
+    dtype: the dtype of the computation (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    kernel_init: initializer function for the weight matrix.
+    bias_init: initializer function for the bias.
+    precision: numerical precision of the computation see `jax.lax.Precision`
+      for details.
+  """
+
+  def __init__(
+    self,
+    features_in: Size | tp.Sequence[Size],
+    features_out: Size | tp.Sequence[Size],
+    *,
+    axis: Axis | tp.Sequence[Axis] = -1,
+    batch_axis: tp.Mapping[Axis, Size] = MappingProxyType({}),
+    use_bias: bool = True,
+    dtype: Dtype | None = None,
+    param_dtype: Dtype = jnp.float32,
+    kernel_init: initializers.Initializer = default_kernel_init,
+    bias_init: initializers.Initializer = initializers.zeros(),
+    precision: PrecisionLike = None,
+    # Deprecated. Will be removed.
+    dot_general: DotGeneralT | None = None,
+    dot_general_cls: tp.Any = None,
+    rngs: rnglib.Rngs,
+  ):
+    self.features_in = _canonicalize_tuple(features_in)
+    self.features_out = _canonicalize_tuple(features_out)
+    self.axis = _canonicalize_tuple(axis)
+    self.batch_axis = MappingProxyType(batch_axis)
+    self.use_bias = use_bias
+    self.dtype = dtype
+    self.param_dtype = param_dtype
+    self.kernel_init = kernel_init
+    self.bias_init = bias_init
+    self.precision = precision
+    self.dot_general = dot_general
+    self.dot_general_cls = dot_general_cls
+
+    if len(self.features_in) != len(self.axis):
+      raise ValueError(
+        'features_in and axis must have the same length. '
+        f'Got {self.features_in} and {self.axis}.'
+      )
+
+    if batch_axis:
+      batch_dims = tuple(batch_axis.keys())
+      max_dim = np.max(batch_dims)
+      if set(batch_dims) != set(range(max_dim + 1)):
+        raise ValueError(
+          'batch_dims %s must be consecutive leading '
+          'dimensions starting from 0.' % str(batch_dims)
+        )
+
+    n_batch_axis = len(self.batch_axis)
+    n_features_in = len(self.features_in)
+    n_features_out = len(self.features_out)
+
+    def kernel_init_wrap(rng, shape, dtype) -> jax.Array:
+      flat_shape = (
+        np.prod(shape[:n_batch_axis])
+        * np.prod(shape[n_batch_axis : n_features_in + n_batch_axis]),
+        np.prod(shape[-n_features_out:]),
+      )
+      flat_shape = jax.tree_map(int, flat_shape)
+      kernel = self.kernel_init(rng, flat_shape, dtype)
+      if isinstance(kernel, variables.VariableMetadata):
+        kernel.value = jnp.reshape(kernel.value, shape)
+      else:
+        kernel = jnp.reshape(kernel, shape)
+
+      return kernel
+
+    batch_shape = tuple(self.batch_axis.values())
+    kernel_shape = (
+      *batch_shape,
+      *self.features_in,
+      *self.features_out,
+    )
+    self.kernel = nnx.Param(
+      kernel_init_wrap(rngs.params(), kernel_shape, self.param_dtype)
+    )
+
+    if self.use_bias:
+
+      def bias_init_wrap(rng, shape, dtype) -> jax.Array:
+        flat_shape = (int(np.prod(shape)),)
+        bias = self.bias_init(rng, flat_shape, dtype)
+        if isinstance(bias, variables.VariableMetadata):
+          bias.value = jnp.reshape(bias.value, shape)
+        else:
+          bias = jnp.reshape(bias, shape)
+        return bias
+
+      bias_shape = (*batch_shape, *self.features_out)
+      self.bias = nnx.Param(
+        bias_init_wrap(rngs.params(), bias_shape, self.param_dtype)
+      )
+    else:
+      self.bias = nnx.Param(None)
+
+  def __call__(self, inputs: Array) -> Array:
+    """Applies a linear transformation to the inputs along multiple dimensions.
+
+    Args:
+      inputs: The nd-array to be transformed.
+
+    Returns:
+      The transformed input.
+    """
+
+    ndim = inputs.ndim
+    n_batch_dims = len(self.batch_axis)
+    axis = _normalize_axes(self.axis, ndim)
+    batch_axis = _normalize_axes(tuple(self.batch_axis.keys()), ndim)
+    n_axis = len(axis)
+
+    # batch and non-contracting dims of input with 1s for batch dims.
+    expanded_batch_shape = tuple(
+      inputs.shape[ax] if ax in batch_axis else 1
+      for ax in range(inputs.ndim)
+      if ax not in axis
+    )
+    kernel = self.kernel
+    bias = self.bias
+
+    batch_ind = tuple(range(n_batch_dims))
+    contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
+
+    inputs, kernel, bias = dtypes.promote_dtype(
+      inputs, kernel, bias, dtype=self.dtype
+    )
+
+    if self.dot_general_cls is not None:
+      dot_general = self.dot_general_cls()
+    elif self.dot_general is not None:
+      dot_general = self.dot_general
+    else:
+      dot_general = lax.dot_general
+    out = dot_general(
+      inputs,
+      kernel,
+      ((axis, contract_ind), (batch_axis, batch_ind)),
+      precision=self.precision,
+    )
+    # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
+    if bias is not None:
+      # expand bias shape to broadcast bias over batch dims.
+      bias = jnp.reshape(bias, (*expanded_batch_shape, *self.features_out))
+      out += bias
+    return out
 
 
 class Linear(Module):
