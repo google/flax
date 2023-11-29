@@ -154,7 +154,7 @@ class TestModule:
     def f(state: nnx.State, graphdef: nnx.GraphDef[nnx.Dict[Any]]):
       m = graphdef.merge(state)
 
-      assert m['a'][0] is not m['b']
+      assert m['a'][0] is m['b']
       assert m['a'][1] is not m['b']
 
       return m.split()
@@ -162,10 +162,10 @@ class TestModule:
     state, graphdef = f(*m.split())
     m = graphdef.merge(state)
 
-    assert m['a'][0] is not m['b']
+    assert m['a'][0] is m['b']
     assert m['a'][1] is not m['b']
 
-    # compare with pytree0
+    # compare with original
     assert m['a'][0] is not m0['a'][0]
     assert m['a'][1] is not m0['a'][1]
     assert m['b'] is not m0['b']
@@ -227,8 +227,8 @@ class TestModule:
     )
 
     p, graphdef = m.split()
-    assert len(p.flat_state()) == 4
-    assert len(jax.tree_util.tree_leaves(p)) == 4
+    assert len(p.flat_state()) == 2
+    assert len(jax.tree_util.tree_leaves(p)) == 2
 
   def test_deref_array_attributes_not_allowed(self):
     # test arrays are nodes

@@ -65,6 +65,61 @@ class _HasSetup(tp.Protocol):
 SEEN_MODULES_REPR: tp.Optional[tp.Set[ids.UUID]] = None
 
 
+class VariablesMapping(
+  tp.MutableMapping[str, Variable[tp.Any]], reprlib.Representable
+):
+  __slots__ = ('_module',)
+
+  def __init__(self, module: Module):
+    if tp.TYPE_CHECKING:
+      self._module = module
+    else:
+      object.__setattr__(self, '_module', module)
+
+  def __getitem__(self, name: str) -> Variable[tp.Any]:
+    module_vars = vars(self._module)
+    if name not in module_vars:
+      raise KeyError(f'Variable {name} not found')
+    value = module_vars[name]
+
+    if not isinstance(value, Variable):
+      raise KeyError(f"Variable '{name}' is not found.")
+
+    return value
+
+  def __setitem__(self, name: str, value: Variable[tp.Any]) -> None:
+    vars(self._module)[name] = value
+
+  def __getattr__(self, name: str) -> Variable[tp.Any]:
+    module_vars = vars(self._module)
+    if name not in module_vars:
+      raise AttributeError(f'Variable {name!r} not found')
+    value = module_vars[name]
+    if not isinstance(value, Variable):
+      raise AttributeError(f"Variable '{name}' is not found.")
+    return value
+
+  def __setattr__(self, name: str, value: Variable[tp.Any]) -> None:
+    vars(self._module)[name] = value
+
+  def __delitem__(self, name: str) -> None:
+    delattr(self._module, name)
+
+  def __iter__(self) -> tp.Iterator[str]:
+    for name, value in vars(self._module).items():
+      if isinstance(value, Variable):
+        yield name
+
+  def __len__(self) -> int:
+    return sum(1 for _ in self)
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type(self), start='{', end='}', value_sep=': ')
+    for name, value in vars(self._module).items():
+      if isinstance(value, Variable):
+        yield reprlib.Attr(name, value)
+
+
 class ModuleState(reprlib.Representable):
   __slots__ = ('_trace_state', '_id')
 
@@ -153,12 +208,22 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       )
 
     vars_dict = vars(self)
-    if name in vars_dict and isinstance(vars_dict[name], Variable):
-      vars_dict[name] = vars_dict[name].set_value(value)
+    if name in vars_dict:
+      if isinstance(variable := vars_dict[name], Variable):
+        if isinstance(value, Variable):
+          if type(value) != type(variable):
+            raise ValueError(
+              f"Trying to assing a Variable of type '{type(value).__name__}' "
+              f"to the Module attribute '{name}' of a different type "
+              f"'{type(variable).__name__}'."
+            )
+          variable.copy_from(value)
+        else:
+          variable.set_value(value)
+      else:
+        vars_dict[name] = value
     else:
-      if isinstance(value, Variable):
-        value = value.copy()
-      elif isinstance(value, (jax.Array, np.ndarray, State)):
+      if isinstance(value, (jax.Array, np.ndarray, State)):
         raise ValueError(
           f"Trying to assing a '{type(value).__name__}' to the Module"
           f" attribute '{name}'. This is not supported. Non-hashable "
@@ -166,6 +231,10 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
           'the value in a Variable type instead.'
         )
       vars_dict[name] = value
+
+  @property
+  def variables(self) -> VariablesMapping:
+    return VariablesMapping(self)
 
   def __deepcopy__(self: M, memo=None) -> M:
     state, graphdef = self.split()
@@ -364,6 +433,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
             states.append(leaf.get_state())
           else:
             module = leaf.make_empty()
+            module
         elif isinstance(leaf, State):
           states.append(leaf)
         else:
@@ -493,7 +563,7 @@ def _module_graph_flatten(module: Module):
 
 
 def _module_graph_get_key(module: Module, name: str) -> tp.Any:
-  return getattr(module, name)
+  return vars(module)[name]
 
 
 def _module_graph_set_key(module: M, name: str, value: tp.Any) -> M:
