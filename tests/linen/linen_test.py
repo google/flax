@@ -137,6 +137,59 @@ class PoolTest(parameterized.TestCase):
 
 
 class NormalizationTest(parameterized.TestCase):
+  def test_layer_norm_mask(self):
+    key = random.key(0)
+    keys = random.split(key)
+    x = random.normal(keys[0], (3, 4, 5))
+    m = random.choice(keys[1], 2, x.shape).astype(bool)
+    m = m.at[..., :2].set(True)  # guarantee at least 2 elements
+    x = jnp.where(m, x, jnp.nan)
+
+    module = nn.LayerNorm()
+    y, w = module.init_with_output(key, x, m)
+
+    z = y.mean(-1, where=m)
+    np.testing.assert_allclose(z, 0, atol=1e-4)
+
+    z = y.var(-1, where=m)
+    np.testing.assert_allclose(z, 1, atol=1e-4)
+
+  def test_rms_norm_mask(self):
+    key = random.key(0)
+    keys = random.split(key)
+    x = random.normal(keys[0], (3, 4, 5))
+    m = random.choice(keys[1], 2, x.shape).astype(bool)
+    m = m.at[..., :1].set(True)  # guarantee at least 1 element
+    x = jnp.where(m, x, jnp.nan)
+
+    module = nn.RMSNorm()
+    y, w = module.init_with_output(key, x, m)
+
+    z = np.square(y).mean(-1, where=m)
+    np.testing.assert_allclose(z, 1, atol=1e-4)
+
+  def test_group_norm_mask(self):
+    key = random.key(0)
+    keys = random.split(key)
+    x = random.normal(keys[0], (13, 3, 5, 7 * 11))
+    m = random.choice(keys[1], 2, x.shape).astype(bool)
+    m = m.at[..., :2].set(True)  # guarantee at least 2 elements
+    x = jnp.where(m, x, jnp.nan)
+
+    module = nn.GroupNorm(7, use_bias=False, use_scale=False)
+    y, w = module.init_with_output(key, x, m)
+
+    yr = y.reshape((13, 3, 5, 7, 11))
+    mr = m.reshape((13, 3, 5, 7, 11))
+
+    axes = list(range(1, x.ndim - 1)) + [-1]
+
+    z = yr.mean(axes, where=mr)
+    np.testing.assert_allclose(z, 0, atol=1e-4)
+
+    z = yr.var(axes, where=mr)
+    np.testing.assert_allclose(z, 1, atol=1e-4)
+
   @parameterized.parameters({'test_mask': True}, {'test_mask': False})
   def test_batch_norm(self, test_mask):
     rng = random.key(0)
