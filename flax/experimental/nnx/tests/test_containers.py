@@ -58,10 +58,10 @@ class TestContainers:
 
   def test_box(self):
     x: nnx.Param[int] = nnx.Param(
-      1,
+      1,  # type: ignore
       set_value_hooks=[lambda c, x: x + 1, lambda c, x: x * 2],  # type: ignore
     )
-    x = x.set_value(5)
+    x.set_value(5)
 
     assert x.value == 12
 

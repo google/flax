@@ -48,8 +48,8 @@ SetValueHook = tp.Callable[['Variable[A]', A], A]
 CreateValueHook = tp.Callable[['Variable[A]', A], A]
 AxisName = str
 AxisIndex = int
-AddAxisHook = tp.Callable[[V, AxisName, AxisIndex], V]
-RemoveAxisHook = tp.Callable[[V, AxisName, AxisIndex], V]
+AddAxisHook = tp.Callable[[V, AxisName, AxisIndex], None]
+RemoveAxisHook = tp.Callable[[V, AxisName, AxisIndex], None]
 
 VariableTypeCache: dict[str, tp.Type['Variable[tp.Any]']] = {}
 
@@ -252,28 +252,29 @@ class Variable(
         value = hook(self, value)
     return value
 
-  def set_value(self: V, value: A) -> V:
+  def copy_from(self, other: 'Variable[A]') -> None:
+    vars_dict = vars(self)
+    vars_dict.clear()
+    vars_dict.update(vars(other))
+
+  def set_value(self, value: A):
     if self.set_value_hooks:
       for hook in self.set_value_hooks:
         value = hook(self, value)
-    return self.replace(value=value)
+    self.value = value
 
   def create_value(self, value: A):
     for hook in self.create_value_hooks:
       value = hook(self, value)
     return value
 
-  def add_axis(self: V, axis_name: AxisName, axis_index: AxisIndex) -> V:
-    box = self
+  def add_axis(self, axis_name: AxisName, axis_index: AxisIndex):
     for hook in self.add_axis_hooks:
-      box = hook(box, axis_name, axis_index)
-    return box  # type: ignore
+      hook(self, axis_name, axis_index)
 
-  def remove_axis(self: V, axis_name: AxisName, axis_index: AxisIndex) -> V:
-    box = self
+  def remove_axis(self, axis_name: AxisName, axis_index: AxisIndex):
     for hook in self.remove_axis_hooks:
-      box = hook(box, axis_name, axis_index)
-    return box  # type: ignore
+      hook(self, axis_name, axis_index)
 
   def __eq__(self, other: object) -> bool:
     if not isinstance(other, Variable):

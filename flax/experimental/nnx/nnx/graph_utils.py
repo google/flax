@@ -29,6 +29,9 @@ from flax.experimental.nnx.nnx.proxy_caller import (
 from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import EMPTY, Empty, Variable
 
+HA = tp.TypeVar('HA', bound=tp.Hashable)
+HB = tp.TypeVar('HB', bound=tp.Hashable)
+
 Index = int
 Names = tp.Sequence[int]
 PathParts = tuple[str, ...]
@@ -140,21 +143,119 @@ def get_node_impl(x: type[Node] | Node) -> NodeImpl[Node, tp.Any, tp.Any]:
   return NODE_TYPES[x]
 
 
+class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
+  def __init__(self, mapping: tp.Mapping[HA, HB] | tp.Iterable[tuple[HA, HB]]):
+    self._mapping = dict(mapping)
+
+  def __getitem__(self, key: HA) -> HB:
+    return self._mapping[key]
+
+  def __iter__(self) -> tp.Iterator[HA]:
+    return iter(self._mapping)
+
+  def __len__(self) -> int:
+    return len(self._mapping)
+
+  def __hash__(self) -> int:
+    return hash(tuple(self._mapping.items()))
+
+  def __eq__(self, other: tp.Any) -> bool:
+    if not isinstance(other, tp.Mapping):
+      return False
+    return self._mapping == other
+
+  def __repr__(self) -> str:
+    return repr(self._mapping)
+
+
 @dataclasses.dataclass(repr=False)
 class _SubgraphRepr(reprlib.Representable):
-  subgraphs: tuple[tuple[str, tp.Union['GraphDef[tp.Any]', int]], ...]
+  subgraphs: tp.Mapping[str, tp.Union['GraphDef[tp.Any]', int]]
 
   def __nnx_repr__(self):
     yield reprlib.Object(type='', value_sep=', ')
 
-    for name, subgraph in self.subgraphs:
+    for name, subgraph in self.subgraphs.items():
       yield reprlib.Attr(repr(name), subgraph, start='(', end=')')
+
+
+@dataclasses.dataclass(repr=False)
+class _MappingRepr(reprlib.Representable):
+  mapping: tp.Mapping[str, tp.Any]
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type='', value_sep=': ', start='{', end='}')
+
+    for key, value in self.mapping.items():
+      yield reprlib.Attr(repr(key), value)
+
+
+class VariableDef(reprlib.Representable):
+  __slots__ = (
+    '_type',
+    '_index',
+    '_metadata',
+  )
+
+  @classmethod
+  def from_variable(cls, variable: Variable[tp.Any], index: int) -> VariableDef:
+    metadata = vars(variable).copy()
+    del metadata['value']
+    return cls(type(variable), index, metadata)
+
+  def to_variable(self, value: Node) -> Variable[Node]:
+    variables = object.__new__(self._type)
+    variables.value = value
+    vars(variables).update(self._metadata)
+    return variables
+
+  def __init__(
+    self,
+    type: tp.Type[Variable[tp.Any]],
+    index: int,
+    metadata: dict[str, tp.Any],
+  ):
+    self._type = type
+    self._index = index
+    self._metadata = metadata
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type=type(self))
+
+    yield reprlib.Attr('type', self._type.__name__)
+    yield reprlib.Attr('index', self._index)
+    yield reprlib.Attr('metadata', _MappingRepr(self._metadata))
+
+  @property
+  def type(self):
+    return self._type
+
+  @property
+  def index(self):
+    return self._index
+
+  @property
+  def metadata(self):
+    return self._metadata
+
+  def __hash__(self):
+    return hash((self._type, self._index, tuple(self._metadata.items())))
+
+  def __eq__(self, other):
+    if not isinstance(other, VariableDef):
+      return False
+    return (
+      self._type == other._type
+      and self._index == other._index
+      and self._metadata == other._metadata
+    )
 
 
 class GraphDef(tp.Generic[Node], reprlib.Representable):
   __slots__ = (
     '_type',
     '_index',
+    '_attributes',
     '_subgraphs',
     '_static_fields',
     '_variables',
@@ -165,16 +266,18 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     self,
     type: tp.Type[Node],
     index: int,
-    subgraphs: tuple[tuple[str, tp.Union['GraphDef[Node]', int]], ...],
-    static_fields: tuple[tuple[str, tp.Any], ...],
-    variables: tuple[tuple[str, Variable[Empty]], ...],
+    attributes: tuple[str, ...],
+    subgraphs: tp.Iterable[tuple[str, tp.Union['GraphDef[tp.Any]', int]]],
+    static_fields: tp.Iterable[tuple[str, tp.Any]],
+    variables: tp.Iterable[tuple[str, VariableDef | int]],
     metadata: tp.Any,
   ):
     self._type = type
     self._index = index
-    self._subgraphs = subgraphs
-    self._static_fields = static_fields
-    self._variables = variables
+    self._attributes = attributes
+    self._subgraphs = _HashableMapping(subgraphs)
+    self._static_fields = _HashableMapping(static_fields)
+    self._variables = _HashableMapping(variables)
     self._metadata = metadata
 
   def __nnx_repr__(self):
@@ -182,9 +285,10 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
 
     yield reprlib.Attr('type', self._type.__name__)
     yield reprlib.Attr('index', self._index)
-    yield reprlib.Attr('subgraphs', _SubgraphRepr(self._subgraphs))
-    yield reprlib.Attr('static_fields', self._static_fields)
-    yield reprlib.Attr('variables', self._variables)
+    yield reprlib.Attr('attributes', self._attributes)
+    yield reprlib.Attr('subgraphs', _MappingRepr(self._subgraphs))
+    yield reprlib.Attr('static_fields', _MappingRepr(self._static_fields))
+    yield reprlib.Attr('variables', _MappingRepr(self._variables))
     yield reprlib.Attr('metadata', self._metadata)
 
   def __hash__(self) -> int:
@@ -204,17 +308,19 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     return self._index
 
   @property
-  def subgraphs(
-    self
-  ) -> tuple[tuple[str, tp.Union['GraphDef[tp.Any]', int]], ...]:
+  def attributes(self) -> tuple[str, ...]:
+    return self._attributes
+
+  @property
+  def subgraphs(self):
     return self._subgraphs
 
   @property
-  def static_fields(self) -> tuple[tuple[str, tp.Any], ...]:
+  def static_fields(self):
     return self._static_fields
 
   @property
-  def variables(self) -> tuple[tuple[str, Variable[Empty]], ...]:
+  def variables(self):
     return self._variables
 
   @property
@@ -249,6 +355,7 @@ def _gradphdef_flatten(graphdef: GraphDef[tp.Any]):
   return (), (
     graphdef._type,
     graphdef._index,
+    graphdef._attributes,
     graphdef._subgraphs,
     graphdef._static_fields,
     graphdef._variables,
@@ -260,9 +367,10 @@ def _graphdef_unflatten(
   metadata: tuple[
     tp.Type[Node],
     int,
+    tuple[str, ...],
     tuple[tuple[str, GraphDef[Node] | int], ...],
     tuple[tuple[str, tp.Any], ...],
-    tuple[tuple[str, Variable[Empty]], ...],
+    tuple[tuple[str, Variable[Empty] | int], ...],
     tp.Any,
   ],
   _,
@@ -292,15 +400,15 @@ def _graph_flatten(
   if not is_node(node):
     raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
 
-  if (index := id(node)) in id_to_index:
-    return id_to_index[index]
+  if (node_id := id(node)) in id_to_index:
+    return id_to_index[node_id]
 
   index = len(id_to_index)
   id_to_index[id(node)] = index
 
   subgraphs: list[tuple[str, tp.Union[GraphDef[Node], int]]] = []
   static_fields: list[tuple[str, tp.Any]] = []
-  variables: list[tuple[str, Variable[Empty]]] = []
+  variables: list[tuple[str, VariableDef | int]] = []
 
   node_impl = get_node_impl(node)
   values, metadata = node_impl.flatten(node)
@@ -310,17 +418,25 @@ def _graph_flatten(
       subgraphs.append((key, graphdef))
     elif isinstance(value, Variable):
       str_path = '/'.join((*path, key))
-      flat_state[str_path] = value
-      variables.append((key, value.as_empty()))
+      variable_id = id(value)
+      if variable_id in id_to_index:
+        variables.append((key, id_to_index[variable_id]))
+      else:
+        flat_state[str_path] = value
+        variable_index = id_to_index[variable_id] = len(id_to_index)
+        variables.append(
+          (key, VariableDef.from_variable(value, variable_index))
+        )
     else:
       static_fields.append((key, value))
 
   graphdef = GraphDef(
     type=type(node),
     index=index,
-    subgraphs=tuple(subgraphs),
-    static_fields=tuple(static_fields),
-    variables=tuple(variables),
+    attributes=tuple(key for key, _ in values),
+    subgraphs=subgraphs,
+    static_fields=static_fields,
+    variables=variables,
     metadata=metadata,
   )
   return graphdef
@@ -333,7 +449,7 @@ def graph_unflatten(graphdef: GraphDef[Node], state: State) -> Node:
 
 def _graph_unflatten(
   graphdef: tp.Union[GraphDef[Node], int],
-  state: dict[str, Variable[Empty] | dict[str, tp.Any]],
+  state: dict[str, Variable[tp.Any] | dict[str, tp.Any]],
   index_to_node: dict[Index, tp.Any],
 ) -> Node:
   if isinstance(graphdef, int):
@@ -348,19 +464,71 @@ def _graph_unflatten(
   node_impl = get_node_impl(graphdef.type)
 
   def _get_children():
-    subgraph_nodes: dict[str, tp.Any] = {}
+    new_state: dict[str, tp.Any] = {}
 
-    for key, subgraphdef in graphdef.subgraphs:
-      substate = state.pop(key, {})
-      if isinstance(substate, Variable):
-        raise ValueError(
-          f'Expected a subgraph for {key!r}, but got a variable.'
-        )
-      subgraph_nodes[key] = _graph_unflatten(
-        subgraphdef, substate, index_to_node
-      )
+    for key in graphdef.attributes:
+      if key in graphdef.static_fields:
+        new_state[key] = graphdef.static_fields[key]
+      elif key not in state:
+        # if key is not present create an empty types
+        if key in graphdef.subgraphs:
+          # if the key is a subgraph we create an empty node
+          subgraphdef = graphdef.subgraphs[key]
+          if isinstance(subgraphdef, int):
+            # subgraph exists, take it from the cache
+            new_state[key] = index_to_node[subgraphdef]
+          else:
+            # create an empty node and add it to the cache
+            substate = {}
+            node = new_state[key] = _graph_unflatten(
+              subgraphdef, substate, index_to_node
+            )
+            index_to_node[subgraphdef.index] = node
+        elif key in graphdef.variables:
+          variable_def = graphdef.variables[key]
+          if isinstance(variable_def, int):
+            # variable exists, take it from the cache
+            new_state[key] = index_to_node[variable_def]
+          else:
+            # create an empty variable and add it to the cache
+            node = new_state[key] = variable_def.to_variable(EMPTY)
+            index_to_node[variable_def.index] = node
+        else:
+          raise RuntimeError(f'Unknown static field: {key!r}')
+      else:
+        value = state[key]
+        if key in graphdef.subgraphs:
+          if isinstance(value, Variable):
+            raise ValueError(
+              f'Expected a subgraph for {key!r}, but got a Variable.'
+            )
+          subgraphdef = graphdef.subgraphs[key]
 
-    return {**subgraph_nodes, **state, **dict(graphdef.static_fields)}
+          if isinstance(subgraphdef, int):
+            node = index_to_node[subgraphdef]
+          else:
+            node = new_state[key] = _graph_unflatten(
+              subgraphdef, value, index_to_node
+            )
+            index_to_node[subgraphdef.index] = node
+
+        elif key in graphdef.variables:
+          variable_def = graphdef.variables[key]
+          if isinstance(variable_def, int):
+            new_state[key] = index_to_node[variable_def]
+          else:
+            if type(value) != variable_def.type:
+              raise ValueError(
+                f'Expected a Variable of type {variable_def.type} '
+                f'for {key!r}, but got a Variable of type {type(value)}.'
+              )
+            new_state[key] = value
+            index_to_node[variable_def.index] = value
+
+    for new_key in set(state) - set(graphdef.attributes):
+      new_state[new_key] = state[new_key]
+
+    return new_state
 
   if node_impl.create_empty:
     assert node_impl.init is not None
@@ -406,10 +574,11 @@ def _graph_pop(
   if id(node) in id_to_index:
     return
 
-  index = len(id_to_index)
-  id_to_index[id(node)] = index
+  id_to_index[id(node)] = len(id_to_index)
+  node_impl = get_node_impl(node)
 
-  for name, value in list(vars(node).items()):
+  for name in node_impl.all_keys(node):
+    value = node_impl.get_key(node, name)
     if is_node(value):
       _graph_pop(value, id_to_index, (*path_parts, name), states, predicates)
       continue
@@ -417,12 +586,15 @@ def _graph_pop(
       continue
     elif value.is_empty:
       continue
+    elif id(value) in id_to_index:
+      continue
 
     path = '/'.join((*path_parts, name))
     node_impl = get_node_impl(node)
     for state, predicate in zip(states, predicates):
       if predicate(path, value):
-        state[path] = value
+        state[path] = value.copy()
+        id_to_index[id(value)] = len(id_to_index)
         # empty Variable attributes
         node_impl.set_key(node, name, value.as_empty())
         break
@@ -462,6 +634,15 @@ def _graph_update_dynamic(
         )
       _graph_update_dynamic(node_impl.get_key(node, key), value)
     else:
+      # we skip if trying to replace a non-empty Variable with an empty one
+      if (
+        isinstance(value, Variable)
+        and value.is_empty
+        and isinstance(current_value := node_impl.get_key(node, key), Variable)
+        and not current_value.is_empty
+      ):
+        continue
+
       node_impl.set_key(node, key, value)
 
 

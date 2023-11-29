@@ -509,7 +509,7 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
     else:
       out, updates = out
 
-  module.update((updates, graphdef))
+  module.update(updates, graphdef)
   return out
 
 

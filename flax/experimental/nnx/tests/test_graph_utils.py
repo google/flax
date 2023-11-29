@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import jax
 import pytest
 
 from flax.experimental import nnx
@@ -44,8 +45,8 @@ class TestGraphUtils:
     g = static.merge(nnx.State({}))
 
     assert g[0] is g[2]
-    assert 'b' not in g[0]
-    assert g[3] is nnx.EMPTY
+    assert g[0]['b'].value is nnx.EMPTY
+    assert g[3].value is nnx.EMPTY
 
   def test_update_dynamic(self):
     a = {'a': 1, 'b': nnx.Param(2)}
@@ -115,3 +116,67 @@ class TestGraphUtils:
     assert state['1']['bias'].shape == (2,)
     assert state['1']['mean'].shape == (2,)
     assert state['1']['var'].shape == (2,)
+
+  def test_shared_variables(self):
+    v = nnx.Param(1)
+    g = [v, v]
+
+    state, static = nnx.graph_utils.graph_flatten(g)
+
+    assert len(state.flat_state()) == 1
+
+    g2 = static.merge(state)
+
+    assert g2[0] is g2[1]
+
+  def test_tied_weights(self):
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs) -> None:
+        self.bar = nnx.Linear(2, 2, rngs=rngs)
+        self.baz = nnx.Linear(2, 2, rngs=rngs)
+
+        # tie the weights
+        self.baz.variables.kernel = self.bar.variables.kernel
+
+    node = Foo(rngs=nnx.Rngs(0))
+    state, static = nnx.graph_utils.graph_flatten(node)
+
+    assert len(state.flat_state()) == 3  # 2 bias + 1 kernel
+
+    node2 = static.merge(state)
+
+    assert node2.bar.variables.kernel is node2.baz.variables.kernel
+
+  def test_tied_weights_example(self):
+    class LinearTranspose(nnx.Module):
+      def __init__(self, dout: int, din: int, *, rngs: nnx.Rngs) -> None:
+        self.kernel = nnx.Param(
+          nnx.initializers.lecun_normal()(rngs(), (dout, din))
+        )
+
+      def __call__(self, x):
+        return x @ self.kernel.T
+
+    class Encoder(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs) -> None:
+        self.embed = nnx.Embed(10, 2, rngs=rngs)
+        ...
+        self.linear_out = LinearTranspose(10, 2, rngs=rngs)
+
+        # tie the weights
+        self.linear_out.variables.kernel = self.embed.variables.embedding
+
+      def __call__(self, x):
+        x = self.embed(x)
+        ...
+        return self.linear_out(x)
+
+    model = Encoder(rngs=nnx.Rngs(0))
+    state, static = model.split()
+
+    assert len(state.flat_state()) == 1
+
+    x = jax.random.randint(jax.random.key(0), (2,), 0, 10)
+    y = model(x)
+
+    assert y.shape == (2, 10)

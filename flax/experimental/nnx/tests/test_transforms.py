@@ -136,20 +136,20 @@ class TestGrad:
 
     grads = f(m)
 
+    assert m.a.variables['0'] is m.variables.b
     assert isinstance(grads, nnx.State)
-    assert grads['a']['0'] == 1.0
+    assert grads['a']['0'] == 2.0
     assert isinstance(grads.variables['a']['0'], nnx.Variable)
     assert grads['a']['1'] == 1.0
     assert isinstance(grads.variables['a']['1'], nnx.Variable)
-    assert grads['b'] == 1.0
-    assert isinstance(grads.variables['b'], nnx.Variable)
-    assert len(grads.flat_state()) == 3
+    assert len(grads.flat_state()) == 2
 
     m.update(grads)
 
-    assert m['a'][0] == 1.0
+    assert m.a.variables['0'] is m.variables.b
+    assert m['a'][0] == 2.0
     assert m['a'][1] == 1.0
-    assert m['b'] == 1.0
+    assert m['b'] == 2.0
     assert m['c'] == 7
     assert m['d'] == 5.0
 

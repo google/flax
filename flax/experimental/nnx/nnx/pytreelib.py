@@ -114,12 +114,22 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         f'{type(self)} is immutable, trying to update field {name}'
       )
 
-    if name in vars_dict and isinstance(vars_dict[name], variables.Variable):
-      vars_dict[name] = vars_dict[name].replace(value=value)
+    if name in vars_dict:
+      if isinstance(variable := vars_dict[name], variables.Variable):
+        if isinstance(value, variables.Variable):
+          if type(value) != type(variable):
+            raise ValueError(
+              f"Trying to assing a Variable of type '{type(value).__name__}' "
+              f"to the Module attribute '{name}' of a different type "
+              f"'{type(variable).__name__}'."
+            )
+          vars_dict[name] = value
+        else:
+          variable.set_value(value)
+      else:
+        vars_dict[name] = value
     else:
-      if isinstance(value, variables.Variable):
-        value = value.copy()
-      elif isinstance(value, (jax.Array, np.ndarray, State)):
+      if isinstance(value, (jax.Array, np.ndarray, State)):
         raise ValueError(
           f"Trying to assing a '{type(value).__name__}' to the Module"
           f" attribute '{name}'. This is not supported. Non-hashable "

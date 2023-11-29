@@ -51,9 +51,9 @@ def add_axis(
         while len(sharding) < index:
           sharding.append(None)
         sharding.insert(index, axis_name)
-        x = x.replace(sharding=tuple(sharding))
+        x.sharding = tuple(sharding)
 
-      x = x.add_axis(axis_name, index)
+      x.add_axis(axis_name, index)
     return x
 
   return jax.tree_map(
@@ -71,8 +71,8 @@ def remove_axis(
       if isinstance(x, HasSharding) and x.sharding is not None:
         sharding = list(x.sharding)
         assert sharding.pop(index) == axis_name
-        x = x.replace(sharding=tuple(sharding))
-      x = x.remove_axis(axis_name, index)
+        x.sharding = tuple(sharding)
+      x.remove_axis(axis_name, index)
     return x
 
   return jax.tree_map(
