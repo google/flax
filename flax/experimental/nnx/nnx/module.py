@@ -103,6 +103,8 @@ class ModuleMeta(ABCMeta):
       assert isinstance(module, Module)
 
       for field in dataclasses.fields(module):
+        if not field.init:
+          continue
         value = vars(module)[field.name]
         # set Rngs instances to None
         if isinstance(value, Rngs):
