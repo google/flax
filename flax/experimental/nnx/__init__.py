@@ -62,9 +62,11 @@ from .nnx.nn.activations import softplus as softplus
 from .nnx.nn.activations import standardize as standardize
 from .nnx.nn.activations import swish as swish
 from .nnx.nn.activations import tanh as tanh
+from .nnx.nn.attention import MultiHeadAttention as MultiHeadAttention
 from .nnx.nn.linear import Conv as Conv
 from .nnx.nn.linear import Embed as Embed
 from .nnx.nn.linear import Linear as Linear
+from .nnx.nn.linear import LinearGeneral as LinearGeneral
 from .nnx.nn.normalization import BatchNorm as BatchNorm
 from .nnx.nn.normalization import LayerNorm as LayerNorm
 from .nnx.nn.stochastic import Dropout as Dropout

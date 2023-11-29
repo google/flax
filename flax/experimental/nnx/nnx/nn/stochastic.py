@@ -59,6 +59,7 @@ class Dropout(Module):
       The masked inputs reweighted to preserve mean.
     """
     deterministic = first_from(
+      'deterministic',
       deterministic,
       self.deterministic,
       flaglib.flags.get('deterministic'),
