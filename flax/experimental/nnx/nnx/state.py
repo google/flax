@@ -121,6 +121,10 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       super().__setattr__('_mapping', dict(mapping))
 
   @property
+  def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
+    return self._mapping
+
+  @property
   def variables(self) -> StateVariablesMapping:
     return StateVariablesMapping(self._mapping)
 

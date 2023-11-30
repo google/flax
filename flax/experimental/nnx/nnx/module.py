@@ -531,7 +531,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
 # -------------------------
 def _module_flatten(module: Module, *, with_keys: bool):
   state, graphdef = module.split()
-  variables = state.variables
+  variables = state.raw_mapping
   paths = tuple(variables.keys())
 
   if with_keys:

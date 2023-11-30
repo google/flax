@@ -155,5 +155,5 @@ class TestPartitioning:
     assert state['a']['0'] == m.a[0]
     assert state['a']['1'] == m.a[1]
     assert state['b'] == m.b
-    assert state.variables['b'] is not state.variables['a']['0']
+    assert state.variables.b is not state.a.variables['0']
     assert len(state.flat_state()) == 3

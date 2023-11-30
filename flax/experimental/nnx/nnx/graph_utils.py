@@ -436,7 +436,7 @@ def _graph_flatten(
 
 def graph_unflatten(graphdef: GraphDef[Node], state: State) -> Node:
   index_to_node: dict[Index, tp.Any] = {}
-  return _graph_unflatten(graphdef, state.variables, index_to_node)
+  return _graph_unflatten(graphdef, state.raw_mapping, index_to_node)
 
 
 def _graph_unflatten(
@@ -610,7 +610,7 @@ def graph_update_dynamic(
     new_states = updates
 
   for state in new_states:
-    _graph_update_dynamic(node, state.variables)
+    _graph_update_dynamic(node, state.raw_mapping)
 
 
 def _graph_update_dynamic(

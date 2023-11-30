@@ -281,7 +281,7 @@ class TestModule:
 
     intermediates = m.pop(nnx.Intermediate)
 
-    assert isinstance(intermediates.variables['y'], nnx.Intermediate)
+    assert isinstance(intermediates.variables.y, nnx.Intermediate)
     assert intermediates['y'] == (3, 11)
 
     assert hasattr(m, 'y')
@@ -515,10 +515,10 @@ class TestModuleDataclass:
     state, graphdef = m.split()
 
     assert len(state) == 4
-    assert state.variables['b'] == nnx.TreeNode(2)
-    assert state.variables['c'] == nnx.Param(3)
-    assert state.variables['d'] == nnx.BatchStat(4)
-    assert state.variables['f'] == nnx.Variable(6)
+    assert state.variables.b == nnx.TreeNode(2)
+    assert state.variables.c == nnx.Param(3)
+    assert state.variables.d == nnx.BatchStat(4)
+    assert state.variables.f == nnx.Variable(6)
 
   def test_no_override(self):
     @nnx.dataclass
@@ -584,7 +584,7 @@ class TestModuleDef:
     states, graphdef = foo.split()
 
     assert isinstance(states, nnx.State)
-    assert isinstance(states.variables['w'], nnx.Param)
+    assert isinstance(states.variables.w, nnx.Param)
     # assert isinstance(states["c"], jax.Array)
 
     y, _updates = graphdef.apply(states)(x=2.0, rngs=nnx.Rngs(e=1))
@@ -609,8 +609,8 @@ class TestModuleDef:
 
     assert isinstance(graphdef, nnx.GraphDef)
     assert isinstance(state, nnx.State)
-    assert isinstance(state.variables['w'], nnx.Param)
-    assert isinstance(state.variables['c'], nnx.Variable)
+    assert isinstance(state.variables.w, nnx.Param)
+    assert isinstance(state.variables.c, nnx.Variable)
 
     y, (state, graphdef) = graphdef.apply(state)(x=2.0, rngs=nnx.Rngs(e=1))
 
