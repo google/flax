@@ -65,7 +65,7 @@ class _HasSetup(tp.Protocol):
 SEEN_MODULES_REPR: tp.Optional[tp.Set[ids.UUID]] = None
 
 
-class VariablesMapping(
+class ModuleVariablesMapping(
   tp.MutableMapping[str, Variable[tp.Any]], reprlib.Representable
 ):
   __slots__ = ('_module',)
@@ -117,7 +117,7 @@ class VariablesMapping(
     yield reprlib.Object(type(self), start='{', end='}', value_sep=': ')
     for name, value in vars(self._module).items():
       if isinstance(value, Variable):
-        yield reprlib.Attr(name, value)
+        yield reprlib.Attr(repr(name), value)
 
 
 class ModuleState(reprlib.Representable):
@@ -235,8 +235,8 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       vars_dict[name] = value
 
   @property
-  def variables(self) -> VariablesMapping:
-    return VariablesMapping(self)
+  def variables(self) -> ModuleVariablesMapping:
+    return ModuleVariablesMapping(self)
 
   def __deepcopy__(self: M, memo=None) -> M:
     state, graphdef = self.split()

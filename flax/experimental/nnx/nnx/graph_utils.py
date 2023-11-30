@@ -172,17 +172,6 @@ class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
 
 
 @dataclasses.dataclass(repr=False)
-class _SubgraphRepr(reprlib.Representable):
-  subgraphs: tp.Mapping[str, tp.Union['GraphDef[tp.Any]', int]]
-
-  def __nnx_repr__(self):
-    yield reprlib.Object(type='', value_sep=', ')
-
-    for name, subgraph in self.subgraphs.items():
-      yield reprlib.Attr(repr(name), subgraph, start='(', end=')')
-
-
-@dataclasses.dataclass(repr=False)
 class _MappingRepr(reprlib.Representable):
   mapping: tp.Mapping[str, tp.Any]
 

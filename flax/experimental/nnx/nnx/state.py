@@ -44,6 +44,55 @@ Key = str
 FlatState = dict[Path, Variable[Leaf]]
 
 
+class StateVariablesMapping(
+  tp.MutableMapping[str, Variable[tp.Any]], reprlib.Representable
+):
+  __slots__ = ('_mapping',)
+
+  def __init__(self, mapping: dict[Key, tp.Any]):
+    if tp.TYPE_CHECKING:
+      self._mapping = mapping
+    else:
+      object.__setattr__(self, '_mapping', mapping)
+
+  def __getitem__(self, name: str) -> Variable[tp.Any]:
+    value = self._mapping[name]
+
+    if not isinstance(value, Variable):
+      raise KeyError(f"Variable '{name}' not found.")
+
+    return value
+
+  def __setitem__(self, name: str, value: Variable[tp.Any]) -> None:
+    self._mapping[name] = value
+
+  def __getattr__(self, name: str) -> Variable[tp.Any]:
+    value = self._mapping[name]
+    if not isinstance(value, Variable):
+      raise AttributeError(f"Variable '{name}' not found.")
+    return value
+
+  def __setattr__(self, name: str, value: Variable[tp.Any]) -> None:
+    self._mapping[name] = value
+
+  def __delitem__(self, name: str) -> None:
+    del self._mapping[name]
+
+  def __iter__(self) -> tp.Iterator[str]:
+    for name, value in self._mapping.items():
+      if isinstance(value, Variable):
+        yield name
+
+  def __len__(self) -> int:
+    return sum(1 for _ in self)
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type(self), start='{', end='}', value_sep=': ')
+    for name, value in vars(self._mapping).items():
+      if isinstance(value, Variable):
+        yield reprlib.Attr(repr(name), value)
+
+
 class NestedStateRepr(reprlib.Representable):
   def __init__(self, state: State):
     self.state = state
@@ -72,8 +121,8 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       super().__setattr__('_mapping', dict(mapping))
 
   @property
-  def variables(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
-    return self._mapping
+  def variables(self) -> StateVariablesMapping:
+    return StateVariablesMapping(self._mapping)
 
   def __getitem__(self, key: Key | int) -> Leaf | State:
     if isinstance(key, int):
