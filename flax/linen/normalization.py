@@ -434,11 +434,13 @@ class LayerNorm(Module):
   use_fast_variance: bool = True
 
   @compact
-  def __call__(self, x):
+  def __call__(self, x, mask=None):
     """Applies layer normalization on the input.
 
     Args:
       x: the inputs
+      mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+        the positions for which the mean and variance should be computed.
 
     Returns:
       Normalized inputs (the same shape as inputs).
@@ -450,6 +452,7 @@ class LayerNorm(Module):
       self.axis_name,
       self.axis_index_groups,
       use_fast_variance=self.use_fast_variance,
+      mask=mask,
     )
 
     return _normalize(
@@ -525,11 +528,13 @@ class RMSNorm(Module):
   axis_index_groups: Any = None
 
   @compact
-  def __call__(self, x):
+  def __call__(self, x, mask=None):
     """Applies layer normalization on the input.
 
     Args:
       x: the inputs
+      mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+        the positions for which the mean and variance should be computed.
 
     Returns:
       Normalized inputs (the same shape as inputs).
@@ -541,6 +546,7 @@ class RMSNorm(Module):
       self.axis_name,
       self.axis_index_groups,
       use_mean=False,
+      mask=mask,
     )
 
     return _normalize(
@@ -625,13 +631,15 @@ class GroupNorm(Module):
   use_fast_variance: bool = True
 
   @compact
-  def __call__(self, x):
+  def __call__(self, x, mask=None):
     """Applies group normalization to the input (arxiv.org/abs/1803.08494).
 
     Args:
       x: the input of shape N...C, where N is a batch dimension and C is a
         channels dimensions. `...` represents an arbitrary number of extra
         dimensions that are used to accumulate statistics over.
+      mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+        the positions for which the mean and variance should be computed.
 
     Returns:
       Normalized inputs (the same shape as inputs).
@@ -670,6 +678,9 @@ class GroupNorm(Module):
     group_size = x.shape[-1] // num_groups
     group_shape = x.shape[:-1] + (num_groups, group_size)
 
+    if mask is not None:
+      mask = mask.reshape(mask.shape[:-1] + (num_groups, group_size))
+
     mean, var = _compute_stats(
       x.reshape(group_shape),
       reduction_axes,
@@ -677,6 +688,7 @@ class GroupNorm(Module):
       self.axis_name,
       self.axis_index_groups,
       use_fast_variance=self.use_fast_variance,
+      mask=mask,
     )
     mean = jnp.repeat(mean, group_size, axis=-1)
     var = jnp.repeat(var, group_size, axis=-1)
