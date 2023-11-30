@@ -147,6 +147,9 @@ class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
   def __init__(self, mapping: tp.Mapping[HA, HB] | tp.Iterable[tuple[HA, HB]]):
     self._mapping = dict(mapping)
 
+  def __contains__(self, key: object) -> bool:
+    return key in self._mapping
+
   def __getitem__(self, key: HA) -> HB:
     return self._mapping[key]
 
@@ -422,7 +425,7 @@ def _graph_flatten(
       if variable_id in id_to_index:
         variables.append((key, id_to_index[variable_id]))
       else:
-        flat_state[str_path] = value
+        flat_state[str_path] = value.copy()
         variable_index = id_to_index[variable_id] = len(id_to_index)
         variables.append(
           (key, VariableDef.from_variable(value, variable_index))
@@ -522,6 +525,8 @@ def _graph_unflatten(
                 f'Expected a Variable of type {variable_def.type} '
                 f'for {key!r}, but got a Variable of type {type(value)}.'
               )
+            assert isinstance(value, Variable)
+            value = value.copy()
             new_state[key] = value
             index_to_node[variable_def.index] = value
 

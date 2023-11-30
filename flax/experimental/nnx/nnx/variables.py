@@ -253,6 +253,13 @@ class Variable(
     return value
 
   def copy_from(self, other: 'Variable[A]') -> None:
+    if not self.is_equivalent(other):
+      raise ValueError(
+        f'Cannot copy from incompatible container, '
+        f'expected {type(self).__name__}, got {type(other).__name__}'
+      )
+    if self is other:
+      return
     vars_dict = vars(self)
     vars_dict.clear()
     vars_dict.update(vars(other))
