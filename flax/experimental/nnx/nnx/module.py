@@ -76,14 +76,17 @@ class ModuleVariablesMapping(
     else:
       object.__setattr__(self, '_module', module)
 
-  def __getitem__(self, name: str) -> Variable[tp.Any]:
+  def __getitem__(self, key: str | int) -> Variable[tp.Any]:
+    if isinstance(key, int):
+      key = str(key)
+
     module_vars = vars(self._module)
-    if name not in module_vars:
-      raise KeyError(f'Variable {name} not found')
-    value = module_vars[name]
+    if key not in module_vars:
+      raise KeyError(f'Variable {key} not found')
+    value = module_vars[key]
 
     if not isinstance(value, Variable):
-      raise KeyError(f"Variable '{name}' is not found.")
+      raise KeyError(f"Variable '{key}' is not found.")
 
     return value
 

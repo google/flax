@@ -55,11 +55,14 @@ class StateVariablesMapping(
     else:
       object.__setattr__(self, '_mapping', mapping)
 
-  def __getitem__(self, name: str) -> Variable[tp.Any]:
-    value = self._mapping[name]
+  def __getitem__(self, key: str | int) -> Variable[tp.Any]:
+    if isinstance(key, int):
+      key = str(key)
+
+    value = self._mapping[key]
 
     if not isinstance(value, Variable):
-      raise KeyError(f"Variable '{name}' not found.")
+      raise KeyError(f"Variable '{key}' not found.")
 
     return value
 
