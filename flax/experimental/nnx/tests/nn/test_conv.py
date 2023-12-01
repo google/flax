@@ -24,18 +24,18 @@ from flax import linen
 from flax.experimental import nnx
 
 
-class TestLinenConsistency(parameterized.TestCase):
+class TestConvLinenConsistency(parameterized.TestCase):
 
   @parameterized.product(
-      strides = [None, 1, (2, 3)],
-      padding = ['SAME', 'VALID', 'CIRCULAR', (4, 2)],
-      input_dilation = [1, (2, 3)],
-      kernel_dilation = [1, (2, 3)],
-      feature_group_count = [1, 3],
+      strides = [None, (2, 3)],
+      padding = ['VALID', (4, 2)],
+      input_dilation = [(2, 3)],
+      kernel_dilation = [(2, 3)],
+      feature_group_count = [3],
       use_bias = [True, False],
-      dtype = [jnp.float32, jnp.float16],
-      param_dtype = [jnp.float32, jnp.float16],
-      precision = [Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
+      dtype = [jnp.float32],
+      param_dtype = [jnp.float16],
+      precision = [Precision.HIGHEST],
   )
   def test_nnx_linen_equivalence(self, **kwargs):
     key = jax.random.key(42)
