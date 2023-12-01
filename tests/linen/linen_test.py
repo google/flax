@@ -329,13 +329,84 @@ class NormalizationTest(parameterized.TestCase):
 
     np.testing.assert_allclose(y_test, y, atol=1e-4)
 
+  def test_group_norm_unbatched(self):
+    rng = random.key(0)
+    key1, key2 = random.split(rng)
+    e = 1e-5
+    x = random.normal(key1, (2, 5, 4, 4, 32))
+    model_cls = nn.GroupNorm(
+        num_groups=2,
+        use_bias=False,
+        use_scale=False,
+        epsilon=e,
+        reduction_axes=(0, 1, 3, 4),
+    )
+
+    y, _ = model_cls.init_with_output(key2, x)
+    self.assertEqual(x.dtype, y.dtype)
+    self.assertEqual(x.shape, y.shape)
+
+    x_gr = x.reshape([2, 5, 4, 4, 2, 16])
+    y_test = (
+        x_gr - x_gr.mean(axis=[0, 1, 3, 5], keepdims=True)
+    ) * jax.lax.rsqrt(x_gr.var(axis=[0, 1, 3, 5], keepdims=True) + e)
+    y_test = y_test.reshape([2, 5, 4, 4, 32])
+
+    np.testing.assert_allclose(y_test, y, atol=1e-4)
+
+  def test_group_norm_batched(self):
+    rng = random.key(0)
+    key1, key2 = random.split(rng)
+    e = 1e-5
+    x = random.normal(key1, (3, 4, 32))
+    model_cls = nn.GroupNorm(
+        num_groups=2,
+        use_bias=False,
+        use_scale=False,
+        epsilon=e,
+        reduction_axes=(-3, -2, -1),
+    )
+
+    y, _ = model_cls.init_with_output(key2, x)
+    self.assertEqual(x.dtype, y.dtype)
+    self.assertEqual(x.shape, y.shape)
+
+    x_stacked = jnp.stack([x] * 5)
+    y_stacked = model_cls.apply({}, x_stacked)
+
+    np.testing.assert_allclose(y, y_stacked[0, ...], atol=1e-4)
+
+    x_gr = x_stacked.reshape([5, 3, 4, 2, 16])
+    y_test = (x_gr - x_gr.mean(axis=[1, 2, 4], keepdims=True)) * jax.lax.rsqrt(
+        x_gr.var(axis=[1, 2, 4], keepdims=True) + e
+    )
+    y_test = y_test.reshape([5, 3, 4, 32])
+
+    np.testing.assert_allclose(y_test, y_stacked, atol=1e-4)
+
   def test_group_norm_raises(self):
     rng = random.key(0)
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 5, 4, 4, 32))
     model_cls = nn.GroupNorm(
-      num_groups=3, use_bias=False, use_scale=False, epsilon=e
+        num_groups=3, use_bias=False, use_scale=False, epsilon=e
+    )
+
+    with self.assertRaises(ValueError):
+      model_cls.init_with_output(key2, x)
+
+  def test_group_norm_raises_incorrect_reduction_axes(self):
+    rng = random.key(0)
+    key1, key2 = random.split(rng)
+    e = 1e-5
+    x = random.normal(key1, (2, 5, 4, 4, 32))
+    model_cls = nn.GroupNorm(
+        num_groups=3,
+        use_bias=False,
+        use_scale=False,
+        epsilon=e,
+        reduction_axes=(0, 1, 2, 3),
     )
 
     with self.assertRaises(ValueError):

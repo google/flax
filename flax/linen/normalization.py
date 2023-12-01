@@ -601,6 +601,11 @@ class GroupNorm(Module):
       by the next layer.
     bias_init: Initializer for bias, by default, zero.
     scale_init: Initializer for scale, by default, one.
+    reduction_axes: List of axes used for computing normalization statistics.
+      This list must include the final dimension, which is assumed to be the
+      feature axis. Furthermore, if the input used at call time has additional
+      leading axes compared to the data used for initialisation, for example due
+      to batching, then the reduction axes need to be defined explicitly.
     axis_name: the axis name used to combine batch statistics from multiple
       devices. See `jax.pmap` for a description of axis names (default: None).
       This is only needed if the model is subdivided across devices, i.e. the
@@ -626,6 +631,7 @@ class GroupNorm(Module):
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  reduction_axes: Optional[Axes] = None
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
@@ -635,17 +641,31 @@ class GroupNorm(Module):
     """Applies group normalization to the input (arxiv.org/abs/1803.08494).
 
     Args:
-      x: the input of shape N...C, where N is a batch dimension and C is a
-        channels dimensions. `...` represents an arbitrary number of extra
-        dimensions that are used to accumulate statistics over.
+      x: the input of shape ...C where C is a channels dimension and `...`
+        represents an arbitrary number of extra dimensions that can be used to
+        accumulate statistics over. If no reduction axes have been specified
+        then all additional dimensions `...` will be used to accumulate
+        statistics apart from the leading dimension which is assumed to
+        represent the batch.
       mask: Binary array of shape broadcastable to `inputs` tensor, indicating
         the positions for which the mean and variance should be computed.
 
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    reduction_axes = list(range(1, x.ndim - 1)) + [-1]
-    feature_axes = (-1,)
+    if self.reduction_axes is not None:
+      reduction_axes = self.reduction_axes
+    else:
+      reduction_axes = list(range(1, x.ndim - 1)) + [-1]
+    feature_axis = -1
+
+    reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
+
+    if reduction_axes[-1] != (feature_axis % x.ndim):
+      raise ValueError(
+          'The reduction axes must include the final dimension '
+          'as this is assumed to be the feature axis.'
+      )
 
     if (self.num_groups is None and self.group_size is None) or (
       self.num_groups is not None and self.group_size is not None
@@ -683,7 +703,7 @@ class GroupNorm(Module):
 
     mean, var = _compute_stats(
       x.reshape(group_shape),
-      reduction_axes,
+      list(reduction_axes[:-1]) + [-1],
       self.dtype,
       self.axis_name,
       self.axis_index_groups,
@@ -699,7 +719,7 @@ class GroupNorm(Module):
       mean,
       var,
       reduction_axes[:-1],
-      feature_axes,
+      (feature_axis,),
       self.dtype,
       self.param_dtype,
       self.epsilon,
