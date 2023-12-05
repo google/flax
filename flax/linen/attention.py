@@ -50,6 +50,7 @@ def dot_product_attention_weights(
   deterministic: bool = False,
   dtype: Optional[Dtype] = None,
   precision: PrecisionLike = None,
+  module: Optional[Module] = None,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -76,6 +77,10 @@ def dot_product_attention_weights(
     dtype: the dtype of the computation (default: infer from inputs and params)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
+    module: the Module that will sow the attention weights into the
+      'intermediates' collection. Remember to mark 'intermediates' as mutable via
+      `mutable=['intermediates'] in order to have that collection returned.
+      If `module` is None, the attention weights will not be sowed.
 
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
@@ -107,6 +112,9 @@ def dot_product_attention_weights(
   # normalize the attention weights
   attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
 
+  if module:
+    module.sow('intermediates', 'attention_weights', attn_weights)
+
   # apply attention dropout
   if not deterministic and dropout_rate > 0.0:
     keep_prob = 1.0 - dropout_rate
@@ -134,6 +142,7 @@ def dot_product_attention(
   deterministic: bool = False,
   dtype: Optional[Dtype] = None,
   precision: PrecisionLike = None,
+  module: Optional[Module] = None,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -164,6 +173,10 @@ def dot_product_attention(
     dtype: the dtype of the computation (default: infer from inputs)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
+    module: the Module that will sow the attention weights into the
+      'intermediates' collection. Remember to mark 'intermediates' as mutable via
+      `mutable=['intermediates'] in order to have that collection returned.
+      If `module` is None, the attention weights will not be sowed.
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
@@ -191,6 +204,7 @@ def dot_product_attention(
     deterministic,
     dtype,
     precision,
+    module,
   )
 
   # return weighted sum over values for each query position
@@ -306,6 +320,7 @@ class MultiHeadDotProductAttention(Module):
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[PRNGKey] = None,
+    return_weights: bool = False,
   ):
     ...
 
@@ -318,6 +333,7 @@ class MultiHeadDotProductAttention(Module):
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[PRNGKey] = None,
+    return_weights: bool = False,
   ):
     ...
 
@@ -332,6 +348,7 @@ class MultiHeadDotProductAttention(Module):
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[PRNGKey] = None,
+    return_weights: bool = False,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -358,6 +375,10 @@ class MultiHeadDotProductAttention(Module):
         dropout, whereas if true, the attention weights are deterministic.
       dropout_rng: optional rng key to pass to the attention layer's dropout
         mask. Otherwise, self.make_rng('dropout') is used instead.
+      return_weights: if `True`, the attention weights are sowed into the
+        'intermediates' collection. Remember to mark 'intermediates' as
+        mutable via `mutable=['intermediates'] in order to have that
+        collection returned.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
@@ -506,18 +527,33 @@ class MultiHeadDotProductAttention(Module):
       m_deterministic = True
 
     # apply attention
-    x = self.attention_fn(
-      query,
-      key,
-      value,
-      mask=mask,
-      dropout_rng=dropout_rng,
-      dropout_rate=self.dropout_rate,
-      broadcast_dropout=self.broadcast_dropout,
-      deterministic=m_deterministic,
-      dtype=self.dtype,
-      precision=self.precision,
-    )  # pytype: disable=wrong-keyword-args
+    if return_weights:
+      x = self.attention_fn(
+        query,
+        key,
+        value,
+        mask=mask,
+        dropout_rng=dropout_rng,
+        dropout_rate=self.dropout_rate,
+        broadcast_dropout=self.broadcast_dropout,
+        deterministic=m_deterministic,
+        dtype=self.dtype,
+        precision=self.precision,
+        module=self if return_weights else None,
+      )  # pytype: disable=wrong-keyword-args
+    else:
+      x = self.attention_fn(
+        query,
+        key,
+        value,
+        mask=mask,
+        dropout_rng=dropout_rng,
+        dropout_rate=self.dropout_rate,
+        broadcast_dropout=self.broadcast_dropout,
+        deterministic=m_deterministic,
+        dtype=self.dtype,
+        precision=self.precision,
+      )
     # back to the original inputs dimensions
     out = DenseGeneral(
       features=features,
