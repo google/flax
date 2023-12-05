@@ -49,7 +49,6 @@ from .nnx.nn.activations import leaky_relu as leaky_relu
 from .nnx.nn.activations import log_sigmoid as log_sigmoid
 from .nnx.nn.activations import log_softmax as log_softmax
 from .nnx.nn.activations import logsumexp as logsumexp
-from .nnx.nn.activations import normalize as normalize
 from .nnx.nn.activations import one_hot as one_hot
 from .nnx.nn.activations import relu as relu
 from .nnx.nn.activations import relu6 as relu6
