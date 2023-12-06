@@ -371,8 +371,9 @@ class Conv(Module):
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
-      the kernel size can be passed as an integer. For all other cases, it must
-      be a sequence of integers.
+      the kernel size can be passed as an integer, which will be interpreted
+      as a tuple of the single integer. For all other cases, it must be a
+      sequence of integers.
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string `'SAME'`, the string `'VALID'`, the string
@@ -407,7 +408,7 @@ class Conv(Module):
     self,
     in_features: int,
     out_features: int,
-    kernel_size: tp.Sequence[int],
+    kernel_size: int | tp.Sequence[int],
     strides: tp.Union[None, int, tp.Sequence[int]] = 1,
     *,
     padding: PaddingLike = 'SAME',
@@ -429,11 +430,7 @@ class Conv(Module):
     rngs: rnglib.Rngs,
   ):
     if isinstance(kernel_size, int):
-      raise TypeError(
-        'Expected Conv kernel_size to be a'
-        ' tuple/list of integers (eg.: [3, 3]) but got'
-        f' {kernel_size}.'
-      )
+      kernel_size = (kernel_size,)
     else:
       kernel_size = tuple(kernel_size)
 
