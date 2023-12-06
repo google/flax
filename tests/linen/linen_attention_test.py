@@ -343,6 +343,57 @@ class AttentionTest(parameterized.TestCase):
       with self.assertRaises(errors.ScopeParamShapeError):
         module.apply(initial_vars, query, key, causal_mask)
 
+  def test_multihead_sow_attention_weights(self):
+    rng = random.key(0)
+    x = jnp.ones((4, 6, 5))
+
+    class Model(nn.Module):
+      attention_kwargs: dict
+
+      @nn.compact
+      def __call__(self, x, return_weights=False):
+        x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
+          x, return_weights=return_weights
+        )
+        x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x)
+        x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
+          x, return_weights=return_weights
+        )
+        return x
+
+    module = Model(
+      dict(
+        num_heads=8,
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        deterministic=False,
+      )
+    )
+    v = module.init(rng, x)
+    _, intermediates = module.apply(
+      v, x, mutable=['intermediates'], return_weights=True
+    )
+    self.assertEqual(
+      intermediates['intermediates']['MultiHeadDotProductAttention_0'][
+        'attention_weights'
+      ][0].shape,
+      (4, 8, 6, 6),
+    )
+    self.assertNotIn(
+      'MultiHeadDotProductAttention_1', intermediates['intermediates']
+    )
+    self.assertEqual(
+      intermediates['intermediates']['MultiHeadDotProductAttention_2'][
+        'attention_weights'
+      ][0].shape,
+      (4, 8, 6, 6),
+    )
+    _, intermediates = module.apply(
+      v, x, mutable=['intermediates'], return_weights=False
+    )
+    self.assertNotIn('intermediates', intermediates)
+
 
 if __name__ == '__main__':
   absltest.main()
