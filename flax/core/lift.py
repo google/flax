@@ -1491,6 +1491,8 @@ remat = checkpoint
 
 def _hashable_filter(x):
   """Hashable version of CollectionFilter."""
+  if isinstance(x, str):
+    return (x,)
   if isinstance(x, Iterable):
     return tuple(x)  # convert un-hashable list & sets to tuple
   if isinstance(x, DenyList):
