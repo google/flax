@@ -346,8 +346,12 @@ def module_class_lift_transform(
         _test_transformed_return_values(res, fn_name)
         return res
 
-      # here we apply the given lifting transform to the scope-ingesting fn
-      trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
+      if hasattr(wrapped_fn, '_trafo_fn'):
+        trafo_fn = wrapped_fn._trafo_fn
+      else:
+        # here we apply the given lifting transform to the scope-ingesting fn
+        trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
+        wrapped_fn._trafo_fn = trafo_fn
       module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
       ret = trafo_fn(module_scopes, *args, **kwargs)
       return ret
