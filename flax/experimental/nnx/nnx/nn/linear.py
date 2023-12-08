@@ -586,10 +586,15 @@ default_embed_init = initializers.variance_scaling(
 class Embed(Module):
   """Embedding Module.
 
-  A parameterized function from integers [0, n) to d-dimensional vectors.
+  A parameterized function from integers [0, ``num_embeddings``) to
+  ``features``-dimensional vectors. This ``Module`` will create an ``embedding``
+  matrix with shape ``(num_embeddings, features)``. When calling this layer,
+  the input values will be used to 0-index into the ``embedding`` matrix.
+  Indexing on a value greater than or equal to ``num_embeddings`` will result
+  in ``nan`` values.
 
   Attributes:
-    num_embeddings: number of embeddings.
+    num_embeddings: number of embeddings / vocab size.
     features: number of feature dimensions for each embedding.
     dtype: the dtype of the embedding vectors (default: same as embedding).
     param_dtype: the dtype passed to parameter initializers (default: float32).
@@ -623,6 +628,7 @@ class Embed(Module):
 
     Args:
       inputs: input data, all dimensions are considered batch dimensions.
+        Values in the input array must be integers.
 
     Returns:
       Output which is embedded input data.  The output shape follows the input,
@@ -643,6 +649,7 @@ class Embed(Module):
     Args:
       query: array with last dimension equal the feature depth `features` of the
         embedding.
+
     Returns:
       An array with final dim `num_embeddings` corresponding to the batched
       inner-product of the array of query vectors against each embedding.
