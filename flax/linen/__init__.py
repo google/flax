@@ -14,7 +14,6 @@
 
 """The Flax Module system."""
 
-
 # pylint: disable=g-multiple-import,useless-import-alias
 # re-export commonly used modules and functions
 from ..core import (
@@ -92,6 +91,7 @@ from .module import (
     compact as compact,
     disable_named_call as disable_named_call,
     enable_named_call as enable_named_call,
+    get_submodules_and_paths as get_submodules_and_paths,
     init_with_output as init_with_output,
     init as init,
     intercept_methods as intercept_methods,
@@ -105,15 +105,15 @@ from .normalization import (
     LayerNorm as LayerNorm,
     RMSNorm as RMSNorm,
     SpectralNorm as SpectralNorm,
-    WeightNorm as WeightNorm
+    WeightNorm as WeightNorm,
 )
 from .pooling import (avg_pool as avg_pool, max_pool as max_pool, pool as pool)
 from .recurrent import (
     Bidirectional as Bidirectional,
     ConvLSTMCell as ConvLSTMCell,
     GRUCell as GRUCell,
-    MGUCell as MGUCell,
     LSTMCell as LSTMCell,
+    MGUCell as MGUCell,
     OptimizedLSTMCell as OptimizedLSTMCell,
     RNNCellBase as RNNCellBase,
     RNN as RNN,
@@ -136,6 +136,7 @@ from .transforms import (
     checkpoint as checkpoint,
     cond as cond,
     custom_vjp as custom_vjp,
+    grad as grad,
     jit as jit,
     jvp as jvp,
     map_variables as map_variables,
@@ -144,9 +145,8 @@ from .transforms import (
     remat as remat,
     scan as scan,
     switch as switch,
-    vjp as vjp,
-    grad as grad,
     value_and_grad as value_and_grad,
+    vjp as vjp,
     vmap as vmap,
     while_loop as while_loop,
 )

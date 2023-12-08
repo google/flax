@@ -2835,3 +2835,47 @@ def init(
     return init_fn(*args, **kwargs)[1]
 
   return init_wrapper
+
+
+def get_submodules_and_paths(
+    module: Module,
+    rngs: Union[Dict[str, jax.Array], jax.Array],
+    *args,
+    max_depth: int = sys.maxsize,
+    **kwargs,
+) -> Dict[Tuple[str, ...], Module]:
+  """Get a mapping from submodule paths to their instantiated nn.Module.
+
+  Args:
+    module: nn.Module, the root/parent module we would like to inspect.
+    rngs: jax rng key or dict of jax rng keys to pass to module.init()
+    *args: arguments to pass to module.init(). Usually at least one random key,
+      and must include some inputs.
+    max_depth: Go <depth> modules in from the root. By default, all submodules
+      will be provided.
+    **kwargs: keyword arguments to pass to module.init()
+
+  Returns:
+    Dictionary mapping the path (tuple[str, ...]) to its Module object. As of
+    Python 3.7, dictionaries preserve order of addition so the order of
+    operations is preserved.
+  """
+
+  with _tabulate_context():
+    jax.eval_shape(lambda: module.init(rngs, *args, **kwargs))
+    calls = _context.call_info_stack[-1].calls
+    calls.sort(key=lambda c: c.index)
+
+  module_info = {}
+  visited_paths: set[tuple[str, ...]] = set()
+
+  for c in calls:
+    call_depth = len(c.path)
+
+    if c.path in visited_paths or call_depth > max_depth:
+      continue
+
+    visited_paths.add(c.path)
+    module_info[c.path] = c.module
+
+  return module_info

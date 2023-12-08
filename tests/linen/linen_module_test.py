@@ -40,7 +40,7 @@ from unittest.mock import patch
 import jax
 import jax.numpy as jnp
 import numpy as np
-from absl.testing import absltest
+from absl.testing import absltest, parameterized
 from jax import random
 from jax.nn import initializers
 
@@ -96,7 +96,7 @@ class RaisesModule(nn.Module):
     assert False
 
 
-class ModuleTest(absltest.TestCase):
+class ModuleTest(parameterized.TestCase):
   def test_init_module(self):
     rngkey = jax.random.key(0)
     x = jnp.array([1.0])
@@ -2486,6 +2486,94 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(obj_loaded.a, 2)
     self.assertEqual(obj_loaded.b, 'ok')
     self.assertEqual(obj_loaded.my_property, 'okok')
+
+  @parameterized.named_parameters(
+      {'testcase_name': 'depth=0', 'depth': 0, 'expected_path_keys': [()]},
+      {
+          'testcase_name': 'depth=1',
+          'depth': 1,
+          'expected_path_keys': [
+              (),
+              ('ResBlock_0',),
+              ('ResBlock_1',),
+              ('Dense_0',),
+          ],
+      },
+      {
+          'testcase_name': 'depth=2',
+          'depth': 2,
+          'expected_path_keys': [
+              (),
+              ('ResBlock_0',),
+              ('ResBlock_0', 'Conv_0'),
+              ('ResBlock_1',),
+              ('ResBlock_1', 'Conv_0'),
+              ('Dense_0',),
+          ],
+      },
+  )
+  def test_get_submodules_and_paths(
+      self, depth: int, expected_path_keys: tuple[str, ...]
+  ):
+    class ResBlock(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        x_res = x
+        x = nn.Conv(4, [3, 3])(x)
+        return x + x_res
+
+    class ExplicitCNN(nn.Module):
+
+      def setup(self):
+        self.ResBlock_0 = ResBlock()  # pylint: disable=invalid-name
+        self.ResBlock_1 = ResBlock()  # pylint: disable=invalid-name
+        self.Dense_0 = nn.Dense(10)  # pylint: disable=invalid-name
+
+      def __call__(self, x):
+        x = self.ResBlock_0(x)
+        x = self.ResBlock_1(x)
+        x = x.reshape(x.shape[0], -1)
+        x = self.Dense_0(x)
+        return x
+
+    class CompactCNN(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        x = ResBlock()(x)
+        x = ResBlock()(x)
+        x = x.reshape(x.shape[0], -1)
+        x = nn.Dense(10)(x)
+        return x
+
+    explicit_cnn = ExplicitCNN()
+    compact_cnn = CompactCNN()
+
+    dummy_input = jnp.ones((1, 28, 28, 1))
+    rng = jax.random.PRNGKey(0)
+    explicit_rng, compact_rng = jax.random.split(rng)
+
+    explicit_paths_to_submodules = nn.get_submodules_and_paths(
+        explicit_cnn, explicit_rng, dummy_input, max_depth=depth
+    )
+    compact_paths_to_submodules = nn.get_submodules_and_paths(
+        compact_cnn, compact_rng, dummy_input, max_depth=depth
+    )
+
+    self.assertSequenceEqual(
+        list(explicit_paths_to_submodules.keys()), expected_path_keys
+    )
+    self.assertSequenceEqual(
+        list(compact_paths_to_submodules.keys()), expected_path_keys
+    )
+
+    self.assertEqual(explicit_paths_to_submodules.pop(()), explicit_cnn)
+    self.assertEqual(compact_paths_to_submodules.pop(()), compact_cnn)
+
+    self.assertDictEqual(
+        explicit_paths_to_submodules, compact_paths_to_submodules
+    )
 
 
 class LeakTests(absltest.TestCase):
