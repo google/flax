@@ -100,7 +100,7 @@ def scan(
 
     def trans(x):
       if ax < 0:
-        pax = x.ndim - ax
+        pax = x.ndim + ax
       else:
         pax = ax
       assert pax < x.ndim
