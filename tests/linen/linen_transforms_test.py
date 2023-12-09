@@ -1714,6 +1714,27 @@ class TransformTest(absltest.TestCase):
     y1 = Foo().apply(vs, x)
     np.testing.assert_array_equal(y0, y1)
 
+  def test_jit_reuse(self):
+    n = 0
+
+    class Foo(nn.Module):
+
+      @nn.jit
+      def __call__(self, x):
+        nonlocal n
+        n += 1
+        return x
+
+    x = jnp.array(1.0)
+    m = Foo()
+
+    self.assertEqual(n, 0)
+
+    y = m.apply({}, x)
+    self.assertEqual(n, 1)
+    y = m .apply({}, x)
+    self .assertEqual(n, 1)
+
   def test_while_loop(self):
     class Foo(nn.Module):
       @nn.compact
