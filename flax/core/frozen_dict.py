@@ -191,7 +191,7 @@ def _prepare_freeze(xs: Any) -> Any:
 def freeze(xs: Mapping[Any, Any]) -> FrozenDict[Any, Any]:
   """Freeze a nested dict.
 
-  Makes a nested `dict` immutable by transforming it into `FrozenDict`.
+  Makes a nested ``dict`` immutable by transforming it into ``FrozenDict``.
 
   Args:
     xs: Dictionary to freeze (a regualr Python dict).
@@ -204,7 +204,7 @@ def freeze(xs: Mapping[Any, Any]) -> FrozenDict[Any, Any]:
 def unfreeze(x: Union[FrozenDict, Dict[str, Any]]) -> Dict[Any, Any]:
   """Unfreeze a FrozenDict.
 
-  Makes a mutable copy of a `FrozenDict` mutable by transforming
+  Makes a mutable copy of a ``FrozenDict`` mutable by transforming
   it into (nested) dict.
 
   Args:
@@ -233,7 +233,7 @@ def copy(
 ) -> Union[FrozenDict, Dict[str, Any]]:
   """Create a new dict with additional and/or replaced entries. This is a utility
   function that can act on either a FrozenDict or regular dict and mimics the
-  behavior of `FrozenDict.copy`.
+  behavior of ``FrozenDict.copy``.
 
   Example::
 
@@ -262,7 +262,7 @@ def pop(
 ) -> Tuple[Union[FrozenDict, Dict[str, Any]], Any]:
   """Create a new dict where one entry is removed. This is a utility
   function that can act on either a FrozenDict or regular dict and
-  mimics the behavior of `FrozenDict.pop`.
+  mimics the behavior of ``FrozenDict.pop``.
 
   Example::
 
@@ -289,8 +289,8 @@ def pop(
 def pretty_repr(x: Any, num_spaces: int = 4) -> str:
   """Returns an indented representation of the nested dictionary.
   This is a utility function that can act on either a FrozenDict or
-  regular dict and mimics the behavior of `FrozenDict.pretty_repr`.
-  If x is any other dtype, this function will return `repr(x)`.
+  regular dict and mimics the behavior of ``FrozenDict.pretty_repr``.
+  If x is any other dtype, this function will return ``repr(x)``.
 
   Args:
     x: the dictionary to be represented

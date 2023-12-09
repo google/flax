@@ -97,7 +97,7 @@ class DenseGeneral(Module):
     param_dtype: the dtype passed to parameter initializers (default: float32).
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
   """
 
@@ -228,7 +228,7 @@ class Dense(Module):
     use_bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
@@ -326,25 +326,25 @@ def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
 
 
 class _Conv(Module):
-  """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
+  """Convolution Module wrapping ``lax.conv_general_dilated[_local]``.
 
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
-    strides: an integer or a sequence of `n` integers, representing the
+    strides: an integer or a sequence of ``n`` integers, representing the
       inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, the string
-      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
-      high)` integer pairs that give the padding to apply before and after each
+    padding: either the string ``'SAME'``, the string ``'VALID'``, the string
+      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
+      high)`` integer pairs that give the padding to apply before and after each
       spatial dimension. A single int is interpreted as applying the same padding
       in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
+      to be used on both sides. ``'CAUSAL'`` padding for a 1D convolution will
       left-pad the convolution axis, resulting in same-sized output.
-    input_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs`
-      (default: 1). Convolution with input dilation `d` is equivalent to
-      transposed convolution with stride `d`.
-    kernel_dilation: an integer or a sequence of `n` integers, giving the
+    input_dilation: an integer or a sequence of ``n`` integers, giving the
+      dilation factor to apply in each spatial dimension of ``inputs``
+      (default: 1). Convolution with input dilation ``d`` is equivalent to
+      transposed convolution with stride ``d``.
+    kernel_dilation: an integer or a sequence of ``n`` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel (default: 1). Convolution with kernel dilation
       is also known as 'atrous convolution'.
@@ -355,7 +355,7 @@ class _Conv(Module):
           be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
@@ -386,8 +386,8 @@ class _Conv(Module):
     """Defines whether weights are shared or not between different pixels.
 
     Returns:
-      `True` to use shared weights in convolution (regular convolution).
-      `False` to use different weights at different pixels, a.k.a.
+      ``True`` to use shared weights in convolution (regular convolution).
+      ``False`` to use different weights at different pixels, a.k.a.
       "locally connected layer", "unshared convolution", or "local convolution".
 
     """
@@ -401,7 +401,7 @@ class _Conv(Module):
       inputs: input data with dimensions (*batch_dims, spatial_dims...,
         features). This is the channels-last convention, i.e. NHWC for a 2d
         convolution and NDHWC for a 3D convolution. Note: this is different from
-        the input convention used by `lax.conv_general_dilated`, which puts the
+        the input convention used by ``lax.conv_general_dilated``, which puts the
         spatial dimensions last.
         Note: If the input has more than 1 batch dimension, all batch dimensions
         are flattened into a single dimension for the convolution and restored
@@ -586,7 +586,7 @@ class _Conv(Module):
 
 
 class Conv(_Conv):
-  """Convolution Module wrapping `lax.conv_general_dilated`.
+  """Convolution Module wrapping ``lax.conv_general_dilated``.
 
   Example usage::
 
@@ -615,20 +615,20 @@ class Conv(_Conv):
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
-    strides: an integer or a sequence of `n` integers, representing the
+    strides: an integer or a sequence of ``n`` integers, representing the
       inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, the string
-      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
-      high)` integer pairs that give the padding to apply before and after each
+    padding: either the string ``'SAME'``, the string ``'VALID'``, the string
+      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
+      high)`` integer pairs that give the padding to apply before and after each
       spatial dimension. A single int is interpreted as applying the same padding
       in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
+      to be used on both sides. ``'CAUSAL'`` padding for a 1D convolution will
       left-pad the convolution axis, resulting in same-sized output.
-    input_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs`
-      (default: 1). Convolution with input dilation `d` is equivalent to
-      transposed convolution with stride `d`.
-    kernel_dilation: an integer or a sequence of `n` integers, giving the
+    input_dilation: an integer or a sequence of ``n`` integers, giving the
+      dilation factor to apply in each spatial dimension of ``inputs``
+      (default: 1). Convolution with input dilation ``d`` is equivalent to
+      transposed convolution with stride ``d``.
+    kernel_dilation: an integer or a sequence of ``n`` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel (default: 1). Convolution with kernel dilation
       is also known as 'atrous convolution'.
@@ -639,7 +639,7 @@ class Conv(_Conv):
           be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision`
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
@@ -651,7 +651,7 @@ class Conv(_Conv):
 
 
 class ConvLocal(_Conv):
-  """Local convolution Module wrapping `lax.conv_general_dilated_local`.
+  """Local convolution Module wrapping ``lax.conv_general_dilated_local``.
 
   Example usage::
 
@@ -680,20 +680,20 @@ class ConvLocal(_Conv):
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
-    strides: an integer or a sequence of `n` integers, representing the
+    strides: an integer or a sequence of ``n`` integers, representing the
       inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, the string
-      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
-      high)` integer pairs that give the padding to apply before and after each
+    padding: either the string ``'SAME'``, the string ``'VALID'``, the string
+      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
+      high)`` integer pairs that give the padding to apply before and after each
       spatial dimension. A single int is interpreted as applying the same padding
       in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
+      to be used on both sides. ``'CAUSAL'`` padding for a 1D convolution will
       left-pad the convolution axis, resulting in same-sized output.
-    input_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs`
-      (default: 1). Convolution with input dilation `d` is equivalent to
-      transposed convolution with stride `d`.
-    kernel_dilation: an integer or a sequence of `n` integers, giving the
+    input_dilation: an integer or a sequence of ``n`` integers, giving the
+      dilation factor to apply in each spatial dimension of ``inputs``
+      (default: 1). Convolution with input dilation ``d`` is equivalent to
+      transposed convolution with stride ``d``.
+    kernel_dilation: an integer or a sequence of ``n`` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel (default: 1). Convolution with kernel dilation
       is also known as 'atrous convolution'.
@@ -704,7 +704,7 @@ class ConvLocal(_Conv):
           be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
@@ -747,14 +747,14 @@ class ConvTranspose(Module):
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer. For all other cases, it must
       be a sequence of integers.
-    strides: a sequence of `n` integers, representing the inter-window strides.
-    padding: either the string `'SAME'`, the string `'VALID'`, the string
-      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
-      high)` integer pairs that give the padding to apply before and after each
+    strides: a sequence of ``n`` integers, representing the inter-window strides.
+    padding: either the string ``'SAME'``, the string ``'VALID'``, the string
+      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
+      high)`` integer pairs that give the padding to apply before and after each
       spatial dimension. A single int is interpreted as applying the same padding
       in all dims and assign a single int in a sequence causes the same padding
       to be used on both sides.
-    kernel_dilation: `None`, or a sequence of `n` integers, giving the
+    kernel_dilation: ``None``, or a sequence of ``n`` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel. Convolution with kernel dilation is also known as 'atrous
       convolution'.
@@ -763,7 +763,7 @@ class ConvTranspose(Module):
           be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
@@ -791,13 +791,13 @@ class ConvTranspose(Module):
   def __call__(self, inputs: Array) -> Array:
     """Applies a transposed convolution to the inputs.
 
-    Behaviour mirrors of `jax.lax.conv_transpose`.
+    Behaviour mirrors of ``jax.lax.conv_transpose``.
 
     Args:
       inputs: input data with dimensions (*batch_dims, spatial_dims...,
         features). This is the channels-last convention, i.e. NHWC for a 2d
         convolution and NDHWC for a 3D convolution. Note: this is different from
-        the input convention used by `lax.conv_general_dilated`, which puts the
+        the input convention used by ``lax.conv_general_dilated``, which puts the
         spatial dimensions last.
         Note: If the input has more than 1 batch dimension, all batch dimensions
         are flattened into a single dimension for the convolution and restored

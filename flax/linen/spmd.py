@@ -14,13 +14,13 @@
 
 """Utilities for working with jit and partitioned models.
 
-This module introduces `axis_rules`, `logical_to_mesh_axes`,
-`logical_to_mesh`, `with_logical_constraint` for appyling jit sharding
+This module introduces ``axis_rules``, ``logical_to_mesh_axes``,
+``logical_to_mesh``, ``with_logical_constraint`` for appyling jit sharding
 constraints in terms of "logical named axes" rather than jit's default mesh
 axes.
 
-Additionally the `LogicallyPartitioned` metadata wrapper is defined as
-well as the initializer function wrapper `with_logical_partitioning` for
+Additionally the ``LogicallyPartitioned`` metadata wrapper is defined as
+well as the initializer function wrapper ``with_logical_partitioning``for
 introducing logical axis metadata into a model's variables.
 """
 
@@ -146,7 +146,7 @@ def logical_to_mesh_axes(
   """Compute layout for an array.
 
   The rules are in order of precedence, and consist of pairs:
-  (ArrayDimensionName, MeshDimensionName), meaning that the given array
+  ``(ArrayDimensionName, MeshDimensionName)``, meaning that the given array
   dimension (if present and unused) should be sharded across the given
   mesh dimension (if present and unused).
 
@@ -155,22 +155,25 @@ def logical_to_mesh_axes(
   mesh-dimension, meaning that this dimension of the array is sharded across
   this dimension of the mesh.
 
-  For example, given an array with
+  For example, given an array with::
+
     array_dim_names = ('batch', 'length', 'heads', 'features')
-  and the layout rules are:
+
+  and the layout rules are::
+
     rules = (('batch', 'X'),
              ('features', 'X'),
              ('heads', 'Y'),
              ('batch', 'Z'))
 
-  then this function will return
+  then this function will return::
 
     PartitionSpec('X', None, 'Y', None)
 
   Args:
     array_dim_names: Tuple of array dimension names or None.
     rules: Optional logical to mesh rules override.  Defaults to using the
-      rules defined in the dynamic context set from the `axis_rules` function.
+      rules defined in the dynamic context set from the ``axis_rules`` function.
 
   Returns:
     PartitionSpec for the parameter.

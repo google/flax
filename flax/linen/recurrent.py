@@ -139,7 +139,7 @@ class LSTMCell(RNNCellBase):
 
     Args:
       carry: the hidden state of the LSTM cell,
-        initialized using `LSTMCell.initialize_carry`.
+        initialized using ``LSTMCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
 
@@ -199,7 +199,7 @@ class LSTMCell(RNNCellBase):
 
 
 class DenseParams(Module):
-  """Dummy module for creating parameters matching `flax.linen.Dense`."""
+  """Dummy module for creating parameters matching ``flax.linen.Dense``."""
 
   features: int
   use_bias: bool = True
@@ -228,10 +228,10 @@ class DenseParams(Module):
 class OptimizedLSTMCell(RNNCellBase):
   r"""More efficient LSTM Cell that concatenates state components before matmul.
 
-  The parameters are compatible with `LSTMCell`. Note that this cell is often
-  faster than `LSTMCell` as long as the hidden size is roughly <= 2048 units.
+  The parameters are compatible with ``LSTMCell``. Note that this cell is often
+  faster than ``LSTMCell`` as long as the hidden size is roughly <= 2048 units.
 
-  The mathematical definition of the cell is the same as `LSTMCell` and as
+  The mathematical definition of the cell is the same as ``LSTMCell`` and as
   follows
 
   .. math::
@@ -290,7 +290,7 @@ class OptimizedLSTMCell(RNNCellBase):
 
     Args:
       carry: the hidden state of the LSTM cell, initialized using
-        `LSTMCell.initialize_carry`.
+        ``LSTMCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step. All
         dimensions except the final are considered batch dimensions.
 
@@ -447,7 +447,7 @@ class GRUCell(RNNCellBase):
 
     Args:
       carry: the hidden state of the GRU cell,
-        initialized using `GRUCell.initialize_carry`.
+        initialized using ``GRUCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
 
@@ -566,7 +566,7 @@ class MGUCell(RNNCellBase):
 
     Args:
       carry: the hidden state of the MGU cell,
-        initialized using `MGUCell.initialize_carry`.
+        initialized using ``MGUCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
 
@@ -667,10 +667,10 @@ class ConvLSTMCell(RNNCellBase):
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
-    strides: a sequence of `n` integers, representing the inter-window
+    strides: a sequence of ``n`` integers, representing the inter-window
       strides.
-    padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-      of `n` `(low, high)` integer pairs that give the padding to apply before
+    padding: either the string ``'SAME'``, the string ``'VALID'``, or a sequence
+      of ``n`` ``(low, high)`` integer pairs that give the padding to apply before
       and after each spatial dimension.
     bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: None).
@@ -692,7 +692,7 @@ class ConvLSTMCell(RNNCellBase):
 
     Args:
       carry: the hidden state of the Conv2DLSTM cell,
-        initialized using `Conv2DLSTM.initialize_carry`.
+        initialized using ``Conv2DLSTM.initialize_carry``.
       inputs: input data with dimensions (batch, spatial_dims..., features).
     Returns:
       A tuple with the new carry and the output.
@@ -840,20 +840,20 @@ class RNN(Module):
       useful to align sequences in bidirectional RNNs. If ``keep_order=False`` (default),
       the output will remain in the order specified by ``reverse``.
     unroll: how many scan iterations to unroll within a single iteration of a loop,
-      defaults to 1. This argument will be passed to `nn.scan`.
-    variable_axes: a dictionary mapping each collection to either an integer `i` (meaning we scan over
-      dimension `i`) or `None` (replicate rather than scan). This argument is forwarded to `nn.scan`.
+      defaults to 1. This argument will be passed to ``nn.scan``.
+    variable_axes: a dictionary mapping each collection to either an integer ``i`` (meaning we scan over
+      dimension ``i``) or ``None`` (replicate rather than scan). This argument is forwarded to ``nn.scan``.
     variable_broadcast: Specifies the broadcasted variable collections. A
       broadcasted variable should not depend on any computation that cannot be
       lifted out of the loop. This is typically used to define shared parameters
-      inside the fn. This argument is forwarded to `nn.scan`.
+      inside the fn. This argument is forwarded to ``nn.scan``.
     variable_carry: Specifies the variable collections that are carried through
       the loop. Mutations to these variables are carried to the next iteration
       and will be preserved when the scan finishes. This argument is forwarded to
-      `nn.scan`.
+      ``nn.scan``.
     split_rngs: a mapping from PRNGSequenceFilter to bool specifying whether a collection's
       PRNG key should be split such that its values are different at each step, or replicated
-      such that its values remain the same at each step. This argument is forwarded to `nn.scan`.
+      such that its values remain the same at each step. This argument is forwarded to ``nn.scan``.
   """
 
   cell: RNNCellBase

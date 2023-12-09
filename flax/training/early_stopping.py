@@ -53,7 +53,7 @@ class EarlyStopping(struct.PyTreeNode):
     should_stop: Whether the training loop should stop to avoid
         overfitting.
     has_improved: Whether the metric has improved greater or
-      equal to the min_delta in the last `.update` call.
+      equal to the min_delta in the last ``.update`` call.
   """
 
   min_delta: float = 0
@@ -75,9 +75,9 @@ class EarlyStopping(struct.PyTreeNode):
     """Update the state based on metric.
 
     Returns:
-      The updated EarlyStopping class. The `.has_improved` attribute is True
-      when there was an improvement greater than `min_delta` from the previous
-      `best_metric`.
+      The updated EarlyStopping class. The ``.has_improved`` attribute is True
+      when there was an improvement greater than ``min_delta`` from the previous
+      ``best_metric``.
     """
 
     if (

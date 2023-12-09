@@ -41,7 +41,7 @@ to construct the intended Traversal::
   >>> list(iterator)
   [1, 3]
 
-Traversals can also be used to make changes using the `update` method::
+Traversals can also be used to make changes using the ``update`` method::
 
   >>> data = {'foo': Foo(bar=2)}
   >>> traversal = traverse_util.t_identity['foo'].bar
@@ -82,7 +82,7 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
   """Flatten a nested dictionary.
 
   The nested keys are flattened to a tuple.
-  See `unflatten_dict` on how to restore the
+  See ``unflatten_dict`` on how to restore the
   nested dictionary structure.
 
   Example::
@@ -95,19 +95,19 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
     {('foo',): 1, ('bar', 'a'): 2}
 
   Note that empty dictionaries are ignored and
-  will not be restored by `unflatten_dict`.
+  will not be restored by ``unflatten_dict``.
 
   Args:
     xs: a nested dictionary
     keep_empty_nodes: replaces empty dictionaries
-      with `traverse_util.empty_node`.
+      with ``traverse_util.empty_node``.
     is_leaf: an optional function that takes the
       next nested dictionary and nested keys and
       returns True if the nested dictionary is a
       leaf (i.e., should not be flattened further).
     sep: if specified, then the keys of the returned
-      dictionary will be `sep`-joined strings (if
-      `None`, then keys will be tuples).
+      dictionary will be ``sep``-joined strings (if
+      ``None``, then keys will be tuples).
   Returns:
     The flattened dictionary.
   """
@@ -143,7 +143,7 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
 def unflatten_dict(xs, sep=None):
   """Unflatten a dictionary.
 
-  See `flatten_dict`
+  See ``flatten_dict``
 
   Example::
 
@@ -157,7 +157,7 @@ def unflatten_dict(xs, sep=None):
 
   Args:
     xs: a flattened dictionary
-    sep: separator (same as used with `flatten_dict()`).
+    sep: separator (same as used with ``flatten_dict()``).
   Returns:
     The nested dictionary.
   """
@@ -236,7 +236,7 @@ class Traversal(abc.ABC):
 
   @abc.abstractmethod
   def iterate(self, inputs):
-    """Iterate over the values selected by this `Traversal`.
+    """Iterate over the values selected by this ``Traversal``.
 
     Args:
       inputs: the object that should be traversed.
@@ -246,7 +246,7 @@ class Traversal(abc.ABC):
     pass
 
   def set(self, values, inputs):
-    """Overrides the values selected by the `Traversal`.
+    """Overrides the values selected by the ``Traversal``.
 
     Args:
       values: a list containing the new values.
@@ -464,7 +464,7 @@ class ModelParamTraversal(Traversal):
   """Select model parameters using a name filter.
 
   This traversal operates on a nested dictionary of parameters and selects a
-  subset based on the `filter_fn` argument.
+  subset based on the ``filter_fn`` argument.
 
   See :class:`flax.optim.MultiOptimizer` for an example of how to use
   :class:`ModelParamTraversal` to update subsets of the parameter tree with a

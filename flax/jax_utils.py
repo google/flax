@@ -37,7 +37,7 @@ def replicate(tree, devices=None):
   Args:
     tree: a pytree containing the arrays that should be replicated.
     devices: the devices the data is replicated to
-      (default: same order as expected by `jax.pmap()`).
+      (default: same order as expected by ``jax.pmap()``).
   Returns:
     A new pytree containing the replicated arrays.
   """
@@ -58,10 +58,10 @@ def pmean(xs, axis_name):
 def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   """Lazily evaluate a function by using the shapes of the inputs.
 
-  This function is similar to `jax.eval_shape` with the key difference that
+  This function is similar to ``jax.eval_shape`` with the key difference that
   function outputs that can be computed without a concrete value of the
   inputs are returned as is instead of only the shape. See for example
-  `module.init_by_shape` where this functionality is used to initialize a
+  ``module.init_by_shape`` where this functionality is used to initialize a
   model without using input data lr computation.
 
   Args:
@@ -124,7 +124,7 @@ def prefetch_to_device(iterator, size, devices=None):
 
     devices: the list of devices to which the arrays should be prefetched.
 
-      Defaults to the order of devices expected by `jax.pmap`.
+      Defaults to the order of devices expected by ``jax.pmap``.
 
   Yields:
     The original items from the iterator where each ndarray is now sharded to
@@ -240,11 +240,11 @@ def pad_shard_unpad(
   """Wraps a function with code that pads, shards, then un-shards, un-pads.
 
   Args:
-    wrapped: the function to be wrapped. Signature is `params, *args, *kwargs`.
-    static_argnums: indices of arguments to `wrapped` that should _not_ be
+    wrapped: the function to be wrapped. Signature is ``params, *args, *kwargs``.
+    static_argnums: indices of arguments to ``wrapped`` that should _not_ be
       padded and sharded, but instead be forwarded as-is. The default is (0,)
-      because by far the most common use-case is to pass `params` first.
-    static_argnames: names of kwargs to `wrapped` that should _not_ be padded
+      because by far the most common use-case is to pass ``params`` first.
+    static_argnames: names of kwargs to ``wrapped`` that should _not_ be padded
       and sharded, but instead be forwarded as-is.
     static_return: whether not to un-shard, and un-pad the return value; static
       return values are typically used with eval steps that compute metrics
@@ -264,7 +264,7 @@ def pad_shard_unpad(
     the values returned by the function are transferred back to host memory.
 
     The returned function is augmented with a new keyword-only argument
-    `min_device_batch` that, if specified, forces padding inputs to at least
+    ``min_device_batch`` that, if specified, forces padding inputs to at least
     this size per device. This can be useful to avoid recompiles for the last
     batch and reduce memory fragmentation.
 

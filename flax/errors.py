@@ -174,7 +174,7 @@ class ApplyScopeInvalidVariablesTypeError(FlaxError):
 
 
 class ApplyScopeInvalidVariablesStructureError(FlaxError):
-  """This error is thrown when the dict passed as `variables` to apply() has an
+  """This error is thrown when the dict passed as ``variables`` to apply() has an
 
   extra 'params' layer, i.e. {'params': {'params': ...}}.
   For more explanation on variable dicts, please see :mod:`flax.core.variables`.
@@ -561,7 +561,7 @@ class MultipleMethodsCompactError(FlaxError):
   * Use two separate modules that both have a unique ``@compact`` method.
 
   TODO(marcvanzee): Link to a design note explaining the motivation behind this.
-  There is no need for an equivalent to `hk.transparent` and it makes submodules
+  There is no need for an equivalent to ``hk.transparent`` and it makes submodules
   much more sane because there is no need to prefix the method names.
   """
 
@@ -628,7 +628,7 @@ class CallCompactUnboundModuleError(FlaxError):
 
 
 class CallSetupUnboundModuleError(FlaxError):
-  """This error occurs when you are trying to call `.setup()` directly.
+  """This error occurs when you are trying to call ``.setup()`` directly.
 
   For instance, the error will be raised when trying to run this code::
 
@@ -643,12 +643,12 @@ class CallSetupUnboundModuleError(FlaxError):
     module.setup() # <-- ERROR!
     submodule = module.submodule
 
-  In general you shouldn't call `.setup()` yourself, if you need to get access
-  to a field or submodule defined inside `setup` you can instead create a
+  In general you shouldn't call ``.setup()`` yourself, if you need to get access
+  to a field or submodule defined inside ``setup`` you can instead create a
   function
-  to extract it and pass it to `nn.apply`::
+  to extract it and pass it to ``nn.apply``::
 
-    # setup() will be called automatically by `nn.apply`
+    # setup() will be called automatically by ``nn.apply``
     def get_submodule(module):
       return module.submodule.clone() # avoid leaking the Scope
 
@@ -688,7 +688,7 @@ class CallUnbindOnUnboundModuleError(FlaxError):
 
 
 class InvalidInstanceModuleError(FlaxError):
-  """This error occurs when you are trying to call `.init()`, `.init_with_output()`, `.apply() or `.bind()`
+  """This error occurs when you are trying to call ``.init()``, ``.init_with_output()``, ``.apply()`` or ``.bind()``
 
   on the Module class itself, instead of an instance of the Module class.
   For example, the error will be raised when trying to run this code::
@@ -713,7 +713,7 @@ class InvalidInstanceModuleError(FlaxError):
 
 
 class IncorrectPostInitOverrideError(FlaxError):
-  """This error occurs when you overrode `.__post_init__()` without calling `super().__post_init__()`.
+  """This error occurs when you overrode ``.__post_init__()`` without calling ``super().__post_init__()``.
 
   For example, the error will be raised when trying to run this code::
 
@@ -856,7 +856,7 @@ class TransformTargetError(FlaxError):
 
     nn.vmap(nn.Dense(features))(x)  # raises TransformTargetError
 
-  You can transform the `nn.Dense` class directly instead::
+  You can transform the ``nn.Dense`` class directly instead::
 
     nn.vmap(nn.Dense)(features)(x)
 

@@ -30,12 +30,12 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
   Args:
     inputs: input data with dimensions (batch, window dims..., features).
     init: the initial value for the reduction
-    reduce_fn: a reduce function of the form `(T, T) -> T`.
+    reduce_fn: a reduce function of the form ``(T, T) -> T``.
     window_shape: a shape tuple defining the window to reduce over.
-    strides: a sequence of `n` integers, representing the inter-window
-      strides (default: `(1, ..., 1)`).
-    padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-      of `n` `(low, high)` integer pairs that give the padding to apply before
+    strides: a sequence of ``n`` integers, representing the inter-window
+      strides (default: ``(1, ..., 1)``).
+    padding: either the string ``'SAME'``, the string ``'VALID'``, or a sequence
+      of ``n`` ``(low, high)`` integer pairs that give the padding to apply before
       and after each spatial dimension.
   Returns:
     The output of the reduction for each window slice.
@@ -82,13 +82,13 @@ def avg_pool(
   Args:
     inputs: input data with dimensions (batch, window dims..., features).
     window_shape: a shape tuple defining the window to reduce over.
-    strides: a sequence of `n` integers, representing the inter-window
-      strides (default: `(1, ..., 1)`).
-    padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-      of `n` `(low, high)` integer pairs that give the padding to apply before
-      and after each spatial dimension (default: `'VALID'`).
+    strides: a sequence of ``n`` integers, representing the inter-window
+      strides (default: ``(1, ..., 1)``).
+    padding: either the string ``'SAME'``, the string ``'VALID'``, or a sequence
+      of ``n`` ``(low, high)`` integer pairs that give the padding to apply before
+      and after each spatial dimension (default: ``'VALID'``).
     count_include_pad: a boolean whether to include padded tokens
-      in the average calculation (default: `True`).
+      in the average calculation (default: ``True``).
   Returns:
     The average for each window slice.
   """
@@ -111,11 +111,11 @@ def max_pool(inputs, window_shape, strides=None, padding='VALID'):
   Args:
     inputs: input data with dimensions (batch, window dims..., features).
     window_shape: a shape tuple defining the window to reduce over.
-    strides: a sequence of `n` integers, representing the inter-window
-      strides (default: `(1, ..., 1)`).
-    padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-      of `n` `(low, high)` integer pairs that give the padding to apply before
-      and after each spatial dimension (default: `'VALID'`).
+    strides: a sequence of ``n`` integers, representing the inter-window
+      strides (default: ``(1, ..., 1)``).
+    padding: either the string ``'SAME'``, the string ``'VALID'``, or a sequence
+      of ``n`` ``(low, high)`` integer pairs that give the padding to apply before
+      and after each spatial dimension (default: ``'VALID'``).
   Returns:
     The maximum for each window slice.
   """
@@ -129,11 +129,11 @@ def min_pool(inputs, window_shape, strides=None, padding='VALID'):
   Args:
     inputs: Input data with dimensions (batch, window dims..., features).
     window_shape: A shape tuple defining the window to reduce over.
-    strides: A sequence of `n` integers, representing the inter-window strides
-      (default: `(1, ..., 1)`).
-    padding: Either the string `'SAME'`, the string `'VALID'`, or a sequence of
-      `n` `(low, high)` integer pairs that give the padding to apply before and
-      after each spatial dimension (default: `'VALID'`).
+    strides: A sequence of ``n`` integers, representing the inter-window strides
+      (default: ``(1, ..., 1)``).
+    padding: Either the string ``'SAME'``, the string ``'VALID'``, or a sequence of
+      ``n`` ``(low, high)`` integer pairs that give the padding to apply before and
+      after each spatial dimension (default: ``'VALID'``).
 
   Returns:
     The minimum for each window slice.

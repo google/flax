@@ -59,31 +59,31 @@ def dot_product_attention_weights(
   you can directly call this function and call einsum yourself.
 
   Args:
-    query: queries for calculating attention with shape of `[batch..., q_length,
-      num_heads, qk_depth_per_head]`.
-    key: keys for calculating attention with shape of `[batch..., kv_length,
-      num_heads, qk_depth_per_head]`.
+    query: queries for calculating attention with shape of ``[batch..., q_length,
+      num_heads, qk_depth_per_head]``.
+    key: keys for calculating attention with shape of ``[batch..., kv_length,
+      num_heads, qk_depth_per_head]``.
     bias: bias for the attention weights. This should be broadcastable to the
-      shape `[batch..., num_heads, q_length, kv_length]`. This can be used for
+      shape ``[batch..., num_heads, q_length, kv_length]``. This can be used for
       incorporating causal masks, padding masks, proximity bias, etc.
     mask: mask for the attention weights. This should be broadcastable to the
-      shape `[batch..., num_heads, q_length, kv_length]`. This can be used for
+      shape ``[batch..., num_heads, q_length, kv_length]``. This can be used for
       incorporating causal masks. Attention weights are masked out if their
-      corresponding mask value is `False`.
+      corresponding mask value is ``False``.
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
     deterministic: bool, deterministic or not (to apply dropout)
     dtype: the dtype of the computation (default: infer from inputs and params)
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     module: the Module that will sow the attention weights into the
       'intermediates' collection. Remember to mark 'intermediates' as mutable via
-      `mutable=['intermediates'] in order to have that collection returned.
-      If `module` is None, the attention weights will not be sowed.
+      ``mutable=['intermediates']`` in order to have that collection returned.
+      If ``module`` is None, the attention weights will not be sowed.
 
   Returns:
-    Output of shape `[batch..., num_heads, q_length, kv_length]`.
+    Output of shape ``[batch..., num_heads, q_length, kv_length]``.
   """
   query, key = promote_dtype(query, key, dtype=dtype)
   dtype = query.dtype
@@ -153,33 +153,33 @@ def dot_product_attention(
   Note: query, key, value needn't have any batch dimensions.
 
   Args:
-    query: queries for calculating attention with shape of `[batch..., q_length,
-      num_heads, qk_depth_per_head]`.
-    key: keys for calculating attention with shape of `[batch..., kv_length,
-      num_heads, qk_depth_per_head]`.
-    value: values to be used in attention with shape of `[batch..., kv_length,
-      num_heads, v_depth_per_head]`.
+    query: queries for calculating attention with shape of ``[batch..., q_length,
+      num_heads, qk_depth_per_head]``.
+    key: keys for calculating attention with shape of ``[batch..., kv_length,
+      num_heads, qk_depth_per_head]``.
+    value: values to be used in attention with shape of ``[batch..., kv_length,
+      num_heads, v_depth_per_head]``.
     bias: bias for the attention weights. This should be broadcastable to the
-      shape `[batch..., num_heads, q_length, kv_length]`. This can be used for
+      shape ``[batch..., num_heads, q_length, kv_length]``. This can be used for
       incorporating causal masks, padding masks, proximity bias, etc.
     mask: mask for the attention weights. This should be broadcastable to the
-      shape `[batch..., num_heads, q_length, kv_length]`. This can be used for
+      shape ``[batch..., num_heads, q_length, kv_length]``. This can be used for
       incorporating causal masks. Attention weights are masked out if their
-      corresponding mask value is `False`.
+      corresponding mask value is ``False``.
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
     deterministic: bool, deterministic or not (to apply dropout)
     dtype: the dtype of the computation (default: infer from inputs)
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision`
       for details.
     module: the Module that will sow the attention weights into the
       'intermediates' collection. Remember to mark 'intermediates' as mutable via
-      `mutable=['intermediates'] in order to have that collection returned.
-      If `module` is None, the attention weights will not be sowed.
+      ``mutable=['intermediates']`` in order to have that collection returned.
+      If ``module`` is None, the attention weights will not be sowed.
 
   Returns:
-    Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
+    Output of shape ``[batch..., q_length, num_heads, v_depth_per_head]``.
   """
   query, key, value = promote_dtype(query, key, value, dtype=dtype)
   dtype = query.dtype
@@ -275,13 +275,13 @@ class MultiHeadDotProductAttention(Module):
     dropout_rate: dropout rate
     deterministic: if false, the attention weight is masked randomly using
       dropout, whereas if true, the attention weights are deterministic.
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer for the kernel of the Dense layers.
     bias_init: initializer for the bias of the Dense layers.
     use_bias: bool: whether pointwise QKVO dense transforms use bias.
     attention_fn: dot_product_attention or compatible function. Accepts query,
-      key, value, and returns output of shape `[bs, dim1, dim2, ..., dimN,,
+      key, value, and returns output of shape ``[bs, dim1, dim2, ..., dimN,,
       num_heads, value_channels]``
     decode: whether to prepare and use an autoregressive cache.
     normalize_qk: should QK normalization be applied (arxiv.org/abs/2302.05442).
@@ -360,28 +360,28 @@ class MultiHeadDotProductAttention(Module):
     If only inputs_v is None, it will copy the value of inputs_k.
 
     Args:
-      inputs_q: input queries of shape `[batch_sizes..., length, features]`.
-      inputs_k: key of shape `[batch_sizes..., length, features]`. If None,
+      inputs_q: input queries of shape ``[batch_sizes..., length, features]``.
+      inputs_k: key of shape ``[batch_sizes..., length, features]``. If None,
         inputs_k will copy the value of inputs_q.
-      inputs_v: values of shape `[batch_sizes..., length, features]`. If None,
+      inputs_v: values of shape ``[batch_sizes..., length, features]``. If None,
         inputs_v will copy the value of inputs_k.
-      inputs_kv: key/values of shape `[batch_sizes..., length, features]`. If
+      inputs_kv: key/values of shape ``[batch_sizes..., length, features]``. If
         None, inputs_kv will copy the value of inputs_q. This arg will be
         deprecated soon. Use inputs_k and inputs_v instead.
-      mask: attention mask of shape `[batch_sizes..., num_heads, query_length,
-        key/value_length]`. Attention weights are masked out if their
-        corresponding mask value is `False`.
+      mask: attention mask of shape ``[batch_sizes..., num_heads, query_length,
+        key/value_length]``. Attention weights are masked out if their
+        corresponding mask value is ``False``.
       deterministic: if false, the attention weight is masked randomly using
         dropout, whereas if true, the attention weights are deterministic.
       dropout_rng: optional rng key to pass to the attention layer's dropout
         mask. Otherwise, self.make_rng('dropout') is used instead.
-      return_weights: if `True`, the attention weights are sowed into the
+      return_weights: if ``True``, the attention weights are sowed into the
         'intermediates' collection. Remember to mark 'intermediates' as
-        mutable via `mutable=['intermediates'] in order to have that
+        mutable via ``mutable=['intermediates']`` in order to have that
         collection returned.
 
     Returns:
-      output of shape `[batch_sizes..., length, features]`.
+      output of shape ``[batch_sizes..., length, features]``.
     """
     if inputs_kv is not None:
       if inputs_k is not None or inputs_v is not None:
@@ -573,7 +573,7 @@ class MultiHeadDotProductAttention(Module):
 
 class SelfAttention(MultiHeadDotProductAttention):
   """Self-attention special case of multi-head dot-product attention.
-  This layer is deprecated in favor of `MultiHeadDotProductAttention`.
+  This layer is deprecated in favor of ``MultiHeadDotProductAttention``.
 
   Example usage::
     >>> import flax.linen as nn
@@ -596,15 +596,15 @@ class SelfAttention(MultiHeadDotProductAttention):
     applies dot-product attention and project the results to an output vector.
 
     Args:
-      inputs_q: input queries of shape `[batch_sizes..., length, features]`.
-      mask: attention mask of shape `[batch_sizes..., num_heads, query_length,
-        key/value_length]`. Attention weights are masked out if their
-        corresponding mask value is `False`.
+      inputs_q: input queries of shape ``[batch_sizes..., length, features]``.
+      mask: attention mask of shape ``[batch_sizes..., num_heads, query_length,
+        key/value_length]``. Attention weights are masked out if their
+        corresponding mask value is ``False``.
       deterministic: if false, the attention weight is masked randomly using
         dropout, whereas if true, the attention weights are deterministic.
 
     Returns:
-      output of shape `[batch_sizes..., length, features]`.
+      output of shape ``[batch_sizes..., length, features]``.
     """
     warnings.warn(
       'SelfAttention will be deprecated soon. Use '
@@ -630,9 +630,9 @@ def make_attention_mask(
 ):
   """Mask-making helper for attention weights.
 
-  In case of 1d inputs (i.e., `[batch..., len_q]`, `[batch..., len_kv]`, the
-  attention weights will be `[batch..., heads, len_q, len_kv]` and this
-  function will produce `[batch..., 1, len_q, len_kv]`.
+  In case of 1d inputs (i.e., ``[batch..., len_q]``, ``[batch..., len_kv]``, the
+  attention weights will be ``[batch..., heads, len_q, len_kv]`` and this
+  function will produce ``[batch..., 1, len_q, len_kv]``.
 
   Args:
     query_input: a batched, flat input of query_length size
@@ -643,7 +643,7 @@ def make_attention_mask(
     dtype: mask return dtype
 
   Returns:
-    A `[batch..., 1, len_q, len_kv]` shaped mask for 1d attention.
+    A ``[batch..., 1, len_q, len_kv]`` shaped mask for 1d attention.
   """
   mask = pairwise_fn(
     jnp.expand_dims(query_input, axis=-1), jnp.expand_dims(key_input, axis=-2)
@@ -658,18 +658,18 @@ def make_causal_mask(
 ) -> Array:
   """Make a causal mask for self-attention.
 
-  In case of 1d inputs (i.e., `[batch..., len]`, the self-attention weights
-  will be `[batch..., heads, len, len]` and this function will produce a
-  causal mask of shape `[batch..., 1, len, len]`.
+  In case of 1d inputs (i.e., ``[batch..., len]``, the self-attention weights
+  will be ``[batch..., heads, len, len]`` and this function will produce a
+  causal mask of shape ``[batch..., 1, len, len]``.
 
   Args:
-    x: input array of shape `[batch..., len]`
+    x: input array of shape ``[batch..., len]``
     extra_batch_dims: number of batch dims to add singleton axes for, none by
       default
     dtype: mask return dtype
 
   Returns:
-    A `[batch..., 1, len, len]` shaped causal mask for 1d attention.
+    A ``[batch..., 1, len, len]`` shaped causal mask for 1d attention.
   """
   idxs = jnp.broadcast_to(jnp.arange(x.shape[-1], dtype=jnp.int32), x.shape)
   return make_attention_mask(
