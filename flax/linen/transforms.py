@@ -539,22 +539,22 @@ def vmap(
     target: a ``Module`` or a function taking a ``Module`` as its first
       argument.
     variable_axes: the variable collections that are lifted into the batching
-      transformation. Use `None` to indicate a broadcasted collection or an
+      transformation. Use ``None`` to indicate a broadcasted collection or an
       integer to map over an axis.
     split_rngs: Split PRNG sequences will be different for each index of the
       batch dimension. Unsplit PRNGs will be broadcasted.
-    in_axes: Specifies the mapping of the input arguments (see `jax.vmap`).
-    out_axes: Specifies the mapping of the return value (see `jax.vmap`).
+    in_axes: Specifies the mapping of the input arguments (see ``jax.vmap``).
+    out_axes: Specifies the mapping of the return value (see ``jax.vmap``).
     axis_size: Specifies the size of the batch axis. This only needs to be
       specified if it cannot be derived from the input arguments.
     axis_name: Specifies a name for the batch axis. Can be used together with
-      parallel reduction primitives (e.g. `jax.lax.pmean`, `jax.lax.ppermute`,
+      parallel reduction primitives (e.g. ``jax.lax.pmean``, ``jax.lax.ppermute``,
       etc.). Note, this is only used for pmap and shard map. For SPMD jit, you
       do not need to manually synchronize. Just make sure that the axes are
       correctly annotated and XLA:SPMD will insert the necessary collectives.
-    methods: If `target` is a `Module`, the methods of `Module` to vmap over.
+    methods: If ``target`` is a ``Module``, the methods of ``Module`` to vmap over.
     spmd_axis_name: Axis name added to any pjit sharding constraints appearing
-      in `fn`. See also
+      in ``fn``. See also
       https://github.com/google/flax/blob/main/flax/linen/partitioning.py.
     metadata_params: arguments dict passed to AxisMetadata instances in the
       variable tree.
@@ -623,7 +623,7 @@ def jit(
       ``jax.devices()[0]``.
     backend: a string representing the XLA backend: ``'cpu'``, ``'gpu'``, or
       ``'tpu'``.
-    methods: If `target` is a `Module`, the methods of `Module` to jit.
+    methods: If ``target`` is a ``Module``, the methods of ``Module`` to jit.
 
   Returns:
     A wrapped version of target, set up for just-in-time compilation.
@@ -704,9 +704,9 @@ def checkpoint(
       arguments as static can avoid ConcretizationTypeErrors when tracing, but
       at the cost of more retracing overheads.
     policy: Experimental checkpoint policy, see ``jax.checkpoint``.
-    methods: An optional list of method names that will be lifted, if `methods`
-      is None (default) only the `__call__` method will be lifted. If `target`
-      is a function, `methods` is ignored.
+    methods: An optional list of method names that will be lifted, if ``methods``
+      is None (default) only the ``__call__`` method will be lifted. If``target``
+      is a function, ``methods`` is ignored.
 
   Returns:
     A wrapped version of ``target``. When computing gradients intermediate
@@ -763,9 +763,9 @@ def remat_scan(
     target: a ``Module`` or a function taking a ``Module`` as its first
       argument.
     lengths: number of loop iterations at the given level. The total number of
-      iterations `n = prod(lengths)`. each loop is rematerialized. This way the
-      memory consumption is proportional to `n^(1 / d)` where `d =
-      len(lengths)`. Minimal memory consumptions requires tuning the lengths
+      iterations ``n = prod(lengths)``. each loop is rematerialized. This way the
+      memory consumption is proportional to ``n^(1 / d)`` where ``d =
+      len(lengths)``. Minimal memory consumptions requires tuning the lengths
       such that the same amount of memory is consumed at each level of the
       nested loop.
     policy: Experimental checkpoint policy, see ``jax.checkpoint``.
@@ -935,7 +935,7 @@ def scan(
     split_rngs: Split PRNG sequences will be different for each loop iterations.
       If split is False the PRNGs will be the same across iterations.
     in_axes: Specifies the axis to scan over for the arguments. Should be a
-      prefix tree of the arguments. Use `flax.core.broadcast` to feed an entire
+      prefix tree of the arguments. Use ``flax.core.broadcast`` to feed an entire
       input to each iteration of the scan body.
     out_axes: Specifies the axis to scan over for the return value. Should be a
       prefix tree of the return value.
@@ -949,7 +949,7 @@ def scan(
       annotations.
     metadata_params: arguments dict passed to AxisMetadata instances in the
       variable tree.
-    methods: If `target` is a `Module`, the methods of `Module` to scan over.
+    methods: If ``target`` is a ``Module``, the methods of ``Module`` to scan over.
 
   Returns:
     The scan function with the signature ``(module, carry, *xs) -> (carry,
@@ -1030,8 +1030,8 @@ def map_variables(
     mutable: If True, the mapped variable collections will be mutable.
     rngs: PRNGSequences added to the transformed scope (default: all).
     variables: Additional Variable collections added to the transformed scope.
-      Besides those specified by `target` (default: all).
-    methods: If `target` is a `Module`, the methods of `Module` to map variables
+      Besides those specified by ``target`` (default: all).
+    methods: If ``target`` is a ``Module``, the methods of ``Module`` to map variables
       for.
   Returns:
     a wrapped version of ``target`` that will map the specified collections.
@@ -1067,9 +1067,9 @@ def vjp(
   See ``jax.vjp`` for the unlifted vector-Jacobiam product (backward gradient).
 
   Note that a gradient is returned for all variables in the collections
-  specified by `vjp_variables`. However, the backward funtion only expects
-  a cotangent for the return value of `fn`. If variables require a co-tangent
-  as well they can be returned from `fn` using `Module.variables`.
+  specified by ``vjp_variables``. However, the backward funtion only expects
+  a cotangent for the return value of ``fn``. If variables require a co-tangent
+  as well they can be returned from ``fn`` using ``Module.variables``.
 
   Example::
 
@@ -1111,9 +1111,9 @@ def vjp(
       will create a per-example VJP.
     vjp_variables: The vjpfun will return a cotangent vector for all
       variable collections specified by this filter.
-    variables: other variables collections that are available inside `fn` but
+    variables: other variables collections that are available inside ``fn`` but
       do not receive a cotangent.
-    rngs: the prngs that are available inside `fn`.
+    rngs: the prngs that are available inside ``fn``.
     multi_scope: for Modules containing multiple scopes from outside modules passed in,
       allow for variable gradients to be returned for multiple scopes instead of erroring.
   Returns:
@@ -1191,9 +1191,9 @@ def value_and_grad(
       is a named batch axis, ``vjp(f, *args, reduce_axes=('batch',))`` will
       create a grad function that sums over the batch while ``grad(f, *args)``
       will create a per-example grad.
-    variables: variables collections that are available inside `fn` but
+    variables: variables collections that are available inside ``fn`` but
       do not receive a cotangent.
-    rngs: the prngs that are available inside `fn`.
+    rngs: the prngs that are available inside ``fn``.
   Returns:
     If ``has_aux`` is ``False``, returns a ``primals_out, grads`` pair, where
     ``primals_out`` is ``fn(*primals)``.  ``grads`` are the gradients for the
@@ -1284,9 +1284,9 @@ def grad(
       is a named batch axis, ``vjp(f, *args, reduce_axes=('batch',))`` will
       create a grad function that sums over the batch while ``grad(f, *args)``
       will create a per-example grad.
-    variables: variables collections that are available inside `fn` but
+    variables: variables collections that are available inside ``fn`` but
       do not receive a cotangent.
-    rngs: the prngs that are available inside `fn`.
+    rngs: the prngs that are available inside ``fn``.
   Returns:
     If ``has_aux`` is ``False``, returns ``grads``, where ``grads`` are the
     gradients for the corresponding primals and do not include the gradients
@@ -1329,8 +1329,8 @@ def jvp(
   See ``jax.jvp`` for the unlifted Jacobian-vector product (forward gradient).
 
   Note that no tangents are returned for variables. When variable tangents
-  are required their value should be returned explicitly by `fn`
-  using `Module.variables`::
+  are required their value should be returned explicitly by ``fn``
+  using ``Module.variables``::
 
     >>> import flax.linen as nn
     >>> import jax.numpy as jnp
@@ -1382,9 +1382,9 @@ def jvp(
       scopes. Each entry in the dict specifies the tangents for a variable
       collection. Not specifying a collection in variable_tangents is
       equivalent to passing a zero vector as the tangent.
-    variables: other variables collections that are available in `fn` but
+    variables: other variables collections that are available in ``fn`` but
       do not receive a tangent.
-    rngs: the prngs that are available inside `fn`.
+    rngs: the prngs that are available inside ``fn``.
 
   Returns:
     A ``(primals_out, tangents_out)`` pair, where ``primals_out`` is
@@ -1421,12 +1421,12 @@ def while_loop(
 ) -> C:
   """Lifted version of jax.lax.while_loop.
 
-  The lifted scope is passed to `cond_fn` and `body_fn`.
+  The lifted scope is passed to ``cond_fn`` and ``body_fn``.
   Broadcasted variables are immutable. The carry variable are
   mutable but cannot change shape and dtype.
   This also means you cannot initialize variables inside
-  the body. Consider calling `body_fn` once manually before
-  calling `while_loop` if variable initialization is required.
+  the body. Consider calling ``body_fn`` once manually before
+  calling ``while_loop`` if variable initialization is required.
 
   Example::
 
@@ -1525,9 +1525,9 @@ def cond(
 
   Args:
     pred: determines if true_fun or false_fun is evaluated.
-    true_fun: The function evalauted when ``pred`` is `True`.
+    true_fun: The function evaluated when ``pred`` is ``True``.
       The signature is (module, *operands) -> T.
-    false_fun: The function evalauted when ``pred`` is `False`.
+    false_fun: The function evaluated when ``pred`` is ``False``.
       The signature is (module, *operands) -> T.
     mdl: A Module target to pass.
     *operands: The arguments passed to ``true_fun`` and ``false_fun``
@@ -1669,22 +1669,22 @@ def custom_vjp(
   grad_vars: lift.CollectionFilter = 'params',
   nondiff_argnums=(),
 ):
-  """Lifted version of `jax.custom_vjp`.
+  """Lifted version of ``jax.custom_vjp``.
 
-  `forward_fn` and `backward_fn` together define a custom vjp for `fn`.
-  The original `fn` will run in case a vjp (backward gradient) is not computed.
+  ``forward_fn`` and ``backward_fn`` together define a custom vjp for ``fn``.
+  The original ``fn`` will run in case a vjp (backward gradient) is not computed.
 
-  The `forward_fn` receives the same arguments as `fn` but is expected to return
-  a tuple containing the output of `fn(mdl, *args)` and the residuals that are
-  passed to `backward_fn`.
+  The ``forward_fn`` receives the same arguments as ``fn`` but is expected to return
+  a tuple containing the output of ``fn(mdl, *args)`` and the residuals that are
+  passed to ``backward_fn``.
 
-  The `backward_fn` receives the nondiff arguments, residuals, and the output
+  The ``backward_fn`` receives the nondiff arguments, residuals, and the output
   tangents. It should return a tuple containing the variable and input tangents.
 
-  Note that the vjp function returned by `nn.vjp` can be passed as residual and
-  used in the `backward_fn`. The scope is unavailable during the backward pass.
-  If the module is required in `backward_fn`, a snapshot of the variables can
-  be taken and returned as a residual in the `forward_fn`.
+  Note that the vjp function returned by ``nn.vjp`` can be passed as residual and
+  used in the ``backward_fn``. The scope is unavailable during the backward pass.
+  If the module is required in ``backward_fn``, a snapshot of the variables can
+  be taken and returned as a residual in the ``forward_fn``.
 
   Example::
 
@@ -1721,13 +1721,13 @@ def custom_vjp(
     backward_fn: arguments are passed as
       ``(*nondiff_args, residuals, tangents)`` The function should return a
       tuple containing the tangents for the variable in the collections
-      specified by `grad_vars` and the input arguments (except the module and
+      specified by ``grad_vars`` and the input arguments (except the module and
       nondiff args).
     grad_vars: The collections for which a vjp will be computed
       (default: "params").
     nondiff_argnums: arguments for which no vjp is computed.
   Returns:
-    A function with the same signature as `fn` with the custom vjp.
+    A function with the same signature as ``fn`` with the custom vjp.
   """
 
   def shared_forward_fn(*args, needs_residual, **kwargs):

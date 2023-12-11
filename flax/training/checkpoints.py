@@ -596,13 +596,13 @@ def save_checkpoint(
   In this method, every JAX process saves the checkpoint on its own. Do not
   use it if you have multiple processes and you intend for them to save data
   to a common directory (e.g., a GCloud bucket). To save multi-process
-  checkpoints to a shared storage or to save `GlobalDeviceArray`s, use
-  `save_checkpoint_multiprocess()` instead.
+  checkpoints to a shared storage or to save ``GlobalDeviceArray``s, use
+  ``save_checkpoint_multiprocess()`` instead.
 
   Pre-emption safe by writing to temporary before a final rename and cleanup
   of past files. However, if async_manager is used, the final
   commit will happen inside an async callback, which can be explicitly waited
-  by calling `async_manager.wait_previous_save()`.
+  by calling ``async_manager.wait_previous_save()``.
 
   Example usage::
 
@@ -639,7 +639,7 @@ def save_checkpoint(
       block subsequent saves, to make sure overwrite/keep logic works correctly.
     orbax_checkpointer: if defined, the save will be done by ocp. In the future,
       all Flax checkpointing features will be migrated to Orbax, and starting to
-      use an `orbax_checkpointer` is recommended. Please check out the
+      use an ``orbax_checkpointer`` is recommended. Please check out the
       checkpointing guide
       (https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#save-checkpoints)
       for how to use Orbax checkpointers.
@@ -763,15 +763,15 @@ def save_checkpoint_multiprocess(
 ) -> str:
   """Save a checkpoint of the model in multi-process environment.
 
-  Use this method to save `GlobalDeviceArray`s, or to save data to a
+  Use this method to save ``GlobalDeviceArray``s, or to save data to a
   common directory. Only process 0 will save the main checkpoint file and
   remove old checkpoint files.
 
   Pre-emption safe by writing to temporary before a final rename and cleanup
   of past files. However, if async_manager or gda_manager is used, the final
   commit will happen inside an async callback, which can be explicitly waited
-  by calling `async_manager.wait_previous_save()` or
-  `gda_manager.wait_until_finished()`.
+  by calling ``async_manager.wait_previous_save()`` or
+  ``gda_manager.wait_until_finished()``.
 
   Args:
     ckpt_dir: str or pathlib-like path to store checkpoint files in.
@@ -791,7 +791,7 @@ def save_checkpoint_multiprocess(
       Same as async_manager, this will block subsequent saves.
     orbax_checkpointer: if defined, the save will be done by Orbax In the
       future, all Flax checkpointing features will be migrated to Orbax, and
-      starting to use an `orbax_checkpointer` is recommended. Please check out
+      starting to use an ``orbax_checkpointer`` is recommended. Please check out
       the checkpointing guide
       (https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#save-checkpoints)
       for how to use Orbax checkpointers.
@@ -1056,20 +1056,20 @@ def restore_checkpoint(
     gda_manager: required if checkpoint contains a multiprocess array
       (GlobalDeviceArray or jax Array from pjit). Will read the arrays from the
       separate subdirectory with postfix "_gda".
-    allow_partial_mpa_restoration: If true, the given `target` doesn't have to
+    allow_partial_mpa_restoration: If true, the given ``target`` doesn't have to
       contain all valid multiprocess arrays. As a result, the restored Pytree
       may have some MPAs not restored correctly. Use this if you cannot provide
       a fully valid ``target`` and don't need all the MPAs in the checkpoint to
       be restored.
-    orbax_checkpointer: the `ocp.Checkpointer` that handles the underlying
+    orbax_checkpointer: the ``ocp.Checkpointer`` that handles the underlying
       restore, if the given checkpoint is saved with ocp.
     orbax_transforms: the Orbax transformations that will be passed into
-      `orbax_checkpointer.restore()` call.
+      ``orbax_checkpointer.restore()`` call.
 
   Returns:
-    Restored `target` updated from checkpoint file, or if no step specified and
-    no checkpoint files present, returns the passed-in `target` unchanged.
-    If a file path is specified and is not found, the passed-in `target` will be
+    Restored ``target`` updated from checkpoint file, or if no step specified and
+    no checkpoint files present, returns the passed-in ``target`` unchanged.
+    If a file path is specified and is not found, the passed-in ``target`` will be
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """

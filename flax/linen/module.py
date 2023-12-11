@@ -492,7 +492,7 @@ def compact(fun: _CallableT) -> _CallableT:
     fun: The Module method to mark as compact.
 
   Returns:
-    The given function `fun` marked as compact.
+    The given function ``fun`` marked as compact.
   """
   fun.compact = True  # type: ignore[attr-defined]
   return fun
@@ -501,7 +501,7 @@ def compact(fun: _CallableT) -> _CallableT:
 def nowrap(fun: _CallableT) -> _CallableT:
   """Marks the given module method as a helper method that needn't be wrapped.
 
-  Methods wrapped in @nowrap are private helper methods that needn't be wrapped
+  Methods wrapped in ``@nowrap`` are private helper methods that needn't be wrapped
   with the state handler or a separate named_call transform.
 
   This is needed in several concrete instances:
@@ -532,7 +532,7 @@ def nowrap(fun: _CallableT) -> _CallableT:
     fun: The Module method to mark as nowrap.
 
   Returns:
-    The given function `fun` marked as nowrap.
+    The given function ``fun`` marked as nowrap.
   """
   fun.nowrap = True  # type: ignore[attr-defined]
   return fun
@@ -1304,7 +1304,7 @@ class Module(ModuleBase):
 
     ``setup`` is called once lazily on a module instance when a module
     is bound, immediately before any other methods like ``__call__`` are
-    invoked, or before a ``setup``-defined attribute on `self` is accessed.
+    invoked, or before a ``setup``-defined attribute on ``self`` is accessed.
 
     This can happen in three cases:
 
@@ -1452,8 +1452,8 @@ class Module(ModuleBase):
   ) -> M:
     """Creates a clone of this Module, with optionally updated arguments.
 
-    NOTE: end users are encouraged to use the `copy` method.  `clone` is used
-      primarily for internal routines, and `copy` offers simpler arguments and
+    NOTE: end users are encouraged to use the ``copy`` method.  ``clone`` is used
+      primarily for internal routines, and ``copy`` offers simpler arguments and
       better defaults.
 
     Args:
@@ -1463,8 +1463,8 @@ class Module(ModuleBase):
         of submodules. If True, submodules will be cloned recursively. If a weak
         value dictionary is passed, it will be used to cache cloned submodules.
         This flag is used by init/apply/bind to avoid scope leakage.
-      _reset_names: If True, `name=None` is also passed to submodules when
-        cloning. Resetting names in submodules is necessary when calling `.unbind`.
+      _reset_names: If True, ``name=None`` is also passed to submodules when
+        cloning. Resetting names in submodules is necessary when calling ``.unbind``.
       **updates: Attribute updates.
 
     Returns:
@@ -1598,7 +1598,7 @@ class Module(ModuleBase):
     for a shorthand way to define read-only variables in the "params"
     collection.
 
-    Contrary to :meth:`param`, all arguments passing using `init_fn` should be
+    Contrary to :meth:`param`, all arguments passing using ``init_fn`` should be
     passed on explicitly::
 
       >>> class Foo(nn.Module):
@@ -1613,8 +1613,8 @@ class Module(ModuleBase):
       >>> jax.tree_map(jnp.shape, variables)
       {'params': {'Dense_0': {'bias': (4,), 'kernel': (3, 4)}}, 'stats': {'mean': (2, 4)}}
 
-    In the example above, the function `lecun_normal` expects two arguments:
-    `key` and `shape`, and both have to be passed on. The PRNG for `stats` has
+    In the example above, the function ``lecun_normal`` expects two arguments:
+    ``key`` and ``shape``, and both have to be passed on. The PRNG for ``stats`` has
     to be provided explicitly when calling :meth:`init` and :meth:`apply`.
 
     Args:
@@ -1682,8 +1682,8 @@ class Module(ModuleBase):
     Parameters are read-only variables in the collection named "params". See
     :mod:`flax.core.variables` for more details on variables.
 
-    The first argument of `init_fn` is assumed to be a PRNG key, which is
-    provided automatically and does not have to be passed using `init_args`::
+    The first argument of ``init_fn`` is assumed to be a PRNG key, which is
+    provided automatically and does not have to be passed using ``init_args``::
 
       >>> class Foo(nn.Module):
       ...   @nn.compact
@@ -1696,9 +1696,9 @@ class Module(ModuleBase):
       >>> jax.tree_map(jnp.shape, variables)
       {'params': {'Dense_0': {'bias': (4,), 'kernel': (3, 4)}, 'mean': (2, 4)}}
 
-    In the example above, the function `lecun_normal` expects two arguments:
-    `key` and `shape`, but only `shape` has to be provided explicitly; `key`
-    is set automatically using the PRNG for `params` that is passed when
+    In the example above, the function ``lecun_normal`` expects two arguments:
+    ``key`` and ``shape``, but only ``shape`` has to be provided explicitly; ``key``
+    is set automatically using the PRNG for ``params`` that is passed when
     initializing the module using :meth:`init`.
 
     Args:
@@ -1744,13 +1744,13 @@ class Module(ModuleBase):
     return self.scope.has_variable(col, name)
 
   def is_mutable_collection(self, col: str) -> bool:
-    """Returns true if the collection `col` is mutable."""
+    """Returns true if the collection ``col`` is mutable."""
     if self.scope is None:
       raise ValueError("Can't check mutability on unbound modules")
     return self.scope.is_mutable_collection(col)
 
   def has_rng(self, name: str) -> bool:
-    """Returns true if a PRNGSequence with name `name` exists."""
+    """Returns true if a PRNGSequence with name ``name`` exists."""
     if self.scope is None:
       raise ValueError("Can't query for RNGs on unbound modules")
     return self.scope.has_rng(name)
@@ -1759,7 +1759,7 @@ class Module(ModuleBase):
     """Returns a new RNG key from a given RNG sequence for this Module.
 
     The new RNG key is split from the previous one. Thus, every call to
-    `make_rng` returns a new RNG key, while still guaranteeing full
+    ``make_rng`` returns a new RNG key, while still guaranteeing full
     reproducibility.
 
     TODO: Link to Flax RNG design note.
@@ -1921,10 +1921,10 @@ class Module(ModuleBase):
   ) -> Union[Any, Tuple[Any, Union[FrozenVariableDict, Dict[str, Any]]]]:
     """Applies a module method to variables and returns output and modified variables.
 
-    Note that `method` should be set if one would like to call `apply` on a
+    Note that ``method`` should be set if one would like to call ``apply`` on a
     different class method than ``__call__``. For instance, suppose a
-    Transformer modules has a method called `encode`, then the following calls
-    `apply` on that method::
+    Transformer modules has a method called ``encode``, then the following calls
+    ``apply`` on that method::
 
       >>> class Transformer(nn.Module):
       ...   def encode(self, x):
@@ -1972,7 +1972,7 @@ class Module(ModuleBase):
         treated as mutable: ``bool``: all/no collections are mutable. ``str``:
         The name of a single mutable collection. ``list``: A list of names of
         mutable collections.
-      capture_intermediates: If `True`, captures intermediate return values of
+      capture_intermediates: If ``True``, captures intermediate return values of
         all Modules inside the "intermediates" collection. By default, only the
         return values of all ``__call__`` methods are stored. A function can be
         passed to change the filter behavior. The filter function takes the
@@ -2035,7 +2035,7 @@ class Module(ModuleBase):
         The name of a single mutable collection. ``list``: A list of names of
         mutable collections. By default, all collections except "intermediates"
         are mutable.
-      capture_intermediates: If `True`, captures intermediate return values of
+      capture_intermediates: If ``True``, captures intermediate return values of
         all Modules inside the "intermediates" collection. By default only the
         return values of all ``__call__`` methods are stored. A function can be
         passed to change the filter behavior. The filter function takes the
@@ -2044,7 +2044,7 @@ class Module(ModuleBase):
       **kwargs: Keyword arguments passed to the init function.
 
     Returns:
-      `(output, vars)``, where ``vars`` are is a dict of the modified
+      ``(output, vars)``, where ``vars`` are is a dict of the modified
       collections.
     """
     Module._module_checks(self)
@@ -2137,7 +2137,7 @@ class Module(ModuleBase):
       ...         'noise': jax.random.key(1)}
       >>> variables = module.init(rngs, jnp.empty((1, 7)), train=False)
 
-    Jitting `init` initializes a model lazily using only the shapes of the
+    Jitting ``init`` initializes a model lazily using only the shapes of the
     provided arguments, and avoids computing the forward pass with actual
     values. Example::
 
@@ -2160,7 +2160,7 @@ class Module(ModuleBase):
         The name of a single mutable collection. ``list``: A list of names of
         mutable collections. By default all collections except "intermediates"
         are mutable.
-      capture_intermediates: If `True`, captures intermediate return values of
+      capture_intermediates: If ``True``, captures intermediate return values of
         all Modules inside the "intermediates" collection. By default only the
         return values of all ``__call__`` methods are stored. A function can be
         passed to change the filter behavior. The filter function takes the
@@ -2298,8 +2298,8 @@ class Module(ModuleBase):
     Collections can be used to collect intermediate values without
     the overhead of explicitly passing a container through each Module call.
 
-    If the target collection is not mutable `sow` behaves like a no-op
-    and returns `False`.
+    If the target collection is not mutable ``sow`` behaves like a no-op
+    and returns ``False``.
 
     Example::
 
@@ -2366,12 +2366,12 @@ class Module(ModuleBase):
       value: The value of the variable.
       reduce_fn: The function used to combine the existing value with the new
         value. The default is to append the value to a tuple.
-      init_fn: For the first value stored, `reduce_fn` will be passed the result
-        of `init_fn` together with the value to be stored. The default is an
+      init_fn: For the first value stored, ``reduce_fn`` will be passed the result
+        of ``init_fn`` together with the value to be stored. The default is an
         empty tuple.
 
     Returns:
-      `True` if the value has been stored successfully, `False` otherwise.
+      ``True`` if the value has been stored successfully, ``False`` otherwise.
     """
     if self.scope is None:
       raise ValueError("Can't store variables on unbound modules")
@@ -2392,10 +2392,10 @@ class Module(ModuleBase):
   ) -> T:
     """Add an zero-value variable ('perturbation') to the intermediate value.
 
-    The gradient of `value` would be the same as the gradient of this
+    The gradient of ``value`` would be the same as the gradient of this
     perturbation variable. Therefore, if you define your loss function with
     both params and perturbations as standalone arguments, you can get the
-    intermediate gradients of `value` by running `jax.grad` on the perturbation
+    intermediate gradients of ``value`` by running ``jax.grad`` on the perturbation
     argument.
 
     Note: this is an experimental API and may be tweaked later for better
@@ -2425,7 +2425,7 @@ class Module(ModuleBase):
       [[-1.456924   -0.44332537  0.02422847]
        [-1.456924   -0.44332537  0.02422847]]
 
-    If perturbations are not passed to `apply`, `perturb` behaves like a no-op
+    If perturbations are not passed to ``apply``, ``perturb`` behaves like a no-op
     so you can easily disable the behavior when not needed::
 
       >>> model.apply(variables, x) # works as expected
@@ -2471,13 +2471,13 @@ class Module(ModuleBase):
   ) -> str:
     """Creates a summary of the Module represented as a table.
 
-    This method has the same signature and internally calls `Module.init`,
+    This method has the same signature and internally calls ``Module.init``,
     but instead of returning the variables, it returns the string summarizing
-    the Module in a table. `tabulate` uses `jax.eval_shape` to run the forward
+    the Module in a table. ``tabulate`` uses ``jax.eval_shape`` to run the forward
     computation without consuming any FLOPs or allocating memory.
 
-    Additional arguments can be passed into the `console_kwargs` argument, for
-    example, `{'width': 120}`. For a full list of `console_kwargs` arguments,
+    Additional arguments can be passed into the ``console_kwargs`` argument, for
+    example, ``{'width': 120}``. For a full list of ``console_kwargs`` arguments,
     see:
     https://rich.readthedocs.io/en/stable/reference/console.html#rich.console.Console
 
@@ -2525,45 +2525,45 @@ class Module(ModuleBase):
                                     Total Parameters: 50 (200 B)
 
     **Note**: rows order in the table does not represent execution order,
-    instead it aligns with the order of keys in `variables` which are sorted
+    instead it aligns with the order of keys in ``variables`` which are sorted
     alphabetically.
 
-    **Note**: `vjp_flops` returns `0` if the module is not differentiable.
+    **Note**: ``vjp_flops`` returns ``0`` if the module is not differentiable.
 
     Args:
-      rngs: The rngs for the variable collections as passed to `Module.init`.
+      rngs: The rngs for the variable collections as passed to ``Module.init``.
       *args: The arguments to the forward computation.
       depth: controls how many submodule deep the summary can go. By default,
-        its `None` which means no limit. If a submodule is not shown because of
+        its ``None`` which means no limit. If a submodule is not shown because of
         the depth limit, its parameter count and bytes will be added to the row
         of its first shown ancestor such that the sum of all rows always adds
         up to the total number of parameters of the Module.
-      show_repeated: If `True`, repeated calls to the same module will be shown
+      show_repeated: If ``True``, repeated calls to the same module will be shown
         in the table, otherwise only the first call will be shown. Default is
-        `False`.
+        ``False``.
       mutable: Can be bool, str, or list. Specifies which collections should be
         treated as mutable: ``bool``: all/no collections are mutable. ``str``:
         The name of a single mutable collection. ``list``: A list of names of
         mutable collections. By default, all collections except 'intermediates'
         are mutable.
       console_kwargs: An optional dictionary with additional keyword arguments
-        that are passed to `rich.console.Console` when rendering the table.
-        Default arguments are `{'force_terminal': True, 'force_jupyter':
-        False}`.
+        that are passed to ``rich.console.Console`` when rendering the table.
+        Default arguments are ``{'force_terminal': True, 'force_jupyter':
+        False}``.
       table_kwargs: An optional dictionary with additional keyword arguments
-        that are passed to `rich.table.Table` constructor.
+        that are passed to ``rich.table.Table`` constructor.
       column_kwargs: An optional dictionary with additional keyword arguments
-        that are passed to `rich.table.Table.add_column` when adding columns to
+        that are passed to ``rich.table.Table.add_column`` when adding columns to
         the table.
-      compute_flops: whether to include a `flops` column in the table listing
+      compute_flops: whether to include a ``flops`` column in the table listing
         the estimated FLOPs cost of each module forward pass. Does incur actual
         on-device computation / compilation / memory allocation, but still
         introduces overhead for large modules (e.g. extra 20 seconds for a
         Stable Diffusion's UNet, whereas otherwise tabulation would finish in 5
         seconds).
-      compute_vjp_flops: whether to include a `vjp_flops` column in the table
+      compute_vjp_flops: whether to include a ``vjp_flops`` column in the table
         listing the estimated FLOPs cost of each module backward pass.
-        Introduces a compute overhead of about 2-3X of `compute_flops`.
+        Introduces a compute overhead of about 2-3X of ``compute_flops``.
       **kwargs: keyword arguments to pass to the forward computation.
 
     Returns:
@@ -2594,7 +2594,7 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
 
   This is a utility for supporting a pattern where a Module hyperparameter
   can be passed either to ``__init__`` or ``__call__``, and the value that is
-  not `None` will be used.
+  not ``None`` will be used.
 
   Example::
 
@@ -2607,8 +2607,8 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
     ...   def __call__(self, train: Optional[bool] = None):
     ...     train = nn.merge_param('train', self.train, train)
 
-  An error is thrown when both arguments are `None` or both values are not
-  `None`.
+  An error is thrown when both arguments are ``None`` or both values are not
+  ``None``.
 
   Args:
     name: the name of the parameter. Used for error messages.
@@ -2616,7 +2616,7 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
     b: option b
 
   Returns:
-    a or b whichever is not `None`.
+    a or b whichever is not ``None``.
   """
   if a is None and b is None:
     raise ValueError(
@@ -2643,7 +2643,7 @@ def apply(
   """Creates an apply function to call ``fn`` with a bound module.
 
   Unlike ``Module.apply`` this function returns a new function with the
-  signature ``(variables, *args, rngs=None, **kwargs) -> T`` where `T` is the
+  signature ``(variables, *args, rngs=None, **kwargs) -> T`` where ``T`` is the
   return type of ``fn``. If ``mutable`` is not ``False`` the return type is a
   tuple where the second item is a ``FrozenDict`` with the mutated variables.
 
@@ -2677,7 +2677,7 @@ def apply(
       treated as mutable: ``bool``: all/no collections are mutable. ``str``: The
       name of a single mutable collection. ``list``: A list of names of mutable
       collections.
-    capture_intermediates: If `True`, captures intermediate return values of all
+    capture_intermediates: If ``True``, captures intermediate return values of all
       Modules inside the "intermediates" collection. By default, only the return
       values of all `__call__` methods are stored. A function can be passed to
       change the filter behavior. The filter function takes the Module instance
@@ -2713,7 +2713,7 @@ def init_with_output(
   """Creates an init function to call ``fn`` with a bound module that also returns the function outputs.
 
   Unlike ``Module.init_with_output`` this function returns a new function with
-  the signature ``(rngs, *args, **kwargs) -> (T, variables)`` where `T` is the
+  the signature ``(rngs, *args, **kwargs) -> (T, variables)`` where ``T`` is the
   return type of ``fn``. The rngs can be a dict of PRNGKeys or a single
   ```PRNGKey`` which is equivalent to passing a dict with one PRNGKey with the
   name "params".
@@ -2748,7 +2748,7 @@ def init_with_output(
       name of a single mutable collection. ``list``: A list of names of mutable
       collections. By default, all collections except "intermediates" are
       mutable.
-    capture_intermediates: If `True`, captures intermediate return values of all
+    capture_intermediates: If ``True``, captures intermediate return values of all
       Modules inside the "intermediates" collection. By default, only the return
       values of all `__call__` methods are stored. A function can be passed to
       change the filter behavior. The filter function takes the Module instance

@@ -89,7 +89,7 @@ def get_metrics(device_metrics):
 def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
   """Create a dense one-hot version of an indexed array.
 
-  NB: consider using the more standard `jax.nn.one_hot` instead.
+  NB: consider using the more standard ``jax.nn.one_hot`` instead.
 
   Args:
     labels: an n-dim JAX array whose last dimension contains integer indices.

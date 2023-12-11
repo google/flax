@@ -38,9 +38,9 @@ def dataclass(clz: _T) -> _T:
   NOTE: Inherit from ``PyTreeNode`` instead to avoid type checking issues when
   using PyType.
 
-  Jax transformations such as `jax.jit` and `jax.grad` require objects that are
-  immutable and can be mapped over using the `jax.tree_util` methods.
-  The `dataclass` decorator makes it easy to define custom classes that can be
+  Jax transformations such as ``jax.jit`` and ``jax.grad`` require objects that are
+  immutable and can be mapped over using the ``jax.tree_util`` methods.
+  The ``dataclass`` decorator makes it easy to define custom classes that can be
   passed safely to Jax. For example::
 
     >>> from flax import struct
@@ -75,13 +75,13 @@ def dataclass(clz: _T) -> _T:
   the arguments of the constructor and the attributes of the created
   instance match 1:1. This correspondence is what makes these objects
   valid containers that work with JAX transformations and
-  more generally the `jax.tree_util` library.
+  more generally the ``jax.tree_util`` library.
 
   Sometimes a "smart constructor" is desired, for example because
   some of the attributes can be (optionally) derived from others.
   The way to do this with Flax dataclasses is to make a static or
   class method that provides the smart constructor.
-  This way the simple constructor used by `jax.tree_util` is
+  This way the simple constructor used by ``jax.tree_util`` is
   preserved. Consider the following example::
 
     >>> @struct.dataclass

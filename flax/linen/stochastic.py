@@ -29,7 +29,7 @@ class Dropout(Module):
   """Create a dropout layer.
 
   Note: When using :meth:`Module.apply() <flax.linen.Module.apply>`, make sure
-  to include an RNG seed named `'dropout'`. Dropout isn't necessary for
+  to include an RNG seed named ``'dropout'``. Dropout isn't necessary for
   variable initialization. Example usage::
 
     >>> import flax.linen as nn
@@ -53,7 +53,7 @@ class Dropout(Module):
   Attributes:
     rate: the dropout probability.  (_not_ the keep rate!)
     broadcast_dims: dimensions that will share the same dropout mask
-    deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+    deterministic: if false the inputs are scaled by ``1 / (1 - rate)`` and
       masked, whereas if true, no mask is applied and the inputs are returned as
       is.
     rng_collection: the rng collection name to use when requesting an rng key.
@@ -75,7 +75,7 @@ class Dropout(Module):
 
     Args:
       inputs: the inputs that should be randomly masked.
-      deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+      deterministic: if false the inputs are scaled by ``1 / (1 - rate)`` and
         masked, whereas if true, no mask is applied and the inputs are returned
         as is.
       rng: an optional PRNGKey used as the random key, if not specified, one

@@ -243,11 +243,11 @@ class BatchNorm(Module):
     {'batch_stats': {'mean': (6,), 'var': (6,)}, 'params': {'bias': (6,), 'scale': (6,)}}
 
   We then update the batch_stats during training by specifying that the
-  `batch_stats` collection is mutable in the `apply` method for our module.::
+  ``batch_stats`` collection is mutable in the ``apply`` method for our module.::
 
     >>> y, new_batch_stats = BN.apply(variables, x, mutable=['batch_stats'], use_running_average=False)
 
-  During eval we would define BN with `use_running_average=True` and use the
+  During eval we would define BN with ``use_running_average=True`` and use the
   batch_stats collection from training to set the statistics.  In this case
   we are not mutating the batch statistics collection, and needn't mark it
   mutable::
@@ -270,14 +270,14 @@ class BatchNorm(Module):
     bias_init: initializer for bias, by default, zero.
     scale_init: initializer for scale, by default, one.
     axis_name: the axis name used to combine batch statistics from multiple
-      devices. See `jax.pmap` for a description of axis names (default: None).
+      devices. See ``jax.pmap`` for a description of axis names (default: None).
       Note, this is only used for pmap and shard map. For SPMD jit, you do not
       need to manually synchronize. Just make sure that the axes are correctly
       annotated and XLA:SPMD will insert the necessary collectives.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
-      example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
-      examples on the first two and last two devices. See `jax.lax.psum` for
+      example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
+      examples on the first two and last two devices. See ``jax.lax.psum`` for
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
@@ -302,17 +302,17 @@ class BatchNorm(Module):
     """Normalizes the input using batch statistics.
 
     NOTE:
-    During initialization (when `self.is_initializing()` is `True`) the running
+    During initialization (when ``self.is_initializing()`` is ``True``) the running
     average of the batch statistics will not be updated. Therefore, the inputs
     fed during initialization don't need to match that of the actual input
-    distribution and the reduction axis (set with `axis_name`) does not have
+    distribution and the reduction axis (set with ``axis_name``) does not have
     to exist.
 
     Args:
       x: the input to be normalized.
       use_running_average: if true, the statistics stored in batch_stats will be
         used instead of computing the batch statistics on the input.
-      mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+      mask: Binary array of shape broadcastable to ``inputs`` tensor, indicating
         the positions for which the mean and variance should be computed.
 
     Returns:
@@ -405,7 +405,7 @@ class LayerNorm(Module):
     reduction_axes: Axes for computing normalization statistics.
     feature_axes: Feature axes for learned bias and scaling.
     axis_name: the axis name used to combine batch statistics from multiple
-      devices. See `jax.pmap` for a description of axis names (default: None).
+      devices. See ``jax.pmap`` for a description of axis names (default: None).
       This is only needed if the model is subdivided across devices, i.e. the
       array being normalized is sharded across devices within a pmap or shard
       map. For SPMD jit, you do not need to manually synchronize. Just make sure
@@ -413,8 +413,8 @@ class LayerNorm(Module):
       necessary collectives.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
-      example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
-      examples on the first two and last two devices. See `jax.lax.psum` for
+      example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
+      examples on the first two and last two devices. See ``jax.lax.psum`` for
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
@@ -439,7 +439,7 @@ class LayerNorm(Module):
 
     Args:
       x: the inputs
-      mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+      mask: Binary array of shape broadcastable to ``inputs`` tensor, indicating
         the positions for which the mean and variance should be computed.
 
     Returns:
@@ -504,7 +504,7 @@ class RMSNorm(Module):
     reduction_axes: Axes for computing normalization statistics.
     feature_axes: Feature axes for learned bias and scaling.
     axis_name: the axis name used to combine batch statistics from multiple
-      devices. See `jax.pmap` for a description of axis names (default: None).
+      devices. See ``jax.pmap`` for a description of axis names (default: None).
       This is only needed if the model is subdivided across devices, i.e. the
       array being normalized is sharded across devices within a pmap or shard
       map. For SPMD jit, you do not need to manually synchronize. Just make sure
@@ -512,8 +512,8 @@ class RMSNorm(Module):
       necessary collectives.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
-      example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
-      examples on the first two and last two devices. See `jax.lax.psum` for
+      example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
+      examples on the first two and last two devices. See ``jax.lax.psum`` for
       more details.
   """
 
@@ -533,7 +533,7 @@ class RMSNorm(Module):
 
     Args:
       x: the inputs
-      mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+      mask: Binary array of shape broadcastable to ``inputs`` tensor, indicating
         the positions for which the mean and variance should be computed.
 
     Returns:
@@ -607,7 +607,7 @@ class GroupNorm(Module):
       leading axes compared to the data used for initialisation, for example due
       to batching, then the reduction axes need to be defined explicitly.
     axis_name: the axis name used to combine batch statistics from multiple
-      devices. See `jax.pmap` for a description of axis names (default: None).
+      devices. See ``jax.pmap`` for a description of axis names (default: None).
       This is only needed if the model is subdivided across devices, i.e. the
       array being normalized is sharded across devices within a pmap or shard
       map. For SPMD jit, you do not need to manually synchronize. Just make sure
@@ -615,8 +615,8 @@ class GroupNorm(Module):
       necessary collectives.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
-      example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
-      examples on the first two and last two devices. See `jax.lax.psum` for
+      example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
+      examples on the first two and last two devices. See ``jax.lax.psum`` for
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
@@ -641,13 +641,13 @@ class GroupNorm(Module):
     """Applies group normalization to the input (arxiv.org/abs/1803.08494).
 
     Args:
-      x: the input of shape ...C where C is a channels dimension and `...`
+      x: the input of shape ``...C`` where ``C`` is a channels dimension and ``...``
         represents an arbitrary number of extra dimensions that can be used to
         accumulate statistics over. If no reduction axes have been specified
-        then all additional dimensions `...` will be used to accumulate
+        then all additional dimensions ``...`` will be used to accumulate
         statistics apart from the leading dimension which is assumed to
         represent the batch.
-      mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+      mask: Binary array of shape broadcastable to ``inputs`` tensor, indicating
         the positions for which the mean and variance should be computed.
 
     Returns:

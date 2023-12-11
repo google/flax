@@ -61,13 +61,13 @@ class TrainState(struct.PyTreeNode):
 
   Args:
     step: Counter starts at 0 and is incremented by every call to
-      `.apply_gradients()`.
-    apply_fn: Usually set to `model.apply()`. Kept in this dataclass for
-      convenience to have a shorter params list for the `train_step()` function
+      ``.apply_gradients()``.
+    apply_fn: Usually set to ``model.apply()``. Kept in this dataclass for
+      convenience to have a shorter params list for the ``train_step()`` function
       in your training loop.
-    params: The parameters to be updated by `tx` and used by `apply_fn`.
+    params: The parameters to be updated by ``tx`` and used by ``apply_fn``.
     tx: An Optax gradient transformation.
-    opt_state: The state for `tx`.
+    opt_state: The state for ``tx``.
   """
 
   step: int
@@ -77,19 +77,19 @@ class TrainState(struct.PyTreeNode):
   opt_state: optax.OptState = struct.field(pytree_node=True)
 
   def apply_gradients(self, *, grads, **kwargs):
-    """Updates `step`, `params`, `opt_state` and `**kwargs` in return value.
+    """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
 
-    Note that internally this function calls `.tx.update()` followed by a call
-    to `optax.apply_updates()` to update `params` and `opt_state`.
+    Note that internally this function calls ``.tx.update()`` followed by a call
+    to ``optax.apply_updates()`` to update ``params`` and ``opt_state``.
 
     Args:
-      grads: Gradients that have the same pytree structure as `.params`.
-      **kwargs: Additional dataclass attributes that should be `.replace()`-ed.
+      grads: Gradients that have the same pytree structure as ``.params``.
+      **kwargs: Additional dataclass attributes that should be ``.replace()``-ed.
 
     Returns:
-      An updated instance of `self` with `step` incremented by one, `params`
-      and `opt_state` updated by applying `grads`, and additional attributes
-      replaced as specified by `kwargs`.
+      An updated instance of ``self`` with ``step`` incremented by one, ``params``
+      and ``opt_state`` updated by applying ``grads``, and additional attributes
+      replaced as specified by ``kwargs``.
     """
     if OVERWRITE_WITH_GRADIENT in grads:
       grads_with_opt = grads['params']
@@ -121,7 +121,7 @@ class TrainState(struct.PyTreeNode):
 
   @classmethod
   def create(cls, *, apply_fn, params, tx, **kwargs):
-    """Creates a new instance with `step=0` and initialized `opt_state`."""
+    """Creates a new instance with ``step=0`` and initialized ``opt_state``."""
     # We exclude OWG params when present because they do not need opt states.
     params_with_opt = (
       params['params'] if OVERWRITE_WITH_GRADIENT in params else params
