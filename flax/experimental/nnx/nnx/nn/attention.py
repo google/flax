@@ -53,6 +53,7 @@ def dot_product_attention_weights(
   deterministic: bool = False,
   dtype: Optional[Dtype] = None,
   precision: PrecisionLike = None,
+  module: Optional[Module] = None,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -79,6 +80,9 @@ def dot_product_attention_weights(
     dtype: the dtype of the computation (default: infer from inputs and params)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
+    module: the Module that will sow the attention weights into the
+      ``nnx.Intermediate`` collection. If ``module`` is None, the attention
+      weights will not be sowed.
 
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
@@ -110,6 +114,9 @@ def dot_product_attention_weights(
   # normalize the attention weights
   attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
 
+  if module:
+    module.sow(nnx.Intermediate, 'attention_weights', attn_weights)
+
   # apply attention dropout
   if not deterministic and dropout_rate > 0.0:
     keep_prob = 1.0 - dropout_rate
@@ -137,6 +144,7 @@ def dot_product_attention(
   deterministic: bool = False,
   dtype: Optional[Dtype] = None,
   precision: PrecisionLike = None,
+  module: Optional[Module] = None,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -167,6 +175,9 @@ def dot_product_attention(
     dtype: the dtype of the computation (default: infer from inputs)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
+    module: the Module that will sow the attention weights into the
+      ``nnx.Intermediate`` collection. If ``module`` is None, the attention
+      weights will not be sowed.
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
@@ -194,6 +205,7 @@ def dot_product_attention(
     deterministic,
     dtype,
     precision,
+    module,
   )
 
   # return weighted sum over values for each query position
@@ -385,6 +397,7 @@ class MultiHeadAttention(Module):
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[Array] = None,
     rngs: rnglib.Rngs | None = None,
+    sow_weights: bool = False,
   ):
     ...
 
@@ -398,6 +411,7 @@ class MultiHeadAttention(Module):
     deterministic: bool | None = None,
     dropout_rng: Array | None = None,
     rngs: rnglib.Rngs | None = None,
+    sow_weights: bool = False,
   ):
     ...
 
@@ -410,6 +424,7 @@ class MultiHeadAttention(Module):
     mask: Array | None = None,
     deterministic: bool | None = None,
     rngs: rnglib.Rngs | None = None,
+    sow_weights: bool = False,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -434,6 +449,8 @@ class MultiHeadAttention(Module):
       rngs: container for random number generators to generate the dropout
         mask when `deterministic` is False. The `rngs` container should have a
         `dropout` key.
+      sow_weights: if ``True``, the attention weights are sowed into the
+        'intermediates' collection.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
@@ -537,6 +554,7 @@ class MultiHeadAttention(Module):
       deterministic=deterministic,
       dtype=self.dtype,
       precision=self.precision,
+      module=self if sow_weights else None,
     )
     # back to the original inputs dimensions
     out = self.out(x)
