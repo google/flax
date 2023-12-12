@@ -989,12 +989,12 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (6, 6, 4, 3))
     self.assertEqual(y.shape, (1, 30, 30, 4))
 
-  @parameterized.product(module=(nn.Conv, nn.ConvLocal))
-  def test_int_kernel_size(self, module):
-    conv = module(features=4, kernel_size=3)
+  @parameterized.product(module=(nn.Conv, nn.ConvLocal, nn.ConvTranspose))
+  def test_int_kernel_equality(self, module):
+    conv_int = module(features=4, kernel_size=3)
+    conv_seq = module(features=4, kernel_size=(3,))
     x = jnp.ones((8, 3))
-    with self.assertRaises(TypeError):
-      conv.init(random.key(0), x)
+    self.assertTrue(jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x==y).all(), conv_int.init(random.key(0), x), conv_seq.init(random.key(0), x))))
 
   def test_embed(self):
     rng = dict(params=random.key(0))

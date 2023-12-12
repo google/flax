@@ -330,8 +330,9 @@ class _Conv(Module):
 
   Attributes:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
-    strides: an integer or a sequence of ``n`` integers, representing the
+    kernel_size: shape of the convolutional kernel. An integer will be
+      interpreted as a tuple of the single integer.
+    strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string ``'SAME'``, the string ``'VALID'``, the string
       ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
@@ -362,7 +363,7 @@ class _Conv(Module):
   """
 
   features: int
-  kernel_size: Sequence[int]
+  kernel_size: Union[int, Sequence[int]]
   strides: Union[None, int, Sequence[int]] = 1
   padding: PaddingLike = 'SAME'
   input_dilation: Union[None, int, Sequence[int]] = 1
@@ -414,12 +415,9 @@ class _Conv(Module):
       The convolved data.
     """
 
+    kernel_size: Sequence[int]
     if isinstance(self.kernel_size, int):
-      raise TypeError(
-        'Expected Conv kernel_size to be a'
-        ' tuple/list of integers (eg.: [3, 3]) but got'
-        f' {self.kernel_size}.'
-      )
+      kernel_size = (self.kernel_size,)
     else:
       kernel_size = tuple(self.kernel_size)
 
@@ -614,8 +612,9 @@ class Conv(_Conv):
 
   Attributes:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
-    strides: an integer or a sequence of ``n`` integers, representing the
+    kernel_size: shape of the convolutional kernel. An integer will be
+      interpreted as a tuple of the single integer.
+    strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string ``'SAME'``, the string ``'VALID'``, the string
       ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
@@ -679,8 +678,9 @@ class ConvLocal(_Conv):
 
   Attributes:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
-    strides: an integer or a sequence of ``n`` integers, representing the
+    kernel_size: shape of the convolutional kernel. An integer will be
+      interpreted as a tuple of the single integer.
+    strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string ``'SAME'``, the string ``'VALID'``, the string
       ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
@@ -745,12 +745,13 @@ class ConvTranspose(Module):
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
-      the kernel size can be passed as an integer. For all other cases, it must
-      be a sequence of integers.
-    strides: a sequence of ``n`` integers, representing the inter-window strides.
-    padding: either the string ``'SAME'``, the string ``'VALID'``, the string
-      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
-      high)`` integer pairs that give the padding to apply before and after each
+      the kernel size can be passed as an integer, which will be interpreted
+      as a tuple of the single integer. For all other cases, it must be a
+      sequence of integers.
+    strides: a sequence of `n` integers, representing the inter-window strides.
+    padding: either the string `'SAME'`, the string `'VALID'`, the string
+      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
+      high)` integer pairs that give the padding to apply before and after each
       spatial dimension. A single int is interpreted as applying the same padding
       in all dims and assign a single int in a sequence causes the same padding
       to be used on both sides.
