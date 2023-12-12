@@ -539,7 +539,7 @@ class MultiHeadDotProductAttention(Module):
         deterministic=m_deterministic,
         dtype=self.dtype,
         precision=self.precision,
-        module=self if return_weights else None,
+        module=self,
       )  # pytype: disable=wrong-keyword-args
     else:
       x = self.attention_fn(
