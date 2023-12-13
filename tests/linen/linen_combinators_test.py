@@ -56,7 +56,7 @@ class AttentionTuple(nn.Module):
 
   @nn.compact
   def __call__(self, query, key_value):
-    output = nn.MultiHeadDotProductAttention(
+    output = nn.MultiHeadAttention(
       num_heads=self.num_heads, qkv_features=self.qkv_features
     )(query, key_value)
     return output, key_value
@@ -68,7 +68,7 @@ class AttentionDict(nn.Module):
 
   @nn.compact
   def __call__(self, query, key_value):
-    output = nn.MultiHeadDotProductAttention(
+    output = nn.MultiHeadAttention(
       num_heads=self.num_heads, qkv_features=self.qkv_features
     )(query, key_value)
     return dict(query=output, key_value=key_value)

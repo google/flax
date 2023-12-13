@@ -33,7 +33,7 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_self_attention(self):
     rng = random.key(0)
     x = jnp.ones((4, 6, 5))
-    sa_module = nn.MultiHeadDotProductAttention(
+    sa_module = nn.MultiHeadAttention(
       num_heads=8,
       qkv_features=16,
       kernel_init=initializers.ones,
@@ -47,7 +47,7 @@ class AttentionTest(parameterized.TestCase):
   def test_dtype_infer(self):
     rng = random.key(0)
     x = jnp.ones((4, 6, 5), jnp.complex64)
-    sa_module = nn.MultiHeadDotProductAttention(
+    sa_module = nn.MultiHeadAttention(
       num_heads=8,
       qkv_features=16,
       kernel_init=initializers.ones,
@@ -61,7 +61,7 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_encoder_decoder_attention(self):
     rng = random.key(0)
     q = jnp.ones((4, 2, 3, 5))
-    sa_module = nn.MultiHeadDotProductAttention(
+    sa_module = nn.MultiHeadAttention(
       num_heads=8,
       qkv_features=16,
       kernel_init=initializers.ones,
@@ -74,7 +74,7 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_self_attention_w_dropout(self):
     rng = random.key(0)
     x = jnp.ones((4, 2, 3, 5))
-    sa_module = nn.MultiHeadDotProductAttention(
+    sa_module = nn.MultiHeadAttention(
       num_heads=8,
       qkv_features=16,
       kernel_init=initializers.ones,
@@ -93,10 +93,10 @@ class AttentionTest(parameterized.TestCase):
 
       @nn.compact
       def __call__(self, x, dropout_rng=None):
-        a = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
+        a = nn.MultiHeadAttention(**self.attention_kwargs)(
           x, x, dropout_rng=dropout_rng
         )
-        b = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
+        b = nn.MultiHeadAttention(**self.attention_kwargs)(
           x, x, dropout_rng=dropout_rng
         )
         return a, b
@@ -132,7 +132,7 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_self_attention_w_dropout_disabled(self):
     rng = random.key(0)
     x = jnp.ones((4, 2, 3, 5))
-    sa_module0 = nn.MultiHeadDotProductAttention(
+    sa_module0 = nn.MultiHeadAttention(
       num_heads=8,
       qkv_features=16,
       kernel_init=initializers.ones,
@@ -149,7 +149,7 @@ class AttentionTest(parameterized.TestCase):
     y3 = sa_module0.apply(vs, x, rngs=rngs1)
     y4 = sa_module0.apply(vs, x, rngs=rngs2)
     np.testing.assert_allclose(y3, y4)
-    sa_module1 = nn.MultiHeadDotProductAttention(
+    sa_module1 = nn.MultiHeadAttention(
       num_heads=8,
       qkv_features=16,
       kernel_init=initializers.ones,
@@ -159,7 +159,7 @@ class AttentionTest(parameterized.TestCase):
     y5 = sa_module1.apply(vs, x, deterministic=True, rngs=rngs1)
     y6 = sa_module1.apply(vs, x, deterministic=True, rngs=rngs2)
     np.testing.assert_allclose(y5, y6)
-    sa_module2 = nn.MultiHeadDotProductAttention(
+    sa_module2 = nn.MultiHeadAttention(
       num_heads=8,
       qkv_features=16,
       kernel_init=initializers.ones,
@@ -192,7 +192,7 @@ class AttentionTest(parameterized.TestCase):
     inputs = random.normal(
       key1, (bs,) + spatial_shape + (num_heads * num_features,)
     )
-    module = nn.MultiHeadDotProductAttention(
+    module = nn.MultiHeadAttention(
       num_heads=num_heads,
       qkv_features=num_heads * num_features,
       precision=lax.Precision.HIGHEST,
@@ -233,7 +233,7 @@ class AttentionTest(parameterized.TestCase):
     input_shape = (1, length, dim)
     inputs = random.normal(rng2, input_shape)
 
-    module = nn.MultiHeadDotProductAttention(
+    module = nn.MultiHeadAttention(
       num_heads=num_heads,
       kernel_init=jax.nn.initializers.ones,
       deterministic=False,
@@ -273,7 +273,7 @@ class AttentionTest(parameterized.TestCase):
     key1, key2 = random.split(random.key(0), 2)
     query = random.uniform(key1, (3, 5))
     key_value = random.uniform(key1, (9, 5))
-    module = nn.MultiHeadDotProductAttention(
+    module = nn.MultiHeadAttention(
       num_heads=8,
       qkv_features=16,
       kernel_init=initializers.ones,
@@ -326,7 +326,7 @@ class AttentionTest(parameterized.TestCase):
     input_shape = (1, length, dim)
     query = key = random.normal(rng2, input_shape)
 
-    module = nn.MultiHeadDotProductAttention(
+    module = nn.MultiHeadAttention(
       num_heads=num_heads,
       kernel_init=jax.nn.initializers.ones,
       deterministic=False,
@@ -338,7 +338,7 @@ class AttentionTest(parameterized.TestCase):
     module.apply(initial_vars, query, key, mask=causal_mask)
     with self.assertWarnsRegex(
       DeprecationWarning,
-      "the function signature of MultiHeadDotProductAttention's `__call__` method has changed",
+      "the function signature of MultiHeadAttention's `__call__` method has changed",
     ):
       with self.assertRaises(errors.ScopeParamShapeError):
         module.apply(initial_vars, query, key, causal_mask)
@@ -352,11 +352,11 @@ class AttentionTest(parameterized.TestCase):
 
       @nn.compact
       def __call__(self, x, sow_weights=False):
-        x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
+        x = nn.MultiHeadAttention(**self.attention_kwargs)(
           x, sow_weights=sow_weights
         )
-        x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x)
-        x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
+        x = nn.MultiHeadAttention(**self.attention_kwargs)(x)
+        x = nn.MultiHeadAttention(**self.attention_kwargs)(
           x, sow_weights=sow_weights
         )
         return x
@@ -375,16 +375,14 @@ class AttentionTest(parameterized.TestCase):
       v, x, mutable=['intermediates'], sow_weights=True
     )
     self.assertEqual(
-      intermediates['intermediates']['MultiHeadDotProductAttention_0'][
+      intermediates['intermediates']['MultiHeadAttention_0'][
         'attention_weights'
       ][0].shape,
       (4, 8, 6, 6),
     )
-    self.assertNotIn(
-      'MultiHeadDotProductAttention_1', intermediates['intermediates']
-    )
+    self.assertNotIn('MultiHeadAttention_1', intermediates['intermediates'])
     self.assertEqual(
-      intermediates['intermediates']['MultiHeadDotProductAttention_2'][
+      intermediates['intermediates']['MultiHeadAttention_2'][
         'attention_weights'
       ][0].shape,
       (4, 8, 6, 6),
@@ -393,6 +391,42 @@ class AttentionTest(parameterized.TestCase):
       v, x, mutable=['intermediates'], sow_weights=False
     )
     self.assertNotIn('intermediates', intermediates)
+
+  def test_multihead_alias(self):
+    rng = random.key(0)
+    x = jnp.ones((4, 6, 5))
+    module1 = nn.MultiHeadAttention(
+      num_heads=8,
+      qkv_features=16,
+      kernel_init=initializers.ones,
+      bias_init=initializers.zeros,
+      deterministic=False,
+    )
+    with self.assertWarnsRegex(
+      DeprecationWarning,
+      'flax.linen.MultiHeadDotProductAttention is deprecated. Use flax.linen.MultiHeadAttention instead.',
+    ):
+      module2 = nn.MultiHeadDotProductAttention(
+        num_heads=8,
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        deterministic=False,
+      )
+      self.assertIsInstance(module2, nn.MultiHeadAttention)
+      self.assertEqual(module1, module2)
+    y1, v1 = module1.init_with_output(rng, x)
+    y2, v2 = module2.init_with_output(rng, x)
+    self.assertTrue(
+      jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x == y).all(), v1, v2))
+    )
+    self.assertTrue((y1 == y2).all())
+
+    with self.assertRaisesRegex(
+      AttributeError,
+      "module 'flax.linen' has no attribute 'non_existent_attribute'",
+    ):
+      _ = nn.non_existent_attribute
 
 
 if __name__ == '__main__':

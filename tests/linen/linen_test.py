@@ -442,20 +442,20 @@ class NormalizationTest(parameterized.TestCase):
     {
       'model_index': 2,
       'key_paths': {
-        'MultiHeadDotProductAttention_0/key/bias/u',
-        'MultiHeadDotProductAttention_0/key/kernel/u',
-        'MultiHeadDotProductAttention_0/out/kernel/u',
-        'MultiHeadDotProductAttention_0/query/bias/u',
-        'MultiHeadDotProductAttention_0/query/kernel/u',
-        'MultiHeadDotProductAttention_0/value/bias/u',
-        'MultiHeadDotProductAttention_0/value/kernel/u',
-        'MultiHeadDotProductAttention_0/key/bias/sigma',
-        'MultiHeadDotProductAttention_0/key/kernel/sigma',
-        'MultiHeadDotProductAttention_0/out/kernel/sigma',
-        'MultiHeadDotProductAttention_0/query/bias/sigma',
-        'MultiHeadDotProductAttention_0/query/kernel/sigma',
-        'MultiHeadDotProductAttention_0/value/bias/sigma',
-        'MultiHeadDotProductAttention_0/value/kernel/sigma',
+        'MultiHeadAttention_0/key/bias/u',
+        'MultiHeadAttention_0/key/kernel/u',
+        'MultiHeadAttention_0/out/kernel/u',
+        'MultiHeadAttention_0/query/bias/u',
+        'MultiHeadAttention_0/query/kernel/u',
+        'MultiHeadAttention_0/value/bias/u',
+        'MultiHeadAttention_0/value/kernel/u',
+        'MultiHeadAttention_0/key/bias/sigma',
+        'MultiHeadAttention_0/key/kernel/sigma',
+        'MultiHeadAttention_0/out/kernel/sigma',
+        'MultiHeadAttention_0/query/bias/sigma',
+        'MultiHeadAttention_0/query/kernel/sigma',
+        'MultiHeadAttention_0/value/bias/sigma',
+        'MultiHeadAttention_0/value/kernel/sigma',
       },
     },
   )
@@ -485,7 +485,7 @@ class NormalizationTest(parameterized.TestCase):
       def __call__(self, x, train):
         a = nn.Dense(4)(x)
         b = nn.Dense(4)(x)
-        x = nn.SpectralNorm(nn.attention.MultiHeadDotProductAttention(4))(
+        x = nn.SpectralNorm(nn.attention.MultiHeadAttention(4))(
           a, b, update_stats=train
         )
         x = nn.Dense(4)(x)
@@ -721,10 +721,10 @@ class NormalizationTest(parameterized.TestCase):
     {
       'model_index': 2,
       'key_paths': {
-        'MultiHeadDotProductAttention_0/key/kernel/scale',
-        'MultiHeadDotProductAttention_0/out/kernel/scale',
-        'MultiHeadDotProductAttention_0/query/kernel/scale',
-        'MultiHeadDotProductAttention_0/value/kernel/scale',
+        'MultiHeadAttention_0/key/kernel/scale',
+        'MultiHeadAttention_0/out/kernel/scale',
+        'MultiHeadAttention_0/query/kernel/scale',
+        'MultiHeadAttention_0/value/kernel/scale',
       },
     },
   )
@@ -758,7 +758,7 @@ class NormalizationTest(parameterized.TestCase):
       def __call__(self, x):
         a = nn.Dense(4)(x)
         b = nn.Dense(4)(x)
-        x = nn.WeightNorm(nn.attention.MultiHeadDotProductAttention(4))(a, b)
+        x = nn.WeightNorm(nn.attention.MultiHeadAttention(4))(a, b)
         x = nn.Dense(4)(x)
         return x
 

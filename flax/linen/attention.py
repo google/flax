@@ -213,7 +213,7 @@ def dot_product_attention(
   )
 
 
-class MultiHeadDotProductAttention(Module):
+class MultiHeadAttention(Module):
   """Multi-head dot-product attention.
 
   Example usage::
@@ -221,7 +221,7 @@ class MultiHeadDotProductAttention(Module):
     >>> import flax.linen as nn
     >>> import jax
 
-    >>> layer = nn.MultiHeadDotProductAttention(num_heads=8, qkv_features=16)
+    >>> layer = nn.MultiHeadAttention(num_heads=8, qkv_features=16)
     >>> key1, key2, key3, key4, key5, key6 = jax.random.split(jax.random.key(0), 6)
     >>> shape = (4, 3, 2, 5)
     >>> q, k, v = jax.random.uniform(key1, shape), jax.random.uniform(key2, shape), jax.random.uniform(key3, shape)
@@ -247,8 +247,8 @@ class MultiHeadDotProductAttention(Module):
     ...
     ...   @nn.compact
     ...   def __call__(self, x, dropout_rng=None):
-    ...     out1 = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x, dropout_rng=dropout_rng)
-    ...     out2 = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x, dropout_rng=dropout_rng)
+    ...     out1 = nn.MultiHeadAttention(**self.attention_kwargs)(x, dropout_rng=dropout_rng)
+    ...     out2 = nn.MultiHeadAttention(**self.attention_kwargs)(x, dropout_rng=dropout_rng)
     ...     return out1, out2
     >>> module = Module(attention_kwargs)
     >>> variables = module.init({'params': key1, 'dropout': key2}, q)
@@ -418,7 +418,7 @@ class MultiHeadDotProductAttention(Module):
           'to the `inputs_v` arg, when you may have intended '
           'to pass it to the `mask` arg. As of Flax version '
           '0.7.4, the function signature of '
-          "MultiHeadDotProductAttention's `__call__` method "
+          "MultiHeadAttention's `__call__` method "
           'has changed to `__call__(inputs_q, inputs_k=None, '
           'inputs_v=None, *, inputs_kv=None, mask=None, '
           'deterministic=None)`. Use the kwarg `mask` instead. '
@@ -571,14 +571,14 @@ class MultiHeadDotProductAttention(Module):
     return out
 
 
-class SelfAttention(MultiHeadDotProductAttention):
+class SelfAttention(MultiHeadAttention):
   """Self-attention special case of multi-head dot-product attention.
-  This layer is deprecated in favor of ``MultiHeadDotProductAttention``.
+  This layer is deprecated in favor of ``MultiHeadAttention``.
 
   Example usage::
     >>> import flax.linen as nn
     >>> import jax, jax.numpy as jnp
-    >>> layer = nn.MultiHeadDotProductAttention(num_heads=8, qkv_features=16)
+    >>> layer = nn.MultiHeadAttention(num_heads=8, qkv_features=16)
     >>> variables = layer.init(jax.random.key(0), jnp.ones((4, 3, 2, 5)))
   """
 
@@ -608,7 +608,7 @@ class SelfAttention(MultiHeadDotProductAttention):
     """
     warnings.warn(
       'SelfAttention will be deprecated soon. Use '
-      '`MultiHeadDotProductAttention.__call__(inputs_q)` instead. '
+      '`MultiHeadAttention.__call__(inputs_q)` instead. '
       'See https://github.com/google/flax/discussions/3389 '
       'for more information.',
       DeprecationWarning,

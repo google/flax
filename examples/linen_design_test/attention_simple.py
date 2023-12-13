@@ -153,7 +153,7 @@ def concise_vmap(module, in_axes, out_axes, axis_size=None, **var_specs):
   )
 
 
-class MultiHeadDotProductAttention(Module):
+class MultiHeadAttention(Module):
   qkv_features: Optional[int] = None
   out_features: Optional[int] = None
   attn_module: Callable = SoftmaxAttn
@@ -201,7 +201,7 @@ class MultiHeadDotProductAttention(Module):
 if __name__ == '__main__':
   inputs = jnp.ones((8, 97, 256))
   rngs = {'params': random.key(0), 'dropout': random.key(1)}
-  model = MultiHeadDotProductAttention(
+  model = MultiHeadAttention(
       broadcast_dropout=False,
       qkv_features=256,
       out_features=256,

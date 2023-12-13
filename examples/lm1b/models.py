@@ -243,7 +243,7 @@ class EncoderDecoder1DBlock(nn.Module):
             nn.initializers.ones, ('embed',)
         ),
     )(inputs)
-    x = nn.MultiHeadDotProductAttention(
+    x = nn.MultiHeadAttention(
         num_heads=config.num_heads,
         dtype=config.dtype,
         qkv_features=config.qkv_dim,

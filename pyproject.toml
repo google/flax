@@ -128,8 +128,8 @@ filterwarnings = [
     "ignore:Flax Checkpointing will soon be deprecated in favor of Orbax.*:DeprecationWarning",
     # DeprecationWarning: The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.
     "ignore:.*The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.*:DeprecationWarning",
-    # DeprecationWarning: the function signature of MultiHeadDotProductAttention's `__call__` method has changed
-    "ignore:.*the function signature of MultiHeadDotProductAttention's `__call__` method has changed.*:DeprecationWarning",
+    # DeprecationWarning: the function signature of MultiHeadAttention's `__call__` method has changed
+    "ignore:.*the function signature of MultiHeadAttention's `__call__` method has changed.*:DeprecationWarning",
     # DeprecationWarning: ml_dtypes.float8_e4m3b11 is deprecated.
     "ignore:.*ml_dtypes.float8_e4m3b11 is deprecated.*:DeprecationWarning",
     # DeprecationWarning: jax.config.define_bool_state is deprecated. Please use other libraries for configuration instead.

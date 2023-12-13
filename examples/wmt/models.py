@@ -217,7 +217,7 @@ class Encoder1DBlock(nn.Module):
     # Attention block.
     assert inputs.ndim == 3
     x = nn.LayerNorm(dtype=config.dtype)(inputs)
-    x = nn.MultiHeadDotProductAttention(
+    x = nn.MultiHeadAttention(
         num_heads=config.num_heads,
         dtype=config.dtype,
         qkv_features=config.qkv_dim,
@@ -270,7 +270,7 @@ class EncoderDecoder1DBlock(nn.Module):
     # Decoder block.
     assert targets.ndim == 3
     x = nn.LayerNorm(dtype=config.dtype)(targets)
-    x = nn.MultiHeadDotProductAttention(
+    x = nn.MultiHeadAttention(
         num_heads=config.num_heads,
         dtype=config.dtype,
         qkv_features=config.qkv_dim,
@@ -289,7 +289,7 @@ class EncoderDecoder1DBlock(nn.Module):
 
     # Encoder-Decoder block.
     y = nn.LayerNorm(dtype=config.dtype)(x)
-    y = nn.MultiHeadDotProductAttention(
+    y = nn.MultiHeadAttention(
         num_heads=config.num_heads,
         dtype=config.dtype,
         qkv_features=config.qkv_dim,

@@ -61,7 +61,7 @@ from .activation import (
     tanh as tanh,
 )
 from .attention import (
-    MultiHeadDotProductAttention as MultiHeadDotProductAttention,
+    MultiHeadAttention as MultiHeadAttention,
     SelfAttention as SelfAttention,
     combine_masks as combine_masks,
     dot_product_attention_weights as dot_product_attention_weights,
@@ -151,3 +151,22 @@ from .transforms import (
     while_loop as while_loop,
 )
 # pylint: enable=g-multiple-import
+
+
+# aliasing the deprecated MultiHeadDotProductAttention to MultiHeadAttention and raising a DeprecationWarning
+import typing as _typing
+if _typing.TYPE_CHECKING:
+  from .attention import MultiHeadAttention as MultiHeadDotProductAttention
+else:
+  def __getattr__(attr):
+    if attr == 'MultiHeadDotProductAttention':
+      import _warnings
+      _warnings.warn(
+        'flax.linen.MultiHeadDotProductAttention is deprecated. Use flax.linen.MultiHeadAttention instead.',
+        DeprecationWarning,
+        stacklevel=2,
+      )
+      del _warnings
+      return MultiHeadAttention
+    raise AttributeError(f"module '{__name__}' has no attribute '{attr}'")
+del _typing
