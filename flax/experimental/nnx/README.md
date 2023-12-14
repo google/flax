@@ -53,7 +53,8 @@ class Linear(nnx.Module):
     return x @ self.w + self.b
 
 model = Linear(din=12, dout=2, rngs=nnx.Rngs(0)) # no special `init` method
-y = model(jnp.ones((8, 12))) # call methods directly
+x = jnp.ones((8, 12))
+y = model(x) # call methods directly
 
 assert model.count == 1
 ```
@@ -73,7 +74,7 @@ def train_step(params, counts, x, y):
     model = static.merge(params, counts)
     y_pred = model(x)
     loss = jax.numpy.mean((y_pred - y) ** 2)
-    return loss, updates.extract(Count)
+    return loss, model.extract(Count)
 
   # compute gradient
   grads, counts = jax.grad(loss_fn, has_aux=True)(params)
@@ -104,12 +105,12 @@ def train_step(model, x, y):
     # SGD update
     params: nnx.State = model.extract(nnx.Param)
     model.update(
-        jax.tree_map(lambda w, g: w - 0.1 * g, , params, grads)
+        jax.tree_map(lambda w, g: w - 0.1 * g, params, grads)
     )
 
 # execute the training step
 train_step(model, x, y)
-assert model.count == 2
+assert model.count == 3
 ```
 
 **Note**: Using `nnx.jit` introduces some overhead when compared to using `jax.jit` directly. Use `nnx.jit` for simple prototypes, but for production code use `jax.jit` directly.
@@ -137,21 +138,27 @@ One place in which NNX strongly deviates from Flax is that (currently) it avoids
 
 ### Modules
 
-NNX Modules are normal python classes, they obey regular python semantics such as mutability and reference sharing, including reference cycles. They can contain 2 types of attributes: node attributes and static attributes. Node attributes include NNX `Variable`s (e.g. `nnx.Param`) and sub-Modules. All other types are treated as static attributes. For convenience, `jax.Array`s and `np.ndarray`s are casted to `nnx.Param`.
+NNX Modules are normal python classes, they obey regular python semantics such as mutability and reference sharing, including reference cycles. They can contain 2 types of attributes: node attributes and static attributes. Node attributes include NNX `Variable`s (e.g. `nnx.Param`) and sub-Modules. All other types are treated as static attributes.
 
 ```python
 class Foo(nnx.Module):
   def __init__(self, rngs: nnx.Rngs):
     # node attributes
-    self.variable = nnx.Param(jnp.array(1))
-    self.submodule = nnx.Linear(2, 3, rngs=rngs)
+    self.param = nnx.Param(jnp.array(1))
+    self.submodule = nnx.Linear(12, 3, rngs=rngs)
     self.container = [4, nnx.Linear(5, 6, rngs=rngs), 7]
     # static attributes
     self.int = 8
     self.float = 9.0
     self.str = 'hello'
 
-model = Foo(din=12, dout=2, rngs=nnx.Rngs(0))
+  def __call__(self, x):
+      return self.submodule(x + self.param)
+
+  def some_method(self, x):
+      return x + 1
+
+model = Foo(rngs=nnx.Rngs(0))
 ```
 As shown above, python container types such as `list`, `tuple`, and `dict` are treated as node attributes,
 this means you can naturally have e.g. `list`s or `dict`s of Modules.
@@ -162,14 +169,21 @@ NNX Modules are not pytrees so they cannot be passed to JAX transformations. In 
 
 ```python
 state, static = model.split()
+state
 ```
 ```
-state = State({
-  'variable': Array(1, dtype=int32, weak_type=True),
-  'submodule/kernel': Array(..., dtype=float32),
-  'submodule/bias': Array(..., dtype=float32),
-  'container/1/kernel': Array(..., dtype=float32),
-  'container/1/bias': Array(..., dtype=float32)
+State({
+  'param': Array(1, dtype=int32, weak_type=True),
+  'submodule': {
+    'kernel': Array(..., dtype=float32),
+    'bias': Array(..., dtype=float32)
+  },
+  'container': {
+    '1': {
+      'kernel': Array(..., dtype=float32),
+      'bias': Array(..., dtype=float32)
+    }
+  }
 })
 ```
 
@@ -288,6 +302,9 @@ intermediates = model.pop(nnx.Intermediate)
 `pop` will return a `State` object with the nodes that match the given filter and remove them from the module's attributes.
 
 ```
+intermediates
+```
+```
 State({
   'y: Intermediate(value=Array(...))
 })
@@ -362,7 +379,7 @@ apply it to the input `x`, passing the sliced `dropout_key` as part of the `Rngs
         dropout_key = jax.random.split(rngs.dropout(), self.n_layers)
         params, static = self.layers.split(nnx.Param)
 
-        def scan_fn(x: inputs):
+        def scan_fn(x, inputs):
             params, dropout_key = inputs
             module = static.merge(params)
             x = module(x, train=train, rngs=nnx.Rngs(dropout=dropout_key))
