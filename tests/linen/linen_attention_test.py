@@ -351,13 +351,13 @@ class AttentionTest(parameterized.TestCase):
       attention_kwargs: dict
 
       @nn.compact
-      def __call__(self, x, return_weights=False):
+      def __call__(self, x, sow_weights=False):
         x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
-          x, return_weights=return_weights
+          x, sow_weights=sow_weights
         )
         x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x)
         x = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
-          x, return_weights=return_weights
+          x, sow_weights=sow_weights
         )
         return x
 
@@ -372,7 +372,7 @@ class AttentionTest(parameterized.TestCase):
     )
     v = module.init(rng, x)
     _, intermediates = module.apply(
-      v, x, mutable=['intermediates'], return_weights=True
+      v, x, mutable=['intermediates'], sow_weights=True
     )
     self.assertEqual(
       intermediates['intermediates']['MultiHeadDotProductAttention_0'][
@@ -390,7 +390,7 @@ class AttentionTest(parameterized.TestCase):
       (4, 8, 6, 6),
     )
     _, intermediates = module.apply(
-      v, x, mutable=['intermediates'], return_weights=False
+      v, x, mutable=['intermediates'], sow_weights=False
     )
     self.assertNotIn('intermediates', intermediates)
 

@@ -320,7 +320,7 @@ class MultiHeadDotProductAttention(Module):
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[PRNGKey] = None,
-    return_weights: bool = False,
+    sow_weights: bool = False,
   ):
     ...
 
@@ -333,7 +333,7 @@ class MultiHeadDotProductAttention(Module):
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[PRNGKey] = None,
-    return_weights: bool = False,
+    sow_weights: bool = False,
   ):
     ...
 
@@ -348,7 +348,7 @@ class MultiHeadDotProductAttention(Module):
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[PRNGKey] = None,
-    return_weights: bool = False,
+    sow_weights: bool = False,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -375,7 +375,7 @@ class MultiHeadDotProductAttention(Module):
         dropout, whereas if true, the attention weights are deterministic.
       dropout_rng: optional rng key to pass to the attention layer's dropout
         mask. Otherwise, self.make_rng('dropout') is used instead.
-      return_weights: if ``True``, the attention weights are sowed into the
+      sow_weights: if ``True``, the attention weights are sowed into the
         'intermediates' collection. Remember to mark 'intermediates' as
         mutable via ``mutable=['intermediates']`` in order to have that
         collection returned.
@@ -527,7 +527,7 @@ class MultiHeadDotProductAttention(Module):
       m_deterministic = True
 
     # apply attention
-    if return_weights:
+    if sow_weights:
       x = self.attention_fn(
         query,
         key,
