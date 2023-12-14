@@ -144,8 +144,8 @@ class LinearGeneral(Module):
 
   def __init__(
     self,
-    features_in: Size | tp.Sequence[Size],
-    features_out: Size | tp.Sequence[Size],
+    in_features: Size | tp.Sequence[Size],
+    out_features: Size | tp.Sequence[Size],
     *,
     axis: Axis | tp.Sequence[Axis] = -1,
     batch_axis: tp.Mapping[Axis, Size] = MappingProxyType({}),
@@ -160,8 +160,8 @@ class LinearGeneral(Module):
     dot_general_cls: tp.Any = None,
     rngs: rnglib.Rngs,
   ):
-    self.features_in = _canonicalize_tuple(features_in)
-    self.features_out = _canonicalize_tuple(features_out)
+    self.in_features = _canonicalize_tuple(in_features)
+    self.out_features = _canonicalize_tuple(out_features)
     self.axis = _canonicalize_tuple(axis)
     self.batch_axis = MappingProxyType(batch_axis)
     self.use_bias = use_bias
@@ -173,10 +173,10 @@ class LinearGeneral(Module):
     self.dot_general = dot_general
     self.dot_general_cls = dot_general_cls
 
-    if len(self.features_in) != len(self.axis):
+    if len(self.in_features) != len(self.axis):
       raise ValueError(
-        'features_in and axis must have the same length. '
-        f'Got {self.features_in} and {self.axis}.'
+        'in_features and axis must have the same length. '
+        f'Got {self.in_features} and {self.axis}.'
       )
 
     if batch_axis:
@@ -189,14 +189,14 @@ class LinearGeneral(Module):
         )
 
     n_batch_axis = len(self.batch_axis)
-    n_features_in = len(self.features_in)
-    n_features_out = len(self.features_out)
+    n_in_features = len(self.in_features)
+    n_out_features = len(self.out_features)
 
     def kernel_init_wrap(rng, shape, dtype) -> jax.Array:
       flat_shape = (
         np.prod(shape[:n_batch_axis])
-        * np.prod(shape[n_batch_axis : n_features_in + n_batch_axis]),
-        np.prod(shape[-n_features_out:]),
+        * np.prod(shape[n_batch_axis : n_in_features + n_batch_axis]),
+        np.prod(shape[-n_out_features:]),
       )
       flat_shape = jax.tree_map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
@@ -210,8 +210,8 @@ class LinearGeneral(Module):
     batch_shape = tuple(self.batch_axis.values())
     kernel_shape = (
       *batch_shape,
-      *self.features_in,
-      *self.features_out,
+      *self.in_features,
+      *self.out_features,
     )
     self.kernel = nnx.Param(
       kernel_init_wrap(rngs.params(), kernel_shape, self.param_dtype)
@@ -228,7 +228,7 @@ class LinearGeneral(Module):
           bias = jnp.reshape(bias, shape)
         return bias
 
-      bias_shape = (*batch_shape, *self.features_out)
+      bias_shape = (*batch_shape, *self.out_features)
       self.bias = nnx.Param(
         bias_init_wrap(rngs.params(), bias_shape, self.param_dtype)
       )
@@ -282,7 +282,7 @@ class LinearGeneral(Module):
     # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if bias is not None:
       # expand bias shape to broadcast bias over batch dims.
-      bias = jnp.reshape(bias, (*expanded_batch_shape, *self.features_out))
+      bias = jnp.reshape(bias, (*expanded_batch_shape, *self.out_features))
       out += bias
     return out
 

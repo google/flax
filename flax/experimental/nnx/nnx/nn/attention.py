@@ -291,7 +291,7 @@ class MultiHeadAttention(Module):
   def __init__(
     self,
     num_heads: int,
-    features_in: int,
+    in_features: int,
     out_features: int | None = None,
     *,
     dtype: Dtype | None = None,
@@ -314,9 +314,9 @@ class MultiHeadAttention(Module):
     rngs: rnglib.Rngs,
   ):
     self.num_heads = num_heads
-    self.features_in = features_in
-    self.features_out = (
-      out_features if out_features is not None else features_in
+    self.in_features = in_features
+    self.out_features = (
+      out_features if out_features is not None else in_features
     )
     self.dtype = dtype
     self.param_dtype = param_dtype
@@ -335,18 +335,18 @@ class MultiHeadAttention(Module):
     self.qkv_dot_general_cls = qkv_dot_general_cls
     self.out_dot_general_cls = out_dot_general_cls
 
-    if self.features_out % self.num_heads != 0:
+    if self.out_features % self.num_heads != 0:
       raise ValueError(
-        f"'features_out' ({self.features_out}) must be divisible by "
+        f"'out_features' ({self.out_features}) must be divisible by "
         f"'num_heads' heads ({self.num_heads})."
       )
 
-    self.head_dim = self.features_out // self.num_heads
+    self.head_dim = self.out_features // self.num_heads
 
     linear_general = functools.partial(
       LinearGeneral,
-      features_in=self.features_in,
-      features_out=(self.num_heads, self.head_dim),
+      in_features=self.in_features,
+      out_features=(self.num_heads, self.head_dim),
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       kernel_init=self.kernel_init,
@@ -372,8 +372,8 @@ class MultiHeadAttention(Module):
       self.key_ln = None
 
     self.out = LinearGeneral(
-      features_in=(self.num_heads, self.head_dim),
-      features_out=self.features_out,
+      in_features=(self.num_heads, self.head_dim),
+      out_features=self.out_features,
       axis=(-2, -1),
       kernel_init=self.kernel_init,
       bias_init=self.bias_init,
@@ -467,10 +467,10 @@ class MultiHeadAttention(Module):
     if inputs_v is None:
       inputs_v = inputs_k
 
-    if inputs_q.shape[-1] != self.features_in:
+    if inputs_q.shape[-1] != self.in_features:
       raise ValueError(
         f'Incompatible input dimension, got {inputs_q.shape[-1]} '
-        f'but module expects {self.features_in}.'
+        f'but module expects {self.in_features}.'
       )
 
     query = self.query(inputs_q)
@@ -562,7 +562,7 @@ class MultiHeadAttention(Module):
 
   def init_cache(self, input_shape: Shape, dtype: Dtype = jnp.float32):
     """Initializes cache for fast autoregressive decoding."""
-    cache_shape = (*input_shape[:-1], self.num_heads, self.features_out)
+    cache_shape = (*input_shape[:-1], self.num_heads, self.out_features)
     self.cached_key = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cached_value = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
