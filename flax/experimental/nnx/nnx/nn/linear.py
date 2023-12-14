@@ -153,7 +153,7 @@ class LinearGeneral(Module):
     dtype: Dtype | None = None,
     param_dtype: Dtype = jnp.float32,
     kernel_init: initializers.Initializer = default_kernel_init,
-    bias_init: initializers.Initializer = initializers.zeros(),
+    bias_init: initializers.Initializer = initializers.zeros_init(),
     precision: PrecisionLike = None,
     # Deprecated. Will be removed.
     dot_general: DotGeneralT | None = None,
@@ -315,7 +315,7 @@ class Linear(Module):
     ] = default_kernel_init,
     bias_init: tp.Callable[
       [KeyArray, Shape, Dtype], Array
-    ] = initializers.zeros(),
+    ] = initializers.zeros_init(),
     dot_general: DotGeneralT = lax.dot_general,
     rngs: rnglib.Rngs,
   ):
@@ -425,7 +425,7 @@ class Conv(Module):
     ] = default_kernel_init,
     bias_init: tp.Callable[
       [KeyArray, Shape, Dtype], Array
-    ] = initializers.zeros(),
+    ] = initializers.zeros_init(),
     conv_general_dilated: ConvGeneralDilatedT = lax.conv_general_dilated,
     rngs: rnglib.Rngs,
   ):

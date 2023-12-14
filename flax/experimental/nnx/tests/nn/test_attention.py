@@ -45,8 +45,8 @@ class TestMultiHeadAttention:
       dict(
         features_in=8,
         num_heads=8,
-        kernel_init=nnx.initializers.ones(),
-        bias_init=nnx.initializers.zeros(),
+        kernel_init=nnx.initializers.ones_init(),
+        bias_init=nnx.initializers.zeros_init(),
         deterministic=False,
       ),
       rng,

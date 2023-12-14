@@ -453,7 +453,7 @@ class TestScan:
             sharding=('din', 'dout'),
           ),
           bias_init=nnx.with_metadata(
-            nnx.initializers.zeros(),
+            nnx.initializers.zeros_init(),
             sharding=('dout',),
           ),
           rngs=rngs,

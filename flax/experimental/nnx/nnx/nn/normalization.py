@@ -203,10 +203,10 @@ class BatchNorm(Module):
     use_scale: bool = True,
     bias_init: tp.Callable[
       [KeyArray, Shape, Dtype], Array
-    ] = initializers.zeros(),
+    ] = initializers.zeros_init(),
     scale_init: tp.Callable[
       [KeyArray, Shape, Dtype], Array
-    ] = initializers.ones(),
+    ] = initializers.ones_init(),
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
     rngs: rnglib.Rngs,
@@ -335,10 +335,10 @@ class LayerNorm(Module):
     use_scale: bool = True,
     bias_init: tp.Callable[
       [KeyArray, Shape, Dtype], Array
-    ] = initializers.zeros(),
+    ] = initializers.zeros_init(),
     scale_init: tp.Callable[
       [KeyArray, Shape, Dtype], Array
-    ] = initializers.ones(),
+    ] = initializers.ones_init(),
     reduction_axes: Axes = -1,
     feature_axes: Axes = -1,
     axis_name: tp.Optional[str] = None,

@@ -301,7 +301,7 @@ class MultiHeadAttention(Module):
     deterministic: bool | None = None,
     precision: PrecisionLike = None,
     kernel_init: initializers.Initializer = default_kernel_init,
-    bias_init: initializers.Initializer = initializers.zeros(),
+    bias_init: initializers.Initializer = initializers.zeros_init(),
     use_bias: bool = True,
     attention_fn: Callable[..., Array] = dot_product_attention,
     decode: bool = False,
