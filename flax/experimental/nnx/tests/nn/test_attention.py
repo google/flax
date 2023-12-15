@@ -43,7 +43,7 @@ class TestMultiHeadAttention:
 
     module = Model(
       dict(
-        features_in=8,
+        in_features=8,
         num_heads=8,
         kernel_init=nnx.initializers.ones(),
         bias_init=nnx.initializers.zeros(),
