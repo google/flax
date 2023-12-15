@@ -459,10 +459,10 @@ def vjp(
 ) -> Union[Tuple[Any, Callable[..., Any]], Tuple[Any, Callable[..., Any], Any]]:
   """A lifted version of ``jax.vjp``.
 
-  See ``jax.vjp`` for the unlifted vector-Jacobiam product (backward gradient).
+  See ``jax.vjp`` for the unlifted vector-Jacobian product (backward gradient).
 
   Note that a gradient is returned for all variables in the collections
-  specified by `vjp_variables`. However, the backward funtion only expects
+  specified by `vjp_variables`. However, the backward function only expects
   a cotangent for the return value of `fn`. If variables require a co-tangent
   as well they can be returned from `fn` using `scope.variables()`.
 
@@ -488,7 +488,7 @@ def vjp(
       tuple of arrays, scalar, or standard Python containers thereof.
     has_aux: Optional, bool. Indicates whether ``fn`` returns a pair where the
      first element is considered the output of the mathematical function to be
-     differentiated and the second element is auxiliary data. Default False.
+     differentiated and the second element is auxiliary data. Default ``False``.
     reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
       ``fn`` implicitly broadcasts a value over that axis, the backward pass
       will perform a ``psum`` of the corresponding gradient. Otherwise, the
@@ -585,7 +585,7 @@ def value_and_grad(
       tuple of arrays, scalar, or standard Python containers thereof.
     has_aux: Optional, bool. Indicates whether ``fn`` returns a pair where the
      first element is considered the output of the mathematical function to be
-     differentiated and the second element is auxiliary data. Default False.
+     differentiated and the second element is auxiliary data. Default ``False``.
     reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
       ``fn`` implicitly broadcasts a value over that axis, the backward pass
       will perform a ``psum`` of the corresponding gradient. Otherwise, the
@@ -1435,7 +1435,7 @@ def checkpoint(
     rngs: The PRNG sequences that are lifted. By default all PRNG sequences
       are lifted.
     concrete: Optional, boolean indicating whether ``fun`` may involve
-      value-dependent Python control flow (default False). Support for such
+      value-dependent Python control flow (default ``False``). Support for such
       control flow is optional, and disabled by default, because in some
       edge-case compositions with :func:`jax.jit` it can lead to some extra
       computation.
