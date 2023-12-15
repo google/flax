@@ -173,7 +173,7 @@ indent-width = 2
 
 [tool.ruff.lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
-select = ["F401", "I001"]
+select = ["F401"]
 ignore = []
 # Allow fix for all enabled rules (when `--fix`) is provided.
 # Full list of rules: https://docs.astral.sh/ruff/rules/
