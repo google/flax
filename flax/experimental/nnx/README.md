@@ -23,7 +23,7 @@ NNX is a Neural Networks library for JAX that provides a simple yet powerful mod
 To get started with `nnx`, install the package via pip from github:
 
 ```
-pip install git+https://github.com/google/flax.git@nnx
+pip install git+https://github.com/google/flax.git
 ```
 
 ## Getting Started
