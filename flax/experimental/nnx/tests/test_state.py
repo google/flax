@@ -45,10 +45,10 @@ class StateTest(TestCase):
     state.a = 3
     state.b.c = 4
 
-    assert isinstance(state.variables['a'], nnx.Param)
-    assert state.variables['a'].value == 3
-    assert isinstance(state.variables['b']['c'], nnx.Param)
-    assert state.variables['b']['c'].value == 4
+    assert isinstance(state.variables.a, nnx.Param)
+    assert state.variables.a.value == 3
+    assert isinstance(state.b.variables.c, nnx.Param)
+    assert state.b.variables.c.value == 4
 
   def test_integer_access(self):
     class Foo(nnx.Module):

@@ -139,9 +139,9 @@ class TestGrad:
     assert m.a.variables['0'] is m.variables.b
     assert isinstance(grads, nnx.State)
     assert grads['a']['0'] == 2.0
-    assert isinstance(grads.variables['a']['0'], nnx.Variable)
+    assert isinstance(grads.a.variables['0'], nnx.Variable)
     assert grads['a']['1'] == 1.0
-    assert isinstance(grads.variables['a']['1'], nnx.Variable)
+    assert isinstance(grads.a.variables['1'], nnx.Variable)
     assert len(grads.flat_state()) == 2
 
     m.update(grads)
@@ -170,7 +170,7 @@ class TestGrad:
 
     assert isinstance(grads, nnx.State)
     assert grads['a']['0'] == 1.0
-    assert isinstance(grads.variables['a']['0'], nnx.Param)
+    assert isinstance(grads.a.variables['0'], nnx.Param)
     assert len(grads) == 2
 
     m.update(grads)
@@ -198,7 +198,7 @@ class TestGrad:
 
     assert isinstance(grads, nnx.State)
     assert grads['a']['1'] == 1.0
-    assert isinstance(grads.variables['a']['1'], nnx.BatchStat)
+    assert isinstance(grads.a.variables['1'], nnx.BatchStat)
     assert len(grads) == 1
 
     m.update(grads)
@@ -463,11 +463,11 @@ class TestScan:
         x = self.linear(x)
 
         # test sharding layer axes is not present inside scan
-        variables = self.linear.get_state().variables
-        assert variables['kernel'].value.shape == (3, 3)
-        assert variables['kernel'].sharding == ('din', 'dout')
-        assert variables['bias'].value.shape == (3,)
-        assert variables['bias'].sharding == ('dout',)
+        state = self.linear.get_state()
+        assert state.kernel.shape == (3, 3)
+        assert state.variables.kernel.sharding == ('din', 'dout')
+        assert state.bias.shape == (3,)
+        assert state.variables.bias.sharding == ('dout',)
 
         return x, None
 
@@ -481,15 +481,15 @@ class TestScan:
     m = MLP(rngs=nnx.Rngs(0))
 
     # test sharding layers axes is set
-    variables = m.get_state().variables
-    assert variables['scan_module']['linear']['kernel'].value.shape == (5, 3, 3)
-    assert variables['scan_module']['linear']['kernel'].sharding == (
+    state = m.get_state()
+    assert state.scan_module.linear.variables.kernel.value.shape == (5, 3, 3)
+    assert state.scan_module.linear.variables.kernel.sharding == (
       'layers',
       'din',
       'dout',
     )
-    assert variables['scan_module']['linear']['bias'].value.shape == (5, 3)
-    assert variables['scan_module']['linear']['bias'].sharding == (
+    assert state.scan_module.linear.variables.bias.value.shape == (5, 3)
+    assert state.scan_module.linear.variables.bias.sharding == (
       'layers',
       'dout',
     )
@@ -498,15 +498,15 @@ class TestScan:
     y, out = m(x, None)
 
     # test sharding axes is preserved
-    variables = m.get_state().variables
-    assert variables['scan_module']['linear']['kernel'].value.shape == (5, 3, 3)
-    assert variables['scan_module']['linear']['kernel'].sharding == (
+    state = m.get_state()
+    assert state.scan_module.linear.kernel.shape == (5, 3, 3)
+    assert state.scan_module.linear.variables.kernel.sharding == (
       'layers',
       'din',
       'dout',
     )
-    assert variables['scan_module']['linear']['bias'].value.shape == (5, 3)
-    assert variables['scan_module']['linear']['bias'].sharding == (
+    assert state.scan_module.linear.bias.shape == (5, 3)
+    assert state.scan_module.linear.variables.bias.sharding == (
       'layers',
       'dout',
     )

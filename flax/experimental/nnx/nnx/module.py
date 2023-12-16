@@ -65,7 +65,7 @@ class _HasSetup(tp.Protocol):
 SEEN_MODULES_REPR: tp.Optional[tp.Set[ids.UUID]] = None
 
 
-class VariablesMapping(
+class ModuleVariablesMapping(
   tp.MutableMapping[str, Variable[tp.Any]], reprlib.Representable
 ):
   __slots__ = ('_module',)
@@ -76,14 +76,17 @@ class VariablesMapping(
     else:
       object.__setattr__(self, '_module', module)
 
-  def __getitem__(self, name: str) -> Variable[tp.Any]:
+  def __getitem__(self, key: str | int) -> Variable[tp.Any]:
+    if isinstance(key, int):
+      key = str(key)
+
     module_vars = vars(self._module)
-    if name not in module_vars:
-      raise KeyError(f'Variable {name} not found')
-    value = module_vars[name]
+    if key not in module_vars:
+      raise KeyError(f'Variable {key} not found')
+    value = module_vars[key]
 
     if not isinstance(value, Variable):
-      raise KeyError(f"Variable '{name}' is not found.")
+      raise KeyError(f"Variable '{key}' is not found.")
 
     return value
 
@@ -117,7 +120,7 @@ class VariablesMapping(
     yield reprlib.Object(type(self), start='{', end='}', value_sep=': ')
     for name, value in vars(self._module).items():
       if isinstance(value, Variable):
-        yield reprlib.Attr(name, value)
+        yield reprlib.Attr(repr(name), value)
 
 
 class ModuleState(reprlib.Representable):
@@ -235,8 +238,8 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       vars_dict[name] = value
 
   @property
-  def variables(self) -> VariablesMapping:
-    return VariablesMapping(self)
+  def variables(self) -> ModuleVariablesMapping:
+    return ModuleVariablesMapping(self)
 
   def __deepcopy__(self: M, memo=None) -> M:
     state, graphdef = self.split()
@@ -531,7 +534,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
 # -------------------------
 def _module_flatten(module: Module, *, with_keys: bool):
   state, graphdef = module.split()
-  variables = state.variables
+  variables = state.raw_mapping
   paths = tuple(variables.keys())
 
   if with_keys:

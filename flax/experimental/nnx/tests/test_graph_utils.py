@@ -190,15 +190,15 @@ class TestGraphUtils:
     state, static = m.split()
 
     assert isinstance(m.variables.a, nnx.Param)
-    assert isinstance(state.variables['a'], nnx.Param)
-    assert m.variables.a is not state.variables['a']
+    assert isinstance(state.variables.a, nnx.Param)
+    assert m.variables.a is not state.variables.a
     assert m.a == state.a
 
     m2 = static.merge(state)
 
     assert isinstance(m2.variables.a, nnx.Param)
-    assert isinstance(state.variables['a'], nnx.Param)
-    assert m2.variables.a is not state.variables['a']
+    assert isinstance(state.variables.a, nnx.Param)
+    assert m2.variables.a is not state.variables.a
     assert m2.a == state.a
 
   def test_shared_state_variables_not_shared_with_graph(self):
@@ -213,10 +213,10 @@ class TestGraphUtils:
 
     assert isinstance(m.variables.a, nnx.Param)
     assert isinstance(m.variables.b, nnx.Param)
-    assert isinstance(state.variables['a'], nnx.Param)
+    assert isinstance(state.variables.a, nnx.Param)
     assert 'b' not in state
-    assert m.variables.a is not state.variables['a']
-    assert m.variables.b is not state.variables['a']
+    assert m.variables.a is not state.variables.a
+    assert m.variables.b is not state.variables.a
     assert m.a == state.a
     assert m.b == state.a
 
@@ -224,9 +224,9 @@ class TestGraphUtils:
 
     assert isinstance(m2.variables.a, nnx.Param)
     assert isinstance(m2.variables.b, nnx.Param)
-    assert isinstance(state.variables['a'], nnx.Param)
-    assert m2.variables.a is not state.variables['a']
-    assert m2.variables.b is not state.variables['a']
+    assert isinstance(state.variables.a, nnx.Param)
+    assert m2.variables.a is not state.variables.a
+    assert m2.variables.b is not state.variables.a
     assert m2.a == state.a
     assert m2.b == state.a
     assert m2.a is m2.b

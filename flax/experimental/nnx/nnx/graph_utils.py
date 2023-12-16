@@ -172,17 +172,6 @@ class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
 
 
 @dataclasses.dataclass(repr=False)
-class _SubgraphRepr(reprlib.Representable):
-  subgraphs: tp.Mapping[str, tp.Union['GraphDef[tp.Any]', int]]
-
-  def __nnx_repr__(self):
-    yield reprlib.Object(type='', value_sep=', ')
-
-    for name, subgraph in self.subgraphs.items():
-      yield reprlib.Attr(repr(name), subgraph, start='(', end=')')
-
-
-@dataclasses.dataclass(repr=False)
 class _MappingRepr(reprlib.Representable):
   mapping: tp.Mapping[str, tp.Any]
 
@@ -447,7 +436,7 @@ def _graph_flatten(
 
 def graph_unflatten(graphdef: GraphDef[Node], state: State) -> Node:
   index_to_node: dict[Index, tp.Any] = {}
-  return _graph_unflatten(graphdef, state.variables, index_to_node)
+  return _graph_unflatten(graphdef, state.raw_mapping, index_to_node)
 
 
 def _graph_unflatten(
@@ -621,7 +610,7 @@ def graph_update_dynamic(
     new_states = updates
 
   for state in new_states:
-    _graph_update_dynamic(node, state.variables)
+    _graph_update_dynamic(node, state.raw_mapping)
 
 
 def _graph_update_dynamic(
