@@ -292,6 +292,7 @@ class MultiHeadAttention(Module):
     self,
     num_heads: int,
     in_features: int,
+    qkv_features: int | None = None,
     out_features: int | None = None,
     *,
     dtype: Dtype | None = None,
@@ -315,6 +316,9 @@ class MultiHeadAttention(Module):
   ):
     self.num_heads = num_heads
     self.in_features = in_features
+    self.qkv_features = (
+      qkv_features if qkv_features is not None else in_features
+    )
     self.out_features = (
       out_features if out_features is not None else in_features
     )
@@ -335,13 +339,13 @@ class MultiHeadAttention(Module):
     self.qkv_dot_general_cls = qkv_dot_general_cls
     self.out_dot_general_cls = out_dot_general_cls
 
-    if self.out_features % self.num_heads != 0:
+    if self.qkv_features % self.num_heads != 0:
       raise ValueError(
-        f"'out_features' ({self.out_features}) must be divisible by "
+        f'Memory dimension ({self.qkv_features}) must be divisible by '
         f"'num_heads' heads ({self.num_heads})."
       )
 
-    self.head_dim = self.out_features // self.num_heads
+    self.head_dim = self.qkv_features // self.num_heads
 
     linear_general = functools.partial(
       LinearGeneral,
