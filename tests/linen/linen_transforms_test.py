@@ -1714,6 +1714,35 @@ class TransformTest(absltest.TestCase):
     y1 = Foo().apply(vs, x)
     np.testing.assert_array_equal(y0, y1)
 
+  def test_jit_kwargs(self):
+    class Foo(nn.Module):
+
+      @nn.jit
+      def __call__(self, a: jax.Array, b: jax.Array):
+        return a + b
+
+    m = Foo()
+    y = m.apply({}, jnp.array(1.0), b=jnp.array(2.0))
+
+    np.testing.assert_array_equal(y, jnp.array(3.0))
+
+  def test_jit_static_argnames(self):
+    s = None
+
+    class Foo(nn.Module):
+
+      @partial(nn.jit, static_argnames=['b'])
+      def __call__(self, a: jax.Array, b: str):
+        nonlocal s
+        s = b
+        return a
+
+    m = Foo()
+    y = m.apply({}, jnp.array(1.0), b='hi')
+
+    self.assertEqual(s, 'hi')
+    np.testing.assert_array_equal(y, jnp.array(1.0))
+
   def test_while_loop(self):
     class Foo(nn.Module):
       @nn.compact

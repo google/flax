@@ -17,26 +17,25 @@
 import collections
 import dataclasses
 import functools
-import warnings
 from typing import (
-  Any,
-  Callable,
-  Dict,
-  Generic,
-  Iterable,
-  List,
-  Mapping,
-  Optional,
-  Sequence,
-  Tuple,
-  TypeVar,
-  Union,
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
 )
-
-import jax
-from jax import random
+import warnings
 
 from flax import traceback_util
+import jax
+from jax import random
 
 from . import axes_scan, meta
 from .frozen_dict import freeze, unfreeze
@@ -1503,13 +1502,14 @@ def _hashable_filter(x):
 
 
 def jit(
-  fn: Callable[..., Any],
-  variables: CollectionFilter = True,
-  rngs: PRNGSequenceFilter = True,
-  static_argnums: Union[int, Iterable[int]] = (),
-  donate_argnums: Union[int, Iterable[int]] = (),
-  device=None,
-  backend: Union[str, None] = None,
+    fn: Callable[..., Any],
+    variables: CollectionFilter = True,
+    rngs: PRNGSequenceFilter = True,
+    static_argnums: Union[int, Iterable[int]] = (),
+    static_argnames: Union[str, Iterable[str]] = (),
+    donate_argnums: Union[int, Iterable[int]] = (),
+    device=None,
+    backend: Union[str, None] = None,
 ) -> Callable[..., Any]:
   """Lifted version of ``jax.jit``.
 
@@ -1530,6 +1530,11 @@ def jit(
       indicated by ``static_argnums`` then an error is raised. Arguments that
       are not arrays or containers thereof must be marked as static.
       Defaults to ().
+    static_argnames: An optional string or collection of strings specifying
+      which named arguments to treat as static (compile-time constant). See the
+      comment on ``static_argnums`` for details. If not
+      provided but ``static_argnums`` is set, the default is based on calling
+      ``inspect.signature(fun)`` to find corresponding named arguments.
     donate_argnums: Specify which arguments are "donated" to the computation.
       It is safe to donate arguments if you no longer need them once the
       computation has finished. In some cases XLA can make use of donated
@@ -1564,34 +1569,44 @@ def jit(
   repack_fn = None  # type: Optional[Callable]
 
   @functools.partial(
-    jax.jit,
-    static_argnums=static_argnums,
-    donate_argnums=donate_argnums,
-    device=device,
-    backend=backend,
+      jax.jit,
+      static_argnums=static_argnums,
+      static_argnames=static_argnames,
+      donate_argnums=donate_argnums,
+      device=device,
+      backend=backend,
   )
   @functools.wraps(fn)
-  def jitted(fingerprint, variable_groups, rng_groups, *args):
+  def jitted(fingerprint, variable_groups, rng_groups, *args, **kwargs):
     nonlocal scope_fn, repack_fn
     # fingerprint is only used to differentiate the cache signature for cases
     # where different collections are mutable.
     del fingerprint
     scope = scope_fn(variable_groups, rng_groups)  # pylint: disable=not-callable
-    y = fn(scope, *args)
+    y = fn(scope, *args, **kwargs)
     return y, repack_fn(scope)  # pylint: disable=not-callable
 
-  def inner(scope_fun, repack_fun, variable_groups, rng_groups, *args):
+  def inner(
+      scope_fun,
+      repack_fun,
+      variable_groups,
+      rng_groups,
+      *args,
+      **kwargs,
+  ):
     nonlocal scope_fn, repack_fn
     try:
       scope_fn = scope_fun
       repack_fn = repack_fun
       scopes = jax.tree_util.tree_leaves(scope_fn(variable_groups, rng_groups))
       mutable = tuple(_hashable_filter(scope.mutable) for scope in scopes)
-      return jitted(mutable, variable_groups, rng_groups, *args)
+      return jitted(mutable, variable_groups, rng_groups, *args, **kwargs)
     finally:
       scope_fn, repack_fn = None, None
 
-  return pack(inner, (variables,), (variables,), (rngs,), name='jit')
+  return pack(
+      inner, (variables,), (variables,), (rngs,), name='jit', enable_kwargs=True
+  )
 
 
 def remat_scan(

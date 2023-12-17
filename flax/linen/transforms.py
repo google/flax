@@ -39,8 +39,6 @@ from typing import (
   Union,
 )
 
-import jax
-
 from flax import errors, struct, traceback_util
 from flax.core import Scope, lift, meta
 from flax.core.frozen_dict import FrozenDict
@@ -52,6 +50,7 @@ from flax.linen.module import (
   _get_unbound_fn,
   wrap_method_once,
 )
+import jax
 
 traceback_util.register_exclusion(__file__)
 
@@ -580,24 +579,25 @@ def vmap(
 
 
 def jit(
-  target: Target,
-  variables: lift.CollectionFilter = True,
-  rngs: lift.PRNGSequenceFilter = True,
-  static_argnums: Union[int, Iterable[int]] = (),
-  donate_argnums: Union[int, Iterable[int]] = (),
-  device=None,
-  backend: Union[str, None] = None,
-  methods=None,
+    target: Target,
+    variables: lift.CollectionFilter = True,
+    rngs: lift.PRNGSequenceFilter = True,
+    static_argnums: Union[int, Iterable[int]] = (),
+    static_argnames: Union[str, Iterable[str]] = (),
+    donate_argnums: Union[int, Iterable[int]] = (),
+    device=None,
+    backend: Union[str, None] = None,
+    methods=None,
 ) -> Target:
   """Lifted version of ``jax.jit``.
 
   Args:
-    target: a ``Module`` or a function taking a ``Module``
-      as its first argument.
+    target: a ``Module`` or a function taking a ``Module`` as its first
+      argument.
     variables: The variable collections that are lifted. By default all
       collections are lifted.
-    rngs: The PRNG sequences that are lifted. By default all PRNG sequences
-      are lifted.
+    rngs: The PRNG sequences that are lifted. By default all PRNG sequences are
+      lifted.
     static_argnums: An int or collection of ints specifying which positional
       arguments to treat as static (compile-time constant). Operations that only
       depend on static arguments will be constant-folded in Python (during
@@ -607,10 +607,15 @@ def jit(
       with different values for these constants will trigger recompilation. If
       the jitted function is called with fewer positional arguments than
       indicated by ``static_argnums`` then an error is raised. Arguments that
-      are not arrays or containers thereof must be marked as static.
-      Defaults to ().
-    donate_argnums: Specify which arguments are "donated" to the computation.
-      It is safe to donate arguments if you no longer need them once the
+      are not arrays or containers thereof must be marked as static. Defaults to
+      ().
+    static_argnames: An optional string or collection of strings specifying
+      which named arguments to treat as static (compile-time constant). See the
+      comment on ``static_argnums`` for details. If not provided but
+      ``static_argnums`` is set, the default is based on calling
+      ``inspect.signature(fun)`` to find corresponding named arguments.
+    donate_argnums: Specify which arguments are "donated" to the computation. It
+      is safe to donate arguments if you no longer need them once the
       computation has finished. In some cases XLA can make use of donated
       buffers to reduce the amount of memory needed to perform a computation,
       for example recycling one of your input buffers to store a result. You
@@ -629,15 +634,16 @@ def jit(
     A wrapped version of target, set up for just-in-time compilation.
   """
   return lift_transform(
-    lift.jit,
-    target,
-    variables=variables,
-    rngs=rngs,
-    static_argnums=static_argnums,
-    donate_argnums=donate_argnums,
-    device=device,
-    backend=backend,
-    methods=methods,
+      lift.jit,
+      target,
+      variables=variables,
+      rngs=rngs,
+      static_argnums=static_argnums,
+      static_argnames=static_argnames,
+      donate_argnums=donate_argnums,
+      device=device,
+      backend=backend,
+      methods=methods,
   )
 
 
