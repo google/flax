@@ -8,22 +8,21 @@ NNX is a Neural Networks library for JAX that provides a simple yet powerful mod
 
 * **Pythonic**: Modules are just regular python classes, they contain their own state, are fully mutable, and allow sharing references between Modules.
 * **Compatible**: Easily convert back and forth between Modules and pytrees using the Functional API to integrate with any JAX API.
-* **Safe**: NNX incorporates mechanisms to try to prevent tracer leakage, avoid stale RNGs, and ensure proper state propagation in order to help produce correct JAX programs.
 * **Semantic**: Partition a Module's state into different semantic collections, allowing for fine-grained control when applying JAX transformations.
+* **Easy to use**: NNX learns from years of experience with Linen and optimizes for simplicity and ease of use for common use cases without sacrificing generality.
 
 #### Table of Contents
 * [Installation](#installation)
 * [Getting Started](#getting-started)
-* [FAQs](#faqs)
 * [Examples](#examples)
+* [FAQs](#faqs)
 * [User Guide](#user-guide)
 
 ## Installation
 
-To get started with `nnx`, install the package via pip from github:
-
+To get started with `nnx`, install Flax from GitHub:
 ```
-pip install git+https://github.com/google/flax.git@nnx
+pip install git+https://github.com/google/flax.git
 ```
 
 ## Getting Started
@@ -61,9 +60,61 @@ assert model.count == 1
 
 In this example `nnx.Rngs(0)` create a `random.key` for `params` with seed `0`, this is used by `rngs.<rng-name>()` inside `__init__` to generate a random key to initialize the parameters.
 
-### Training with the Functional API
+### Interacting with JAX
 
-The [Functional API](#functional-api) converts an NNX Module python semantics into pure pytree object with functional semantics. It is the recommended way to use NNX as it provides tight control over the state, allows you to use regular JAX transformations, and it minimizes overhead. In this example the model will be trained using Stochastic Gradient Descent (SGD).
+While NNX Modules inherently follow reference semantics, they can be easily converted into a pure functional representation that can be used with JAX transformations and other value-based, functional code.
+
+NNX has two very simple APIs to interact with JAX: `split` and `merge`.
+
+The `Module.split` method allows you to convert into a `State` dict-like object that contains the dynamic state of the Module, and a `ModuleDef` object that contains the static structure of the Module.
+
+```python
+state, static = model.split()
+```
+```
+state = State({
+  'b: Array(..., dtype=float32)',
+  'count': Array(1, dtype=int32),
+  'w': Array(..., dtype=float32)
+})
+```
+
+The `ModuleDef.merge` method allows you to take a `ModuleDef` and one or more `State` objects and merge them back into a `Module` object.
+
+Using `split` and `merge` in conjunction allows you to carry your Module in and out of any JAX transformation. Here is a simple jitted `forward` function as an example:
+
+```python
+@jax.jit
+def forward(static: nnx.ModuleDef, state: nnx.State, x: jax.Array):
+  model = static.merge(state)
+  y = model(x)
+  state, _ = model.split()
+  return y, state
+
+x = jnp.ones((2, 4))
+y, state = forward(static, state, x)
+```
+```
+state["count"] = Array(2, dtype=int32)
+```
+
+For simple use cases, you can use `nnx.jit` which is a lifted transform that automatically splits, merges, and updates the outside Module for you:
+
+```python
+state, static = model.split()
+
+@nnx.jit
+def forward(model: Linear, x: jax.Array):
+  return model(x)
+
+y = forward(model, x=jnp.ones((2, 4)))
+
+assert model.count == 3 # state automatically updated!
+```
+
+#### Training Example
+
+Using `split` and `merge` (the [Functional API](#functional-api)) is the recommended way to use NNX as it provides tight control over the state, allows you to use regular JAX transformations, and it minimizes overhead. In this example we will create a simple training step that implements Stochastic Gradient Descent (SGD):
 
 ```python
 params, counts, static = model.split(nnx.Param, Count)
@@ -73,8 +124,9 @@ def train_step(params, counts, x, y):
   def loss_fn(params):
     model = static.merge(params, counts)
     y_pred = model(x)
+    counts = model.extract(Count) # get updated Counts
     loss = jax.numpy.mean((y_pred - y) ** 2)
-    return loss, model.extract(Count)
+    return loss, counts
 
   # compute gradient
   grads, counts = jax.grad(loss_fn, has_aux=True)(params)
@@ -86,10 +138,11 @@ def train_step(params, counts, x, y):
 # execute the training step
 params, counts = train_step(params, counts, x, y)
 model = static.merge(params, counts)
-assert model.count == 2
+assert model.count == 4
 ```
+Here `...` is a `Filter` (much like `nnx.Param`) that matches any node type, see the [Filters](#filters) section for more information.
 
-### Training with Lifted Transforms
+#### Training with Lifted Transforms
 
 [Lifted Transforms](#lifted-transforms) provide a convenient way interact with NNX Modules. In this example, we use the `nnx.jit` and `nnx.grad` lifted transforms to define the training step. The model is trained using Stochastic Gradient Descent (SGD). Because lifted transforms automatically update the Module's state, `train_step` doesn't require a return statement.
 
@@ -103,7 +156,7 @@ def train_step(model, x, y):
     # compute gradient
     grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
     # SGD update
-    params: nnx.State = model.extract(nnx.Param)
+    params, *_ = model.split(nnx.Param, ...)
     model.update(
         jax.tree_map(lambda w, g: w - 0.1 * g, params, grads)
     )
@@ -169,7 +222,6 @@ NNX Modules are not pytrees so they cannot be passed to JAX transformations. In 
 
 ```python
 state, static = model.split()
-state
 ```
 ```
 State({
@@ -211,7 +263,7 @@ In NNX you can filter based on any node type, most commonly you will want to fil
 Here are various examples of how you can use the `split` method to split a module into multiple substates:
 
 ```python
-# split the module into the state with all the nodes and the static information
+# split the module into the state with all the nodes and the static
 state, static = model.split()
 # verify that the state contains only params, else raise an error
 params, static = model.split(nnx.Param)
