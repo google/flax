@@ -139,7 +139,7 @@ def dataclass(clz: _T) -> _T:
     return data_clz(**kwargs)
 
   jax.tree_util.register_pytree_with_keys(
-    data_clz, iterate_clz_with_keys, clz_from_iterable
+    data_clz, iterate_clz_with_keys, clz_from_iterable, iterate_clz,
   )
 
   def to_state_dict(x):
