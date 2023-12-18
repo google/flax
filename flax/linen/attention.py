@@ -493,10 +493,11 @@ class MultiHeadDotProductAttention(Module):
           )
         # update key, value caches with our new 1d spatial slices
         cur_index = cache_index.value
-        indices: tuple[Union[int, jax.Array], ...] = (0,) * len(batch_dims) + (
+        zero = jnp.array(0, dtype=lax.dtype(cur_index.dtype))
+        indices: tuple[Union[int, jax.Array], ...] = (zero,) * len(batch_dims) + (
           cur_index,
-          0,
-          0,
+          zero,
+          zero,
         )
         key = lax.dynamic_update_slice(cached_key.value, key, indices)
         value = lax.dynamic_update_slice(cached_value.value, value, indices)

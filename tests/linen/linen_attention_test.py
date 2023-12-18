@@ -394,6 +394,31 @@ class AttentionTest(parameterized.TestCase):
     )
     self.assertNotIn('intermediates', intermediates)
 
+  def test_autoregressive_decode_with_x64(self):
+    with jax.experimental.enable_x64():
+        x = jnp.ones((1, 4, 4))
+        module = nn.MultiHeadDotProductAttention(
+          num_heads=2,
+          qkv_features=4,
+          decode=True
+        )
+
+        rng = random.PRNGKey(0)
+        variables = module.init(rng, x, x, x)
+        params, cache = variables['params'], variables['cache']
+        y1, updates = module.apply(
+          { 'params': params, 'cache': cache },
+          x[:, :1, :],
+          mutable=['cache']
+        )
+        cache = updates['cache']
+        y2, updates = module.apply(
+          { 'params': params, 'cache': cache },
+          x[:, 1:2, :],
+          mutable=['cache']
+        )
+        assert y1.shape == (1, 1, 4)
+        assert y2.shape == (1, 1, 4)
 
 if __name__ == '__main__':
   absltest.main()
