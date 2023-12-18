@@ -238,7 +238,7 @@ class TestModule:
 
     with pytest.raises(
       ValueError,
-      match=f"Trying to assing a '{type(v1).__name__}' to the Module",
+      match=f"Trying to assign a '{type(v1).__name__}' to the Module",
     ):
       m = nnx.Dict(
         {

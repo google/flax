@@ -218,7 +218,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
         if isinstance(value, Variable):
           if type(value) != type(variable):
             raise ValueError(
-              f"Trying to assing a Variable of type '{type(value).__name__}' "
+              f"Trying to assign a Variable of type '{type(value).__name__}' "
               f"to the Module attribute '{name}' of a different type "
               f"'{type(variable).__name__}'."
             )
@@ -230,7 +230,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
     else:
       if isinstance(value, (jax.Array, np.ndarray, State)):
         raise ValueError(
-          f"Trying to assing a '{type(value).__name__}' to the Module"
+          f"Trying to assign a '{type(value).__name__}' to the Module"
           f" attribute '{name}'. This is not supported. Non-hashable "
           'objects are not valid static state in JAX. Please wrap '
           'the value in a Variable type instead.'
