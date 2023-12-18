@@ -84,11 +84,15 @@ Attention
 
 .. flax_module::
   :module: flax.linen
-  :class: SelfAttention
+  :class: MultiHeadDotProductAttention
 
 .. flax_module::
   :module: flax.linen
-  :class: MultiHeadDotProductAttention
+  :class: MultiHeadAttention
+
+.. flax_module::
+  :module: flax.linen
+  :class: SelfAttention
 
 .. autofunction:: dot_product_attention_weights
 .. autofunction:: dot_product_attention
@@ -147,8 +151,9 @@ Recurrent
   WeightNorm
   Sequential
   Dropout
-  SelfAttention
   MultiHeadDotProductAttention
+  MultiHeadAttention
+  SelfAttention
   RNNCellBase
   LSTMCell
   OptimizedLSTMCell
