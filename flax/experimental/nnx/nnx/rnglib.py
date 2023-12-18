@@ -130,14 +130,14 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
     }
     self._trace_state = tracers.TraceState()
 
-  def _make_rng(self, name: str) -> jax.Array:
+  def _make_rng(self, name: str, error_type: Exception) -> jax.Array:
     if not self.is_valid():
       raise errors.TraceContextError(
         'Cannot use Rngs from a different trace level'
       )
     if name not in self._rngs:
       if 'default' not in self._rngs:
-        raise ValueError(f"No RNG named {name!r} or 'default' found in Rngs.")
+        raise error_type(f"No RNG named {name!r} or 'default' found in Rngs.")
       stream = self._rngs['default']
     else:
       stream = self._rngs[name]
@@ -145,9 +145,10 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
     return stream.make_rng()
 
   def __getitem__(self, name: str) -> tp.Callable[[], jax.Array]:
-    return lambda: self._make_rng(name)
+    return lambda: self._make_rng(name, KeyError)
 
-  __getattr__ = __getitem__
+  def __getattr__(self, name: str) -> tp.Callable[[], jax.Array]:
+    return lambda: self._make_rng(name, AttributeError)
 
   def __call__(self):
     return self.default()

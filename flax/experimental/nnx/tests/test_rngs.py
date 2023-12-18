@@ -37,7 +37,7 @@ class TestRngs:
 
   def test_fallback_error_no_default(self):
     rngs = nnx.Rngs(some_name=0)
-    with pytest.raises(ValueError, match='No RNG named'):
+    with pytest.raises(AttributeError, match='No RNG named'):
       key = rngs.dropout()
 
   def test_rng_stream(self):
