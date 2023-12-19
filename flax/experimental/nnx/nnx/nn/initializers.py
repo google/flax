@@ -27,11 +27,13 @@ from jax.nn.initializers import kaiming_uniform as kaiming_uniform
 from jax.nn.initializers import lecun_normal as lecun_normal
 from jax.nn.initializers import lecun_uniform as lecun_uniform
 from jax.nn.initializers import normal as normal
+from jax.nn.initializers import ones as ones
 from jax.nn.initializers import orthogonal as orthogonal
 from jax.nn.initializers import uniform as uniform
 from jax.nn.initializers import variance_scaling as variance_scaling
 from jax.nn.initializers import xavier_normal as xavier_normal
 from jax.nn.initializers import xavier_uniform as xavier_uniform
+from jax.nn.initializers import zeros as zeros
 
 Shape = tp.Sequence[int]
 DTypeLikeInexact = tp.Any
@@ -56,7 +58,7 @@ def zeros_init() -> Initializer:
   Array([[0., 0., 0.],
          [0., 0., 0.]], dtype=float32)
   """
-  return jax.nn.initializers.zeros
+  return zeros
 
 
 def ones_init() -> Initializer:
@@ -70,4 +72,4 @@ def ones_init() -> Initializer:
          [1., 1.],
          [1., 1.]], dtype=float32)
   """
-  return jax.nn.initializers.ones
+  return ones
