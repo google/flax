@@ -402,6 +402,42 @@ class TestScan:
 
     assert y.shape == (1, 3)
 
+  def test_complex_broadcast_dropout(self):
+    class Block(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5)
+        self.node = nnx.Variable(jnp.ones((2,)))
+
+      def __call__(self, x: jax.Array, *, rngs: nnx.Rngs) -> jax.Array:
+        x = self.linear(x)
+        x = self.bn(x)
+        x = self.dropout(x, rngs=rngs)
+        x = nnx.gelu(x)
+        return x
+
+    MLP = nnx.Scan(
+      Block,
+      variable_axes={nnx.Param: 0},
+      length=5,
+      # params is split, dropout is broadcast
+      broadcast_rngs=['dropout'],
+      scan_output=False,
+    )
+
+    module = MLP(rngs=nnx.Rngs(0))
+
+    assert module.scan_module.linear.kernel.shape == (5, 3, 3)
+    assert module.scan_module.linear.bias.shape == (5, 3)
+    assert module.scan_module.node.shape == (2,)
+
+    x = jnp.ones((1, 3))
+    with nnx.flags(deterministic=False, use_running_average=False):
+      y = module(x, rngs=nnx.Rngs(1))
+
+    assert y.shape == (1, 3)
+
   def test_complex_decorator(self):
     scan_over_layers = partial(
       nnx.scan,
