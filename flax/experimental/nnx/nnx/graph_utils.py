@@ -405,6 +405,10 @@ def _graph_flatten(
   node_impl = get_node_impl(node)
   values, metadata = node_impl.flatten(node)
   for key, value in values:
+    if not isinstance(key, str):
+      raise TypeError(
+              f"Node (of type {type(node).__name__}) has a key of non-string "
+              f"type {type(key).__name__}.")
     if is_node(value):
       graphdef = _graph_flatten((*path, key), id_to_index, flat_state, value)
       subgraphs.append((key, graphdef))
