@@ -75,6 +75,7 @@ from .nnx.rnglib import Rngs as Rngs
 from .nnx.rnglib import RngStream as RngStream
 from .nnx.spmd import PARTITION_NAME as PARTITION_NAME
 from .nnx.spmd import get_partition_spec as get_partition_spec
+from .nnx.spmd import get_named_sharding as get_named_sharding
 from .nnx.spmd import with_partitioning as with_partitioning
 from .nnx.spmd import with_sharding_constraint as with_sharding_constraint
 from .nnx.state import State as State
