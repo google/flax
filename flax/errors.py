@@ -224,6 +224,7 @@ class ScopeCollectionNotFound(FlaxError):
   collection.
 
   There are two common causes:
+
   1. | The collection was not passed to ``apply`` correctly.
      | For example, you might have used ``module.apply(params, ...)`` instead
      | of ``module.apply({'params': params}, ...)``.
