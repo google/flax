@@ -615,3 +615,23 @@ class TestModuleDef:
     y, (state, graphdef) = graphdef.apply(state)(x=2.0, rngs=nnx.Rngs(e=1))
 
     assert isinstance(y, jax.Array)
+
+  def test_modules_iterator(self):
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.submodules = [
+          {'a': nnx.Linear(1, 1, rngs=rngs)},
+          {'b': nnx.Conv(1, 1, 1, rngs=rngs)},
+        ]
+
+    module = Foo(rngs=nnx.Rngs(0))
+
+    modules = list(module.modules())
+
+    assert len(modules) == 3
+    assert modules[0][0] == ''
+    assert isinstance(modules[0][1], Foo)
+    assert modules[1][0] == 'submodules/0/a'
+    assert isinstance(modules[1][1], nnx.Linear)
+    assert modules[2][0] == 'submodules/1/b'
+    assert isinstance(modules[2][1], nnx.Conv)

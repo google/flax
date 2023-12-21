@@ -458,6 +458,7 @@ def _graph_unflatten(
   if graphdef.index in index_to_node:
     raise RuntimeError(f'GraphDef index {graphdef.index} already used.')
 
+  state = state.copy()
   node_impl = get_node_impl(graphdef.type)
 
   def _get_children():
@@ -719,6 +720,27 @@ def _graph_update_static(
 def clone(node: Node) -> Node:
   state, static = graph_flatten(node)
   return static.merge(state)
+
+
+def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[Path, tp.Any]]:
+  visited: set[int] = set()
+  path_parts: PathParts = ()
+  yield from _iter_nodes(node, visited, path_parts)
+
+
+def _iter_nodes(
+  node: tp.Any, visited: set[int], path_parts: PathParts
+) -> tp.Iterator[tuple[Path, tp.Any]]:
+  if not is_node(node):
+    return
+  if id(node) in visited:
+    return
+  visited.add(id(node))
+  path = '/'.join(path_parts)
+  yield path, node
+  node_impl = get_node_impl(node)
+  for key, value in node_impl.items(node):
+    yield from _iter_nodes(value, visited, (*path_parts, key))
 
 
 # -----------------------------
