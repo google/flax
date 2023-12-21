@@ -188,7 +188,7 @@ for i in range(10):
 
 plt.show()
 
-model = state.static.merge(state.params)
+model = state.graphdef.merge(state.params)
 # %%
 # Quantization
 

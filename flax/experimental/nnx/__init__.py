@@ -18,9 +18,9 @@ from flax.linen.pooling import min_pool as min_pool
 from flax.linen.pooling import pool as pool
 
 from .nnx import compatibility as compatibility
-from .nnx import graph_utils
 from .nnx.dataclasses import dataclass as dataclass
 from .nnx.dataclasses import field as field
+from .nnx import graph_utils as graph_utils
 from .nnx.dataclasses import param_field as param_field
 from .nnx.dataclasses import treenode_field as treenode_field
 from .nnx.dataclasses import variable_field as variable_field
@@ -62,6 +62,11 @@ from .nnx.nn.activations import standardize as standardize
 from .nnx.nn.activations import swish as swish
 from .nnx.nn.activations import tanh as tanh
 from .nnx.nn.attention import MultiHeadAttention as MultiHeadAttention
+from .nnx.nn.attention import combine_masks as combine_masks
+from .nnx.nn.attention import dot_product_attention as dot_product_attention
+from .nnx.nn.attention import make_attention_mask as make_attention_mask
+from .nnx.nn.attention import make_causal_mask as make_causal_mask
+from .nnx.nn.initializers import Initializer as Initializer
 from .nnx.nn.linear import Conv as Conv
 from .nnx.nn.linear import Embed as Embed
 from .nnx.nn.linear import Linear as Linear
@@ -75,6 +80,7 @@ from .nnx.rnglib import Rngs as Rngs
 from .nnx.rnglib import RngStream as RngStream
 from .nnx.spmd import PARTITION_NAME as PARTITION_NAME
 from .nnx.spmd import get_partition_spec as get_partition_spec
+from .nnx.spmd import get_named_sharding as get_named_sharding
 from .nnx.spmd import with_partitioning as with_partitioning
 from .nnx.spmd import with_sharding_constraint as with_sharding_constraint
 from .nnx.state import State as State

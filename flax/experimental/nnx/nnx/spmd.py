@@ -115,6 +115,12 @@ def get_partition_spec(tree: A) -> A:
   )
 
 
+def get_named_sharding(tree: A, mesh: jax.sharding.Mesh) -> A:
+  spec = get_partition_spec(tree)
+  sharding = jax.tree_map(lambda p: jax.sharding.NamedSharding(mesh, p), spec)
+  return sharding
+
+
 # Dynamic Axis Mapping Rngs
 # ------------------------------------------------------------------------------
 
@@ -157,8 +163,8 @@ def with_sharding_constraint(
   # Translate logical names to mesh assignments.
   return jax.tree_util.tree_map(
     functools.partial(_with_sharding_constraint, mesh=mesh),
-    axis_resources,
     x,
+    axis_resources,
     is_leaf=_is_spec,
   )
 
@@ -183,11 +189,8 @@ def sharding_hook(
   if _global_mesh_defined() or (
     isinstance(node, Partitioned) and node.mesh is not None
   ):
-    return with_sharding_constraint(
-      value,
-      get_partition_spec(node),
-      mesh=node.mesh,
-    )
+    spec = get_partition_spec(node).value
+    return with_sharding_constraint(value, spec, mesh=node.mesh)
   return value
 
 

@@ -566,7 +566,7 @@ class MultiHeadAttention(Module):
 
   def init_cache(self, input_shape: Shape, dtype: Dtype = jnp.float32):
     """Initializes cache for fast autoregressive decoding."""
-    cache_shape = (*input_shape[:-1], self.num_heads, self.out_features)
+    cache_shape = (*input_shape[:-1], self.num_heads, self.head_dim)
     self.cached_key = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cached_value = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
