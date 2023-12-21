@@ -15,7 +15,6 @@
 import typing as tp
 
 import jax
-import jax.numpy as jnp
 from jax.nn.initializers import constant as constant
 from jax.nn.initializers import delta_orthogonal as delta_orthogonal
 from jax.nn.initializers import glorot_normal as glorot_normal
@@ -39,13 +38,7 @@ Shape = tp.Sequence[int]
 DTypeLikeInexact = tp.Any
 Array = jax.Array
 
-
-class Initializer(tp.Protocol):
-  @staticmethod
-  def __call__(
-    key: Array, shape: Shape, dtype: DTypeLikeInexact = jnp.float_
-  ) -> Array:
-    ...
+Initializer = jax.nn.initializers.Initializer
 
 
 def zeros_init() -> Initializer:
