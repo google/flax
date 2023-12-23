@@ -265,26 +265,26 @@ class MultiHeadDotProductAttention(Module):
     >>> out3, out4 = module.apply(variables, q, rngs={'dropout': key6}, dropout_rng=key5)
 
   Attributes:
-    num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
+    num_heads: Number of attention heads. Features (i.e. inputs_q.shape[-1])
       should be divisible by the number of heads.
-    dtype: the dtype of the computation (default: infer from inputs and params)
-    param_dtype: the dtype passed to parameter initializers (default: float32)
-    qkv_features: dimension of the key, query, and value.
-    out_features: dimension of the last projection
-    broadcast_dropout: bool: use a broadcasted dropout along batch dims.
-    dropout_rate: dropout rate
-    deterministic: if false, the attention weight is masked randomly using
-      dropout, whereas if true, the attention weights are deterministic.
-    precision: numerical precision of the computation see ``jax.lax.Precision``
+    dtype: The dtype of the computation (default: infer from inputs and params)
+    param_dtype: The dtype passed to parameter initializers (default: float32)
+    qkv_features: Dimension of the key, query, and value.
+    out_features: Dimension of the last projection
+    broadcast_dropout: Use a broadcasted dropout along batch dims.
+    dropout_rate: Dropout rate.
+    deterministic: If False, the attention weight is masked randomly using
+      dropout, whereas if True, the attention weights are deterministic.
+    precision: Numerical precision of the computation see ``jax.lax.Precision``
       for details.
-    kernel_init: initializer for the kernel of the Dense layers.
-    bias_init: initializer for the bias of the Dense layers.
-    use_bias: bool: whether pointwise QKVO dense transforms use bias.
+    kernel_init: Initializer for the kernel of the Dense layers.
+    bias_init: Initializer for the bias of the Dense layers.
+    use_bias: Whether pointwise QKVO dense transforms use bias.
     attention_fn: dot_product_attention or compatible function. Accepts query,
       key, value, and returns output of shape ``[bs, dim1, dim2, ..., dimN,,
       num_heads, value_channels]``
-    decode: whether to prepare and use an autoregressive cache.
-    normalize_qk: should QK normalization be applied (arxiv.org/abs/2302.05442).
+    decode: Whether to prepare and use an autoregressive cache.
+    normalize_qk: Should QK normalization be applied (arxiv.org/abs/2302.05442).
   """
 
   num_heads: int
