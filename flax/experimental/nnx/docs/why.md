@@ -10,6 +10,9 @@ jupytext:
 
 # Why NNX?
 
+<!-- open in colab button -->
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/flax/experimental/nnx/docs/why.ipynb)
+
 Four years ago we developed the Flax "Linen" API to support modeling research on JAX, with a focus on scaling scaling and performance.  We've learned a lot from our users over these years.
 
 We introduced some ideas that have proven to be good:
@@ -30,6 +33,7 @@ We'd love to hear from any of our users about their thoughts on these ideas.
 [[this doc on github](https://github.com/google/flax/blob/main/flax/experimental/nnx/docs/why.ipynb)]
 
 ```{code-cell}
+! pip install -U git+https://github.com/google/flax.git
 from functools import partial
 import jax
 from jax import random, numpy as jnp
