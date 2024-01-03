@@ -407,8 +407,9 @@ def _graph_flatten(
   for key, value in values:
     if not isinstance(key, str):
       raise TypeError(
-              f"Node (of type {type(node).__name__}) has a key of non-string "
-              f"type {type(key).__name__}.")
+        f'Node (of type {type(node).__name__}) has a key of non-string '
+        f'type {type(key).__name__}.'
+      )
     if is_node(value):
       graphdef = _graph_flatten((*path, key), id_to_index, flat_state, value)
       subgraphs.append((key, graphdef))
@@ -725,7 +726,7 @@ def clone(node: Node) -> Node:
 # -----------------------------
 # dict
 def _flatten_dict(
-  node: dict[str, tp.Any]
+  node: dict[str, tp.Any],
 ) -> tuple[tuple[tuple[str, tp.Any], ...], None]:
   return tuple(node.items()), None
 
@@ -771,7 +772,7 @@ register_node_type(
 
 # list
 def _flatten_list(
-  node: list[tp.Any]
+  node: list[tp.Any],
 ) -> tuple[tuple[tuple[str, tp.Any], ...], int]:
   return tuple((str(i), value) for i, value in enumerate(node)), len(node)
 
@@ -819,7 +820,7 @@ register_node_type(
 
 # tuple
 def _flatten_tuple(
-  node: tuple[tp.Any, ...]
+  node: tuple[tp.Any, ...],
 ) -> tuple[tuple[tuple[str, tp.Any], ...], int]:
   return tuple((str(i), value) for i, value in enumerate(node)), len(node)
 
@@ -837,10 +838,12 @@ def _get_key_tuple(node: tuple[tp.Any, ...], key: str) -> tp.Any:
   return node[int(key)]
 
 
-def _set_key_tuple(
-  node: tuple[tp.Any, ...], key: str, value: tp.Any
-) -> tuple[tp.Any, ...]:
-  raise ValueError("'tuple' object is immutable, does not support assignment")
+def _set_key_tuple(node: tuple[tp.Any, ...], key: str, value: tp.Any):
+  current_value = _get_key_tuple(node, key)
+  if current_value is value or current_value == value:
+    return
+  else:
+    raise ValueError("'tuple' object is immutable, does not support assignment")
 
 
 def _has_key_tuple(node: tuple[tp.Any, ...], key: str) -> bool:
