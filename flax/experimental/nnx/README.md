@@ -73,7 +73,7 @@ state, static = model.split()
 ```
 ```
 state = State({
-  'b: Array(..., dtype=float32)',
+  'b': Array(..., dtype=float32),
   'count': Array(1, dtype=int32),
   'w': Array(..., dtype=float32)
 })
