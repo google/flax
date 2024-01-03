@@ -62,6 +62,11 @@ from .nnx.nn.activations import standardize as standardize
 from .nnx.nn.activations import swish as swish
 from .nnx.nn.activations import tanh as tanh
 from .nnx.nn.attention import MultiHeadAttention as MultiHeadAttention
+from .nnx.nn.attention import combine_masks as combine_masks
+from .nnx.nn.attention import dot_product_attention as dot_product_attention
+from .nnx.nn.attention import make_attention_mask as make_attention_mask
+from .nnx.nn.attention import make_causal_mask as make_causal_mask
+from .nnx.nn.initializers import Initializer as Initializer
 from .nnx.nn.linear import Conv as Conv
 from .nnx.nn.linear import Embed as Embed
 from .nnx.nn.linear import Linear as Linear
