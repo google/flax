@@ -18,9 +18,9 @@ from flax.linen.pooling import min_pool as min_pool
 from flax.linen.pooling import pool as pool
 
 from .nnx import compatibility as compatibility
-from .nnx import graph_utils
 from .nnx.dataclasses import dataclass as dataclass
 from .nnx.dataclasses import field as field
+from .nnx import graph_utils as graph_utils
 from .nnx.dataclasses import param_field as param_field
 from .nnx.dataclasses import treenode_field as treenode_field
 from .nnx.dataclasses import variable_field as variable_field

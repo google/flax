@@ -482,29 +482,10 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
 
-  def for_each(
-    self, module_type: tp.Type[M], fn: tp.Callable[[M], None]
-  ) -> None:
-    visited: tp.Set[ids.UUID] = set()
-    self._on_all(module_type, fn, visited)
-
-  def _on_all(
-    self,
-    module_type: tp.Type[M],
-    fn: tp.Callable[[M], None],
-    visited: tp.Set[ids.UUID],
-  ) -> None:
-    if self._module__state.id in visited:
-      return
-
-    visited.add(self._module__state.id)
-
-    if isinstance(self, module_type):
-      fn(self)
-
-    for value in vars(self).values():
+  def modules(self) -> tp.Iterator[tuple[Path, Module]]:
+    for path, value in graph_utils.iter_nodes(self):
       if isinstance(value, Module):
-        value._on_all(module_type, fn, visited)
+        yield path, value
 
   def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
     super().__init_subclass__()
@@ -603,7 +584,7 @@ def first_from(arg_name: str, *args: tp.Optional[A]) -> A:
 
 
 def merge(
-  state_and_def: tuple[tpe.Unpack[tuple[State, ...]], GraphDef[M]]
+  state_and_def: tuple[tpe.Unpack[tuple[State, ...]], GraphDef[M]],
 ) -> M:
   *states, graphdef = state_and_def
   return graphdef.merge(*states)
