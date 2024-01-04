@@ -140,6 +140,7 @@ the average *across devices*. This also requires us to specify the
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (loss, logits), grads = grad_fn(state.params)
+    loss = jax.lax.pmean(loss, axis_name='ensemble')  #!
     probs = jax.lax.pmean(jax.nn.softmax(logits), axis_name='ensemble')  #!
     accuracy = jnp.mean(jnp.argmax(probs, -1) == labels)  #!
     return grads, loss, accuracy
