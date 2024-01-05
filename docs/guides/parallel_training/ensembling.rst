@@ -105,7 +105,7 @@ Next we simply do the same for the functions ``apply_model()`` and
 ``update_model()``. To compute the average loss of the ensemble, we take the
 average of the individual losses. Similarly, to compute the predictions from
 the ensemble, we take the average of the individual probabilities. We use
-|jax.lax.pmean()|_ to computethe average *across devices*. This also requires
+|jax.lax.pmean()|_ to compute the average *across devices*. This also requires
 us to specify the ``axis_name`` to both |jax.pmap()|_ and |jax.lax.pmean()|_.
 
 .. codediff::
