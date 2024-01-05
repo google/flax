@@ -507,7 +507,8 @@ class MultiHeadAttention(Module):
         )
       # update key, value caches with our new 1d spatial slices
       cur_index = self.cache_index
-      indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
+      zero = jnp.array(0, dtype=lax.dtype(cur_index.dtype))
+      indices = (zero,) * len(batch_dims) + (cur_index, zero, zero)
       key = lax.dynamic_update_slice(self.cached_key, key, indices)
       value = lax.dynamic_update_slice(self.cached_value, value, indices)
       self.cached_key = key
@@ -566,7 +567,7 @@ class MultiHeadAttention(Module):
 
   def init_cache(self, input_shape: Shape, dtype: Dtype = jnp.float32):
     """Initializes cache for fast autoregressive decoding."""
-    cache_shape = (*input_shape[:-1], self.num_heads, self.out_features)
+    cache_shape = (*input_shape[:-1], self.num_heads, self.head_dim)
     self.cached_key = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cached_value = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import jax.numpy as jnp
+import jax, jax.numpy as jnp
 
 from flax.experimental import nnx
 
@@ -77,3 +77,23 @@ class TestMultiHeadAttention:
     _ = module(x)
     intermediates = module.pop(nnx.Intermediate)
     assert not intermediates  # empty
+
+  def test_autoregressive_decode_with_x64(self):
+    with jax.experimental.enable_x64():
+      x = jnp.ones((1, 4, 4))
+      module = nnx.MultiHeadAttention(
+        in_features=4,
+        num_heads=2,
+        qkv_features=4,
+        decode=True,
+        rngs=nnx.Rngs(0)
+      )
+      module.init_cache(x.shape, dtype=x.dtype)
+      assert module.cached_key.shape == (1, 4, 2, 2)
+      assert module.cached_value.shape == (1, 4, 2, 2)
+
+      y1 = module(x[:, :1, :])
+      y2 = module(x[:, 1:2, :])
+
+      assert y1.shape == (1, 1, 4)
+      assert y2.shape == (1, 1, 4)
