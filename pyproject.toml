@@ -1,0 +1,185 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flax"
+requires-python = ">=3.9"
+description = "Flax: A neural network library for JAX designed for flexibility"
+keywords = []
+authors = [
+    {name = "Flax team", email = "flax-dev@google.com"},
+]
+dependencies = [
+    "numpy>=1.22",
+    "numpy>=1.23.2; python_version>='3.11'",
+    "numpy>=1.26.0; python_version>='3.12'",
+    "jax>=0.4.19",
+    "msgpack",
+    "optax",
+    "orbax-checkpoint",
+    "tensorstore",
+    "rich>=11.1",
+    "typing_extensions>=4.2",
+    "PyYAML>=5.4.1",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dynamic = ["version", "readme"]
+
+[project.optional-dependencies]
+all = [
+    "matplotlib",  # only needed for tensorboard export
+]
+testing = [
+    "clu",  # All examples.
+    "clu<=0.0.9; python_version<'3.10'",
+    "einops",
+    "gymnasium[atari, accept-rom-license]",
+    "jaxlib",
+    "jraph>=0.0.6dev0",
+    "ml-collections",
+    "mypy",
+    "opencv-python",
+    "pytest",
+    "pytest-cov",
+    "pytest-custom_exit_code",
+    "pytest-xdist",
+    "pytype",
+    "sentencepiece",  # WMT/LM1B examples
+    "tensorflow_text>=2.11.0",  # WMT/LM1B examples
+    "tensorflow_datasets",
+    "tensorflow",
+    "torch",
+    "nbstripout",
+    "black[jupyter]==23.7.0",
+    # "pyink==23.5.0", # disabling pyink fow now
+]
+
+[project.urls]
+homepage = "https://github.com/google/flax"
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"], content-type = "text/markdown"}
+version = {attr = "flax.version.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["flax*"]
+
+[tool.setuptools.package-data]
+flax = ["*py.typed"]
+
+[tool.yapf]
+based_on_style = "yapf"
+
+[tool.pytype]
+# TODO(levskaya): figure out why we get pyi-error from flax's root __init__.py
+# could be a pytype bug.
+disable = "pyi-error"
+
+[tool.mypy]
+show_error_codes = true
+no_implicit_optional = true
+disable_error_code = "attr-defined"
+
+[[tool.mypy.overrides]]
+module = [
+    "tensorflow.*",
+    "tensorboard.*",
+    "absl.*",
+    "jax.*",
+    "rich.*",
+    "flax.*",
+    "jaxlib.cuda.*",
+    "jaxlib.cpu.*",
+    "msgpack",
+    "numpy.*",
+    "optax.*",
+    "orbax.*",
+    "opt_einsum.*",
+    "scipy.*",
+    "libtpu.*",
+    "jaxlib.mlir.*",
+    "yaml",
+]
+ignore_missing_imports = true
+# exclude nnx
+[[tool.mypy.overrides]]
+module = "flax.experimental.nnx.*"
+ignore_errors = true
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # By default error out on any warnings.
+    "error",
+    # Jax warning when no gpu/tpu found.
+	"ignore:No GPU/TPU found, falling back to CPU.*:UserWarning",
+    # traverse_util.Traversal will be removed soon.
+    "ignore:`flax.traverse_util.Traversal` will be deprecated.*:DeprecationWarning",
+    # Deprecated legacy checkpoint - just want to keep the tests running for a while
+    "ignore:Flax Checkpointing will soon be deprecated in favor of Orbax.*:DeprecationWarning",
+    # DeprecationWarning: The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.
+    "ignore:.*The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.*:DeprecationWarning",
+    # DeprecationWarning: the function signature of MultiHeadDotProductAttention's `__call__` method has changed
+    "ignore:.*the function signature of MultiHeadDotProductAttention's `__call__` method has changed.*:DeprecationWarning",
+    # DeprecationWarning: ml_dtypes.float8_e4m3b11 is deprecated.
+    "ignore:.*ml_dtypes.float8_e4m3b11 is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: jax.config.define_bool_state is deprecated. Please use other libraries for configuration instead.
+    "ignore:.*jax.config.define_bool_state is deprecated.:DeprecationWarning",
+    # pytest-cov uses a deprecated feature of pytest-xdist. (2023-11-06)
+    "ignore:The --rsyncdir command line argument and rsyncdirs config variable are deprecated.:DeprecationWarning",
+    # DeprecationWarning: jax.random.KeyArray is deprecated.
+    "ignore:.*jax.random.KeyArray is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: jax.core.Shape is deprecated.
+    "ignore:.*jax.core.Shape is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: pkg_resources is deprecated as an API.
+    "ignore:.*pkg_resources is deprecated as an API.*:DeprecationWarning",
+    # DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('google')`.
+    "ignore:.*Deprecated call to.*pkg_resources.declare_namespace.*:DeprecationWarning",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "@abc.abstractmethod",
+    "raise NotImplementedError",
+]
+
+[tool.pyink]
+pyink-indentation = 2
+pyink-use-majority-quotes = true
+line-length = 80
+preview = true
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+  "__init__.py",
+  "activation.py",
+  "partitioning.py",
+  "variables.py",
+  "examples/",
+]
+
+line-length = 80
+indent-width = 2
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
+select = ["F401"]
+ignore = []
+# Allow fix for all enabled rules (when `--fix`) is provided.
+# Full list of rules: https://docs.astral.sh/ruff/rules/
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "single"
