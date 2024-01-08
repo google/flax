@@ -258,10 +258,11 @@ class BatchNorm(Module):
     """
 
     use_running_average = first_from(
-      'use_running_average',
       use_running_average,
       self.use_running_average,
       flaglib.flags.get('use_running_average'),
+      error_msg="""No `use_running_average` argument was provided to BatchNorm
+        as either a __call__ argument, class attribute, or nnx.flag.""",
     )
     feature_axes = _canonicalize_axes(x.ndim, self.axis)
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)

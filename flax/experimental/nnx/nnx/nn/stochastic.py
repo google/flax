@@ -59,10 +59,11 @@ class Dropout(Module):
       The masked inputs reweighted to preserve mean.
     """
     deterministic = first_from(
-      'deterministic',
       deterministic,
       self.deterministic,
       flaglib.flags.get('deterministic'),
+      error_msg="""No `deterministic` argument was provided to Dropout
+          as either a __call__ argument, class attribute, or nnx.flag.""",
     )
 
     if (self.rate == 0.0) or deterministic:
