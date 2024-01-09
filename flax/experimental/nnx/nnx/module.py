@@ -283,21 +283,19 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
   @classmethod
   @property
   def create_abstract(cls: type[M]) -> type[M]:
-    accessesor = DelayedAccessor()
-
     def lift_rngs(kwargs: dict[str, tp.Any]):
       if 'rngs' in kwargs and isinstance(kwargs['rngs'], Rngs):
         kwargs['rngs'] = kwargs['rngs'].copy()
       return kwargs
 
-    def _create_abstract(accessesor, *args, **kwargs):
-      constructor = accessesor(cls)
+    def _create_abstract(accessor: DelayedAccessor, *args, **kwargs):
+      constructor = accessor(cls)
       state, graphdef = jax.eval_shape(
         lambda: constructor(*args, **lift_rngs(kwargs)).split()
       )
       return graphdef.merge(state)
 
-    return CallableProxy(_create_abstract, accessesor)  # type: ignore
+    return CallableProxy(_create_abstract)  # type: ignore
 
   def clone(self: M) -> M:
     return merge(self.split())
@@ -404,15 +402,13 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
 
   @property
   def apply(self: M) -> ApplyCaller[M]:
-    accessesor = DelayedAccessor()
-
-    def _apply(accessesor, *args, **kwargs) -> tuple[tp.Any, M]:
+    def _apply(accessor: DelayedAccessor, *args, **kwargs) -> tuple[tp.Any, M]:
       module = self.clone()
-      fn = accessesor(module)
+      fn = accessor(module)
       out = fn(*args, **kwargs)
       return out, module
 
-    return CallableProxy(_apply, accessesor)  # type: ignore
+    return CallableProxy(_apply)  # type: ignore
 
   def update(self: M, update: Updates[M], *updates: Updates[M]) -> None:
     updates = (update, *updates)

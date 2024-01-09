@@ -327,17 +327,17 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
   def apply(
     self, state: State, *states: State
   ) -> ApplyCaller[tuple[State, 'GraphDef[Node]']]:
-    accessesor = DelayedAccessor()
+    accessor = DelayedAccessor()
 
     def _apply(
-      accessesor, *args, **kwargs
+      accessor: DelayedAccessor, *args, **kwargs
     ) -> tuple[tp.Any, tuple[State, GraphDef[Node]]]:
       module = self.merge(state, *states)
-      fn = accessesor(module)
+      fn = accessor(module)
       out = fn(*args, **kwargs)
       return out, graph_flatten(module)
 
-    return CallableProxy(_apply, accessesor)  # type: ignore
+    return CallableProxy(_apply, accessor)  # type: ignore
 
   def make_empty(self) -> Node:
     return self.merge(State({}))

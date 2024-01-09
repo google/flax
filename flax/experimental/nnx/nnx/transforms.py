@@ -77,7 +77,7 @@ def _check_args(args: tuple[tp.Any, ...]):
 
 class LiftedModule(Module, tp.Generic[M]):
   @abstractmethod
-  def _call(self, accessesor: DelayedAccessor, *args, **kwargs) -> tp.Any:
+  def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> tp.Any:
     ...
 
   @property
@@ -92,11 +92,11 @@ class LiftedModule(Module, tp.Generic[M]):
   def call(self) -> tp.Any:
     module = self
 
-    def check_and_call(*args, **kwargs):
+    def check_and_call(accessor: DelayedAccessor, *args, **kwargs):
       _check_args(args)
-      return self._call(*args, **kwargs)
+      return self._call(accessor, *args, **kwargs)
 
-    proxy = CallableProxy(check_and_call, DelayedAccessor())
+    proxy = CallableProxy(check_and_call)
 
     while isinstance(module._submodule, LiftedModule):
       module = module._submodule
@@ -301,8 +301,8 @@ class JIT(LiftedModule[M], metaclass=JITMeta):
   def _submodule(self) -> M:
     return self.jit_module
 
-  def _call(self, accessesor: DelayedAccessor, *args, **kwargs) -> Any:
-    self.accessor = accessesor
+  def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> Any:
+    self.accessor = accessor
     try:
       out = jit_apply(self.jitted_fn, self.jit_module, args, kwargs)
     finally:
@@ -450,9 +450,9 @@ class Grad(LiftedModule[M], metaclass=GradMeta):
   def _submodule(self) -> M:
     return self.grad_module
 
-  def _call(self, accessesor: DelayedAccessor, *args, **kwargs) -> Any:
+  def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> Any:
     def grad_call_apply(module, *args, **kwargs):
-      return accessesor(module)(*args, **kwargs)
+      return accessor(module)(*args, **kwargs)
 
     return grad_apply(
       self.options, grad_call_apply, self.grad_module, *args, **kwargs
@@ -723,7 +723,7 @@ class Scan(LiftedModule[M], metaclass=ScanMeta):
     return self.scan_module
 
   def _call(
-    self, accessesor: DelayedAccessor, *args, **kwargs
+    self, accessor: DelayedAccessor, *args, **kwargs
   ) -> tuple[tp.Any, tp.Any]:
     if len(args) < 1:
       raise TypeError(
@@ -733,7 +733,7 @@ class Scan(LiftedModule[M], metaclass=ScanMeta):
     carry_arg, args = args[0], args[1:]
 
     def scan_call_apply(module, *args, **kwargs):
-      return accessesor(module)(*args, **kwargs)
+      return accessor(module)(*args, **kwargs)
 
     return scan_apply(
       self.options,
@@ -1176,12 +1176,12 @@ class Remat(LiftedModule[M], metaclass=RematMeta):
 
   def _call(
     self,
-    accessesor: DelayedAccessor,
+    accessor: DelayedAccessor,
     *args,
     rngs: tp.Optional[rnglib.Rngs] = None,
   ) -> tp.Any:
     def remat_call_apply(module, *args, **kwargs):
-      return accessesor(module)(*args, **kwargs)
+      return accessor(module)(*args, **kwargs)
 
     return remat_apply(
       self.options,
@@ -1366,12 +1366,12 @@ class Vmap(LiftedModule[M], metaclass=VmapMeta):
     return self.vmap_module
 
   def _call(
-    self, accessesor: DelayedAccessor, *args, **kwargs
+    self, accessor: DelayedAccessor, *args, **kwargs
   ) -> tuple[tp.Any, tp.Any]:
     _check_args(args)
 
     def vmap_call_apply(module, *args, **kwargs):
-      return accessesor(module)(*args, **kwargs)
+      return accessor(module)(*args, **kwargs)
 
     return vmap_apply(
       self.options,
