@@ -110,6 +110,7 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
   def __init__(
     self,
     default: RngValue | RngDict | None = None,
+    /,
     **rngs: RngValue,
   ):
     if default is not None:
