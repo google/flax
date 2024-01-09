@@ -26,7 +26,7 @@ class TestMultiHeadAttention:
       out_features=6,
       rngs=nnx.Rngs(0),
     )
-    y = module(jnp.ones((1, 7, 3)))
+    y = module(jnp.ones((1, 7, 3)), decode=False)
     assert y.shape == (1, 7, 6)
 
   def test_multihead_sow_attention_weights(self):
@@ -58,7 +58,8 @@ class TestMultiHeadAttention:
       rng,
     )
 
-    _ = module(x, True)
+    with nnx.flags(decode=False):
+      _ = module(x, True)
     intermediates = module.pop(nnx.Intermediate)
     assert intermediates['attention_layers/0/attention_weights'][0].shape == (
       4,
@@ -74,7 +75,8 @@ class TestMultiHeadAttention:
       6,
     )
 
-    _ = module(x)
+    with nnx.flags(decode=False):
+      _ = module(x)
     intermediates = module.pop(nnx.Intermediate)
     assert not intermediates  # empty
 
@@ -86,7 +88,7 @@ class TestMultiHeadAttention:
         num_heads=2,
         qkv_features=4,
         decode=True,
-        rngs=nnx.Rngs(0)
+        rngs=nnx.Rngs(0),
       )
       module.init_cache(x.shape, dtype=x.dtype)
       assert module.cached_key.shape == (1, 4, 2, 2)

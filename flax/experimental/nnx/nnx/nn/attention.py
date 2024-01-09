@@ -25,7 +25,7 @@ from jax import lax, random
 
 from flax.experimental import nnx
 from flax.experimental.nnx.nnx import rnglib
-from flax.experimental.nnx.nnx.flaglib import flags
+from flax.experimental.nnx.nnx import flaglib
 from flax.experimental.nnx.nnx.module import Module, first_from
 from flax.experimental.nnx.nnx.nn import initializers
 from flax.experimental.nnx.nnx.nn.dtypes import promote_dtype
@@ -305,7 +305,7 @@ class MultiHeadAttention(Module):
     bias_init: initializers.Initializer = initializers.zeros_init(),
     use_bias: bool = True,
     attention_fn: Callable[..., Array] = dot_product_attention,
-    decode: bool = False,
+    decode: bool | None = None,
     normalize_qk: bool = False,
     # Deprecated, will be removed.
     qkv_dot_general: DotGeneralT | None = None,
@@ -402,6 +402,7 @@ class MultiHeadAttention(Module):
     dropout_rng: Optional[Array] = None,
     rngs: rnglib.Rngs | None = None,
     sow_weights: bool = False,
+    decode: bool | None = None,
   ):
     ...
 
@@ -416,6 +417,7 @@ class MultiHeadAttention(Module):
     dropout_rng: Array | None = None,
     rngs: rnglib.Rngs | None = None,
     sow_weights: bool = False,
+    decode: bool | None = None,
   ):
     ...
 
@@ -429,6 +431,7 @@ class MultiHeadAttention(Module):
     deterministic: bool | None = None,
     rngs: rnglib.Rngs | None = None,
     sow_weights: bool = False,
+    decode: bool | None = None,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -490,7 +493,15 @@ class MultiHeadAttention(Module):
 
     # During fast autoregressive decoding, we feed one position at a time,
     # and cache the keys and values step by step.
-    if self.decode:
+    decode = first_from(
+      decode,
+      self.decode,
+      flaglib.flags.get('decode'),
+      error_msg="""No `decode` argument was provided to MultiHeadAttention
+        as either a __call__ argument, class attribute, or nnx.flag.""",
+    )
+
+    if decode:
       (
         *batch_dims,
         max_length,
@@ -530,10 +541,11 @@ class MultiHeadAttention(Module):
       self.dropout_rate > 0.0
     ):  # Require `deterministic` only if using dropout.
       deterministic = first_from(
-        'deterministic',
         deterministic,
         self.deterministic,
-        flags.get('deterministic'),
+        flaglib.flags.get('deterministic'),
+        error_msg="""No `deterministic` argument was provided to MultiHeadAttention
+          as either a __call__ argument, class attribute, or nnx.flag.""",
       )
       if not deterministic:
         if rngs is None:
