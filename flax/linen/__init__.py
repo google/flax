@@ -61,7 +61,6 @@ from .activation import (
     tanh as tanh,
 )
 from .attention import (
-    MultiHeadAttention as MultiHeadAttention,
     MultiHeadDotProductAttention as MultiHeadDotProductAttention,
     SelfAttention as SelfAttention,
     combine_masks as combine_masks,
