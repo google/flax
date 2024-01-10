@@ -670,7 +670,6 @@ class SelfAttention(MultiHeadDotProductAttention):
   def __call__(  # type: ignore
     self,
     inputs_q: Array,
-    *,
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[PRNGKey] = None,
