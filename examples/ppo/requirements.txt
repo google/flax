@@ -1,0 +1,10 @@
+absl-py==1.0.0
+atari-py==0.2.5
+opencv-python==4.5.4.60
+flax==0.3.6
+gym==0.18.3
+gymnasium[atari, accept-rom-license]==0.29.0
+ml-collections==0.1.0
+numpy==1.22.0
+optax==0.1.5
+tensorflow==2.11.1

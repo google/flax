@@ -1,0 +1,23 @@
+@import url("theme.css");
+
+.wy-nav-content {
+  max-width: 1290px;
+}
+
+.rst-content table.docutils {
+  width: 100%;
+}
+
+.rst-content table.docutils td {
+  vertical-align: top;
+  padding: 0;
+}
+
+.rst-content table.docutils td p {
+  padding: 8px;
+}
+
+.rst-content div[class^=highlight] {
+  border: 0;
+  margin: 0;
+}

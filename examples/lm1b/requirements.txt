@@ -1,0 +1,13 @@
+absl-py==1.4.0
+clu==0.0.9
+flax==0.6.11
+jax==0.4.13
+--find-links https://storage.googleapis.com/jax-releases/jax_releases.html
+jaxlib==0.4.13+cuda11.cudnn82  # Make sure CUDA version matches the base image.
+ml-collections==0.1.1
+numpy==1.24.3
+optax==0.1.5
+sentencepiece==0.1.99
+tensorflow==2.13.0
+tensorflow-datasets==4.9.2
+tensorflow-text==2.13.0

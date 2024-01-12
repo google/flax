@@ -1,0 +1,71 @@
+query {
+  # Queries all the Pull Requests in a repo. For each issue, we get some basic data such as
+  # the number, state, reviews, and title. The most important part is the 'timelineItems'
+  # which are the events that happened to the issue, we can use the information about
+  # the datetime about certain key events to define some metrics. We also use the 'reviews'
+  # as indicators for certain metrics.  Note that we are getting more information than is
+  # probably needed but its fine for now.
+  repository(owner:"_REPO_OWNER_", name:"_REPO_NAME_") {
+    pullRequests(first:100) {
+      totalCount
+      edges {
+        cursor
+        node {
+          number
+          state
+          title
+          createdAt
+          author{
+            login
+          }
+          mergedAt
+          reviews(first: 100){
+            nodes {
+              createdAt
+            }
+          }
+          timelineItems(first: 100, itemTypes: [LABELED_EVENT, ASSIGNED_EVENT, MERGED_EVENT, READY_FOR_REVIEW_EVENT, CLOSED_EVENT]) {
+            edges {
+              node {
+                __typename
+                ... on ClosedEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on LabeledEvent {
+                  label {
+                    name
+                  }
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on MergedEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on ReadyForReviewEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on AssignedEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+sphinx>=3.3.1
+sphinx-book-theme
+Pygments>=2.6.1
+jax>=0.4
+jaxlib
+numpy>1.22
+numpy>=1.23.2; python_version>='3.11'
+numpy>=1.26.0; python_version>='3.12'
+
+ipykernel
+myst_nb
+recommonmark
+ipython_genutils
+sphinx-design
+jupytext==1.13.8
+dm-haiku
+
+# Need to pin docutils to 0.16 to make bulleted lists appear correctly on
+# ReadTheDocs: https://stackoverflow.com/a/68008428
+docutils==0.16
+
+# The next packages are for notebooks.
+matplotlib
+scikit-learn
+# Must install flax itself for notebook execution and autodocs to work.
+.
+# The next packages are used in testcode blocks.
+ml_collections
+tensorflow
+tensorflow_datasets
+tensorflow_text>=2.11.0 # WMT example
+
+# notebooks
+einops
