@@ -331,15 +331,15 @@ def intercept_methods(interceptor: Interceptor):
 
   >>> import flax.linen as nn
   >>> import jax.numpy as jnp
-
+  ...
   >>> class Foo(nn.Module):
   ...   def __call__(self, x):
   ...     return x
-
+  ...
   >>> def my_interceptor1(next_fun, args, kwargs, context):
   ...   print('calling my_interceptor1')
   ...   return next_fun(*args, **kwargs)
-
+  ...
   >>> foo = Foo()
   >>> with nn.intercept_methods(my_interceptor1):
   ...   _ = foo(jnp.ones([1]))
@@ -351,7 +351,7 @@ def intercept_methods(interceptor: Interceptor):
   >>> def my_interceptor2(next_fun, args, kwargs, context):
   ...   print('calling my_interceptor2')
   ...   return next_fun(*args, **kwargs)
-
+  ...
   >>> with nn.intercept_methods(my_interceptor1), \
   ...      nn.intercept_methods(my_interceptor2):
   ...   _ = foo(jnp.ones([1]))
