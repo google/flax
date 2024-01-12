@@ -2487,6 +2487,76 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(obj_loaded.b, 'ok')
     self.assertEqual(obj_loaded.my_property, 'okok')
 
+  def test_compact_name_scope(self):
+    class Foo(nn.Module):
+      @nn.compact_name_scope
+      def up(self, x):
+        return nn.Dense(3)(x)
+
+      @nn.compact_name_scope
+      def down(self, x):
+        return nn.Dense(3)(x)
+
+      @nn.compact
+      def __call__(self, x):
+        return self.up(x) + self.down(x) + nn.Dense(3)(x)
+
+    m = Foo()
+    x = jnp.ones((1, 2))
+
+    self.assertEqual(set(m._compact_name_scope_methods), {'up', 'down'})
+
+    variables = m.init(random.key(0), x)
+    params = variables['params']
+
+    self.assertIn('Dense_0', params)
+    self.assertIn('down', params)
+    self.assertIn('up', params)
+    self.assertIn('Dense_0', params['down'])
+    self.assertIn('Dense_0', params['up'])
+
+    y = m.apply(variables, x)
+    y_up = m.apply(variables, x, method='up')
+    y_down = m.apply(variables, x, method='down')
+
+    assert y.shape == (1, 3)
+    assert y_up.shape == (1, 3)
+    assert y_down.shape == (1, 3)
+
+  def test_compact_name_scope_outside_compact(self):
+    class Foo(nn.Module):
+      @nn.compact_name_scope
+      def up(self, x):
+        return nn.Dense(3)(x)
+
+      @nn.compact_name_scope
+      def down(self, x):
+        return nn.Dense(3)(x)
+
+      def __call__(self, x):
+        return self.up(x) + self.down(x)
+
+    m = Foo()
+    x = jnp.ones((1, 2))
+
+    self.assertEqual(set(m._compact_name_scope_methods), {'up', 'down'})
+
+    variables = m.init(random.key(0), x)
+    params = variables['params']
+
+    self.assertIn('down', params)
+    self.assertIn('up', params)
+    self.assertIn('Dense_0', params['down'])
+    self.assertIn('Dense_0', params['up'])
+
+    y = m.apply(variables, x)
+    y_up = m.apply(variables, x, method='up')
+    y_down = m.apply(variables, x, method='down')
+
+    assert y.shape == (1, 3)
+    assert y_up.shape == (1, 3)
+    assert y_down.shape == (1, 3)
+
 
 class LeakTests(absltest.TestCase):
   def test_tracer_leaks(self):
