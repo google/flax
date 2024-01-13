@@ -22,20 +22,22 @@ from flax.experimental import nnx
 
 
 class TestLinenConsistency(parameterized.TestCase):
-
   @parameterized.product(
-      input_dtype = [jnp.int16, jnp.int32],
-      dtype = [jnp.float32, jnp.float16],
-      param_dtype = [jnp.float32, jnp.float16],
+    input_dtype=[jnp.int16, jnp.int32],
+    num_embeddings=[1, 7],
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
   )
-  def test_nnx_linen_equivalence(self, input_dtype, **kwargs):
+  def test_nnx_linen_equivalence(self, input_dtype, num_embeddings, **kwargs):
     key = jax.random.key(42)
     rngs = nnx.Rngs(42)
     IN_FEATURES = 32
-    NUM_EMBEDDINGS = 7
+    NUM_EMBEDDINGS = num_embeddings
 
-    x = jax.numpy.ones((10,), dtype=input_dtype)
-    model_nnx = nnx.Embed.create_abstract(NUM_EMBEDDINGS, IN_FEATURES, **kwargs, rngs=rngs)
+    x = jax.numpy.arange(NUM_EMBEDDINGS, dtype=input_dtype)
+    model_nnx = nnx.Embed.create_abstract(
+      NUM_EMBEDDINGS, IN_FEATURES, **kwargs, rngs=rngs
+    )
     model = linen.Embed(NUM_EMBEDDINGS, IN_FEATURES, **kwargs)
     variables = model.init(key, x)
     model_nnx.embedding = variables['params']['embedding']
@@ -43,3 +45,9 @@ class TestLinenConsistency(parameterized.TestCase):
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
     assert_array_equal(out, out_nnx)
+
+    x = jax.numpy.ones((10,), dtype=input_dtype) * 10
+    out_nnx = model_nnx(x)
+    out = model.apply(variables, x)
+    assert_array_equal(out, out_nnx)
+    assert_array_equal(jax.numpy.isnan(out).all(), jax.numpy.array([True]))

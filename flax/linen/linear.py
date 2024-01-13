@@ -422,7 +422,7 @@ class _Conv(Module):
       kernel_size = tuple(self.kernel_size)
 
     def maybe_broadcast(
-      x: Optional[Union[int, Sequence[int]]]
+      x: Optional[Union[int, Sequence[int]]],
     ) -> Tuple[int, ...]:
       if x is None:
         # backward compatibility with using None as sentinel for
@@ -941,7 +941,9 @@ class Embed(Module):
   matrix with shape ``(num_embeddings, features)``. When calling this layer,
   the input values will be used to 0-index into the ``embedding`` matrix.
   Indexing on a value greater than or equal to ``num_embeddings`` will result
-  in ``nan`` values.
+  in ``nan`` values. When ``num_embeddings`` equals to 1, it will
+  broadcast the ``embedding`` matrix to input shape with ``features``
+  dimension appended.
 
   Example usage::
 
@@ -1009,6 +1011,13 @@ class Embed(Module):
     (embedding,) = promote_dtype(
       self.embedding, dtype=self.dtype, inexact=False
     )
+    if self.num_embeddings == 1:
+      return jnp.where(
+        jnp.broadcast_to(inputs[..., None], inputs.shape + (self.features,))
+        == 0,
+        embedding,
+        jnp.nan,
+      )
     return jnp.take(embedding, inputs, axis=0)
 
   def attend(self, query: Array) -> Array:
