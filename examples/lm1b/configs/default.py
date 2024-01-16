@@ -133,7 +133,6 @@ def get_config():
       ['embed', 'fsdp'],
       ['heads', 'tensor'],
   ]
-  config.full_sharding = ['data', 'fsdp', 'tensor']
   config.data_sharding = ['data']
 
   # One axis for each parallelism type may hold a placeholder (-1)

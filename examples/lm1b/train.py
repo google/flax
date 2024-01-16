@@ -472,7 +472,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       m, optimizer, config, init_rng, mesh
   )
   data_sharding = NamedSharding(mesh, P(config.data_sharding))
-  full_sharding = NamedSharding(mesh, P(config.full_sharding))
 
   if config.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
@@ -491,7 +490,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       train_step,
       in_shardings=(
           state_mesh_annotations,
-          full_sharding,
+          data_sharding,
           None,
       ),  # type: ignore
       out_shardings=(state_mesh_annotations, None),  # type: ignore
@@ -503,7 +502,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       eval_step,
       in_shardings=(
           state_mesh_annotations.params,
-          full_sharding,
+          data_sharding,
       ),  # type: ignore
       out_shardings=None,  # type: ignore
       static_argnums=(2, 3),
