@@ -1040,6 +1040,40 @@ class LinearTest(parameterized.TestCase):
     )
     np.testing.assert_allclose(z, 3.0 * jnp.arange(4))
 
+  @parameterized.product(num_embedding=(1, 4))
+  def test_embed_nan(self, num_embedding):
+    rng = dict(params=random.key(0))
+    x = jnp.zeros(4)[None].astype(jnp.int32)
+    dummy_embedding = jnp.arange(3)[None, ...].astype(jnp.float32)
+    dummy_embedding = jnp.broadcast_to(dummy_embedding, (num_embedding, 3))
+    embed_module = nn.Embed(
+      num_embeddings=num_embedding,
+      features=3,
+      embedding_init=lambda rng, shape, dtype: dummy_embedding,
+    )
+    y, initial_params = embed_module.init_with_output(rng, x)
+    np.testing.assert_allclose(
+      y, jnp.broadcast_to(dummy_embedding[0][None], (4, 3))[None]
+    )
+    x = jnp.arange(2)[None] + num_embedding - 1
+    y, initial_params = embed_module.init_with_output(rng, x)
+    expected = jnp.broadcast_to(
+      jnp.array(
+        [
+          [
+            [
+              False,
+            ],
+            [
+              True,
+            ],
+          ]
+        ]
+      ),
+      (1, 2, 3),
+    )
+    np.testing.assert_allclose(jnp.isnan(y), expected)
+
   def test_embed_hash(self):
     self.assertEqual(hash(nn.Embed(2, 3)), hash(nn.Embed(2, 3)))
     self.assertNotEqual(hash(nn.Embed(3, 4)), hash(nn.Embed(2, 3)))
