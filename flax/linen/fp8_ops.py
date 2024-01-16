@@ -12,16 +12,75 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
+import numpy as np
 import warnings
 from functools import partial
 
 from jax import custom_jvp, custom_vjp, lax, random
 from jax import numpy as jnp
+from jax._src import core
+from jax._src import dtypes
 
 from flax.linen import initializers, module
 
 OVERWRITE_WITH_GRADIENT = '_overwrite_with_gradient'
 
+# Define a custom dtype for FP8 meta params.
+class Fp8MetaTyRules:
+  # tell JAX how to lower this dtype to an HLO dtype
+  @staticmethod
+  def physical_element_aval(dtype) -> core.ShapedArray:
+    return core.ShapedArray((), dtype.float_dtype)
+
+  # allow conversions to and from the corresponding float type
+  @staticmethod
+  def convert_from(fp8_meta_dtype, other_dtype) -> bool:
+    return fp8_meta_dtype.float_dtype == other_dtype
+
+  @staticmethod
+  def convert_to(other_dtype, fp8_meta_dtype) -> bool:
+    return fp8_meta_dtype.float_dtype == other_dtype
+
+  # define how autodiff should accumulate these values
+  @staticmethod
+  def add(dt, x, y):
+    from_fp8_meta = partial(lax.convert_element_type, new_dtype=dt.float_dtype)
+    to_fp8_meta = partial(lax.convert_element_type, new_dtype=dt)
+    return to_fp8_meta(lax.max(from_fp8_meta(x), from_fp8_meta(y)))
+
+  @staticmethod
+  def zero(dt):
+    neginf = np.array(-np.inf if dtypes.supports_inf(dt.float_dtype)
+                      else dtypes.finfo(dt.float_dtype).min, dt.float_dtype)
+    return lax.convert_element_type(neginf, dt)
+
+  @staticmethod
+  def tangent_dtype(dtype):
+    return dtype
+
+  # NOTE: by skipping some rules, this dtype can only be used underneath jit
+  @staticmethod
+  def global_sharded_result_handler(aval, sharding, committed, is_from_xla):
+    raise NotImplementedError("convert back under the jit")
+
+
+# class to use as second argument to jax.dtypes.issubdtype
+class fp8_meta_dtype(dtypes.extended): pass
+
+# parameterized datatype for use in e.g. lax.convert_element_type
+@dataclasses.dataclass(frozen=True)
+class fp8_meta_dtype_wrapper(dtypes.ExtendedDType):
+  float_dtype: dtypes.DType
+  _rules: type = Fp8MetaTyRules
+  type: type = fp8_meta_dtype
+
+  def __repr__(self) -> str:
+    nbits = dtypes.finfo(self.float_dtype).bits
+    return f'fp8_meta{nbits}'
+  name = property(__repr__)
+
+fm32 = fp8_meta_dtype_wrapper(jnp.float32)
 
 def get_fp8_max(fp8_dtype, out_dtype):
   assert fp8_dtype in (jnp.float8_e4m3fn, jnp.float8_e5m2)
@@ -60,21 +119,29 @@ def compute_scale(amax, scale, fp8_max, margin=0):
   return 1.0 / sf
 
 
-def compute_scale_and_amax_history(x, q_dtype, scale, amax_history):
-  dtype_max = get_fp8_max(q_dtype, jnp.float32)
-  amax_update = jnp.max(jnp.abs(x)).astype(scale.dtype)
+def compute_amax_history(x, amax_history):
+  amax_update = jnp.max(jnp.abs(x)).astype(amax_history.dtype)
   new_history = jnp.roll(amax_history, shift=-1, axis=0).at[0].set(amax_update)
-  amax_from_history = jnp.max(new_history, axis=0)
+  return new_history
+
+
+def qdq_and_return(x, q_dtype, sf_fm32, ah_fm32, compute_dtype):
+  # convert fm32->f32 so we can do math
+  amax_history = lax.convert_element_type(ah_fm32, jnp.float32)
+  scale = lax.convert_element_type(sf_fm32, jnp.float32)
+
+  dtype_max = get_fp8_max(q_dtype, jnp.float32)
+  amax_from_history = jnp.max(amax_history, axis=0)
   new_scale = compute_scale(amax_from_history, scale, dtype_max)
-  return new_scale, new_history
 
+  qx = quantize_dequantize(x, q_dtype, new_scale, compute_dtype)
 
-def qdq_and_return(x, q_dtype, scale, amax_history, compute_dtype):
-  qx = quantize_dequantize(x, q_dtype, scale, compute_dtype)
-  new_scale, new_history = compute_scale_and_amax_history(
-    x, q_dtype, scale, amax_history
-  )
-  return qx, new_scale, new_history
+  new_history = compute_amax_history(x, amax_history)
+
+  # convert f32->fm32 so the autodiff system accumulates fp8 meta correctly
+  new_ah_fm32 = lax.convert_element_type(new_history, fm32)
+  new_sf_fm32 = lax.convert_element_type(new_scale, fm32)
+  return qx, new_sf_fm32, new_ah_fm32
 
 
 @partial(custom_vjp, nondiff_argnums=(0,))
@@ -202,18 +269,18 @@ class Fp8DotGeneralOp(module.Module):
     comp_dtype = k.dtype
     x = jnp.asarray(x, comp_dtype)
 
-    x_qdq = in_qdq(
-      comp_dtype, x, self.input_scale.value, self.input_amax_history.value
+    x_sf_fm32 = lax.convert_element_type(self.input_scale.value, fm32)
+    x_ah_fm32 = lax.convert_element_type(self.input_amax_history.value, fm32)
+    k_sf_fm32 = lax.convert_element_type(self.kernel_scale.value, fm32)
+    k_ah_fm32 = lax.convert_element_type(self.kernel_amax_history.value, fm32)
+    g_sf_fm32 = lax.convert_element_type(self.output_grad_scale.value, fm32)
+    g_ah_fm32 = lax.convert_element_type(
+        self.output_grad_amax_history.value, fm32
     )
-    k_qdq = in_qdq(
-      comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
-    )
+
+    x_qdq = in_qdq(comp_dtype, x, x_sf_fm32, x_ah_fm32)
+    k_qdq = in_qdq(comp_dtype, k, k_sf_fm32, k_ah_fm32)
     y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers)  # type: ignore
-    y = out_qdq(
-      comp_dtype,
-      y_qdq,
-      self.output_grad_scale.value,
-      self.output_grad_amax_history.value,
-    )
+    y = out_qdq(comp_dtype, y_qdq, g_sf_fm32, g_ah_fm32)
 
     return y  # type: ignore
