@@ -43,15 +43,13 @@ from flax.experimental.nnx.nnx.proxy_caller import (
 from flax.experimental.nnx.nnx.rnglib import Rngs
 from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import Variable
+from flax.typing import Path
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
 M = tp.TypeVar('M', bound='Module')
 S = tp.TypeVar('S', bound=tp.Union[State, tuple[State, ...]])
 V = tp.TypeVar('V', bound=variableslib.Variable[tp.Any])
-
-Path = str
-PathParts = tuple[str, ...]
 
 StateMapping = tp.Mapping[Path, tp.Any]
 

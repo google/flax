@@ -16,7 +16,7 @@
 
 import functools
 import warnings
-from typing import Any, Callable, Optional, Tuple, Union, overload
+from typing import Any, Callable, Optional, Union, overload
 
 import jax
 import jax.numpy as jnp
@@ -26,17 +26,19 @@ from flax.linen import initializers
 from flax.linen.dtypes import promote_dtype
 from flax.linen.linear import (
   DenseGeneral,
-  DotGeneralT,
-  PrecisionLike,
   default_kernel_init,
 )
 from flax.linen.module import Module, compact, merge_param
 from flax.linen.normalization import LayerNorm
-
-PRNGKey = jax.Array
-Shape = Tuple[int, ...]
-Dtype = Any
-Array = Any
+from flax.typing import (
+  Array,
+  PRNGKey,
+  Dtype,
+  Shape as Shape,
+  Initializer,
+  PrecisionLike,
+  DotGeneralT,
+)
 
 
 def dot_product_attention_weights(
@@ -296,10 +298,8 @@ class MultiHeadDotProductAttention(Module):
   dropout_rate: float = 0.0
   deterministic: Optional[bool] = None
   precision: PrecisionLike = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[
-    [PRNGKey, Shape, Dtype], Array
-  ] = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = initializers.zeros_init()
   use_bias: bool = True
   attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False
@@ -329,7 +329,7 @@ class MultiHeadDotProductAttention(Module):
     self,
     inputs_q: Array,
     *,
-    inputs_kv: Array = None,
+    inputs_kv: Optional[Array] = None,
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[PRNGKey] = None,
@@ -766,7 +766,7 @@ def make_causal_mask(
   )
 
 
-def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32) -> Array:
+def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32) -> Optional[Array]:
   """Combine attention masks.
 
   Args:

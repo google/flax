@@ -16,6 +16,7 @@ from flax.linen.pooling import avg_pool as avg_pool
 from flax.linen.pooling import max_pool as max_pool
 from flax.linen.pooling import min_pool as min_pool
 from flax.linen.pooling import pool as pool
+from flax.typing import Initializer as Initializer
 
 from .nnx import compatibility as compatibility
 from .nnx.dataclasses import dataclass as dataclass
@@ -66,7 +67,6 @@ from .nnx.nn.attention import combine_masks as combine_masks
 from .nnx.nn.attention import dot_product_attention as dot_product_attention
 from .nnx.nn.attention import make_attention_mask as make_attention_mask
 from .nnx.nn.attention import make_causal_mask as make_causal_mask
-from .nnx.nn.initializers import Initializer as Initializer
 from .nnx.nn.linear import Conv as Conv
 from .nnx.nn.linear import Embed as Embed
 from .nnx.nn.linear import Linear as Linear

@@ -47,6 +47,17 @@ from flax import config as config
 from flax import configurations as legacy_config  # only for flax_lazy_rng
 from flax import errors, struct, traceback_util
 from flax.ids import uuid
+from flax.typing import (
+  PRNGKey,
+  Array,
+  RNGSequences,
+  Collection,
+  MutableCollection,
+  VariableDict,
+  FrozenVariableDict as FrozenVariableDict,
+  MutableVariableDict,
+  PRNGFoldable
+)
 
 from . import meta, partial_eval, tracers
 from .frozen_dict import FrozenDict, freeze, unfreeze
@@ -54,11 +65,6 @@ from .frozen_dict import FrozenDict, freeze, unfreeze
 traceback_util.register_exclusion(__file__)
 
 T = TypeVar('T')
-
-PRNGKey = Any
-Array = Any
-
-RNGSequences = Dict[str, PRNGKey]
 
 
 Filter = Union[bool, str, typing.Collection[str], 'DenyList']
@@ -70,16 +76,12 @@ Filter = Union[bool, str, typing.Collection[str], 'DenyList']
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
   """DenyList represents an opt-out based mutability filter.
-
   DenyList can be used to make every collection mutable except the ones
   defined in the given filter.
   To for example make everything but the params collection mutable::
-
     nn.apply(fn, mutable=nn.DenyList(["params"]))
-
   Attributes:
     deny: The filter representing the collections that are not mutable.
-
   """
 
   deny: Filter
@@ -87,15 +89,6 @@ class DenyList:
 
 CollectionFilter = Filter
 PRNGSequenceFilter = Filter
-
-Collection = Mapping[str, Any]
-MutableCollection = Dict[str, Any]
-
-VariableDict = Mapping[str, Collection]
-FrozenVariableDict = FrozenDict[str, Collection]
-MutableVariableDict = Dict[str, MutableCollection]
-
-PRNGFoldable = Union[int, str]
 
 
 class LazyRng(struct.PyTreeNode):
@@ -431,7 +424,7 @@ class Scope:
   def __init__(
     self,
     variables: MutableVariableDict,
-    rngs: Optional[Dict[str, Union[PRNGKey, LazyRng]]] = None,
+    rngs: Optional[Union[RNGSequences, Dict[str, LazyRng]]] = None,
     name: Optional[str] = None,
     mutable: CollectionFilter = False,
     parent: Optional['Scope'] = None,

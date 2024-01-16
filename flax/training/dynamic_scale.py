@@ -22,8 +22,7 @@ import jax.numpy as jnp
 from jax import lax
 
 from flax import struct
-
-Array = Any
+from flax.typing import Array
 
 
 class DynamicScaleResult(NamedTuple):
@@ -82,8 +81,8 @@ class DynamicScale(struct.PyTreeNode):
   growth_factor: float = struct.field(pytree_node=False, default=2.0)
   backoff_factor: float = struct.field(pytree_node=False, default=0.5)
   growth_interval: int = struct.field(pytree_node=False, default=2000)
-  fin_steps: Array = 0
-  scale: Array = 65536.0
+  fin_steps: int = 0
+  scale: float = 65536.0
   minimum_scale: Optional[float] = struct.field(
     pytree_node=False, default=jnp.finfo(jnp.float32).tiny
   )

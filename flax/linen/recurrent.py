@@ -38,19 +38,23 @@ from jax import numpy as jnp
 from jax import random
 from typing_extensions import Protocol
 
-from flax.core import lift
 from flax.core.frozen_dict import FrozenDict
+from flax.core.scope import CollectionFilter, PRNGSequenceFilter
 from flax.linen import initializers, transforms
 from flax.linen.activation import sigmoid, tanh
 from flax.linen.dtypes import promote_dtype
-from flax.linen.linear import Conv, Dense, PrecisionLike, default_kernel_init
+from flax.linen.linear import Conv, Dense, default_kernel_init
 from flax.linen.module import Module, compact, nowrap
+from flax.typing import (
+  Array,
+  PRNGKey,
+  Dtype,
+  InOutScanAxis,
+  Initializer,
+  PrecisionLike,
+)
 
 A = TypeVar('A')
-PRNGKey = jax.Array
-Shape = Tuple[int, ...]
-Dtype = Any  # this could be a real type?
-Array = jax.Array
 Carry = Any
 CarryHistory = Any
 Output = Any
@@ -126,12 +130,12 @@ class LSTMCell(RNNCellBase):
   features: int
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
-  kernel_init: initializers.Initializer = default_kernel_init
-  recurrent_kernel_init: initializers.Initializer = initializers.orthogonal()
-  bias_init: initializers.Initializer = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  recurrent_kernel_init: Initializer = initializers.orthogonal()
+  bias_init: Initializer = initializers.zeros_init()
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
-  carry_init: initializers.Initializer = initializers.zeros_init()
+  carry_init: Initializer = initializers.zeros_init()
 
   @compact
   def __call__(self, carry, inputs):
@@ -205,10 +209,8 @@ class DenseParams(Module):
   use_bias: bool = True
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[
-    [PRNGKey, Shape, Dtype], Array
-  ] = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = initializers.zeros_init()
 
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Optional[Array]]:
@@ -275,12 +277,12 @@ class OptimizedLSTMCell(RNNCellBase):
   features: int
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
-  kernel_init: initializers.Initializer = default_kernel_init
-  recurrent_kernel_init: initializers.Initializer = initializers.orthogonal()
-  bias_init: initializers.Initializer = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  recurrent_kernel_init: Initializer = initializers.orthogonal()
+  bias_init: Initializer = initializers.zeros_init()
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
-  carry_init: initializers.Initializer = initializers.zeros_init()
+  carry_init: Initializer = initializers.zeros_init()
 
   @compact
   def __call__(
@@ -434,12 +436,12 @@ class GRUCell(RNNCellBase):
   features: int
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
-  kernel_init: initializers.Initializer = default_kernel_init
-  recurrent_kernel_init: initializers.Initializer = initializers.orthogonal()
-  bias_init: initializers.Initializer = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  recurrent_kernel_init: Initializer = initializers.orthogonal()
+  bias_init: Initializer = initializers.zeros_init()
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
-  carry_init: initializers.Initializer = initializers.zeros_init()
+  carry_init: Initializer = initializers.zeros_init()
 
   @compact
   def __call__(self, carry, inputs):
@@ -552,13 +554,13 @@ class MGUCell(RNNCellBase):
   features: int
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
-  kernel_init: initializers.Initializer = default_kernel_init
-  recurrent_kernel_init: initializers.Initializer = initializers.orthogonal()
-  forget_bias_init: initializers.Initializer = initializers.ones_init()
-  activation_bias_init: initializers.Initializer = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  recurrent_kernel_init: Initializer = initializers.orthogonal()
+  forget_bias_init: Initializer = initializers.ones_init()
+  activation_bias_init: Initializer = initializers.zeros_init()
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
-  carry_init: initializers.Initializer = initializers.zeros_init()
+  carry_init: Initializer = initializers.zeros_init()
 
   @compact
   def __call__(self, carry, inputs):
@@ -684,7 +686,7 @@ class ConvLSTMCell(RNNCellBase):
   use_bias: bool = True
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
-  carry_init: initializers.Initializer = initializers.zeros_init()
+  carry_init: Initializer = initializers.zeros_init()
 
   @compact
   def __call__(self, carry, inputs):
@@ -863,11 +865,11 @@ class RNN(Module):
   keep_order: bool = False
   unroll: int = 1
   variable_axes: Mapping[
-    lift.CollectionFilter, lift.InOutScanAxis
+    CollectionFilter, InOutScanAxis
   ] = FrozenDict()
-  variable_broadcast: lift.CollectionFilter = 'params'
-  variable_carry: lift.CollectionFilter = False
-  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(
+  variable_broadcast: CollectionFilter = 'params'
+  variable_carry: CollectionFilter = False
+  split_rngs: Mapping[PRNGSequenceFilter, bool] = FrozenDict(
     {'params': False}
   )
 

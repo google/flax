@@ -37,12 +37,12 @@ import jax
 import jax.tree_util as jtu
 
 from flax.experimental.nnx.nnx import reprlib
+from flax.typing import Sharding
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 V = tp.TypeVar('V', bound='Variable[Any]')
-Sharding = tp.Tuple[tp.Optional[str], ...]
 GetValueHook = tp.Callable[['Variable[A]', A], A]
 SetValueHook = tp.Callable[['Variable[A]', A], A]
 CreateValueHook = tp.Callable[['Variable[A]', A], A]

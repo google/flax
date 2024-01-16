@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Optional, Tuple, overload
+from typing import Any, Callable, Optional, overload
 
 import jax
 import jax.numpy as jnp
@@ -30,16 +30,18 @@ from flax.experimental.nnx.nnx.module import Module, first_from
 from flax.experimental.nnx.nnx.nn import initializers
 from flax.experimental.nnx.nnx.nn.dtypes import promote_dtype
 from flax.experimental.nnx.nnx.nn.linear import (
-  DotGeneralT,
   LinearGeneral,
-  PrecisionLike,
   default_kernel_init,
 )
 from flax.experimental.nnx.nnx.nn.normalization import LayerNorm
-
-Array = jax.Array
-Shape = Tuple[int, ...]
-Dtype = Any
+from flax.typing import (
+  Array,
+  Dtype,
+  Shape,
+  Initializer,
+  PrecisionLike,
+  DotGeneralT,
+)
 
 
 def dot_product_attention_weights(
@@ -301,8 +303,8 @@ class MultiHeadAttention(Module):
     dropout_rate: float = 0.0,
     deterministic: bool | None = None,
     precision: PrecisionLike = None,
-    kernel_init: initializers.Initializer = default_kernel_init,
-    bias_init: initializers.Initializer = initializers.zeros_init(),
+    kernel_init: Initializer = default_kernel_init,
+    bias_init: Initializer = initializers.zeros_init(),
     use_bias: bool = True,
     attention_fn: Callable[..., Array] = dot_product_attention,
     decode: bool | None = None,

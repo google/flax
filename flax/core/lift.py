@@ -15,13 +15,11 @@
 """Jax transform lifting."""
 
 import collections
-import dataclasses
 import functools
 from typing import (
     Any,
     Callable,
     Dict,
-    Generic,
     Iterable,
     List,
     Mapping,
@@ -34,6 +32,12 @@ from typing import (
 import warnings
 
 from flax import traceback_util
+from flax.typing import (
+  In,
+  Out,
+  InOutAxis,
+  InOutScanAxis,
+)
 import jax
 from jax import random
 
@@ -54,8 +58,6 @@ from .scope import (
 )
 
 traceback_util.register_exclusion(__file__)
-
-T = TypeVar('T')
 
 
 def tree_map_rngs(fn, tree):
@@ -415,29 +417,11 @@ def swap_collection(fn: Callable[..., Any], col_a: str, col_b: str):
   return map_variables(fn, (col_a, col_b), swap, swap, mutable=True)
 
 
-@dataclasses.dataclass(frozen=True)
-class In(Generic[T]):
-  """Specifies a variable collection should only be lifted as input."""
-
-  axis: T
-
-
-@dataclasses.dataclass(frozen=True)
-class Out(Generic[T]):
-  """Specifies a variable collection should only be lifted as output."""
-
-  axis: T
-
-
 def _split_in_out_axes(xs: Mapping[CollectionFilter, Any]):
   unpack = lambda v: v.axis if isinstance(v, (In, Out)) else v
   in_axes = {k: unpack(v) for k, v in xs.items() if not isinstance(v, Out)}
   out_axes = {k: unpack(v) for k, v in xs.items() if not isinstance(v, In)}
   return in_axes, out_axes
-
-
-Axis = Optional[int]
-InOutAxis = Union[Axis, In[Axis], Out[Axis]]
 
 
 def _bwd_wrapper(treedef, bwd_fn, tangent):
@@ -870,10 +854,6 @@ def vmap(
   return pack(
     inner, variable_in_groups, variable_out_groups, rng_groups, name='vmap'
   )
-
-
-ScanAxis = int
-InOutScanAxis = Union[ScanAxis, In[ScanAxis], Out[ScanAxis]]
 
 
 def scan(

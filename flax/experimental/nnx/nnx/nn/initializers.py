@@ -14,7 +14,6 @@
 
 import typing as tp
 
-import jax
 from jax.nn.initializers import constant as constant
 from jax.nn.initializers import delta_orthogonal as delta_orthogonal
 from jax.nn.initializers import glorot_normal as glorot_normal
@@ -33,12 +32,9 @@ from jax.nn.initializers import variance_scaling as variance_scaling
 from jax.nn.initializers import xavier_normal as xavier_normal
 from jax.nn.initializers import xavier_uniform as xavier_uniform
 from jax.nn.initializers import zeros as zeros
+from flax.typing import Initializer
 
-Shape = tp.Sequence[int]
-DTypeLikeInexact = tp.Any
-Array = jax.Array
-
-Initializer = jax.nn.initializers.Initializer
+DtypeLikeInexact = tp.Any
 
 
 def zeros_init() -> Initializer:

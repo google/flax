@@ -38,14 +38,14 @@ from jax.experimental import maps
 
 from flax import struct
 from flax.core import meta
-
-# Real types and dummy aliases for documentation
-LogicalRules = Sequence[Tuple[str, Union[str, Tuple[str], None]]]
-Array = Any  # pylint: disable=invalid-name
-ArrayPytree = Any  # pylint: disable=invalid-name
-LogicalPartitionSpec = Any  # pylint: disable=invalid-name
-LogicalPartitionSpecPytree = Any  # pylint: disable=invalid-name
-PartitionSpecPytree = Any  # pylint: disable=invalid-name
+from flax.typing import (
+  Array,
+  LogicalNames,
+  LogicalRules,
+  ArrayPytree,  # pylint: disable=invalid-name
+  LogicalPartitionSpec,  # pylint: disable=unused-import
+  LogicalPartitionSpecPytree,  # pylint: disable=invalid-name
+  )
 
 
 # Dynamic Axis Mapping Context
@@ -319,7 +319,7 @@ class LogicallyPartitioned(meta.Partitioned):
 
 def with_logical_partitioning(
   fn: Callable[..., Any],
-  names: meta.LogicalNames,
+  names: LogicalNames,
   mesh: Optional[jax.sharding.Mesh] = None,
   rules: Optional[LogicalRules] = None,
 ) -> Callable[..., LogicallyPartitioned]:

@@ -46,14 +46,16 @@ from flax.core import meta, unfreeze
 from flax.core.scope import (
   CollectionFilter,
   DenyList,
-  FrozenVariableDict,
   LazyRng,
-  MutableVariableDict,
 )
-
-PRNGKey = Any  # pylint: disable=invalid-name
-RNGSequences = Dict[str, PRNGKey]
-Array = Any  # pylint: disable=invalid-name
+from flax.typing import (
+  Array,
+  PRNGKey,
+  RNGSequences,
+  FrozenVariableDict,
+  MutableVariableDict,
+  LogicalNames,
+)
 
 
 class _ValueRepresentation(ABC):
@@ -85,7 +87,7 @@ class _ArrayRepresentation(_ValueRepresentation):
 @dataclasses.dataclass
 class _PartitionedArrayRepresentation(_ValueRepresentation):
   array_representation: _ArrayRepresentation
-  names: meta.LogicalNames
+  names: LogicalNames
 
   @classmethod
   def from_partitioned(

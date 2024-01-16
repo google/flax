@@ -51,6 +51,7 @@ from flax.experimental.nnx.nnx.proxy_caller import (
   DelayedAccessor,
 )
 from flax.experimental.nnx.nnx.state import State
+from flax.typing import Leaf
 
 A = tp.TypeVar('A')
 C = tp.TypeVar('C')
@@ -61,7 +62,6 @@ M = tp.TypeVar('M', bound=Module)
 N = tp.TypeVar('N', bound=Module)
 
 AxisName = tp.Hashable
-Leaf = tp.Any
 Leaves = tp.List[Leaf]
 
 

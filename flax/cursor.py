@@ -48,7 +48,7 @@ class AccessType(enum.Enum):
 @dataclasses.dataclass
 class ParentKey(Generic[A]):
   parent: 'Cursor[A]'
-  key: Any
+  key: Key
   access_type: AccessType
 
 

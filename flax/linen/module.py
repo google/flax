@@ -60,19 +60,19 @@ from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (
   CollectionFilter,
   DenyList,
-  FrozenVariableDict,
   Variable,
-  VariableDict,
   union_filters,
 )
 from flax.ids import FlaxId, uuid
 from flax.linen import kw_only_dataclasses
+from flax.typing import (
+  RNGSequences,
+  PRNGKey,
+  FrozenVariableDict,
+  VariableDict,
+)
 
 traceback_util.register_exclusion(__file__)
-
-KeyArray = jax.Array
-RNGSequences = Dict[str, KeyArray]
-Array = Any  # pylint: disable=invalid-name
 
 
 T = TypeVar('T')
@@ -1758,7 +1758,7 @@ class Module(ModuleBase):
       raise ValueError("Can't query for RNGs on unbound modules")
     return self.scope.has_rng(name)
 
-  def make_rng(self, name: str = 'default') -> KeyArray:
+  def make_rng(self, name: str = 'default') -> PRNGKey:
     """Returns a new RNG key from a given RNG sequence for this Module.
 
     The new RNG key is split from the previous one. Thus, every call to
@@ -2018,7 +2018,7 @@ class Module(ModuleBase):
   @traceback_util.api_boundary
   def init_with_output(
     self,
-    rngs: Union[KeyArray, RNGSequences],
+    rngs: Union[PRNGKey, RNGSequences],
     *args,
     method: Union[Callable[..., Any], str, None] = None,
     mutable: CollectionFilter = DenyList('intermediates'),
@@ -2055,7 +2055,7 @@ class Module(ModuleBase):
     if not isinstance(rngs, dict):
       if not core.scope._is_valid_rng(rngs):
         raise errors.InvalidRngError(
-          'RNGs should be of shape (2,) or KeyArray in Module '
+          'RNGs should be of shape (2,) or PRNGKey in Module '
           f'{self.__class__.__name__}, but rngs are: {rngs}'
         )
       rngs = {'params': rngs}
@@ -2082,7 +2082,7 @@ class Module(ModuleBase):
   @traceback_util.api_boundary
   def init(
     self,
-    rngs: Union[KeyArray, RNGSequences],
+    rngs: Union[PRNGKey, RNGSequences],
     *args,
     method: Union[Callable[..., Any], str, None] = None,
     mutable: CollectionFilter = DenyList('intermediates'),
@@ -2189,7 +2189,7 @@ class Module(ModuleBase):
   @traceback_util.api_boundary
   def lazy_init(
     self,
-    rngs: Union[KeyArray, RNGSequences],
+    rngs: Union[PRNGKey, RNGSequences],
     *args,
     method: Optional[Callable[..., Any]] = None,
     mutable: CollectionFilter = DenyList('intermediates'),
@@ -2460,7 +2460,7 @@ class Module(ModuleBase):
 
   def tabulate(
     self,
-    rngs: Union[KeyArray, RNGSequences],
+    rngs: Union[PRNGKey, RNGSequences],
     *args,
     depth: Optional[int] = None,
     show_repeated: bool = False,
@@ -2590,7 +2590,7 @@ class Module(ModuleBase):
 
   def module_paths(
     self,
-    rngs: Union[KeyArray, RNGSequences],
+    rngs: Union[PRNGKey, RNGSequences],
     *args,
     show_repeated: bool = False,
     mutable: CollectionFilter = DenyList('intermediates'),

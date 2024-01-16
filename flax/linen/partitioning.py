@@ -37,27 +37,35 @@ from flax import linen as nn
 from flax import struct
 from flax.core.frozen_dict import freeze
 from flax.core.frozen_dict import unfreeze
-from flax.core.lift import In as ScanIn  # pylint: disable=unused-import
-from flax.core.lift import Out as ScanOut  # pylint: disable=unused-import
+from flax.core.scope import (
+  CollectionFilter as CollectionFilter,
+  PRNGSequenceFilter as PRNGSequenceFilter,
+)
 from flax.linen.spmd import _axis_rules  # pylint: disable=unused-import
 from flax.linen.spmd import _AxisRules  # pylint: disable=unused-import
 from flax.linen.spmd import _is_logical_spec
 from flax.linen.spmd import _with_sharding_constraint  # pylint: disable=unused-import
-from flax.linen.spmd import Array  # pylint: disable=unused-import
-from flax.linen.spmd import ArrayPytree  # pylint: disable=unused-import
 from flax.linen.spmd import get_logical_axis_rules as get_axis_rules  # pylint: disable=unused-import
 from flax.linen.spmd import logical_axis_rules as axis_rules  # pylint: disable=unused-import
 from flax.linen.spmd import logical_to_mesh  # pylint: disable=unused-import
 from flax.linen.spmd import logical_to_mesh_axes  # pylint: disable=unused-import
-from flax.linen.spmd import LogicalPartitionSpec  # pylint: disable=unused-import
-from flax.linen.spmd import LogicalPartitionSpecPytree
-from flax.linen.spmd import LogicalRules  # pylint: disable=unused-import
-from flax.linen.spmd import PartitionSpecPytree  # pylint: disable=unused-import
 from flax.linen.spmd import RulesFallback
 from flax.linen.spmd import set_logical_axis_rules as set_axis_rules  # pylint: disable=unused-import
 from flax.linen.spmd import with_logical_constraint as with_sharding_constraint
 from flax.traverse_util import flatten_dict
 from flax.traverse_util import unflatten_dict
+from flax.typing import (
+  Array,
+  In as ScanIn,  # pylint: disable=unused-import
+  Out as ScanOut,  # pylint: disable=unused-import
+  InOutAxis,
+  InOutScanAxis,
+  LogicalRules,  # pylint: disable=unused-import
+  ArrayPytree,  # pylint: disable=unused-import
+  LogicalPartitionSpec,  # pylint: disable=unused-import
+  LogicalPartitionSpecPytree,
+  PartitionSpecPytree,  # pylint: disable=unused-import
+)
 import jax
 
 
@@ -403,11 +411,11 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
 def scan_with_axes(
     target: 'flax.linen.transforms.Target',
     variable_axes: Mapping[
-        flax.core.lift.CollectionFilter, flax.core.lift.InOutScanAxis
+        CollectionFilter, InOutScanAxis
     ] = {},
-    variable_broadcast: flax.core.lift.CollectionFilter = False,
-    variable_carry: flax.core.lift.CollectionFilter = False,
-    split_rngs: Mapping[flax.core.lift.PRNGSequenceFilter, bool] = {},
+    variable_broadcast: CollectionFilter = False,
+    variable_carry: CollectionFilter = False,
+    split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
     in_axes=0,
     out_axes=0,
     length: Optional[int] = None,
@@ -459,9 +467,9 @@ def scan_with_axes(
 def vmap_with_axes(
     target: 'flax.linen.transforms.Target',
     variable_axes: Mapping[
-        flax.core.lift.CollectionFilter, flax.core.lift.InOutAxis
+        CollectionFilter, InOutAxis
     ],
-    split_rngs: Mapping[flax.core.lift.PRNGSequenceFilter, bool] = {},
+    split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
     in_axes=0,
     out_axes=0,
     axis_size: Optional[int] = None,

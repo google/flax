@@ -39,24 +39,19 @@ from flax.experimental import nnx
 from flax.experimental.nnx.nnx import rnglib, variables
 from flax.experimental.nnx.nnx.module import Module
 from flax.experimental.nnx.nnx.nn import dtypes, initializers
+from flax.typing import (
+  Array,
+  Dtype,
+  Initializer,
+  PrecisionLike,
+  DotGeneralT,
+  ConvGeneralDilatedT,
+  PaddingLike,
+  LaxPadding,
+)
 
-Array = jax.Array
-KeyArray = jax.Array
-Shape = tp.Tuple[int, ...]
-Dtype = tp.Any  # this could be a real type?
 Axis = int
 Size = int
-PrecisionLike = tp.Union[
-  None,
-  str,
-  lax.Precision,
-  tp.Tuple[str, str],
-  tp.Tuple[lax.Precision, lax.Precision],
-]
-ConvGeneralDilatedT = tp.Callable[..., Array]
-PaddingLike = tp.Union[str, int, tp.Sequence[tp.Union[int, tp.Tuple[int, int]]]]
-LaxPadding = tp.Union[str, tp.Sequence[tp.Tuple[int, int]]]
-DotGeneralT = tp.Callable[..., Array]
 
 
 default_kernel_init = initializers.lecun_normal()
@@ -152,8 +147,8 @@ class LinearGeneral(Module):
     use_bias: bool = True,
     dtype: Dtype | None = None,
     param_dtype: Dtype = jnp.float32,
-    kernel_init: initializers.Initializer = default_kernel_init,
-    bias_init: initializers.Initializer = initializers.zeros_init(),
+    kernel_init: Initializer = default_kernel_init,
+    bias_init: Initializer = initializers.zeros_init(),
     precision: PrecisionLike = None,
     # Deprecated. Will be removed.
     dot_general: DotGeneralT | None = None,
@@ -310,12 +305,8 @@ class Linear(Module):
     dtype: tp.Optional[Dtype] = None,
     param_dtype: Dtype = jnp.float32,
     precision: PrecisionLike = None,
-    kernel_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = default_kernel_init,
-    bias_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = initializers.zeros_init(),
+    kernel_init: Initializer = default_kernel_init,
+    bias_init: Initializer = initializers.zeros_init(),
     dot_general: DotGeneralT = lax.dot_general,
     rngs: rnglib.Rngs,
   ):
@@ -420,12 +411,8 @@ class Conv(Module):
     dtype: tp.Optional[Dtype] = None,
     param_dtype: Dtype = jnp.float32,
     precision: PrecisionLike = None,
-    kernel_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = default_kernel_init,
-    bias_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = initializers.zeros_init(),
+    kernel_init: Initializer = default_kernel_init,
+    bias_init: Initializer = initializers.zeros_init(),
     conv_general_dilated: ConvGeneralDilatedT = lax.conv_general_dilated,
     rngs: rnglib.Rngs,
   ):
@@ -566,7 +553,7 @@ class Conv(Module):
     )
 
     if self.use_bias:
-      bias = bias.reshape((1,) * (y.ndim - bias.ndim) + bias.shape)
+      bias = bias.reshape((1,) * (y.ndim - bias.ndim) + bias.shape)  # type: ignore
       y += bias
 
     if num_batch_dimensions != 1:
@@ -607,9 +594,7 @@ class Embed(Module):
     *,
     dtype: tp.Optional[Dtype] = None,
     param_dtype: Dtype = jnp.float32,
-    embedding_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = default_embed_init,
+    embedding_init: Initializer = default_embed_init,
     rngs: rnglib.Rngs,
   ):
     self.embedding = nnx.Param(

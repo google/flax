@@ -14,26 +14,25 @@
 
 """Experimental layers with named axes for the partitioning API."""
 import dataclasses
-from typing import Any, Callable, Iterable, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, Optional, Tuple, Sequence
 
 import jax.numpy as jnp
 from jax import lax
 
 from flax import linen as nn
 from flax.linen import initializers
-from flax.linen.linear import DotGeneralT, PrecisionLike
 from flax.linen.partitioning import param_with_axes, with_sharding_constraint
+from flax.typing import (
+  Array,
+  Dtype,
+  Axes,
+  Initializer,
+  PrecisionLike,
+  DotGeneralT,
+)
 
 # Type annotations
-IntSequence = Any
-Array = jnp.ndarray
-Axes = Union[int, IntSequence]
-DType = Any
-PRNGKey = jnp.ndarray
-Shape = Any
 Activation = Callable[..., Array]
-# Parameter initializers.
-Initializer = Callable[[PRNGKey, Shape, DType], Array]
 
 
 default_kernel_init = initializers.lecun_normal()
@@ -62,13 +61,11 @@ class Dense(nn.Module):
 
   features: int
   use_bias: bool = True
-  dtype: DType = jnp.float32
-  param_dtype: DType = jnp.float32
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
-  kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init
-  bias_init: Callable[
-    [PRNGKey, Shape, DType], Array
-  ] = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = initializers.zeros_init()
   kernel_axes: Tuple[str, ...] = ()
   # Deprecated. Will be removed.
   dot_general: Optional[DotGeneralT] = None
@@ -138,10 +135,10 @@ class Embed(nn.Module):
 
   num_embeddings: int
   features: int
-  cast_input_dtype: Optional[DType] = None
-  dtype: DType = jnp.float32
-  param_dtype: DType = jnp.float32
-  attend_dtype: Optional[DType] = None
+  cast_input_dtype: Optional[Dtype] = None
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
+  attend_dtype: Optional[Dtype] = None
   embedding_init: Initializer = default_embed_init
   one_hot: bool = False
   embedding: Array = dataclasses.field(init=False)
@@ -195,7 +192,7 @@ class Embed(nn.Module):
     return jnp.dot(query, jnp.asarray(self.embedding, dtype).T)
 
 
-def _canonicalize_axes(rank: int, axes: Axes) -> Iterable[int]:
+def _canonicalize_axes(rank: int, axes: Axes) -> Sequence[int]:
   """Returns a tuple of deduplicated, sorted, and positive axes."""
   if not isinstance(axes, Iterable):
     axes = (axes,)
@@ -240,13 +237,13 @@ def _normalize(
   var: Array,
   reduction_axes: Axes,
   feature_axes: Axes,
-  dtype: DType,
-  param_dtype: DType,
+  dtype: Dtype,
+  param_dtype: Dtype,
   epsilon: float,
   use_bias: bool,
   use_scale: bool,
-  bias_init: Callable[[PRNGKey, Shape, DType], Array],
-  scale_init: Callable[[PRNGKey, Shape, DType], Array],
+  bias_init: Initializer,
+  scale_init: Initializer,
 ):
   """ "Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
@@ -309,15 +306,11 @@ class LayerNorm(nn.Module):
 
   epsilon: float = 1e-6
   dtype: Any = jnp.float32
-  param_dtype: DType = jnp.float32
+  param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[
-    [PRNGKey, Shape, DType], Array
-  ] = initializers.zeros_init()
-  scale_init: Callable[
-    [PRNGKey, Shape, DType], Array
-  ] = initializers.ones_init()
+  bias_init: Initializer = initializers.zeros_init()
+  scale_init: Initializer = initializers.ones_init()
 
   @nn.compact
   def __call__(self, x):

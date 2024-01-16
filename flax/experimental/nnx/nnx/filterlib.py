@@ -14,6 +14,7 @@
 
 import builtins
 import dataclasses
+from flax.typing import Path
 import typing as tp
 
 if tp.TYPE_CHECKING:
@@ -21,7 +22,6 @@ if tp.TYPE_CHECKING:
 else:
   ellipsis = tp.Any
 
-Path = str
 Predicate = tp.Callable[[Path, tp.Any], bool]
 FilterLiteral = tp.Union[type, str, Predicate, bool, ellipsis, None]
 Filter = tp.Union[FilterLiteral, tuple[FilterLiteral, ...], list[FilterLiteral]]
