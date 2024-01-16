@@ -65,14 +65,14 @@ class Flags(tp.Mapping[str, tp.Any]):
       FLAGS_CONTEXT.flags_stack.pop()
 
   @tp.overload
-  def get(self, name: str) -> tp.Any:
+  def get(self, name: str, /) -> tp.Any:
     ...
 
   @tp.overload
-  def get(self, name: str, default: A) -> A:
+  def get(self, name: str, /, default: A) -> A:
     ...
 
-  def get(self, name: str, default: A = None) -> A | None:
+  def get(self, name: str, /, default: A = None) -> A | None:
     return FLAGS_CONTEXT.flags_stack[-1].get(name, default)
 
 
