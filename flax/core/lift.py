@@ -1579,11 +1579,11 @@ def jit(
   @functools.wraps(fn)
   def jitted(fingerprint, variable_groups, rng_groups, *args, **kwargs):
     nonlocal scope_fn, repack_fn
-    # fingerprint is only used to differentiate the cache signature for cases
-    # where different collections are mutable.
+    hash_key = fingerprint[1]
+    # fingerprint is only used to differentiate the cache signature
     del fingerprint
     scope = scope_fn(variable_groups, rng_groups)  # pylint: disable=not-callable
-    y = fn(scope, *args, **kwargs)
+    y = fn(scope, hash_key, *args, **kwargs)
     return y, repack_fn(scope)  # pylint: disable=not-callable
 
   def inner(
@@ -1591,6 +1591,7 @@ def jit(
       repack_fun,
       variable_groups,
       rng_groups,
+      module_hash_key,
       *args,
       **kwargs,
   ):
@@ -1600,7 +1601,8 @@ def jit(
       repack_fn = repack_fun
       scopes = jax.tree_util.tree_leaves(scope_fn(variable_groups, rng_groups))
       mutable = tuple(_hashable_filter(scope.mutable) for scope in scopes)
-      return jitted(mutable, variable_groups, rng_groups, *args, **kwargs)
+      fingerprint = (mutable, module_hash_key)
+      return jitted(fingerprint, variable_groups, rng_groups, *args, **kwargs)
     finally:
       scope_fn, repack_fn = None, None
 

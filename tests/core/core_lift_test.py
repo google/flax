@@ -56,7 +56,7 @@ class LiftTest(absltest.TestCase):
     compiles = 0
 
     @lift.jit
-    def f(scope, x):
+    def f(scope, _module_hash, x):
       nonlocal compiles
       compiles += 1
       if scope.is_mutable_collection(
@@ -66,16 +66,17 @@ class LiftTest(absltest.TestCase):
       return nn.dense(scope, x, 1)
 
     x = np.ones((3, 2))
-    _, params = init(f)(random.key(0), x)
-    init(f)(random.key(0), x)
+    module_hash = 1
+    _, params = init(f)(random.key(0), module_hash, x)
+    init(f)(random.key(0), module_hash, x)
     self.assertEqual(compiles, 1)
-    apply(f)(params, x)
+    apply(f)(params, module_hash, x)
     self.assertEqual(compiles, 2)  # apply should cause a compile
-    apply(f)(params, x)
+    apply(f)(params, module_hash, x)
     self.assertEqual(compiles, 2)  # applying again should not
     # edge case where only the implicit return of the jitted functions changes.
     # this should not use the previously cached apply.
-    _, state = apply(f, mutable='intermediates')(params, x)
+    _, state = apply(f, mutable='intermediates')(params, module_hash, x)
     self.assertEqual(compiles, 3)  # applying again should not
     self.assertEqual(state['intermediates']['x'].sum(), 3 * 2 * 2)
 
