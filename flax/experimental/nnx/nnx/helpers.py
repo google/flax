@@ -103,7 +103,7 @@ class Sequence(Module, tp.Generic[A]):
   def __len__(self) -> int:
     return self._length
 
-  def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
+  def __call__(self, *args, ctx: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
     output: tp.Any = None
 
     for i, f in enumerate(self):
@@ -119,8 +119,8 @@ class Sequence(Module, tp.Generic[A]):
         else:
           args = (output,)
           kwargs = {}
-      if rngs is not None and has_keyword_arg(f, 'rngs'):
-        kwargs['rngs'] = rngs
+      if ctx is not None and has_keyword_arg(f, 'ctx'):
+        kwargs['ctx'] = ctx
 
       output = f(*args, **kwargs)
 

@@ -40,7 +40,7 @@ from flax.experimental.nnx.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
 )
-from flax.experimental.nnx.nnx.rnglib import Rngs
+from flax.experimental.nnx.nnx.rnglib import Ctx
 from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import Variable
 
@@ -165,7 +165,7 @@ class ModuleMeta(ABCMeta):
           continue
         value = vars(module)[field.name]
         # set Rngs instances to None
-        if isinstance(value, Rngs):
+        if isinstance(value, Ctx):
           vars(module)[field.name] = None
           continue
 
@@ -284,8 +284,8 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
   @property
   def create_abstract(cls: type[M]) -> type[M]:
     def lift_rngs(kwargs: dict[str, tp.Any]):
-      if 'rngs' in kwargs and isinstance(kwargs['rngs'], Rngs):
-        kwargs['rngs'] = kwargs['rngs'].copy()
+      if 'ctx' in kwargs and isinstance(kwargs['ctx'], Ctx):
+        kwargs['ctx'] = kwargs['ctx'].copy()
       return kwargs
 
     def _create_abstract(accessor: DelayedAccessor, *args, **kwargs):

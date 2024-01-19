@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 from typing import Optional, Sequence
 
 import jax.numpy as jnp
 from jax import lax, random
 
 from flax.experimental.nnx.nnx import dataclasses as nnx_dataclasses
-from flax.experimental.nnx.nnx import flaglib, rnglib
+from flax.experimental.nnx.nnx import rnglib
 from flax.experimental.nnx.nnx.module import Module, first_from
 
 
@@ -45,7 +47,7 @@ class Dropout(Module):
     inputs,
     *,
     deterministic: Optional[bool] = None,
-    rngs: Optional[rnglib.Rngs] = None,
+    ctx: rnglib.Ctx | None = None,
   ):
     """Applies a random dropout mask to the input.
 
@@ -61,9 +63,11 @@ class Dropout(Module):
     deterministic = first_from(
       deterministic,
       self.deterministic,
-      flaglib.flags.get('deterministic'),
-      error_msg="""No `deterministic` argument was provided to Dropout
-          as either a __call__ argument, class attribute, or nnx.flag.""",
+      ctx.flags.get('deterministic') if ctx is not None else None,
+      error_msg=(
+        'No `deterministic` argument was provided to Dropout '
+        'as either a __call__ argument, class attribute, or ctx.flags.'
+      ),
     )
 
     if (self.rate == 0.0) or deterministic:
@@ -73,13 +77,13 @@ class Dropout(Module):
     if self.rate == 1.0:
       return jnp.zeros_like(inputs)
 
-    if rngs is None:
+    if ctx is None:
       raise ValueError(
-        "Dropout needs to generate a random mask but no 'rngs' were provided."
+        "Dropout needs to generate a random mask but no 'ctx' were provided."
       )
 
     keep_prob = 1.0 - self.rate
-    rng = rngs[self.rng_collection]()
+    rng = ctx[self.rng_collection]()
     broadcast_shape = list(inputs.shape)
     for dim in self.broadcast_dims:
       broadcast_shape[dim] = 1

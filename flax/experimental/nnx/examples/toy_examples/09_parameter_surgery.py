@@ -20,14 +20,14 @@ from flax.experimental import nnx
 
 # lets pretend this function loads a pretrained model from a checkpoint
 def load_pretrained():
-  return nnx.Linear(784, 128, rngs=nnx.Rngs(0))
+  return nnx.Linear(784, 128, ctx=nnx.Ctx(0))
 
 
 # create a simple linear classifier using a pretrained backbone
 class Classifier(nnx.Module):
-  def __init__(self, *, rngs: nnx.Rngs):
-    self.backbone = nnx.Linear(784, 128, rngs=nnx.Rngs(0))
-    self.head = nnx.Linear(128, 10, rngs=rngs)
+  def __init__(self, *, ctx: nnx.Ctx):
+    self.backbone = nnx.Linear(784, 128, ctx=nnx.Ctx(0))
+    self.head = nnx.Linear(128, 10, ctx=ctx)
 
   def __call__(self, x):
     x = self.backbone(x)
@@ -39,7 +39,7 @@ class Classifier(nnx.Module):
 # create the classifier using the pretrained backbone, here we are technically
 # doing "parameter surgery", however, compared to Haiku/Flax where you must manually
 # construct the parameter structure, in NNX this is done automatically
-model = Classifier(rngs=nnx.Rngs(42))
+model = Classifier(ctx=nnx.Ctx(42))
 model.backbone = load_pretrained()
 
 

@@ -23,7 +23,7 @@ from flax.experimental import nnx
 
 class Linear(nnx.Module):
   @tp.overload
-  def __init__(self, *, din: int, dout: int, rngs: nnx.Rngs):
+  def __init__(self, *, din: int, dout: int, ctx: nnx.Ctx):
     ...
 
   @tp.overload
@@ -36,7 +36,7 @@ class Linear(nnx.Module):
     *,
     din: tp.Optional[int] = None,
     dout: int,
-    rngs: tp.Optional[nnx.Rngs] = None,
+    ctx: tp.Optional[nnx.Rngs] = None,
   ):
     ...
 
@@ -45,26 +45,26 @@ class Linear(nnx.Module):
     *,
     din: tp.Optional[int] = None,
     dout: int,
-    rngs: tp.Optional[nnx.Rngs] = None,
+    ctx: tp.Optional[nnx.Rngs] = None,
   ):
     self.dout = dout
     if din is not None:
-      if rngs is None:
-        raise ValueError('rngs must be provided if din is provided')
-      self.init_variables(din, rngs)
+      if ctx is None:
+        raise ValueError('ctx must be provided if din is provided')
+      self.init_variables(din, ctx)
 
-  def init_variables(self, din: int, rngs: nnx.Rngs):
-    key = rngs.params()
+  def init_variables(self, din: int, ctx: nnx.Ctx):
+    key = ctx.params()
     self.w = nnx.Param(random.uniform(key, (din, self.dout)))
     self.b = nnx.Param(jnp.zeros((self.dout,)))
 
   def __call__(
-    self, x: jax.Array, *, rngs: tp.Optional[nnx.Rngs] = None
+    self, x: jax.Array, *, ctx: tp.Optional[nnx.Rngs] = None
   ) -> jax.Array:
     if self.is_initializing and not hasattr(self, 'w'):
-      if rngs is None:
-        raise ValueError('rngs must be provided to initialize module')
-      self.init_variables(x.shape[-1], rngs)
+      if ctx is None:
+        raise ValueError('ctx must be provided to initialize module')
+      self.init_variables(x.shape[-1], ctx)
 
     return x @ self.w + self.b
 
@@ -75,7 +75,7 @@ class BatchNorm(nnx.Module):
     ...
 
   @tp.overload
-  def __init__(self, *, din: int, mu: float = 0.95, rngs: nnx.Rngs):
+  def __init__(self, *, din: int, mu: float = 0.95, ctx: nnx.Ctx):
     ...
 
   @tp.overload
@@ -84,7 +84,7 @@ class BatchNorm(nnx.Module):
     *,
     din: tp.Optional[int] = None,
     mu: float = 0.95,
-    rngs: tp.Optional[nnx.Rngs] = None,
+    ctx: tp.Optional[nnx.Rngs] = None,
   ):
     ...
 
@@ -93,28 +93,28 @@ class BatchNorm(nnx.Module):
     *,
     din: tp.Optional[int] = None,
     mu: float = 0.95,
-    rngs: tp.Optional[nnx.Rngs] = None,
+    ctx: tp.Optional[nnx.Rngs] = None,
   ):
     self.mu = mu
 
     if din is not None:
-      if rngs is None:
-        raise ValueError('rngs must be provided if din is provided')
-      self.init_variables(din, rngs)
+      if ctx is None:
+        raise ValueError('ctx must be provided if din is provided')
+      self.init_variables(din, ctx)
 
-  def init_variables(self, din: int, rngs: nnx.Rngs):
+  def init_variables(self, din: int, ctx: nnx.Ctx):
     self.scale = nnx.Param(jax.numpy.ones((din,)))
     self.bias = nnx.Param(jax.numpy.zeros((din,)))
     self.mean = nnx.BatchStat(jax.numpy.zeros((din,)))
     self.var = nnx.BatchStat(jax.numpy.ones((din,)))
 
   def __call__(
-    self, x, *, train: bool, rngs: tp.Optional[nnx.Rngs] = None
+    self, x, *, train: bool, ctx: tp.Optional[nnx.Rngs] = None
   ) -> jax.Array:
     if self.is_initializing and not hasattr(self, 'scale'):
-      if rngs is None:
-        raise ValueError('rngs must be provided to initialize module')
-      self.init_variables(x.shape[-1], rngs)
+      if ctx is None:
+        raise ValueError('ctx must be provided to initialize module')
+      self.init_variables(x.shape[-1], ctx)
 
     if train:
       axis = tuple(range(x.ndim - 1))
@@ -135,9 +135,9 @@ class Dropout(nnx.Module):
   def __init__(self, rate: float):
     self.rate = rate
 
-  def __call__(self, x: jax.Array, *, train: bool, rngs: nnx.Rngs) -> jax.Array:
+  def __call__(self, x: jax.Array, *, train: bool, ctx: nnx.Ctx) -> jax.Array:
     if train:
-      mask = random.bernoulli(rngs.dropout(), (1 - self.rate), x.shape)
+      mask = random.bernoulli(ctx.dropout(), (1 - self.rate), x.shape)
       x = x * mask / (1 - self.rate)
     return x
 
@@ -148,13 +148,13 @@ class Dropout(nnx.Module):
 print('test Linear')
 
 # eager
-m1 = Linear(din=32, dout=10, rngs=nnx.Rngs(params=0))
+m1 = Linear(din=32, dout=10, ctx=nnx.Ctx(params=0))
 y = m1(x=jnp.ones((1, 32)))
 print(jax.tree_map(jnp.shape, m1.get_state()))
 
 # lazy
 m2 = Linear(dout=10)
-y = m2.init(x=jnp.ones((1, 32)), rngs=nnx.Rngs(params=0))
+y = m2.init(x=jnp.ones((1, 32)), ctx=nnx.Ctx(params=0))
 print(jax.tree_map(jnp.shape, m2.get_state()))
 
 # usage
@@ -172,16 +172,16 @@ class Block(nnx.Module):
     self,
     din: tp.Optional[int] = None,
     dout: int = 10,
-    rngs: tp.Optional[nnx.Rngs] = None,
+    ctx: tp.Optional[nnx.Rngs] = None,
   ):
-    self.linear = Linear(din=din, dout=dout, rngs=rngs)
-    self.bn = BatchNorm(din=dout if din is not None else None, rngs=rngs)
+    self.linear = Linear(din=din, dout=dout, ctx=ctx)
+    self.bn = BatchNorm(din=dout if din is not None else None, ctx=ctx)
     self.dropout = Dropout(0.5)
 
-  def __call__(self, x: jax.Array, _, *, train: bool, rngs: nnx.Rngs):
-    x = self.linear(x, rngs=rngs)
-    x = self.bn(x, train=train, rngs=rngs)
-    x = self.dropout(x, train=train, rngs=rngs)
+  def __call__(self, x: jax.Array, _, *, train: bool, ctx: nnx.Ctx):
+    x = self.linear(x, ctx=ctx)
+    x = self.bn(x, train=train, ctx=ctx)
+    x = self.dropout(x, train=train, ctx=ctx)
     x = jax.nn.gelu(x)
     return x, None
 
@@ -196,15 +196,15 @@ MLP = nnx.Scan(
 
 
 # eager
-mlp = MLP(din=10, dout=10, rngs=nnx.Rngs(params=0))
-y, _ = mlp.call(jnp.ones((1, 10)), None, train=True, rngs=nnx.Rngs(dropout=1))
+mlp = MLP(din=10, dout=10, ctx=nnx.Ctx(params=0))
+y, _ = mlp.call(jnp.ones((1, 10)), None, train=True, ctx=nnx.Ctx(dropout=1))
 print(f'{y.shape=}')
 print('state =', jax.tree_map(jnp.shape, mlp.get_state()))
 print()
 
 # lazy
 mlp = MLP(dout=10)
-mlp.init(jnp.ones((1, 10)), None, train=False, rngs=nnx.Rngs(params=0))
-y, _ = mlp.call(jnp.ones((1, 10)), None, train=True, rngs=nnx.Rngs(dropout=1))
+mlp.init(jnp.ones((1, 10)), None, train=False, ctx=nnx.Ctx(params=0))
+y, _ = mlp.call(jnp.ones((1, 10)), None, train=True, ctx=nnx.Ctx(dropout=1))
 print(f'{y.shape=}')
 print('state =', jax.tree_map(jnp.shape, mlp.get_state()))

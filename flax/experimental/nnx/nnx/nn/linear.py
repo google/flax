@@ -158,7 +158,7 @@ class LinearGeneral(Module):
     # Deprecated. Will be removed.
     dot_general: DotGeneralT | None = None,
     dot_general_cls: tp.Any = None,
-    rngs: rnglib.Rngs,
+    ctx: rnglib.Ctx,
   ):
     self.in_features = _canonicalize_tuple(in_features)
     self.out_features = _canonicalize_tuple(out_features)
@@ -214,7 +214,7 @@ class LinearGeneral(Module):
       *self.out_features,
     )
     self.kernel = nnx.Param(
-      kernel_init_wrap(rngs.params(), kernel_shape, self.param_dtype)
+      kernel_init_wrap(ctx.params(), kernel_shape, self.param_dtype)
     )
 
     if self.use_bias:
@@ -230,7 +230,7 @@ class LinearGeneral(Module):
 
       bias_shape = (*batch_shape, *self.out_features)
       self.bias = nnx.Param(
-        bias_init_wrap(rngs.params(), bias_shape, self.param_dtype)
+        bias_init_wrap(ctx.params(), bias_shape, self.param_dtype)
       )
     else:
       self.bias = nnx.Param(None)
@@ -317,14 +317,14 @@ class Linear(Module):
       [KeyArray, Shape, Dtype], Array
     ] = initializers.zeros_init(),
     dot_general: DotGeneralT = lax.dot_general,
-    rngs: rnglib.Rngs,
+    ctx: rnglib.Ctx,
   ):
-    kernel_key = rngs.params()
+    kernel_key = ctx.params()
     self.kernel = nnx.Param(
       kernel_init(kernel_key, (in_features, out_features), param_dtype)
     )
     if use_bias:
-      bias_key = rngs.params()
+      bias_key = ctx.params()
       self.bias = nnx.Param(bias_init(bias_key, (out_features,), param_dtype))
     else:
       self.bias = nnx.Param(None)
@@ -427,7 +427,7 @@ class Conv(Module):
       [KeyArray, Shape, Dtype], Array
     ] = initializers.zeros_init(),
     conv_general_dilated: ConvGeneralDilatedT = lax.conv_general_dilated,
-    rngs: rnglib.Rngs,
+    ctx: rnglib.Ctx,
   ):
     if isinstance(kernel_size, int):
       kernel_size = (kernel_size,)
@@ -438,12 +438,12 @@ class Conv(Module):
       in_features // feature_group_count,
       out_features,
     )
-    kernel_key = rngs.params()
+    kernel_key = ctx.params()
     self.kernel = nnx.Param(kernel_init(kernel_key, kernel_shape, param_dtype))
 
     if use_bias:
       bias_shape = (out_features,)
-      bias_key = rngs.params()
+      bias_key = ctx.params()
       self.bias = nnx.Param(bias_init(bias_key, bias_shape, param_dtype))
     else:
       self.bias = nnx.Param(None)
@@ -610,10 +610,10 @@ class Embed(Module):
     embedding_init: tp.Callable[
       [KeyArray, Shape, Dtype], Array
     ] = default_embed_init,
-    rngs: rnglib.Rngs,
+    ctx: rnglib.Ctx,
   ):
     self.embedding = nnx.Param(
-      embedding_init(rngs.params(), (num_embeddings, features), param_dtype)
+      embedding_init(ctx.params(), (num_embeddings, features), param_dtype)
     )
 
     self.num_embeddings = num_embeddings

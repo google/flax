@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 import typing as tp
 
@@ -19,7 +20,7 @@ import jax.numpy as jnp
 from jax import lax
 
 from flax.experimental import nnx
-from flax.experimental.nnx.nnx import flaglib, rnglib
+from flax.experimental.nnx.nnx import rnglib
 from flax.experimental.nnx.nnx.module import Module, first_from
 from flax.experimental.nnx.nnx.nn import dtypes, initializers
 
@@ -209,20 +210,20 @@ class BatchNorm(Module):
     ] = initializers.ones_init(),
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
-    rngs: rnglib.Rngs,
+    ctx: rnglib.Ctx,
   ):
     feature_shape = (num_features,)
     self.mean = nnx.BatchStat(jnp.zeros(feature_shape, jnp.float32))
     self.var = nnx.BatchStat(jnp.ones(feature_shape, jnp.float32))
 
     if use_scale:
-      key = rngs.params()
+      key = ctx.params()
       self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
     else:
       self.scale = nnx.Param(None)
 
     if use_bias:
-      key = rngs.params()
+      key = ctx.params()
       self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
     else:
       self.bias = nnx.Param(None)
@@ -244,7 +245,9 @@ class BatchNorm(Module):
   def __call__(
     self,
     x,
+    *,
     use_running_average: tp.Optional[bool] = None,
+    ctx: rnglib.Ctx | None = None,
   ):
     """Normalizes the input using batch statistics.
 
@@ -260,9 +263,11 @@ class BatchNorm(Module):
     use_running_average = first_from(
       use_running_average,
       self.use_running_average,
-      flaglib.flags.get('use_running_average'),
-      error_msg="""No `use_running_average` argument was provided to BatchNorm
-        as either a __call__ argument, class attribute, or nnx.flag.""",
+      ctx.flags.get('use_running_average') if ctx is not None else None,
+      error_msg=(
+        'No `use_running_average` argument was provided to BatchNorm '
+        'as either a __call__ argument, class attribute, or ctx.flags.'
+      ),
     )
     feature_axes = _canonicalize_axes(x.ndim, self.axis)
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
@@ -344,18 +349,18 @@ class LayerNorm(Module):
     feature_axes: Axes = -1,
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
-    rngs: rnglib.Rngs,
+    ctx: rnglib.Ctx,
   ):
     feature_shape = (num_features,)
 
     if use_scale:
-      key = rngs.params()
+      key = ctx.params()
       self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
     else:
       self.scale = nnx.Param(None)
 
     if use_bias:
-      key = rngs.params()
+      key = ctx.params()
       self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
     else:
       self.bias = nnx.Param(None)

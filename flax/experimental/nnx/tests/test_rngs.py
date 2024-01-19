@@ -28,39 +28,39 @@ class TestRngs:
     assert isinstance(_hash, int)
 
   def test_call(self):
-    rngs = nnx.Rngs(0)
-    key = rngs()
+    ctx = nnx.Ctx(0)
+    key = ctx()
 
   def test_fallback(self):
-    rngs = nnx.Rngs(0)
-    key = rngs.dropout()
+    ctx = nnx.Ctx(0)
+    key = ctx.dropout()
 
   def test_fallback_error_no_default(self):
-    rngs = nnx.Rngs(some_name=0)
+    ctx = nnx.Ctx(some_name=0)
     with pytest.raises(AttributeError, match='No RNG named'):
-      key = rngs.dropout()
+      key = ctx.dropout()
 
   def test_rng_stream(self):
     key0 = jax.random.key(0)
-    rngs = nnx.Rngs(params=key0)
-    assert rngs._rngs['params'].counts[-1] == 0
+    ctx = nnx.Ctx(params=key0)
+    assert ctx.rngs._rngs['params'].counts[-1] == 0
 
-    key1 = rngs.params()
-    assert rngs._rngs['params'].counts[-1] == 1
-    assert rngs._rngs['params'].key is key0
+    key1 = ctx.params()
+    assert ctx.rngs._rngs['params'].counts[-1] == 1
+    assert ctx.rngs._rngs['params'].key is key0
     assert not jnp.allclose(key0, key1)
 
-    key2 = rngs.params()
-    assert rngs._rngs['params'].counts[-1] == 2
-    assert rngs._rngs['params'].key is key0
+    key2 = ctx.params()
+    assert ctx.rngs._rngs['params'].counts[-1] == 2
+    assert ctx.rngs._rngs['params'].key is key0
     assert not jnp.allclose(key1, key2)
 
   def test_rng_fork(self):
     key0 = jax.random.key(0)
-    rngs1 = nnx.Rngs(params=key0)
-    rngs2 = nnx.Rngs(rngs1.fork())
+    rngs1 = nnx.Ctx(params=key0)
+    rngs2 = nnx.Ctx(rngs1.fork())
 
-    assert rngs2._rngs['params'].counts == [0, 0]
+    assert rngs2.rngs._rngs['params'].counts == [0, 0]
 
     key1 = rngs1.params()
     key2 = rngs2.params()
@@ -68,7 +68,7 @@ class TestRngs:
     assert not jnp.allclose(key1, key2)
 
   def test_rng_trace_level_constraints(self):
-    rngs = nnx.Rngs(0)
+    ctx = nnx.Ctx(0)
 
     @jax.jit
     def f():
@@ -76,7 +76,7 @@ class TestRngs:
         nnx.TraceContextError,
         match='Cannot use Rngs from a different trace level',
       ):
-        rngs.params()
+        ctx.params()
 
     f()
 
@@ -86,7 +86,7 @@ class TestRngs:
         nnx.TraceContextError,
         match='Cannot use Rngs from a different trace level',
       ):
-        rngs.fork()
+        ctx.fork()
 
     f()
 
@@ -95,11 +95,11 @@ class TestRngs:
     @jax.jit
     def g():
       nonlocal rngs1
-      rngs1 = nnx.Rngs(1)
+      rngs1 = nnx.Ctx(1)
 
     g()
 
-    assert isinstance(rngs1, nnx.Rngs)
+    assert isinstance(rngs1, nnx.Ctx)
     with pytest.raises(
       nnx.TraceContextError,
       match='Cannot use Rngs from a different trace level',
@@ -107,72 +107,77 @@ class TestRngs:
       rngs1.params()
 
   def test_partition_merge(self):
-    rngs = nnx.Rngs(dropout=0)
+    ctx = nnx.Ctx(dropout=0)
 
-    keys = rngs.fork()
+    keys, flags = ctx.fork()
 
+    assert flags == {}
     assert 'dropout' in keys
     assert keys['dropout'].counts == [0, 0]
 
-    rngs2 = nnx.Rngs(keys)
+    rngs2 = nnx.Ctx(keys)
 
-    key1 = rngs.dropout()
+    key1 = ctx.dropout()
     key2 = rngs2.dropout()
     assert not jnp.allclose(key1, key2)
 
-    rngs3 = nnx.Rngs(keys)
+    rngs3 = nnx.Ctx(keys)
     key3 = rngs3.dropout()
     assert jnp.allclose(key2, key3)
 
   def test_fork_broadcast(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
+    ctx = nnx.Ctx(params=0, dropout=1)
     jax.random.key
 
-    keys = rngs.fork()  # all broadcast
+    keys, flags = ctx.fork()  # all broadcast
 
+    assert flags == {}
     assert keys['params'].key.shape == ()
     assert keys['dropout'].key.shape == ()
     assert jnp.allclose(keys['params'].key, jax.random.key(0))
     assert jnp.allclose(keys['dropout'].key, jax.random.key(1))
 
   def test_fork_split(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    keys = rngs.fork(4)  # split all
+    ctx = nnx.Ctx(params=0, dropout=1)
+    keys, flags = ctx.fork(4)  # split all
 
+    assert flags == {}
     assert keys['params'].key.shape == (4,)
     assert keys['dropout'].key.shape == (4,)
 
   def test_fork_split_and_broadcast(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    splits, broadcasts = rngs.fork(params=4, dropout=None)
+    ctx = nnx.Ctx(params=0, dropout=1)
+    splits, broadcasts, flags = ctx.fork(params=4, dropout=None)
 
+    assert flags == {}
     assert splits['params'].key.shape == (4,)
     assert broadcasts['dropout'].key.shape == ()
 
   def test_fork_filters(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    splits, broadcasts = rngs.fork({'params': 4})
+    ctx = nnx.Ctx(params=0, dropout=1)
+    splits, broadcasts, flags = ctx.fork({'params': 4})
 
     assert splits['params'].key.shape == (4,)
     assert broadcasts['dropout'].key.shape == ()
 
   def test_fork_multidimensional_split(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    keys = rngs.fork((4, None, 3))  # split all
+    ctx = nnx.Ctx(params=0, dropout=1)
+    keys, flags = ctx.fork((4, None, 3))  # split all
 
+    assert flags == {}
     assert keys['params'].key.shape == (4, 1, 3)
     assert keys['dropout'].key.shape == (4, 1, 3)
 
   def test_fork_multidimensional_split_mixed(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    splits, broadcasts = rngs.fork(params=(4, None, 3))  # split all
+    ctx = nnx.Ctx(params=0, dropout=1)
+    splits, broadcasts, flags = ctx.fork(params=(4, None, 3))  # split all
 
     assert splits['params'].key.shape == (4, 1, 3)
     assert broadcasts['dropout'].key.shape == ()
 
   def test_rng_stream_pytree(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    stream = rngs.fork()['params']
+    ctx = nnx.Ctx(params=0, dropout=1)
+    stream = ctx.fork()[0]['params']
 
     stream2 = jax.tree_map(lambda x: x, stream)
 

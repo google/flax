@@ -30,6 +30,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import typing as tp
+from types import MappingProxyType
 
 import jax
 import numpy as np
@@ -102,6 +103,10 @@ RngDict = tp.Union[
   dict[str, RngStream],
   dict[str, RngValue],
 ]
+ForkValue = tp.Union[
+  tuple[dict[str, RngStream], dict[str, tp.Any]],
+  tuple[dict[str, RngStream], dict[str, RngStream], dict[str, tp.Any]],
+]
 
 
 class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
@@ -110,14 +115,13 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
   def __init__(
     self,
     default: RngValue | RngDict | None = None,
-    /,
-    **rngs: RngValue,
+    **ctx: RngValue,
   ):
     if default is not None:
       if isinstance(default, dict):
-        rngs = {**default, **rngs}
+        ctx = {**default, **ctx}
       else:
-        rngs['default'] = default
+        ctx['default'] = default
 
     self._rngs = {
       name: (
@@ -127,11 +131,11 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
         if isinstance(value, jax.Array)
         else value.copy()
       )
-      for name, value in rngs.items()
+      for name, value in ctx.items()
     }
     self._trace_state = tracers.TraceState()
 
-  def _make_rng(self, name: str, error_type: Exception) -> jax.Array:
+  def _make_rng(self, name: str, error_type: type[Exception]) -> jax.Array:
     if not self.is_valid():
       raise errors.TraceContextError(
         'Cannot use Rngs from a different trace level'
@@ -167,32 +171,40 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
     return Rngs(**self._rngs)
 
   def replace(self, **kwargs: tp.Union[int, jax.Array, RngStream]) -> 'Rngs':
-    rngs: dict[str, tp.Any] = self._rngs.copy()
-    rngs.update(kwargs)
-    return Rngs(**rngs)
+    ctx: dict[str, tp.Any] = self._rngs.copy()
+    ctx.update(kwargs)
+    return Rngs(**ctx)
 
   def is_valid(self) -> bool:
     return self._trace_state.is_valid()
 
   @tp.overload
-  def fork(self) -> dict[str, RngStream]:
+  def fork(self, /) -> dict[str, RngStream]:
     ...
 
   @tp.overload
-  def fork(self, __default: Pattern) -> dict[str, RngStream]:
+  def fork(self, default: Pattern, /) -> dict[str, RngStream]:
     ...
 
   @tp.overload
   def fork(
-    self,
-    __default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
-    **patterns: Pattern,
+    self, /, **patterns: Pattern
   ) -> tuple[dict[str, RngStream], dict[str, RngStream]]:
     ...
 
+  @tp.overload
   def fork(
     self,
-    _default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
+    default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
+    /,
+    **patterns: Pattern,
+  ) -> dict[str, RngStream] | tuple[dict[str, RngStream], dict[str, RngStream]]:
+    ...
+
+  def fork(
+    self,
+    default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
+    /,
     **patterns: Pattern,
   ) -> dict[str, RngStream] | tuple[dict[str, RngStream], dict[str, RngStream]]:
     if not self.is_valid():
@@ -201,18 +213,18 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
       )
 
     filter_patterns: list[tuple[filterlib.Filter, Pattern]]
-    if isinstance(_default, dict):
+    if isinstance(default, dict):
       # merge default and patterns
       filter_patterns = [
-        *_default.items(),
+        *default.items(),
         *patterns.items(),
         (..., None),  # broadcast all remaining
       ]
     else:
-      default = None if isinstance(_default, Missing) else _default
+      _default = None if isinstance(default, Missing) else default
       filter_patterns = [
         *patterns.items(),
-        (..., default),  # split all remaining with default
+        (..., _default),  # split all remaining with default
       ]
 
     predicate_pattern = [
@@ -237,7 +249,138 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
           f'Strea {name!r} did not match any predicate, this is a bug.'
         )
 
-    if isinstance(_default, dict) or patterns:
+    if isinstance(default, dict) or patterns:
       return splits, broadcasts
     else:
       return {**splits, **broadcasts}
+
+
+class Flags(tp.Mapping[str, tp.Any]):
+  __slots__ = ('_flags',)
+
+  def __init__(
+    self,
+    flags: tp.Mapping[str, tp.Any] | tp.Iterable[tp.Tuple[str, tp.Any]] = (),
+  ):
+    self._flags = MappingProxyType(dict(flags))
+
+  def __getitem__(self, name: str) -> tp.Any:
+    return self._flags[name]
+
+  def __getattr__(self, name: str) -> tp.Any:
+    if name not in self._flags:
+      raise AttributeError(f'Unknown Flag: {name}')
+    return self._flags[name]
+
+  def __iter__(self) -> tp.Iterator[str]:
+    return iter(self._flags)
+
+  def __len__(self) -> int:
+    return len(self._flags)
+
+  def __contains__(self, name: tp.Any) -> bool:
+    return name in self._flags
+
+
+class Ctx(tp.Mapping[str, tp.Callable[[], jax.Array]]):
+  __slots__ = ('_rngs', '_flags')
+
+  def __init__(
+    self,
+    default: RngValue | RngDict | ForkValue | None = None,
+    *,
+    flags: tp.Mapping[str, tp.Any] | tp.Iterable[tp.Tuple[str, tp.Any]] = (),
+    **rngs: RngValue,
+  ):
+    if isinstance(default, tuple):
+      if flags:
+        raise ValueError('Cannot specify both a`default` tuple and `flags`')
+      if rngs:
+        raise ValueError('Cannot specify both a `default` tuple and `rngs`')
+
+      if len(default) == 2:
+        _rngs, _flags = default
+      elif len(default) == 3:
+        _rngs_split, _rngs, _flags = default
+        _rngs = {**_rngs_split, **_rngs}
+      else:
+        raise ValueError(f'Expected 2 or 3 values in fork, got {len(default)}')
+
+      self._rngs = Rngs(_rngs)
+      self._flags = Flags(_flags)
+    else:
+      self._rngs = Rngs(default, **rngs)
+      self._flags = Flags(flags)
+
+  @property
+  def rngs(self) -> Rngs:
+    return self._rngs
+
+  @property
+  def flags(self) -> Flags:
+    return self._flags
+
+  def __getitem__(self, name: str) -> tp.Callable[[], jax.Array]:
+    return self._rngs[name]
+
+  def __getattr__(self, name: str) -> tp.Callable[[], jax.Array]:
+    return getattr(self._rngs, name)
+
+  def __iter__(self) -> tp.Iterator[str]:
+    return iter(self._rngs)
+
+  def __len__(self) -> int:
+    return len(self._rngs)
+
+  def __call__(self):
+    return self._rngs()
+
+  @tp.overload
+  def fork(self, /) -> tuple[dict[str, RngStream], dict[str, tp.Any]]:
+    ...
+
+  @tp.overload
+  def fork(
+    self, default: Pattern, /
+  ) -> tuple[dict[str, RngStream], dict[str, tp.Any]]:
+    ...
+
+  @tp.overload
+  def fork(
+    self, default: dict[filterlib.Filter, Pattern], /
+  ) -> tuple[dict[str, RngStream], dict[str, RngStream], dict[str, tp.Any]]:
+    ...
+
+  @tp.overload
+  def fork(
+    self, /, **patterns: Pattern
+  ) -> tuple[dict[str, RngStream], dict[str, RngStream], dict[str, tp.Any]]:
+    ...
+
+  @tp.overload
+  def fork(
+    self,
+    default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
+    /,
+    **patterns: Pattern,
+  ) -> (
+    tuple[dict[str, RngStream], dict[str, tp.Any]]
+    | tuple[dict[str, RngStream], dict[str, RngStream], dict[str, tp.Any]]
+  ):
+    ...
+
+  def fork(
+    self,
+    default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
+    **patterns: Pattern,
+  ) -> (
+    tuple[dict[str, RngStream], dict[str, tp.Any]]
+    | tuple[dict[str, RngStream], dict[str, RngStream], dict[str, tp.Any]]
+  ):
+    rngs_out = self._rngs.fork(default, **patterns)
+    flags_out = dict(self._flags)
+
+    if isinstance(rngs_out, dict):
+      return rngs_out, flags_out
+    else:
+      return *rngs_out, flags_out

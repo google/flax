@@ -20,7 +20,7 @@ from flax import linen
 from flax.experimental.nnx.nnx import helpers
 from flax.experimental.nnx.nnx import variables as variableslib
 from flax.experimental.nnx.nnx.module import GraphDef, Module
-from flax.experimental.nnx.nnx.rnglib import Rngs
+from flax.experimental.nnx.nnx.rnglib import Ctx
 from flax.experimental.nnx.nnx.state import State
 
 M = tp.TypeVar('M', bound=Module)
@@ -34,10 +34,10 @@ class Functional(tp.Generic[M]):
   args: tuple[tp.Any, ...]
   kwargs: dict[str, tp.Any]
 
-  def init(self, *, rngs: tp.Optional[Rngs] = None) -> State:
+  def init(self, *, ctx: tp.Optional[Ctx] = None) -> State:
     kwargs = {}
-    if rngs is not None:
-      kwargs['rngs'] = rngs
+    if ctx is not None:
+      kwargs['ctx'] = ctx
     module = self.module_type(*self.args, **self.kwargs, **kwargs)
     state, graphdef = module.split()
     self.graphdef = graphdef
@@ -60,13 +60,15 @@ class LinenWrapper(Module):
     self,
     module: linen.Module,
     *args: tp.Any,
-    rngs: tp.Optional[Rngs] = None,
+    ctx: tp.Optional[Ctx] = None,
     **kwargs: tp.Any,
   ):
     self.module = module
 
     _rngs = (
-      {name: stream.key for name, stream in rngs._rngs.items()} if rngs else {}
+      {name: stream.key for name, stream in ctx.rngs._rngs.items()}
+      if ctx is not None
+      else {}
     )
     # rename default to params
     if 'params' not in _rngs and 'default' in _rngs:
@@ -81,10 +83,12 @@ class LinenWrapper(Module):
     )
 
   def __call__(
-    self, *args: Any, rngs: tp.Optional[Rngs] = None, **kwargs: Any
+    self, *args: Any, ctx: tp.Optional[Ctx] = None, **kwargs: Any
   ) -> Any:
     _rngs = (
-      {name: stream.key for name, stream in rngs._rngs.items()} if rngs else {}
+      {name: stream.key for name, stream in ctx.rngs._rngs.items()}
+      if ctx is not None
+      else {}
     )
 
     variables = {collection: value for collection, value in self.states.items()}

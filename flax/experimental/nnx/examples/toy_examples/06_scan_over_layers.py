@@ -21,13 +21,13 @@ from flax.experimental import nnx
 
 
 class Block(nnx.Module):
-  def __init__(self, dim: int, *, rngs: nnx.Rngs):
-    self.linear = nnx.Linear(dim, dim, rngs=rngs)
+  def __init__(self, dim: int, *, ctx: nnx.Ctx):
+    self.linear = nnx.Linear(dim, dim, ctx=ctx)
     self.dropout = nnx.Dropout(0.5)
 
-  def __call__(self, x: jax.Array, *, rngs: nnx.Rngs) -> jax.Array:
+  def __call__(self, x: jax.Array, *, ctx: nnx.Ctx) -> jax.Array:
     x = self.linear(x)
-    x = self.dropout(x, rngs=rngs)
+    x = self.dropout(x, ctx=ctx)
     x = jax.nn.gelu(x)
     return x
 
@@ -39,22 +39,22 @@ class ScanMLP(nnx.Module):
   the sequence of layers iteratively over the input / output `x`.
   """
 
-  def __init__(self, dim: int, *, n_layers: int, rngs: nnx.Rngs):
+  def __init__(self, dim: int, *, n_layers: int, ctx: nnx.Ctx):
     self.n_layers = n_layers
     # fork Rngs, split keys into `n_layers`
-    keys = rngs.fork(n_layers)
+    keys = ctx.fork(n_layers)
 
     def create_block(keys):
       # create Block instance and return its split
-      return Block(dim, rngs=nnx.Rngs(keys)).split()
+      return Block(dim, ctx=nnx.Ctx(keys)).split()
 
     # call vmap over create_block, passing the split `params` key
     # and immediately merge to get a Block instance
     self.layers = nnx.merge(jax.vmap(create_block)(keys))
 
-  def __call__(self, x: jax.Array, *, rngs: nnx.Rngs) -> jax.Array:
+  def __call__(self, x: jax.Array, *, ctx: nnx.Ctx) -> jax.Array:
     # fork Rngs, split keys into `n_layers`
-    keys = rngs.fork(self.n_layers)
+    keys, flags = ctx.fork(self.n_layers)
     # split Module to get params
     params, static = self.layers.split(nnx.Param)
 
@@ -65,7 +65,7 @@ class ScanMLP(nnx.Module):
       # merge back Module and Rngs
       module = static.merge(params)
       # forward pass
-      x = module(x, rngs=nnx.Rngs(keys))
+      x = module(x, ctx=nnx.Ctx(keys, flags=flags))
       # split state and return
       params, _ = module.split(nnx.Param)
       return x, params
@@ -77,11 +77,11 @@ class ScanMLP(nnx.Module):
     return x
 
 
-model = ScanMLP(10, n_layers=5, rngs=nnx.Rngs(0))
+model = ScanMLP(10, n_layers=5, ctx=nnx.Ctx(0))
 
 x = jnp.ones((3, 10))
-with nnx.flags(deterministic=False):
-  y = model(x, rngs=nnx.Rngs(dropout=1))
+flags = dict(deterministic=False)
+y = model(x, ctx=nnx.Ctx(dropout=1, flags=flags))
 
 print(jax.tree_map(jnp.shape, model.get_state()))
 print(y.shape)

@@ -50,12 +50,12 @@ class Loss(nnx.Variable):
 
 # %%
 class Encoder(nnx.Module):
-  def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
-    self.linear1 = nnx.Linear(din, dmid, rngs=rngs)
-    self.linear_mean = nnx.Linear(dmid, dout, rngs=rngs)
-    self.linear_std = nnx.Linear(dmid, dout, rngs=rngs)
+  def __init__(self, din: int, dmid: int, dout: int, *, ctx: nnx.Ctx):
+    self.linear1 = nnx.Linear(din, dmid, ctx=ctx)
+    self.linear_mean = nnx.Linear(dmid, dout, ctx=ctx)
+    self.linear_std = nnx.Linear(dmid, dout, ctx=ctx)
 
-  def __call__(self, x: jax.Array, *, rngs: nnx.Rngs) -> jax.Array:
+  def __call__(self, x: jax.Array, *, ctx: nnx.Ctx) -> jax.Array:
     x = x.reshape((x.shape[0], -1))  # flatten
     x = self.linear1(x)
     x = jax.nn.relu(x)
@@ -68,15 +68,15 @@ class Encoder(nnx.Module):
         0.5 * jnp.mean(-jnp.log(std**2) - 1.0 + std**2 + mean**2, axis=-1)
       )
     )
-    key = rngs.noise()
+    key = ctx.noise()
     z = mean + std * jax.random.normal(key, mean.shape)
     return z
 
 
 class Decoder(nnx.Module):
-  def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
-    self.linear1 = nnx.Linear(din, dmid, rngs=rngs)
-    self.linear2 = nnx.Linear(dmid, dout, rngs=rngs)
+  def __init__(self, din: int, dmid: int, dout: int, *, ctx: nnx.Ctx):
+    self.linear1 = nnx.Linear(din, dmid, ctx=ctx)
+    self.linear2 = nnx.Linear(dmid, dout, ctx=ctx)
 
   def __call__(self, z: jax.Array) -> jax.Array:
     z = self.linear1(z)
@@ -93,16 +93,16 @@ class VAE(nnx.Module):
     latent_size: int,
     output_shape: tp.Sequence[int],
     *,
-    rngs: nnx.Rngs,
+    ctx: nnx.Ctx,
   ):
     self.output_shape = output_shape
-    self.encoder = Encoder(din, hidden_size, latent_size, rngs=rngs)
+    self.encoder = Encoder(din, hidden_size, latent_size, ctx=ctx)
     self.decoder = Decoder(
-      latent_size, hidden_size, int(np.prod(output_shape)), rngs=rngs
+      latent_size, hidden_size, int(np.prod(output_shape)), ctx=ctx
     )
 
-  def __call__(self, x: jax.Array, *, rngs: nnx.Rngs) -> jax.Array:
-    z = self.encoder(x, rngs=rngs)
+  def __call__(self, x: jax.Array, *, ctx: nnx.Ctx) -> jax.Array:
+    z = self.encoder(x, ctx=ctx)
     logits = self.decoder(z)
     logits = jnp.reshape(logits, (-1, *self.output_shape))
     return logits
@@ -118,7 +118,7 @@ params, static = VAE(
   hidden_size=256,
   latent_size=latent_size,
   output_shape=image_shape,
-  rngs=nnx.Rngs(0),
+  ctx=nnx.Ctx(0),
 ).split(nnx.Param)
 
 state = nnx.TrainState(
@@ -132,8 +132,8 @@ state = nnx.TrainState(
 @jax.jit
 def train_step(state: nnx.TrainState[VAE], x: jax.Array, key: jax.Array):
   def loss_fn(params: nnx.State):
-    rngs = nnx.Rngs(noise=jax.random.fold_in(key, state.step))
-    logits, (updates, _) = state.apply(params)(x, rngs=rngs)
+    ctx = nnx.Ctx(noise=jax.random.fold_in(key, state.step))
+    logits, (updates, _) = state.apply(params)(x, ctx=ctx)
 
     losses = updates.extract(Loss)
     kl_loss = sum(jax.tree_util.tree_leaves(losses), 0.0)
@@ -155,8 +155,8 @@ def train_step(state: nnx.TrainState[VAE], x: jax.Array, key: jax.Array):
 def forward(
   state: nnx.TrainState[VAE], x: jax.Array, key: jax.Array
 ) -> jax.Array:
-  rngs = nnx.Rngs(noise=key)
-  y_pred = state.apply('params')(x, rngs=rngs)[0]
+  ctx = nnx.Ctx(noise=key)
+  y_pred = state.apply('params')(x, ctx=ctx)[0]
   return jax.nn.sigmoid(y_pred)
 
 

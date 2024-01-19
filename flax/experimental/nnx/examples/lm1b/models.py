@@ -33,8 +33,8 @@ import numpy as np
 from jax import lax
 
 from flax.experimental import nnx
-from flax.experimental.nnx.nnx import flaglib
 from flax.experimental.nnx.examples.lm1b.configs import default
+from flax.experimental.nnx.nnx.module import first_from
 
 Shape = tuple[int, ...]
 Dtype = Any
@@ -126,19 +126,28 @@ class AddPositionEmbs(nnx.Module):
     self,
     config: TransformerConfig,
     *,
-    rngs: nnx.Rngs,
+    decode: bool | None = None,
+    ctx: nnx.Ctx,
   ):
     self.config = config
     self.pos_emb_shape = (1, config.max_len, config.emb_dim)
+    self.decode = decode
 
     if config.posemb_init is not None:
       self.pos_embedding = nnx.Param(
-        config.posemb_init(rngs(), self.pos_emb_shape)
+        config.posemb_init(ctx(), self.pos_emb_shape)
       )
     else:
       self.pos_embedding = None
 
-  def __call__(self, inputs: jax.Array, inputs_positions=None):
+  def __call__(
+    self,
+    inputs: jax.Array,
+    inputs_positions=None,
+    *,
+    decode: bool | None = None,
+    ctx: nnx.Ctx | None = None,
+  ):
     """Applies AddPositionEmbs module.
 
     By default this layer uses a fixed sinusoidal embedding table. If a
@@ -166,8 +175,17 @@ class AddPositionEmbs(nnx.Module):
         None, self.pos_emb_shape
       )
 
+    decode = first_from(
+      decode,
+      self.decode,
+      ctx.flags.get('decode') if ctx is not None else None,
+      error_msg=(
+        'No `decode` argument was provided to AddPositionEmbs '
+        'as either a __call__ argument, class attribute, or ctx.flags.'
+      ),
+    )
     # We use a cache position index for tracking decoding position.
-    if flaglib.flags.get('decode', False):
+    if decode:
       _, _, df = pos_embedding.shape
       # equivalent to pos_embedding[:, i:i+1] but traceable
       pos_embedding = lax.dynamic_slice(
@@ -196,7 +214,7 @@ class MlpBlock(nnx.Module):
     out_dim: optionally specify out dimension.
   """
 
-  def __init__(self, config: TransformerConfig, *, rngs: nnx.Rngs):
+  def __init__(self, config: TransformerConfig, *, ctx: nnx.Ctx):
     self.config = config
 
     self.linear1 = nnx.Linear(
@@ -211,7 +229,7 @@ class MlpBlock(nnx.Module):
         config.bias_init,
         config.axis_rules('mlp'),
       ),
-      rngs=rngs,
+      ctx=ctx,
     )
     self.linear2 = nnx.Linear(
       config.mlp_dim,
@@ -225,17 +243,17 @@ class MlpBlock(nnx.Module):
         config.bias_init,
         config.axis_rules('embed'),
       ),
-      rngs=rngs,
+      ctx=ctx,
     )
     self.dropout = nnx.Dropout(rate=config.dropout_rate)
 
-  def __call__(self, inputs: jax.Array, *, rngs: nnx.Rngs | None = None):
+  def __call__(self, inputs: jax.Array, *, ctx: nnx.Ctx | None = None):
     """Applies Transformer MlpBlock module."""
     x = self.linear1(inputs)
     x = nnx.relu(x)
-    x = self.dropout(x, rngs=rngs)
+    x = self.dropout(x, ctx=ctx)
     output = self.linear2(x)
-    output = self.dropout(output, rngs=rngs)
+    output = self.dropout(output, ctx=ctx)
     return output
 
 
@@ -246,7 +264,7 @@ class EncoderDecoder1DBlock(nnx.Module):
     config: TransformerConfig dataclass containing hyperparameters.
   """
 
-  def __init__(self, config: TransformerConfig, *, rngs: nnx.Rngs):
+  def __init__(self, config: TransformerConfig, *, ctx: nnx.Ctx):
     self.config = config
 
     self.ln1 = nnx.LayerNorm(
@@ -260,7 +278,7 @@ class EncoderDecoder1DBlock(nnx.Module):
         nnx.initializers.ones_init(),
         config.axis_rules('embed'),
       ),
-      rngs=rngs,
+      ctx=ctx,
     )
     self.ln2 = nnx.LayerNorm(
       num_features=config.emb_dim,
@@ -273,7 +291,7 @@ class EncoderDecoder1DBlock(nnx.Module):
         nnx.initializers.ones_init(),
         config.axis_rules('embed'),
       ),
-      rngs=rngs,
+      ctx=ctx,
     )
     self.attention = nnx.MultiHeadAttention(
       num_heads=config.num_heads,
@@ -289,9 +307,9 @@ class EncoderDecoder1DBlock(nnx.Module):
       use_bias=False,
       broadcast_dropout=False,
       dropout_rate=config.attention_dropout_rate,
-      rngs=rngs,
+      ctx=ctx,
     )
-    self.mlp = MlpBlock(config=config, rngs=rngs)
+    self.mlp = MlpBlock(config=config, ctx=ctx)
     self.dropout = nnx.Dropout(rate=config.dropout_rate)
 
   def __call__(
@@ -299,7 +317,7 @@ class EncoderDecoder1DBlock(nnx.Module):
     inputs: jax.Array,
     *,
     decoder_mask: jax.Array | None = None,
-    rngs: nnx.Rngs | None = None,
+    ctx: nnx.Ctx | None = None,
   ):
     """Applies EncoderDecoder1DBlock module.
 
@@ -313,12 +331,12 @@ class EncoderDecoder1DBlock(nnx.Module):
     # Decoder block.
     assert inputs.ndim == 3
     x = self.ln1(inputs)
-    x = self.attention(x, mask=decoder_mask, rngs=rngs)
-    x = self.dropout(x, rngs=rngs)
+    x = self.attention(x, mask=decoder_mask, ctx=ctx)
+    x = self.dropout(x, ctx=ctx)
     x = x + inputs
     # MLP block.
     z = self.ln2(x)
-    z = self.mlp(z, rngs=rngs)
+    z = self.mlp(z, ctx=ctx)
     return x + z
 
 
@@ -335,10 +353,12 @@ class Decoder(nnx.Module):
     config: TransformerConfig,
     shared_embedding: nnx.Embed | None = None,
     *,
-    rngs: nnx.Rngs,
+    decode: bool | None = None,
+    ctx: nnx.Ctx,
   ):
     self.config = config
     self.shared_embedding = shared_embedding
+    self.decode = decode
 
     # Target Embedding
     if self.shared_embedding is None:
@@ -349,15 +369,15 @@ class Decoder(nnx.Module):
           nnx.initializers.normal(stddev=1.0),
           config.axis_rules('vocab', 'embed'),
         ),
-        rngs=rngs,
+        ctx=ctx,
       )
     else:
       self.output_embed = self.shared_embedding
 
-    self.posembed_output = AddPositionEmbs(config=config, rngs=rngs)
+    self.posembed_output = AddPositionEmbs(config=config, ctx=ctx)
     self.dropout = nnx.Dropout(rate=config.dropout_rate)
     for idx in range(config.num_layers):
-      layer = EncoderDecoder1DBlock(config=config, rngs=rngs)
+      layer = EncoderDecoder1DBlock(config=config, ctx=ctx)
       setattr(self, f'encoderdecoderblock_{idx}', layer)
 
     self.encoderdecoder_norm = nnx.LayerNorm(
@@ -369,7 +389,7 @@ class Decoder(nnx.Module):
       scale_init=nnx.with_partitioning(
         nnx.initializers.ones_init(), config.axis_rules('embed')
       ),
-      rngs=rngs,
+      ctx=ctx,
     )
     if not config.logits_via_embedding:
       self.logitdense = nnx.Linear(
@@ -382,7 +402,7 @@ class Decoder(nnx.Module):
         bias_init=nnx.with_partitioning(
           config.bias_init, config.axis_rules('vocab')
         ),
-        rngs=rngs,
+        ctx=ctx,
       )
     else:
       self.logitdense = None
@@ -394,7 +414,8 @@ class Decoder(nnx.Module):
     inputs_positions=None,
     inputs_segmentation=None,
     decoder_mask=None,
-    rngs: nnx.Rngs | None = None,
+    decode: bool | None = None,
+    ctx: nnx.Ctx | None = None,
   ):
     """Applies Transformer model on the inputs.
 
@@ -411,12 +432,22 @@ class Decoder(nnx.Module):
     config = self.config
     assert inputs.ndim == 2  # (batch, len)
 
+    decode = first_from(
+      decode,
+      self.decode,
+      ctx.flags.get('decode') if ctx is not None else None,
+      error_msg=(
+        'No `decode` argument was provided to Decoder '
+        'as either a __call__ argument, class attribute, or ctx.flags.'
+      ),
+    )
+
     y = inputs.astype('int32')
-    if not flaglib.flags.get('decode', False):
+    if not decode:
       y = shift_inputs(y, segment_ids=inputs_segmentation)
     y = self.output_embed(y)
-    y = self.posembed_output(y, inputs_positions=inputs_positions)
-    y = self.dropout(y, rngs=rngs)
+    y = self.posembed_output(y, inputs_positions=inputs_positions, ctx=ctx)
+    y = self.dropout(y, ctx=ctx)
 
     y = y.astype(config.dtype)
 
@@ -427,7 +458,7 @@ class Decoder(nnx.Module):
       y = layer(
         y,
         decoder_mask=decoder_mask,
-        rngs=rngs,
+        ctx=ctx,
       )
     y = self.encoderdecoder_norm(y)
 
@@ -449,9 +480,9 @@ class TransformerLM(nnx.Module):
     config: TransformerConfig dataclass containing hyperparameters.
   """
 
-  def __init__(self, config: TransformerConfig, *, rngs: nnx.Rngs):
+  def __init__(self, config: TransformerConfig, *, ctx: nnx.Ctx):
     self.config = config
-    self.decoder = Decoder(config=config, shared_embedding=None, rngs=rngs)
+    self.decoder = Decoder(config=config, shared_embedding=None, ctx=ctx)
 
   def __call__(
     self,
@@ -459,7 +490,7 @@ class TransformerLM(nnx.Module):
     *,
     inputs_positions=None,
     inputs_segmentation=None,
-    rngs: nnx.Rngs | None = None,
+    ctx: nnx.Ctx | None = None,
   ):
     """Applies TransformerLM on the inputs.
 
@@ -472,9 +503,10 @@ class TransformerLM(nnx.Module):
       logits array from transformer decoder.
     """
     config = self.config
+    decode: bool = ctx.flags.get('decode', False) if ctx is not None else False
 
     # Make padding attention masks.
-    if flaglib.flags.get('decode', False):
+    if decode:
       # for fast autoregressive decoding we use no decoder mask
       decoder_mask = None
     else:
@@ -500,6 +532,6 @@ class TransformerLM(nnx.Module):
       inputs_positions=inputs_positions,
       inputs_segmentation=inputs_segmentation,
       decoder_mask=decoder_mask,
-      rngs=rngs,
+      ctx=ctx,
     )
     return logits.astype(self.config.dtype)

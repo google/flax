@@ -22,9 +22,9 @@ from flax.experimental import nnx
 
 
 class MLP(nnx.Module):
-  def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
-    self.dense1 = nnx.Linear(din, dmid, rngs=rngs)
-    self.dense2 = nnx.Linear(dmid, dout, rngs=rngs)
+  def __init__(self, din: int, dmid: int, dout: int, *, ctx: nnx.Ctx):
+    self.dense1 = nnx.Linear(din, dmid, ctx=ctx)
+    self.dense2 = nnx.Linear(dmid, dout, ctx=ctx)
 
   def __call__(self, x: jax.Array) -> jax.Array:
     x = self.dense1(x)
@@ -34,7 +34,7 @@ class MLP(nnx.Module):
 
 
 def create_model(seed: int):
-  return MLP(10, 20, 30, rngs=nnx.Rngs(seed))
+  return MLP(10, 20, 30, ctx=nnx.Ctx(seed))
 
 
 def create_and_save(seed: int, path: str):

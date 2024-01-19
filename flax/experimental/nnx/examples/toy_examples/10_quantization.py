@@ -94,9 +94,9 @@ print('X_test:', X_test.shape, X_test.dtype)
 
 # %%
 class MLP(nnx.Module):
-  def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
-    self.linear1 = nnx.Linear(din, dmid, rngs=rngs)
-    self.linear2 = nnx.Linear(dmid, dout, rngs=rngs)
+  def __init__(self, din: int, dmid: int, dout: int, *, ctx: nnx.Ctx):
+    self.linear1 = nnx.Linear(din, dmid, ctx=ctx)
+    self.linear2 = nnx.Linear(dmid, dout, ctx=ctx)
 
   def __call__(self, x: jax.Array) -> jax.Array:
     x = x.reshape((x.shape[0], -1))
@@ -107,7 +107,7 @@ class MLP(nnx.Module):
 
 
 params, static = MLP(
-  din=np.prod(image_shape), dmid=256, dout=10, rngs=nnx.Rngs(0)
+  din=np.prod(image_shape), dmid=256, dout=10, ctx=nnx.Ctx(0)
 ).split(nnx.Param)
 
 state = nnx.TrainState(

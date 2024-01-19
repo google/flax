@@ -164,14 +164,14 @@ def rms_norm(cfg, scale, x):
   return y * jnp.asarray(scale, cfg.dtype)
 
 
-def dropout(cfg: Config, x, broadcast_dims=(-2,), *, rngs: nnx.Rngs):
+def dropout(cfg: Config, x, broadcast_dims=(-2,), *, ctx: nnx.Ctx):
   if cfg.dropout_rate == 0.0:
     return x
   broadcast_shape = list(x.shape)
   for dim in broadcast_dims:
     broadcast_shape[dim] = 1
   keep_rate = 1.0 - cfg.dropout_rate
-  key = rngs.dropout()
+  key = ctx.dropout()
   mask = jax.random.bernoulli(key, p=keep_rate, shape=broadcast_shape)
   return jax.lax.select(
     jnp.broadcast_to(mask, x.shape), x / keep_rate, jnp.zeros_like(x)
@@ -179,31 +179,31 @@ def dropout(cfg: Config, x, broadcast_dims=(-2,), *, rngs: nnx.Rngs):
 
 
 class Attention(nnx.Module):
-  def __init__(self, cfg: Config, *, rngs: nnx.Rngs):
+  def __init__(self, cfg: Config, *, ctx: nnx.Ctx):
     sharding = cfg.sharding
 
-    key = rngs.params()
+    key = ctx.params()
     self.WQ = nnx.Param(
       dense_init(
         key, (cfg.embed, cfg.heads, cfg.depth), cfg.param_dtype, 0, (1, 2)
       ),
       P(sharding.embed, sharding.heads, sharding.depth),
     )
-    key = rngs.params()
+    key = ctx.params()
     self.WK = nnx.Param(
       dense_init(
         key, (cfg.embed, cfg.heads, cfg.depth), cfg.param_dtype, 0, (1, 2)
       ),
       P(sharding.embed, sharding.heads, sharding.depth),
     )
-    key = rngs.params()
+    key = ctx.params()
     self.WV = nnx.Param(
       dense_init(
         key, (cfg.embed, cfg.heads, cfg.depth), cfg.param_dtype, 0, (1, 2)
       ),
       P(sharding.embed, sharding.heads, sharding.depth),
     )
-    key = rngs.params()
+    key = ctx.params()
     self.WO = nnx.Param(
       dense_init(
         key, (cfg.heads, cfg.depth, cfg.embed), cfg.param_dtype, (0, 1), 2
@@ -231,7 +231,7 @@ class Attention(nnx.Module):
 
   # We combine the cache and params into "vs", but it would be no harder at all
   # to thread through a separate "cache" argument storing cache entries.
-  def __call__(self, cfg: Config, x_q, x_kv, mask=None, *, rngs: nnx.Rngs):
+  def __call__(self, cfg: Config, x_q, x_kv, mask=None, *, ctx: nnx.Ctx):
     q = jnp.einsum('bse,enh->bsnh', x_q, self.WQ.astype(cfg.dtype)).astype(
       jnp.float32
     )
@@ -276,7 +276,7 @@ class Attention(nnx.Module):
       jnp.einsum('bsnh,btnh->bnst', q, k) / np.sqrt(cfg.depth) + attention_bias
     )
     s = jax.nn.softmax(l).astype(cfg.dtype)
-    s = dropout(cfg, s, rngs=rngs)
+    s = dropout(cfg, s, ctx=ctx)
     a = jnp.einsum('bnst,btnh->bsnh', s, v)
     o = jnp.einsum('bsnh,nhe->bse', a, self.WO.astype(cfg.dtype))
 
@@ -284,11 +284,11 @@ class Attention(nnx.Module):
 
 
 class MLP(nnx.Module):
-  def __init__(self, cfg: Config, *, rngs: nnx.Rngs):
+  def __init__(self, cfg: Config, *, ctx: nnx.Ctx):
     sharding = cfg.sharding
     self.Win1 = nnx.Param(
       dense_init(
-        rngs.params(),
+        ctx.params(),
         (cfg.embed, cfg.hidden),
         cfg.param_dtype,
         0,
@@ -298,7 +298,7 @@ class MLP(nnx.Module):
     )
     self.Win2 = nnx.Param(
       dense_init(
-        rngs.params(),
+        ctx.params(),
         (cfg.embed, cfg.hidden),
         cfg.param_dtype,
         0,
@@ -308,7 +308,7 @@ class MLP(nnx.Module):
     )
     self.Wout = nnx.Param(
       dense_init(
-        rngs.params(),
+        ctx.params(),
         (cfg.hidden, cfg.embed),
         cfg.param_dtype,
         0,
@@ -317,20 +317,20 @@ class MLP(nnx.Module):
       P(sharding.hidden, sharding.embed),
     )
 
-  def __call__(self, cfg: Config, x, *, rngs: nnx.Rngs):
+  def __call__(self, cfg: Config, x, *, ctx: nnx.Ctx):
     h1 = jnp.einsum('bse,eh->bsh', x, self.Win1.astype(cfg.dtype))
     h2 = jnp.einsum('bse,eh->bsh', x, self.Win2.astype(cfg.dtype))
     h = jax.nn.gelu(h1) * h2
-    h = dropout(cfg, h, rngs=rngs)
+    h = dropout(cfg, h, ctx=ctx)
     o = jnp.einsum('bsh,he->bse', h, self.Wout.astype(cfg.dtype))
     return o
 
 
 class DecoderBlock(nnx.Module):
-  def __init__(self, cfg: Config, *, rngs: nnx.Rngs):
+  def __init__(self, cfg: Config, *, ctx: nnx.Ctx):
     sharding = cfg.sharding
-    self.attn = Attention(cfg, rngs=rngs)
-    self.mlp = MLP(cfg, rngs=rngs)
+    self.attn = Attention(cfg, ctx=ctx)
+    self.mlp = MLP(cfg, ctx=ctx)
     self.scale1 = nnx.Param(
       jnp.ones((cfg.embed,), cfg.param_dtype), P(sharding.embed)
     )
@@ -338,23 +338,23 @@ class DecoderBlock(nnx.Module):
       jnp.ones((cfg.embed,), cfg.param_dtype), P(sharding.embed)
     )
 
-  def __call__(self, cfg: Config, input, *, rngs: nnx.Rngs):
+  def __call__(self, cfg: Config, input, *, ctx: nnx.Ctx):
     x = rms_norm(cfg, self.scale1, input)
-    x = self.attn(cfg, x, x, mask=None, rngs=rngs)
-    x = dropout(cfg, x, rngs=rngs)
+    x = self.attn(cfg, x, x, mask=None, ctx=ctx)
+    x = dropout(cfg, x, ctx=ctx)
     x = x + input
     y = rms_norm(cfg, self.scale2, x)
-    y = self.mlp(cfg, y, rngs=rngs)
-    y = dropout(cfg, y, rngs=rngs)
+    y = self.mlp(cfg, y, ctx=ctx)
+    y = dropout(cfg, y, ctx=ctx)
     return y + x
 
 
 class Decoder(nnx.Module):
-  def __init__(self, cfg: Config, *, rngs: nnx.Rngs):
+  def __init__(self, cfg: Config, *, ctx: nnx.Ctx):
     sharding = cfg.sharding
     self.embed = nnx.Param(
       embed_init(
-        rngs.params(),
+        ctx.params(),
         (cfg.vocab, cfg.embed),
         cfg.param_dtype,
         1,
@@ -363,7 +363,7 @@ class Decoder(nnx.Module):
       P(sharding.vocab, sharding.embed),
     )
     self.unembed = nnx.Param(
-      dense_init(rngs.params(), (cfg.embed, cfg.vocab), jnp.float32, 0, 1),
+      dense_init(ctx.params(), (cfg.embed, cfg.vocab), jnp.float32, 0, 1),
       P(sharding.embed, sharding.vocab),
     )
     self.scale1 = nnx.Param(
@@ -372,16 +372,16 @@ class Decoder(nnx.Module):
 
     if cfg.scanned:
       self.layers = nnx.merge(
-        jax.vmap(lambda key: DecoderBlock(cfg, rngs=nnx.Rngs(key)).split())(
-          jax.random.split(rngs.params(), cfg.layers)
+        jax.vmap(lambda key: DecoderBlock(cfg, ctx=nnx.Ctx(key)).split())(
+          jax.random.split(ctx.params(), cfg.layers)
         )
       )
     else:
       self.layers = nnx.Sequence(
-        DecoderBlock(cfg, rngs=rngs) for _ in range(cfg.layers)
+        DecoderBlock(cfg, ctx=ctx) for _ in range(cfg.layers)
       )
 
-  def __call__(self, cfg: Config, x, *, rngs: nnx.Rngs):
+  def __call__(self, cfg: Config, x, *, ctx: nnx.Ctx):
     # TODO: handle right-shifting for training: here or in train loop.
     # TODO: handle general mask routing.
     x = self.embed.astype(cfg.dtype)[x]
@@ -390,13 +390,13 @@ class Decoder(nnx.Module):
       assert isinstance(self.layers, DecoderBlock)
 
       state, static = self.layers.split()
-      rngs, rngsdef = rngs.fork()
-      dropout_key = jax.random.split(rngs['dropout'], cfg.layers)
+      ctx, rngsdef = ctx.fork()
+      dropout_key = jax.random.split(ctx['dropout'], cfg.layers)
 
       def scan_fn(x, s: tp.Tuple[jax.Array, nnx.State]):
         dropout_key, state = s
-        rngs = rngsdef.merge({'dropout': dropout_key})
-        y, (state, _) = static.apply(state)(cfg, x, rngs=rngs)
+        ctx = rngsdef.merge({'dropout': dropout_key})
+        y, (state, _) = static.apply(state)(cfg, x, ctx=ctx)
         return y, state
 
       x, state = jax.lax.scan(
@@ -408,7 +408,7 @@ class Decoder(nnx.Module):
     else:
       assert isinstance(self.layers, nnx.Sequence)
       for decoder_block in self.layers:
-        x = decoder_block(cfg, x, rngs=rngs)
+        x = decoder_block(cfg, x, ctx=ctx)
 
     x = jnp.einsum('bse,ev->bsv', x, self.unembed)
     return x

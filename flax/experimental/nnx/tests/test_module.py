@@ -105,18 +105,18 @@ class TestModule:
 
   def test_call(self):
     class Foo(nnx.Module):
-      def __init__(self, c: float, *, rngs: nnx.Rngs):
-        key = rngs.params()
+      def __init__(self, c: float, *, ctx: nnx.Ctx):
+        key = ctx.params()
         self.w = nnx.Param(jax.random.uniform(key, ()))
         self.c = c
 
-      def __call__(self, x, *, rngs: nnx.Rngs):
-        key = rngs.e()
+      def __call__(self, x, *, ctx: nnx.Ctx):
+        key = ctx.e()
         return self.w * x + jax.random.normal(key, ()) + self.c
 
-    foo = Foo(c=1.0, rngs=nnx.Rngs(0))
+    foo = Foo(c=1.0, ctx=nnx.Ctx(0))
 
-    y = foo(x=2.0, rngs=nnx.Rngs(e=1))
+    y = foo(x=2.0, ctx=nnx.Ctx(e=1))
 
     assert isinstance(y, jax.Array)
 
@@ -454,7 +454,7 @@ class TestModule:
       m1.update(m2)
 
   def test_create_abstract(self):
-    linear = nnx.Linear.create_abstract(2, 3, rngs=nnx.Rngs(0))
+    linear = nnx.Linear.create_abstract(2, 3, ctx=nnx.Ctx(0))
 
     assert linear.kernel == jax.ShapeDtypeStruct((2, 3), jnp.float32)
     assert linear.bias == jax.ShapeDtypeStruct((3,), jnp.float32)
@@ -535,51 +535,51 @@ class TestModuleDataclass:
     class DFoo(nnx.Module):
       din: int
       dout: int
-      rngs: nnx.Rngs
+      ctx: nnx.Ctx
 
       def __post_init__(self):
-        self.bar = nnx.Linear(self.din, self.dout, rngs=self.rngs)
+        self.bar = nnx.Linear(self.din, self.dout, ctx=self.ctx)
 
       def __call__(self, x):
         return self.bar(x)
 
-    m = DFoo(1, 1, rngs=nnx.Rngs(0))
+    m = DFoo(1, 1, ctx=nnx.Ctx(0))
 
     assert hasattr(m, 'bar')
-    assert m.rngs is None
+    assert m.ctx is None
 
   def test_setup_is_called(self):
     @dataclasses.dataclass
     class DFoo(nnx.Module):
       din: int
       dout: int
-      rngs: nnx.Rngs
+      ctx: nnx.Ctx
 
       def setup(self):
-        self.bar = nnx.Linear(self.din, self.dout, rngs=self.rngs)
+        self.bar = nnx.Linear(self.din, self.dout, ctx=self.ctx)
 
       def __call__(self, x):
         return self.bar(x)
 
-    m = DFoo(1, 1, rngs=nnx.Rngs(0))
+    m = DFoo(1, 1, ctx=nnx.Ctx(0))
 
     assert hasattr(m, 'bar')
-    assert m.rngs is None
+    assert m.ctx is None
 
 
 class TestModuleDef:
   def test_apply(self):
     class Foo(nnx.Module):
-      def __init__(self, c: float, *, rngs: nnx.Rngs):
-        self.w = nnx.Param(jax.random.uniform(rngs.params(), ()))
+      def __init__(self, c: float, *, ctx: nnx.Ctx):
+        self.w = nnx.Param(jax.random.uniform(ctx.params(), ()))
         self.c = c
 
-      def __call__(self, x, *, rngs: nnx.Rngs):
-        key = rngs.e()
+      def __call__(self, x, *, ctx: nnx.Ctx):
+        key = ctx.e()
         return self.w * x + jax.random.normal(key, ()) + self.c
 
-    rngs = nnx.Rngs(0)
-    foo = Foo(c=1.0, rngs=rngs)
+    ctx = nnx.Ctx(0)
+    foo = Foo(c=1.0, ctx=ctx)
 
     states, graphdef = foo.split()
 
@@ -587,23 +587,23 @@ class TestModuleDef:
     assert isinstance(states.variables.w, nnx.Param)
     # assert isinstance(states["c"], jax.Array)
 
-    y, _updates = graphdef.apply(states)(x=2.0, rngs=nnx.Rngs(e=1))
+    y, _updates = graphdef.apply(states)(x=2.0, ctx=nnx.Ctx(e=1))
 
     assert isinstance(y, jax.Array)
 
   def test_derefed_mod_apply(self):
     class Foo(nnx.Module):
-      def __init__(self, c: float, *, rngs: nnx.Rngs):
+      def __init__(self, c: float, *, ctx: nnx.Ctx):
         self.w = nnx.Param(
-          jax.random.uniform(rngs.params(), ()),
+          jax.random.uniform(ctx.params(), ()),
         )
         self.c = nnx.Variable(c)
 
-      def __call__(self, x, *, rngs: nnx.Rngs):
-        key = rngs.e()
+      def __call__(self, x, *, ctx: nnx.Ctx):
+        key = ctx.e()
         return self.w * x + jax.random.normal(key, ()) + self.c
 
-    foo = Foo(c=1.0, rngs=nnx.Rngs(0))
+    foo = Foo(c=1.0, ctx=nnx.Ctx(0))
 
     state, graphdef = foo.split()
 
@@ -612,19 +612,19 @@ class TestModuleDef:
     assert isinstance(state.variables.w, nnx.Param)
     assert isinstance(state.variables.c, nnx.Variable)
 
-    y, (state, graphdef) = graphdef.apply(state)(x=2.0, rngs=nnx.Rngs(e=1))
+    y, (state, graphdef) = graphdef.apply(state)(x=2.0, ctx=nnx.Ctx(e=1))
 
     assert isinstance(y, jax.Array)
 
   def test_modules_iterator(self):
     class Foo(nnx.Module):
-      def __init__(self, *, rngs: nnx.Rngs):
+      def __init__(self, *, ctx: nnx.Ctx):
         self.submodules = [
-          {'a': nnx.Linear(1, 1, rngs=rngs)},
-          {'b': nnx.Conv(1, 1, 1, rngs=rngs)},
+          {'a': nnx.Linear(1, 1, ctx=ctx)},
+          {'b': nnx.Conv(1, 1, 1, ctx=ctx)},
         ]
 
-    module = Foo(rngs=nnx.Rngs(0))
+    module = Foo(ctx=nnx.Ctx(0))
 
     modules = list(module.modules())
 

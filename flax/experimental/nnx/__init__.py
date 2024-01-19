@@ -27,7 +27,6 @@ from .nnx.dataclasses import variable_field as variable_field
 from .nnx.errors import TraceContextError as TraceContextError
 from .nnx.filterlib import All as All
 from .nnx.filterlib import Not as Not
-from .nnx.flaglib import flags as flags
 from .nnx.graph_utils import GraphDef as GraphDef
 from .nnx.helpers import Dict as Dict
 from .nnx.helpers import Sequence as Sequence
@@ -78,6 +77,7 @@ from .nnx.pytreelib import Pytree as Pytree
 from .nnx.pytreelib import TreeNode as TreeNode
 from .nnx.rnglib import Rngs as Rngs
 from .nnx.rnglib import RngStream as RngStream
+from .nnx.rnglib import Ctx as Ctx
 from .nnx.spmd import PARTITION_NAME as PARTITION_NAME
 from .nnx.spmd import get_partition_spec as get_partition_spec
 from .nnx.spmd import get_named_sharding as get_named_sharding
@@ -105,3 +105,5 @@ from .nnx.variables import Rng as Rng
 from .nnx.variables import Variable as Variable
 from .nnx.variables import VariableMetadata as VariableMetadata
 from .nnx.variables import with_metadata as with_metadata
+
+__version__ = '0.0.1'

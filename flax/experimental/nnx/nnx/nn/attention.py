@@ -25,7 +25,6 @@ from jax import lax, random
 
 from flax.experimental import nnx
 from flax.experimental.nnx.nnx import rnglib
-from flax.experimental.nnx.nnx import flaglib
 from flax.experimental.nnx.nnx.module import Module, first_from
 from flax.experimental.nnx.nnx.nn import initializers
 from flax.experimental.nnx.nnx.nn.dtypes import promote_dtype
@@ -255,15 +254,15 @@ class MultiHeadAttention(Module):
     >>> variables = module.init({'params': key1, 'dropout': key2}, q)
 
     >>> # out1 and out2 are different.
-    >>> out1, out2 = module.apply(variables, q, rngs={'dropout': key3})
+    >>> out1, out2 = module.apply(variables, q, ctx={'dropout': key3})
     >>> # out3 and out4 are different.
     >>> # out1 and out3 are different. out2 and out4 are different.
-    >>> out3, out4 = module.apply(variables, q, rngs={'dropout': key4})
+    >>> out3, out4 = module.apply(variables, q, ctx={'dropout': key4})
     >>> # out1 and out2 are the same.
     >>> out1, out2 = module.apply(variables, q, dropout_rng=key5)
     >>> # out1 and out2 are the same as out3 and out4.
-    >>> # providing a `dropout_rng` arg will take precedence over the `rngs` arg in `.apply`
-    >>> out3, out4 = module.apply(variables, q, rngs={'dropout': key6}, dropout_rng=key5)
+    >>> # providing a `dropout_rng` arg will take precedence over the `ctx` arg in `.apply`
+    >>> out3, out4 = module.apply(variables, q, ctx={'dropout': key6}, dropout_rng=key5)
 
   Attributes:
     num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
@@ -312,7 +311,7 @@ class MultiHeadAttention(Module):
     out_dot_general: DotGeneralT | None = None,
     qkv_dot_general_cls: Any = None,
     out_dot_general_cls: Any = None,
-    rngs: rnglib.Rngs,
+    ctx: rnglib.Ctx,
   ):
     self.num_heads = num_heads
     self.in_features = in_features
@@ -362,15 +361,15 @@ class MultiHeadAttention(Module):
     )
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
-    self.query = linear_general(rngs=rngs)
-    self.key = linear_general(rngs=rngs)
-    self.value = linear_general(rngs=rngs)
+    self.query = linear_general(ctx=ctx)
+    self.key = linear_general(ctx=ctx)
+    self.value = linear_general(ctx=ctx)
 
     if self.normalize_qk:
       # Normalizing query and key projections stabilizes training with higher
       # LR. See ViT-22B paper http://arxiv.org/abs/2302.05442 for analysis.
-      self.query_ln = LayerNorm(self.head_dim, use_bias=False, rngs=rngs)
-      self.key_ln = LayerNorm(self.head_dim, use_bias=False, rngs=rngs)
+      self.query_ln = LayerNorm(self.head_dim, use_bias=False, ctx=ctx)
+      self.key_ln = LayerNorm(self.head_dim, use_bias=False, ctx=ctx)
     else:
       self.query_ln = None
       self.key_ln = None
@@ -387,7 +386,7 @@ class MultiHeadAttention(Module):
       precision=self.precision,
       dot_general=self.out_dot_general,
       dot_general_cls=self.out_dot_general_cls,
-      rngs=rngs,
+      ctx=ctx,
     )
 
   @overload
@@ -400,7 +399,7 @@ class MultiHeadAttention(Module):
     mask: Optional[Array] = None,
     deterministic: Optional[bool] = None,
     dropout_rng: Optional[Array] = None,
-    rngs: rnglib.Rngs | None = None,
+    ctx: rnglib.Ctx | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
   ):
@@ -415,7 +414,7 @@ class MultiHeadAttention(Module):
     mask: Array | None = None,
     deterministic: bool | None = None,
     dropout_rng: Array | None = None,
-    rngs: rnglib.Rngs | None = None,
+    ctx: rnglib.Ctx | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
   ):
@@ -429,7 +428,7 @@ class MultiHeadAttention(Module):
     *,
     mask: Array | None = None,
     deterministic: bool | None = None,
-    rngs: rnglib.Rngs | None = None,
+    ctx: rnglib.Ctx | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
   ):
@@ -453,8 +452,8 @@ class MultiHeadAttention(Module):
         corresponding mask value is `False`.
       deterministic: if false, the attention weight is masked randomly using
         dropout, whereas if true, the attention weights are deterministic.
-      rngs: container for random number generators to generate the dropout
-        mask when `deterministic` is False. The `rngs` container should have a
+      ctx: container for random number generators to generate the dropout
+        mask when `deterministic` is False. The `ctx` container should have a
         `dropout` key.
       sow_weights: if ``True``, the attention weights are sowed into the
         'intermediates' collection.
@@ -496,9 +495,11 @@ class MultiHeadAttention(Module):
     decode = first_from(
       decode,
       self.decode,
-      flaglib.flags.get('decode'),
-      error_msg="""No `decode` argument was provided to MultiHeadAttention
-        as either a __call__ argument, class attribute, or nnx.flag.""",
+      ctx.flags.get('decode') if ctx is not None else None,
+      error_msg=(
+        'No `decode` argument was provided to MultiHeadAttention '
+        'as either a __call__ argument, class attribute, or ctx.flags.'
+      ),
     )
 
     if decode:
@@ -543,16 +544,18 @@ class MultiHeadAttention(Module):
       deterministic = first_from(
         deterministic,
         self.deterministic,
-        flaglib.flags.get('deterministic'),
-        error_msg="""No `deterministic` argument was provided to MultiHeadAttention
-          as either a __call__ argument, class attribute, or nnx.flag.""",
+        ctx.flags.get('deterministic') if ctx is not None else None,
+        error_msg=(
+          'No `deterministic` argument was provided to MultiHeadAttention'
+          'as either a __call__ argument, class attribute, or ctx.flags.'
+        ),
       )
       if not deterministic:
-        if rngs is None:
+        if ctx is None:
           raise ValueError(
-            "'rngs' must be provided if 'dropout_rng' is not given."
+            "'ctx' must be provided if 'dropout_rng' is not given."
           )
-        dropout_rng = rngs.dropout()
+        dropout_rng = ctx.dropout()
       else:
         dropout_rng = None
     else:

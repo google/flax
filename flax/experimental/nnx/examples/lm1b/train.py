@@ -194,13 +194,13 @@ def train_step(
   def loss_fn(params):
     """loss function used for training."""
     module = state.graphdef.merge(params)
-    with nnx.flags(deterministic=False, decode=False):
-      logits = module(
-        inputs,
-        inputs_positions=inputs_positions,
-        inputs_segmentation=inputs_segmentation,
-        rngs=nnx.Rngs(dropout=dropout_rng),
-      )
+    flags = dict(deterministic=False, decode=False)
+    logits = module(
+      inputs,
+      inputs_positions=inputs_positions,
+      inputs_segmentation=inputs_segmentation,
+      ctx=nnx.Ctx(dropout=dropout_rng, flags=flags),
+    )
 
     loss, weight_sum = compute_weighted_cross_entropy(
       logits, inputs, weights, label_smoothing
@@ -229,8 +229,8 @@ def eval_step(
   inputs = batch['inputs']
   weights = jnp.where(inputs > 0, 1.0, 0.0)
   module = static.merge(params)
-  with nnx.flags(deterministic=True, decode=False):
-    logits = module(inputs)
+  flags = dict(deterministic=True, decode=False)
+  logits = module(inputs, ctx=nnx.Ctx(flags=flags))
 
   return compute_metrics(logits, inputs, weights, label_smoothing)
 
@@ -261,8 +261,8 @@ def predict_step(
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
     module = static.merge(params, cache)
-    with nnx.flags(deterministic=True, decode=True):
-      logits = module(flat_ids)
+    flags = dict(deterministic=True, decode=True)
+    logits = module(flat_ids, ctx=nnx.Ctx(flags=flags))
     cache = module.extract(nnx.Cache)
     # Remove singleton sequence-length dimension:
     # [batch, 1, vocab] --> [batch, vocab]
@@ -477,7 +477,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
   rng, inference_rng = random.split(rng)
 
   def constructor(config: models.TransformerConfig, key: jax.Array):
-    return models.TransformerLM(config, rngs=nnx.Rngs(params=key))
+    return models.TransformerLM(config, ctx=nnx.Ctx(params=key))
 
   learning_rate_fn = create_learning_rate_schedule(
     learning_rate=config.learning_rate, warmup_steps=config.warmup_steps

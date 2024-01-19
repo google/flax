@@ -56,8 +56,8 @@ class Count(nnx.Variable):   # custom Variable types define the "collections"
 
 
 class CounterLinear(nnx.Module):
-  def __init__(self, din, dout, *, rngs): # explicit RNG threading
-    self.linear = nnx.Linear(din, dout, rngs=rngs)
+  def __init__(self, din, dout, *, ctx): # explicit RNG threading
+    self.linear = nnx.Linear(din, dout, ctx=ctx)
     self.count = Count(jnp.zeros((), jnp.int32)) # typed Variable collections
 
   def __call__(self, x):
@@ -65,7 +65,7 @@ class CounterLinear(nnx.Module):
     return self.linear(x)
 
 
-model = CounterLinear(4, 4, rngs=nnx.Rngs(0))  # no special `init` method
+model = CounterLinear(4, 4, ctx=nnx.Ctx(0))  # no special `init` method
 y = model(jnp.ones((2, 4)))  # call methods directly
 
 print(f'{model = }')
@@ -101,7 +101,7 @@ y
 
 def load_pretrained_fragment():
   # pretend this inits / loads some fragment of a model
-  replacement = nnx.Linear(4, 4, rngs=nnx.Rngs(1))
+  replacement = nnx.Linear(4, 4, ctx=nnx.Ctx(1))
   return replacement
 
 # you can replace modules directly
@@ -113,15 +113,15 @@ y
 Not only is this easier than messing with dictionary structures and aligning that with code changes, but one can even replace a field with a completely different Module type, or even change the architecture (e.g. share two Modules that were not shared before).
 
 ```{code-cell}
-rngs = nnx.Rngs(0)
+ctx = nnx.Ctx(0)
 model = nnx.Sequence(
   [
-    nnx.Conv(1, 16, [3, 3], padding='SAME', rngs=rngs),
+    nnx.Conv(1, 16, [3, 3], padding='SAME', ctx=ctx),
     partial(nnx.max_pool, window_shape=(2, 2), strides=(2, 2)),
-    nnx.Conv(16, 32, [3, 3], padding='SAME', rngs=rngs),
+    nnx.Conv(16, 32, [3, 3], padding='SAME', ctx=ctx),
     partial(nnx.max_pool, window_shape=(2, 2), strides=(2, 2)),
     lambda x: x.reshape((x.shape[0], -1)),  # flatten
-    nnx.Linear(32 * 7 * 7, 10, rngs=rngs),
+    nnx.Linear(32 * 7 * 7, 10, ctx=ctx),
   ]
 )
 
@@ -130,7 +130,7 @@ y = model(jnp.ones((2, 28, 28, 1)))
 # Do some weird surgery of the stack:
 for i, layer in enumerate(model):
   if isinstance(layer, nnx.Conv):
-    model[i] = nnx.Linear(layer.in_features, layer.out_features, rngs=rngs)
+    model[i] = nnx.Linear(layer.in_features, layer.out_features, ctx=ctx)
 
 y = model(jnp.ones((2, 28, 28, 1)))
 ```
@@ -150,7 +150,7 @@ The `Module.split` method allows you to convert into a `State` dict-like object 
 ```{code-cell}
 :outputId: 9a3f378b-739e-4f45-9968-574651200ede
 
-model = CounterLinear(4, 4, rngs=nnx.Rngs(0))
+model = CounterLinear(4, 4, ctx=nnx.Ctx(0))
 
 state, static = model.split()
 
@@ -196,13 +196,13 @@ It uses the single additional method `update` to locally modify model state.
 :outputId: fdd212d7-4994-4fa5-d922-5a7d7cfad3e3
 
 class LinearEnsemble(nnx.Module):
-  def __init__(self, din, dout, *, num_models, rngs: nnx.Rngs):
+  def __init__(self, din, dout, *, num_models, ctx: nnx.Ctx):
     # get raw rng seeds
-    keys = rngs.fork(num_models) # split all keys into `num_models`
+    keys = ctx.fork(num_models) # split all keys into `num_models`
 
     # define pure init fn and vmap
     def vmap_init(keys):
-      return CounterLinear(din, dout, rngs=nnx.Rngs(keys)).split(
+      return CounterLinear(din, dout, ctx=nnx.Ctx(keys)).split(
         nnx.Param, Count
       )
     params, counts, static = jax.vmap(
@@ -236,7 +236,7 @@ class LinearEnsemble(nnx.Module):
     return y
 
 x = jnp.ones((4,))
-ensemble = LinearEnsemble(4, 4, num_models=8, rngs=nnx.Rngs(0))
+ensemble = LinearEnsemble(4, 4, num_models=8, ctx=nnx.Ctx(0))
 
 # forward pass
 y = ensemble(x)
@@ -258,7 +258,7 @@ Like linen, for convenience we still provide simple lifted transforms for standa
 # class transform:
 ScannedLinear = nnx.Scan(nnx.Linear, variable_axes={nnx.Param: 0}, length=4)
 
-scanned = ScannedLinear(2, 2, rngs=nnx.Rngs(0))
+scanned = ScannedLinear(2, 2, ctx=nnx.Ctx(0))
 scanned.get_state()
 ```
 
@@ -270,14 +270,14 @@ scanned.get_state()
 class ScannedLinear(nnx.Module):
 
   @partial(nnx.scan, variable_axes={nnx.Param: 0}, length=4)
-  def __init__(self, din, dout, *, rngs: nnx.Rngs):
-    self.model = nnx.Linear(din, dout, rngs=nnx.Rngs(rngs))
+  def __init__(self, din, dout, *, ctx: nnx.Ctx):
+    self.model = nnx.Linear(din, dout, ctx=nnx.Ctx(ctx))
 
   @partial(nnx.scan, variable_axes={nnx.Param: 0}, length=4)
   def __call__(self, x):
     return self.model(x)
 
-scanned = ScannedLinear(2, 2, rngs=nnx.Rngs(0))
+scanned = ScannedLinear(2, 2, ctx=nnx.Ctx(0))
 scanned.get_state()
 ```
 
@@ -320,8 +320,8 @@ class TransposedParam(nnx.Variable):
 
 
 class OddLinear(nnx.Module):
-  def __init__(self, din, dout, *, rngs):
-    self.kernel = TransposedParam(random.uniform(rngs.params(), (din, dout)))
+  def __init__(self, din, dout, *, ctx):
+    self.kernel = TransposedParam(random.uniform(ctx.params(), (din, dout)))
     self.bias = nnx.Param(jnp.zeros((dout,)))
 
   def __call__(self, x):
@@ -329,7 +329,7 @@ class OddLinear(nnx.Module):
     return x @ self.kernel + self.bias
 
 
-model = OddLinear(4, 8, rngs=nnx.Rngs(0))
+model = OddLinear(4, 8, ctx=nnx.Ctx(0))
 y = model(jnp.ones((2, 4)))
 
 print(f'outer kernel shape = {model.split()[0]["kernel"].shape}')
@@ -348,15 +348,15 @@ class MetadataParam(nnx.Param):
 
 
 class AnnotatedLinear(nnx.Module):
-  def __init__(self, din, dout, *, rngs):
-    self.kernel = TransposedParam(random.uniform(rngs.params(), (din, dout)), meta='foo', other_meta=0)
+  def __init__(self, din, dout, *, ctx):
+    self.kernel = TransposedParam(random.uniform(ctx.params(), (din, dout)), meta='foo', other_meta=0)
     self.bias = TransposedParam(jnp.zeros((dout,)), meta='bar', other_meta=1)
 
   def __call__(self, x):
     return x @ self.kernel + self.bias
 
 
-model = AnnotatedLinear(4, 8, rngs=nnx.Rngs(0))
+model = AnnotatedLinear(4, 8, ctx=nnx.Ctx(0))
 y = model(jnp.ones((2, 4)))
 
 state, static = model.split()
@@ -380,19 +380,19 @@ class Example(nnx.Module):
                in_filters=3,
                out_filters=4,
                input_shape=None,  # provide an example input size
-               rngs):
+               ctx):
       self.encoder = nnx.Conv(in_filters, out_filters,
                               kernel_size=(3, 3),
                               strides=(1, 1),
                               padding="SAME",
-                              rngs=rngs)
+                              ctx=ctx)
       # calculate the flattened shape post-conv using jax.eval_shape
       encoded_shape = jax.eval_shape(
           lambda x: batched_flatten(self.encoder(x)),
           jax.ShapeDtypeStruct(input_shape, jnp.float32)
       ).shape
       # use this shape information to continue initializing
-      self.linear = nnx.Linear(encoded_shape[-1], 4, rngs=rngs)
+      self.linear = nnx.Linear(encoded_shape[-1], 4, ctx=ctx)
 
   def __call__(self, x):
     x = self.encoder(x)
@@ -402,7 +402,7 @@ class Example(nnx.Module):
 model = Example(in_filters=3,
                 out_filters=4,
                 input_shape=(2, 6, 6, 3),
-                rngs=nnx.Rngs(0))
+                ctx=nnx.Ctx(0))
 
 state, static = model.split()
 jax.tree_map(jnp.shape, state)

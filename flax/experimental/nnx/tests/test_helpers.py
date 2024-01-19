@@ -43,16 +43,16 @@ class TestHelpers:
 
   def test_train_state_methods(self):
     class Foo(nnx.Module):
-      def __init__(self, *, rngs: nnx.Rngs):
-        self.linear = nnx.Linear(2, 4, rngs=rngs)
-        self.batch_norm = nnx.BatchNorm(4, rngs=rngs)
+      def __init__(self, *, ctx: nnx.Ctx):
+        self.linear = nnx.Linear(2, 4, ctx=ctx)
+        self.batch_norm = nnx.BatchNorm(4, ctx=ctx)
 
       def __call__(self, x: jax.Array, train: bool) -> jax.Array:
         x = self.linear(x)
         x = self.batch_norm(x, use_running_average=not train)
         return x
 
-    module = Foo(rngs=nnx.Rngs(0))
+    module = Foo(ctx=nnx.Ctx(0))
     params, batch_stats, graphdef = module.split(nnx.Param, nnx.BatchStat)
 
     state = nnx.TrainState(

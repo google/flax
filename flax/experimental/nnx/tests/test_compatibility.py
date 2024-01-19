@@ -22,7 +22,7 @@ class TestCompatibility:
   def test_functional(self):
     # Functional API for NNX Modules
     functional = nnx.compatibility.functional(nnx.Linear)(32, 64)
-    state = functional.init(rngs=nnx.Rngs(0))
+    state = functional.init(ctx=nnx.Ctx(0))
     x = jax.numpy.ones((1, 32))
     y, updates = functional.apply(state)(x)
 
@@ -31,6 +31,6 @@ class TestCompatibility:
     linen_module = linen.Dense(features=64)
     x = jax.numpy.ones((1, 32))
     module = nnx.compatibility.LinenWrapper(
-      linen_module, x, rngs=nnx.Rngs(0)
+      linen_module, x, ctx=nnx.Ctx(0)
     )  # init
     y = module(x)  # apply

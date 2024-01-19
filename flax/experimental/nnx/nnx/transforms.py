@@ -68,9 +68,9 @@ Leaves = tp.List[Leaf]
 def _check_args(args: tuple[tp.Any, ...]):
   """Check if Rngs is passed as a positional argument and raise an error."""
   for arg in args:
-    if isinstance(arg, rnglib.Rngs):
+    if isinstance(arg, rnglib.Ctx):
       raise ValueError(
-        "Rngs must be passed as a keyword argument named 'rngs', not a"
+        "Rngs must be passed as a keyword argument named 'ctx', not a"
         ' positional argument'
       )
 
@@ -198,8 +198,8 @@ def get_jitted_fn(_module_type: type[M], f, options: JITOptions) -> JittedFn[M]:
 
     nnx_trace = tracers.get_top_trace((args, kwargs))
     with tracers.nnx_trace(nnx_trace):
-      if 'rngs' in kwargs:
-        kwargs['rngs'] = rnglib.Rngs(kwargs['rngs'])
+      if 'ctx' in kwargs:
+        kwargs['ctx'] = rnglib.Ctx(kwargs['ctx'])
       module = graphdef.merge(*states)
       out = f(module, *args, **kwargs)
 
@@ -222,8 +222,8 @@ def jit_init(
 
   module = tp.cast(M, module)
 
-  if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], rnglib.Rngs):
-    kwargs['rngs'] = rngs.fork()
+  if 'ctx' in kwargs and isinstance(ctx := kwargs['ctx'], rnglib.Ctx):
+    kwargs['ctx'] = ctx.fork()
 
   state_and_def = module.split()
   out = jitted_fn(state_and_def, *args, **kwargs)
@@ -242,8 +242,8 @@ def jit_apply(
 
   module = tp.cast(M, module)
 
-  if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], rnglib.Rngs):
-    kwargs['rngs'] = rngs.fork()
+  if 'ctx' in kwargs and isinstance(ctx := kwargs['ctx'], rnglib.Ctx):
+    kwargs['ctx'] = ctx.fork()
 
   state_and_def = module.split()
   updates, out = jitted_fn(state_and_def, *args, **kwargs)
@@ -767,18 +767,18 @@ def scan_init(
 
   _check_args(module_init_args)
 
-  rngs = module_init_kwargs.pop('rngs', None)
+  ctx = module_init_kwargs.pop('ctx', None)
 
-  if rngs is not None and not isinstance(rngs, rnglib.Rngs):
-    raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
+  if ctx is not None and not isinstance(ctx, rnglib.Ctx):
+    raise TypeError(f'Expected a Rngs, got {type(ctx).__name__}')
 
   split_keys = []
 
-  if rngs is not None:
-    if not isinstance(rngs, rnglib.Rngs):
-      raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
+  if ctx is not None:
+    if not isinstance(ctx, rnglib.Ctx):
+      raise TypeError(f'Expected a Rngs, got {type(ctx).__name__}')
 
-    split_keys, broadcast_keys = rngs.fork(
+    split_keys, broadcast_keys, flags = ctx.fork(
       {filterlib.Not(options.broadcast_rngs): options.length}
     )
 
@@ -788,6 +788,7 @@ def scan_init(
   else:
     split_keys = None
     broadcast_keys = None
+    flags = {}
 
   graphdef: tp.Optional[GraphDef[M]] = None
 
@@ -796,7 +797,9 @@ def scan_init(
 
     if split_keys is not None:
       assert broadcast_keys is not None
-      module_init_kwargs['rngs'] = rnglib.Rngs(**split_keys, **broadcast_keys)
+      module_init_kwargs['ctx'] = rnglib.Ctx(
+        **split_keys, **broadcast_keys, flags=flags
+      )
 
     module = module_constructor(*module_init_args, **module_init_kwargs)
 
@@ -839,7 +842,7 @@ def scan_apply(
   args: tuple[tp.Any, ...],
   kwargs: dict[str, tp.Any],
 ) -> tuple[C, B] | C:
-  rngs = kwargs.pop('rngs', None)
+  ctx = kwargs.pop('ctx', None)
 
   # split module state
   filters = (*options.variable_axes.keys(), ...)
@@ -907,15 +910,16 @@ def scan_apply(
       )
 
   # split rng state
-  if rngs is not None:
-    if not isinstance(rngs, rnglib.Rngs):
-      raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
-    split_keys, broadcast_keys = rngs.fork(
+  if ctx is not None:
+    if not isinstance(ctx, rnglib.Ctx):
+      raise TypeError(f'Expected a Rngs, got {type(ctx).__name__}')
+    split_keys, broadcast_keys, flags = ctx.fork(
       {filterlib.Not(options.broadcast_rngs): length}
     )
   else:
     split_keys = None
     broadcast_keys = None
+    flags = {}
 
   moduledef_out: tp.Optional[GraphDef[Module]] = None
 
@@ -951,7 +955,7 @@ def scan_apply(
     # merge rng state
     if split_keys is not None:
       assert broadcast_keys is not None
-      kwargs['rngs'] = rnglib.Rngs(**split_keys, **broadcast_keys)
+      kwargs['ctx'] = rnglib.Ctx(**split_keys, **broadcast_keys, flags=flags)
 
     # remove metadata axis name from Variable.sharding
     if spmd.PARTITION_NAME in options.scan_metadata:
@@ -1111,7 +1115,7 @@ class RematMeta(ModuleMeta):
     self,
     module_constructor: tp.Callable[..., M],
     # variables: lift.CollectionFilter = True,
-    # rngs: lift.PRNGSequenceFilter = True,
+    # ctx: lift.PRNGSequenceFilter = True,
     prevent_cse: bool = True,
     static_argnums: tp.Union[int, tuple[int, ...]] = (),
     policy: tp.Optional[tp.Callable[..., bool]] = None,
@@ -1178,7 +1182,7 @@ class Remat(LiftedModule[M], metaclass=RematMeta):
     self,
     accessor: DelayedAccessor,
     *args,
-    rngs: tp.Optional[rnglib.Rngs] = None,
+    ctx: tp.Optional[rnglib.Ctx] = None,
   ) -> tp.Any:
     def remat_call_apply(module, *args, **kwargs):
       return accessor(module)(*args, **kwargs)
@@ -1188,12 +1192,12 @@ class Remat(LiftedModule[M], metaclass=RematMeta):
       remat_call_apply,
       self.remat_module,
       args,
-      rngs,
+      ctx,
     )
 
 
 class RematCall(tp.Protocol):
-  def __call__(self, *args, rngs: tp.Optional[rnglib.Rngs]) -> tp.Any:
+  def __call__(self, *args, ctx: tp.Optional[rnglib.Ctx]) -> tp.Any:
     ...
 
 
@@ -1202,12 +1206,12 @@ def remat_apply(
   f: RematCall,
   module: Module,
   args: tuple[tp.Any, ...],
-  rngs: tp.Optional[rnglib.Rngs],
+  ctx: tp.Optional[rnglib.Ctx],
 ):
   _check_args(args)
 
   state, graphdef = module.split()
-  keys = rngs.fork() if rngs is not None else None
+  keys, flags = ctx.fork() if ctx is not None else None, {}
 
   def _remat_fn(
     state: State,
@@ -1216,7 +1220,7 @@ def remat_apply(
   ) -> tuple[tuple[State, GraphDef[Module]], tp.Any]:
     kwargs = {}
     if keys is not None:
-      kwargs['rngs'] = rnglib.Rngs(keys)
+      kwargs['ctx'] = rnglib.Ctx(keys, flags=flags)
 
     module = graphdef.merge(state)
     out = f(module, *args, **kwargs)
@@ -1242,7 +1246,7 @@ def remat(
   f: F,
   *,
   # variables: lift.CollectionFilter,
-  # rngs: lift.PRNGSequenceFilter,
+  # ctx: lift.PRNGSequenceFilter,
   prevent_cse: bool = True,
   static_argnums: tp.Union[int, tuple[int, ...]] = (),
   policy: tp.Optional[tp.Callable[..., bool]] = None,
@@ -1253,7 +1257,7 @@ def remat(
 
   options = RematOptions(
     # variables=variables,
-    # rngs=rngs,
+    # ctx=ctx,
     prevent_cse=prevent_cse,
     static_argnums=static_argnums,
     policy=policy,
@@ -1265,9 +1269,9 @@ def remat(
 
     @functools.wraps(f)
     def remat_wrapper(
-      module: Module, *args, rngs: tp.Optional[rnglib.Rngs] = None
+      module: Module, *args, ctx: tp.Optional[rnglib.Ctx] = None
     ):
-      return remat_apply(options, f, module, args, rngs)
+      return remat_apply(options, f, module, args, ctx)
 
     return remat_wrapper  # type: ignore
 
@@ -1403,15 +1407,15 @@ def vmap_init(
 
   _check_args(module_init_args)
 
-  rngs = module_init_kwargs.pop('rngs', None)
+  ctx = module_init_kwargs.pop('ctx', None)
 
-  if rngs is not None and not isinstance(rngs, rnglib.Rngs):
-    raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
+  if ctx is not None and not isinstance(ctx, rnglib.Ctx):
+    raise TypeError(f'Expected a Rngs, got {type(ctx).__name__}')
 
-  if rngs is not None:
-    if not isinstance(rngs, rnglib.Rngs):
-      raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
-    split_keys, broadcast_keys = rngs.fork(
+  if ctx is not None:
+    if not isinstance(ctx, rnglib.Ctx):
+      raise TypeError(f'Expected a Rngs, got {type(ctx).__name__}')
+    split_keys, broadcast_keys, flags = ctx.fork(
       {filterlib.Not(options.broadcast_rngs): options.axis_size}
     )
     if split_keys and options.axis_size is None:
@@ -1419,6 +1423,7 @@ def vmap_init(
   else:
     split_keys = None
     broadcast_keys = None
+    flags = {}
 
   graphdef: tp.Optional[GraphDef[M]] = None
 
@@ -1427,7 +1432,9 @@ def vmap_init(
 
     if split_keys is not None:
       assert broadcast_keys is not None
-      module_init_kwargs['rngs'] = rnglib.Rngs(**split_keys, **broadcast_keys)
+      module_init_kwargs['ctx'] = rnglib.Ctx(
+        **split_keys, **broadcast_keys, flags=flags
+      )
 
     module = module_constructor(*module_init_args, **module_init_kwargs)
 
@@ -1468,7 +1475,7 @@ def vmap_apply(
   args: tuple[tp.Any, ...],
   kwargs: dict[str, tp.Any],
 ) -> tp.Any:
-  rngs = kwargs.pop('rngs', None)
+  ctx = kwargs.pop('ctx', None)
 
   # split module state
   filters = (*options.variable_axes.keys(), ...)
@@ -1516,16 +1523,17 @@ def vmap_apply(
       )
 
   # split rng state
-  if rngs is not None:
-    if not isinstance(rngs, rnglib.Rngs):
-      raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
+  if ctx is not None:
+    if not isinstance(ctx, rnglib.Ctx):
+      raise TypeError(f'Expected a Rngs, got {type(ctx).__name__}')
 
-    split_keys, broadcast_keys = rngs.fork(
+    split_keys, broadcast_keys, flags = ctx.fork(
       {filterlib.Not(options.broadcast_rngs): axis_size}
     )
   else:
     split_keys = None
     broadcast_keys = None
+    flags = {}
 
   moduledef_out: tp.Optional[GraphDef[Module]] = None
 
@@ -1554,7 +1562,7 @@ def vmap_apply(
     # merge rng state
     if split_keys is not None:
       assert broadcast_keys is not None
-      kwargs['rngs'] = rnglib.Rngs(**split_keys, **broadcast_keys)
+      kwargs['ctx'] = rnglib.Ctx(**split_keys, **broadcast_keys, flags=flags)
 
     # remove metadata axis name from Variable.sharding
     if spmd.PARTITION_NAME in options.vmap_metadata:

@@ -30,13 +30,13 @@ class TestLinenConsistency(parameterized.TestCase):
   )
   def test_nnx_linen_equivalence(self, input_dtype, num_embeddings, **kwargs):
     key = jax.random.key(42)
-    rngs = nnx.Rngs(42)
+    ctx = nnx.Ctx(42)
     IN_FEATURES = 32
     NUM_EMBEDDINGS = num_embeddings
 
     x = jax.numpy.arange(NUM_EMBEDDINGS, dtype=input_dtype)
     model_nnx = nnx.Embed.create_abstract(
-      NUM_EMBEDDINGS, IN_FEATURES, **kwargs, rngs=rngs
+      NUM_EMBEDDINGS, IN_FEATURES, **kwargs, ctx=ctx
     )
     model = linen.Embed(NUM_EMBEDDINGS, IN_FEATURES, **kwargs)
     variables = model.init(key, x)

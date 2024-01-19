@@ -18,9 +18,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 # add project_root to import lm1b Linen model
-project_root = str(Path(__file__).parents[6])
+project_root = str(Path(__file__).parents[5])
+print('root', project_root)
 sys.path.append(project_root)
 from examples.lm1b.models import TransformerLM as TransformerLinen
 
@@ -30,17 +30,18 @@ import dataclasses
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from absl.testing import absltest
 from jax import random
 
 from flax import traverse_util
 from flax.experimental import nnx
 from flax.experimental.nnx.examples.lm1b.configs import default
-from flax.experimental.nnx.examples.lm1b.utils import HasCache
 from flax.experimental.nnx.examples.lm1b.models import (
   TransformerConfig,
   TransformerLM,
 )
+from flax.experimental.nnx.examples.lm1b.utils import HasCache
 
 jax.config.update('jax_disable_most_optimizations', True)
 
@@ -207,7 +208,7 @@ class ModelTest(absltest.TestCase):
       decode=False,
     )
 
-    model_nnx = TransformerLM.create_abstract(config, rngs=nnx.Rngs(0))
+    model_nnx = TransformerLM.create_abstract(config, ctx=nnx.Ctx(0))
     params_nnx, _ = model_nnx.split(nnx.Param)
 
     model_linen = TransformerLinen(config)
@@ -218,14 +219,17 @@ class ModelTest(absltest.TestCase):
     self.transfer_params(config, params_nnx, params_linen)
     model_nnx.update(params_nnx)
 
-    with nnx.flags(deterministic=True, decode=False):
-      output_nnx = model_nnx(sample_inputs)
+    flags = dict(deterministic=True, decode=False)
+    output_nnx = model_nnx(sample_inputs, ctx=nnx.Ctx(flags=flags))
 
     output_linen: jax.Array = model_linen.apply(
       {'params': params_linen}, sample_inputs
     )
 
-    assert jnp.allclose(output_nnx, output_linen, atol=1e-5)
+    output_nnx = output_nnx.astype(jnp.float32)
+    output_linen = output_linen.astype(jnp.float32)
+
+    np.testing.assert_allclose(output_nnx, output_linen, atol=1e-5)
 
   def test_forward_decode(self):
     batch_size = 2
@@ -241,7 +245,7 @@ class ModelTest(absltest.TestCase):
       decode=True,
     )
 
-    model_nnx = TransformerLM.create_abstract(config, rngs=nnx.Rngs(0))
+    model_nnx = TransformerLM.create_abstract(config, ctx=nnx.Ctx(0))
     for _path, m in model_nnx.modules():
       if isinstance(m, HasCache):
         input_shape = (batch_size, config.max_len, config.emb_dim)
@@ -269,8 +273,8 @@ class ModelTest(absltest.TestCase):
     outputs_linen = []
 
     for inputs in ar_decode_inputs:
-      with nnx.flags(deterministic=True, decode=True):
-        output_nnx = model_nnx(inputs)
+      flags = dict(deterministic=True, decode=True)
+      output_nnx = model_nnx(inputs, ctx=nnx.Ctx(flags=flags))
       outputs_nnx.append(output_nnx)
 
     output_linen: jax.Array
@@ -284,7 +288,9 @@ class ModelTest(absltest.TestCase):
       outputs_linen.append(output_linen)
 
     for output_nnx, output_linen in zip(outputs_nnx, outputs_linen):
-      assert jnp.allclose(output_nnx, output_linen, atol=1e-5)
+      output_nnx = output_nnx.astype(jnp.float32)
+      output_linen = output_linen.astype(jnp.float32)
+      np.testing.assert_allclose(output_nnx, output_linen, atol=1e-5)
 
 
 if __name__ == '__main__':

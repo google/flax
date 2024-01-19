@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import jax, jax.numpy as jnp
+import jax
+import jax.numpy as jnp
 
 from flax.experimental import nnx
 
@@ -24,7 +25,7 @@ class TestMultiHeadAttention:
       in_features=3,
       qkv_features=6,
       out_features=6,
-      rngs=nnx.Rngs(0),
+      ctx=nnx.Ctx(0),
     )
     y = module(jnp.ones((1, 7, 3)), decode=False)
     assert y.shape == (1, 7, 6)
@@ -33,18 +34,18 @@ class TestMultiHeadAttention:
     class Model(nnx.Module):
       attention_kwargs: dict
 
-      def __init__(self, attention_kwargs, rng):
+      def __init__(self, attention_kwargs, *, ctx):
         self.attention_layers = [
-          nnx.MultiHeadAttention(**attention_kwargs, rngs=rng) for i in range(3)
+          nnx.MultiHeadAttention(**attention_kwargs, ctx=ctx) for i in range(3)
         ]
 
-      def __call__(self, x, sow_weights=False):
-        x = self.attention_layers[0](x, sow_weights=sow_weights)
-        x = self.attention_layers[1](x)
-        x = self.attention_layers[2](x, sow_weights=sow_weights)
+      def __call__(self, x, *, sow_weights=False, ctx):
+        x = self.attention_layers[0](x, sow_weights=sow_weights, ctx=ctx)
+        x = self.attention_layers[1](x, ctx=ctx)
+        x = self.attention_layers[2](x, sow_weights=sow_weights, ctx=ctx)
         return x
 
-    rng = nnx.Rngs(0)
+    ctx = nnx.Ctx(0)
     x = jnp.ones((4, 6, 8))
 
     module = Model(
@@ -55,11 +56,11 @@ class TestMultiHeadAttention:
         bias_init=nnx.initializers.zeros_init(),
         deterministic=False,
       ),
-      rng,
+      ctx=ctx,
     )
 
-    with nnx.flags(decode=False):
-      _ = module(x, True)
+    flags = dict(decode=False)
+    _ = module(x, sow_weights=True, ctx=nnx.Ctx(flags=flags))
     intermediates = module.pop(nnx.Intermediate)
     assert intermediates['attention_layers/0/attention_weights'][0].shape == (
       4,
@@ -75,8 +76,8 @@ class TestMultiHeadAttention:
       6,
     )
 
-    with nnx.flags(decode=False):
-      _ = module(x)
+    flags = dict(decode=False)
+    _ = module(x, ctx=nnx.Ctx(flags=flags))
     intermediates = module.pop(nnx.Intermediate)
     assert not intermediates  # empty
 
@@ -88,7 +89,7 @@ class TestMultiHeadAttention:
         num_heads=2,
         qkv_features=4,
         decode=True,
-        rngs=nnx.Rngs(0),
+        ctx=nnx.Ctx(0),
       )
       module.init_cache(x.shape, dtype=x.dtype)
       assert module.cached_key.shape == (1, 4, 2, 2)

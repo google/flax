@@ -26,32 +26,31 @@ A = tp.TypeVar('A')
 class TestIntegration:
   def test_shared_modules(self):
     class Block(nnx.Module):
-      def __init__(self, linear: nnx.Linear, *, rngs):
+      def __init__(self, linear: nnx.Linear, *, ctx):
         self.linear = linear
-        self.bn = nnx.BatchNorm(2, rngs=rngs)
+        self.bn = nnx.BatchNorm(2, ctx=ctx)
 
-      def __call__(self, x):
+      def __call__(self, x, *, ctx):
         x = self.linear(x)
-        x = self.bn(x)
+        x = self.bn(x, ctx=ctx)
         return nnx.relu(x)
 
     class Model(nnx.Module):
-      def __init__(self, *, rngs):
-        shared = nnx.Linear(2, 2, rngs=rngs)
-        self.block1 = Block(shared, rngs=rngs)
-        self.block2 = Block(shared, rngs=rngs)
+      def __init__(self, *, ctx):
+        shared = nnx.Linear(2, 2, ctx=ctx)
+        self.block1 = Block(shared, ctx=ctx)
+        self.block2 = Block(shared, ctx=ctx)
 
-      def __call__(self, x):
-        x = self.block1(x)
-        x = self.block2(x)
+      def __call__(self, x, *, ctx):
+        x = self.block1(x, ctx=ctx)
+        x = self.block2(x, ctx=ctx)
         return x
 
     @nnx.jit
     def train_step(model: Model, x, y):
       @nnx.grad
       def loss_fn(model: Model):
-        with nnx.flags(use_running_average=False):
-          y_pred = model(x)
+        y_pred = model(x, ctx=nnx.Ctx(flags=dict(use_running_average=False)))
         return jnp.mean((y - y_pred) ** 2)
 
       grads = loss_fn(model)
@@ -59,7 +58,7 @@ class TestIntegration:
         jax.tree_map(lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads)
       )
 
-    model = Model(rngs=nnx.Rngs(0))
+    model = Model(ctx=nnx.Ctx(0))
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
@@ -73,24 +72,24 @@ class TestIntegration:
 
   def test_shared_modules_pure(self):
     class Block(nnx.Module):
-      def __init__(self, linear: nnx.Linear, *, rngs: nnx.Rngs):
+      def __init__(self, linear: nnx.Linear, *, ctx: nnx.Ctx):
         self.linear = linear
-        self.bn = nnx.BatchNorm(2, rngs=rngs)
+        self.bn = nnx.BatchNorm(2, ctx=ctx)
 
-      def __call__(self, x):
+      def __call__(self, x, *, ctx: nnx.Ctx):
         x = self.linear(x)
-        x = self.bn(x)
+        x = self.bn(x, ctx=ctx)
         return nnx.relu(x)
 
     class Model(nnx.Module):
-      def __init__(self, *, rngs: nnx.Rngs):
-        shared = nnx.Linear(2, 2, rngs=rngs)
-        self.block1 = Block(shared, rngs=rngs)
-        self.block2 = Block(shared, rngs=rngs)
+      def __init__(self, *, ctx: nnx.Ctx):
+        shared = nnx.Linear(2, 2, ctx=ctx)
+        self.block1 = Block(shared, ctx=ctx)
+        self.block2 = Block(shared, ctx=ctx)
 
-      def __call__(self, x):
-        x = self.block1(x)
-        x = self.block2(x)
+      def __call__(self, x, *, ctx: nnx.Ctx):
+        x = self.block1(x, ctx=ctx)
+        x = self.block2(x, ctx=ctx)
         return x
 
     @jax.jit
@@ -99,8 +98,8 @@ class TestIntegration:
 
       @nnx.grad
       def loss_fn(model: Model):
-        with nnx.flags(use_running_average=False):
-          y_pred = model(x)
+        ctx = nnx.Ctx(flags=dict(use_running_average=False))
+        y_pred = model(x, ctx=ctx)
         return jnp.mean((y - y_pred) ** 2)
 
       grads = loss_fn(model)
@@ -111,7 +110,7 @@ class TestIntegration:
       return model.split()
 
     graphdef: nnx.GraphDef[Model]
-    state, graphdef = Model(rngs=nnx.Rngs(0)).split()
+    state, graphdef = Model(ctx=nnx.Ctx(0)).split()
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
@@ -132,8 +131,8 @@ class TestIntegration:
       pass
 
     class Linear(nnx.Module):
-      def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-        key = rngs.params()
+      def __init__(self, din: int, dout: int, *, ctx: nnx.Ctx):
+        key = ctx.params()
         self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
         self.b = nnx.Param(jnp.zeros((dout,)))
         self.count = State(0)
@@ -142,7 +141,7 @@ class TestIntegration:
         self.count += 1
         return x @ self.w + self.b[None]
 
-    model = Linear(din=12, dout=2, rngs=nnx.Rngs(0))
+    model = Linear(din=12, dout=2, ctx=nnx.Ctx(0))
     # forward pass
     x = jnp.ones((8, 12))
     y = model(x)
@@ -170,8 +169,8 @@ class TestIntegration:
       pass
 
     class Linear(nnx.Module):
-      def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-        key = rngs.params()
+      def __init__(self, din: int, dout: int, *, ctx: nnx.Ctx):
+        key = ctx.params()
         self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
         self.b = nnx.Param(jnp.zeros((dout,)))
         self.count = Count(0)
@@ -180,7 +179,7 @@ class TestIntegration:
         self.count += 1
         return x @ self.w + self.b[None]
 
-    model = Linear(din=12, dout=2, rngs=nnx.Rngs(0))
+    model = Linear(din=12, dout=2, ctx=nnx.Ctx(0))
     # forward pass
     x = jnp.ones((8, 12))
     y = model(x)
@@ -209,8 +208,8 @@ class TestIntegration:
 
   def test_intermediates_example(self):
     class Linear(nnx.Module):
-      def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-        key = rngs.params()
+      def __init__(self, din: int, dout: int, *, ctx: nnx.Ctx):
+        key = ctx.params()
         self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
         self.b = nnx.Param(jnp.zeros((dout,)))
 
@@ -219,7 +218,7 @@ class TestIntegration:
         self.y = nnx.Intermediate(y)
         return y
 
-    model = Linear(12, 2, rngs=nnx.Rngs(0))
+    model = Linear(12, 2, ctx=nnx.Ctx(0))
 
     y = model(jnp.ones((8, 12)))
 
@@ -229,8 +228,8 @@ class TestIntegration:
 
   def test_intermediates_example_functional(self):
     class Linear(nnx.Module):
-      def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-        key = rngs.params()
+      def __init__(self, din: int, dout: int, *, ctx: nnx.Ctx):
+        key = ctx.params()
         self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
         self.b = nnx.Param(jnp.zeros((dout,)))
 
@@ -239,7 +238,7 @@ class TestIntegration:
         self.y = nnx.Intermediate(y)
         return y
 
-    model = Linear(12, 2, rngs=nnx.Rngs(0))
+    model = Linear(12, 2, ctx=nnx.Ctx(0))
 
     state, graphdef = model.split()
 

@@ -102,10 +102,10 @@ class TestGraphUtils:
       nnx.graph_utils.graph_update_static(g, g2)
 
   def test_module_list(self):
-    rngs = nnx.Rngs(0)
+    ctx = nnx.Ctx(0)
     ls = [
-      nnx.Linear(2, 2, rngs=rngs),
-      nnx.BatchNorm(2, rngs=rngs),
+      nnx.Linear(2, 2, ctx=ctx),
+      nnx.BatchNorm(2, ctx=ctx),
     ]
 
     state, static = nnx.graph_utils.graph_flatten(ls)
@@ -131,14 +131,14 @@ class TestGraphUtils:
 
   def test_tied_weights(self):
     class Foo(nnx.Module):
-      def __init__(self, *, rngs: nnx.Rngs) -> None:
-        self.bar = nnx.Linear(2, 2, rngs=rngs)
-        self.baz = nnx.Linear(2, 2, rngs=rngs)
+      def __init__(self, *, ctx: nnx.Ctx) -> None:
+        self.bar = nnx.Linear(2, 2, ctx=ctx)
+        self.baz = nnx.Linear(2, 2, ctx=ctx)
 
         # tie the weights
         self.baz.variables.kernel = self.bar.variables.kernel
 
-    node = Foo(rngs=nnx.Rngs(0))
+    node = Foo(ctx=nnx.Ctx(0))
     state, static = nnx.graph_utils.graph_flatten(node)
 
     assert len(state.flat_state()) == 3  # 2 bias + 1 kernel
@@ -149,19 +149,19 @@ class TestGraphUtils:
 
   def test_tied_weights_example(self):
     class LinearTranspose(nnx.Module):
-      def __init__(self, dout: int, din: int, *, rngs: nnx.Rngs) -> None:
+      def __init__(self, dout: int, din: int, *, ctx: nnx.Ctx) -> None:
         self.kernel = nnx.Param(
-          nnx.initializers.lecun_normal()(rngs(), (dout, din))
+          nnx.initializers.lecun_normal()(ctx(), (dout, din))
         )
 
       def __call__(self, x):
         return x @ self.kernel.T
 
     class Encoder(nnx.Module):
-      def __init__(self, *, rngs: nnx.Rngs) -> None:
-        self.embed = nnx.Embed(10, 2, rngs=rngs)
+      def __init__(self, *, ctx: nnx.Ctx) -> None:
+        self.embed = nnx.Embed(10, 2, ctx=ctx)
         ...
-        self.linear_out = LinearTranspose(10, 2, rngs=rngs)
+        self.linear_out = LinearTranspose(10, 2, ctx=ctx)
 
         # tie the weights
         self.linear_out.variables.kernel = self.embed.variables.embedding
@@ -171,7 +171,7 @@ class TestGraphUtils:
         ...
         return self.linear_out(x)
 
-    model = Encoder(rngs=nnx.Rngs(0))
+    model = Encoder(ctx=nnx.Ctx(0))
     state, static = model.split()
 
     assert len(state.flat_state()) == 1

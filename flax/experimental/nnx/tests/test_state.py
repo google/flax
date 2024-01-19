@@ -52,10 +52,10 @@ class StateTest(TestCase):
 
   def test_integer_access(self):
     class Foo(nnx.Module):
-      def __init__(self, *, rngs: nnx.Rngs):
-        self.layers = [nnx.Linear(1, 2, rngs=rngs), nnx.Linear(2, 3, rngs=rngs)]
+      def __init__(self, *, ctx: nnx.Ctx):
+        self.layers = [nnx.Linear(1, 2, ctx=ctx), nnx.Linear(2, 3, ctx=ctx)]
 
-    module = Foo(rngs=nnx.Rngs(0))
+    module = Foo(ctx=nnx.Ctx(0))
     state = module.get_state()
 
     assert module.layers[0].kernel.shape == (1, 2)

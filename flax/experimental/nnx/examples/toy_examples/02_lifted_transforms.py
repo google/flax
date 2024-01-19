@@ -31,8 +31,8 @@ def dataset(batch_size):
 
 
 class Linear(nnx.Module):
-  def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-    self.w = nnx.Param(jax.random.uniform(rngs.params(), (din, dout)))
+  def __init__(self, din: int, dout: int, *, ctx: nnx.Ctx):
+    self.w = nnx.Param(jax.random.uniform(ctx.params(), (din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
 
   def __call__(self, x):
@@ -44,10 +44,10 @@ class Count(nnx.Variable):
 
 
 class MLP(nnx.Module):
-  def __init__(self, din, dhidden, dout, *, rngs: nnx.Rngs):
+  def __init__(self, din, dhidden, dout, *, ctx: nnx.Ctx):
     self.count = Count(jnp.array(0))
-    self.linear1 = Linear(din, dhidden, rngs=rngs)
-    self.linear2 = Linear(dhidden, dout, rngs=rngs)
+    self.linear1 = Linear(din, dhidden, ctx=ctx)
+    self.linear2 = Linear(dhidden, dout, ctx=ctx)
 
   def __call__(self, x):
     self.count += 1
@@ -57,7 +57,7 @@ class MLP(nnx.Module):
     return x
 
 
-model = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0))
+model = MLP(din=1, dhidden=32, dout=1, ctx=nnx.Ctx(0))
 
 
 @nnx.jit

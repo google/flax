@@ -25,36 +25,40 @@ from flax.experimental import nnx
 
 
 class TestConvLinenConsistency(parameterized.TestCase):
-
   @parameterized.product(
-      strides = [None, (2, 3)],
-      padding = ['VALID', (4, 2)],
-      input_dilation = [(2, 3)],
-      kernel_dilation = [(2, 3)],
-      feature_group_count = [3],
-      use_bias = [True, False],
-      dtype = [jnp.float32],
-      param_dtype = [jnp.float16],
-      precision = [Precision.HIGHEST],
+    strides=[None, (2, 3)],
+    padding=['VALID', (4, 2)],
+    input_dilation=[(2, 3)],
+    kernel_dilation=[(2, 3)],
+    feature_group_count=[3],
+    use_bias=[True, False],
+    dtype=[jnp.float32],
+    param_dtype=[jnp.float16],
+    precision=[Precision.HIGHEST],
   )
   def test_nnx_linen_equivalence(self, **kwargs):
     key = jax.random.key(42)
-    rngs = nnx.Rngs(42)
+    ctx = nnx.Ctx(42)
     IN_FEATURES = 3
     OUT_FEATURES = 6
     INPUT_SHAPE = (24, 9, IN_FEATURES)
-    kwargs["kernel_size"] = (7, 4)
+    kwargs['kernel_size'] = (7, 4)
 
     # Cannot use string padding specification for transpose conv
-    if isinstance(kwargs["input_dilation"], Sequence) or kwargs["input_dilation"] > 1:
-      kwargs["padding"] = (4, 2)
+    if (
+      isinstance(kwargs['input_dilation'], Sequence)
+      or kwargs['input_dilation'] > 1
+    ):
+      kwargs['padding'] = (4, 2)
 
     x = jax.numpy.ones(INPUT_SHAPE)
-    model_nnx = nnx.Conv.create_abstract(IN_FEATURES, OUT_FEATURES, **kwargs, rngs=rngs)
+    model_nnx = nnx.Conv.create_abstract(
+      IN_FEATURES, OUT_FEATURES, **kwargs, ctx=ctx
+    )
     model = linen.Conv(OUT_FEATURES, **kwargs)
     variables = model.init(key, x)
     model_nnx.kernel = variables['params']['kernel']
-    if kwargs["use_bias"]:
+    if kwargs['use_bias']:
       model_nnx.bias = variables['params']['bias']
 
     out_nnx = model_nnx(x)

@@ -37,8 +37,8 @@ import jax.numpy as jnp
 class Count(nnx.Variable): pass # typed Variable collections
 
 class Linear(nnx.Module):
-  def __init__(self, din, dout, *, rngs: nnx.Rngs): # explicit RNG management
-    key = rngs()
+  def __init__(self, din, dout, *, ctx: nnx.Ctx): # explicit RNG management
+    key = ctx()
     # put dynamic state in Variable types
     self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
@@ -51,14 +51,14 @@ class Linear(nnx.Module):
     self.count += 1 # inplace stateful updates
     return x @ self.w + self.b
 
-model = Linear(din=12, dout=2, rngs=nnx.Rngs(0)) # no special `init` method
+model = Linear(din=12, dout=2, ctx=nnx.Ctx(0)) # no special `init` method
 x = jnp.ones((8, 12))
 y = model(x) # call methods directly
 
 assert model.count == 1
 ```
 
-In this example `nnx.Rngs(0)` create a `random.key` for `params` with seed `0`, this is used by `rngs.<rng-name>()` inside `__init__` to generate a random key to initialize the parameters.
+In this example `nnx.Ctx(0)` create a `random.key` for `params` with seed `0`, this is used by `ctx.<rng-name>()` inside `__init__` to generate a random key to initialize the parameters.
 
 ### Interacting with JAX
 
@@ -195,11 +195,11 @@ NNX Modules are normal python classes, they obey regular python semantics such a
 
 ```python
 class Foo(nnx.Module):
-  def __init__(self, *, rngs: nnx.Rngs):
+  def __init__(self, *, ctx: nnx.Ctx):
     # node attributes
     self.param = nnx.Param(jnp.array(1))
-    self.submodule = nnx.Linear(12, 3, rngs=rngs)
-    self.container = [4, nnx.Linear(5, 6, rngs=rngs), 7]
+    self.submodule = nnx.Linear(12, 3, ctx=ctx)
+    self.container = [4, nnx.Linear(5, 6, ctx=ctx), 7]
     # static attributes
     self.int = 8
     self.float = 9.0
@@ -211,7 +211,7 @@ class Foo(nnx.Module):
   def some_method(self, x):
       return x + 1
 
-model = Foo(rngs=nnx.Rngs(0))
+model = Foo(ctx=nnx.Ctx(0))
 ```
 As shown above, python container types such as `list`, `tuple`, and `dict` are treated as node attributes,
 this means you can naturally have e.g. `list`s or `dict`s of Modules.
@@ -333,8 +333,8 @@ Here is an example of how to create a `Linear` module that captures its output i
 
 ```python
 class Linear(nnx.Module):
-    def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-        key = rngs.params()
+    def __init__(self, din: int, dout: int, *, ctx: nnx.Ctx):
+        key = ctx.params()
         self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
         self.b = nnx.Param(jnp.zeros((dout,)))
 
@@ -343,7 +343,7 @@ class Linear(nnx.Module):
         self.y = nnx.Intermediate(y)
         return y
 
-model = Linear(12, 2, rngs=nnx.Rngs(0))
+model = Linear(12, 2, ctx=nnx.Ctx(0))
 ```
 Since `y` is only created when the module is called, it is not available upon initialization. However, once you call the module `y` will be created. It is recommended that you use `pop` to retrieve temporary collections like `Intermediate`:
 
@@ -396,13 +396,13 @@ Here we will create an example of how to implement an MLP that uses "scan over l
 
 ```python
 class Block(nnx.Module):
-    def __init__(self, dim: int, *, rngs: nnx.Rngs):
-        self.linear = nnx.Linear(dim, dim, rngs=rngs)
+    def __init__(self, dim: int, *, ctx: nnx.Ctx):
+        self.linear = nnx.Linear(dim, dim, ctx=ctx)
         self.dropout = nnx.Dropout(0.5)
 
-    def __call__(self, x: jax.Array, *, train: bool, rngs: nnx.Rngs) -> jax.Array:
+    def __call__(self, x: jax.Array, *, train: bool, ctx: nnx.Ctx) -> jax.Array:
         x = self.linear(x)
-        x = self.dropout(x, deterministic=not train, rngs=rngs)
+        x = self.dropout(x, deterministic=not train, ctx=ctx)
         x = jax.nn.gelu(x)
         return x
 ```
@@ -411,11 +411,11 @@ Now we will define `ScanMLP`. During `__init__`, instead of creating a list of `
 
 ```python
 class ScanMLP(nnx.Module):
-    def __init__(self, dim: int, *, n_layers: int, rngs: nnx.Rngs):
-        params_key = jax.random.split(rngs.params(), n_layers)
+    def __init__(self, dim: int, *, n_layers: int, ctx: nnx.Ctx):
+        params_key = jax.random.split(ctx.params(), n_layers)
         self.n_layers = n_layers
         state, static = jax.vmap(
-            lambda key: Block(dim, rngs=nnx.Rngs(params=key)).split()
+            lambda key: Block(dim, ctx=nnx.Ctx(params=key)).split()
         )(params_key)
         self.layers = static.merge(state)
 
@@ -427,14 +427,14 @@ apply it to the input `x`, passing the sliced `dropout_key` as part of the `Rngs
 
 
 ```python
-    def __call__(self, x: jax.Array, *, train: bool, rngs: nnx.Rngs) -> jax.Array:
-        dropout_key = jax.random.split(rngs.dropout(), self.n_layers)
+    def __call__(self, x: jax.Array, *, train: bool, ctx: nnx.Ctx) -> jax.Array:
+        dropout_key = jax.random.split(ctx.dropout(), self.n_layers)
         params, static = self.layers.split(nnx.Param)
 
         def scan_fn(x, inputs):
             params, dropout_key = inputs
             module = static.merge(params)
-            x = module(x, train=train, rngs=nnx.Rngs(dropout=dropout_key))
+            x = module(x, train=train, ctx=nnx.Ctx(dropout=dropout_key))
             return x, module.extract(nnx.Param)
 
         x, params = jax.lax.scan(scan_fn, x, (params, dropout_key))
@@ -446,10 +446,10 @@ Finally we apply `jax.lax.scan`, update the `layers` state with the new `params`
 Here is a simple way to test our `ScanMLP`:
 
 ```python
-model = ScanMLP(10, n_layers=5, rngs=nnx.Rngs(0))
+model = ScanMLP(10, n_layers=5, ctx=nnx.Ctx(0))
 
 x = jnp.ones((3, 10))
-y = model(x, train=True, rngs=nnx.Rngs(dropout=1))
+y = model(x, train=True, ctx=nnx.Ctx(dropout=1))
 ```
 
 For a more robust implementation with comments take a look at the [Scan over layers](https://github.com/cgarciae/nnx/blob/main/examples/06_scan_over_layers.py) example.
@@ -463,36 +463,36 @@ Here's an example of creating a module with shared state:
 
 ```python
 class Block(nnx.Module):
-    def __init__(self, linear: nnx.Linear, *, rngs: nnx.Rngs):
+    def __init__(self, linear: nnx.Linear, *, ctx: nnx.Ctx):
         self.linear = linear
-        self.bn = nnx.BatchNorm(2, rngs=rngs)
+        self.bn = nnx.BatchNorm(2, ctx=ctx)
 
-    def __call__(self, x, *, rngs: nnx.Rngs):
+    def __call__(self, x, *, ctx: nnx.Ctx):
         x = self.linear(x)
-        x = self.bn(x, rngs=rngs)
+        x = self.bn(x, ctx=ctx)
         x = nnx.relu(x)
         return x
 
 class Model(nnx.Module):
-    def __init__(self, *, rngs: nnx.Rngs):
-        shared = nnx.Linear(2, 2, rngs=rngs)
-        self.block1 = Block(shared, rngs=rngs)
-        self.block2 = Block(shared, rngs=rngs)
+    def __init__(self, *, ctx: nnx.Ctx):
+        shared = nnx.Linear(2, 2, ctx=ctx)
+        self.block1 = Block(shared, ctx=ctx)
+        self.block2 = Block(shared, ctx=ctx)
 
-    def __call__(self, x):
-        x = self.block1(x)
-        x = self.block2(x)
+    def __call__(self, x, ctx: nnx.Ctx):
+        x = self.block1(x, ctx=ctx)
+        x = self.block2(x, ctx=ctx)
         return x
 ```
 
-In this example, the `Model` module contains two instances of the `Block` module. Each instance shares the same `nnx.Linear` module. To run the model, you can use the Rngs `flags` argument to set the `use_running_average` flag for all `BatchNorm` modules.
+In this example, the `Model` module contains two instances of the `Block` module. Each instance shares the same `nnx.Linear` module. To run the model, you can use the Ctx `flags` argument to set the `use_running_average` flag for all `BatchNorm` modules.
 
 Here's an example of computing the loss for a `Model` instance:
 
 ```python
 def loss_fn(model: Model, x: jax.Array, y: jax.Array):
-    with nnx.flags(use_running_average=True):
-        y_pred = model(x)
+    flags = dict(use_running_average=True)
+    y_pred = model(x, ctx=nnx.Ctx(flags=flags))
     return jnp.mean((y - y_pred) ** 2)
 ```
 
