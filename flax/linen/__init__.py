@@ -70,6 +70,7 @@ from .attention import (
     make_attention_mask as make_attention_mask,
     make_causal_mask as make_causal_mask,
 )
+from .batch_apply import BatchApply as BatchApply
 from .combinators import Sequential as Sequential
 from .fp8_ops import Fp8DotGeneralOp as Fp8DotGeneralOp
 from .initializers import (
