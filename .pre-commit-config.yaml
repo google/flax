@@ -34,13 +34,13 @@ repos:
         --extra-keys,
         "cell.metadata.executionInfo cell.metadata.id metadata.kernelspec metadata.vscode metadata.colab cell.metadata.executionInfo.user cell.metadata.executionInfo.user_tz cell.metadata.colab",
       ]
-# - repo: https://github.com/astral-sh/ruff-pre-commit
-#   # Ruff version.
-#   rev: v0.1.3
-#   hooks:
-#     # Run the Ruff linter.
-#     - id: ruff
-#       args: [--fix, --exit-non-zero-on-fix]
-#     # Disable Ruff formatter for now
-#     # # Run the Ruff formatter.
-#     # - id: ruff-format
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version.
+  rev: v0.1.3
+  hooks:
+    # Run the Ruff linter.
+    - id: ruff
+      args: [--fix, --exit-non-zero-on-fix]
+    # Disable Ruff formatter for now
+    # # Run the Ruff formatter.
+    # - id: ruff-format
