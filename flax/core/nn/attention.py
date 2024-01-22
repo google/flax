@@ -124,7 +124,7 @@ def dot_product_attention(
   if not deterministic and dropout_rate > 0.0:
     if dropout_rng is None:
       dropout_rng = scope.make_rng('dropout')
-    keep_prob = jax.lax.tie_in(attn_weights, 1.0 - dropout_rate)
+    keep_prob = 1.0 - dropout_rate
     if broadcast_dropout:
       # dropout is broadcast across the batch+head+non-attention dimension
       dropout_dims = attn_weights.shape[-(2 * len(axis)) :]
@@ -511,8 +511,8 @@ def _make_causal_mask(key, attention_axis=None, self_mask=False):
     # Tie in the key to avoid the mask becoming a constant.
     # This way XLA can construct the mask during computation and fuse it
     # with the attention ops.
-    x = lax.tie_in(key, jnp.arange(n, dtype=jnp.int32))
-    y = lax.tie_in(key, jnp.arange(m, dtype=jnp.int32))
+    x = jnp.arange(n, dtype=jnp.int32)
+    y = jnp.arange(m, dtype=jnp.int32)
     mask = lax.ge(
       (lax.broadcast_in_dim(x, shape=(n, m), broadcast_dimensions=(0,))) + k,
       lax.broadcast(y, [n]),
