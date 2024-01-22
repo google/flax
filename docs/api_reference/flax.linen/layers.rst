@@ -130,6 +130,13 @@ Recurrent
   :module: flax.linen
   :class: Bidirectional
 
+BatchApply
+------------------------
+
+.. flax_module::
+  :module: flax.linen
+  :class: BatchApply
+
 
 **Summary**
 
