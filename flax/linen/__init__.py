@@ -1,4 +1,4 @@
-# Copyright 2023 The Flax Authors.
+# Copyright 2024 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -91,6 +91,7 @@ from .module import (
     Variable as Variable,
     apply as apply,
     compact as compact,
+    compact_name_scope as compact_name_scope,
     disable_named_call as disable_named_call,
     enable_named_call as enable_named_call,
     init_with_output as init_with_output,
