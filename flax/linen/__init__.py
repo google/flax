@@ -106,7 +106,6 @@ from .module import (
     Variable as Variable,
     apply as apply,
     compact as compact,
-    compact_name_scope as compact_name_scope,
     disable_named_call as disable_named_call,
     enable_named_call as enable_named_call,
     init_with_output as init_with_output,
