@@ -329,7 +329,7 @@ def with_logical_partitioning(
 
     >>> import flax.linen as nn
     >>> kernel_init = nn.with_logical_partitioning(
-    ...     nn.initializers.lecun_normal, (None, "data"))
+    ...     nn.initializers.lecun_normal(), (None, "data"))
     >>> partitioned_dense = nn.Dense(features=3, kernel_init=kernel_init)
 
   Args:
