@@ -541,6 +541,84 @@ def nowrap(fun: _CallableT) -> _CallableT:
   return fun
 
 
+def compact_name_scope(fun: _CallableT) -> _CallableT:
+  """Creates compact submodules from a method.
+
+  This is a decorator that allows you to define compact submodules from a
+  method. It's intention is to make it easier to port code Haiku code to Flax
+  by providing the same functionality.
+
+  Example::
+
+    >>> import flax.linen as nn
+    >>> import jax
+    >>> import jax.numpy as jnp
+    >>> from flax.core import pretty_repr
+    ...
+    >>> class Foo(nn.Module):
+    ...   @nn.compact_name_scope
+    ...   def up(self, x):
+    ...     return nn.Dense(3)(x)
+    ...
+    ...   @nn.compact_name_scope
+    ...   def down(self, x):
+    ...     return nn.Dense(3)(x)
+    ...
+    ...   def __call__(self, x):
+    ...     return self.up(x) + self.down(x)
+    ...
+    >>> module = Foo()
+    >>> variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 2)))
+    >>> params = variables['params']
+    >>> print(pretty_repr(jax.tree_map(jnp.shape, params)))
+    {
+        down: {
+            Dense_0: {
+                bias: (3,),
+                kernel: (2, 3),
+            },
+        },
+        up: {
+            Dense_0: {
+                bias: (3,),
+                kernel: (2, 3),
+            },
+        },
+    }
+
+  You can also use ``compact_name_scope`` inside ``@compact`` methods or even other
+  ``compact_name_scope`` methods. Methods that are decorated with ``compact_name_scope``
+  can also be called directly from ``init`` or ``apply`` via the ``method`` argument::
+
+    >>> y_down = module.apply({'params': params}, jnp.ones((1, 2)), method='down')
+    >>> y_down.shape
+    (1, 3)
+
+  Args:
+    fun: The Module method to mark as compact_name_scope.
+
+  Returns:
+    The given function ``fun`` marked as compact_name_scope.
+  """
+
+  @functools.wraps(fun)
+  def compact_name_scope_wrapper(self: nn.Module, *args, **kwargs):
+    name = fun.__name__
+    if not hasattr(self, '_compact_name_scope_modules'):
+      raise ValueError(
+        f'Cannot call compact_name_scope method {name!r} on a Module that has not been '
+        f'setup. This is likely because you are calling {name!r} '
+        'from outside of init or apply.'
+      )
+    module = self._compact_name_scope_modules[name]
+    return module(*args, **kwargs)
+
+  compact_name_scope_wrapper.compact_name_scope = True  # type: ignore[attr-defined]
+  compact_name_scope_wrapper.inner_fun = fun  # type: ignore[attr-defined]
+  compact_name_scope_wrapper.nowrap = True  # type: ignore[attr-defined]
+  return compact_name_scope_wrapper  # type: ignore[return-value]
+
+
 def _get_local_method_names(
   cls: Any, exclude: Iterable[str] = ()
 ) -> Tuple[str, ...]:
@@ -958,6 +1036,7 @@ class Module(ModuleBase):
     # We wrap user-defined methods including setup and __call__ to enforce
     # a number of different checks and to provide clear error messages.
     cls._verify_single_or_no_compact()
+    cls._find_compact_name_scope_methods()
     cls._wrap_module_attributes()
     # Set empty class defaults.
     cls._state = _uninitialized_module_internal_state  # type: ignore[attr-defined]
@@ -1048,6 +1127,17 @@ class Module(ModuleBase):
     )
     if n_compact_fns > 1:
       raise errors.MultipleMethodsCompactError()
+
+  @classmethod
+  def _find_compact_name_scope_methods(cls):
+    """Finds all compact_name_scope methods in the class."""
+    methods = [m[0] for m in inspect.getmembers(cls, predicate=callable)]
+    compact_name_scope_fns = tuple(
+      method_name
+      for method_name in methods
+      if hasattr(getattr(cls, method_name), 'compact_name_scope')
+    )
+    cls._compact_name_scope_methods = compact_name_scope_fns
 
   @classmethod
   def _wrap_module_attributes(cls):
@@ -1350,6 +1440,7 @@ class Module(ModuleBase):
 
     def adopt_attr_modules(cache, queue, suffix, subvalue):
       if isinstance(subvalue, Module):
+        current_name = subvalue.name
         adopted_name = None
         if subvalue.parent is None:
           # Preserve sharing-by-reference relationships during adoption
@@ -1369,7 +1460,11 @@ class Module(ModuleBase):
         if subvalue.name is None:
           object.__setattr__(subvalue, 'parent', self)
           if adopted_name is None:
-            adopted_name = f'{name}{suffix}'
+            adopted_name = (
+              f'{name}{suffix}'
+              if not isinstance(subvalue, CompactNameScope)
+              else current_name
+            )
           object.__setattr__(subvalue, 'name', adopted_name)
           queue.append(subvalue)
       return subvalue
@@ -1400,6 +1495,14 @@ class Module(ModuleBase):
             self._register_submodules(field.name, getattr(self, field.name))
         if not shallow:
           self.setup()
+          # create NonTransparent Modules
+          self._compact_name_scope_modules = {
+            name: CompactNameScope(
+              getattr(type(self), name).inner_fun, lambda: self, name=name
+            )
+            for name in self._compact_name_scope_methods
+          }
+
         # We run static checks abstractly once for setup before any transforms
         # to detect name collisions and other python errors.
         elif self._state.setup_called == SetupState.NEW:
@@ -2900,3 +3003,27 @@ def init(
     return init_fn(*args, **kwargs)[1]
 
   return init_wrapper
+
+
+# TODO(cgarciae): we are defining CompactNameScope just to
+# avoid a pytype bug with the Flax overlay. We should aim to
+# remove in the at some point as its not ergonomic.
+if not typing.TYPE_CHECKING:
+
+  class CompactNameScope(Module):
+    fn: Callable
+    module_fn: Callable[[], Module]
+
+    @compact
+    def __call__(self, *args, **kwargs) -> Any:
+      return self.fn(self.module_fn(), *args, **kwargs)
+else:
+
+  @dataclasses.dataclass
+  class CompactNameScope:
+    fn: Callable
+    module_fn: Callable
+    name: str
+
+    def __call__(self, *args, **kwargs) -> Any:
+      ...
