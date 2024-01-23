@@ -18,12 +18,26 @@ vNext
 -
 -
 -
+-
+-
+-
+-
+-
+
+0.8.0
+-----
+- Added [NNX](https://github.com/google/flax/tree/main/flax/experimental/nnx#nnx), a neural network library for JAX that provides a simple yet powerful module system that adheres to standard Python semantics. Its aim is to combine the robustness of Linen with a simplified, Pythonic API akin to that of PyTorch.
+- Added `nn.compact_name_scope` decorator that enables methods to act as compact name scopes as with regular Haiku methods. This makes porting Haiku code easier.
 - Add copy() method to Module.  This is a user-friendly version of the internal clone() method with better
   defaults for common use cases.
--
--
--
-- NOTE: Remember to bump version number to 0.8.0
+- Added [`BatchApply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/layers.html#batchapply) class.
+- Added `sow_weights` option in attention layer.
+- Added [`MultiHeadAttention`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/_autosummary/flax.linen.MultiHeadAttention.html) alias.
+- Added kwargs support for `nn.jit`.
+- Deprecated `normalize` activation function, in favor of `standardize`.
+- Added `GeGLU` activation function.
+- Added `Enum` support for `tabulate` function.
+- Added simple argument-only lifted `nn.grad` function.
 
 0.7.5
 -----
