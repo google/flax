@@ -32,7 +32,7 @@ def field(pytree_node=True, **kwargs):
 
 
 @dataclass_transform(field_specifiers=(field,))  # type: ignore[literal-required]
-def dataclass(clz: _T) -> _T:
+def dataclass(clz: _T, **kwargs) -> _T:
   """Create a class which can be passed to functional transformations.
 
   NOTE: Inherit from ``PyTreeNode`` instead to avoid type checking issues when
@@ -104,7 +104,9 @@ def dataclass(clz: _T) -> _T:
   if '_flax_dataclass' in clz.__dict__:
     return clz
 
-  data_clz = dataclasses.dataclass(frozen=True)(clz)  # type: ignore
+  if 'frozen' not in kwargs.keys():
+    kwargs['frozen'] = True
+  data_clz = dataclasses.dataclass(**kwargs)(clz)  # type: ignore
   meta_fields = []
   data_fields = []
   for field_info in dataclasses.fields(data_clz):

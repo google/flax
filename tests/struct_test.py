@@ -47,6 +47,21 @@ class StructTest(absltest.TestCase):
     with self.assertRaises(dataclasses.FrozenInstanceError):
       p.y = 3
 
+  # Slots param is not supported in Python 3.9
+  # TODO(lew): Uncomment when Flax upgrades to Python 3.10.
+
+  # def test_slots(self):
+  #   slots_dataclass = partial(struct.dataclass, frozen=False, slots=True)
+  #   @slots_dataclass
+  #   class SlotsPoint:
+  #     x: float
+  #     y: float
+  #   p = SlotsPoint(x=1., y=2.)
+  #   p.x = 3.  # can assign to existing fields
+  #   self.assertEqual(p, SlotsPoint(x=3., y=2.))
+  #   with self.assertRaises(AttributeError):
+  #     p.z = 0.  # can't create new fields by accident.
+
   def test_pytree_nodes(self):
     p = Point(x=1, y=2, meta={'abc': True})
     leaves = jax.tree_util.tree_leaves(p)
