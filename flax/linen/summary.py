@@ -30,7 +30,6 @@ from typing import (
   Sequence,
   Set,
   Tuple,
-  Type,
   Union,
 )
 
@@ -130,7 +129,7 @@ class Row:
   """
 
   path: Tuple[str, ...]
-  module_type: Type[module_lib.Module]
+  module_copy: 'module_lib.Module'
   method: str
   inputs: Any
   outputs: Any
@@ -478,7 +477,7 @@ def _get_module_table(
       rows.append(
         Row(
           c.path,
-          type(c.module),
+          c.module.copy(),
           c.method,
           inputs,
           c.outputs,
@@ -612,7 +611,7 @@ def _render_table(
     )
     rich_table.add_row(
       path_repr,
-      row.module_type.__name__ + method_repr,
+      type(row.module_copy).__name__ + method_repr,
       *(
         _as_yaml_str(
           _summary_tree_map(
