@@ -58,6 +58,10 @@ Normalization
 
 .. flax_module::
   :module: flax.linen
+  :class: InstanceNorm
+
+.. flax_module::
+  :module: flax.linen
   :class: SpectralNorm
 
 .. flax_module::

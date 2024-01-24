@@ -431,6 +431,61 @@ class NormalizationTest(parameterized.TestCase):
     np.testing.assert_allclose(y1, y2, rtol=1e-4)
 
   @parameterized.parameters(
+    {'channel_axes': -1},
+    {'channel_axes': (1, 2)},
+    {'channel_axes': (1, 2, 3)},
+    {'channel_axes': -1, 'use_fast_variance': False},
+  )
+  def test_instance_norm(self, channel_axes, use_fast_variance=True):
+    rng = random.key(0)
+    key1, key2 = random.split(rng)
+    e = 1e-5
+    x = random.normal(key1, (2, 3, 4, 5))
+    if not use_fast_variance:
+      x += 1e4  # This blows up fast variance, but should work otherwise.
+    model_cls = nn.InstanceNorm(
+      use_bias=False,
+      use_scale=False,
+      epsilon=e,
+      channel_axes=channel_axes,
+      use_fast_variance=use_fast_variance,
+    )
+    y, _ = model_cls.init_with_output(key2, x)
+    self.assertEqual(x.dtype, y.dtype)
+    self.assertEqual(x.shape, y.shape)
+
+    canonicalized_channel_axes = [
+      i if i >= 0 else (x.ndim + i)
+      for i in (
+        channel_axes if isinstance(channel_axes, tuple) else (channel_axes,)
+      )
+    ]
+    reduction_axes = [
+      i for i in range(1, x.ndim) if i not in canonicalized_channel_axes
+    ]
+    y_one_liner = (
+      x - x.mean(axis=reduction_axes, keepdims=True)
+    ) * jax.lax.rsqrt(x.var(axis=reduction_axes, keepdims=True) + e)
+
+    np.testing.assert_allclose(y_one_liner, y, atol=1e-6)
+
+  @parameterized.parameters(
+    {'channel_axes': 0},
+    {'channel_axes': -4},
+    {'channel_axes': (0, 3)},
+    {'channel_axes': (2, -4)},
+  )
+  def test_instance_norm_raise_error(self, channel_axes):
+    with self.assertRaisesRegex(
+      ValueError,
+      'The channel axes cannot include the leading dimension '
+      'as this is assumed to be the batch axis.',
+    ):
+      x = jax.random.normal(jax.random.key(0), (2, 3, 4, 5))
+      layer = nn.InstanceNorm(channel_axes=channel_axes)
+      _ = layer.init(jax.random.key(1), x)
+
+  @parameterized.parameters(
     {
       'model_index': 0,
       'key_paths': {'Dense_1/kernel/u', 'Dense_1/kernel/sigma'},
