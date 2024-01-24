@@ -92,6 +92,25 @@ class StructTest(absltest.TestCase):
     class A(struct.PyTreeNode):
       a: int
 
+  # TODO(marcuschiam): Uncomment when Flax upgrades to Python 3.10.
+  # def test_kw_only(self):
+  #   @struct.dataclass
+  #   class A:
+  #     a: int = 1
+
+  #   with self.assertRaisesRegex(TypeError, "non-default argument 'b' follows default argument"):
+  #     @struct.dataclass
+  #     class B(A):
+  #       b: int
+
+  #   @functools.partial(struct.dataclass, kw_only=True)
+  #   class B(A):
+  #     b: int
+
+  #   obj = B(b=2)
+  #   self.assertEqual(obj.a, 1)
+  #   self.assertEqual(obj.b, 2)
+
 
 if __name__ == '__main__':
   absltest.main()
