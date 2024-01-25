@@ -170,6 +170,22 @@ class SequentialTest(absltest.TestCase):
     np.testing.assert_equal(out_query.shape, (3, 5))
     np.testing.assert_equal(out_key_value.shape, (9, 5))
 
+  def test_sequential_compact(self):
+
+    mlp = nn.Sequential([
+        lambda x: nn.Dense(x.shape[-1])(x),
+        nn.relu,
+        lambda x: nn.Dense(x.shape[-1])(x),
+        nn.relu,
+        lambda x: nn.Dense(x.shape[-1])(x),
+    ])
+
+    params = mlp.init(random.key(0), jnp.ones((3, 5)))['params']
+
+    self.assertIn('Dense_0', params)
+    self.assertIn('Dense_1', params)
+    self.assertIn('Dense_2', params)
+
 
 if __name__ == '__main__':
   absltest.main()

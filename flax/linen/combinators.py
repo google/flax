@@ -16,7 +16,7 @@
 
 from typing import Any, Callable, Dict, Sequence
 
-from flax.linen.module import Module
+from flax.linen.module import Module, compact
 
 
 class Sequential(Module):
@@ -42,6 +42,15 @@ class Sequential(Module):
     ...                           nn.relu,
     ...                           nn.Dense(2),
     ...                           nn.log_softmax])(x)
+
+  Since `Sequential.__call__` is a `compact` method, you can also pass functions
+  that construct Modules inline if you need shape inference::
+
+    module = nn.Sequential([
+        # << more layers
+        lambda x: SomeModule(x.shape[-1])(x), # shape inference
+        # << more layers
+    ])
 
   This combinator supports also layers that return multiple outputs if returned
   as a tuple or a dictionary. If the output of a layer is a ``tuple`` it will be
@@ -70,6 +79,13 @@ class Sequential(Module):
     ...   def __call__(self, x):
     ...     return nn.Sequential([CrossAttentionBlock() for _ in
     ...                           range(self.num_layers)])(query, key_value)
+
+
+  Attributes:
+    layers: A sequence of callables to be applied in order.
+
+  Raises:
+    ValueError: If layers is not a sequence.
   """
 
   layers: Sequence[Callable[..., Any]]
@@ -81,6 +97,7 @@ class Sequential(Module):
       )
     super().__post_init__()
 
+  @compact
   def __call__(self, *args, **kwargs):
     if not self.layers:
       raise ValueError(f'Empty Sequential module {self.name}.')
