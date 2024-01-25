@@ -191,7 +191,8 @@ def get_module_scopes(module, args=None, kwargs=None):
       for f in dataclasses.fields(module)
       if f.name != 'parent' and f.init
     }
-    jax.tree_util.tree_map(get_scopes_inner, attrs)
+    for leaf in jax.tree_util.tree_leaves(attrs):
+      get_scopes_inner(leaf)
     scopes.append(module.scope)
 
   get_scopes(module)
