@@ -9,3 +9,4 @@ Flax fundamentals
    state_params
    setup_or_nncompact
    arguments
+   rng_guide
