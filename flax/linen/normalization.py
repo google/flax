@@ -730,6 +730,127 @@ class GroupNorm(Module):
     )
 
 
+class InstanceNorm(Module):
+  """Instance normalization (https://arxiv.org/abs/1607.08022v3).
+
+  InstanceNorm normalizes the activations of the layer for each channel (rather
+  than across all channels like Layer Normalization), and for each given example
+  in a batch independently (rather than across an entire batch like Batch
+  Normalization). i.e. applies a transformation that maintains the mean activation
+  within each channel within each example close to 0 and the activation standard
+  deviation close to 1.
+
+  NOTE: This normalization operation is identical to LayerNorm and GroupNorm; the
+  difference is simply which axes are reduced and the shape of the feature axes
+  (i.e. the shape of the learnable scale and bias parameters).
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax
+    >>> import numpy as np
+
+    >>> # dimensions: (batch, height, width, channel)
+    >>> x = jax.random.normal(jax.random.key(0), (2, 3, 4, 5))
+    >>> layer = nn.InstanceNorm()
+    >>> variables = layer.init(jax.random.key(1), x)
+    >>> variables
+    {'params': {'scale': Array([1., 1., 1., 1., 1.], dtype=float32), 'bias': Array([0., 0., 0., 0., 0.], dtype=float32)}}
+    >>> y = layer.apply(variables, x)
+
+    >>> # having a channel_axis of -1 in InstanceNorm is identical to reducing all non-batch,
+    >>> # non-channel axes and using the channel_axes as the feature_axes in LayerNorm
+    >>> y2 = nn.LayerNorm(reduction_axes=[1, 2], feature_axes=-1).apply(variables, x)
+    >>> np.testing.assert_allclose(y, y2, atol=1e-7)
+    >>> y3 = nn.GroupNorm(num_groups=x.shape[-1]).apply(variables, x)
+    >>> np.testing.assert_allclose(y, y3, atol=1e-7)
+
+  Attributes:
+    epsilon: A small float added to variance to avoid dividing by zero.
+    dtype: the dtype of the result (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    use_bias:  If True, bias (beta) is added.
+    use_scale: If True, multiply by scale (gamma). When the next layer is linear
+      (also e.g. nn.relu), this can be disabled since the scaling will be done
+      by the next layer.
+    bias_init: Initializer for bias, by default, zero.
+    scale_init: Initializer for scale, by default, one.
+    channel_axes: Axes for channel. This is considered the feature axes for the
+      learned bias and scaling parameter. All other axes except the batch axes
+      (which is assumed to be the leading axis) will be reduced.
+    axis_name: the axis name used to combine batch statistics from multiple
+      devices. See ``jax.pmap`` for a description of axis names (default: None).
+      This is only needed if the model is subdivided across devices, i.e. the
+      array being normalized is sharded across devices within a pmap or shard
+      map. For SPMD jit, you do not need to manually synchronize. Just make sure
+      that the axes are correctly annotated and XLA:SPMD will insert the
+      necessary collectives.
+    axis_index_groups: groups of axis indices within that named axis
+      representing subsets of devices to reduce over (default: None). For
+      example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
+      examples on the first two and last two devices. See ``jax.lax.psum`` for
+      more details.
+    use_fast_variance: If true, use a faster, but less numerically stable,
+      calculation for the variance.
+  """
+
+  epsilon: float = 1e-6
+  dtype: Optional[Dtype] = None
+  param_dtype: Dtype = jnp.float32
+  use_bias: bool = True
+  use_scale: bool = True
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  channel_axes: Axes = -1
+  axis_name: Optional[str] = None
+  axis_index_groups: Any = None
+  use_fast_variance: bool = True
+
+  @compact
+  def __call__(self, x, mask=None):
+    """Applies instance normalization on the input.
+
+    Args:
+      x: the inputs
+      mask: Binary array of shape broadcastable to ``inputs`` tensor, indicating
+        the positions for which the mean and variance should be computed.
+
+    Returns:
+      Normalized inputs (the same shape as inputs).
+    """
+    channel_axes = _canonicalize_axes(x.ndim, self.channel_axes)
+    if 0 in channel_axes:
+      raise ValueError('The channel axes cannot include the leading dimension '
+                       'as this is assumed to be the batch axis.')
+    reduction_axes = [i for i in range(1, x.ndim) if i not in channel_axes]
+
+    mean, var = _compute_stats(
+      x,
+      reduction_axes,
+      self.dtype,
+      self.axis_name,
+      self.axis_index_groups,
+      use_fast_variance=self.use_fast_variance,
+      mask=mask,
+    )
+
+    return _normalize(
+      self,
+      x,
+      mean,
+      var,
+      reduction_axes,
+      channel_axes,
+      self.dtype,
+      self.param_dtype,
+      self.epsilon,
+      self.use_bias,
+      self.use_scale,
+      self.bias_init,
+      self.scale_init,
+    )
+
+
 class SpectralNorm(Module):
   """Spectral normalization. See:
 

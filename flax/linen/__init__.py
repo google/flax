@@ -118,6 +118,7 @@ from .module import (
 from .normalization import (
     BatchNorm as BatchNorm,
     GroupNorm as GroupNorm,
+    InstanceNorm as InstanceNorm,
     LayerNorm as LayerNorm,
     RMSNorm as RMSNorm,
     SpectralNorm as SpectralNorm,
