@@ -146,7 +146,7 @@ class NormalizationTest(parameterized.TestCase):
     x = jnp.where(m, x, jnp.nan)
 
     module = nn.LayerNorm()
-    y, w = module.init_with_output(key, x, m)
+    y, w = module.init_with_output(key, x, mask=m)
 
     z = y.mean(-1, where=m)
     np.testing.assert_allclose(z, 0, atol=1e-4)
@@ -163,7 +163,7 @@ class NormalizationTest(parameterized.TestCase):
     x = jnp.where(m, x, jnp.nan)
 
     module = nn.RMSNorm()
-    y, w = module.init_with_output(key, x, m)
+    y, w = module.init_with_output(key, x, mask=m)
 
     z = np.square(y).mean(-1, where=m)
     np.testing.assert_allclose(z, 1, atol=1e-4)
@@ -177,7 +177,7 @@ class NormalizationTest(parameterized.TestCase):
     x = jnp.where(m, x, jnp.nan)
 
     module = nn.GroupNorm(7, use_bias=False, use_scale=False)
-    y, w = module.init_with_output(key, x, m)
+    y, w = module.init_with_output(key, x, mask=m)
 
     yr = y.reshape((13, 3, 5, 7, 11))
     mr = m.reshape((13, 3, 5, 7, 11))

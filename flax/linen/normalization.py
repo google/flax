@@ -298,7 +298,7 @@ class BatchNorm(Module):
   use_fast_variance: bool = True
 
   @compact
-  def __call__(self, x, use_running_average: Optional[bool] = None, mask=None):
+  def __call__(self, x, use_running_average: Optional[bool] = None, *, mask: Optional[jax.Array] = None):
     """Normalizes the input using batch statistics.
 
     NOTE:
@@ -434,7 +434,7 @@ class LayerNorm(Module):
   use_fast_variance: bool = True
 
   @compact
-  def __call__(self, x, mask=None):
+  def __call__(self, x, *, mask: Optional[jax.Array] = None):
     """Applies layer normalization on the input.
 
     Args:
@@ -528,7 +528,7 @@ class RMSNorm(Module):
   axis_index_groups: Any = None
 
   @compact
-  def __call__(self, x, mask=None):
+  def __call__(self, x, *, mask: Optional[jax.Array] = None):
     """Applies layer normalization on the input.
 
     Args:
@@ -637,7 +637,7 @@ class GroupNorm(Module):
   use_fast_variance: bool = True
 
   @compact
-  def __call__(self, x, mask=None):
+  def __call__(self, x, *, mask: Optional[jax.Array] = None):
     """Applies group normalization to the input (arxiv.org/abs/1803.08494).
 
     Args:
@@ -807,7 +807,7 @@ class InstanceNorm(Module):
   use_fast_variance: bool = True
 
   @compact
-  def __call__(self, x, mask=None):
+  def __call__(self, x, *, mask: Optional[jax.Array] = None):
     """Applies instance normalization on the input.
 
     Args:
