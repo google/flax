@@ -197,7 +197,7 @@ class _DynamicContext(threading.local):
       None,
     ]
     self.capture_stack = []
-    self.call_info_stack = []
+    self.call_info_stack: list[_CallInfoContext] = []
 
 
 # The global context
@@ -2584,6 +2584,68 @@ class Module(ModuleBase):
       compute_vjp_flops=compute_vjp_flops,
     )
     return tabulate_fn(*args, **kwargs)
+
+  def module_paths(
+    self,
+    rngs: Union[KeyArray, RNGSequences],
+    *args,
+    show_repeated: bool = False,
+    mutable: CollectionFilter = DenyList('intermediates'),
+    **kwargs,
+  ) -> dict[str, 'Module']:
+    """Returns a dictionary mapping module paths to module instances.
+
+    This method has the same signature and internally calls ``Module.init``,
+    but instead of returning the variables, it returns a dictionary mapping
+    module paths to unbounded copies of module instances that were used
+    at runtime. ``module_paths`` uses ``jax.eval_shape`` to run the forward
+    computation without consuming any FLOPs or allocating memory.
+
+    Example::
+
+      >>> import flax.linen as nn
+      >>> import jax, jax.numpy as jnp
+
+      >>> class Foo(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     h = nn.Dense(4)(x)
+      ...     return nn.Dense(2)(h)
+
+      >>> x = jnp.ones((16, 9))
+      >>> modules = Foo().module_paths(jax.random.key(0), x)
+      >>> print({
+      ...     p: type(m).__name__ for p, m in modules.items()
+      ... })
+      {'': 'Foo', 'Dense_0': 'Dense', 'Dense_1': 'Dense'}
+
+    `Args:
+      rngs: The rngs for the variable collections as passed to ``Module.init``.
+      *args: The arguments to the forward computation.
+      show_repeated: If ``True``, repeated calls to the same module will be
+        shown in the table, otherwise only the first call will be shown.
+        Default is ``False``.
+      mutable: Can be bool, str, or list. Specifies which collections should
+        be treated as mutable: ``bool``: all/no collections are mutable.
+        ``str``: The name of a single mutable collection. ``list``: A list of
+        names of mutable collections. By default, all collections except
+        'intermediates' are mutable.
+      **kwargs: keyword arguments to pass to the forward computation.
+
+    Returns:
+      A dict`ionary mapping module paths to module instances.
+    """
+    from flax.linen import summary
+
+    table = summary._get_module_table(
+      module=self,
+      depth=None,
+      show_repeated=show_repeated,
+      compute_flops=False,
+      compute_vjp_flops=False,
+    )(rngs, *args, **kwargs, mutable=mutable)
+
+    return {'/'.join(row.path): row.module_copy for row in table}
 
 
 _ParentType = Union[Type[Module], Scope, Type[_Sentinel], None]

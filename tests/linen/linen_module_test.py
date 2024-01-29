@@ -2487,6 +2487,41 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(obj_loaded.b, 'ok')
     self.assertEqual(obj_loaded.my_property, 'okok')
 
+  def test_module_paths(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Dense(3)(x)
+        x = nn.Dense(4)(x)
+        return x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = Bar()(x)
+        x = nn.Dense(5)(x)
+        return x
+
+    x = jnp.ones((1, 2))
+    m = Foo()
+    module_paths = m.module_paths(random.key(0), x)
+
+    # assert all module are unbounded
+    for module in module_paths.values():
+      self.assertIsNone(module.scope)
+
+    # test paths
+    self.assertIn('', module_paths)
+    self.assertEqual(type(module_paths['']), Foo)
+    self.assertIn('Dense_0', module_paths)
+    self.assertEqual(type(module_paths['Dense_0']), nn.Dense)
+    self.assertIn('Bar_0', module_paths)
+    self.assertEqual(type(module_paths['Bar_0']), Bar)
+    self.assertIn('Bar_0/Dense_0', module_paths)
+    self.assertEqual(type(module_paths['Bar_0/Dense_0']), nn.Dense)
+    self.assertIn('Bar_0/Dense_1', module_paths)
+    self.assertEqual(type(module_paths['Bar_0/Dense_1']), nn.Dense)
+
 
 class LeakTests(absltest.TestCase):
   def test_tracer_leaks(self):
