@@ -54,6 +54,7 @@ from typing import (
 )
 
 from flax import errors, struct, traceback_util
+from flax import serialization
 from flax.core import Scope, lift, meta
 from flax.core.frozen_dict import FrozenDict
 from flax.ids import FlaxId
@@ -443,25 +444,6 @@ def decorator_lift_transform(
 
 
 @dataclasses.dataclass(frozen=True)
-class _ModuleHash:
-  module: Module
-  hashable_module: Module
-
-  @classmethod
-  def from_module(cls, module: Module):
-    return cls(module, module.clone(_deep_clone=True, _reset_names=True))
-
-  def __hash__(self):
-    return hash(self.hashable_module)
-
-  def __eq__(self, other):
-    return (
-        isinstance(other, _ModuleHash)
-        and self.hashable_module == other.hashable_module
-    )
-
-
-@dataclasses.dataclass(frozen=True)
 class _HashableProxy:
   """A hashable proxy object that is use to define a hash for Modules.
 
@@ -472,76 +454,84 @@ class _HashableProxy:
   module: Module
 
   def __hash__(self):
-    key = _hashable_pytree(self.module)
+    key = _module_pytree_hash(self.module)
     return hash(key)
 
   def __eq__(self, other):
-    return isinstance(other, _HashableProxy) and _hashable_pytree(
+    return isinstance(other, _HashableProxy) and _module_pytree_hash(
         self.module
-    ) == _hashable_pytree(other.module)
+    ) == _module_pytree_hash(other.module)
 
 
-def _hashable_pytree(x: Any) -> tuple[type[Any], Any]:
-  return _hashable_pytree_recursive(x, {})
+def _recursive_freeze(name: str, x: Any, seen_modules: dict[FlaxId, int]):
+  if isinstance(x, dict):
+    return tuple(
+        (k, _recursive_freeze(k, v, seen_modules)) for k, v in x.items()
+    )
+  elif isinstance(x, Module):
+    return _module_pytree_hash_recursive(x, seen_modules)
+  else:
+    _check_field_is_hashable(name, x)
+    return x
 
 
-def _hashable_pytree_recursive(
-    x: Any, modules_seen: dict[FlaxId, int]
-) -> tuple[type, Any]:
+def _module_pytree_hash(module: Module) -> tuple[type[Any], Any]:
+  return _module_pytree_hash_recursive(module, {})
+
+
+def _module_pytree_hash_recursive(
+    module: Module, seen_modules: dict[FlaxId, int]
+) -> tuple[type[Any], Any]:
   """Creates a hashable representation for a Module by travering its structure recursively."""
   static: Any
-  if isinstance(x, Module):
-    if x._id in modules_seen:
-      # if we have already seen the module we just use the index
-      # as its static component
-      static = modules_seen[x._id]
-    else:
-      # if its a new module we add it to the cache and give it
-      # a new index
-      modules_seen[x._id] = len(modules_seen)
-      # TODO(cgarciae): define a way for the user of nn.jit to define
-      # what fields it wants to ignore per Module instance.
-      static = tuple(
-          (
-              field.name,
-              _hashable_pytree_recursive(getattr(x, field.name), modules_seen),
-          )
-          for field in dataclasses.fields(x)
-          if hasattr(x, field.name) and field.name not in ('parent', 'name')
-      )
-  elif isinstance(x, FrozenDict):
-    static = tuple(
-        (name, _hashable_pytree_recursive(value, modules_seen))
-        for name, value in sorted(x.items())
-    )
-  elif isinstance(x, tuple):
-    static = tuple(
-        _hashable_pytree_recursive(value, modules_seen) for value in x
-    )
+  if module._id in seen_modules:
+    # if we have already seen the module we just use the index
+    # as its static component
+    static = seen_modules[module._id]
   else:
-    # test for hashability to catch errors early
-    try:
-      hash(x)
-    except Exception as e:
-      if dataclasses.is_dataclass(x):
-        if not hasattr(x, '__hash__'):
-          raise ValueError(
-              f"type '{type(x)}' is a dataclass but its not hashable, using"
-              ' `dataclass(frozen=True, eq=True)` to make it immutable and'
-              ' hashable, or `dataclass(unsafe_hash=True)` for mutable types.'
-          ) from e
+    # if its a new module we add it to the cache and give it
+    # a new index
+    seen_modules[module._id] = len(seen_modules)
+    # TODO(cgarciae): define a way for the user of nn.jit to define
+    # what fields it wants to ignore per Module instance.
+    values = []
+    for field in dataclasses.fields(module):
+      if field.init and field.name not in ('parent', 'name'):
+        value = getattr(module, field.name)
+        if isinstance(value, Module):
+          value = _module_pytree_hash_recursive(value, seen_modules)
+        elif serialization.is_serializable(value):
+          value = serialization.to_state_dict(value)
+          value = _recursive_freeze(field.name, value, seen_modules)
         else:
-          raise ValueError(
-              f"type '{type(x)}' is a hashable dataclass but hashing failed,"
-              ' this probably means that at least one of its fields is not'
-              ' hashable.'
-          ) from e
+          _check_field_is_hashable(field.name, value)
+        values.append((field.name, value))
+    static = tuple(values)
+
+  return type(module), static
+
+
+def _check_field_is_hashable(name: str, x: Any):
+  """Checks if a field is hashable."""
+  try:
+    hash(x)
+  except Exception as e:
+    if dataclasses.is_dataclass(x):
+      if x.__hash__ is None:
+        raise ValueError(
+            f"field '{name}' of type '{type(x)}' is a dataclass but its not"
+            ' hashable, using `dataclass(frozen=True, eq=True)` to make it'
+            ' immutable and hashable, or `dataclass(unsafe_hash=True)` for'
+            ' mutable types.'
+        ) from e
       else:
-        raise ValueError(f"type '{type(x)}' is not hashable.") from e
-
-    static = x
-
-  return type(x), static
+        raise ValueError(
+            f"field '{name}' of type '{type(x)}' is a hashable dataclass but"
+            ' hashing failed, this probably means that at least one of its'
+            ' fields is not hashable.'
+        ) from e
+    else:
+      raise ValueError(f"type '{type(x)}' is not hashable.") from e
 
 
 def decorator_lift_transform_jit(class_fn, **trafo_kwargs):
@@ -614,7 +604,6 @@ def decorator_lift_transform_jit(class_fn, **trafo_kwargs):
 
     # get a hash for the Module by using its repr as a proxy
     hash_key = _HashableProxy(self)
-    # hash_key = _ModuleHash.from_module(self)
 
     return trafo_fn(module_scopes, hash_key, *args, **kwargs)
 
@@ -688,7 +677,6 @@ def module_class_lift_transform_jit(module_class, methods=None, **trafo_kwargs):
 
       # get a hash for the Module by using its repr as a proxy
       hash_key = _HashableProxy(self)
-      # hash_key = _ModuleHash.from_module(self)
 
       ret = trafo_fn(module_scopes, hash_key, *args, **kwargs)
       return ret

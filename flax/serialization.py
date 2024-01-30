@@ -110,6 +110,12 @@ def to_state_dict(target) -> Dict[str, Any]:
   return state_dict
 
 
+def is_serializable(target):
+  if not isinstance(target, type):
+    target = type(target)
+  return target in _STATE_DICT_REGISTRY
+
+
 def register_serialization_state(
   ty, ty_to_state_dict, ty_from_state_dict, override=False
 ):

@@ -22,6 +22,7 @@ import unittest
 from absl.testing import absltest, parameterized
 from flax import errors
 from flax import linen as nn
+from flax import serialization
 from flax.core import copy, freeze
 from flax.linen.transforms import _HashableProxy
 import jax
@@ -1938,6 +1939,46 @@ class TransformTest(parameterized.TestCase):
     self.assertEqual(n, 2)
     y = Parent([Foo(3), Foo(4)]).apply({}, x)
     self.assertEqual(n, 2)
+
+  def test_jit_hashes_serializable_types(self):
+    class Node:
+
+      def __init__(self, a: int):
+        self.a = a
+
+      def __hash__(self):
+        # test object is not being passed as static
+        raise Exception('immutable')
+
+    def to_dict(node: Node):
+      return {'a': node.a}
+
+    def from_dict(node: Node, d: dict[str, Any]):
+      node.a = d['a']
+      return node
+
+    serialization.register_serialization_state(Node, to_dict, from_dict)
+
+    try:
+      n = 0
+
+      class Foo(nn.Module):
+        node: Node
+
+        @nn.jit
+        @nn.compact
+        def __call__(self, x):
+          nonlocal n
+          n += 1
+          return self.node.a + nn.Dense(2)(x)
+
+      m = Foo(Node(1))
+      m.init_with_output(random.key(0), jnp.ones((2, 2)))
+      self.assertEqual(n, 1)
+      m.init_with_output(random.key(0), jnp.ones((2, 2)))
+      self.assertEqual(n, 1)
+    finally:
+      del serialization._STATE_DICT_REGISTRY[Node]
 
   def test_while_loop(self):
     class Foo(nn.Module):
