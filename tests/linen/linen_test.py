@@ -487,6 +487,69 @@ class NormalizationTest(parameterized.TestCase):
 
   @parameterized.parameters(
     {
+      'layer1': nn.LayerNorm(feature_axes=(1, 2)),
+      'layer2': nn.InstanceNorm(channel_axes=(1, 2)),
+    },
+    {
+      'layer1': nn.LayerNorm(reduction_axes=(1, 2), feature_axes=-1),
+      'layer2': nn.InstanceNorm(channel_axes=-1),
+    },
+    {
+      'layer1': nn.LayerNorm(
+        reduction_axes=-2,
+        feature_axes=(1, 3),
+        bias_init=nn.initializers.uniform(),
+        scale_init=nn.initializers.uniform(),
+      ),
+      'layer2': nn.InstanceNorm(
+        channel_axes=(1, -1),
+        bias_init=nn.initializers.uniform(),
+        scale_init=nn.initializers.uniform(),
+      ),
+    },
+    {
+      'layer1': nn.LayerNorm(
+        reduction_axes=(1, 2, 3),
+        bias_init=nn.initializers.uniform(),
+        scale_init=nn.initializers.uniform(),
+      ),
+      'layer2': nn.GroupNorm(
+        num_groups=1,
+        bias_init=nn.initializers.uniform(),
+        scale_init=nn.initializers.uniform()
+      ),
+    },
+    {
+      'layer1': nn.InstanceNorm(
+        bias_init=nn.initializers.uniform(),
+        scale_init=nn.initializers.uniform(),
+      ),
+      'layer2': nn.GroupNorm(
+        num_groups=None,
+        group_size=1,
+        bias_init=nn.initializers.uniform(),
+        scale_init=nn.initializers.uniform(),
+      ),
+    },
+  )
+  def test_normalization_equivalence(self, layer1, layer2):
+    x = jax.random.normal(jax.random.key(0), (2, 3, 4, 5))
+    layer1_variables = layer1.init(jax.random.key(1), x)
+    layer2_variables = layer2.init(jax.random.key(1), x)
+    self.assertTrue(
+      jax.tree_util.tree_all(
+        jax.tree_map(
+          lambda v1, v2: (v1 == v2).all(), layer1_variables, layer2_variables
+        )
+      )
+    )
+
+    layer1_y = layer1.apply(layer1_variables, x)
+    layer2_y = layer2.apply(layer2_variables, x)
+    np.testing.assert_allclose(layer1_y, layer2_y, atol=1e-7)
+
+  @parameterized.parameters(
+    {
       'model_index': 0,
       'key_paths': {'Dense_1/kernel/u', 'Dense_1/kernel/sigma'},
     },

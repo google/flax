@@ -380,17 +380,30 @@ class LayerNorm(Module):
   i.e. applies a transformation that maintains the mean activation within
   each example close to 0 and the activation standard deviation close to 1.
 
+  NOTE: This normalization operation is identical to InstanceNorm and GroupNorm;
+  the difference is simply which axes are reduced and the shape of the feature axes
+  (i.e. the shape of the learnable scale and bias parameters).
+
   Example usage::
 
     >>> import flax.linen as nn
-    >>> import jax, jax.numpy as jnp
+    >>> import jax
+    >>> import numpy as np
 
-    >>> x = jax.random.normal(jax.random.key(0), (5, 6))
+    >>> x = jax.random.normal(jax.random.key(0), (3, 4, 5, 6))
     >>> layer = nn.LayerNorm()
     >>> variables = layer.init(jax.random.key(1), x)
     >>> variables
     {'params': {'scale': Array([1., 1., 1., 1., 1., 1.], dtype=float32), 'bias': Array([0., 0., 0., 0., 0., 0.], dtype=float32)}}
     >>> y = layer.apply(variables, x)
+
+    >>> y = nn.LayerNorm(reduction_axes=(1, 2, 3)).apply(variables, x)
+    >>> y2 = nn.GroupNorm(num_groups=1).apply(variables, x)
+    >>> np.testing.assert_allclose(y, y2)
+
+    >>> y = nn.LayerNorm(reduction_axes=(1, 2), feature_axes=-1).apply(variables, x)
+    >>> y2 = nn.InstanceNorm(channel_axes=-1).apply(variables, x)
+    >>> np.testing.assert_allclose(y, y2)
 
   Attributes:
     epsilon: A small float added to variance to avoid dividing by zero.
@@ -576,17 +589,29 @@ class GroupNorm(Module):
   The user should either specify the total number of channel groups or the
   number of channels per group.
 
+  NOTE: LayerNorm is a special case of GroupNorm where `num_groups=1`, and
+  InstanceNorm is a special case of GroupNorm where `group_size=1`.
+
   Example usage::
 
     >>> import flax.linen as nn
-    >>> import jax, jax.numpy as jnp
+    >>> import jax
+    >>> import numpy as np
 
-    >>> x = jax.random.normal(jax.random.key(0), (5, 6))
+    >>> x = jax.random.normal(jax.random.key(0), (3, 4, 5, 6))
     >>> layer = nn.GroupNorm(num_groups=3)
     >>> variables = layer.init(jax.random.key(1), x)
     >>> variables
     {'params': {'scale': Array([1., 1., 1., 1., 1., 1.], dtype=float32), 'bias': Array([0., 0., 0., 0., 0., 0.], dtype=float32)}}
     >>> y = layer.apply(variables, x)
+
+    >>> y = nn.GroupNorm(num_groups=1).apply(variables, x)
+    >>> y2 = nn.LayerNorm(reduction_axes=(1, 2, 3)).apply(variables, x)
+    >>> np.testing.assert_allclose(y, y2)
+
+    >>> y = nn.GroupNorm(num_groups=None, group_size=1).apply(variables, x)
+    >>> y2 = nn.InstanceNorm(channel_axes=-1).apply(variables, x)
+    >>> np.testing.assert_allclose(y, y2)
 
   Attributes:
     num_groups: the total number of channel groups. The default value of 32 is
