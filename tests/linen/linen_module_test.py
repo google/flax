@@ -2522,6 +2522,145 @@ class ModuleTest(absltest.TestCase):
     self.assertIn('Bar_0/Dense_1', module_paths)
     self.assertEqual(type(module_paths['Bar_0/Dense_1']), nn.Dense)
 
+  def test_init_apply_default_rng(self):
+    class SubModel(nn.Module):
+      @nn.compact
+      def __call__(self, x, apply_dropout):
+        x = nn.Dense(8)(x)
+        x = nn.Dropout(0.8)(x, deterministic=not apply_dropout)
+        p = self.param(
+          'parameter', lambda key, shape: jax.random.normal(key, shape), x.shape
+        )
+        noise = jax.random.normal(self.make_rng('noise'), x.shape)
+        return x * p + noise
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x, apply_dropout):
+        x = nn.Dense(16)(x)
+        x = SubModel()(x, apply_dropout)
+        x = nn.Dropout(0.5)(x, deterministic=not apply_dropout)
+        v = self.variable(
+          'var_collection',
+          'variable',
+          lambda shape: jax.random.normal(self.make_rng('var_rng'), shape),
+          x.shape,
+        )
+        noise = jax.random.normal(self.make_rng('noise'), x.shape)
+        return x * v.value + noise
+
+    key0, key1, key2 = jax.random.split(jax.random.key(0), 3)
+    x = jax.random.normal(key0, (10, 4))
+    model = Model()
+
+    # test init equality
+    default_variables = model.init({'default': key1}, x, apply_dropout=False)
+    # adding 'default' rng shouldn't change anything
+    rngs = {'params': key1, 'var_rng': key1, 'noise': key1, 'default': key0}
+    explicit_variables = model.init(rngs, x, apply_dropout=False)
+    self.assertTrue(
+      jax.tree_util.tree_all(
+        jax.tree_map(
+          lambda v1, v2: (v1 == v2).all(), default_variables, explicit_variables
+        )
+      )
+    )
+
+    # test init inequality
+    rngs['default'] = key1  # adding 'default' rng shouldn't change anything
+    for rng_name in ('params', 'var_rng'):
+      rngs[rng_name] = key2
+      explicit_variables = model.init(rngs, x, apply_dropout=False)
+      self.assertFalse(
+        jax.tree_util.tree_all(
+          jax.tree_map(
+            lambda v1, v2: (v1 == v2).all(),
+            default_variables,
+            explicit_variables,
+          )
+        )
+      )
+      rngs[rng_name] = key1
+
+    # test apply equality
+    default_out = model.apply(
+      default_variables, x, apply_dropout=True, rngs={'default': key1}
+    )
+    # adding 'default' rng shouldn't change anything
+    rngs = {'dropout': key1, 'noise': key1, 'default': key0}
+    explicit_out = model.apply(
+      default_variables, x, apply_dropout=True, rngs=rngs
+    )
+    np.testing.assert_allclose(default_out, explicit_out)
+
+    # test apply inequality
+    rngs['default'] = key1  # adding 'default' rng shouldn't change anything
+    for rng_name in ('dropout', 'noise'):
+      rngs[rng_name] = key2
+      explicit_out = model.apply(
+        default_variables, x, apply_dropout=True, rngs=rngs
+      )
+      with self.assertRaises(AssertionError):
+        np.testing.assert_allclose(default_out, explicit_out, atol=1e-1)
+      rngs[rng_name] = key1
+
+  def test_default_make_rng(self):
+    class SubModel(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        noise = jax.random.normal(self.make_rng(), x.shape)
+        return x + noise
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = SubModel()(x)
+        noise = jax.random.normal(self.make_rng(), x.shape)
+        return x + noise
+
+    key0, key1 = jax.random.split(jax.random.key(0), 2)
+    x = jax.random.normal(key0, (10, 4))
+    default_out = Model().apply({}, x, rngs={'default': key1})
+
+    class SubModel(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        noise = jax.random.normal(self.make_rng('default'), x.shape)
+        return x + noise
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = SubModel()(x)
+        noise = jax.random.normal(self.make_rng('default'), x.shape)
+        return x + noise
+
+    explicit_out = Model().apply({}, x, rngs={'default': key1})
+    np.testing.assert_allclose(default_out, explicit_out)
+
+  def test_default_rng_error(self):
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(2)(x)
+
+    model = Model()
+    with self.assertRaisesRegex(
+      errors.InvalidRngError, 'Dense_0 needs PRNG for "params"'
+    ):
+      model.init({'other_rng_stream': jax.random.key(0)}, jnp.ones((1, 3)))
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x + jax.random.normal(self.make_rng('default'), x.shape)
+
+    model = Model()
+    with self.assertRaisesRegex(
+      errors.InvalidRngError, 'None needs PRNG for "default"'
+    ):
+      model.init(jax.random.key(0), jnp.ones((1, 3)))
+
 
 class LeakTests(absltest.TestCase):
   def test_tracer_leaks(self):

@@ -1755,7 +1755,7 @@ class Module(ModuleBase):
       raise ValueError("Can't query for RNGs on unbound modules")
     return self.scope.has_rng(name)
 
-  def make_rng(self, name: str) -> KeyArray:
+  def make_rng(self, name: str = 'default') -> KeyArray:
     """Returns a new RNG key from a given RNG sequence for this Module.
 
     The new RNG key is split from the previous one. Thus, every call to
