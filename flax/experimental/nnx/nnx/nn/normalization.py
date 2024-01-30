@@ -14,7 +14,6 @@
 
 import typing as tp
 
-import jax
 import jax.numpy as jnp
 from jax import lax
 
@@ -22,13 +21,12 @@ from flax.experimental import nnx
 from flax.experimental.nnx.nnx import flaglib, rnglib
 from flax.experimental.nnx.nnx.module import Module, first_from
 from flax.experimental.nnx.nnx.nn import dtypes, initializers
-
-KeyArray = jax.Array
-Array = jax.Array
-Shape = tp.Tuple[int, ...]
-Dtype = tp.Any  # this could be a real type?
-
-Axes = tp.Union[int, tp.Any]
+from flax.typing import (
+  Array,
+  Dtype,
+  Initializer,
+  Axes,
+)
 
 
 def _canonicalize_axes(rank: int, axes: Axes) -> tp.Tuple[int, ...]:
@@ -116,7 +114,7 @@ def _normalize(
   bias: tp.Optional[Array],
   reduction_axes: Axes,
   feature_axes: Axes,
-  dtype: Dtype,
+  dtype: tp.Optional[Dtype],
   epsilon: float,
 ):
   """ "Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
@@ -201,12 +199,8 @@ class BatchNorm(Module):
     param_dtype: Dtype = jnp.float32,
     use_bias: bool = True,
     use_scale: bool = True,
-    bias_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = initializers.zeros_init(),
-    scale_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = initializers.ones_init(),
+    bias_init: Initializer = initializers.zeros_init(),
+    scale_init: Initializer = initializers.ones_init(),
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
     rngs: rnglib.Rngs,
@@ -334,12 +328,8 @@ class LayerNorm(Module):
     param_dtype: Dtype = jnp.float32,
     use_bias: bool = True,
     use_scale: bool = True,
-    bias_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = initializers.zeros_init(),
-    scale_init: tp.Callable[
-      [KeyArray, Shape, Dtype], Array
-    ] = initializers.ones_init(),
+    bias_init: Initializer = initializers.zeros_init(),
+    scale_init: Initializer = initializers.ones_init(),
     reduction_axes: Axes = -1,
     feature_axes: Axes = -1,
     axis_name: tp.Optional[str] = None,

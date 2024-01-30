@@ -28,11 +28,8 @@
 """APIs for handling dtypes in Linen Modules."""
 
 from typing import Any, List, Optional
-
+from flax.typing import Dtype
 from jax import numpy as jnp
-
-Dtype = Any
-Array = Any
 
 
 def canonicalize_dtype(
@@ -67,7 +64,7 @@ def canonicalize_dtype(
   return dtype
 
 
-def promote_dtype(*args, dtype=None, inexact=True) -> List[Array]:
+def promote_dtype(*args, dtype=None, inexact=True) -> List[Any]:
   """ "Promotes input arguments to a specified or inferred dtype.
 
   All args are cast to the same dtype. See ``canonicalize_dtype`` for how

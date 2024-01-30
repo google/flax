@@ -22,16 +22,17 @@ from jax.sharding import Mesh, PartitionSpec
 from flax.experimental.nnx.nnx import variables
 from flax.experimental.nnx.nnx.pytreelib import TreeNode
 from flax.experimental.nnx.nnx.state import State
+from flax.typing import (
+  Array,
+  ArrayPytree,  # pylint: disable=invalid-name
+  PartitionSpecPytree,  # pylint: disable=invalid-name
+  Sharding,
+)
 
-# Real types and dummy aliases for documentation
-Array = tp.Any  # pylint: disable=invalid-name
-ArrayPytree = tp.Any  # pylint: disable=invalid-name
-PartitionSpecPytree = tp.Any  # pylint: disable=invalid-name
 
 A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 PARTITION_NAME = 'partition_name'
-Sharding = tuple[tp.Optional[str], ...]
 
 
 @tp.runtime_checkable

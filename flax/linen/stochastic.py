@@ -16,13 +16,11 @@
 
 from typing import Optional, Sequence
 
-import jax
 import jax.numpy as jnp
 from jax import lax, random
 
 from flax.linen.module import Module, compact, merge_param
-
-KeyArray = jax.Array
+from flax.typing import PRNGKey
 
 
 class Dropout(Module):
@@ -69,7 +67,7 @@ class Dropout(Module):
     self,
     inputs,
     deterministic: Optional[bool] = None,
-    rng: Optional[KeyArray] = None,
+    rng: Optional[PRNGKey] = None,
   ):
     """Applies a random dropout mask to the input.
 

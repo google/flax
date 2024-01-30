@@ -17,7 +17,6 @@
 import dataclasses
 from typing import (
   Any,
-  Callable,
   Iterable,
   List,
   Optional,
@@ -36,20 +35,19 @@ from flax.core import meta
 from flax.linen import initializers
 from flax.linen.dtypes import promote_dtype
 from flax.linen.module import Module, compact
+from flax.typing import (
+  Array,
+  PRNGKey as PRNGKey,
+  Dtype,
+  Shape as Shape,
+  Initializer,
+  PrecisionLike,
+  DotGeneralT,
+  ConvGeneralDilatedT,
+  PaddingLike,
+  LaxPadding,
+)
 
-PRNGKey = Any
-Shape = Tuple[int, ...]
-Dtype = Any  # this could be a real type?
-Array = Any
-PrecisionLike = Union[
-  None,
-  str,
-  lax.Precision,
-  Tuple[str, str],
-  Tuple[lax.Precision, lax.Precision],
-]
-DotGeneralT = Callable[..., Array]
-ConvGeneralDilatedT = Callable[..., Array]
 
 default_kernel_init = initializers.lecun_normal()
 
@@ -107,10 +105,8 @@ class DenseGeneral(Module):
   use_bias: bool = True
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[
-    [PRNGKey, Shape, Dtype], Array
-  ] = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = initializers.zeros_init()
   precision: PrecisionLike = None
   # Deprecated. Will be removed.
   dot_general: Optional[DotGeneralT] = None
@@ -239,10 +235,8 @@ class Dense(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[
-    [PRNGKey, Shape, Dtype], Array
-  ] = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = initializers.zeros_init()
   # Deprecated. Will be removed.
   dot_general: Optional[DotGeneralT] = None
   dot_general_cls: Any = None
@@ -296,9 +290,6 @@ def _conv_dimension_numbers(input_shape):
   out_spec = lhs_spec
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
 
-
-PaddingLike = Union[str, int, Sequence[Union[int, Tuple[int, int]]]]
-LaxPadding = Union[str, Sequence[Tuple[int, int]]]
 
 
 def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
@@ -374,10 +365,8 @@ class _Conv(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[
-    [PRNGKey, Shape, Dtype], Array
-  ] = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = initializers.zeros_init()
   # Deprecated. Will be removed.
   conv_general_dilated: Optional[ConvGeneralDilatedT] = None
   conv_general_dilated_cls: Any = None
@@ -574,7 +563,7 @@ class _Conv(Module):
       )
 
     if self.use_bias:
-      bias = bias.reshape((1,) * (y.ndim - bias.ndim) + bias.shape)
+      bias = bias.reshape((1,) * (y.ndim - bias.ndim) + bias.shape)  # type: ignore
       y += bias
 
     if num_batch_dimensions != 1:
@@ -779,13 +768,11 @@ class ConvTranspose(Module):
   kernel_dilation: Optional[Sequence[int]] = None
   use_bias: bool = True
   mask: Optional[Array] = None
-  dtype: Dtype = None
+  dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[
-    [PRNGKey, Shape, Dtype], Array
-  ] = initializers.zeros_init()
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = initializers.zeros_init()
   transpose_kernel: bool = False
 
   @compact
@@ -919,7 +906,7 @@ class ConvTranspose(Module):
         y = y.sum(axis=i)
 
     if self.use_bias:
-      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))  # type: ignore
 
     if num_batch_dimensions != 1:
       output_shape = input_batch_shape + y.shape[1:]
@@ -981,7 +968,7 @@ class Embed(Module):
   features: int
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
-  embedding_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_embed_init
+  embedding_init: Initializer = default_embed_init
 
   embedding: Array = dataclasses.field(init=False)
 

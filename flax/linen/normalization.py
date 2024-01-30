@@ -16,7 +16,7 @@
 
 import dataclasses
 import functools
-from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
+from typing import Any, Iterable, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -24,12 +24,14 @@ from jax import lax
 from jax.nn import initializers
 
 from flax.linen import dtypes, module, transforms
-
-PRNGKey = Any
-Array = Any
-Shape = Tuple[int, ...]
-Dtype = Any  # this could be a real type?
-Axes = Union[int, Sequence[int]]
+from flax.typing import (
+  Array,
+  PRNGKey as PRNGKey,
+  Dtype,
+  Shape as Shape,
+  Initializer,
+  Axes,
+)
 
 field = dataclasses.field
 canonicalize_dtype = dtypes.canonicalize_dtype
@@ -145,13 +147,13 @@ def _normalize(
   var: Array,
   reduction_axes: Axes,
   feature_axes: Axes,
-  dtype: Dtype,
+  dtype: Optional[Dtype],
   param_dtype: Dtype,
   epsilon: float,
   use_bias: bool,
   use_scale: bool,
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
-  scale_init: Callable[[PRNGKey, Shape, Dtype], Array],
+  bias_init: Initializer,
+  scale_init: Initializer,
 ):
   """Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
@@ -291,8 +293,8 @@ class BatchNorm(Module):
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
-  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  bias_init: Initializer = initializers.zeros
+  scale_init: Initializer = initializers.ones
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
@@ -438,8 +440,8 @@ class LayerNorm(Module):
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
-  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  bias_init: Initializer = initializers.zeros
+  scale_init: Initializer = initializers.ones
   reduction_axes: Axes = -1
   feature_axes: Axes = -1
   axis_name: Optional[str] = None
@@ -534,7 +536,7 @@ class RMSNorm(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   use_scale: bool = True
-  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  scale_init: Initializer = initializers.ones
   reduction_axes: Axes = -1
   feature_axes: Axes = -1
   axis_name: Optional[str] = None
@@ -654,8 +656,8 @@ class GroupNorm(Module):
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
-  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  bias_init: Initializer = initializers.zeros
+  scale_init: Initializer = initializers.ones
   reduction_axes: Optional[Axes] = None
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
@@ -824,8 +826,8 @@ class InstanceNorm(Module):
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
-  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  bias_init: Initializer = initializers.zeros
+  scale_init: Initializer = initializers.ones
   feature_axes: Axes = -1
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
@@ -1232,7 +1234,7 @@ class WeightNorm(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   use_scale: bool = True
-  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  scale_init: Initializer = initializers.ones
   feature_axes: Optional[Axes] = -1
   variable_filter: Optional[Iterable] = dataclasses.field(
     default_factory=lambda: {'kernel'}

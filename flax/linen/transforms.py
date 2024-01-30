@@ -57,6 +57,10 @@ from flax import errors, struct, traceback_util
 from flax import serialization
 from flax.core import Scope, lift, meta
 from flax.core.frozen_dict import FrozenDict
+from flax.core.scope import (
+  CollectionFilter,
+  PRNGSequenceFilter,
+)
 from flax.ids import FlaxId
 from flax.linen import module as linen_module
 from flax.linen.module import (
@@ -65,6 +69,10 @@ from flax.linen.module import (
   _derive_profiling_name,
   _get_unbound_fn,
   wrap_method_once,
+)
+from flax.typing import (
+  InOutAxis,
+  InOutScanAxis,
 )
 import jax
 
@@ -764,8 +772,8 @@ def lift_direct_transform(
 
 def vmap(
   target: Target,
-  variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis] = FrozenDict(),
-  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(),
+  variable_axes: Mapping[CollectionFilter, InOutAxis] = FrozenDict(),
+  split_rngs: Mapping[PRNGSequenceFilter, bool] = FrozenDict(),
   in_axes=0,
   out_axes=0,
   axis_size: Optional[int] = None,
@@ -855,8 +863,8 @@ def vmap(
 
 def jit(
     target: Target,
-    variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True,
+    variables: CollectionFilter = True,
+    rngs: PRNGSequenceFilter = True,
     static_argnums: Union[int, Iterable[int]] = (),
     static_argnames: Union[str, Iterable[str]] = (),
     donate_argnums: Union[int, Iterable[int]] = (),
@@ -939,8 +947,8 @@ def jit(
 
 def checkpoint(
   target: Target,
-  variables: lift.CollectionFilter = True,
-  rngs: lift.PRNGSequenceFilter = True,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
   concrete: bool = False,
   prevent_cse: bool = True,
   static_argnums: Union[int, Tuple[int, ...]] = (),
@@ -1031,12 +1039,12 @@ def remat_scan(
   target: Target,
   lengths: Optional[Sequence[int]] = (),
   policy: Optional[Callable[..., bool]] = None,
-  variable_broadcast: lift.CollectionFilter = False,
-  variable_carry: lift.CollectionFilter = False,
+  variable_broadcast: CollectionFilter = False,
+  variable_carry: CollectionFilter = False,
   variable_axes: Mapping[
-    lift.CollectionFilter, lift.InOutScanAxis
+    CollectionFilter, InOutScanAxis
   ] = FrozenDict({True: 0}),
-  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict({True: True}),
+  split_rngs: Mapping[PRNGSequenceFilter, bool] = FrozenDict({True: True}),
 ) -> Target:
   """Combines remat and scan for memory efficiency and constant time compilation.
 
@@ -1096,11 +1104,11 @@ def remat_scan(
 def scan(
   target: Target,
   variable_axes: Mapping[
-    lift.CollectionFilter, lift.InOutScanAxis
+    CollectionFilter, InOutScanAxis
   ] = FrozenDict(),
-  variable_broadcast: lift.CollectionFilter = False,
-  variable_carry: lift.CollectionFilter = False,
-  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(),
+  variable_broadcast: CollectionFilter = False,
+  variable_carry: CollectionFilter = False,
+  split_rngs: Mapping[PRNGSequenceFilter, bool] = FrozenDict(),
   in_axes=0,
   out_axes=0,
   length: Optional[int] = None,
@@ -1272,13 +1280,13 @@ def scan(
 
 def map_variables(
   target: Target,
-  mapped_collections: lift.CollectionFilter = True,
+  mapped_collections: CollectionFilter = True,
   trans_in_fn: Callable[..., Any] = lift.id_fn,
   trans_out_fn: Callable[..., Any] = lift.id_fn,
   init: bool = False,
   mutable: bool = False,
-  rngs: lift.PRNGSequenceFilter = True,
-  variables: lift.CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
+  variables: CollectionFilter = True,
   methods=None,
 ) -> Target:
   """Map Variables inside a module.
@@ -1353,9 +1361,9 @@ def vjp(
   *primals,
   has_aux: bool = False,
   reduce_axes=(),
-  vjp_variables: lift.CollectionFilter = 'params',
-  variables: lift.CollectionFilter = True,
-  rngs: lift.PRNGSequenceFilter = True,
+  vjp_variables: CollectionFilter = 'params',
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
   multi_scope: bool = False,
 ):
   """A lifted version of ``jax.vjp``.
@@ -1442,8 +1450,8 @@ def value_and_grad(
   *primals,
   has_aux: bool = False,
   reduce_axes=(),
-  variables: lift.CollectionFilter = True,
-  rngs: lift.PRNGSequenceFilter = True,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ):
   """A limited, lifted equivalent of ``jax.value_and_grad``.
 
@@ -1535,8 +1543,8 @@ def grad(
   *primals,
   has_aux: bool = False,
   reduce_axes=(),
-  variables: lift.CollectionFilter = True,
-  rngs: lift.PRNGSequenceFilter = True,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ):
   """A limited, lifted equivalent of ``jax.grad``.
 
@@ -1617,8 +1625,8 @@ def jvp(
   primals,
   tangents,
   variable_tangents,
-  variables: lift.CollectionFilter = True,
-  rngs: lift.PRNGSequenceFilter = True,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ) -> Union[Tuple[Any, Callable[..., Any]], Tuple[Any, Callable[..., Any], Any]]:
   """A lifted version of ``jax.jvp``.
 
@@ -1711,9 +1719,9 @@ def while_loop(
   body_fn: Callable[[ModuleT, C], C],
   mdl: ModuleT,
   init: C,
-  carry_variables: lift.CollectionFilter = False,
-  broadcast_variables: lift.CollectionFilter = True,
-  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(),
+  carry_variables: CollectionFilter = False,
+  broadcast_variables: CollectionFilter = True,
+  split_rngs: Mapping[PRNGSequenceFilter, bool] = FrozenDict(),
 ) -> C:
   """Lifted version of jax.lax.while_loop.
 
@@ -1788,8 +1796,8 @@ def cond(
   false_fun: Callable[..., C],
   mdl: Module,
   *operands,
-  variables: lift.CollectionFilter = True,
-  rngs: lift.PRNGSequenceFilter = True,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ) -> C:
   """Lifted version of ``jax.lax.cond``.
 
@@ -1859,8 +1867,8 @@ def switch(
   branches: Sequence[Callable[..., C]],
   mdl: Module,
   *operands,
-  variables: lift.CollectionFilter = True,
-  rngs: lift.PRNGSequenceFilter = True,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ) -> C:
   """Lifted version of ``jax.lax.switch``.
 
@@ -1948,7 +1956,7 @@ def switch(
 def _custom_vjp_single_scope_fn(
   fn: Callable[..., Any],
   backward_fn: Callable[..., Any],
-  grad_vars: lift.CollectionFilter = 'params',
+  grad_vars: CollectionFilter = 'params',
   nondiff_argnums=(),
 ):
   nodiff_fn = functools.partial(fn, needs_residual=False)
@@ -1962,7 +1970,7 @@ def custom_vjp(
   fn: Callable[..., Any],
   forward_fn: Callable[..., Any],
   backward_fn: Callable[..., Any],
-  grad_vars: lift.CollectionFilter = 'params',
+  grad_vars: CollectionFilter = 'params',
   nondiff_argnums=(),
 ):
   """Lifted version of ``jax.custom_vjp``.
@@ -2069,7 +2077,7 @@ def named_call(class_fn, force=True):
 
 def add_metadata_axis(
   target: Target,
-  variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis] = FrozenDict(),
+  variable_axes: Mapping[CollectionFilter, InOutAxis] = FrozenDict(),
   metadata_params: Dict[Any, Any] = {},
 ) -> Target:
   """A helper to manipulate boxed axis metadata.

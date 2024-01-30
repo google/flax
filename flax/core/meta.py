@@ -23,12 +23,13 @@ to keep track of how variables should be partitioned with ``jax.pjit``.
 
 import abc
 import functools
-from typing import Any, Callable, Dict, Generic, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 
 import jax
 from jax.experimental import maps
 
 from flax import errors, struct
+from flax.typing import LogicalNames
 
 A = TypeVar('A')
 B = TypeVar('B')
@@ -170,7 +171,6 @@ def replace_boxed(tree: Any, updates: Any) -> Any:
 
 
 PARTITION_NAME = 'partition_name'
-LogicalNames = Tuple[Union[str, None], ...]
 
 
 def _global_mesh_defined() -> bool:

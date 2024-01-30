@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional
-
+from typing import Optional
+from flax.typing import Dtype
 from jax import numpy as jnp
 from typing_extensions import TypeVarTuple, Unpack
 
 T = TypeVarTuple('T')
-Dtype = Any
-Array = Any
 
 
 def canonicalize_dtype(

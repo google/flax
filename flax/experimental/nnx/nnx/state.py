@@ -35,11 +35,10 @@ import jax.tree_util as jtu
 from flax import traverse_util
 from flax.experimental.nnx.nnx import filterlib, reprlib
 from flax.experimental.nnx.nnx.variables import Variable
+from flax.typing import Path, Leaf
 
 A = tp.TypeVar('A')
 
-Leaf = tp.Any
-Path = str
 Key = str
 FlatState = dict[Path, Variable[Leaf]]
 

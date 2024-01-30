@@ -21,6 +21,7 @@ from typing import Any, Optional
 from flax.linen.module import compact
 from flax.linen.module import Module
 from flax.linen.linear import Dense
+from flax.typing import Array, Dtype
 
 from jax.nn import celu
 from jax.nn import elu
@@ -53,9 +54,6 @@ normalize = standardize
 
 # pylint: enable=unused-import
 
-
-Array = Any
-Dtype = Any
 
 
 class PReLU(Module):

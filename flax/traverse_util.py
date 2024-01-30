@@ -57,16 +57,15 @@ import abc
 import copy
 import dataclasses
 import warnings
-from typing import Any, Callable, Tuple
+from typing import Any, Callable
 
 import jax
 
 import flax
 from flax.core.scope import VariableDict
+from flax.typing import PathParts
 
 from . import struct
-
-Path = Tuple[str, ...]
 
 
 # the empty node is a struct.dataclass to be compatible with JAX.
@@ -178,7 +177,7 @@ def unflatten_dict(xs, sep=None):
 
 
 def path_aware_map(
-  f: Callable[[Path, Any], Any], nested_dict: VariableDict
+  f: Callable[[PathParts, Any], Any], nested_dict: VariableDict
 ) -> VariableDict:
   """A map function that operates over nested dictionary structures while taking
   the path to each leaf into account.

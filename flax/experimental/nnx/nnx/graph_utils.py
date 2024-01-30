@@ -28,14 +28,13 @@ from flax.experimental.nnx.nnx.proxy_caller import (
 )
 from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import EMPTY, Empty, Variable
+from flax.typing import Path, PathParts
 
 HA = tp.TypeVar('HA', bound=tp.Hashable)
 HB = tp.TypeVar('HB', bound=tp.Hashable)
 
 Index = int
 Names = tp.Sequence[int]
-PathParts = tuple[str, ...]
-Path = str
 Node = tp.TypeVar('Node')
 Leaf = tp.TypeVar('Leaf')
 AuxData = tp.TypeVar('AuxData')

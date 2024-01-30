@@ -38,7 +38,6 @@ from .meta import (
     unbox as unbox,
 )
 from .scope import (
-    Array as Array,
     DenyList as DenyList,
     Scope as Scope,
     apply as apply,
@@ -50,4 +49,8 @@ from .tracers import (
     check_trace_level as check_trace_level,
     current_trace as current_trace,
     trace_level as trace_level,
+)
+
+from flax.typing import (
+    Array as Array,
 )
