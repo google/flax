@@ -402,7 +402,7 @@ class LayerNorm(Module):
     >>> np.testing.assert_allclose(y, y2)
 
     >>> y = nn.LayerNorm(reduction_axes=(1, 2), feature_axes=-1).apply(variables, x)
-    >>> y2 = nn.InstanceNorm(channel_axes=-1).apply(variables, x)
+    >>> y2 = nn.InstanceNorm(feature_axes=-1).apply(variables, x)
     >>> np.testing.assert_allclose(y, y2)
 
   Attributes:
@@ -610,7 +610,7 @@ class GroupNorm(Module):
     >>> np.testing.assert_allclose(y, y2)
 
     >>> y = nn.GroupNorm(num_groups=None, group_size=1).apply(variables, x)
-    >>> y2 = nn.InstanceNorm(channel_axes=-1).apply(variables, x)
+    >>> y2 = nn.InstanceNorm(feature_axes=-1).apply(variables, x)
     >>> np.testing.assert_allclose(y, y2)
 
   Attributes:
@@ -784,7 +784,7 @@ class InstanceNorm(Module):
     >>> y = layer.apply(variables, x)
 
     >>> # having a channel_axis of -1 in InstanceNorm is identical to reducing all non-batch,
-    >>> # non-channel axes and using the channel_axes as the feature_axes in LayerNorm
+    >>> # non-channel axes and using the feature_axes as the feature_axes in LayerNorm
     >>> y2 = nn.LayerNorm(reduction_axes=[1, 2], feature_axes=-1).apply(variables, x)
     >>> np.testing.assert_allclose(y, y2, atol=1e-7)
     >>> y3 = nn.GroupNorm(num_groups=x.shape[-1]).apply(variables, x)
@@ -800,9 +800,9 @@ class InstanceNorm(Module):
       by the next layer.
     bias_init: Initializer for bias, by default, zero.
     scale_init: Initializer for scale, by default, one.
-    channel_axes: Axes for channel. This is considered the feature axes for the
-      learned bias and scaling parameter. All other axes except the batch axes
-      (which is assumed to be the leading axis) will be reduced.
+    feature_axes: Axes for features. The learned bias and scaling parameters will
+      be in the shape defined by the feature axes. All other axes except the batch
+      axes (which is assumed to be the leading axis) will be reduced.
     axis_name: the axis name used to combine batch statistics from multiple
       devices. See ``jax.pmap`` for a description of axis names (default: None).
       This is only needed if the model is subdivided across devices, i.e. the
@@ -826,7 +826,7 @@ class InstanceNorm(Module):
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
-  channel_axes: Axes = -1
+  feature_axes: Axes = -1
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
@@ -843,11 +843,11 @@ class InstanceNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    channel_axes = _canonicalize_axes(x.ndim, self.channel_axes)
-    if 0 in channel_axes:
+    feature_axes = _canonicalize_axes(x.ndim, self.feature_axes)
+    if 0 in feature_axes:
       raise ValueError('The channel axes cannot include the leading dimension '
                        'as this is assumed to be the batch axis.')
-    reduction_axes = [i for i in range(1, x.ndim) if i not in channel_axes]
+    reduction_axes = [i for i in range(1, x.ndim) if i not in feature_axes]
 
     mean, var = _compute_stats(
       x,
@@ -865,7 +865,7 @@ class InstanceNorm(Module):
       mean,
       var,
       reduction_axes,
-      channel_axes,
+      feature_axes,
       self.dtype,
       self.param_dtype,
       self.epsilon,
