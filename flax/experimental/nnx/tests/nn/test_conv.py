@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Sequence
+import typing as tp
 
 import jax
 from absl.testing import parameterized
@@ -22,6 +23,11 @@ from numpy.testing import assert_array_equal
 
 from flax import linen
 from flax.experimental import nnx
+from flax.typing import (
+  PaddingLike,
+  Dtype,
+  PrecisionLike
+)
 
 
 class TestConvLinenConsistency(parameterized.TestCase):
@@ -37,24 +43,61 @@ class TestConvLinenConsistency(parameterized.TestCase):
       param_dtype = [jnp.float16],
       precision = [Precision.HIGHEST],
   )
-  def test_nnx_linen_equivalence(self, **kwargs):
+  def test_nnx_linen_equivalence(
+    self,
+    strides: tp.Union[None, int, tp.Sequence[int]],
+    padding: PaddingLike,
+    input_dilation: tp.Union[None, int, tp.Sequence[int]],
+    kernel_dilation: tp.Union[None, int, tp.Sequence[int]],
+    feature_group_count: int,
+    use_bias: bool,
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+    precision: PrecisionLike,
+  ):
     key = jax.random.key(42)
     rngs = nnx.Rngs(42)
     IN_FEATURES = 3
     OUT_FEATURES = 6
     INPUT_SHAPE = (24, 9, IN_FEATURES)
-    kwargs["kernel_size"] = (7, 4)
+    kernel_size = (7, 4)
 
     # Cannot use string padding specification for transpose conv
-    if isinstance(kwargs["input_dilation"], Sequence) or kwargs["input_dilation"] > 1:
-      kwargs["padding"] = (4, 2)
+    if isinstance(input_dilation, Sequence) or input_dilation > 1:
+      padding = (4, 2)
 
     x = jax.numpy.ones(INPUT_SHAPE)
-    model_nnx = nnx.Conv.create_abstract(IN_FEATURES, OUT_FEATURES, **kwargs, rngs=rngs)
-    model = linen.Conv(OUT_FEATURES, **kwargs)
+    model_nnx = nnx.Conv.create_abstract(
+      IN_FEATURES,
+      OUT_FEATURES,
+      kernel_size,
+      strides,
+      padding=padding,
+      input_dilation=input_dilation,
+      kernel_dilation=kernel_dilation,
+      feature_group_count=feature_group_count,
+      use_bias=use_bias,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+      rngs=rngs,
+    )
+    model = linen.Conv(
+      OUT_FEATURES,
+      kernel_size=kernel_size,
+      strides=strides,
+      padding=padding,
+      input_dilation=input_dilation,
+      kernel_dilation=kernel_dilation,
+      feature_group_count=feature_group_count,
+      use_bias=use_bias,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+    )
     variables = model.init(key, x)
     model_nnx.kernel = variables['params']['kernel']
-    if kwargs["use_bias"]:
+    if use_bias:
       model_nnx.bias = variables['params']['bias']
 
     out_nnx = model_nnx(x)

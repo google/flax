@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import typing as tp
+
 import jax
 from absl.testing import parameterized
 from jax import numpy as jnp
@@ -19,6 +21,7 @@ from numpy.testing import assert_array_equal
 
 from flax import linen
 from flax.experimental import nnx
+from flax.typing import Dtype
 
 
 class TestLinenConsistency(parameterized.TestCase):
@@ -28,7 +31,13 @@ class TestLinenConsistency(parameterized.TestCase):
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
   )
-  def test_nnx_linen_equivalence(self, input_dtype, num_embeddings, **kwargs):
+  def test_nnx_linen_equivalence(
+    self,
+    input_dtype: tp.Optional[Dtype],
+    num_embeddings: int,
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+  ):
     key = jax.random.key(42)
     rngs = nnx.Rngs(42)
     IN_FEATURES = 32
@@ -36,9 +45,15 @@ class TestLinenConsistency(parameterized.TestCase):
 
     x = jax.numpy.arange(NUM_EMBEDDINGS, dtype=input_dtype)
     model_nnx = nnx.Embed.create_abstract(
-      NUM_EMBEDDINGS, IN_FEATURES, **kwargs, rngs=rngs
+      NUM_EMBEDDINGS,
+      IN_FEATURES,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      rngs=rngs,
     )
-    model = linen.Embed(NUM_EMBEDDINGS, IN_FEATURES, **kwargs)
+    model = linen.Embed(
+      NUM_EMBEDDINGS, IN_FEATURES, dtype=dtype, param_dtype=param_dtype
+    )
     variables = model.init(key, x)
     model_nnx.embedding = variables['params']['embedding']
 

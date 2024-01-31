@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import typing as tp
+
 import jax
 import jax.numpy as jnp
 from absl.testing import parameterized
@@ -20,6 +22,7 @@ from numpy.testing import assert_array_equal
 
 from flax import linen
 from flax.experimental import nnx
+from flax.typing import Dtype, PrecisionLike
 
 
 class TestLinearGeneral:
@@ -50,18 +53,38 @@ class TestLinenConsistency(parameterized.TestCase):
       param_dtype = [jnp.float32, jnp.float16],
       precision = [Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
   )
-  def test_nnx_linen_equivalence(self, **kwargs):
+  def test_nnx_linen_equivalence(
+    self,
+    use_bias: bool,
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+    precision: PrecisionLike,
+  ):
     key = jax.random.key(42)
     rngs = nnx.Rngs(42)
     IN_FEATURES = 32
     OUT_FEATURES = 64
 
     x = jax.numpy.ones((1, IN_FEATURES))
-    model_nnx = nnx.Linear.create_abstract(IN_FEATURES, OUT_FEATURES, **kwargs, rngs=rngs)
-    model = linen.Dense(OUT_FEATURES, **kwargs)
+    model_nnx = nnx.Linear.create_abstract(
+      IN_FEATURES,
+      OUT_FEATURES,
+      use_bias=use_bias,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+      rngs=rngs,
+    )
+    model = linen.Dense(
+      OUT_FEATURES,
+      use_bias=use_bias,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+    )
     variables = model.init(key, x)
     model_nnx.kernel = variables['params']['kernel']
-    if kwargs["use_bias"]:
+    if use_bias:
       model_nnx.bias = variables['params']['bias']
 
     out_nnx = model_nnx(x)
