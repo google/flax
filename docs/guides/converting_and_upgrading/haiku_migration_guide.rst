@@ -572,9 +572,10 @@ an ``encode`` and ``decode`` function which correspond to the methods on the
 the method name as a string.
 Another noteworthy distinction here is that in Haiku, ``rng`` needs to be
 explicitly passed, even though the module does not use any stochastic
-operations during ``apply``. In Flax this is not necessary. The Haiku ``rng``
-is set to ``None`` here, but you could also use ``hk.without_apply_rng`` on the
-``apply`` function to remove the ``rng`` argument.
+operations during ``apply``. In Flax this is not necessary (check out
+`Randomness and PRNGs in Flax <https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/rng_guide.html>`_).
+The Haiku ``rng`` is set to ``None`` here, but you could also use
+``hk.without_apply_rng`` on the ``apply`` function to remove the ``rng`` argument.
 
 
 Lifted Transforms
