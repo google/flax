@@ -822,7 +822,9 @@ def vmap(
       argument.
     variable_axes: the variable collections that are lifted into the batching
       transformation. Use ``None`` to indicate a broadcasted collection or an
-      integer to map over an axis.
+      integer to map over an axis. For example, passing in
+      ``variable_axes={'params': None}`` will indicate that the
+      parameter variables should be shared along the mapped axis.
     split_rngs: Split PRNG sequences will be different for each index of the
       batch dimension. Unsplit PRNGs will be broadcasted.
     in_axes: Specifies the mapping of the input arguments (see ``jax.vmap``).

@@ -171,6 +171,7 @@ BatchApply
   GRUCell
   RNN
   Bidirectional
+  BatchApply
 
 .. autosummary::
   :toctree: _autosummary

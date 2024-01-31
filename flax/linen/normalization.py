@@ -499,7 +499,7 @@ class RMSNorm(Module):
   Example usage::
 
     >>> import flax.linen as nn
-    >>> import jax, jax.numpy as jnp
+    >>> import jax
 
     >>> x = jax.random.normal(jax.random.key(0), (5, 6))
     >>> layer = nn.RMSNorm()
@@ -544,7 +544,7 @@ class RMSNorm(Module):
 
   @compact
   def __call__(self, x, mask=None):
-    """Applies layer normalization on the input.
+    """Applies RMS layer normalization on the input.
 
     Args:
       x: the inputs
@@ -591,8 +591,8 @@ class GroupNorm(Module):
   The user should either specify the total number of channel groups or the
   number of channels per group.
 
-  NOTE: LayerNorm is a special case of GroupNorm where `num_groups=1`, and
-  InstanceNorm is a special case of GroupNorm where `group_size=1`.
+  NOTE: LayerNorm is a special case of GroupNorm where ``num_groups=1``, and
+  InstanceNorm is a special case of GroupNorm where ``group_size=1``.
 
   Example usage::
 
@@ -1114,7 +1114,7 @@ class SpectralNorm(Module):
 
 
 class WeightNorm(Module):
-  """L2 weight normalization (https://arxiv.org/pdf/1602.07868.pdf).
+  """L2 weight normalization (https://arxiv.org/abs/1602.07868).
 
   Weight normalization normalizes the weight params so that the l2-norm of
   the matrix is equal to 1. This is implemented as a layer wrapper where
