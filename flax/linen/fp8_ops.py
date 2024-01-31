@@ -59,6 +59,12 @@ class Fp8MetaTyRules:
   def tangent_dtype(dtype):
     return dtype
 
+  @staticmethod
+  def full(shape, fill_value, dtype):
+    fill_value = lax.convert_element_type(fill_value, dtype.float_dtype)
+    out_raw = lax.full(shape, fill_value, dtype.float_dtype)
+    return lax.convert_element_type(out_raw, dtype)
+
   # NOTE: by skipping some rules, this dtype can only be used underneath jit
   @staticmethod
   def global_sharded_result_handler(aval, sharding, committed, is_from_xla):
