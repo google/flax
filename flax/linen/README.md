@@ -13,7 +13,7 @@ Please open a [discussion](https://github.com/google/flax/discussions) if you ha
 
 * 2-page intro to the [Linen Design Principles](https://docs.google.com/document/d/1ZlL_4bXCw5Xl0WstQw1GpnZqfb9JFOeUGAPcBVk-kn8)
 * [Slides from a talk to the JAX core team](https://docs.google.com/presentation/d/1ngKWUwsSqAwPRvATG8sAxMzu9ujv4N__cKsUofdNno0)
-* [Brief Intro to Linen](https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/linen_intro.ipynb) in Colab
+* [Brief Intro to Linen](https://colab.research.google.com/github/google/flax/blob/main/docs/linen_intro.ipynb) in Colab
 * An [upgrade guide](https://docs.google.com/document/d/1hYavTVPaKVVe9Be8pCB7yW7r6dDv3RALVNit8NZca4c) + some additional questions we're considering
 * Ported [examples](https://github.com/google/flax/tree/main/examples)
 * "Design tests" used to ensure that our "functional core" supports [various advanced use-cases](https://github.com/google/flax/tree/main/tests/core/design), and that the mostly-syntactic-sugar Module abstraction
