@@ -5,7 +5,7 @@ This code follows [pytorch/examples/vae](https://github.com/pytorch/examples/blo
 
 ```bash
 pip install -r requirements.txt
-python main.py --workdir=/tmp/mnist --config=configs/default.py
+python main.py --config=configs/default.py
 ```
 
 ## Overriding Hyperparameter configurations
@@ -18,7 +18,7 @@ follows:
 
 ```shell
 python main.py \
---workdir=/tmp/mnist --config=configs/default.py \
+--config=configs/default.py \
 --config.learning_rate=0.01 --config.num_epochs=10
 ```
 
