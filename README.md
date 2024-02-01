@@ -95,7 +95,7 @@ pip install "flax[all]"
 
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder.
 
-To learn more about the `Module` abstraction, check out our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/main/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, refer to our
+To learn more about the `Module` abstraction, check out our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/main/docs/linen_intro.ipynb). For additional concrete demonstrations of best practices, refer to our
 [guides](https://flax.readthedocs.io/en/latest/guides/index.html) and
 [developer notes](https://flax.readthedocs.io/en/latest/developer_notes/index.html).
 
