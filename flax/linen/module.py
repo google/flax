@@ -1665,6 +1665,7 @@ class Module(ModuleBase):
     init_fn: Optional[Callable[..., T]] = None,
     *init_args,
     unbox: Literal[True],
+    **init_kwargs,
   ) -> Variable[T]:
     ...
 
@@ -1676,6 +1677,7 @@ class Module(ModuleBase):
     init_fn: Optional[Callable[..., T]] = None,
     *init_args,
     unbox: Literal[False],
+    **init_kwargs,
   ) -> Variable[meta.AxisMetadata[T]]:
     ...
 
@@ -1687,6 +1689,7 @@ class Module(ModuleBase):
     init_fn: Optional[Callable[..., T]] = None,
     *init_args,
     unbox: bool = True,
+    **init_kwargs,
   ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     ...
 
@@ -1697,6 +1700,7 @@ class Module(ModuleBase):
     init_fn: Optional[Callable[..., T]] = None,
     *init_args,
     unbox: bool = True,
+    **init_kwargs,
   ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     """Declares and returns a variable in this Module.
 
@@ -1730,9 +1734,10 @@ class Module(ModuleBase):
         this variable. This function will only be called the first time this
         variable is used in this module. If None, the variable must already be
         initialized otherwise an error is raised.
-      *init_args: The arguments to pass to init_fn.
+      *init_args: The positional arguments to pass to init_fn.
       unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
         value, see ``flax.nn.meta.unbox`` (default: True).
+      **init_kwargs: The key-word arguments to pass to init_fn
 
     Returns:
       A :class:`flax.core.variables.Variable` that can be read or set via
@@ -1746,12 +1751,16 @@ class Module(ModuleBase):
     if self._name_taken(name, collection=col):
       raise errors.NameInUseError('variable', name, self.__class__.__name__)
     assert self.scope is not None
-    v = self.scope.variable(col, name, init_fn, *init_args, unbox=unbox)
+    v = self.scope.variable(
+      col, name, init_fn, *init_args, unbox=unbox, **init_kwargs
+    )
     self._state.children[name] = col
     return v
 
   @overload
-  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+  def param(
+    self, name: str, init_fn: Callable[..., T], *init_args,
+  ) -> T:
     ...
 
   @overload
@@ -1761,6 +1770,7 @@ class Module(ModuleBase):
     init_fn: Callable[..., T],
     *init_args,
     unbox: Literal[True],
+    **init_kwargs,
   ) -> T:
     ...
 
@@ -1771,17 +1781,28 @@ class Module(ModuleBase):
     init_fn: Callable[..., T],
     *init_args,
     unbox: Literal[False],
+    **init_kwargs,
   ) -> meta.AxisMetadata[T]:
     ...
 
   @overload
   def param(
-    self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool
+    self,
+    name: str,
+    init_fn: Callable[..., T],
+    *init_args,
+    unbox: bool,
+    **init_kwargs,
   ) -> Union[T, meta.AxisMetadata[T]]:
     ...
 
   def param(
-    self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
+    self,
+    name: str,
+    init_fn: Callable[..., T],
+    *init_args,
+    unbox: bool = True,
+    **init_kwargs,
   ) -> Union[T, meta.AxisMetadata[T]]:
     """Declares and returns a parameter in this Module.
 
@@ -1789,7 +1810,8 @@ class Module(ModuleBase):
     :mod:`flax.core.variables` for more details on variables.
 
     The first argument of ``init_fn`` is assumed to be a PRNG key, which is
-    provided automatically and does not have to be passed using ``init_args``::
+    provided automatically and does not have to be passed using ``init_args``
+    or ``init_kwargs``::
 
       >>> class Foo(nn.Module):
       ...   @nn.compact
@@ -1812,9 +1834,10 @@ class Module(ModuleBase):
       init_fn: The function that will be called to compute the initial value of
         this variable. This function will only be called the first time this
         parameter is used in this module.
-      *init_args: The arguments to pass to init_fn.
+      *init_args: The positional arguments to pass to init_fn.
       unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
         value, see ``flax.nn.meta.unbox`` (default: True).
+      **init_kwargs: The key-word arguments to pass to init_fn.
 
     Returns:
       The value of the initialized parameter. Throws an error if the parameter
@@ -1828,7 +1851,7 @@ class Module(ModuleBase):
     if self._name_taken(name, collection='params'):
       raise errors.NameInUseError('param', name, self.__class__.__name__)
     assert self.scope is not None
-    v = self.scope.param(name, init_fn, *init_args, unbox=unbox)
+    v = self.scope.param(name, init_fn, *init_args, unbox=unbox, **init_kwargs)
     self._state.children[name] = 'params'
     return v
 
