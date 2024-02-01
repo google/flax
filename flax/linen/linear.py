@@ -34,6 +34,7 @@ from flax.typing import (
     PaddingLike,
     PrecisionLike,
     Shape as Shape,
+    Tuple,
 )
 import jax
 from jax import eval_shape, lax
@@ -95,15 +96,12 @@ class DenseGeneral(Module):
     bias_init: initializer function for the bias.
     precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
-<<<<<<< HEAD
     promote_dtype: function to promote the dtype of the arrays to the desired
       dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
       and a ``dtype`` keyword argument, and return a tuple of arrays with the
       promoted dtype.
-=======
     kernel_axes: a tuple of axes associated with the kernel.
     bias_axes: a tuple of axes associated with the bias.
->>>>>>> add t5x sharding annotations to flax layers
   """
 
   features: int | Sequence[int]
@@ -243,15 +241,12 @@ class Dense(Module):
       for details.
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
-<<<<<<< HEAD
     promote_dtype: function to promote the dtype of the arrays to the desired
       dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
       and a ``dtype`` keyword argument, and return a tuple of arrays with the
       promoted dtype.
-=======
     kernel_axes: a tuple of axes associated with the kernel.
     bias_axes: a tuple of axes associated with the bias.
->>>>>>> add t5x sharding annotations to flax layers
   """
 
   features: int
@@ -514,15 +509,12 @@ class _Conv(Module):
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
-<<<<<<< HEAD
     promote_dtype: function to promote the dtype of the arrays to the desired
       dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
       and a ``dtype`` keyword argument, and return a tuple of arrays with the
       promoted dtype.
-=======
     kernel_axes: a tuple of axes associated with the kernel.
     bias_axes: a tuple of axes associated with the bias.
->>>>>>> add t5x sharding annotations to flax layers
   """
 
   features: int
