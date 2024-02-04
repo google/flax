@@ -4,12 +4,15 @@
 
 _**N**eural **N**etworks for JA**X**_
 
-NNX is a Neural Networks library for JAX that provides a simple yet powerful module system that adheres to standard Python semantics. Its aim is to combine the robustness of Linen with a simplified, Pythonic API akin to that of [PyTorch](https://pytorch.org/).
+NNX is a JAX-based neural network library designed for simplicity and power. Its modular approach follows standard Python conventions, making it both intuitive and compatible with the broader JAX ecosystem.
 
-* **Pythonic**: Modules are just regular python classes, they contain their own state, are fully mutable, and allow sharing references between Modules.
-* **Compatible**: Easily convert back and forth between Modules and pytrees using the Functional API to integrate with any JAX API.
-* **Semantic**: Partition a Module's state into different semantic collections, allowing for fine-grained control when applying JAX transformations.
-* **Easy to use**: NNX learns from years of experience with Linen and optimizes for simplicity and ease of use for common use cases without sacrificing generality.
+* **Pythonic**: Modules are standard Python classes, promoting ease of use and a more familiar
+  development experience.
+* **Compatible**: Effortlessly convert between Modules and pytrees using the Functional API for maximum flexibility.
+* **Control**: Manage a Module's state with precision using typed Variable collections, enabling fine-grained control
+  on JAX transformations.
+* **User-friendly**: NNX prioritizes simplicity for common use cases, building upon lessons learned from Linen
+  to provide a streamlined experience.
 
 #### Table of Contents
 * [Installation](#installation)
