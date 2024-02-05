@@ -18,6 +18,7 @@ from typing import Any, TypeVar
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from flax.experimental import nnx
@@ -458,6 +459,20 @@ class TestModule:
 
     assert linear.kernel == jax.ShapeDtypeStruct((2, 3), jnp.float32)
     assert linear.bias == jax.ShapeDtypeStruct((3,), jnp.float32)
+
+  def test_partial_init(self):
+    linear = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    state = linear.get_state()
+
+    del state['bias']
+
+    linear2 = nnx.Linear.partial_init(state)(
+      2, 3, bias_init=nnx.initializers.ones_init(), rngs=nnx.Rngs(1)
+    )
+
+    np.testing.assert_allclose(linear.kernel, linear2.kernel)
+    np.testing.assert_allclose(linear.bias, 0)
+    np.testing.assert_allclose(linear2.bias, 1)
 
   def test_deepcopy(self):
     class Foo(nnx.Module):
