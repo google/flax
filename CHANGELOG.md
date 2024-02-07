@@ -24,6 +24,18 @@ vNext
 -
 -
 
+0.8.1
+-----
+- Added default collection in `make_rng`.
+- Added `InstanceNorm` and renamed `channel_axes` to `feature_axes`.
+- Added norm equivalence tests.
+- Added `Module.module_paths` and doc.
+- make `Sequential.__call__` compact.
+- Added `nn.compact_name_scope` v3.
+- Add explicit control over frozen/slots setting in `flax.struct.dataclass`.
+- Replacing `jax.tree_util.tree_map` with mapping over leafs.
+- Fixed docs and docstrings.
+
 0.8.0
 -----
 - Added [NNX](https://github.com/google/flax/tree/main/flax/experimental/nnx#nnx), a neural network library for JAX that provides a simple yet powerful module system that adheres to standard Python semantics. Its aim is to combine the robustness of Linen with a simplified, Pythonic API akin to that of PyTorch.
