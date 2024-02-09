@@ -180,7 +180,7 @@ Flax uses lazy initialization, which allows declared variables to be initialized
 
 For declaring parameters that aren't mutated inside the model, but rather by gradient descent, we use the syntax:
 
- `self.param(parameter_name, parameter_init_fn, *init_args)`
+ `self.param(parameter_name, parameter_init_fn, *init_args, **init_kwargs)`
 
 with arguments:
  - `parameter_name` just the name, a string
@@ -261,7 +261,7 @@ print('output:\n', y)
 
 For declaring generally mutable _variables_ that may be mutated inside the model we use the call:
 
- `self.variable(variable_kind, variable_name, variable_init_fn, *init_args)`
+ `self.variable(variable_kind, variable_name, variable_init_fn, *init_args, **init_kwargs)`
 
 with arguments:
  - `variable_kind` the "kind" of state this variable is, i.e. the name of the nested-dict collection that this will be stored in inside the top Modules variables.  e.g. `batch_stats` for the moving statistics for a batch norm layer or `cache` for autoregressive cache data.  Note that parameters also have a kind, but they're set to the default `param` kind.

@@ -127,6 +127,7 @@ def param_with_axes(
     *init_args,
     axes: Optional[Tuple[str, ...]] = None,
     module: Optional['nn.Module'] = None,
+    **init_kwargs,
 ):
   """Declares and returns a parameter with logical axes in the current Module.
 
@@ -137,10 +138,11 @@ def param_with_axes(
     init_fn: The function that will be called to compute the initial value
       of this variable. This function will only be called the first time
       this parameter is used in this module.
-    *init_args: The arguments to pass to init_fn.
+    *init_args: The positional arguments to pass to init_fn.
     axes: A tuple of axis names, must match the rank of the param array.
     module: Use an explicit module instead of deriving the most recent from
       dynamic module context.
+    **init_kwargs: The key-word arguments to pass to init_fn.
 
   Returns:
     The value of the initialized parameter.
@@ -154,7 +156,7 @@ def param_with_axes(
     module = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
     assert module is not None
   # define/fetch parameter on that module
-  module_param = module.param(name, init_fn, *init_args)
+  module_param = module.param(name, init_fn, *init_args, **init_kwargs)
   if axes is not None:
     # apply logical axis constraint immediately
     module_param = with_sharding_constraint(
@@ -227,13 +229,14 @@ def _core_variable_with_axes(
     *init_args,
     axes: Optional[Tuple[str, ...]] = None,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
+    **init_kwargs,
 ):
   """Variant of flax core variable scope call with sharding constraints."""
   scope.reserve(name)
   if not scope.has_variable(col, name):
     if not scope.is_mutable_collection(col):
       raise flax.errors.ScopeVariableNotFoundError(name, col, scope.path_text)
-    init_value = init_fn(*init_args)
+    init_value = init_fn(*init_args, **init_kwargs)
     if axes is not None:
       init_value = with_sharding_constraint(init_value, axes, fallback=fallback)
     scope.put_variable(col, name, init_value)
@@ -248,6 +251,7 @@ def variable_with_axes(
     axes: Optional[Tuple[str, ...]] = None,
     module: Optional['nn.Module'] = None,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
+    **init_kwargs,
 ):
   """Declares and returns a variable with logical axes in the current Module.
 
@@ -259,11 +263,12 @@ def variable_with_axes(
     init_fn: The function that will be called to compute the initial value
       of this variable. This function will only be called the first time
       this parameter is used in this module.
-    *init_args: The arguments to pass to init_fn.
+    *init_args: The positional arguments to pass to init_fn.
     axes: A tuple of axis names, must match the rank of the variable array.
     module: Use an explicit module instead of deriving the most recent from
       dynamic module context.
     fallback: How sharding should behave if there is no rule covering some axis.
+    **init_kwargs: The key-word arguments to pass to init_fn.
 
   Returns:
     A flax `PartitionedVariable` object referencing the initialized variable
@@ -285,6 +290,7 @@ def variable_with_axes(
       *init_args,
       axes=axes,
       fallback=fallback,
+      **init_kwargs,
   )
   if axes is not None:
     # record logical axis constraint for global axis metadata

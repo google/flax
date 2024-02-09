@@ -56,7 +56,7 @@ from flax.typing import (
   VariableDict,
   FrozenVariableDict as FrozenVariableDict,
   MutableVariableDict,
-  PRNGFoldable
+  PRNGFoldable,
 )
 
 from . import meta, partial_eval, tracers
@@ -831,6 +831,7 @@ class Scope:
     init_fn: Optional[Callable[..., T]] = None,
     *init_args,
     unbox: Literal[True],
+    **init_kwargs,
   ) -> Variable[T]:
     ...
 
@@ -842,6 +843,7 @@ class Scope:
     init_fn: Optional[Callable[..., T]] = None,
     *init_args,
     unbox: Literal[False],
+    **init_kwargs,
   ) -> Variable[meta.AxisMetadata[T]]:
     ...
 
@@ -853,6 +855,7 @@ class Scope:
     init_fn: Optional[Callable[..., T]] = None,
     *init_args,
     unbox: bool = True,
+    **init_kwargs,
   ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     ...
 
@@ -863,6 +866,7 @@ class Scope:
     init_fn: Optional[Callable[..., T]] = None,
     *init_args,
     unbox: bool = True,
+    **init_kwargs,
   ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
@@ -872,9 +876,10 @@ class Scope:
       init_fn: a function taking a PRNGKey plus any other number of positional
         arguments. If None, the variable must already be initialized otherwise
         an error is raised.
-      *init_args: the arguments to evaluate init_fn on lazily.
+      *init_args: the positional arguments to evaluate init_fn on lazily.
       unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
         value, see ``flax.nn.meta.unbox`` (default: True).
+      **init_kwargs: the key-word arguments to evaluate init_fn on lazily.
 
     Returns:
       The variable.  Throws an error if the variable exists already.
@@ -885,7 +890,7 @@ class Scope:
         if self.is_collection_empty(col):
           raise errors.ScopeCollectionNotFound(col, name, self.path_text)
         raise errors.ScopeVariableNotFoundError(name, col, self.path_text)
-      init_value = init_fn(*init_args)
+      init_value = init_fn(*init_args, **init_kwargs)
       self.put_variable(col, name, init_value)
     # cast to make static analyzers happy
     return cast(
@@ -894,7 +899,9 @@ class Scope:
     )
 
   @overload
-  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+  def param(
+    self, name: str, init_fn: Callable[..., T], *init_args,
+  ) -> T:
     ...
 
   @overload
@@ -904,6 +911,7 @@ class Scope:
     init_fn: Callable[..., T],
     *init_args,
     unbox: Literal[True],
+    **init_kwargs,
   ) -> T:
     ...
 
@@ -914,17 +922,28 @@ class Scope:
     init_fn: Callable[..., T],
     *init_args,
     unbox: Literal[False],
+    **init_kwargs,
   ) -> meta.AxisMetadata[T]:
     ...
 
   @overload
   def param(
-    self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool
+    self,
+    name: str,
+    init_fn: Callable[..., T],
+    *init_args,
+    unbox: bool,
+    **init_kwargs,
   ) -> Union[T, meta.AxisMetadata[T]]:
     ...
 
   def param(
-    self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
+    self,
+    name: str,
+    init_fn: Callable[..., T],
+    *init_args,
+    unbox: bool = True,
+    **init_kwargs,
   ) -> Union[T, meta.AxisMetadata[T]]:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
 
@@ -934,9 +953,10 @@ class Scope:
       name: the name of the parameter.
       init_fn: a function taking a PRNGKey plus any other number of positional
         arguments.
-      *init_args: the arguments to evaluate init_fn on lazily.
+      *init_args: the positional arguments to evaluate init_fn on lazily.
       unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
         value, see ``flax.nn.meta.unbox`` (default: True).
+      **init_kwargs: the key-word arguments to evaluate init_fn on lazily.
 
     Returns:
       The parameters. Throws an error if the params exist already.
@@ -949,7 +969,9 @@ class Scope:
       # in a Flax Module match the shapes coming in during apply, and if not,
       # catch it with an error message.
       # NOTE: We could consider moving this to `self.`
-      abs_value = jax.eval_shape(lambda: init_fn(random.key(0), *init_args))
+      abs_value = jax.eval_shape(
+        lambda: init_fn(random.key(0), *init_args, **init_kwargs)
+      )
       abs_value_flat = jax.tree_util.tree_leaves(abs_value)
       value_flat = jax.tree_util.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
@@ -965,7 +987,7 @@ class Scope:
         if self.is_collection_empty('params'):
           raise errors.ScopeCollectionNotFound('params', name, self.path_text)
         raise errors.ScopeParamNotFoundError(name, self.path_text)
-      value = init_fn(self.make_rng('params'), *init_args)
+      value = init_fn(self.make_rng('params'), *init_args, **init_kwargs)
       self.put_variable('params', name, value)
     if unbox:
       value = meta.unbox(value)
