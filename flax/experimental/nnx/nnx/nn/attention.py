@@ -371,8 +371,20 @@ class MultiHeadAttention(Module):
     if self.normalize_qk:
       # Normalizing query and key projections stabilizes training with higher
       # LR. See ViT-22B paper http://arxiv.org/abs/2302.05442 for analysis.
-      self.query_ln = LayerNorm(self.head_dim, use_bias=False, rngs=rngs)
-      self.key_ln = LayerNorm(self.head_dim, use_bias=False, rngs=rngs)
+      self.query_ln = LayerNorm(
+        self.head_dim,
+        use_bias=False,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        rngs=rngs,
+      )
+      self.key_ln = LayerNorm(
+        self.head_dim,
+        use_bias=False,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        rngs=rngs,
+      )
     else:
       self.query_ln = None
       self.key_ln = None
