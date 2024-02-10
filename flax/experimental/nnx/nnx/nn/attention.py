@@ -580,7 +580,32 @@ class MultiHeadAttention(Module):
     return out
 
   def init_cache(self, input_shape: Shape, dtype: Dtype = jnp.float32):
-    """Initializes cache for fast autoregressive decoding."""
+    """Initializes cache for fast autoregressive decoding. When
+    ``decode=True``, this method must be called first before performing
+    forward inference.
+
+    Example usage::
+
+      >>> from flax.experimental import nnx
+      >>> import jax.numpy as jnp
+
+      >>> rngs = nnx.Rngs(42)
+
+      >>> x = jnp.ones((1, 3))
+      >>> model_nnx = nnx.MultiHeadAttention(
+      ...   num_heads=2,
+      ...   in_features=3,
+      ...   qkv_features=6,
+      ...   out_features=6,
+      ...   decode=True,
+      ...   rngs=rngs,
+      >>> )
+
+      >>> # out_nnx = model_nnx(x) <-- throws an error because cache isn't initialized
+
+      >>> model_nnx.init_cache(x.shape)
+      >>> out_nnx = model_nnx(x)
+    """
     cache_shape = (*input_shape[:-1], self.num_heads, self.head_dim)
     self.cached_key = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cached_value = nnx.Cache(jnp.zeros(cache_shape, dtype))
