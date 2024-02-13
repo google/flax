@@ -13,8 +13,16 @@
 # limitations under the License.
 
 import jax, jax.numpy as jnp
+from jax.lax import Precision
 
+from flax import linen
 from flax.experimental import nnx
+from flax.typing import Dtype, PrecisionLike
+
+from numpy.testing import assert_array_equal
+
+import typing as tp
+from absl.testing import parameterized
 
 
 class TestMultiHeadAttention:
@@ -99,3 +107,73 @@ class TestMultiHeadAttention:
 
       assert y1.shape == (1, 1, 4)
       assert y2.shape == (1, 1, 4)
+
+
+# TODO: add all possible constructor argument values to parameterized.product
+class TestLinenConsistency(parameterized.TestCase):
+  @parameterized.product(
+    use_bias=[True, False],
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    precision=[Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
+    decode=[True, False],
+    normalize_qk=[True, False],
+  )
+  def test_nnx_attention_equivalence(
+    self,
+    use_bias: bool,
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+    precision: PrecisionLike,
+    decode: bool,
+    normalize_qk: bool,
+  ):
+    key = jax.random.key(42)
+    rngs = nnx.Rngs(42)
+
+    num_heads = 2
+    in_features = 3
+    qkv_features = 6
+    out_features = 6
+
+    x = jax.numpy.ones((1, in_features))
+    model_nnx = nnx.MultiHeadAttention(
+      num_heads=num_heads,
+      in_features=in_features,
+      qkv_features=qkv_features,
+      out_features=out_features,
+      use_bias=use_bias,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+      decode=decode,
+      normalize_qk=normalize_qk,
+      rngs=rngs,
+    )
+    model = linen.MultiHeadDotProductAttention(
+      num_heads=num_heads,
+      qkv_features=qkv_features,
+      out_features=out_features,
+      use_bias=use_bias,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+      decode=decode,
+      normalize_qk=normalize_qk,
+    )
+    variables = model.init(key, x)
+
+    for qkvo in ('query', 'key', 'value', 'out'):
+      setattr(
+        getattr(model_nnx, qkvo), 'kernel', variables['params'][qkvo]['kernel']
+      )
+      if use_bias:
+        setattr(
+          getattr(model_nnx, qkvo), 'bias', variables['params'][qkvo]['bias']
+        )
+    if decode:
+      model_nnx.init_cache(x.shape, dtype=dtype)
+
+    out_nnx = model_nnx(x)
+    out, cache = model.apply(variables, x, mutable=['cache'])
+    assert_array_equal(out, out_nnx)

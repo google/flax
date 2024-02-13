@@ -459,8 +459,18 @@ class MultiHeadDotProductAttention(Module):
     if self.normalize_qk:
       # Normalizing query and key projections stabilizes training with higher
       # LR. See ViT-22B paper http://arxiv.org/abs/2302.05442 for analysis.
-      query = LayerNorm(name='query_ln', use_bias=False)(query)  # type: ignore[call-arg]
-      key = LayerNorm(name='key_ln', use_bias=False)(key)  # type: ignore[call-arg]
+      query = LayerNorm(
+        name='query_ln',
+        use_bias=False,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+      )(query)  # type: ignore[call-arg]
+      key = LayerNorm(
+        name='key_ln',
+        use_bias=False,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+      )(key)  # type: ignore[call-arg]
 
     # During fast autoregressive decoding, we feed one position at a time,
     # and cache the keys and values step by step.
@@ -494,7 +504,9 @@ class MultiHeadDotProductAttention(Module):
         # update key, value caches with our new 1d spatial slices
         cur_index = cache_index.value
         zero = jnp.array(0, dtype=lax.dtype(cur_index.dtype))
-        indices: tuple[Union[int, jax.Array], ...] = (zero,) * len(batch_dims) + (
+        indices: tuple[Union[int, jax.Array], ...] = (zero,) * len(
+          batch_dims
+        ) + (
           cur_index,
           zero,
           zero,
@@ -699,7 +711,11 @@ class SelfAttention(MultiHeadDotProductAttention):
       DeprecationWarning,
     )
     return super().__call__(
-      inputs_q, mask=mask, deterministic=deterministic, dropout_rng=dropout_rng, sow_weights=sow_weights
+      inputs_q,
+      mask=mask,
+      deterministic=deterministic,
+      dropout_rng=dropout_rng,
+      sow_weights=sow_weights,
     )
 
 
@@ -766,7 +782,9 @@ def make_causal_mask(
   )
 
 
-def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32) -> Optional[Array]:
+def combine_masks(
+  *masks: Optional[Array], dtype: Dtype = jnp.float32
+) -> Optional[Array]:
   """Combine attention masks.
 
   Args:
