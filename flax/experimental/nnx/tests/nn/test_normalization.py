@@ -138,3 +138,56 @@ class TestLinenConsistency(parameterized.TestCase):
 
     nnx_out = nnx_model(x)
     assert_array_equal(linen_out, nnx_out)
+
+  @parameterized.product(
+    dtype=[jnp.float32, jnp.float16], param_dtype=[jnp.float32, jnp.float16]
+  )
+  def test_nnx_linen_rmsnorm_equivalence(
+    self,
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+  ):
+    class NNXModel(nnx.Module):
+      def __init__(self, dtype, param_dtype, rngs):
+        self.norm_layer = nnx.RMSNorm(
+          3, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+        )
+        self.linear = nnx.Linear(
+          3, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+        )
+
+      def __call__(self, x):
+        x = self.norm_layer(x)
+        x = self.linear(x)
+        return x
+
+    class LinenModel(linen.Module):
+      dtype: tp.Optional[Dtype] = None
+      param_dtype: Dtype = jnp.float32
+
+      def setup(self):
+        self.norm_layer = linen.RMSNorm(
+          dtype=self.dtype, param_dtype=self.param_dtype
+        )
+        self.linear = linen.Dense(
+          4, dtype=self.dtype, param_dtype=self.param_dtype
+        )
+
+      def __call__(self, x):
+        x = self.norm_layer(x)
+        x = self.linear(x)
+        return x
+
+    rngs = nnx.Rngs(42)
+    x = jnp.ones((1, 3))
+
+    linen_model = LinenModel(dtype=dtype, param_dtype=param_dtype)
+    variables = linen_model.init(jax.random.key(0), x)
+    linen_out = linen_model.apply(variables, x)
+
+    nnx_model = NNXModel(dtype=dtype, param_dtype=param_dtype, rngs=rngs)
+    nnx_model.linear.kernel = variables['params']['linear']['kernel']
+    nnx_model.linear.bias = variables['params']['linear']['bias']
+
+    nnx_out = nnx_model(x)
+    assert_array_equal(linen_out, nnx_out)
