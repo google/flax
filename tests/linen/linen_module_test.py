@@ -17,6 +17,7 @@
 import contextlib
 import copy
 import dataclasses
+import enum
 import functools
 import gc
 import inspect
@@ -3036,6 +3037,17 @@ class RelaxedNamingTests(absltest.TestCase):
     self.assertIn('next_layer_0', variables['params'])
     self.assertIn('next_layer_1', variables['params'])
     self.assertNotIn('child_template', variables['params'])
+
+  def test_nonstring_keys_in_dict_on_module(self):
+    class MyEnum(str, enum.Enum):
+      a = 'a'
+      b = 'b'
+    class MyModule(nn.Module):
+      config: dict[MyEnum, int]
+      def __call__(self, inputs):
+        return inputs
+    module = MyModule(config={MyEnum.a: 1, MyEnum.b: 2})
+    variables = module.init(jax.random.key(0), jnp.zeros([0]))
 
 
 class FrozenDictTests(absltest.TestCase):

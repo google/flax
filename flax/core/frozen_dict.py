@@ -322,7 +322,7 @@ def _frozen_dict_state_dict(xs):
 
 
 def _restore_frozen_dict(xs, states):
-  diff = set(map(str, xs.keys())).difference(states.keys())
+  diff = set(map(str, xs.keys())).difference(map(str, states.keys()))
   if diff:
     raise ValueError(
       'The target dict keys and state dict keys do not match, target dict'
