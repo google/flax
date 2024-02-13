@@ -73,6 +73,7 @@ from .nnx.nn.linear import Linear as Linear
 from .nnx.nn.linear import LinearGeneral as LinearGeneral
 from .nnx.nn.normalization import BatchNorm as BatchNorm
 from .nnx.nn.normalization import LayerNorm as LayerNorm
+from .nnx.nn.normalization import RMSNorm as RMSNorm
 from .nnx.nn.stochastic import Dropout as Dropout
 from .nnx.pytreelib import Pytree as Pytree
 from .nnx.pytreelib import TreeNode as TreeNode

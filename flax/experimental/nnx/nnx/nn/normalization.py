@@ -391,3 +391,98 @@ class LayerNorm(Module):
       self.dtype,
       self.epsilon,
     )
+
+
+class RMSNorm(Module):
+  """RMS Layer normalization (https://arxiv.org/abs/1910.07467).
+
+  RMSNorm normalizes the activations of the layer for each given example in a
+  batch independently, rather than across a batch like Batch Normalization.
+  Unlike LayerNorm which re-centers the mean to be 0 and normalizes by the
+  standard deviation of the activations, RMSNorm does not re-center at all
+  and instead normalizes by the root mean square of the activations.
+
+  Attributes:
+      epsilon: A small float added to variance to avoid dividing by zero.
+      dtype: the dtype of the result (default: infer from input and params).
+      param_dtype: the dtype passed to parameter initializers (default: float32).
+      use_scale: If True, multiply by scale (gamma). When the next layer is linear
+          (also e.g. nn.relu), this can be disabled since the scaling will be done
+          by the next layer.
+      scale_init: Initializer for scale, by default, one.
+      reduction_axes: Axes for computing normalization statistics.
+      feature_axes: Feature axes for learned bias and scaling.
+      axis_name: the axis name used to combine batch statistics from multiple
+          devices. See `jax.pmap` for a description of axis names (default: None).
+          This is only needed if the model is subdivided across devices, i.e. the
+          array being normalized is sharded across devices within a pmap.
+      axis_index_groups: groups of axis indices within that named axis
+          representing subsets of devices to reduce over (default: None). For
+          example, `[[0, 1], [2, 3]]` would independently batch-normalize over
+          the examples on the first two and last two devices. See `jax.lax.psum`
+          for more details.
+  """
+
+  def __init__(
+    self,
+    num_features: int,
+    *,
+    epsilon: float = 1e-6,
+    dtype: tp.Optional[Dtype] = None,
+    param_dtype: Dtype = jnp.float32,
+    use_scale: bool = True,
+    scale_init: Initializer = initializers.ones,
+    reduction_axes: Axes = -1,
+    feature_axes: Axes = -1,
+    axis_name: tp.Optional[str] = None,
+    axis_index_groups: tp.Any = None,
+    rngs: rnglib.Rngs,
+  ):
+    feature_shape = (num_features,)
+
+    if use_scale:
+      key = rngs.params()
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+    else:
+      self.scale = nnx.Param(None)
+
+    self.num_features = num_features
+    self.epsilon = epsilon
+    self.dtype = dtype
+    self.param_dtype = param_dtype
+    self.use_scale = use_scale
+    self.scale_init = scale_init
+    self.reduction_axes = reduction_axes
+    self.feature_axes = feature_axes
+    self.axis_name = axis_name
+    self.axis_index_groups = axis_index_groups
+
+  def __call__(self, x):
+    """Applies layer normalization on the input.
+
+    Args:
+      x: the inputs
+
+    Returns:
+      Normalized inputs (the same shape as inputs).
+    """
+    mean, var = _compute_stats(
+      x,
+      self.reduction_axes,
+      self.dtype,
+      self.axis_name,
+      self.axis_index_groups,
+      use_mean=False,
+    )
+
+    return _normalize(
+      x,
+      mean,
+      var,
+      self.scale,
+      None,
+      self.reduction_axes,
+      self.feature_axes,
+      self.dtype,
+      self.epsilon,
+    )
