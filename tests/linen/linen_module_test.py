@@ -1450,6 +1450,33 @@ class ModuleTest(absltest.TestCase):
       all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply'])
     )
 
+  def test_perturb_setup(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(10)
+      def __call__(self, x):
+        x = self.a(x)
+        x = self.perturb('before_multiply', x)
+        x = 4 * x
+        x = self.perturb('after_multiply', x)
+        return x
+
+    def loss(params, perturbations, inputs, targets):
+      variables = {'params': params, 'perturbations': perturbations}
+      preds = Foo().apply(variables, inputs)
+      return jnp.square(preds - targets).mean()
+
+    x = jax.random.uniform(jax.random.key(1), shape=(10,))
+    y = jax.random.uniform(jax.random.key(2), shape=(10,))
+    variables = Foo().init(jax.random.key(0), x)
+    intm_grads = jax.grad(loss, argnums=1)(
+      variables['params'], variables['perturbations'], x, y
+    )
+    # activation * 4 so reverse gradient also * 4
+    self.assertTrue(
+      all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply'])
+    )
+
   def test_perturb_noop(self):
     class Foo(nn.Module):
       @nn.compact
@@ -1471,7 +1498,7 @@ class ModuleTest(absltest.TestCase):
 
     # check errors if perturbations is passed but empty
     with self.assertRaisesRegex(
-      errors.ScopeCollectionNotFound, 'Tried to access'
+      ValueError, 'Perturbation collection'
     ):
       module.apply({'params': params, 'perturbations': {}}, x)
 

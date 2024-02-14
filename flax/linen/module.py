@@ -2566,21 +2566,22 @@ class Module(ModuleBase):
       >>> 'perturbations' not in intm_grads
       True
     """
+    if self.scope is None:
+      raise ValueError("Can't store variables on unbound modules")
 
-    def _root_has_collection():
-      """Returns True if the root scope has the collection."""
-      assert self.scope is not None
-      return collection in self.scope.root._variables
+    if self.is_mutable_collection(collection):
+      if not self.scope.has_variable(collection, name):
+        self.scope.reserve(name, collection)
+        self._state.children[name] = collection
+        self.scope.put_variable(collection, name, jnp.zeros_like(value))  # type: ignore
 
-    # we will only add the perturbation variable if the collection is mutable
-    # (e.g. during `init`) or if the collection was passed to `apply` (contained in
-    # the root scope).
-    if self.is_mutable_collection(collection) or _root_has_collection():
-      value += self.variable(
-        collection,
-        name,
-        lambda: jnp.zeros_like(value),  # type: ignore
-      ).value
+    if collection in self.scope.root._variables:
+      if self.scope.has_variable(collection, name):
+        value += self.scope.get_variable(collection, name)  # type: ignore
+      else:
+        raise ValueError(f"Perturbation collection {collection} present, but "
+                         f"missing perturbation variable {name}")
+
     return value
 
   def tabulate(
