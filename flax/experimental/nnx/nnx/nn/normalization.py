@@ -14,6 +14,7 @@
 
 import typing as tp
 
+import jax
 import jax.numpy as jnp
 from jax import lax
 
@@ -46,18 +47,21 @@ def _abs_sq(x):
 
 def _compute_stats(
   x: Array,
-  axes: tp.Optional[Axes],
+  axes: Axes,
   dtype: tp.Optional[Dtype],
   axis_name: tp.Optional[str] = None,
   axis_index_groups: tp.Any = None,
   use_mean: bool = True,
+  use_fast_variance: bool = True,
+  mask: tp.Optional[Array] = None,
 ):
   """Computes mean and variance statistics.
 
   This implementation takes care of a few important details:
   - Computes in float32 precision for stability in half precision training.
-  - mean and variance are computable in a single XLA fusion,
-    by using Var = E[|x|^2] - |E[x]|^2 instead of Var = E[|x - E[x]|^2]).
+  - If `use_fast_variance` is `True`, mean and variance are computed using
+    Var = E[|x|^2] - |E[x]|^2, instead of Var = E[|x - E[x]|^2]), in a single
+    XLA fusion.
   - Clips negative variances to zero which can happen due to
     roundoff errors. This avoids downstream NaNs.
   - Supports averaging across a parallel axis and subgroups of a parallel axis
@@ -66,13 +70,20 @@ def _compute_stats(
   Arguments:
     x: Input array.
     axes: The axes in ``x`` to compute mean and variance statistics for.
-    dtype: tp.Optional dtype specifying the minimal precision. Statistics
-      are always at least float32 for stability (default: dtype of x).
-    axis_name: tp.Optional name for the pmapped axis to compute mean over.
-    axis_index_groups: tp.Optional axis indices.
+    dtype: Optional dtype specifying the minimal precision. Statistics are
+      always at least float32 for stability (default: dtype of x).
+    axis_name: Optional name for the pmapped axis to compute mean over. Note,
+      this is only used for pmap and shard map. For SPMD jit, you do not need to
+      manually synchronize. Just make sure that the axes are correctly annotated
+      and XLA:SPMD will insert the necessary collectives.
+    axis_index_groups: Optional axis indices.
     use_mean: If true, calculate the mean from the input and use it when
-      computing the variance. If false, set the mean to zero and compute
-      the variance without subtracting the mean.
+      computing the variance. If false, set the mean to zero and compute the
+      variance without subtracting the mean.
+    use_fast_variance: If true, use a faster, but less numerically stable,
+      calculation for the variance.
+    mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+      the positions for which the mean and variance should be computed.
 
   Returns:
     A pair ``(mean, var)``.
@@ -83,27 +94,39 @@ def _compute_stats(
   # but preserves double or complex floating points
   dtype = jnp.promote_types(dtype, jnp.float32)
   x = jnp.asarray(x, dtype)
+  axes = _canonicalize_axes(x.ndim, axes)
 
-  mean2 = jnp.mean(_abs_sq(x), axes)
+  def maybe_distributed_mean(*xs, mask=None):
+    mus = tuple(x.mean(axes, where=mask) for x in xs)
+    if axis_name is None:
+      return mus if len(xs) > 1 else mus[0]
+    else:
+      # In the distributed case we stack multiple arrays to speed comms.
+      if len(xs) > 1:
+        reduced_mus = lax.pmean(
+          jnp.stack(mus, axis=0),
+          axis_name,
+          axis_index_groups=axis_index_groups,
+        )
+        return tuple(reduced_mus[i] for i in range(len(xs)))
+      else:
+        return lax.pmean(mus[0], axis_name, axis_index_groups=axis_index_groups)
+
   if use_mean:
-    mean = jnp.mean(x, axes)
+    if use_fast_variance:
+      mu, mu2 = maybe_distributed_mean(x, _abs_sq(x), mask=mask)
+      # mean2 - _abs_sq(mean) is not guaranteed to be non-negative due
+      # to floating point round-off errors.
+      var = jnp.maximum(0.0, mu2 - _abs_sq(mu))
+    else:
+      mu = maybe_distributed_mean(x, mask=mask)
+      var = maybe_distributed_mean(
+        _abs_sq(x - jnp.expand_dims(mu, axes)), mask=mask
+      )
   else:
-    mean = jnp.zeros(mean2.shape, dtype=dtype)
-
-  if axis_name is not None:
-    concatenated_mean = jnp.concatenate([mean, mean2])
-    mean, mean2 = jnp.split(
-      lax.pmean(
-        concatenated_mean,
-        axis_name=axis_name,
-        axis_index_groups=axis_index_groups,
-      ),
-      2,
-    )
-  # mean2 - _abs_sq(mean) is not guaranteed to be non-negative due
-  # to floating point round-off errors.
-  var = jnp.maximum(0.0, mean2 - _abs_sq(mean))
-  return mean, var
+    var = maybe_distributed_mean(_abs_sq(x), mask=mask)
+    mu = jnp.zeros_like(var)
+  return mu, var
 
 
 def _normalize(
@@ -185,6 +208,8 @@ class BatchNorm(Module):
       example, `[[0, 1], [2, 3]]` would independently batch-normalize over
       the examples on the first two and last two devices. See `jax.lax.psum`
       for more details.
+    use_fast_variance: If true, use a faster, but less numerically stable,
+      calculation for the variance.
   """
 
   def __init__(
@@ -203,6 +228,7 @@ class BatchNorm(Module):
     scale_init: Initializer = initializers.ones_init(),
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
+    use_fast_variance: bool = True,
     rngs: rnglib.Rngs,
   ):
     feature_shape = (num_features,)
@@ -234,11 +260,14 @@ class BatchNorm(Module):
     self.scale_init = scale_init
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
+    self.use_fast_variance = use_fast_variance
 
   def __call__(
     self,
     x,
     use_running_average: tp.Optional[bool] = None,
+    *,
+    mask: tp.Optional[jax.Array] = None,
   ):
     """Normalizes the input using batch statistics.
 
@@ -270,6 +299,8 @@ class BatchNorm(Module):
         dtype=self.dtype,
         axis_name=self.axis_name,
         axis_index_groups=self.axis_index_groups,
+        use_fast_variance=self.use_fast_variance,
+        mask=mask,
       )
 
       self.mean = self.momentum * self.mean + (1 - self.momentum) * mean
@@ -317,6 +348,8 @@ class LayerNorm(Module):
           example, `[[0, 1], [2, 3]]` would independently batch-normalize over
           the examples on the first two and last two devices. See `jax.lax.psum`
           for more details.
+      use_fast_variance: If true, use a faster, but less numerically stable,
+          calculation for the variance.
   """
 
   def __init__(
@@ -334,6 +367,7 @@ class LayerNorm(Module):
     feature_axes: Axes = -1,
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
+    use_fast_variance: bool = True,
     rngs: rnglib.Rngs,
   ):
     feature_shape = (num_features,)
@@ -362,8 +396,9 @@ class LayerNorm(Module):
     self.feature_axes = feature_axes
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
+    self.use_fast_variance = use_fast_variance
 
-  def __call__(self, x):
+  def __call__(self, x, *, mask: tp.Optional[jax.Array] = None):
     """Applies layer normalization on the input.
 
     Args:
@@ -378,6 +413,8 @@ class LayerNorm(Module):
       self.dtype,
       self.axis_name,
       self.axis_index_groups,
+      use_fast_variance=self.use_fast_variance,
+      mask=mask,
     )
 
     return _normalize(
@@ -421,6 +458,8 @@ class RMSNorm(Module):
           example, `[[0, 1], [2, 3]]` would independently batch-normalize over
           the examples on the first two and last two devices. See `jax.lax.psum`
           for more details.
+      use_fast_variance: If true, use a faster, but less numerically stable,
+          calculation for the variance.
   """
 
   def __init__(
@@ -436,6 +475,7 @@ class RMSNorm(Module):
     feature_axes: Axes = -1,
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
+    use_fast_variance: bool = True,
     rngs: rnglib.Rngs,
   ):
     feature_shape = (num_features,)
@@ -456,8 +496,9 @@ class RMSNorm(Module):
     self.feature_axes = feature_axes
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
+    self.use_fast_variance = use_fast_variance
 
-  def __call__(self, x):
+  def __call__(self, x, mask: tp.Optional[jax.Array] = None):
     """Applies layer normalization on the input.
 
     Args:
@@ -473,6 +514,8 @@ class RMSNorm(Module):
       self.axis_name,
       self.axis_index_groups,
       use_mean=False,
+      use_fast_variance=self.use_fast_variance,
+      mask=mask,
     )
 
     return _normalize(
