@@ -26,168 +26,221 @@ from flax.typing import Dtype
 
 class TestLinenConsistency(parameterized.TestCase):
   @parameterized.product(
-    dtype=[jnp.float32, jnp.float16], param_dtype=[jnp.float32, jnp.float16]
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    use_fast_variance=[True, False],
+    mask=[None, jnp.array([True, False, True, False, True])],
   )
   def test_nnx_linen_batchnorm_equivalence(
     self,
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
+    use_fast_variance: bool,
+    mask: tp.Optional[jax.Array],
   ):
     class NNXModel(nnx.Module):
-      def __init__(self, dtype, param_dtype, rngs):
+      def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
         self.norm_layer = nnx.BatchNorm(
-          3,
+          5,
           use_running_average=False,
           dtype=dtype,
           param_dtype=param_dtype,
+          use_fast_variance=use_fast_variance,
           rngs=rngs,
         )
         self.linear = nnx.Linear(
-          3, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+          5, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
         )
 
-      def __call__(self, x):
-        x = self.norm_layer(x)
+      def __call__(self, x, *, mask=None):
+        x = self.norm_layer(x, mask=mask)
         x = self.linear(x)
         return x
 
     class LinenModel(linen.Module):
       dtype: tp.Optional[Dtype] = None
       param_dtype: Dtype = jnp.float32
+      use_fast_variance: bool = True
 
       def setup(self):
         self.norm_layer = linen.BatchNorm(
           use_running_average=False,
           dtype=self.dtype,
           param_dtype=self.param_dtype,
+          use_fast_variance=use_fast_variance,
         )
         self.linear = linen.Dense(
           4, dtype=self.dtype, param_dtype=self.param_dtype
         )
 
-      def __call__(self, x):
-        x = self.norm_layer(x)
+      def __call__(self, x, *, mask=None):
+        x = self.norm_layer(x, mask=mask)
         x = self.linear(x)
         return x
 
     rngs = nnx.Rngs(42)
-    x = jnp.ones((1, 3))
+    x = jax.random.normal(jax.random.key(0), (10, 5))
 
-    linen_model = LinenModel(dtype=dtype, param_dtype=param_dtype)
-    variables = linen_model.init(jax.random.key(0), x)
+    linen_model = LinenModel(
+      dtype=dtype, param_dtype=param_dtype, use_fast_variance=use_fast_variance
+    )
+    variables = linen_model.init(jax.random.key(1), x)
     linen_out, batch_stats = linen_model.apply(
-      variables, x, mutable=['batch_stats']
+      variables, x, mask=mask, mutable=['batch_stats']
     )
 
-    nnx_model = NNXModel(dtype=dtype, param_dtype=param_dtype, rngs=rngs)
+    nnx_model = NNXModel(
+      dtype=dtype,
+      param_dtype=param_dtype,
+      use_fast_variance=use_fast_variance,
+      rngs=rngs,
+    )
     nnx_model.linear.kernel = variables['params']['linear']['kernel']
     nnx_model.linear.bias = variables['params']['linear']['bias']
 
-    nnx_out = nnx_model(x)
+    nnx_out = nnx_model(x, mask=mask)
     assert_array_equal(linen_out, nnx_out)
 
   @parameterized.product(
-    dtype=[jnp.float32, jnp.float16], param_dtype=[jnp.float32, jnp.float16]
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    use_fast_variance=[True, False],
+    mask=[None, jnp.array([True, False, True, False, True])],
   )
   def test_nnx_linen_layernorm_equivalence(
     self,
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
+    use_fast_variance: bool,
+    mask: tp.Optional[jax.Array],
   ):
     class NNXModel(nnx.Module):
-      def __init__(self, dtype, param_dtype, rngs):
+      def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
         self.norm_layer = nnx.LayerNorm(
-          3, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+          5,
+          dtype=dtype,
+          param_dtype=param_dtype,
+          use_fast_variance=use_fast_variance,
+          rngs=rngs,
         )
         self.linear = nnx.Linear(
-          3, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+          5, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
         )
 
-      def __call__(self, x):
-        x = self.norm_layer(x)
+      def __call__(self, x, *, mask=None):
+        x = self.norm_layer(x, mask=mask)
         x = self.linear(x)
         return x
 
     class LinenModel(linen.Module):
       dtype: tp.Optional[Dtype] = None
       param_dtype: Dtype = jnp.float32
+      use_fast_variance: bool = True
 
       def setup(self):
         self.norm_layer = linen.LayerNorm(
-          dtype=self.dtype, param_dtype=self.param_dtype
+          dtype=self.dtype,
+          param_dtype=self.param_dtype,
+          use_fast_variance=self.use_fast_variance,
         )
         self.linear = linen.Dense(
           4, dtype=self.dtype, param_dtype=self.param_dtype
         )
 
-      def __call__(self, x):
-        x = self.norm_layer(x)
+      def __call__(self, x, *, mask=None):
+        x = self.norm_layer(x, mask=mask)
         x = self.linear(x)
         return x
 
     rngs = nnx.Rngs(42)
-    x = jnp.ones((1, 3))
+    x = jax.random.normal(jax.random.key(0), (10, 5))
 
-    linen_model = LinenModel(dtype=dtype, param_dtype=param_dtype)
-    variables = linen_model.init(jax.random.key(0), x)
-    linen_out = linen_model.apply(variables, x)
+    linen_model = LinenModel(
+      dtype=dtype, param_dtype=param_dtype, use_fast_variance=use_fast_variance
+    )
+    variables = linen_model.init(jax.random.key(1), x)
+    linen_out = linen_model.apply(variables, x, mask=mask)
 
-    nnx_model = NNXModel(dtype=dtype, param_dtype=param_dtype, rngs=rngs)
+    nnx_model = NNXModel(
+      dtype=dtype,
+      param_dtype=param_dtype,
+      use_fast_variance=use_fast_variance,
+      rngs=rngs,
+    )
     nnx_model.linear.kernel = variables['params']['linear']['kernel']
     nnx_model.linear.bias = variables['params']['linear']['bias']
 
-    nnx_out = nnx_model(x)
+    nnx_out = nnx_model(x, mask=mask)
     assert_array_equal(linen_out, nnx_out)
 
   @parameterized.product(
-    dtype=[jnp.float32, jnp.float16], param_dtype=[jnp.float32, jnp.float16]
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    use_fast_variance=[True, False],
+    mask=[None, jnp.array([True, False, True, False, True])],
   )
   def test_nnx_linen_rmsnorm_equivalence(
     self,
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
+    use_fast_variance: bool,
+    mask: tp.Optional[jax.Array],
   ):
     class NNXModel(nnx.Module):
-      def __init__(self, dtype, param_dtype, rngs):
+      def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
         self.norm_layer = nnx.RMSNorm(
-          3, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+          5,
+          dtype=dtype,
+          param_dtype=param_dtype,
+          use_fast_variance=use_fast_variance,
+          rngs=rngs,
         )
         self.linear = nnx.Linear(
-          3, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+          5, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
         )
 
-      def __call__(self, x):
-        x = self.norm_layer(x)
+      def __call__(self, x, *, mask=None):
+        x = self.norm_layer(x, mask=mask)
         x = self.linear(x)
         return x
 
     class LinenModel(linen.Module):
       dtype: tp.Optional[Dtype] = None
       param_dtype: Dtype = jnp.float32
+      use_fast_variance: bool = True
 
       def setup(self):
         self.norm_layer = linen.RMSNorm(
-          dtype=self.dtype, param_dtype=self.param_dtype
+          dtype=self.dtype,
+          param_dtype=self.param_dtype,
+          use_fast_variance=self.use_fast_variance,
         )
         self.linear = linen.Dense(
           4, dtype=self.dtype, param_dtype=self.param_dtype
         )
 
-      def __call__(self, x):
-        x = self.norm_layer(x)
+      def __call__(self, x, *, mask=None):
+        x = self.norm_layer(x, mask=mask)
         x = self.linear(x)
         return x
 
     rngs = nnx.Rngs(42)
-    x = jnp.ones((1, 3))
+    x = jax.random.normal(jax.random.key(0), (10, 5))
 
-    linen_model = LinenModel(dtype=dtype, param_dtype=param_dtype)
-    variables = linen_model.init(jax.random.key(0), x)
-    linen_out = linen_model.apply(variables, x)
+    linen_model = LinenModel(
+      dtype=dtype, param_dtype=param_dtype, use_fast_variance=use_fast_variance
+    )
+    variables = linen_model.init(jax.random.key(1), x)
+    linen_out = linen_model.apply(variables, x, mask=mask)
 
-    nnx_model = NNXModel(dtype=dtype, param_dtype=param_dtype, rngs=rngs)
+    nnx_model = NNXModel(
+      dtype=dtype,
+      param_dtype=param_dtype,
+      use_fast_variance=use_fast_variance,
+      rngs=rngs,
+    )
     nnx_model.linear.kernel = variables['params']['linear']['kernel']
     nnx_model.linear.bias = variables['params']['linear']['bias']
 
-    nnx_out = nnx_model(x)
+    nnx_out = nnx_model(x, mask=mask)
     assert_array_equal(linen_out, nnx_out)

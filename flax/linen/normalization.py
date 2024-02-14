@@ -536,6 +536,8 @@ class RMSNorm(Module):
       example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
       examples on the first two and last two devices. See ``jax.lax.psum`` for
       more details.
+    use_fast_variance: If true, use a faster, but less numerically stable,
+      calculation for the variance.
   """
 
   epsilon: float = 1e-6
@@ -547,6 +549,7 @@ class RMSNorm(Module):
   feature_axes: Axes = -1
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
+  use_fast_variance: bool = True
 
   @compact
   def __call__(self, x, *, mask: Optional[jax.Array] = None):
@@ -567,6 +570,7 @@ class RMSNorm(Module):
       self.axis_name,
       self.axis_index_groups,
       use_mean=False,
+      use_fast_variance=self.use_fast_variance,
       mask=mask,
     )
 
