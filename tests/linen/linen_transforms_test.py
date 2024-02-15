@@ -1801,14 +1801,14 @@ class TransformTest(parameterized.TestCase):
       n += 1
       return None
 
-    f(_HashableProxy(nn.Dense(10)))
+    f(_HashableProxy.from_module(nn.Dense(10)))
     self.assertEqual(n, 1)
-    f(_HashableProxy(nn.Dense(10)))
+    f(_HashableProxy.from_module(nn.Dense(10)))
     self.assertEqual(n, 1)
 
-    f(_HashableProxy(nn.Dense(20)))
+    f(_HashableProxy.from_module(nn.Dense(20)))
     self.assertEqual(n, 2)
-    f(_HashableProxy(nn.Dense(20)))
+    f(_HashableProxy.from_module(nn.Dense(20)))
     self.assertEqual(n, 2)
 
   def test_jit_reuse(self):
@@ -1948,7 +1948,10 @@ class TransformTest(parameterized.TestCase):
 
       def __hash__(self):
         # test object is not being passed as static
-        raise Exception('immutable')
+        raise Exception('this should not be called')
+
+      def __eq__(self, __value, /):
+        raise Exception('this should not be called')
 
     def to_dict(node: Node):
       return {'a': node.a}

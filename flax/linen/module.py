@@ -21,32 +21,12 @@ import functools
 import inspect
 import sys
 import threading
-import typing
-import weakref
 from types import MappingProxyType
-from typing import (
-  Any,
-  Callable,
-  Dict,
-  Iterable,
-  Iterator,
-  List,
-  Literal,
-  Mapping,
-  Optional,
-  Tuple,
-  Type,
-  TypeVar,
-  Union,
-  overload,
-)
-
-import jax
-import jax.numpy as jnp
-import typing_extensions as tpe
+import typing
+from typing import Any, Callable, Dict, Generic, Iterable, Iterator, List, Literal, Mapping, Optional, Tuple, Type, TypeVar, Union, overload
+import weakref
 
 import flax
-import flax.linen as nn
 from flax import (
   config,
   core,
@@ -58,19 +38,26 @@ from flax import (
 from flax.core import Scope, meta, partial_eval
 from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (
-  CollectionFilter,
-  DenyList,
-  Variable,
-  union_filters,
+    CollectionFilter,
+    DenyList,
+    PRNGSequenceFilter,
+    Variable,
+    freeze_filter,
+    in_filter,
+    union_filters,
 )
 from flax.ids import FlaxId, uuid
+import flax.linen as nn
 from flax.linen import kw_only_dataclasses
 from flax.typing import (
-  RNGSequences,
-  PRNGKey,
-  FrozenVariableDict,
-  VariableDict,
+    FrozenVariableDict,
+    PRNGKey,
+    RNGSequences,
+    VariableDict,
 )
+import jax
+import jax.numpy as jnp
+import typing_extensions as tpe
 
 traceback_util.register_exclusion(__file__)
 
@@ -79,7 +66,8 @@ T = TypeVar('T')
 K = TypeVar('K')
 M = TypeVar('M', bound='Module')
 _CallableT = TypeVar('_CallableT', bound=Callable)
-
+AxesValue = Union[int, None]
+SplitPattern = Union[AxesValue, tuple[AxesValue, ...]]
 
 # Used for abstractly testing module behavior.
 TestScope = type(
@@ -973,6 +961,7 @@ class ModuleBase:
     _state: _ModuleInternalState
     _parent_ref: Union['Module', weakref.ReferenceType['Module'], None]
     __dataclass_fields__: Dict[str, dataclasses.Field]
+    _id: FlaxId
 
 
 class Module(ModuleBase):
@@ -2791,6 +2780,263 @@ class Module(ModuleBase):
 
     return {'/'.join(row.path): row.module_copy for row in table}
 
+  def split(
+      self,
+      _split_filters: Mapping[PRNGSequenceFilter, SplitPattern] = FrozenDict(),
+      /,
+      **patterns: SplitPattern,
+  ):
+    Module._module_checks(self)
+
+    if self.scope is None:
+      raise errors.CallUnbindOnUnboundModuleError()
+
+    split_filters = dict(_split_filters, **patterns)
+    # normalize patterns
+    split_filters = {k: _normalize_pattern(v) for k, v in split_filters.items()}
+    # split rngs
+    broadcast_rngs: dict[str, PRNGKey] = {}
+    split_rngs: dict[str, PRNGKey] = {}
+    for name, lazy_rng in self.scope.rngs.items():
+      key = lazy_rng.rng
+
+      for split_filter, pattern in split_filters.items():
+        if in_filter(split_filter, name):
+          if pattern is None:
+            broadcast_rngs[name] = key
+          else:
+            self.scope._check_valid()
+            self.scope._validate_trace_level()
+            split_rngs[name] = jax.random.split(key, pattern)
+          break
+      else:
+        broadcast_rngs[name] = key
+
+    rngs = SplitRngs(broadcast_rngs, split_rngs)
+    variables: dict[str, Any] = core.copy(self.variables)
+    static = ModuleDef(self)
+
+    return static, variables, rngs
+
+# ----------------------------------------------------------------
+# split / merge API
+# ----------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class InstanceID:
+  id: FlaxId | int
+
+
+@dataclasses.dataclass(frozen=True)
+class ScopeDef:
+  id: FlaxId
+  name: str
+  mutable: CollectionFilter
+  parent_id: FlaxId | None
+  path: tuple[str, ...]
+  debug_path: tuple[str, ...]
+  flags: FrozenDict[str, Any]
+  rng_names: tuple[str, ...]
+  rng_counters: FrozenDict[str, Any]
+
+
+@dataclasses.dataclass(frozen=True)
+class ModuleInternalStateDef:
+  in_compact_method: bool
+  in_setup: bool
+  setup_called: SetupState
+  is_initialized: bool
+  autoname_cursor: FrozenDict[str, int]
+  children: FrozenDict[str, Union[str, FlaxId]]
+
+
+@dataclasses.dataclass(frozen=True)
+class VariableDef:
+  id: FlaxId
+  scope_id: FlaxId
+  collection: str
+  name: str
+  unbox: bool
+
+
+@dataclasses.dataclass(frozen=True)
+class ModuleDef(Generic[M]):
+  module_type: M
+  id: FlaxId
+  parent_id: FlaxId | None
+  state: ModuleInternalStateDef
+  scope: ScopeDef
+  attrs: dict[str, Any]
+
+  def merge(self, variables: VariableDict, rngs: dict[str, PRNGKey]) -> M:
+    raise NotImplementedError
+
+
+jax.tree_util.register_static(ModuleDef)
+
+
+def _get_all_scopes(
+    module: Module, scopes: set[Scope], seen_modules: set[FlaxId]
+):
+
+  if module._id in seen_modules:
+    return
+
+  seen_modules.add(module._id)
+
+  assert module.scope is not None
+  scopes.add(module.scope)
+
+  for name, value in vars(module).items():
+    if name in ('_id', 'name', 'parent', '_state', '_parent_ref'):
+      continue
+
+    for leaf in jax.tree_util.tree_leaves(value):
+      if isinstance(leaf, Module):
+        _get_all_scopes(leaf, scopes, seen_modules)
+
+
+def _get_group_root(scope: Scope, scopes: set[Scope]) -> Scope:
+  group_root = scope
+
+  while group_root.parent is not None and group_root.parent in scopes:
+    group_root = group_root.parent
+    assert group_root is not None
+
+  return group_root
+
+
+def _get_group_roots(scopes: set[Scope]) -> dict[Scope, Scope]:
+  group_roots = {}
+  for scope in scopes:
+    group_roots[scope] = _get_group_root(scope, scopes)
+  return group_roots
+
+
+def _split_recursive(obj: Any, scopes: list[Scope], refs: dict[FlaxId, Any]):
+  if not isinstance(obj, (Module, Variable)):
+    raise ValueError(
+        f'Object of type {type(obj)} is not a Module, Scope, or Variable.'
+    )
+
+  if obj._id in refs:
+    return InstanceID(obj_id)
+
+  if isinstance(obj, Variable):
+    return VariableDef(
+        id=obj._id,
+        scope_id=obj.scope._id,
+        collection=obj.collection,
+        name=obj.name,
+        unbox=obj.unbox,
+    )
+  elif isinstance(obj, Module):
+    scope = obj.scope
+    assert scope is not None
+    scope_def = ScopeDef(
+        id=scope._id,
+        name=scope.name,
+        mutable=freeze_filter(scope.mutable),
+        parent_id=scope.parent._id if scope.parent is not None else None,
+        path=scope.path,
+        debug_path=scope.debug_path,
+        flags=scope.flags,
+        rng_names=tuple(scope.rngs.keys()),
+        rng_counters=_freeze_collections(scope.rng_counters),
+    )
+
+    def _maybe_split(x):
+      if isinstance(x, (Variable, Scope, Module)):
+        return _split_recursive(x, scopes, refs)
+      else:
+        return x
+
+
+def _freeze_collections(x: Any) -> Any:
+  if isinstance(x, str):
+    return x
+  if isinstance(x, Mapping):
+    return FrozenDict((k, _freeze_collections(v)) for k, v in x.items())
+  elif isinstance(x, Iterable):
+    return tuple(_freeze_collections(v) for v in x)
+  else:
+    return x
+
+
+def _normalize_pattern(pattern: SplitPattern) -> SplitPattern:
+  if isinstance(pattern, tuple):
+    return tuple(1 if axis is None else axis for axis in pattern)
+  else:
+    return pattern
+
+
+class SplitRngs(Mapping[str, PRNGKey]):
+
+  def __init__(
+      self,
+      broadcast_rngs: dict[str, PRNGKey],
+      split_rngs: dict[str, PRNGKey],
+  ):
+    self.broadcast_rngs = broadcast_rngs
+    self.split_rngs = split_rngs
+
+  def __getitem__(self, key: str) -> PRNGKey:
+    if key in self.broadcast_rngs:
+      return self.broadcast_rngs[key]
+    elif key in self.split_rngs:
+      return self.split_rngs[key]
+    else:
+      raise KeyError(f'Key "{key}" not found in SplitRng.')
+
+  def __iter__(self) -> Iterator[str]:
+    yield from self.broadcast_rngs
+    yield from self.split_rngs
+
+  def __len__(self) -> int:
+    return len(self.broadcast_rngs) + len(self.split_rngs)
+
+
+def _split_rng_flatten(rngs: SplitRngs, *, with_keys: bool):
+  broadcast_names = sorted(rngs.broadcast_rngs.keys())
+  split_names = sorted(rngs.split_rngs.keys())
+
+  items = [(name, rngs.broadcast_rngs[name]) for name in broadcast_names]
+  items += [(name, rngs.split_rngs[name]) for name in split_names]
+
+  if with_keys:
+    nodes = tuple((jax.tree_util.DictKey(name), value) for name, value in items)
+  else:
+    nodes = tuple(value for _, value in items)
+
+  metadata = (broadcast_names, split_names)
+
+  return nodes, metadata
+
+
+def _split_rng_unflatten(
+    metadata: tuple[tuple[str, ...], tuple[str, ...]], nodes: list[Any]
+):
+  broadcast_names, split_names = metadata
+  num_broadcasts = len(broadcast_names)
+  rngs = SplitRngs(
+      dict(zip(broadcast_names, nodes[:num_broadcasts])),
+      dict(zip(split_names, nodes[num_broadcasts:])),
+  )
+  return rngs
+
+
+jax.tree_util.register_pytree_with_keys(
+    SplitRngs,
+    functools.partial(_split_rng_unflatten, with_keys=True),
+    _split_rng_unflatten,
+    flatten_func=functools.partial(_split_rng_flatten, with_keys=False),
+)
+
+
+# ----------------------------------------------------------------
+# functional APIs
+# ----------------------------------------------------------------
 
 _ParentType = Union[Type[Module], Scope, Type[_Sentinel], None]
 
