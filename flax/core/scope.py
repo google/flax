@@ -1074,9 +1074,19 @@ def apply(
   def wrapper(
     variables: VariableDict,
     *args,
-    rngs: Optional[RNGSequences] = None,
+    rngs: Optional[Union[PRNGKey, RNGSequences]] = None,
     **kwargs,
   ) -> Union[Any, Tuple[Any, Union[VariableDict, Dict[str, Any]]]]:
+    if rngs is not None:
+      if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
+        raise ValueError(
+          'The ``rngs`` argument passed to an apply function should be a '
+          '``jax.PRNGKey`` or a dictionary mapping strings to '
+          '``jax.PRNGKey``.'
+        )
+      if not isinstance(rngs, (dict, FrozenDict)):
+        rngs = {'params': rngs}
+
     # Try to detect if user accidentally passed {'params': {'params': ...}.
     if (
       'params' in variables
@@ -1118,10 +1128,10 @@ def init(
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
       raise ValueError(
         'First argument passed to an init function should be a '
-        '`jax.PRNGKey` or a dictionary mapping strings to '
-        '`jax.PRNGKey`.'
+        '``jax.PRNGKey`` or a dictionary mapping strings to '
+        '``jax.PRNGKey``.'
       )
-    if not isinstance(rngs, dict):
+    if not isinstance(rngs, (dict, FrozenDict)):
       rngs = {'params': rngs}
     init_flags = {**(flags if flags is not None else {}), 'initializing': True}
     return apply(fn, mutable=mutable, flags=init_flags)(
@@ -1217,7 +1227,7 @@ def _is_valid_rng(rng: Array):
   return True
 
 
-def _is_valid_rngs(rngs: RNGSequences):
+def _is_valid_rngs(rngs: Union[PRNGKey, RNGSequences]):
   if not isinstance(rngs, (FrozenDict, dict)):
     return False
   for key, val in rngs.items():
