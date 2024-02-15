@@ -318,7 +318,7 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
   def metadata(self) -> tp.Any:
     return self._metadata
 
-  def merge(self, state: State, *states: State) -> Node:
+  def merge(self, state: State, /, *states: State) -> Node:
     if states:
       state = State.merge(state, *states)
     return graph_unflatten(self, state)

@@ -269,7 +269,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
         if isinstance(value, Module) or (
           not isinstance(value, Variable) and not name.startswith('_')
         ):
-          yield reprlib.Attr(name, value)
+          yield reprlib.Attr(name, repr(value))
     finally:
       if clear_seen:
         SEEN_MODULES_REPR = None
@@ -408,7 +408,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
 
     return CallableProxy(_apply)  # type: ignore
 
-  def update(self: M, update: Updates[M], *updates: Updates[M]) -> None:
+  def update(self: M, update: Updates[M], /, *updates: Updates[M]) -> None:
     updates = (update, *updates)
 
     def _states_and_moduledef(
