@@ -2041,7 +2041,7 @@ class Module(ModuleBase):
     self,
     variables: VariableDict,
     *args,
-    rngs: Optional[RNGSequences] = None,
+    rngs: Optional[Union[PRNGKey, RNGSequences]] = None,
     method: Union[Callable[..., Any], str, None] = None,
     mutable: CollectionFilter = False,
     capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
@@ -2114,6 +2114,14 @@ class Module(ModuleBase):
       of the modified collections.
     """
     Module._module_checks(self)
+
+    if rngs is not None and not isinstance(rngs, dict):
+      if not core.scope._is_valid_rng(rngs):
+        raise errors.InvalidRngError(
+          'RNGs should be of shape (2,) or PRNGKey in Module '
+          f'{self.__class__.__name__}, but rngs are: {rngs}'
+        )
+      rngs = {'params': rngs}
 
     if isinstance(method, str):
       attribute_name = method

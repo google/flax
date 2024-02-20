@@ -815,6 +815,43 @@ class ModuleTest(absltest.TestCase):
     trace = mlp.apply(variables, x)
     self.assertEqual(trace, expected_trace)
 
+  def test_default_params_rng_equivalence(self):
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x, add_dropout=False, add_noise=False):
+        x = nn.Dense(16)(x)
+        x = nn.Dropout(0.5)(x, deterministic=not add_dropout)
+        if add_noise:
+          x += jax.random.normal(self.make_rng('params'))
+        return x
+
+    model = Model()
+    key0, key1, key2 = jax.random.split(jax.random.key(0), 3)
+    x = jax.random.normal(key0, (10, 8))
+
+    with self.assertRaisesRegex(ValueError, 'First argument passed to an init function should be a ``jax.PRNGKey``'):
+      model.init({'params': 'test'}, x)
+    with self.assertRaisesRegex(errors.InvalidRngError, 'RNGs should be of shape \\(2,\\) or PRNGKey in Module Model, but rngs are: test'):
+      model.init('test', x)
+    with self.assertRaisesRegex(errors.InvalidRngError, 'Dropout_0 needs PRNG for "dropout"'):
+      model.init(key1, x, add_dropout=True)
+
+    v = model.init({'params': key1}, x)
+    v2 = model.init(key1, x)
+    jax.tree_map(np.testing.assert_allclose, v, v2)
+
+    out = model.apply(v, x, add_noise=True, rngs={'params': key2})
+    out2 = model.apply(v, x, add_noise=True, rngs=key2)
+    np.testing.assert_allclose(out, out2)
+
+    with self.assertRaisesRegex(ValueError, 'The ``rngs`` argument passed to an apply function should be a ``jax.PRNGKey``'):
+      model.apply(v, x, rngs={'params': 'test'})
+    with self.assertRaisesRegex(errors.InvalidRngError, 'RNGs should be of shape \\(2,\\) or PRNGKey in Module Model, but rngs are: test'):
+      model.apply(v, x, rngs='test')
+    with self.assertRaisesRegex(errors.InvalidRngError, 'Dropout_0 needs PRNG for "dropout"'):
+      model.apply(v, x, add_dropout=True, rngs=key2)
+
+
   def test_module_apply_method(self):
     class Foo(nn.Module):
       not_callable: int = 1
