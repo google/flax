@@ -743,11 +743,11 @@ class Scope:
     """Returns true if a PRNGSequence with name `name` exists."""
     return name in self.rngs
 
-  def make_rng(self, name: str = 'default') -> PRNGKey:
+  def make_rng(self, name: str = 'params') -> PRNGKey:
     """Generates A PRNGKey from a PRNGSequence with name `name`."""
     if not self.has_rng(name):
-      if self.has_rng('default'):
-        name = 'default'
+      if self.has_rng('params'):
+        name = 'params'
       else:
         raise errors.InvalidRngError(f'{self.name} needs PRNG for "{name}"')
     self._check_valid()

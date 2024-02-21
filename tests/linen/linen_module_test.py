@@ -829,28 +829,46 @@ class ModuleTest(absltest.TestCase):
     key0, key1, key2 = jax.random.split(jax.random.key(0), 3)
     x = jax.random.normal(key0, (10, 8))
 
-    with self.assertRaisesRegex(ValueError, 'First argument passed to an init function should be a ``jax.PRNGKey``'):
+    with self.assertRaisesRegex(
+      ValueError,
+      'First argument passed to an init function should be a ``jax.PRNGKey``',
+    ):
       model.init({'params': 'test'}, x)
-    with self.assertRaisesRegex(errors.InvalidRngError, 'RNGs should be of shape \\(2,\\) or PRNGKey in Module Model, but rngs are: test'):
+    with self.assertRaisesRegex(
+      errors.InvalidRngError,
+      'RNGs should be of shape \\(2,\\) or PRNGKey in Module Model, but rngs are: test',
+    ):
       model.init('test', x)
-    with self.assertRaisesRegex(errors.InvalidRngError, 'Dropout_0 needs PRNG for "dropout"'):
-      model.init(key1, x, add_dropout=True)
+    # should not throw an error, since nn.Dropout will get an RNG key from the 'params' stream
+    model.init(key1, x, add_dropout=True)
 
     v = model.init({'params': key1}, x)
     v2 = model.init(key1, x)
     jax.tree_map(np.testing.assert_allclose, v, v2)
 
-    out = model.apply(v, x, add_noise=True, rngs={'params': key2})
-    out2 = model.apply(v, x, add_noise=True, rngs=key2)
-    np.testing.assert_allclose(out, out2)
+    for add_dropout, add_noise in [[True, False], [False, True], [True, True]]:
+      out = model.apply(
+        v,
+        x,
+        add_dropout=add_dropout,
+        add_noise=add_noise,
+        rngs={'params': key2},
+      )
+      out2 = model.apply(
+        v, x, add_dropout=add_dropout, add_noise=add_noise, rngs=key2
+      )
+      np.testing.assert_allclose(out, out2)
 
-    with self.assertRaisesRegex(ValueError, 'The ``rngs`` argument passed to an apply function should be a ``jax.PRNGKey``'):
+    with self.assertRaisesRegex(
+      ValueError,
+      'The ``rngs`` argument passed to an apply function should be a ``jax.PRNGKey``',
+    ):
       model.apply(v, x, rngs={'params': 'test'})
-    with self.assertRaisesRegex(errors.InvalidRngError, 'RNGs should be of shape \\(2,\\) or PRNGKey in Module Model, but rngs are: test'):
+    with self.assertRaisesRegex(
+      errors.InvalidRngError,
+      'RNGs should be of shape \\(2,\\) or PRNGKey in Module Model, but rngs are: test',
+    ):
       model.apply(v, x, rngs='test')
-    with self.assertRaisesRegex(errors.InvalidRngError, 'Dropout_0 needs PRNG for "dropout"'):
-      model.apply(v, x, add_dropout=True, rngs=key2)
-
 
   def test_module_apply_method(self):
     class Foo(nn.Module):
@@ -1491,6 +1509,7 @@ class ModuleTest(absltest.TestCase):
     class Foo(nn.Module):
       def setup(self):
         self.a = nn.Dense(10)
+
       def __call__(self, x):
         x = self.a(x)
         x = self.perturb('before_multiply', x)
@@ -1534,9 +1553,7 @@ class ModuleTest(absltest.TestCase):
     module.apply({'params': params}, x)
 
     # check errors if perturbations is passed but empty
-    with self.assertRaisesRegex(
-      ValueError, 'Perturbation collection'
-    ):
+    with self.assertRaisesRegex(ValueError, 'Perturbation collection'):
       module.apply({'params': params, 'perturbations': {}}, x)
 
     # check no error if perturbations is passed and not empty
@@ -2619,9 +2636,8 @@ class ModuleTest(absltest.TestCase):
     model = Model()
 
     # test init equality
-    default_variables = model.init({'default': key1}, x, apply_dropout=False)
-    # adding 'default' rng shouldn't change anything
-    rngs = {'params': key1, 'var_rng': key1, 'noise': key1, 'default': key0}
+    default_variables = model.init({'params': key1}, x, apply_dropout=False)
+    rngs = {'params': key1, 'var_rng': key1, 'noise': key1}
     explicit_variables = model.init(rngs, x, apply_dropout=False)
     self.assertTrue(
       jax.tree_util.tree_all(
@@ -2632,7 +2648,6 @@ class ModuleTest(absltest.TestCase):
     )
 
     # test init inequality
-    rngs['default'] = key1  # adding 'default' rng shouldn't change anything
     for rng_name in ('params', 'var_rng'):
       rngs[rng_name] = key2
       explicit_variables = model.init(rngs, x, apply_dropout=False)
@@ -2649,17 +2664,15 @@ class ModuleTest(absltest.TestCase):
 
     # test apply equality
     default_out = model.apply(
-      default_variables, x, apply_dropout=True, rngs={'default': key1}
+      default_variables, x, apply_dropout=True, rngs={'params': key1}
     )
-    # adding 'default' rng shouldn't change anything
-    rngs = {'dropout': key1, 'noise': key1, 'default': key0}
+    rngs = {'dropout': key1, 'noise': key1}
     explicit_out = model.apply(
       default_variables, x, apply_dropout=True, rngs=rngs
     )
     np.testing.assert_allclose(default_out, explicit_out)
 
     # test apply inequality
-    rngs['default'] = key1  # adding 'default' rng shouldn't change anything
     for rng_name in ('dropout', 'noise'):
       rngs[rng_name] = key2
       explicit_out = model.apply(
@@ -2685,22 +2698,22 @@ class ModuleTest(absltest.TestCase):
 
     key0, key1 = jax.random.split(jax.random.key(0), 2)
     x = jax.random.normal(key0, (10, 4))
-    default_out = Model().apply({}, x, rngs={'default': key1})
+    default_out = Model().apply({}, x, rngs={'params': key1})
 
     class SubModel(nn.Module):
       @nn.compact
       def __call__(self, x):
-        noise = jax.random.normal(self.make_rng('default'), x.shape)
+        noise = jax.random.normal(self.make_rng('params'), x.shape)
         return x + noise
 
     class Model(nn.Module):
       @nn.compact
       def __call__(self, x):
         x = SubModel()(x)
-        noise = jax.random.normal(self.make_rng('default'), x.shape)
+        noise = jax.random.normal(self.make_rng('params'), x.shape)
         return x + noise
 
-    explicit_out = Model().apply({}, x, rngs={'default': key1})
+    explicit_out = Model().apply({}, x, rngs={'params': key1})
     np.testing.assert_allclose(default_out, explicit_out)
 
   def test_default_rng_error(self):
@@ -2718,13 +2731,13 @@ class ModuleTest(absltest.TestCase):
     class Model(nn.Module):
       @nn.compact
       def __call__(self, x):
-        return x + jax.random.normal(self.make_rng('default'), x.shape)
+        return x + jax.random.normal(self.make_rng(), x.shape)
 
     model = Model()
     with self.assertRaisesRegex(
-      errors.InvalidRngError, 'None needs PRNG for "default"'
+      errors.InvalidRngError, 'None needs PRNG for "params"'
     ):
-      model.init(jax.random.key(0), jnp.ones((1, 3)))
+      model.init({'other_rng_stream': jax.random.key(0)}, jnp.ones((1, 3)))
 
   def test_compact_name_scope(self):
     class Foo(nn.Module):
@@ -3106,10 +3119,13 @@ class RelaxedNamingTests(absltest.TestCase):
     class MyEnum(str, enum.Enum):
       a = 'a'
       b = 'b'
+
     class MyModule(nn.Module):
       config: dict[MyEnum, int]
+
       def __call__(self, inputs):
         return inputs
+
     module = MyModule(config={MyEnum.a: 1, MyEnum.b: 2})
     variables = module.init(jax.random.key(0), jnp.zeros([0]))
 
