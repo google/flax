@@ -295,6 +295,64 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
 
     return CallableProxy(_create_abstract)  # type: ignore
 
+  @classmethod
+  def partial_init(cls: type[M], state: State, *states: State) -> type[M]:
+    """Creates a constuctor that initializes the Module with the given state.
+
+    ``partial_init`` takes one or more States and returns a constructor that uses
+    ``jax.jit`` to initialize the Module and update its state with the given
+    States. Its semantically equivalent to::
+
+      module = MyModule(*args, **kwargs)
+      module.update(state, *states)
+
+    However, thanks to dead code elimination the resulting constructor will only
+    initialize the subset of ``Variable``s that were part of the given state(s).
+
+    Example::
+
+      >>> import jax.numpy as jnp
+      >>> import jax
+      >>> from flax.experimental import nnx
+      ...
+      >>> bias = jax.random.normal(jax.random.key(0), (4,))
+      >>> state = nnx.State({'bias': bias}) # in reality load it from a checkpoint
+      >>> linear = nnx.Linear.partial_init(state)(2, 4, rngs=nnx.Rngs(1))
+      >>> y = linear(jnp.ones((1, 2)))
+      ...
+      >>> assert jnp.allclose(linear.bias, bias)
+      >>> assert y.shape == (1, 4)
+
+    Args:
+      state: The State to initialize the Module with.
+      *states: Additional States to initialize the Module with.
+
+    Returns:
+      A constructor that initializes the Module with the given States.
+    """
+    states = (state, *states)
+
+    def lift_rngs(kwargs: dict[str, tp.Any]):
+      if 'rngs' in kwargs and isinstance(kwargs['rngs'], Rngs):
+        kwargs['rngs'] = kwargs['rngs'].copy()
+      return kwargs
+
+    def _partial_init(accessor: DelayedAccessor, *args, **kwargs):
+      constructor: tp.Callable[[], M] = accessor(cls)
+
+      def _partial_init_constructor():
+        module = constructor(*args, **lift_rngs(kwargs))
+        module.update(*states)
+        return module.split()
+
+      graphdef: GraphDef[M]
+      state: State
+      state, graphdef = jax.jit(_partial_init_constructor)()
+      module = graphdef.merge(state)
+      return module
+
+    return CallableProxy(_partial_init)  # type: ignore
+
   def clone(self: M) -> M:
     return merge(self.split())
 
