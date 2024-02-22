@@ -129,6 +129,7 @@ from .pooling import (avg_pool as avg_pool, max_pool as max_pool, pool as pool)
 from .recurrent import (
     Bidirectional as Bidirectional,
     ConvLSTMCell as ConvLSTMCell,
+    SimpleCell as SimpleCell,
     GRUCell as GRUCell,
     MGUCell as MGUCell,
     LSTMCell as LSTMCell,
