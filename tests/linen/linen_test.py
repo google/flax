@@ -1021,6 +1021,13 @@ class RecurrentTest(parameterized.TestCase):
 
   @parameterized.parameters(
     {
+      'module_cls': nn.SimpleCell,
+      'expected_param_shapes': {
+        'i': {'kernel': (3, 4), 'bias': (4,)},
+        'h': {'kernel': (4, 4)},
+      },
+    },
+    {
       'module_cls': nn.GRUCell,
       'expected_param_shapes': {
         'ir': {'kernel': (3, 4), 'bias': (4,)},
@@ -1068,7 +1075,9 @@ class RecurrentTest(parameterized.TestCase):
       )
 
   @parameterized.parameters(
-    {'module_cls': nn.GRUCell}, {'module_cls': nn.MGUCell}
+    {'module_cls': nn.SimpleCell},
+    {'module_cls': nn.GRUCell},
+    {'module_cls': nn.MGUCell},
   )
   def test_complex_input_gated_units(self, module_cls):
     module_instance = module_cls(features=4)

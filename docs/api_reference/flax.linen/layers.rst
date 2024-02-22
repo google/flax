@@ -120,6 +120,10 @@ Recurrent
 
 .. flax_module::
   :module: flax.linen
+  :class: SimpleCell
+
+.. flax_module::
+  :module: flax.linen
   :class: GRUCell
 
 .. flax_module::
@@ -168,6 +172,7 @@ BatchApply
   RNNCellBase
   LSTMCell
   OptimizedLSTMCell
+  SimpleCell
   GRUCell
   RNN
   Bidirectional
