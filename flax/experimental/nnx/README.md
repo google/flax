@@ -123,7 +123,7 @@ To interact with JAX NNX provides the [Functional API](https://flax.readthedocs.
 state, static = model.split()
 
 @jax.jit
-def forward(static: nnx.ModuleDef, state: nnx.State, x: jax.Array):
+def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):
   model = static.merge(state)
   y = model(x)
   state, _ = model.split()
