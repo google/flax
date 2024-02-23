@@ -118,6 +118,7 @@ jobs:
     - name: Install Flax
       run: |
         venv/bin/python3 -m pip install -e .[all,testing]
+        venv/bin/python3 -m pip install -U jax jaxlib # Ensure we have the latest JAX
     - name: Cached mypy cache
       id: mypy_cache
       uses: actions/cache@v3
