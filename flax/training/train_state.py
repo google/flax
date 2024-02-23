@@ -126,7 +126,7 @@ class TrainState(struct.PyTreeNode):
     params_with_opt = (
       params['params'] if OVERWRITE_WITH_GRADIENT in params else params
     )
-    opt_state = tx.init(params_with_opt)
+    opt_state = tx.init(params_with_opt) if tx else None
     return cls(
       step=0,
       apply_fn=apply_fn,
