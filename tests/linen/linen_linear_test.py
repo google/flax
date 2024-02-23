@@ -181,6 +181,246 @@ class LinearTest(parameterized.TestCase):
     y = dense.apply(variables, x)
     self.assertEqual(y.dtype, jnp.complex64)
 
+  @parameterized.parameters(
+    [
+      (
+        'abc,cde->abde',
+        (3, 4, 5),
+        (5, 6, 7),
+        (3, 4, 6, 7),
+        (6, 7),
+        (1, 1, 6, 7),
+      ),
+      (
+        'abcd,abcd->abcd',
+        (3, 4, 5, 6),
+        (3, 4, 5, 6),
+        (3, 4, 5, 6),
+        (3, 4, 5, 6),
+        (3, 4, 5, 6),
+      ),
+      (
+        'abcd,abcd->abd',
+        (3, 4, 5, 6),
+        (3, 4, 5, 6),
+        (3, 4, 6),
+        (3, 4, 6),
+        (3, 4, 6),
+      ),
+      (
+        'abcd,cdef->abef',
+        (3, 4, 5, 6),
+        (5, 6, 7, 8),
+        (3, 4, 7, 8),
+        (7, 8),
+        (1, 1, 7, 8),
+      ),
+      (
+        'abcd,eafc->bfed',
+        (3, 4, 5, 6),
+        (7, 3, 8, 5),
+        (4, 8, 7, 6),
+        (8, 7),
+        (1, 8, 7, 1),
+      ),
+      (
+        'abcd,cbedf->abfe',
+        (3, 4, 5, 6),
+        (5, 4, 7, 6, 8),
+        (3, 4, 8, 7),
+        (4, 8, 7),
+        (1, 4, 8, 7),
+      ),
+      (
+        'ab...,bc...->ac...',
+        (3, 4, 6),
+        (4, 5, 6),
+        (3, 5, 6),
+        (5, 6),
+        (1, 5, 6),
+      ),
+      (
+        'd...ab,bc...->ad...c',
+        (8, 6, 7, 3, 4),
+        (4, 5, 6, 7),
+        (3, 8, 6, 7, 5),
+        (6, 7, 5),
+        (1, 1, 6, 7, 5),
+      ),
+      (
+        'd...ab,bc...->adc',
+        (8, 6, 7, 3, 4),
+        (4, 5, 6, 7),
+        (3, 8, 5),
+        (5,),
+        (1, 1, 5),
+      ),
+      (
+        'abd...,bc...->ac...',
+        (3, 4, 6),
+        (4, 5, 6),
+        (3, 5, 6),
+        (5, 6),
+        (1, 5, 6),
+      ),
+      (
+        'a...d,ej...f->adef',
+        (3, 4, 5, 6),
+        (7, 4, 5, 8),
+        (3, 6, 7, 8),
+        (7, 8),
+        (1, 1, 7, 8),
+      ),
+      (
+        'ab...d,ej...f->ad...f',
+        (3, 4, 5, 6),
+        (7, 4, 5, 8),
+        (3, 6, 5, 8),
+        (5, 8),
+        (1, 1, 5, 8),
+      ),
+    ]
+  )
+  def test_einsum_init_apply(
+    self,
+    einsum_str,
+    lhs_shape,
+    rhs_shape,
+    expected_result_shape,
+    expected_bias_shape,
+    bias_broadcast_shape,
+  ):
+    layer = nn.Einsum(rhs_shape, einsum_str, bias_init=nn.initializers.normal())
+    x = jax.random.normal(jax.random.key(0), lhs_shape)
+
+    v = layer.init(jax.random.key(1), x)
+    self.assertEqual(rhs_shape, v['params']['kernel'].shape)
+    self.assertEqual(expected_bias_shape, v['params']['bias'].shape)
+
+    out = layer.apply(v, x)
+    self.assertEqual(out.shape, expected_result_shape)
+    expected_out = jnp.einsum(einsum_str, x, v['params']['kernel']) + v[
+      'params'
+    ]['bias'].reshape(bias_broadcast_shape)
+    np.testing.assert_allclose(out, expected_out)
+
+  @parameterized.parameters(
+    [
+      (
+        ('abd,bce->ace', 'abd,bc...->ac...', 'abd...,bc...->ac...'),
+        (3, 4, 6),
+        (4, 5, 6),
+      ),
+      (
+        (
+          'abcd,ejcf->adef',
+          'ab...d,ej...f->adef',
+          'ab...d,e...f->adef',
+          'a...d,ej...f->adef',
+        ),
+        (3, 4, 5, 6),
+        (7, 4, 5, 8),
+      ),
+      (
+        ('abcd,ejcf->adcf', 'ab...d,ej...f->ad...f'),
+        (3, 4, 5, 6),
+        (7, 4, 5, 8),
+      ),
+    ]
+  )
+  def test_einsum_ellipsis_equivalence(
+    self, einsum_str_list, lhs_shape, rhs_shape
+  ):
+    x = jax.random.uniform(jax.random.key(0), lhs_shape)
+    layer = nn.Einsum(
+      rhs_shape, einsum_str_list[0], bias_init=nn.initializers.normal()
+    )
+    v = layer.init(jax.random.key(1), x)
+    out = layer.apply(v, x)
+
+    for einsum_str in einsum_str_list[1:]:
+      layer2 = nn.Einsum(
+        rhs_shape, einsum_str, bias_init=nn.initializers.normal()
+      )
+      v2 = layer2.init(jax.random.key(1), x)
+      np.testing.assert_allclose(v['params']['kernel'], v2['params']['kernel'])
+      np.testing.assert_allclose(v['params']['bias'], v2['params']['bias'])
+      np.testing.assert_allclose(out, layer2.apply(v2, x))
+
+  def test_einsum_str_arg(self):
+    einsum_str = 'abc,cde->abde'
+    x = jax.random.normal(jax.random.key(0), (3, 4, 5))
+
+    constructed_layer = nn.Einsum(
+      (5, 6, 7), einsum_str, bias_init=nn.initializers.normal()
+    )
+    constructed_v = constructed_layer.init(jax.random.key(1), x)
+    constructed_out = constructed_layer.apply(constructed_v, x)
+
+    called_layer = nn.Einsum((5, 6, 7), bias_init=nn.initializers.normal())
+    called_v = called_layer.init(jax.random.key(1), x, einsum_str)
+    called_out = called_layer.apply(called_v, x, einsum_str)
+
+    np.testing.assert_allclose(
+      constructed_v['params']['kernel'], called_v['params']['kernel']
+    )
+    np.testing.assert_allclose(
+      constructed_v['params']['bias'], called_v['params']['bias']
+    )
+    np.testing.assert_allclose(constructed_out, called_out)
+
+    with self.assertRaisesWithLiteralMatch(
+      ValueError,
+      'Parameter "einsum_str" was passed to the constructor and at call time. Should be passed just once.',
+    ):
+      constructed_layer.init(jax.random.key(1), x, einsum_str)
+    with self.assertRaisesWithLiteralMatch(
+      ValueError,
+      'Parameter "einsum_str" must be passed to the constructor or at call time.',
+    ):
+      called_layer.init(jax.random.key(1), x)
+
+  def test_einsum_space_str(self):
+    x = jax.random.normal(jax.random.key(0), (3, 4, 5))
+
+    layer1 = nn.Einsum(
+      (5, 6, 7), 'abc,cde->abde', bias_init=nn.initializers.normal()
+    )
+    v1 = layer1.init(jax.random.key(1), x)
+    out1 = layer1.apply(v1, x)
+
+    layer2 = nn.Einsum(
+      (5, 6, 7),
+      '  ab c  , c d e    -  >a b d  e  ',
+      bias_init=nn.initializers.normal(),
+    )
+    v2 = layer2.init(jax.random.key(1), x)
+    out2 = layer2.apply(v1, x)
+
+    np.testing.assert_allclose(v1['params']['kernel'], v2['params']['kernel'])
+    np.testing.assert_allclose(v1['params']['bias'], v2['params']['bias'])
+    np.testing.assert_allclose(out1, out2)
+
+  @parameterized.parameters(
+    [
+      ('abc,cde', '`einsum_str` equation must be explicit and include "->".'),
+      (
+        'abc->',
+        f'`einsum_str` equation must have exactly two operands and therefore, exactly one comma character, instead of 0',
+      ),
+      (
+        'abc,cde,efg->abdfg',
+        f'`einsum_str` equation must have exactly two operands and therefore, exactly one comma character, instead of 2',
+      ),
+    ]
+  )
+  def test_einsum_error(self, einsum_str, error_msg):
+    x = jax.random.normal(jax.random.key(0), (3, 4, 5))
+
+    layer = nn.Einsum((5, 6, 7), einsum_str)
+    with self.assertRaisesRegex(ValueError, error_msg):
+      layer.init(jax.random.key(1), x)
+
   @parameterized.product(use_bias=(True, False))
   def test_conv(self, use_bias):
     rng = dict(params=random.key(0))
