@@ -2760,7 +2760,7 @@ class Module(ModuleBase):
       ... })
       {'': 'Foo', 'Dense_0': 'Dense', 'Dense_1': 'Dense'}
 
-    `Args:
+    Args:
       rngs: The rngs for the variable collections as passed to ``Module.init``.
       *args: The arguments to the forward computation.
       show_repeated: If ``True``, repeated calls to the same module will be
