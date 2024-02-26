@@ -174,15 +174,15 @@ class LinenMetaTest(absltest.TestCase):
     f = lambda x: jax.sharding.NamedSharding(mesh, x)
     key_spec = PartitionSpec()
     init_fn = jax.jit(
-      model.init,
-      in_shardings=jax.tree_map(f, (key_spec, x_spec)),
-      out_shardings=jax.tree_map(f, spec),
+        model.init,
+        in_shardings=jax.tree_util.tree_map(f, (key_spec, x_spec)),
+        out_shardings=jax.tree_util.tree_map(f, spec),
     )
     variables = init_fn(random.key(0), x)
     apply_fn = jax.jit(
-      model.apply,
-      in_shardings=jax.tree_map(f, (spec, x_spec)),
-      out_shardings=jax.tree_map(f, x_spec),
+        model.apply,
+        in_shardings=jax.tree_util.tree_map(f, (spec, x_spec)),
+        out_shardings=jax.tree_util.tree_map(f, x_spec),
     )
     y = apply_fn(variables, x)
     self.assertEqual(y.shape, (8, 128))

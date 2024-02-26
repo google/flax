@@ -25,11 +25,10 @@ import abc
 import functools
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 
-import jax
-from jax.experimental import maps
-
 from flax import errors, struct
 from flax.typing import LogicalNames
+import jax
+from jax.experimental import maps
 
 A = TypeVar('A')
 B = TypeVar('B')
@@ -77,6 +76,7 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
 
     Args:
       val: The new value to be boxed by this AxisMetadata wrapper
+
     Returns:
       A new instance of the same type as self with `val` as the new ``unbox``
       content
@@ -85,7 +85,7 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
 
   @abc.abstractmethod
   def add_axis(
-    self: TAxisMetadata, index: int, params: Dict[Any, Any]
+      self: TAxisMetadata, index: int, params: Dict[Any, Any]
   ) -> TAxisMetadata:
     """Adds a new axis to the axis metadata.
 
@@ -98,6 +98,7 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
         that introduces the new axis (e.g.: ``nn.scan`` or ``nn.vmap``). The
         user passes this dictionary as the `metadata_param` argument to the
         transformation.
+
     Returns:
       A new instance of the same type as self and with the same ``unbox``
       content with updated axis metadata.
@@ -106,7 +107,7 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
 
   @abc.abstractmethod
   def remove_axis(
-    self: TAxisMetadata, index: int, params: Dict[Any, Any]
+      self: TAxisMetadata, index: int, params: Dict[Any, Any]
   ) -> TAxisMetadata:
     """Removes an axis from the axis metadata.
 
@@ -116,9 +117,10 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
     Args:
       index: The position of the axis that is to be removed
       params: An arbitrary dictionary of parameters passed by the transformation
-        that introduced the axis (e.g.: ``nn.scan`` or ``nn.vmap``). The
-        user passes this dictionary as the `metadata_param` argument to the
+        that introduced the axis (e.g.: ``nn.scan`` or ``nn.vmap``). The user
+        passes this dictionary as the `metadata_param` argument to the
         transformation.
+
     Returns:
       A new instance of the same type as self and with the same ``unbox``
       content with updated axis metadata.
@@ -167,7 +169,9 @@ def replace_boxed(tree: Any, updates: Any) -> Any:
     else:
       return v
 
-  return jax.tree_util.tree_map(inner_update, tree, updates, is_leaf=is_axis_metadata)
+  return jax.tree_util.tree_map(
+      inner_update, tree, updates, is_leaf=is_axis_metadata
+  )
 
 
 PARTITION_NAME = 'partition_name'
@@ -233,13 +237,12 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
           body, variable_axes={"params": 0}, split_rngs={"params": 0}, length=8,
           metadata_params={nn.meta.PARTITION_NAME: "layers"})(self, x)
       return c
-
   """
 
   value: Any
   names: LogicalNames = struct.field(pytree_node=False)
   mesh: Optional[jax.sharding.Mesh] = struct.field(
-    default=None, pytree_node=False
+      default=None, pytree_node=False
   )
 
   def unbox(self, apply_constraint=True) -> A:
@@ -285,9 +288,9 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
 
 
 def with_partitioning(
-  fn: Callable[..., Any],
-  names: LogicalNames,
-  mesh: Optional[jax.sharding.Mesh] = None,
+    fn: Callable[..., Any],
+    names: LogicalNames,
+    mesh: Optional[jax.sharding.Mesh] = None,
 ) -> Callable[..., Partitioned[Any]]:
   """Wraps a function's return value with Partitioned.
 
@@ -303,6 +306,7 @@ def with_partitioning(
     names: The logical axis passed to ``Partitioned``.
     mesh: The mesh to use for the partitioning. If None, the global mesh
       resource is used if available.
+
   Returns:
     A function wrapping ``fn`` that will return an instance of ``Partitioned``.
   """
@@ -326,10 +330,14 @@ def get_partition_spec(tree: Any) -> Any:
     else:
       return None
 
-  return jax.tree_util.tree_map(f, tree, is_leaf=lambda x: isinstance(x, Partitioned))
+  return jax.tree_util.tree_map(
+      f, tree, is_leaf=lambda x: isinstance(x, Partitioned)
+  )
 
 
 def get_sharding(tree: Any, mesh: jax.sharding.Mesh) -> Any:
   """Extracts a jax.sharding tree from a PyTree containing ``Partitioned`` values and a mesh."""
   pspec_tree = get_partition_spec(tree)
-  return jax.tree_util.tree_map(lambda x: jax.sharding.NamedSharding(mesh, x), pspec_tree)
+  return jax.tree_util.tree_map(
+      lambda x: jax.sharding.NamedSharding(mesh, x), pspec_tree
+  )

@@ -1311,7 +1311,7 @@ def map_variables(
     ...   features: int
     ...
     ...   def apply_mask(self, variables):
-    ...     return (jax.tree_map(jnp.triu, variables)
+    ...     return (jax.tree_util.tree_map(jnp.triu, variables)
     ...             if not self.is_initializing() else variables)
     ...
     ...   def setup(self):
@@ -1337,8 +1337,9 @@ def map_variables(
     rngs: PRNGSequences added to the transformed scope (default: all).
     variables: Additional Variable collections added to the transformed scope.
       Besides those specified by ``target`` (default: all).
-    methods: If ``target`` is a ``Module``, the methods of ``Module`` to map variables
-      for.
+    methods: If ``target`` is a ``Module``, the methods of ``Module`` to map
+      variables for.
+
   Returns:
     a wrapped version of ``target`` that will map the specified collections.
   """

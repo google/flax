@@ -995,13 +995,13 @@ class LinearTest(parameterized.TestCase):
     conv_seq = module(features=4, kernel_size=(3,))
     x = jnp.ones((8, 3))
     self.assertTrue(
-      jax.tree_util.tree_all(
-        jax.tree_map(
-          lambda x, y: (x == y).all(),
-          conv_int.init(random.key(0), x),
-          conv_seq.init(random.key(0), x),
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(
+                lambda x, y: (x == y).all(),
+                conv_int.init(random.key(0), x),
+                conv_seq.init(random.key(0), x),
+            )
         )
-      )
     )
 
   def test_embed(self):

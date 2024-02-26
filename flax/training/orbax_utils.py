@@ -75,7 +75,9 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
 
   # Simpler case: no JAX arrays
   if not any(
-    jax.tree_util.tree_flatten(jax.tree_map(find_sharding, target))[0]
+      jax.tree_util.tree_flatten(jax.tree_util.tree_map(find_sharding, target))[
+          0
+      ]
   ):
     return jax.tree_util.tree_map(
       lambda x: ocp.RestoreArgs(restore_type=np.ndarray), target

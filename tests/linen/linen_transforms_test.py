@@ -2245,7 +2245,7 @@ class TransformTest(parameterized.TestCase):
     x = jnp.ones((4, 4), dtype=jnp.float32)
     vs = Test().init(k, x)
     y = Test().apply(vs, x)
-    outer_expect = jax.tree_map(
+    outer_expect = jax.tree_util.tree_map(
         jnp.shape,
         freeze({
             'params': {
@@ -2259,7 +2259,7 @@ class TransformTest(parameterized.TestCase):
             }
         }),
     )
-    inner_expect = jax.tree_map(
+    inner_expect = jax.tree_util.tree_map(
         jnp.shape,
         freeze({
             'params': {
@@ -2271,8 +2271,8 @@ class TransformTest(parameterized.TestCase):
             }
         }),
     )
-    self.assertEqual(jax.tree_map(jnp.shape, vs), outer_expect)
-    self.assertEqual(jax.tree_map(jnp.shape, vars_copy), inner_expect)
+    self.assertEqual(jax.tree_util.tree_map(jnp.shape, vs), outer_expect)
+    self.assertEqual(jax.tree_util.tree_map(jnp.shape, vars_copy), inner_expect)
 
   def test_outer_setup_called_with_sharing_across_transforms(self):
     class A(nn.Module):
@@ -2305,10 +2305,10 @@ class TransformTest(parameterized.TestCase):
     x = random.randint(k, (2, 2), minval=0, maxval=10)
     vs = C().init(k, x)
     y = C().apply(vs, x)
-    outer_expect = jax.tree_map(
+    outer_expect = jax.tree_util.tree_map(
         jnp.shape, freeze({'params': {'a': {'foo': jnp.zeros((2, 2))}}})
     )
-    self.assertEqual(jax.tree_map(jnp.shape, vs), outer_expect)
+    self.assertEqual(jax.tree_util.tree_map(jnp.shape, vs), outer_expect)
 
   def test_grad_simple(self):
     class LearnScale(nn.Module):

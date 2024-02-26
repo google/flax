@@ -77,12 +77,12 @@ class DenseGeneral(Module):
     >>> # output features (4, 5)
     >>> layer = nn.DenseGeneral(features=(4, 5))
     >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
-    >>> jax.tree_map(jnp.shape, params)
+    >>> jax.tree_util.tree_map(jnp.shape, params)
     {'params': {'bias': (4, 5), 'kernel': (3, 4, 5)}}
     >>> # apply transformation on the the second and last axes
     >>> layer = nn.DenseGeneral(features=(4, 5), axis=(1, -1))
     >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3, 6, 7)))
-    >>> jax.tree_map(jnp.shape, params)
+    >>> jax.tree_util.tree_map(jnp.shape, params)
     {'params': {'bias': (4, 5), 'kernel': (3, 7, 4, 5)}}
 
   Attributes:
@@ -145,7 +145,7 @@ class DenseGeneral(Module):
         * np.prod(shape[n_batch_dims : n_axis + n_batch_dims]),
         np.prod(shape[-n_features:]),
       )
-      flat_shape = jax.tree_map(int, flat_shape)
+      flat_shape = jax.tree_util.tree_map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, meta.AxisMetadata):
         return meta.replace_boxed(kernel, jnp.reshape(kernel.unbox(), shape))
@@ -172,7 +172,7 @@ class DenseGeneral(Module):
         flat_shape = (
           np.prod(shape[:n_batch_dims]) * np.prod(shape[-n_features:]),
         )
-        flat_shape = jax.tree_map(int, flat_shape)
+        flat_shape = jax.tree_util.tree_map(int, flat_shape)
         bias = self.bias_init(rng, flat_shape, dtype)
         if isinstance(bias, meta.AxisMetadata):
           return meta.replace_boxed(bias, jnp.reshape(bias.unbox(), shape))
@@ -216,7 +216,7 @@ class Dense(Module):
 
     >>> layer = nn.Dense(features=4)
     >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
-    >>> jax.tree_map(jnp.shape, params)
+    >>> jax.tree_util.tree_map(jnp.shape, params)
     {'params': {'bias': (4,), 'kernel': (3, 4)}}
 
   Attributes:
@@ -289,7 +289,6 @@ def _conv_dimension_numbers(input_shape):
   rhs_spec = (ndim - 1, ndim - 2) + tuple(range(0, ndim - 2))
   out_spec = lhs_spec
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
-
 
 
 def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
@@ -583,14 +582,14 @@ class Conv(_Conv):
     >>> # valid padding
     >>> layer = nn.Conv(features=4, kernel_size=(3,), padding='VALID')
     >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
-    >>> jax.tree_map(jnp.shape, variables)
+    >>> jax.tree_util.tree_map(jnp.shape, variables)
     {'params': {'bias': (4,), 'kernel': (3, 3, 4)}}
     >>> out.shape
     (1, 6, 4)
     >>> # circular padding with stride 2
     >>> layer = nn.Conv(features=4, kernel_size=(3, 3), strides=2, padding='CIRCULAR')
     >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
-    >>> jax.tree_map(jnp.shape, variables)
+    >>> jax.tree_util.tree_map(jnp.shape, variables)
     {'params': {'bias': (4,), 'kernel': (3, 3, 3, 4)}}
     >>> out.shape
     (1, 4, 4)
@@ -606,25 +605,26 @@ class Conv(_Conv):
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string ``'SAME'``, the string ``'VALID'``, the string
-      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
-      high)`` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpreted as applying the same padding
-      in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides. ``'CAUSAL'`` padding for a 1D convolution will
-      left-pad the convolution axis, resulting in same-sized output.
+      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n``
+      ``(low, high)`` integer pairs that give the padding to apply before and
+      after each spatial dimension. A single int is interpreted as applying the
+      same padding in all dims and assign a single int in a sequence causes the
+      same padding to be used on both sides. ``'CAUSAL'`` padding for a 1D
+      convolution will left-pad the convolution axis, resulting in same-sized
+      output.
     input_dilation: an integer or a sequence of ``n`` integers, giving the
-      dilation factor to apply in each spatial dimension of ``inputs``
-      (default: 1). Convolution with input dilation ``d`` is equivalent to
-      transposed convolution with stride ``d``.
+      dilation factor to apply in each spatial dimension of ``inputs`` (default:
+      1). Convolution with input dilation ``d`` is equivalent to transposed
+      convolution with stride ``d``.
     kernel_dilation: an integer or a sequence of ``n`` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
-      kernel (default: 1). Convolution with kernel dilation
-      is also known as 'atrous convolution'.
+      kernel (default: 1). Convolution with kernel dilation is also known as
+      'atrous convolution'.
     feature_group_count: integer, default 1. If specified divides the input
       features into groups.
     use_bias: whether to add a bias to the output (default: True).
     mask: Optional mask for the weights during masked convolution. The mask must
-          be the same shape as the convolution weight matrix.
+      be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see ``jax.lax.Precision`
@@ -649,14 +649,14 @@ class ConvLocal(_Conv):
     >>> # valid padding
     >>> layer = nn.ConvLocal(features=4, kernel_size=(3,), padding='VALID')
     >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
-    >>> jax.tree_map(jnp.shape, variables)
+    >>> jax.tree_util.tree_map(jnp.shape, variables)
     {'params': {'bias': (6, 4), 'kernel': (6, 9, 4)}}
     >>> out.shape
     (1, 6, 4)
     >>> # circular padding with stride 2
     >>> layer = nn.ConvLocal(features=4, kernel_size=(3, 3), strides=2, padding='CIRCULAR')
     >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
-    >>> jax.tree_map(jnp.shape, variables)
+    >>> jax.tree_util.tree_map(jnp.shape, variables)
     {'params': {'bias': (1, 4, 4), 'kernel': (1, 4, 27, 4)}}
     >>> out.shape
     (1, 4, 4)
@@ -672,25 +672,26 @@ class ConvLocal(_Conv):
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string ``'SAME'``, the string ``'VALID'``, the string
-      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n`` ``(low,
-      high)`` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpreted as applying the same padding
-      in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides. ``'CAUSAL'`` padding for a 1D convolution will
-      left-pad the convolution axis, resulting in same-sized output.
+      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n``
+      ``(low, high)`` integer pairs that give the padding to apply before and
+      after each spatial dimension. A single int is interpreted as applying the
+      same padding in all dims and assign a single int in a sequence causes the
+      same padding to be used on both sides. ``'CAUSAL'`` padding for a 1D
+      convolution will left-pad the convolution axis, resulting in same-sized
+      output.
     input_dilation: an integer or a sequence of ``n`` integers, giving the
-      dilation factor to apply in each spatial dimension of ``inputs``
-      (default: 1). Convolution with input dilation ``d`` is equivalent to
-      transposed convolution with stride ``d``.
+      dilation factor to apply in each spatial dimension of ``inputs`` (default:
+      1). Convolution with input dilation ``d`` is equivalent to transposed
+      convolution with stride ``d``.
     kernel_dilation: an integer or a sequence of ``n`` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
-      kernel (default: 1). Convolution with kernel dilation
-      is also known as 'atrous convolution'.
+      kernel (default: 1). Convolution with kernel dilation is also known as
+      'atrous convolution'.
     feature_group_count: integer, default 1. If specified divides the input
       features into groups.
     use_bias: whether to add a bias to the output (default: True).
     mask: Optional mask for the weights during masked convolution. The mask must
-          be the same shape as the convolution weight matrix.
+      be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see ``jax.lax.Precision``
@@ -715,14 +716,14 @@ class ConvTranspose(Module):
     >>> # valid padding
     >>> layer = nn.ConvTranspose(features=4, kernel_size=(3,), padding='VALID')
     >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
-    >>> jax.tree_map(jnp.shape, variables)
+    >>> jax.tree_util.tree_map(jnp.shape, variables)
     {'params': {'bias': (4,), 'kernel': (3, 3, 4)}}
     >>> out.shape
     (1, 10, 4)
     >>> # circular padding with stride 2
     >>> layer = nn.ConvTranspose(features=4, kernel_size=(6, 6), strides=(2, 2), padding='CIRCULAR', transpose_kernel=True)
     >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 15, 15, 3)))
-    >>> jax.tree_map(jnp.shape, variables)
+    >>> jax.tree_util.tree_map(jnp.shape, variables)
     {'params': {'bias': (4,), 'kernel': (6, 6, 4, 3)}}
     >>> out.shape
     (1, 30, 30, 4)
@@ -733,24 +734,24 @@ class ConvTranspose(Module):
 
   Attributes:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel. For 1D convolution,
-      the kernel size can be passed as an integer, which will be interpreted
-      as a tuple of the single integer. For all other cases, it must be a
-      sequence of integers.
+    kernel_size: shape of the convolutional kernel. For 1D convolution, the
+      kernel size can be passed as an integer, which will be interpreted as a
+      tuple of the single integer. For all other cases, it must be a sequence of
+      integers.
     strides: a sequence of `n` integers, representing the inter-window strides.
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpreted as applying the same padding
-      in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides.
+      spatial dimension. A single int is interpreted as applying the same
+      padding in all dims and assign a single int in a sequence causes the same
+      padding to be used on both sides.
     kernel_dilation: ``None``, or a sequence of ``n`` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel. Convolution with kernel dilation is also known as 'atrous
       convolution'.
     use_bias: whether to add a bias to the output (default: True).
     mask: Optional mask for the weights during masked convolution. The mask must
-          be the same shape as the convolution weight matrix.
+      be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see ``jax.lax.Precision``

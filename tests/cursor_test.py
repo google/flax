@@ -125,13 +125,11 @@ class CursorTest(absltest.TestCase):
   def test_magic_methods(self):
     def same_value(v1, v2):
       if isinstance(v1, tuple):
-        return all(
-          [
-            jnp.all(jax.tree_map(lambda x, y: x == y, e1, e2))
+        return all([
+            jnp.all(jax.tree_util.tree_map(lambda x, y: x == y, e1, e2))
             for e1, e2 in zip(v1, v2)
-          ]
-        )
-      return jnp.all(jax.tree_map(lambda x, y: x == y, v1, v2))
+        ])
+      return jnp.all(jax.tree_util.tree_map(lambda x, y: x == y, v1, v2))
 
     list_obj = [(1, 2), (3, 4)]
     for l, tuple_wrap in ((list_obj, lambda x: x), (tuple(list_obj), tuple)):

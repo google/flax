@@ -290,11 +290,11 @@ class AttentionTest(parameterized.TestCase):
       y2, v2 = module.init_with_output(key2, query, inputs_kv=key_value)
     self.assertTrue((y0 == y1).all() and (y1 == y2).all())
     self.assertTrue(
-      jax.tree_util.tree_all(
-        jax.tree_map(
-          lambda x, y, z: (x == y).all() and (y == z).all(), v0, v1, v2
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(
+                lambda x, y, z: (x == y).all() and (y == z).all(), v0, v1, v2
+            )
         )
-      )
     )
 
     with self.assertRaisesRegex(
@@ -396,29 +396,29 @@ class AttentionTest(parameterized.TestCase):
 
   def test_autoregressive_decode_with_x64(self):
     with jax.experimental.enable_x64():
-        x = jnp.ones((1, 4, 4))
-        module = nn.MultiHeadDotProductAttention(
+      x = jnp.ones((1, 4, 4))
+      module = nn.MultiHeadDotProductAttention(
           num_heads=2,
           qkv_features=4,
           decode=True
         )
 
-        rng = random.PRNGKey(0)
-        variables = module.init(rng, x, x, x)
-        params, cache = variables['params'], variables['cache']
-        y1, updates = module.apply(
+      rng = random.PRNGKey(0)
+      variables = module.init(rng, x, x, x)
+      params, cache = variables['params'], variables['cache']
+      y1, updates = module.apply(
           { 'params': params, 'cache': cache },
           x[:, :1, :],
           mutable=['cache']
         )
-        cache = updates['cache']
-        y2, updates = module.apply(
+      cache = updates['cache']
+      y2, updates = module.apply(
           { 'params': params, 'cache': cache },
           x[:, 1:2, :],
           mutable=['cache']
         )
-        assert y1.shape == (1, 1, 4)
-        assert y2.shape == (1, 1, 4)
+      assert y1.shape == (1, 1, 4)
+      assert y2.shape == (1, 1, 4)
 
   def test_attention_alias_equivalence(self):
     key1, key2 = random.split(random.key(0), 2)
@@ -437,7 +437,9 @@ class AttentionTest(parameterized.TestCase):
     out2, v2 = module2.init_with_output(key2, query, key_value, key_value)
     self.assertTrue((out1 == out2).all())
     self.assertTrue(
-      jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x == y).all(), v1, v2))
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(lambda x, y: (x == y).all(), v1, v2)
+        )
     )
 
   def test_attention_alias_submodule(self):
@@ -480,11 +482,13 @@ class AttentionTest(parameterized.TestCase):
     ]
     del v2['params']['MultiHeadAttention_0']
     self.assertTrue(
-      jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x != y).all(), v1, v2))
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(lambda x, y: (x != y).all(), v1, v2)
+        )
     )
 
     # test same output if variables are the same
-    v2 = jax.tree_map(lambda x: x, v1)
+    v2 = jax.tree_util.tree_map(lambda x: x, v1)
     v2['params']['MultiHeadAttention_0'] = v2['params'][
       'MultiHeadDotProductAttention_0'
     ]
@@ -506,7 +510,9 @@ class AttentionTest(parameterized.TestCase):
     out2, v2 = module2.init_with_output(key2, query, key_value, key_value)
     self.assertTrue((out1 == out2).all())
     self.assertTrue(
-      jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x == y).all(), v1, v2))
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(lambda x, y: (x == y).all(), v1, v2)
+        )
     )
 
 

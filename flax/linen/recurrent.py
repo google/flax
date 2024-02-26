@@ -873,6 +873,7 @@ class ConvLSTMCell(RNNCellBase):
 
 class RNN(Module):
   """The ``RNN`` module takes any :class:`RNNCellBase` instance and applies it over a sequence
+
   using :func:`flax.linen.scan`.
 
   Example::
@@ -888,9 +889,12 @@ class RNN(Module):
     >>> y.shape # (batch, time, cell_size)
     (10, 50, 64)
 
-  As shown above, RNN uses the ``cell_size`` argument to set the ``size`` argument for the cell's
-  ``initialize_carry`` method, in practice this is typically the number of hidden units you want
-  for the cell. However, this may vary depending on the cell you are using, for example the
+  As shown above, RNN uses the ``cell_size`` argument to set the ``size``
+  argument for the cell's
+  ``initialize_carry`` method, in practice this is typically the number of
+  hidden units you want
+  for the cell. However, this may vary depending on the cell you are using, for
+  example the
   :class:`ConvLSTMCell` requires a ``size`` argument of the form
   ``(kernel_height, kernel_width, features)``::
 
@@ -900,8 +904,10 @@ class RNN(Module):
     >>> y.shape # (batch, time, height, width, features)
     (10, 50, 32, 32, 64)
 
-  By default RNN expect the time dimension after the batch dimension (``(*batch, time, *features)``),
-  if you set ``time_major=True`` RNN will instead expect the time dimesion to be at the beginning
+  By default RNN expect the time dimension after the batch dimension (``(*batch,
+  time, *features)``),
+  if you set ``time_major=True`` RNN will instead expect the time dimesion to be
+  at the beginning
   (``(time, *batch, *features)``)::
 
     >>> x = jnp.ones((50, 10, 32)) # (time, batch, features)
@@ -911,29 +917,37 @@ class RNN(Module):
     >>> y.shape # (time, batch, cell_size)
     (50, 10, 64)
 
-  The output is an array of shape ``(*batch, time, *cell_size)`` by default (typically), however
-  if you set ``return_carry=True`` it will instead return a tuple of the final carry and the output::
+  The output is an array of shape ``(*batch, time, *cell_size)`` by default
+  (typically), however
+  if you set ``return_carry=True`` it will instead return a tuple of the final
+  carry and the output::
 
     >>> x = jnp.ones((10, 50, 32)) # (batch, time, features)
     >>> lstm = nn.RNN(nn.LSTMCell(64), return_carry=True)
     >>> variables = lstm.init(jax.random.key(0), x)
     >>> carry, y = lstm.apply(variables, x)
-    >>> jax.tree_map(jnp.shape, carry) # ((batch, cell_size), (batch, cell_size))
+    >>> jax.tree_util.tree_map(jnp.shape, carry) # ((batch, cell_size), (batch, cell_size))
     ((10, 64), (10, 64))
     >>> y.shape # (batch, time, cell_size)
     (10, 50, 64)
 
-  To support variable length sequences, you can pass a ``seq_lengths`` which is an integer
-  array of shape ``(*batch)`` where each element is the length of the sequence in the batch.
+  To support variable length sequences, you can pass a ``seq_lengths`` which is
+  an integer
+  array of shape ``(*batch)`` where each element is the length of the sequence
+  in the batch.
   For example::
 
     >>> seq_lengths = jnp.array([3, 2, 5])
 
-  The output elements corresponding to padding elements are NOT zeroed out. If ``return_carry``
-  is set to ``True`` the carry will be the state of the last valid element of each sequence.
+  The output elements corresponding to padding elements are NOT zeroed out. If
+  ``return_carry``
+  is set to ``True`` the carry will be the state of the last valid element of
+  each sequence.
 
-  RNN also accepts some of the arguments of :func:`flax.linen.scan`, by default they are set to
-  work with cells like :class:`LSTMCell` and :class:`GRUCell` but they can be overriden as needed.
+  RNN also accepts some of the arguments of :func:`flax.linen.scan`, by default
+  they are set to
+  work with cells like :class:`LSTMCell` and :class:`GRUCell` but they can be
+  overriden as needed.
   Overriding default values to scan looks like this::
 
     >>> lstm = nn.RNN(
@@ -943,33 +957,37 @@ class RNN(Module):
 
   Attributes:
     cell: an instance of :class:`RNNCellBase`.
-    time_major: if ``time_major=False`` (default) it will expect inputs with shape
-      ``(*batch, time, *features)``, else it will expect inputs with shape ``(time, *batch, *features)``.
-    return_carry: if ``return_carry=False`` (default) only the output sequence is returned,
-      else it will return a tuple of the final carry and the output sequence.
-    reverse: if ``reverse=False`` (default) the sequence is processed from left to right and
-      returned in the original order, else it will be processed from right to left, and
-      returned in reverse order. If ``seq_lengths`` is passed, padding will always remain
-      at the end of the sequence.
-    keep_order: if ``keep_order=True``, when ``reverse=True``
-      the output will be reversed back to the original order after processing, this is
-      useful to align sequences in bidirectional RNNs. If ``keep_order=False`` (default),
+    time_major: if ``time_major=False`` (default) it will expect inputs with
+      shape ``(*batch, time, *features)``, else it will expect inputs with shape
+      ``(time, *batch, *features)``.
+    return_carry: if ``return_carry=False`` (default) only the output sequence
+      is returned, else it will return a tuple of the final carry and the output
+      sequence.
+    reverse: if ``reverse=False`` (default) the sequence is processed from left
+      to right and returned in the original order, else it will be processed
+      from right to left, and returned in reverse order. If ``seq_lengths`` is
+      passed, padding will always remain at the end of the sequence.
+    keep_order: if ``keep_order=True``, when ``reverse=True`` the output will be
+      reversed back to the original order after processing, this is useful to
+      align sequences in bidirectional RNNs. If ``keep_order=False`` (default),
       the output will remain in the order specified by ``reverse``.
-    unroll: how many scan iterations to unroll within a single iteration of a loop,
-      defaults to 1. This argument will be passed to ``nn.scan``.
-    variable_axes: a dictionary mapping each collection to either an integer ``i`` (meaning we scan over
-      dimension ``i``) or ``None`` (replicate rather than scan). This argument is forwarded to ``nn.scan``.
+    unroll: how many scan iterations to unroll within a single iteration of a
+      loop, defaults to 1. This argument will be passed to ``nn.scan``.
+    variable_axes: a dictionary mapping each collection to either an integer
+      ``i`` (meaning we scan over dimension ``i``) or ``None`` (replicate rather
+      than scan). This argument is forwarded to ``nn.scan``.
     variable_broadcast: Specifies the broadcasted variable collections. A
       broadcasted variable should not depend on any computation that cannot be
       lifted out of the loop. This is typically used to define shared parameters
       inside the fn. This argument is forwarded to ``nn.scan``.
     variable_carry: Specifies the variable collections that are carried through
       the loop. Mutations to these variables are carried to the next iteration
-      and will be preserved when the scan finishes. This argument is forwarded to
-      ``nn.scan``.
-    split_rngs: a mapping from PRNGSequenceFilter to bool specifying whether a collection's
-      PRNG key should be split such that its values are different at each step, or replicated
-      such that its values remain the same at each step. This argument is forwarded to ``nn.scan``.
+      and will be preserved when the scan finishes. This argument is forwarded
+      to ``nn.scan``.
+    split_rngs: a mapping from PRNGSequenceFilter to bool specifying whether a
+      collection's PRNG key should be split such that its values are different
+      at each step, or replicated such that its values remain the same at each
+      step. This argument is forwarded to ``nn.scan``.
   """
 
   cell: RNNCellBase
@@ -1060,14 +1078,14 @@ class RNN(Module):
 
     # maybe reverse the sequence
     if reverse:
-      inputs = jax.tree_map(
-        lambda x: flip_sequences(
-          x,
-          seq_lengths,
-          num_batch_dims=len(batch_dims),
-          time_major=time_major,  # type: ignore
-        ),
-        inputs,
+      inputs = jax.tree_util.tree_map(
+          lambda x: flip_sequences(
+              x,
+              seq_lengths,
+              num_batch_dims=len(batch_dims),
+              time_major=time_major,  # type: ignore
+          ),
+          inputs,
       )
 
     carry: Carry
@@ -1121,14 +1139,14 @@ class RNN(Module):
       carry, outputs = scan_output
 
     if reverse and keep_order:
-      outputs = jax.tree_map(
-        lambda x: flip_sequences(
-          x,
-          seq_lengths,
-          num_batch_dims=len(batch_dims),
-          time_major=time_major,  # type: ignore
-        ),
-        outputs,
+      outputs = jax.tree_util.tree_map(
+          lambda x: flip_sequences(
+              x,
+              seq_lengths,
+              num_batch_dims=len(batch_dims),
+              time_major=time_major,  # type: ignore
+          ),
+          outputs,
       )
 
     if return_carry:
@@ -1143,7 +1161,7 @@ def _select_last_carry(sequence: A, seq_lengths: jnp.ndarray) -> A:
   def _slice_array(x: jnp.ndarray):
     return x[last_idx, jnp.arange(x.shape[1])]
 
-  return jax.tree_map(_slice_array, sequence)
+  return jax.tree_util.tree_map(_slice_array, sequence)
 
 
 def _expand_dims_like(x, target):
@@ -1310,7 +1328,9 @@ class Bidirectional(Module):
     )
 
     carry = (carry_forward, carry_backward)
-    outputs = jax.tree_map(self.merge_fn, outputs_forward, outputs_backward)
+    outputs = jax.tree_util.tree_map(
+        self.merge_fn, outputs_forward, outputs_backward
+    )
 
     if return_carry:
       return carry, outputs

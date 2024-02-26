@@ -241,11 +241,12 @@ class BatchNorm(Module):
 
     >>> x = jax.random.normal(jax.random.key(0), (5, 6))
     >>> variables = BN.init(jax.random.key(1), x, use_running_average=False)
-    >>> jax.tree_map(jnp.shape, variables)
+    >>> jax.tree_util.tree_map(jnp.shape, variables)
     {'batch_stats': {'mean': (6,), 'var': (6,)}, 'params': {'bias': (6,), 'scale': (6,)}}
 
   We then update the batch_stats during training by specifying that the
-  ``batch_stats`` collection is mutable in the ``apply`` method for our module.::
+  ``batch_stats`` collection is mutable in the ``apply`` method for our
+  module.::
 
     >>> y, new_batch_stats = BN.apply(variables, x, mutable=['batch_stats'], use_running_average=False)
 
@@ -889,7 +890,9 @@ class InstanceNorm(Module):
 
 
 class SpectralNorm(Module):
-  """Spectral normalization. See:
+  """Spectral normalization.
+
+  See:
 
   - https://arxiv.org/abs/1802.05957
   - https://arxiv.org/abs/1805.08318
@@ -932,7 +935,7 @@ class SpectralNorm(Module):
     >>> y = jnp.ones((1, 5))
     >>> model = Foo()
     >>> variables = model.init(jax.random.PRNGKey(0), x, train=False)
-    >>> flax.core.freeze(jax.tree_map(jnp.shape, variables))
+    >>> flax.core.freeze(jax.tree_util.tree_map(jnp.shape, variables))
     FrozenDict({
         batch_stats: {
             SpectralNorm_0: {
@@ -972,7 +975,7 @@ class SpectralNorm(Module):
     ...       variables['params']
     ...   )
     ...   return {
-    ...       'params': jax.tree_map(
+    ...       'params': jax.tree_util.tree_map(
     ...           lambda p, g: p - 0.1 * g, variables['params'], grads
     ...       ),
     ...       'batch_stats': updates['batch_stats'],
@@ -990,11 +993,11 @@ class SpectralNorm(Module):
     epsilon: A small float added to l2-normalization to avoid dividing by zero.
     dtype: the dtype of the result (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
-    error_on_non_matrix: Spectral normalization is only defined on matrices.
-      By default, this module will return scalars unchanged and flatten
+    error_on_non_matrix: Spectral normalization is only defined on matrices. By
+      default, this module will return scalars unchanged and flatten
       higher-order tensors in their leading dimensions. Setting this flag to
-      True will instead throw an error if a weight tensor with dimension
-      greater than 2 is used by the layer.
+      True will instead throw an error if a weight tensor with dimension greater
+      than 2 is used by the layer.
     collection_name: Name of the collection to store intermediate values used
       when performing spectral normalization.
   """
@@ -1157,8 +1160,8 @@ class WeightNorm(Module):
     ...     # l2-normalize all params of the second Dense layer
     ...     x = nn.WeightNorm(nn.Dense(4), variable_filter=None)(x)
     ...     x = nn.Dense(5)(x)
-    ...     # l2-normalize all kernels in the Bar submodule and all params in the
-    ...     # Baz submodule
+    ...     # l2-normalize all kernels in the Bar submodule and all params in
+    ...     # the Baz submodule
     ...     x = nn.WeightNorm(Bar(), variable_filter={'kernel', 'Baz'})(x)
     ...     return x
 
@@ -1166,7 +1169,7 @@ class WeightNorm(Module):
     >>> x = jnp.ones((1, 2))
     >>> model = Foo()
     >>> variables = model.init(jax.random.key(0), x)
-    >>> flax.core.freeze(jax.tree_map(jnp.shape, variables))
+    >>> flax.core.freeze(jax.tree_util.tree_map(jnp.shape, variables))
     FrozenDict({
         params: {
             Bar_0: {

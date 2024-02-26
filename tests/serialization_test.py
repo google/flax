@@ -167,9 +167,9 @@ class SerializationTest(parameterized.TestCase):
       '1': {},
     }
     self.assertEqual(state, expected_state)
-    state = jax.tree_map(lambda x: x + 1, expected_state)
+    state = jax.tree_util.tree_map(lambda x: x + 1, expected_state)
     restored_tx_state = serialization.from_state_dict(tx_state, state)
-    tx_state_plus1 = jax.tree_map(lambda x: x + 1, tx_state)
+    tx_state_plus1 = jax.tree_util.tree_map(lambda x: x + 1, tx_state)
     self.assertEqual(restored_tx_state, tx_state_plus1)
 
   def test_collection_serialization(self):
@@ -423,7 +423,7 @@ class SerializationTest(parameterized.TestCase):
       tmp = serialization._chunk_array_leaves_in_place(tmp)
     finally:
       serialization.MAX_CHUNK_SIZE = old_chunksize
-    test = jax.tree_map(jnp.shape, tmp)
+    test = jax.tree_util.tree_map(jnp.shape, tmp)
     ref = {
       'a': {
         '__msgpack_chunked_array__': (),
@@ -442,7 +442,7 @@ class SerializationTest(parameterized.TestCase):
       newtmp = serialization.from_bytes(tmp, tmpbytes)
     finally:
       serialization.MAX_CHUNK_SIZE = old_chunksize
-    jax.tree_map(np.testing.assert_array_equal, tmp, newtmp)
+    jax.tree_util.tree_map(np.testing.assert_array_equal, tmp, newtmp)
 
   def test_serialization_chunking3(self):
     old_chunksize = serialization.MAX_CHUNK_SIZE
@@ -454,7 +454,7 @@ class SerializationTest(parameterized.TestCase):
     finally:
       serialization.MAX_CHUNK_SIZE = old_chunksize
 
-    jax.tree_map(np.testing.assert_array_equal, tmp, newtmp)
+    jax.tree_util.tree_map(np.testing.assert_array_equal, tmp, newtmp)
 
   @parameterized.parameters(
     {

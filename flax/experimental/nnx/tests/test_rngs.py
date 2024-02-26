@@ -174,6 +174,6 @@ class TestRngs:
     rngs = nnx.Rngs(params=0, dropout=1)
     stream = rngs.fork()['params']
 
-    stream2 = jax.tree_map(lambda x: x, stream)
+    stream2 = jax.tree_util.tree_map(lambda x: x, stream)
 
     assert stream.key is stream2.key

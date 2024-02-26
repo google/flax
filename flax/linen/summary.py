@@ -363,12 +363,12 @@ def _get_call_flops(
   if not compute_flops and not compute_vjp_flops:
     return -1, -1
 
-  rngs = jax.tree_map(
-    lambda x: x.rng, c.rngs, is_leaf=lambda x: isinstance(x, LazyRng)
+  rngs = jax.tree_util.tree_map(
+      lambda x: x.rng, c.rngs, is_leaf=lambda x: isinstance(x, LazyRng)
   )
 
-  args = jax.tree_map(_from_value_representation, c.args)
-  kwargs = jax.tree_map(_from_value_representation, c.kwargs)
+  args = jax.tree_util.tree_map(_from_value_representation, c.args)
+  kwargs = jax.tree_util.tree_map(_from_value_representation, c.kwargs)
 
   leaves, treedef = jax.tree_util.tree_flatten((args, kwargs))
   dynamic_leaves = []

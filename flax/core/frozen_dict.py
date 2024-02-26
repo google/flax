@@ -251,7 +251,9 @@ def copy(
   if isinstance(x, FrozenDict):
     return x.copy(add_or_replace)
   elif isinstance(x, dict):
-    new_dict = jax.tree_map(lambda x: x, x)  # make a deep copy of dict x
+    new_dict = jax.tree_util.tree_map(
+        lambda x: x, x
+    )  # make a deep copy of dict x
     new_dict.update(add_or_replace)
     return new_dict
   raise TypeError(f'Expected FrozenDict or dict, got {type(x)}')
@@ -280,7 +282,9 @@ def pop(
   if isinstance(x, FrozenDict):
     return x.pop(key)
   elif isinstance(x, dict):
-    new_dict = jax.tree_map(lambda x: x, x)  # make a deep copy of dict x
+    new_dict = jax.tree_util.tree_map(
+        lambda x: x, x
+    )  # make a deep copy of dict x
     value = new_dict.pop(key)
     return new_dict, value
   raise TypeError(f'Expected FrozenDict or dict, got {type(x)}')

@@ -57,8 +57,8 @@ def add_axis(
       x.add_axis(axis_name, index)
     return x
 
-  return jax.tree_map(
-    _add_axis, state, is_leaf=lambda x: isinstance(x, variables.Variable)
+  return jax.tree_util.tree_map(
+      _add_axis, state, is_leaf=lambda x: isinstance(x, variables.Variable)
   )
 
 
@@ -76,8 +76,8 @@ def remove_axis(
       x.remove_axis(axis_name, index)
     return x
 
-  return jax.tree_map(
-    _remove_axis, state, is_leaf=lambda x: isinstance(x, variables.Variable)
+  return jax.tree_util.tree_map(
+      _remove_axis, state, is_leaf=lambda x: isinstance(x, variables.Variable)
   )
 
 
@@ -108,17 +108,19 @@ def get_partition_spec(tree: A) -> A:
 
     return _maybe_replicate(x)
 
-  return jax.tree_map(
-    f,
-    tree,
-    is_leaf=lambda x: isinstance(x, variables.Variable)
-    and not isinstance(x, TreeNode),
+  return jax.tree_util.tree_map(
+      f,
+      tree,
+      is_leaf=lambda x: isinstance(x, variables.Variable)
+      and not isinstance(x, TreeNode),
   )
 
 
 def get_named_sharding(tree: A, mesh: jax.sharding.Mesh) -> A:
   spec = get_partition_spec(tree)
-  sharding = jax.tree_map(lambda p: jax.sharding.NamedSharding(mesh, p), spec)
+  sharding = jax.tree_util.tree_map(
+      lambda p: jax.sharding.NamedSharding(mesh, p), spec
+  )
   return sharding
 
 

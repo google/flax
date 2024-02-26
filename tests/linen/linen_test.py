@@ -537,11 +537,13 @@ class NormalizationTest(parameterized.TestCase):
     layer1_variables = layer1.init(jax.random.key(1), x)
     layer2_variables = layer2.init(jax.random.key(1), x)
     self.assertTrue(
-      jax.tree_util.tree_all(
-        jax.tree_map(
-          lambda v1, v2: (v1 == v2).all(), layer1_variables, layer2_variables
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(
+                lambda v1, v2: (v1 == v2).all(),
+                layer1_variables,
+                layer2_variables,
+            )
         )
-      )
     )
 
     layer1_y = layer1.apply(layer1_variables, x)
@@ -673,7 +675,7 @@ class NormalizationTest(parameterized.TestCase):
     model_cls = Foo()
     variables = model_cls.init(random.PRNGKey(0), x, train=False)
     params, batch_stats = variables['params'], variables['batch_stats']
-    params = jax.tree_map(lambda x: 4 * jnp.eye(*x.shape), params)
+    params = jax.tree_util.tree_map(lambda x: 4 * jnp.eye(*x.shape), params)
     _, updates = model_cls.apply(
       {'params': params, 'batch_stats': batch_stats},
       x=x,
@@ -747,7 +749,7 @@ class NormalizationTest(parameterized.TestCase):
     x = jax.random.normal(key1, (1, 3))
     module = Foo()
     v = module.init(key2, x)
-    v = jax.tree_map(lambda x: x + 0.5, v)
+    v = jax.tree_util.tree_map(lambda x: x + 0.5, v)
     out = module.apply(v, x)
 
     kernel = v['params']['Dense_0']['kernel']

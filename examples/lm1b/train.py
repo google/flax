@@ -515,11 +515,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           predict_step,
           in_axes=(
               0,
-              jax.tree_map(lambda x: None, state.params),
+              jax.tree_util.tree_map(lambda x: None, state.params),
               0,
               None,
               None,
-              jax.tree_map(lambda x: None, predict_config),
+              jax.tree_util.tree_map(lambda x: None, predict_config),
               None,
               None,
           ),
@@ -558,7 +558,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation("train", step_num=step):
         batch = next(train_iter)
-        batch = jax.tree_map(lambda x: jnp.array(x), batch)
+        batch = jax.tree_util.tree_map(lambda x: jnp.array(x), batch)
         state, metrics = jit_train_step(
             state, batch, train_config, learning_rate_fn, 0.0, dropout_rngs
         )

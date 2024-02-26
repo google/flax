@@ -569,7 +569,7 @@ def compact_name_scope(fun: _CallableT) -> _CallableT:
     >>> module = Foo()
     >>> variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 2)))
     >>> params = variables['params']
-    >>> print(pretty_repr(jax.tree_map(jnp.shape, params)))
+    >>> print(pretty_repr(jax.tree_util.tree_map(jnp.shape, params)))
     {
         down: {
             Dense_0: {
@@ -585,9 +585,12 @@ def compact_name_scope(fun: _CallableT) -> _CallableT:
         },
     }
 
-  You can also use ``compact_name_scope`` inside ``@compact`` methods or even other
-  ``compact_name_scope`` methods. Methods that are decorated with ``compact_name_scope``
-  can also be called directly from ``init`` or ``apply`` via the ``method`` argument::
+  You can also use ``compact_name_scope`` inside ``@compact`` methods or even
+  other
+  ``compact_name_scope`` methods. Methods that are decorated with
+  ``compact_name_scope``
+  can also be called directly from ``init`` or ``apply`` via the ``method``
+  argument::
 
     >>> y_down = module.apply({'params': params}, jnp.ones((1, 2)), method='down')
     >>> y_down.shape
@@ -1719,12 +1722,12 @@ class Module(ModuleBase):
       ...     ...
       ...     return x * mean.value
       >>> variables = Foo().init({'params': jax.random.key(0), 'stats': jax.random.key(1)}, jnp.ones((2, 3)))
-      >>> jax.tree_map(jnp.shape, variables)
+      >>> jax.tree_util.tree_map(jnp.shape, variables)
       {'params': {'Dense_0': {'bias': (4,), 'kernel': (3, 4)}}, 'stats': {'mean': (2, 4)}}
 
     In the example above, the function ``lecun_normal`` expects two arguments:
-    ``key`` and ``shape``, and both have to be passed on. The PRNG for ``stats`` has
-    to be provided explicitly when calling :meth:`init` and :meth:`apply`.
+    ``key`` and ``shape``, and both have to be passed on. The PRNG for ``stats``
+    has to be provided explicitly when calling :meth:`init` and :meth:`apply`.
 
     Args:
       col: The variable collection name.
@@ -1820,13 +1823,13 @@ class Module(ModuleBase):
       ...     ...
       ...     return x * mean
       >>> variables = Foo().init({'params': jax.random.key(0), 'stats': jax.random.key(1)}, jnp.ones((2, 3)))
-      >>> jax.tree_map(jnp.shape, variables)
+      >>> jax.tree_util.tree_map(jnp.shape, variables)
       {'params': {'Dense_0': {'bias': (4,), 'kernel': (3, 4)}, 'mean': (2, 4)}}
 
     In the example above, the function ``lecun_normal`` expects two arguments:
-    ``key`` and ``shape``, but only ``shape`` has to be provided explicitly; ``key``
-    is set automatically using the PRNG for ``params`` that is passed when
-    initializing the module using :meth:`init`.
+    ``key`` and ``shape``, but only ``shape`` has to be provided explicitly;
+    ``key`` is set automatically using the PRNG for ``params`` that is passed
+    when initializing the module using :meth:`init`.
 
     Args:
       name: The parameter name.

@@ -109,7 +109,7 @@ class MetaTest(absltest.TestCase):
       ),
     }
     unboxed = meta.unbox(xs)
-    unboxed_shapes = jax.tree_map(jnp.shape, unboxed)
+    unboxed_shapes = jax.tree_util.tree_map(jnp.shape, unboxed)
     self.assertEqual(
       unboxed_shapes,
       {
@@ -140,7 +140,7 @@ class MetaTest(absltest.TestCase):
       return c
 
     _, variables = init(f)(random.key(0), jnp.zeros((8, 3)))
-    boxed_shapes = jax.tree_map(jnp.shape, variables['params'])
+    boxed_shapes = jax.tree_util.tree_map(jnp.shape, variables['params'])
     self.assertEqual(
       boxed_shapes,
       {
@@ -203,7 +203,9 @@ class MetaTest(absltest.TestCase):
     def create_state():
       y, variables = init(f)(random.key(0), jnp.zeros((8, 4)))
       spec = meta.get_partition_spec(variables)
-      shardings = jax.tree_map(lambda s: sharding.NamedSharding(mesh, s), spec)
+      shardings = jax.tree_util.tree_map(
+          lambda s: sharding.NamedSharding(mesh, s), spec
+      )
       variables = jax.lax.with_sharding_constraint(variables, shardings)
       return variables
 

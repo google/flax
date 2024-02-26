@@ -844,7 +844,7 @@ class ModuleTest(absltest.TestCase):
 
     v = model.init({'params': key1}, x)
     v2 = model.init(key1, x)
-    jax.tree_map(np.testing.assert_allclose, v, v2)
+    jax.tree_util.tree_map(np.testing.assert_allclose, v, v2)
 
     for add_dropout, add_noise in [[True, False], [False, True], [True, True]]:
       out = model.apply(
@@ -1645,22 +1645,22 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(decoder.features, 2)
 
     self.assertTrue(
-      jax.tree_util.tree_all(
-        jax.tree_map(
-          lambda v1, v2: (v1 == v2).all(),
-          variables['params']['encoder'],
-          encoder_vars['params'],
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(
+                lambda v1, v2: (v1 == v2).all(),
+                variables['params']['encoder'],
+                encoder_vars['params'],
+            )
         )
-      )
     )
     self.assertTrue(
-      jax.tree_util.tree_all(
-        jax.tree_map(
-          lambda v1, v2: (v1 == v2).all(),
-          variables['params']['decoder'],
-          decoder_vars['params'],
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(
+                lambda v1, v2: (v1 == v2).all(),
+                variables['params']['decoder'],
+                decoder_vars['params'],
+            )
         )
-      )
     )
 
   def test_bind_unbind_equality(self):
@@ -1681,9 +1681,11 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue((module.apply(variables, x) == bound_module(x)).all())
     new_module, new_variables = bound_module.unbind()
     self.assertTrue(
-      jax.tree_util.tree_all(
-        jax.tree_map(lambda v1, v2: (v1 == v2).all(), variables, new_variables)
-      )
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(
+                lambda v1, v2: (v1 == v2).all(), variables, new_variables
+            )
+        )
     )
     self.assertEqual(module, new_module)
 
@@ -2640,11 +2642,13 @@ class ModuleTest(absltest.TestCase):
     rngs = {'params': key1, 'var_rng': key1, 'noise': key1}
     explicit_variables = model.init(rngs, x, apply_dropout=False)
     self.assertTrue(
-      jax.tree_util.tree_all(
-        jax.tree_map(
-          lambda v1, v2: (v1 == v2).all(), default_variables, explicit_variables
+        jax.tree_util.tree_all(
+            jax.tree_util.tree_map(
+                lambda v1, v2: (v1 == v2).all(),
+                default_variables,
+                explicit_variables,
+            )
         )
-      )
     )
 
     # test init inequality
@@ -2652,13 +2656,13 @@ class ModuleTest(absltest.TestCase):
       rngs[rng_name] = key2
       explicit_variables = model.init(rngs, x, apply_dropout=False)
       self.assertFalse(
-        jax.tree_util.tree_all(
-          jax.tree_map(
-            lambda v1, v2: (v1 == v2).all(),
-            default_variables,
-            explicit_variables,
+          jax.tree_util.tree_all(
+              jax.tree_util.tree_map(
+                  lambda v1, v2: (v1 == v2).all(),
+                  default_variables,
+                  explicit_variables,
+              )
           )
-        )
       )
       rngs[rng_name] = key1
 

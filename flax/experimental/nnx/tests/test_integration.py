@@ -56,7 +56,9 @@ class TestIntegration:
 
       grads = loss_fn(model)
       model.update(
-        jax.tree_map(lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads)
+          jax.tree_util.tree_map(
+              lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
+          )
       )
 
     model = Model(rngs=nnx.Rngs(0))
@@ -105,7 +107,9 @@ class TestIntegration:
 
       grads = loss_fn(model)
       model.update(
-        jax.tree_map(lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads)
+          jax.tree_util.tree_map(
+              lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
+          )
       )
 
       return model.split()
@@ -158,7 +162,9 @@ class TestIntegration:
       grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
       # SGD update
       model.update(
-        jax.tree_map(lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads)
+          jax.tree_util.tree_map(
+              lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
+          )
       )
 
     # execute the training step
@@ -198,7 +204,7 @@ class TestIntegration:
       # compute gradient
       grads, counts = jax.grad(loss_fn, has_aux=True)(params)
       # SGD update
-      params = jax.tree_map(lambda w, g: w - 0.1 * g, params, grads)
+      params = jax.tree_util.tree_map(lambda w, g: w - 0.1 * g, params, grads)
 
       return params, counts
 

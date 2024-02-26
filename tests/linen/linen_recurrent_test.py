@@ -244,7 +244,9 @@ class RNNTest(absltest.TestCase):
         )
         np.testing.assert_allclose(y[0], ys[batch_idx, i, :], rtol=1e-6)
 
-      carry_i = jax.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry)
+      carry_i = jax.tree_util.tree_map(
+          lambda x: x[batch_idx : batch_idx + 1], carry
+      )
       np.testing.assert_allclose(cell_carry, carry_i, rtol=1e-6)
 
   def test_numerical_equivalence_single_batch_nn_scan(self):
@@ -280,7 +282,9 @@ class RNNTest(absltest.TestCase):
         )
         np.testing.assert_allclose(y[0], ys[batch_idx, i, :], rtol=1e-5)
 
-      carry_i = jax.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry)
+      carry_i = jax.tree_util.tree_map(
+          lambda x: x[batch_idx : batch_idx + 1], carry
+      )
       np.testing.assert_allclose(cell_carry, carry_i, rtol=1e-5)
 
   def test_numerical_equivalence_single_batch_jax_scan(self):
@@ -340,9 +344,9 @@ class RNNTest(absltest.TestCase):
         np.testing.assert_allclose(y[0], ys[batch_idx, i, :], rtol=1e-5)
 
       np.testing.assert_allclose(
-        cell_carry,
-        jax.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry),
-        rtol=1e-5,
+          cell_carry,
+          jax.tree_util.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry),
+          rtol=1e-5,
       )
 
   def test_reverse_but_keep_order(self):
@@ -378,9 +382,9 @@ class RNNTest(absltest.TestCase):
         )
 
       np.testing.assert_allclose(
-        cell_carry,
-        jax.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry),
-        rtol=1e-5,
+          cell_carry,
+          jax.tree_util.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry),
+          rtol=1e-5,
       )
 
   def test_flip_sequence(self):
@@ -501,12 +505,12 @@ class BidirectionalTest(absltest.TestCase):
 
     self.assertEqual(ys.shape, (batch_size, seq_len, channels_out * 2))
     self.assertEqual(
-      jax.tree_map(jnp.shape, carry_forward),
-      ((batch_size, channels_out), (batch_size, channels_out)),
+        jax.tree_util.tree_map(jnp.shape, carry_forward),
+        ((batch_size, channels_out), (batch_size, channels_out)),
     )
     self.assertEqual(
-      jax.tree_map(jnp.shape, carry_backward),
-      ((batch_size, channels_out), (batch_size, channels_out)),
+        jax.tree_util.tree_map(jnp.shape, carry_backward),
+        ((batch_size, channels_out), (batch_size, channels_out)),
     )
 
 

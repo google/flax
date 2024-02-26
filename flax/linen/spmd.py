@@ -188,10 +188,10 @@ def logical_to_mesh_axes(
 
 def logical_to_mesh(tree: Any, rules: Optional[LogicalRules] = None) -> Any:
   """Applies logical_to_mesh_axes to pytrees of logical PartitionSpecs."""
-  return jax.tree_map(
-    lambda x: logical_to_mesh_axes(x, rules),
-    tree,
-    is_leaf=lambda x: isinstance(x, jax.sharding.PartitionSpec),
+  return jax.tree_util.tree_map(
+      lambda x: logical_to_mesh_axes(x, rules),
+      tree,
+      is_leaf=lambda x: isinstance(x, jax.sharding.PartitionSpec),
   )
 
 
@@ -201,10 +201,10 @@ def logical_to_mesh_sharding(
   rules: Optional[LogicalRules] = None,
 ) -> Any:
   """Convert pytrees of logical PartitionSpecs to shardings."""
-  return jax.tree_map(
-    lambda x: jax.sharding.NamedSharding(mesh, x),
-    logical_to_mesh(tree, rules),
-    is_leaf=lambda x: isinstance(x, jax.sharding.PartitionSpec),
+  return jax.tree_util.tree_map(
+      lambda x: jax.sharding.NamedSharding(mesh, x),
+      logical_to_mesh(tree, rules),
+      is_leaf=lambda x: isinstance(x, jax.sharding.PartitionSpec),
   )
 
 
