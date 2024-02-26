@@ -336,6 +336,8 @@ def tabulate(
 def _get_flops(fn, *args, **kwargs):
   e = jax.jit(fn).lower(*args, **kwargs)
   cost = e.cost_analysis()
+  if cost is None:
+    return 0
   flops = int(cost['flops']) if 'flops' in cost else 0
   return flops
 
