@@ -29,7 +29,6 @@ from flax.typing import (
   Sharding,
 )
 
-
 A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 PARTITION_NAME = 'partition_name'
@@ -102,9 +101,9 @@ def get_partition_spec(tree: A) -> A:
   def f(x):
     if isinstance(x, variables.Variable):
       if isinstance(x, HasSharding) and x.sharding:
-        return x.replace(value=PartitionSpec(*x.sharding))
+        return x.replace(raw_value=PartitionSpec(*x.sharding))
       else:
-        return x.replace(value=_maybe_replicate(x.value))
+        return x.replace(raw_value=_maybe_replicate(x.raw_value))
 
     return _maybe_replicate(x)
 
@@ -190,7 +189,7 @@ def sharding_hook(
   if _global_mesh_defined() or (
     isinstance(node, Partitioned) and node.mesh is not None
   ):
-    spec = get_partition_spec(node).value
+    spec = get_partition_spec(node).raw_value
     return with_sharding_constraint(value, spec, mesh=node.mesh)
   return value
 

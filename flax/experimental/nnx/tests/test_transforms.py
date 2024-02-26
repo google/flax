@@ -52,12 +52,12 @@ class TestJIT:
 
     m = Foo(2, 3, rngs=nnx.Rngs(0))
     assert n == 1
-    assert m.w.shape == (2, 3)
+    assert m.w.value.shape == (2, 3)
     assert m.din == 2
     assert m.dout == 3
     assert isinstance(m.din, int)
     assert isinstance(m.dout, int)
-    assert isinstance(m.w, jax.Array)
+    assert isinstance(m.w.value, jax.Array)
 
     m = Foo(2, 3, rngs=nnx.Rngs(0))
     assert n == 1
@@ -76,15 +76,15 @@ class TestJIT:
       def __call__(self, x: jax.Array) -> jax.Array:
         nonlocal n
         n += 1
-        return jnp.dot(x, self.w)
+        return jnp.dot(x, self.w.value)
 
     m = Foo(2, 3, rngs=nnx.Rngs(0))
-    assert m.w.shape == (2, 3)
+    assert m.w.value.shape == (2, 3)
     assert m.din == 2
     assert m.dout == 3
     assert isinstance(m.din, int)
     assert isinstance(m.dout, int)
-    assert isinstance(m.w, jax.Array)
+    assert isinstance(m.w.value, jax.Array)
 
     y = m(jnp.ones((1, 2)))
     assert y.shape == (1, 3)
@@ -106,7 +106,7 @@ class TestJIT:
       def __call__(self, x: jax.Array) -> jax.Array:
         nonlocal n
         n += 1
-        return jnp.dot(x, self.w)
+        return jnp.dot(x, self.w.value)
 
     m = nnx.JIT(Foo)(2, 3, rngs=nnx.Rngs(0))
 
@@ -132,24 +132,24 @@ class TestGrad:
     @nnx.grad
     def f(m: nnx.Dict):
       # sum all params
-      return m['a'][0] + m['a'][1] + m['b']
+      return m['a'][0].value + m['a'][1].value + m['b'].value
 
     grads = f(m)
 
-    assert m.a.variables['0'] is m.variables.b
+    assert m.a[0] is m.b
     assert isinstance(grads, nnx.State)
-    assert grads['a']['0'] == 2.0
-    assert isinstance(grads.a.variables['0'], nnx.Variable)
-    assert grads['a']['1'] == 1.0
-    assert isinstance(grads.a.variables['1'], nnx.Variable)
+    assert grads['a']['0'].raw_value == 2.0
+    assert isinstance(grads.a['0'], nnx.Variable)
+    assert grads['a']['1'].raw_value == 1.0
+    assert isinstance(grads.a['1'], nnx.Variable)
     assert len(grads.flat_state()) == 2
 
     m.update(grads)
 
-    assert m.a.variables['0'] is m.variables.b
-    assert m['a'][0] == 2.0
-    assert m['a'][1] == 1.0
-    assert m['b'] == 2.0
+    assert m.a[0] is m.b
+    assert m['a'][0].value == 2.0
+    assert m['a'][1].value == 1.0
+    assert m['b'].value == 2.0
     assert m['c'] == 7
     assert m['d'] == 5.0
 
@@ -164,20 +164,20 @@ class TestGrad:
     @nnx.grad
     def f(m: nnx.Dict):
       # sum all params
-      return m.a[0] + m.a[1] + m.b
+      return m.a[0].value + m.a[1].value + m.b.value
 
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a']['0'] == 1.0
-    assert isinstance(grads.a.variables['0'], nnx.Param)
+    assert grads['a']['0'].raw_value == 1.0
+    assert isinstance(grads.a['0'], nnx.Param)
     assert len(grads) == 2
 
     m.update(grads)
 
-    assert m.a[0] == 1.0
-    assert m.a[1] == 20.0
-    assert m.b == 1.0
+    assert m.a[0].value == 1.0
+    assert m.a[1].value == 20.0
+    assert m.b.value == 1.0
     assert m.c == 7
     assert m.d == 5.0
 
@@ -192,20 +192,20 @@ class TestGrad:
     @partial(nnx.grad, wrt=nnx.BatchStat)
     def f(m: nnx.Dict):
       # sum all params
-      return m.a[0] + m.a[1] + m.b
+      return m.a[0].value + m.a[1].value + m.b.value
 
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a']['1'] == 1.0
-    assert isinstance(grads.a.variables['1'], nnx.BatchStat)
+    assert grads['a']['1'].raw_value == 1.0
+    assert isinstance(grads.a['1'], nnx.BatchStat)
     assert len(grads) == 1
 
     m.update(grads)
 
-    assert m.a[0] == 10.0
-    assert m.a[1] == 1.0
-    assert m.b == 10.0
+    assert m.a[0].value == 10.0
+    assert m.a[1].value == 1.0
+    assert m.b.value == 10.0
     assert m.c == 7
     assert m.d == 5.0
 
@@ -230,9 +230,9 @@ class TestScan:
 
     module = MLP(rngs=nnx.Rngs(0))
 
-    assert module.scan_module.linear.kernel.shape == (5, 3, 3)
-    assert module.scan_module.linear.bias.shape == (5, 3)
-    assert module.scan_module.node.shape == (2,)
+    assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.scan_module.linear.bias.value.shape == (5, 3)
+    assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
     y, out = module(x)
@@ -260,9 +260,9 @@ class TestScan:
 
     module = MLP(rngs=nnx.Rngs(0))
 
-    assert module.scan_module.linear.kernel.shape == (5, 3, 3)
-    assert module.scan_module.linear.bias.shape == (5, 3)
-    assert module.scan_module.node.shape == (2,)
+    assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.scan_module.linear.bias.value.shape == (5, 3)
+    assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
     y = module(x)
@@ -289,9 +289,9 @@ class TestScan:
 
     module = MLP(rngs=nnx.Rngs(0))
 
-    assert module.scan_module.linear.kernel.shape == (5, 3, 3)
-    assert module.scan_module.linear.bias.shape == (5, 3)
-    assert module.scan_module.node.shape == (2,)
+    assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.scan_module.linear.bias.value.shape == (5, 3)
+    assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
     c, (y1, y2) = module(x)
@@ -323,9 +323,9 @@ class TestScan:
 
     module = MLP(rngs=nnx.Rngs(0))
 
-    assert module.scan_module.linear.kernel.shape == (5, 3, 3)
-    assert module.scan_module.linear.bias.shape == (5, 3)
-    assert module.scan_module.node.shape == (2,)
+    assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.scan_module.linear.bias.value.shape == (5, 3)
+    assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
     a = jnp.ones((5, 1, 3))
@@ -359,9 +359,9 @@ class TestScan:
 
     module = MLP(rngs=nnx.Rngs(0))
 
-    assert module.scan_module.linear.kernel.shape == (5, 3, 3)
-    assert module.scan_module.linear.bias.shape == (5, 3)
-    assert module.scan_module.node.shape == (2,)
+    assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.scan_module.linear.bias.value.shape == (5, 3)
+    assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
     a = jnp.ones((5, 1, 3))
@@ -392,9 +392,9 @@ class TestScan:
 
     module = MLP(rngs=nnx.Rngs(0))
 
-    assert module.scan_module.linear.kernel.shape == (5, 3, 3)
-    assert module.scan_module.linear.bias.shape == (5, 3)
-    assert module.scan_module.node.shape == (2,)
+    assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.scan_module.linear.bias.value.shape == (5, 3)
+    assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
     with nnx.flags(deterministic=False, use_running_average=False):
@@ -428,9 +428,9 @@ class TestScan:
 
     module = MLP(rngs=nnx.Rngs(0))
 
-    assert module.scan_module.linear.kernel.shape == (5, 3, 3)
-    assert module.scan_module.linear.bias.shape == (5, 3)
-    assert module.scan_module.node.shape == (2,)
+    assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.scan_module.linear.bias.value.shape == (5, 3)
+    assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
     with nnx.flags(deterministic=False, use_running_average=False):
@@ -467,9 +467,9 @@ class TestScan:
     module = Block(rngs=nnx.Rngs(0))
 
     assert module.d == 3
-    assert module.linear.kernel.shape == (5, 3, 3)
-    assert module.linear.bias.shape == (5, 3)
-    assert module.node.shape == (2,)
+    assert module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.linear.bias.value.shape == (5, 3)
+    assert module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
     with nnx.flags(deterministic=False, use_running_average=False):
@@ -500,10 +500,10 @@ class TestScan:
 
         # test sharding layer axes is not present inside scan
         state = self.linear.get_state()
-        assert state.kernel.shape == (3, 3)
-        assert state.variables.kernel.sharding == ('din', 'dout')
-        assert state.bias.shape == (3,)
-        assert state.variables.bias.sharding == ('dout',)
+        assert state.kernel.raw_value.shape == (3, 3)
+        assert state.kernel.sharding == ('din', 'dout')
+        assert state.bias.raw_value.shape == (3,)
+        assert state.bias.sharding == ('dout',)
 
         return x, None
 
@@ -518,14 +518,18 @@ class TestScan:
 
     # test sharding layers axes is set
     state = m.get_state()
-    assert state.scan_module.linear.variables.kernel.value.shape == (5, 3, 3)
-    assert state.scan_module.linear.variables.kernel.sharding == (
+    assert state.scan_module.linear.kernel.raw_value.shape == (
+      5,
+      3,
+      3,
+    )
+    assert state.scan_module.linear.kernel.sharding == (
       'layers',
       'din',
       'dout',
     )
-    assert state.scan_module.linear.variables.bias.value.shape == (5, 3)
-    assert state.scan_module.linear.variables.bias.sharding == (
+    assert state.scan_module.linear.bias.raw_value.shape == (5, 3)
+    assert state.scan_module.linear.bias.sharding == (
       'layers',
       'dout',
     )
@@ -535,14 +539,14 @@ class TestScan:
 
     # test sharding axes is preserved
     state = m.get_state()
-    assert state.scan_module.linear.kernel.shape == (5, 3, 3)
-    assert state.scan_module.linear.variables.kernel.sharding == (
+    assert state.scan_module.linear.kernel.raw_value.shape == (5, 3, 3)
+    assert state.scan_module.linear.kernel.sharding == (
       'layers',
       'din',
       'dout',
     )
-    assert state.scan_module.linear.bias.shape == (5, 3)
-    assert state.scan_module.linear.variables.bias.sharding == (
+    assert state.scan_module.linear.bias.raw_value.shape == (5, 3)
+    assert state.scan_module.linear.bias.sharding == (
       'layers',
       'dout',
     )
@@ -634,8 +638,8 @@ class TestRemat:
 
     m = ScanRematLinear(rngs=nnx.Rngs(0))
 
-    assert m.scan_module.remat_module.linear.kernel.shape == (5, 3, 3)
-    assert m.scan_module.remat_module.linear.bias.shape == (5, 3)
+    assert m.scan_module.remat_module.linear.kernel.value.shape == (5, 3, 3)
+    assert m.scan_module.remat_module.linear.bias.value.shape == (5, 3)
 
     y, _ = m(jnp.ones((1, 3)), None)
     assert y.shape == (1, 3)
@@ -663,8 +667,8 @@ class TestRemat:
 
     m = ScanLinear(rngs=nnx.Rngs(0))
 
-    assert m.linear.kernel.shape == (5, 3, 3)
-    assert m.linear.bias.shape == (5, 3)
+    assert m.linear.kernel.value.shape == (5, 3, 3)
+    assert m.linear.bias.value.shape == (5, 3)
 
     y, _ = m(jnp.ones((1, 3)), None)
     assert y.shape == (1, 3)
@@ -686,11 +690,11 @@ class TestVmap:
     module = MLP(rngs=nnx.Rngs(0))
 
     assert not jnp.allclose(
-      module.vmap_module.linear.kernel[0],
-      module.vmap_module.linear.kernel[1],
+      module.vmap_module.linear.kernel.value[0],
+      module.vmap_module.linear.kernel.value[1],
     )
-    assert module.vmap_module.linear.kernel.shape == (5, 3, 3)
-    assert module.vmap_module.linear.bias.shape == (5, 3)
+    assert module.vmap_module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.vmap_module.linear.bias.value.shape == (5, 3)
 
     x = jnp.ones((5, 1, 3))
     y = module(x)

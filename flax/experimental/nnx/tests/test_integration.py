@@ -139,14 +139,14 @@ class TestIntegration:
         self.count = State(0)
 
       def __call__(self, x):
-        self.count += 1
-        return x @ self.w + self.b[None]
+        self.count.value += 1
+        return x @ self.w.value + self.b.value[None]
 
     model = Linear(din=12, dout=2, rngs=nnx.Rngs(0))
     # forward pass
     x = jnp.ones((8, 12))
     y = model(x)
-    assert model.count == 1
+    assert model.count.value == 1
 
     @nnx.jit
     def train_step(model, x, y):
@@ -163,7 +163,7 @@ class TestIntegration:
 
     # execute the training step
     train_step(model, x, y)
-    assert model.count == 2
+    assert model.count.value == 2
 
   def test_functional_example(self):
     class Count(nnx.Variable[A]):
@@ -177,14 +177,14 @@ class TestIntegration:
         self.count = Count(0)
 
       def __call__(self, x):
-        self.count += 1
-        return x @ self.w + self.b[None]
+        self.count.value += 1
+        return x @ self.w.value + self.b.value[None]
 
     model = Linear(din=12, dout=2, rngs=nnx.Rngs(0))
     # forward pass
     x = jnp.ones((8, 12))
     y = model(x)
-    assert model.count == 1
+    assert model.count.value == 1
 
     params, counts, graphdef = model.split(nnx.Param, Count)
 
@@ -205,7 +205,7 @@ class TestIntegration:
     # execute the training step
     params, counts = train_step(params, counts, x, y)
     model = graphdef.merge(params, counts)
-    assert model.count == 2
+    assert model.count.value == 2
 
   def test_intermediates_example(self):
     class Linear(nnx.Module):
@@ -215,7 +215,7 @@ class TestIntegration:
         self.b = nnx.Param(jnp.zeros((dout,)))
 
       def __call__(self, x):
-        y = x @ self.w + self.b[None]
+        y = x @ self.w.value + self.b.value[None]
         self.y = nnx.Intermediate(y)
         return y
 
@@ -235,7 +235,7 @@ class TestIntegration:
         self.b = nnx.Param(jnp.zeros((dout,)))
 
       def __call__(self, x):
-        y = x @ self.w + self.b[None]
+        y = x @ self.w.value + self.b.value[None]
         self.y = nnx.Intermediate(y)
         return y
 

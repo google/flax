@@ -187,7 +187,7 @@ class LinearGeneral(Module):
     n_in_features = len(self.in_features)
     n_out_features = len(self.out_features)
 
-    def kernel_init_wrap(rng, shape, dtype) -> jax.Array:
+    def kernel_init_wrap(rng, shape, dtype):
       flat_shape = (
         np.prod(shape[:n_batch_axis])
         * np.prod(shape[n_batch_axis : n_in_features + n_batch_axis]),
@@ -196,7 +196,7 @@ class LinearGeneral(Module):
       flat_shape = jax.tree_map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, variables.VariableMetadata):
-        kernel.value = jnp.reshape(kernel.value, shape)
+        kernel.raw_value = jnp.reshape(kernel.raw_value, shape)
       else:
         kernel = jnp.reshape(kernel, shape)
 
@@ -214,11 +214,11 @@ class LinearGeneral(Module):
 
     if self.use_bias:
 
-      def bias_init_wrap(rng, shape, dtype) -> jax.Array:
+      def bias_init_wrap(rng, shape, dtype):
         flat_shape = (int(np.prod(shape)),)
         bias = self.bias_init(rng, flat_shape, dtype)
         if isinstance(bias, variables.VariableMetadata):
-          bias.value = jnp.reshape(bias.value, shape)
+          bias.raw_value = jnp.reshape(bias.raw_value, shape)
         else:
           bias = jnp.reshape(bias, shape)
         return bias
@@ -252,8 +252,8 @@ class LinearGeneral(Module):
       for ax in range(inputs.ndim)
       if ax not in axis
     )
-    kernel = self.kernel
-    bias = self.bias
+    kernel = self.kernel.value
+    bias = self.bias.value
 
     batch_ind = tuple(range(n_batch_dims))
     contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
@@ -339,8 +339,8 @@ class Linear(Module):
     Returns:
       The transformed input.
     """
-    kernel = self.kernel
-    bias = self.bias
+    kernel = self.kernel.value
+    bias = self.bias.value
 
     inputs, kernel, bias = dtypes.promote_dtype(
       inputs, kernel, bias, dtype=self.dtype
@@ -529,12 +529,12 @@ class Conv(Module):
     # One shared convolutional kernel for all pixels in the output.
     assert self.in_features % self.feature_group_count == 0
 
-    kernel = self.kernel
+    kernel = self.kernel.value
 
     if self.mask_fn is not None:
       kernel = self.mask_fn(kernel)
 
-    bias = self.bias
+    bias = self.bias.value
 
     inputs, kernel, bias = dtypes.promote_dtype(
       inputs, kernel, bias, dtype=self.dtype
@@ -603,7 +603,7 @@ class Embed(Module):
 
     self.num_embeddings = num_embeddings
     self.features = features
-    self.dtype = dtype or self.embedding.dtype
+    self.dtype = dtype or self.embedding.value.dtype
     self.param_dtype = param_dtype
     self.embedding_init = embedding_init
 
@@ -623,7 +623,7 @@ class Embed(Module):
     # Use take because fancy indexing numpy arrays with JAX indices does not
     # work correctly.
     (embedding,) = dtypes.promote_dtype(
-      self.embedding, dtype=self.dtype, inexact=False
+      self.embedding.value, dtype=self.dtype, inexact=False
     )
     if self.num_embeddings == 1:
       return jnp.where(
@@ -648,6 +648,6 @@ class Embed(Module):
       in NLP models.
     """
     query, embedding = dtypes.promote_dtype(
-      query, self.embedding, dtype=self.dtype
+      query, self.embedding.value, dtype=self.dtype
     )
     return jnp.dot(query, embedding.T)

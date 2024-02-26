@@ -158,22 +158,23 @@ class AddPositionEmbs(nnx.Module):
       'Number of dimensions should be 3, but it is: %d' % inputs.ndim
     )
     length = inputs.shape[1]
-    pos_embedding = self.pos_embedding
 
-    if pos_embedding is None:
+    if self.pos_embedding is None:
       # Use a fixed (non-learned) sinusoidal position embedding.
       pos_embedding = sinusoidal_init(max_len=config.max_len)(
         None, self.pos_emb_shape
       )
+    else:
+      pos_embedding = self.pos_embedding.value
 
     # We use a cache position index for tracking decoding position.
     if flaglib.flags.get('decode', False):
       _, _, df = pos_embedding.shape
       # equivalent to pos_embedding[:, i:i+1] but traceable
       pos_embedding = lax.dynamic_slice(
-        pos_embedding, jnp.array((0, self.cache_index, 0)), (1, 1, df)
+        pos_embedding, jnp.array((0, self.cache_index.value, 0)), (1, 1, df)
       )
-      self.cache_index += 1
+      self.cache_index.value += 1
     else:
       pos_embedding = pos_embedding[:, :length, :]
 

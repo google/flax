@@ -85,17 +85,20 @@ PRNGFoldable = Union[int, str]
 
 T = TypeVar('T')
 
+
 @dataclasses.dataclass(frozen=True)
 class In(Generic[T]):
   """Specifies a variable collection should only be lifted as input."""
 
   axis: T
 
+
 @dataclasses.dataclass(frozen=True)
 class Out(Generic[T]):
   """Specifies a variable collection should only be lifted as output."""
 
   axis: T
+
 
 Axis = Optional[int]
 InOutAxis = Union[Axis, In[Axis], Out[Axis]]

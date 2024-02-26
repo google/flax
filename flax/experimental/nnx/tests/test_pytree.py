@@ -150,8 +150,8 @@ class TestPytree:
     path_values, treedef = jax.tree_util.tree_flatten_with_path(foo)
     path_values = [(list(map(str, path)), value) for path, value in path_values]
 
-    assert path_values[0] == (['.x', '.value'], 3)
-    assert path_values[1] == (['.z', '.value', '.a', '.value'], 1)
+    assert path_values[0] == (['.x', '.raw_value'], 3)
+    assert path_values[1] == (['.z', '.raw_value', '.a', '.raw_value'], 1)
 
   def test_replace_unknown_fields_error(self):
     class Foo(nnx.Pytree):

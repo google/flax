@@ -33,17 +33,17 @@ class TestPartitioning:
     assert len(rest) == 1
 
     # check params
-    assert params['a']['0'] == m.a[0]
-    assert params['b'] == m.b
+    assert params['a']['0'].raw_value == m.a[0].value
+    assert params['b'].raw_value == m.b.value
 
     # check rest
-    assert rest['a']['1'] == m.a[1]
+    assert rest['a']['1'].raw_value == m.a[1].value
 
     m2 = graphdef.merge(params, rest)
 
-    assert m2.a[0] == m.a[0]
-    assert m2.a[1] == m.a[1]
-    assert m2.b == m.b
+    assert m2.a[0].value == m.a[0].value
+    assert m2.a[1].value == m.a[1].value
+    assert m2.b.value == m.b.value
     assert m2.c == 100
 
   def test_complete_partitioning(self):
@@ -98,9 +98,9 @@ class TestPartitioning:
 
     m.update(state)
 
-    assert m.a[0] == 2
-    assert m.a[1] == 6
-    assert m.b == 4
+    assert m.a[0].value == 2
+    assert m.a[1].value == 6
+    assert m.b.value == 4
     assert m.c == 100
 
   def test_update_from_with_array_leaf(self):
@@ -115,10 +115,10 @@ class TestPartitioning:
 
     m.update(state)
 
-    assert m.a[0] == 2
-    assert m.a[1] == 6
-    assert m.b == 4
-    assert m.c == 200
+    assert m.a[0].value == 2
+    assert m.a[1].value == 6
+    assert m.b.value == 4
+    assert m.c.value == 200
 
   def test_grad_example(self):
     m = nnx.Dict(
@@ -135,9 +135,9 @@ class TestPartitioning:
     grads = jax.grad(loss)(params)
     m.update(grads)
 
-    assert m.a[0] == 2.0
-    assert m.a[1] == -10
-    assert m.b == 2.0
+    assert m.a[0].value == 2.0
+    assert m.a[1].value == -10
+    assert m.b.value == 2.0
     assert m.c == 100
 
   def test_get_paritition(self):
@@ -152,8 +152,8 @@ class TestPartitioning:
     assert vars(m.a)['0'] is not vars(m)['b']
 
     state = m.extract(nnx.Variable)
-    assert state['a']['0'] == m.a[0]
-    assert state['a']['1'] == m.a[1]
-    assert state['b'] == m.b
-    assert state.variables.b is not state.a.variables[0]
+    assert state['a']['0'].raw_value == m.a[0].value
+    assert state['a']['1'].raw_value == m.a[1].value
+    assert state['b'].raw_value == m.b.value
+    assert state.b is not state.a[0]
     assert len(state.flat_state()) == 3

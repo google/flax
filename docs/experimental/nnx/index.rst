@@ -98,7 +98,7 @@ Basic usage
        self.din, self.dout = din, dout
 
      def __call__(self, x: jax.Array):
-       return x @ self.w + self.b
+       return x @ self.w.value + self.b.value
 
    rngs = nnx.Rngs(0) # explicit RNG handling
    model = Linear(din=2, dout=3, rngs=rngs) # initialize the model

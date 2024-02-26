@@ -36,7 +36,7 @@ class Linear(nnx.Module):
     self.b = nnx.Param(jnp.zeros((dout,)))
 
   def __call__(self, x):
-    return x @ self.w + self.b
+    return x @ self.w.value + self.b.value
 
 
 class Count(nnx.Variable):
@@ -50,7 +50,7 @@ class MLP(nnx.Module):
     self.linear2 = Linear(dhidden, dout, rngs=rngs)
 
   def __call__(self, x):
-    self.count += 1
+    self.count.value += 1
     x = self.linear1(x)
     x = jax.nn.relu(x)
     x = self.linear2(x)
@@ -97,7 +97,7 @@ for step, batch in enumerate(dataset(32)):
   if step >= total_steps - 1:
     break
 
-print('times called:', model.count)
+print('times called:', model.count.value)
 
 y_pred = model(X)
 

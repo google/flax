@@ -35,64 +35,12 @@ import jax.tree_util as jtu
 from flax import traverse_util
 from flax.experimental.nnx.nnx import filterlib, reprlib
 from flax.experimental.nnx.nnx.variables import Variable
-from flax.typing import Path, Leaf
+from flax.typing import Path
 
 A = tp.TypeVar('A')
 
 Key = str
-FlatState = dict[Path, Variable[Leaf]]
-
-
-class StateVariablesMapping(
-  tp.MutableMapping[str, Variable[tp.Any]], reprlib.Representable
-):
-  __slots__ = ('_mapping',)
-
-  def __init__(self, mapping: dict[Key, tp.Any]):
-    if tp.TYPE_CHECKING:
-      self._mapping = mapping
-    else:
-      object.__setattr__(self, '_mapping', mapping)
-
-  def __getitem__(self, key: str | int) -> Variable[tp.Any]:
-    if isinstance(key, int):
-      key = str(key)
-
-    value = self._mapping[key]
-
-    if not isinstance(value, Variable):
-      raise KeyError(f"Variable '{key}' not found.")
-
-    return value
-
-  def __setitem__(self, name: str, value: Variable[tp.Any]) -> None:
-    self._mapping[name] = value
-
-  def __getattr__(self, name: str) -> Variable[tp.Any]:
-    value = self._mapping[name]
-    if not isinstance(value, Variable):
-      raise AttributeError(f"Variable '{name}' not found.")
-    return value
-
-  def __setattr__(self, name: str, value: Variable[tp.Any]) -> None:
-    self._mapping[name] = value
-
-  def __delitem__(self, name: str) -> None:
-    del self._mapping[name]
-
-  def __iter__(self) -> tp.Iterator[str]:
-    for name, value in self._mapping.items():
-      if isinstance(value, Variable):
-        yield name
-
-  def __len__(self) -> int:
-    return sum(1 for _ in self)
-
-  def __nnx_repr__(self):
-    yield reprlib.Object(type(self), start='{', end='}', value_sep=': ')
-    for name, value in vars(self._mapping).items():
-      if isinstance(value, Variable):
-        yield reprlib.Attr(repr(name), value)
+FlatState = dict[Path, Variable[Variable]]
 
 
 class NestedStateRepr(reprlib.Representable):
@@ -126,36 +74,33 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
-  @property
-  def variables(self) -> StateVariablesMapping:
-    return StateVariablesMapping(self._mapping)
-
-  def __getitem__(self, key: Key | int) -> Leaf | State:
+  def __getitem__(self, key: Key | int) -> Variable | State:
     if isinstance(key, int):
       key = str(key)
     value = self._mapping[key]
     if isinstance(value, Variable):
-      return value.value
+      return value
     return State(value)
 
-  def __getattr__(self, key: Key) -> Leaf | State:
+  def __getattr__(self, key: Key) -> Variable | State:
     if '_mapping' not in vars(self) or key not in self._mapping:
       raise AttributeError(f'No attribute {key} in State')
 
     return self[key]
 
-  def __setitem__(self, key: Key | int, value: Leaf | State) -> None:
+  def __setitem__(self, key: Key | int, value: Variable | State) -> None:
     if isinstance(key, int):
       key = str(key)
+
+    if not isinstance(value, (Variable, State)):
+      raise ValueError(
+        f'Trying to set key {key} to a value'
+        f' that is not a Variable or State, got: {value}.'
+      )
     if isinstance(value, State):
       self._mapping[key] = value._mapping
     else:
-      if not isinstance(self._mapping[key], Variable):
-        raise ValueError(
-          f'Trying to set key {key} to a leaf value '
-          f'but current value is not a Variable: {self._mapping[key]}.'
-        )
-      self._mapping[key].value = value
+      self._mapping[key] = value
 
   __setattr__ = __setitem__
 
@@ -176,7 +121,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
         v = NestedStateRepr(v)
       yield reprlib.Attr(repr(k), v)
 
-  def flat_state(self) -> dict[Key, Variable[Leaf]]:
+  def flat_state(self) -> dict[Key, Variable[Variable]]:
     return traverse_util.flatten_dict(self._mapping, sep='/')  # type: ignore
 
   @classmethod
@@ -286,7 +231,7 @@ def _state_flatten_with_keys(x: State):
 
 def _state_unflatten(
   static: tp.Tuple[Path, ...] | None,
-  leaves: tp.Tuple[Leaf, ...] | tuple[dict[str, Leaf]],
+  leaves: tp.Tuple[Variable, ...] | tuple[dict[str, Variable]],
 ):
   return State(zip(static, leaves)) if static else State(leaves[0])
 

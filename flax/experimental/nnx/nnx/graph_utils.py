@@ -191,12 +191,12 @@ class VariableDef(reprlib.Representable):
   @classmethod
   def from_variable(cls, variable: Variable[tp.Any], index: int) -> VariableDef:
     metadata = vars(variable).copy()
-    del metadata['value']
+    del metadata['raw_value']
     return cls(type(variable), index, metadata)
 
   def to_variable(self, value: Node) -> Variable[Node]:
     variables = object.__new__(self._type)
-    variables.value = value
+    variables.raw_value = value
     vars(variables).update(self._metadata)
     return variables
 
