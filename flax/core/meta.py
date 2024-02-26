@@ -140,7 +140,7 @@ def map_axis_meta(fn: Callable[[AxisMetadata[Any]], Any], tree: Any) -> Any:
     else:
       return x
 
-  return jax.tree_map(wrapper, tree, is_leaf=is_axis_metadata)
+  return jax.tree_util.tree_map(wrapper, tree, is_leaf=is_axis_metadata)
 
 
 def add_axis(tree: Any, index: int, params: Dict[Any, Any]) -> Any:
@@ -167,7 +167,7 @@ def replace_boxed(tree: Any, updates: Any) -> Any:
     else:
       return v
 
-  return jax.tree_map(inner_update, tree, updates, is_leaf=is_axis_metadata)
+  return jax.tree_util.tree_map(inner_update, tree, updates, is_leaf=is_axis_metadata)
 
 
 PARTITION_NAME = 'partition_name'
@@ -326,10 +326,10 @@ def get_partition_spec(tree: Any) -> Any:
     else:
       return None
 
-  return jax.tree_map(f, tree, is_leaf=lambda x: isinstance(x, Partitioned))
+  return jax.tree_util.tree_map(f, tree, is_leaf=lambda x: isinstance(x, Partitioned))
 
 
 def get_sharding(tree: Any, mesh: jax.sharding.Mesh) -> Any:
   """Extracts a jax.sharding tree from a PyTree containing ``Partitioned`` values and a mesh."""
   pspec_tree = get_partition_spec(tree)
-  return jax.tree_map(lambda x: jax.sharding.NamedSharding(mesh, x), pspec_tree)
+  return jax.tree_util.tree_map(lambda x: jax.sharding.NamedSharding(mesh, x), pspec_tree)
