@@ -36,7 +36,7 @@ from typing import Any
 import jax
 import jax.tree_util as jtu
 
-from flax.experimental.nnx.nnx import reprlib
+from flax.experimental.nnx.nnx import reprlib, tracers
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -91,6 +91,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
   create_value_hooks: tuple[CreateValueHook[A], ...]
   add_axis_hooks: tuple[AddAxisHook['Variable[A]'], ...]
   remove_axis_hooks: tuple[RemoveAxisHook['Variable[A]'], ...]
+  _trace_state: tracers.TraceState
 
   def __init__(
     self,
@@ -113,6 +114,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     ] = (),
     **metadata: tp.Any,
   ):
+    vars(self)['_trace_state'] = tracers.TraceState()
     if set_value_hooks:
       if callable(set_value_hooks):
         set_value_hooks = (set_value_hooks,)
@@ -214,14 +216,25 @@ class Variable(tp.Generic[A], reprlib.Representable):
     # run create_value hooks
     self.raw_value = self.create_value(self.raw_value)
 
-  @property
-  def is_empty(self) -> bool:
-    return self.raw_value is EMPTY
-
   if tp.TYPE_CHECKING:
 
     def __getattr__(self, name: str) -> tp.Any:
       ...
+  else:
+    def __setattr__(self, name: str, value: Any) -> None:
+      return self._setattr(name, value)
+
+  def _setattr(self, name: str, value: tp.Any):
+    if not self._trace_state.is_valid():
+      raise ValueError(
+        'Cannot mutate Variable from a different trace level'
+      )
+
+    object.__setattr__(self, name, value)
+
+  @property
+  def is_empty(self) -> bool:
+    return self.raw_value is EMPTY
 
   def copy_from(self, other: 'Variable[A]') -> None:
     if not self.is_equivalent(other):
@@ -268,8 +281,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
       hook(self, axis_name, axis_index)
 
   def __eq__(self, other: object) -> bool:
-    if not isinstance(other, Variable):
-      return False
     return type(self) is type(other) and vars(other) == vars(self)
 
   @tp.overload
@@ -315,13 +326,15 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
   def copy(self: 'Variable[A]') -> 'Variable[A]':
     obj = object.__new__(type(self))
-    vars(obj).update(vars(self))
+    attributes = vars(self).copy()
+    attributes['_trace_state'] = tracers.TraceState()
+    vars(obj).update(attributes)
     return obj
 
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
     for name, value in vars(self).items():
-      if name.endswith('_hooks'):
+      if name.endswith('_hooks') or name == "_trace_state":
         continue
       yield reprlib.Attr(name, repr(value))
 
@@ -358,6 +371,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
 def _variable_flatten(x: Variable[tp.Any], *, with_keys: bool):
   attributes = vars(x).copy()
+  del attributes['_trace_state']
   value = attributes.pop('raw_value')
   if with_keys:
     node = (jtu.GetAttrKey('raw_value'), value)
@@ -374,8 +388,7 @@ def _variable_unflatten(
   cls: type[Variable[A]],
 ) -> Variable[A]:
   variable = object.__new__(cls)
-  variable.raw_value = children[0]
-  vars(variable).update(metadata)
+  vars(variable).update(metadata, _trace_state=tracers.TraceState(), raw_value=children[0])
   return variable
 
 

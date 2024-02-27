@@ -111,3 +111,6 @@ class TraceState(reprlib.Representable):
     yield reprlib.Object(f'{type(self).__name__}')
     yield reprlib.Attr('jax_trace', self._jax_trace)
     yield reprlib.Attr('nnx_trace', self._nnx_trace)
+
+  def __eq__(self, other):
+    return isinstance(other, TraceState) and self._jax_trace is other._jax_trace
