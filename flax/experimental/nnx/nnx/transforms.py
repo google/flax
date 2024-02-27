@@ -42,7 +42,6 @@ from flax.experimental.nnx.nnx import (
   filterlib,
   rnglib,
   spmd,
-  tracers,
   variables,
 )
 from flax.experimental.nnx.nnx.module import GraphDef, Module, ModuleMeta
@@ -196,12 +195,10 @@ def get_jitted_fn(_module_type: type[M], f, options: JITOptions) -> JittedFn[M]:
     if isinstance(states, State):
       states = (states,)
 
-    nnx_trace = tracers.get_top_trace((args, kwargs))
-    with tracers.nnx_trace(nnx_trace):
-      if 'rngs' in kwargs:
-        kwargs['rngs'] = rnglib.Rngs(kwargs['rngs'])
-      module = graphdef.merge(*states)
-      out = f(module, *args, **kwargs)
+    if 'rngs' in kwargs:
+      kwargs['rngs'] = rnglib.Rngs(kwargs['rngs'])
+    module = graphdef.merge(*states)
+    out = f(module, *args, **kwargs)
 
     updates = module.split()
     out = (updates, out)
@@ -479,9 +476,8 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
   def grad_fn(diff: State):
     nonlocal graphdef
 
-    with tracers.nnx_trace(tracers.get_top_trace(diff)):
-      module = graphdef.merge(diff, nondiff)
-      out = f(module, *args, **kwargs)
+    module = graphdef.merge(diff, nondiff)
+    out = f(module, *args, **kwargs)
 
     updates, graphdef = module.split()
     if options.has_aux:
@@ -847,41 +843,41 @@ def scan_apply(
 
   # transpose axes state
   scan_states = tuple(
-      jax.tree_util.tree_map(lambda x: jnp.moveaxis(x, axis, 0), axes_state)
-      for axes_state, axis in zip(scan_states, options.variable_axes.values())
+    jax.tree_util.tree_map(lambda x: jnp.moveaxis(x, axis, 0), axes_state)
+    for axes_state, axis in zip(scan_states, options.variable_axes.values())
   )
   # transpose axes arg
   scan_args = jax.tree_util.tree_map(
-      lambda axis, node: jax.tree_util.tree_map(
-          lambda x: jnp.moveaxis(x, axis, 0), node
-      )
-      if axis is not None
-      else None,
-      options.in_args_axes,
-      args,
-      is_leaf=lambda x: x is None,
+    lambda axis, node: jax.tree_util.tree_map(
+      lambda x: jnp.moveaxis(x, axis, 0), node
+    )
+    if axis is not None
+    else None,
+    options.in_args_axes,
+    args,
+    is_leaf=lambda x: x is None,
   )
   broadcast_args = jax.tree_util.tree_map(
-      lambda axis, node: None if axis is not None else node,
-      options.in_args_axes,
-      args,
-      is_leaf=lambda x: x is None,
+    lambda axis, node: None if axis is not None else node,
+    options.in_args_axes,
+    args,
+    is_leaf=lambda x: x is None,
   )
   scan_kwargs = jax.tree_util.tree_map(
-      lambda axis, node: jax.tree_util.tree_map(
-          lambda x: jnp.moveaxis(x, axis, 0), node
-      )
-      if axis is not None
-      else None,
-      options.in_kwargs_axes,
-      kwargs,
-      is_leaf=lambda x: x is None,
+    lambda axis, node: jax.tree_util.tree_map(
+      lambda x: jnp.moveaxis(x, axis, 0), node
+    )
+    if axis is not None
+    else None,
+    options.in_kwargs_axes,
+    kwargs,
+    is_leaf=lambda x: x is None,
   )
   broadcast_kwargs = jax.tree_util.tree_map(
-      lambda axis, node: None if axis is not None else node,
-      options.in_kwargs_axes,
-      kwargs,
-      is_leaf=lambda x: x is None,
+    lambda axis, node: None if axis is not None else node,
+    options.in_kwargs_axes,
+    kwargs,
+    is_leaf=lambda x: x is None,
   )
 
   # infer length
@@ -938,18 +934,18 @@ def scan_apply(
 
     # merge args and kwargs
     args = jax.tree_util.tree_map(
-        lambda axis, scan, broadcast: scan if axis is not None else broadcast,
-        options.in_args_axes,
-        scan_args,
-        broadcast_args,
-        is_leaf=lambda x: x is None,
+      lambda axis, scan, broadcast: scan if axis is not None else broadcast,
+      options.in_args_axes,
+      scan_args,
+      broadcast_args,
+      is_leaf=lambda x: x is None,
     )
     kwargs = jax.tree_util.tree_map(
-        lambda axis, scan, broadcast: scan if axis is not None else broadcast,
-        options.in_kwargs_axes,
-        scan_kwargs,
-        broadcast_kwargs,
-        is_leaf=lambda x: x is None,
+      lambda axis, scan, broadcast: scan if axis is not None else broadcast,
+      options.in_kwargs_axes,
+      scan_kwargs,
+      broadcast_kwargs,
+      is_leaf=lambda x: x is None,
     )
 
     # merge rng state
@@ -1018,16 +1014,16 @@ def scan_apply(
 
   # transpose axes state
   scan_states = tuple(
-      jax.tree_util.tree_map(lambda x: jnp.moveaxis(x, 0, axis), axes_state)
-      for axes_state, axis in zip(scan_states, options.variable_axes.values())
+    jax.tree_util.tree_map(lambda x: jnp.moveaxis(x, 0, axis), axes_state)
+    for axes_state, axis in zip(scan_states, options.variable_axes.values())
   )
   # transpose axes arg
   scan_out = jax.tree_util.tree_map(
-      lambda axis, node: jax.tree_util.tree_map(
-          lambda x: jnp.moveaxis(x, 0, axis), node
-      ),
-      options.out_axes,
-      scan_out,
+    lambda axis, node: jax.tree_util.tree_map(
+      lambda x: jnp.moveaxis(x, 0, axis), node
+    ),
+    options.out_axes,
+    scan_out,
   )
   # slice new carry state
   carry_state_new = jax.tree_util.tree_map(lambda x: x[0], carry_state_new)
@@ -1483,20 +1479,20 @@ def vmap_apply(
   # infer length
   axis_sizes: tp.Set[int] = set()
   args_sizes = jax.tree_util.tree_map(
-      lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
-      if axis is not None
-      else None,
-      options.in_args_axes,
-      args,
-      is_leaf=lambda x: x is None,
+    lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
+    if axis is not None
+    else None,
+    options.in_args_axes,
+    args,
+    is_leaf=lambda x: x is None,
   )
   kwargs_sizes = jax.tree_util.tree_map(
-      lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
-      if axis is not None
-      else None,
-      options.in_kwargs_axes,
-      kwargs,
-      is_leaf=lambda x: x is None,
+    lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
+    if axis is not None
+    else None,
+    options.in_kwargs_axes,
+    kwargs,
+    is_leaf=lambda x: x is None,
   )
   axis_sizes.update(jax.tree_util.tree_leaves(args_sizes))
   axis_sizes.update(jax.tree_util.tree_leaves(kwargs_sizes))

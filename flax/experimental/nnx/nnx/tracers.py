@@ -14,9 +14,6 @@
 
 # Taken from flax/core/tracer.py 🏴‍☠️
 
-import contextlib
-import dataclasses
-import threading
 import typing as tp
 
 import jax
@@ -44,70 +41,19 @@ def current_jax_trace() -> MainTrace:
   return get_top_trace(())
 
 
-def get_all_traces(pytree: tp.Union[tp.Any, Tracer]) -> tp.Set[MainTrace]:
-  """Returns True if all tracers have the same main trace."""
-  if isinstance(pytree, Tracer):
-    return {pytree._trace.main}
-  else:
-    return {
-      trace._trace.main
-      for trace in jax.tree_util.tree_leaves(pytree)
-      if isinstance(trace, Tracer)
-    }
-
-
-def trace_level(main):
-  """Returns the level of the trace of -infinity if it is None."""
-  if main:
-    return main.level
-  return float('-inf')
-
-
-@dataclasses.dataclass
-class TraceContext(threading.local):
-  nnx_trace_stack: tp.List[MainTrace] = dataclasses.field(
-    default_factory=lambda: [current_jax_trace()]
-  )
-
-
-TRACE_CONTEXT = TraceContext()
-
-
-@contextlib.contextmanager
-def nnx_trace(trace: MainTrace):
-  TRACE_CONTEXT.nnx_trace_stack.append(trace)
-  try:
-    yield
-  finally:
-    TRACE_CONTEXT.nnx_trace_stack.pop()
-
-
-def current_nnx_trace() -> MainTrace:
-  return TRACE_CONTEXT.nnx_trace_stack[-1]
-
-
 class TraceState(reprlib.Representable):
-  __slots__ = ['_jax_trace', '_nnx_trace']
+  __slots__ = ['_jax_trace']
 
   def __init__(self):
     self._jax_trace = current_jax_trace()
-    self._nnx_trace = current_nnx_trace()
 
   @property
   def jax_trace(self):
     return self._jax_trace
 
-  @property
-  def nnx_trace(self):
-    return self._nnx_trace
-
   def is_valid(self) -> bool:
-    return (
-      self._jax_trace is current_jax_trace()
-      and self._nnx_trace is current_nnx_trace()
-    )
+    return self._jax_trace is current_jax_trace()
 
   def __nnx_repr__(self):
     yield reprlib.Object(f'{type(self).__name__}')
     yield reprlib.Attr('jax_trace', self._jax_trace)
-    yield reprlib.Attr('nnx_trace', self._nnx_trace)
