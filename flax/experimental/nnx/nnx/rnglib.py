@@ -28,11 +28,10 @@
 from __future__ import annotations
 
 import dataclasses
-import hashlib
+import functools
 import typing as tp
 
 import jax
-import numpy as np
 
 from flax.experimental.nnx.nnx import errors, filterlib, tracers
 
@@ -48,59 +47,39 @@ class Missing:
 MISSING = Missing()
 
 
-def _stable_hash(data: tp.Sequence[tp.Hashable]) -> int:
-  hash_str = ' '.join(str(x) for x in data)
-  _hash = hashlib.blake2s(hash_str.encode())
-  hash_bytes = _hash.digest()
-  # uint32 is represented as 4 bytes in big endian
-  return int.from_bytes(hash_bytes[:4], byteorder='big')
-
-
 @dataclasses.dataclass
 class RngStream:
   key: jax.Array  # dynamic
-  counts: list[int]  # static
+  count: int  # static
+
+  def __post_init__(self):
+    if not isinstance(self.key, jax.Array):
+      raise TypeError(f'key must be a jax.Array, got {type(self.key)}')
 
   def make_rng(self) -> jax.Array:
-    fold_data = _stable_hash(self.counts)
-    self.counts[-1] += 1
-    return jax.random.fold_in(self.key, fold_data)
+    count = self.count
+    self.count += 1
+    return jax.random.fold_in(self.key, count)
 
-  def fork(self, pattern: Pattern) -> 'RngStream':
+  def fork(self, pattern: Pattern) -> jax.Array:
     if pattern is None:
       # broadcast key
-      key = self.key
-      count_path = [*self.counts, 0]
-      self.counts[-1] += 1
-    else:
       key = self.make_rng()
-      # split key
+    else:
       if isinstance(pattern, int):
-        key = jax.random.split(key, pattern)
+        num_splits = pattern
       else:
-        num_splits = int(np.prod([x for x in pattern if x is not None]))
-        axis_size = tuple(x if x is not None else 1 for x in pattern)
-        # reshape key
-        key = jax.random.split(key, num_splits).reshape(*axis_size)
-      count_path = [0]
-    return RngStream(key, count_path)
-
-  def copy(self) -> 'RngStream':
-    return RngStream(self.key, self.counts.copy())
+        num_splits = tuple(x if x is not None else 1 for x in pattern)
+      key = jax.random.split(self.key, num_splits)
+      self.count += 1
+    return key
 
 
-jax.tree_util.register_pytree_node(
-  RngStream,
-  lambda rng: ((rng.key,), tuple(rng.counts)),
-  lambda counts, nodes: RngStream(nodes[0], list(counts)),
-)
-
-RngValue = tp.Union[int, jax.Array, RngStream]
+RngValue = tp.Union[int, jax.Array]
 RngDict = tp.Union[
-  dict[str, int],
-  dict[str, jax.Array],
-  dict[str, RngStream],
-  dict[str, RngValue],
+  tp.Mapping[str, int],
+  tp.Mapping[str, jax.Array],
+  tp.Mapping[str, RngValue],
 ]
 
 
@@ -114,18 +93,15 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
     **rngs: RngValue,
   ):
     if default is not None:
-      if isinstance(default, dict):
+      if isinstance(default, tp.Mapping):
         rngs = {**default, **rngs}
       else:
         rngs['default'] = default
 
     self._rngs = {
-      name: (
-        RngStream(jax.random.key(value), [0])
-        if isinstance(value, int)
-        else RngStream(value, [0])
-        if isinstance(value, jax.Array)
-        else value.copy()
+      name: RngStream(
+        key=jax.random.key(value) if isinstance(value, int) else value,
+        count=0,
       )
       for name, value in rngs.items()
     }
@@ -163,9 +139,6 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
   def __contains__(self, name: tp.Any) -> bool:
     return name in self._rngs
 
-  def copy(self) -> 'Rngs':
-    return Rngs(**self._rngs)
-
   def replace(self, **kwargs: tp.Union[int, jax.Array, RngStream]) -> 'Rngs':
     rngs: dict[str, tp.Any] = self._rngs.copy()
     rngs.update(kwargs)
@@ -174,27 +147,12 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
   def is_valid(self) -> bool:
     return self._trace_state.is_valid()
 
-  @tp.overload
-  def fork(self) -> dict[str, RngStream]:
-    ...
-
-  @tp.overload
-  def fork(self, __default: Pattern) -> dict[str, RngStream]:
-    ...
-
-  @tp.overload
-  def fork(
-    self,
-    __default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
-    **patterns: Pattern,
-  ) -> tuple[dict[str, RngStream], dict[str, RngStream]]:
-    ...
-
   def fork(
     self,
     _default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
+    /,
     **patterns: Pattern,
-  ) -> dict[str, RngStream] | tuple[dict[str, RngStream], dict[str, RngStream]]:
+  ) -> ForkedKeys:
     if not self.is_valid():
       raise errors.TraceContextError(
         'Cannot use Rngs from a different trace level'
@@ -220,8 +178,8 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
       for filter_, pattern in filter_patterns
     ]
 
-    splits: dict[str, RngStream] = {}
-    broadcasts: dict[str, RngStream] = {}
+    splits: dict[str, jax.Array] = {}
+    broadcasts: dict[str, jax.Array] = {}
 
     for name, stream in self._rngs.items():
       for predicate, pattern in predicate_pattern:
@@ -237,7 +195,67 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
           f'Strea {name!r} did not match any predicate, this is a bug.'
         )
 
-    if isinstance(_default, dict) or patterns:
-      return splits, broadcasts
+    return ForkedKeys(broadcasts, splits)
+
+
+class ForkedKeys(tp.Mapping[str, jax.Array]):
+  def __init__(
+    self,
+    broadcast_rngs: dict[str, jax.Array],
+    split_rngs: dict[str, jax.Array],
+  ):
+    self.broadcasts = broadcast_rngs
+    self.splits = split_rngs
+
+  def __getitem__(self, key: str) -> jax.Array:
+    if key in self.broadcasts:
+      return self.broadcasts[key]
+    elif key in self.splits:
+      return self.splits[key]
     else:
-      return {**splits, **broadcasts}
+      raise KeyError(f'Key "{key}" not found in SplitRng.')
+
+  def __iter__(self) -> tp.Iterator[str]:
+    yield from self.broadcasts
+    yield from self.splits
+
+  def __len__(self) -> int:
+    return len(self.broadcasts) + len(self.splits)
+
+
+def _split_rng_flatten(rngs: ForkedKeys, *, with_keys: bool):
+  broadcast_names = sorted(rngs.broadcasts.keys())
+  split_names = sorted(rngs.splits.keys())
+
+  items = [(name, rngs.broadcasts[name]) for name in broadcast_names]
+  items += [(name, rngs.splits[name]) for name in split_names]
+
+  if with_keys:
+    nodes = tuple((jax.tree_util.DictKey(name), value) for name, value in items)
+  else:
+    nodes = tuple(value for _, value in items)
+
+  metadata = (broadcast_names, split_names)
+
+  return nodes, metadata
+
+
+def _split_rng_unflatten(
+  metadata: tuple[tuple[str, ...], tuple[str, ...]],
+  nodes: tuple[jax.Array, ...],
+):
+  broadcast_names, split_names = metadata
+  num_broadcasts = len(broadcast_names)
+  rngs = ForkedKeys(
+    dict(zip(broadcast_names, nodes[:num_broadcasts])),
+    dict(zip(split_names, nodes[num_broadcasts:])),
+  )
+  return rngs
+
+
+jax.tree_util.register_pytree_with_keys(
+  ForkedKeys,
+  functools.partial(_split_rng_flatten, with_keys=True),
+  _split_rng_unflatten,
+  flatten_func=functools.partial(_split_rng_flatten, with_keys=False),
+)

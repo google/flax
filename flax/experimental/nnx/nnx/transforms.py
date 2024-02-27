@@ -774,9 +774,10 @@ def scan_init(
     if not isinstance(rngs, rnglib.Rngs):
       raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
 
-    split_keys, broadcast_keys = rngs.fork(
+    forked_rngs = rngs.fork(
       {filterlib.Not(options.broadcast_rngs): options.length}
     )
+    split_keys, broadcast_keys = forked_rngs.splits, forked_rngs.broadcasts
 
     if split_keys and options.length is None:
       raise ValueError('Cannot split RNGs without specifying a length')
@@ -910,9 +911,8 @@ def scan_apply(
   if rngs is not None:
     if not isinstance(rngs, rnglib.Rngs):
       raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
-    split_keys, broadcast_keys = rngs.fork(
-      {filterlib.Not(options.broadcast_rngs): length}
-    )
+    forked_rngs = rngs.fork({filterlib.Not(options.broadcast_rngs): length})
+    split_keys, broadcast_keys = forked_rngs.splits, forked_rngs.broadcasts
   else:
     split_keys = None
     broadcast_keys = None
@@ -1413,9 +1413,10 @@ def vmap_init(
   if rngs is not None:
     if not isinstance(rngs, rnglib.Rngs):
       raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
-    split_keys, broadcast_keys = rngs.fork(
+    forked_rngs = rngs.fork(
       {filterlib.Not(options.broadcast_rngs): options.axis_size}
     )
+    split_keys, broadcast_keys = forked_rngs.splits, forked_rngs.broadcasts
     if split_keys and options.axis_size is None:
       raise ValueError('Cannot split RNGs without specifying a length')
   else:
@@ -1522,9 +1523,8 @@ def vmap_apply(
     if not isinstance(rngs, rnglib.Rngs):
       raise TypeError(f'Expected a Rngs, got {type(rngs).__name__}')
 
-    split_keys, broadcast_keys = rngs.fork(
-      {filterlib.Not(options.broadcast_rngs): axis_size}
-    )
+    forked_rngs = rngs.fork({filterlib.Not(options.broadcast_rngs): axis_size})
+    split_keys, broadcast_keys = forked_rngs.splits, forked_rngs.broadcasts
   else:
     split_keys = None
     broadcast_keys = None
