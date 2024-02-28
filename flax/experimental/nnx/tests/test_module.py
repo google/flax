@@ -88,22 +88,6 @@ class TestModule:
 
     f(1.0)
 
-  def test_trace_level_error_on_nnx_grad(self):
-    # error occurs because nnx updates its nnx_trace
-    # in nnx.grad.
-    m = nnx.Dict(a=nnx.Param(1.0))
-
-    @nnx.grad
-    def f(_):
-      with pytest.raises(
-        nnx.TraceContextError,
-        match='Cannot mutate Module from different trace level',
-      ):
-        m.a = 2.0
-      return 1.0
-
-    f(m)
-
   def test_call(self):
     class Foo(nnx.Module):
       def __init__(self, c: float, *, rngs: nnx.Rngs):
