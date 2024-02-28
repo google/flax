@@ -119,7 +119,7 @@ y = model.decode(z)
 
 To interact with JAX NNX provides the [Functional API](https://flax.readthedocs.io/en/latest/experimental/nnx/nnx_basics.html#the-functional-api) which consists of 3 simple methods: `split`, `merge`, and `update`. Using these methods any Module can be lifted to be used in JAX transformations. Here is a simple jitted `forward` function as an example:
 
-```pythonthon
+```python
 state, static = model.split()
 
 @jax.jit
