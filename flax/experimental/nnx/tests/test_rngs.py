@@ -19,14 +19,9 @@ import jax.numpy as jnp
 import pytest
 
 from flax.experimental import nnx
-from flax.experimental.nnx.nnx.rnglib import _stable_hash
 
 
 class TestRngs:
-  def test_hash(self):
-    _hash = _stable_hash('hi')
-    assert isinstance(_hash, int)
-
   def test_call(self):
     rngs = nnx.Rngs(0)
     key = rngs()
@@ -43,15 +38,15 @@ class TestRngs:
   def test_rng_stream(self):
     key0 = jax.random.key(0)
     rngs = nnx.Rngs(params=key0)
-    assert rngs._rngs['params'].counts[-1] == 0
+    assert rngs._rngs['params'].count == 0
 
     key1 = rngs.params()
-    assert rngs._rngs['params'].counts[-1] == 1
+    assert rngs._rngs['params'].count == 1
     assert rngs._rngs['params'].key is key0
     assert not jnp.allclose(key0, key1)
 
     key2 = rngs.params()
-    assert rngs._rngs['params'].counts[-1] == 2
+    assert rngs._rngs['params'].count == 2
     assert rngs._rngs['params'].key is key0
     assert not jnp.allclose(key1, key2)
 
@@ -60,7 +55,7 @@ class TestRngs:
     rngs1 = nnx.Rngs(params=key0)
     rngs2 = nnx.Rngs(rngs1.fork())
 
-    assert rngs2._rngs['params'].counts == [0, 0]
+    assert rngs2._rngs['params'].count == 0
 
     key1 = rngs1.params()
     key2 = rngs2.params()
@@ -112,7 +107,6 @@ class TestRngs:
     keys = rngs.fork()
 
     assert 'dropout' in keys
-    assert keys['dropout'].counts == [0, 0]
 
     rngs2 = nnx.Rngs(keys)
 
@@ -130,50 +124,60 @@ class TestRngs:
 
     keys = rngs.fork()  # all broadcast
 
-    assert keys['params'].key.shape == ()
-    assert keys['dropout'].key.shape == ()
-    assert jnp.allclose(keys['params'].key, jax.random.key(0))
-    assert jnp.allclose(keys['dropout'].key, jax.random.key(1))
+    assert keys['params'].shape == ()
+    assert keys['dropout'].shape == ()
+    assert jnp.allclose(
+      keys['params'], jax.random.fold_in(jax.random.key(0), 0)
+    )
+    assert jnp.allclose(
+      keys['dropout'], jax.random.fold_in(jax.random.key(1), 0)
+    )
 
   def test_fork_split(self):
     rngs = nnx.Rngs(params=0, dropout=1)
     keys = rngs.fork(4)  # split all
 
-    assert keys['params'].key.shape == (4,)
-    assert keys['dropout'].key.shape == (4,)
+    assert keys['params'].shape == (4,)
+    assert keys['dropout'].shape == (4,)
 
   def test_fork_split_and_broadcast(self):
     rngs = nnx.Rngs(params=0, dropout=1)
-    splits, broadcasts = rngs.fork(params=4, dropout=None)
+    forked = rngs.fork(params=4, dropout=None)
 
-    assert splits['params'].key.shape == (4,)
-    assert broadcasts['dropout'].key.shape == ()
+    assert forked['params'].shape == (4,)
+    assert forked['dropout'].shape == ()
 
   def test_fork_filters(self):
     rngs = nnx.Rngs(params=0, dropout=1)
-    splits, broadcasts = rngs.fork({'params': 4})
+    forked = rngs.fork({'params': 4})
 
-    assert splits['params'].key.shape == (4,)
-    assert broadcasts['dropout'].key.shape == ()
+    assert forked['params'].shape == (4,)
+    assert forked['dropout'].shape == ()
 
   def test_fork_multidimensional_split(self):
     rngs = nnx.Rngs(params=0, dropout=1)
     keys = rngs.fork((4, None, 3))  # split all
 
-    assert keys['params'].key.shape == (4, 1, 3)
-    assert keys['dropout'].key.shape == (4, 1, 3)
+    assert keys['params'].shape == (4, 1, 3)
+    assert keys['dropout'].shape == (4, 1, 3)
 
   def test_fork_multidimensional_split_mixed(self):
     rngs = nnx.Rngs(params=0, dropout=1)
-    splits, broadcasts = rngs.fork(params=(4, None, 3))  # split all
+    keys = rngs.fork(params=(4, None, 3))  # split all
 
-    assert splits['params'].key.shape == (4, 1, 3)
-    assert broadcasts['dropout'].key.shape == ()
+    assert keys['params'].shape == (4, 1, 3)
+    assert keys['dropout'].shape == ()
 
   def test_rng_stream_pytree(self):
     rngs = nnx.Rngs(params=0, dropout=1)
-    stream = rngs.fork()['params']
 
-    stream2 = jax.tree_util.tree_map(lambda x: x, stream)
+    keys = rngs.fork(dropout=4)
+    keys2 = jax.tree_util.tree_map(lambda x: x, keys)
 
-    assert stream.key is stream2.key
+    assert 'dropout' in keys.splits
+    assert 'params' in keys.broadcasts
+
+    assert keys2 is not keys
+    assert set(keys.keys()) == set(keys2.keys())
+    assert set(keys.splits.keys()) == set(keys2.splits.keys())
+    assert set(keys.broadcasts.keys()) == set(keys2.broadcasts.keys())

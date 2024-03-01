@@ -282,12 +282,14 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
   @property
   def create_abstract(cls: type[M]) -> type[M]:
     def lift_rngs(kwargs: dict[str, tp.Any]):
-      if 'rngs' in kwargs and isinstance(kwargs['rngs'], Rngs):
-        kwargs['rngs'] = kwargs['rngs'].copy()
+      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], tp.Mapping):
+        kwargs['rngs'] = Rngs(rngs)
       return kwargs
 
     def _create_abstract(accessor: DelayedAccessor, *args, **kwargs):
       constructor = accessor(cls)
+      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], Rngs):
+        kwargs['rngs'] = rngs.fork()
       state, graphdef = jax.eval_shape(
         lambda: constructor(*args, **lift_rngs(kwargs)).split()
       )
@@ -333,12 +335,14 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
     states = (state, *states)
 
     def lift_rngs(kwargs: dict[str, tp.Any]):
-      if 'rngs' in kwargs and isinstance(kwargs['rngs'], Rngs):
-        kwargs['rngs'] = kwargs['rngs'].copy()
+      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], tp.Mapping):
+        kwargs['rngs'] = Rngs(rngs)
       return kwargs
 
     def _partial_init(accessor: DelayedAccessor, *args, **kwargs):
       constructor: tp.Callable[[], M] = accessor(cls)
+      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], Rngs):
+        kwargs['rngs'] = rngs.fork()
 
       def _partial_init_constructor():
         module = constructor(*args, **lift_rngs(kwargs))
