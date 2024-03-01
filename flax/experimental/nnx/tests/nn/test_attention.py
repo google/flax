@@ -69,19 +69,13 @@ class TestMultiHeadAttention:
     with nnx.flags(decode=False):
       _ = module(x, True)
     intermediates = module.pop(nnx.Intermediate)
-    assert intermediates['attention_layers/0/attention_weights'][0].shape == (
-      4,
-      8,
-      6,
-      6,
-    )
+    assert intermediates['attention_layers/0/attention_weights'].raw_value[
+      0
+    ].shape == (4, 8, 6, 6)
     assert 'attention_layers/1/attention_weights' not in intermediates
-    assert intermediates['attention_layers/2/attention_weights'][0].shape == (
-      4,
-      8,
-      6,
-      6,
-    )
+    assert intermediates['attention_layers/2/attention_weights'].raw_value[
+      0
+    ].shape == (4, 8, 6, 6)
 
     with nnx.flags(decode=False):
       _ = module(x)
@@ -99,8 +93,8 @@ class TestMultiHeadAttention:
         rngs=nnx.Rngs(0),
       )
       module.init_cache(x.shape, dtype=x.dtype)
-      assert module.cached_key.shape == (1, 4, 2, 2)
-      assert module.cached_value.shape == (1, 4, 2, 2)
+      assert module.cached_key.value.shape == (1, 4, 2, 2)
+      assert module.cached_value.value.shape == (1, 4, 2, 2)
 
       y1 = module(x[:, :1, :])
       y2 = module(x[:, 1:2, :])
@@ -164,13 +158,11 @@ class TestLinenConsistency(parameterized.TestCase):
     variables = model.init(key, x)
 
     for qkvo in ('query', 'key', 'value', 'out'):
-      setattr(
-        getattr(model_nnx, qkvo), 'kernel', variables['params'][qkvo]['kernel']
-      )
+      getattr(model_nnx, qkvo).kernel.value = variables['params'][qkvo][
+        'kernel'
+      ]
       if use_bias:
-        setattr(
-          getattr(model_nnx, qkvo), 'bias', variables['params'][qkvo]['bias']
-        )
+        getattr(model_nnx, qkvo).bias.value = variables['params'][qkvo]['bias']
     if decode:
       model_nnx.init_cache(x.shape, dtype=dtype)
 

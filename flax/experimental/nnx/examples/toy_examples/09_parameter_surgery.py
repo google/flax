@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import jax
 
 from flax.experimental import nnx
@@ -51,10 +52,5 @@ is_trainable = lambda path, node: (
 # split the parameters into trainable and non-trainable parameters
 trainable_params, non_trainable, static = model.split(is_trainable, ...)
 
-print(
-    'trainable_params =',
-    jax.tree_util.tree_map(jax.numpy.shape, trainable_params),
-)
-print(
-    'non_trainable = ', jax.tree_util.tree_map(jax.numpy.shape, non_trainable)
-)
+print('trainable_params =', jax.tree_map(jax.numpy.shape, trainable_params))
+print('non_trainable = ', jax.tree_map(jax.numpy.shape, non_trainable))

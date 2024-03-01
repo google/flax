@@ -166,7 +166,7 @@ for epoch in range(epochs):
     state, loss = train_step(state, x_batch, y_batch)
 
   metrics = eval_step(state, X_test, Y_test)
-  metrics = jax.tree_util.tree_map(lambda x: x.item(), metrics)
+  metrics = jax.tree_map(lambda x: x.item(), metrics)
   print(f'Epoch {epoch} - {metrics}')
 
 # %%
@@ -212,19 +212,19 @@ class QLinear(nnx.Module):
 
   def __call__(self, x: jax.Array) -> jax.Array:
     x = self.quantize(x, 8, jnp.uint8)
-    print(x.shape, self.qkernel.shape, self.qbias.shape)
-    x = jnp.dot(x, self.qkernel, preferred_element_type=jnp.uint16)
-    x = (x + self.qbias).astype(jnp.uint32)
+    print(x.shape, self.qkernel.value.shape, self.qbias.value.shape)
+    x = jnp.dot(x, self.qkernel.value, preferred_element_type=jnp.uint16)
+    x = (x + self.qbias.value).astype(jnp.uint32)
     x = self.dequantize(x)
     return x
 
   def quantize(self, x: jax.Array, b: int, dtype: jnp.dtype) -> jax.Array:
     return jnp.clip(
-      diff_round(x / self.scale) + self.zero_point, 0, 2**b - 1
+      diff_round(x / self.scale.value) + self.zero_point.value, 0, 2**b - 1
     ).astype(dtype)
 
   def dequantize(self, x: jax.Array) -> jax.Array:
-    return (x - self.zero_point) * self.scale
+    return (x - self.zero_point.value) * self.scale.value
 
   def optimize(
     self,
@@ -238,7 +238,7 @@ class QLinear(nnx.Module):
     tx = optax.adam(1e-3)
     opt_state = tx.init(q_hparams)
 
-    print(jax.tree_util.tree_map(lambda x: x.shape, q_hparams))
+    print(jax.tree_map(lambda x: x.shape, q_hparams))
 
     @jax.jit
     def optimization_step(
@@ -251,9 +251,13 @@ class QLinear(nnx.Module):
 
       def loss_fn(q_hparams: nnx.State):
         model = static.merge(q_hparams, rest)
-        model.qkernel = model.quantize(pretrained.kernel, 8, jnp.uint8)
+        model.qkernel.value = model.quantize(
+          pretrained.kernel.value, 8, jnp.uint8
+        )
         assert pretrained.bias is not None
-        model.qbias = model.quantize(pretrained.bias, 16, jnp.uint16)
+        model.qbias.value = model.quantize(
+          pretrained.bias.value, 16, jnp.uint16
+        )
 
         y_quant = model(x)
         y_unquant = pretrained(x)
@@ -276,9 +280,9 @@ class QLinear(nnx.Module):
 
     self.update(q_hparams)
 
-    self.qkernel = self.quantize(pretrained.kernel, 8, jnp.uint8)
-    assert pretrained.bias is not None
-    self.qbias = self.quantize(pretrained.bias, 16, jnp.uint16)
+    self.qkernel.value = self.quantize(pretrained.kernel.value, 8, jnp.uint8)
+    assert pretrained.bias.value is not None
+    self.qbias.value = self.quantize(pretrained.bias.value, 16, jnp.uint16)
 
 
 def optimize2(

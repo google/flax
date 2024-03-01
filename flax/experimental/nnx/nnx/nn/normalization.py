@@ -291,7 +291,7 @@ class BatchNorm(Module):
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
 
     if use_running_average:
-      mean, var = self.mean, self.var
+      mean, var = self.mean.value, self.var.value
     else:
       mean, var = _compute_stats(
         x,
@@ -303,15 +303,19 @@ class BatchNorm(Module):
         mask=mask,
       )
 
-      self.mean = self.momentum * self.mean + (1 - self.momentum) * mean
-      self.var = self.momentum * self.var + (1 - self.momentum) * var
+      self.mean.value = (
+        self.momentum * self.mean.value + (1 - self.momentum) * mean
+      )
+      self.var.value = (
+        self.momentum * self.var.value + (1 - self.momentum) * var
+      )
 
     return _normalize(
       x,
       mean,
       var,
-      self.scale,
-      self.bias,
+      self.scale.value,
+      self.bias.value,
       reduction_axes,
       feature_axes,
       self.dtype,
@@ -421,8 +425,8 @@ class LayerNorm(Module):
       x,
       mean,
       var,
-      self.scale,
-      self.bias,
+      self.scale.value,
+      self.bias.value,
       self.reduction_axes,
       self.feature_axes,
       self.dtype,
@@ -522,7 +526,7 @@ class RMSNorm(Module):
       x,
       mean,
       var,
-      self.scale,
+      self.scale.value,
       None,
       self.reduction_axes,
       self.feature_axes,

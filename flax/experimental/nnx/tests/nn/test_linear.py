@@ -31,27 +31,26 @@ class TestLinearGeneral:
     y = module(jnp.ones((1, 2)))
 
     assert y.shape == (1, 3)
-    assert module.kernel.shape == (2, 3)
-    assert module.bias is not None
-    assert module.bias.shape == (3,)
+    assert module.kernel.value.shape == (2, 3)
+    assert module.bias.value is not None
+    assert module.bias.value.shape == (3,)
 
   def test_basic_multi_features(self):
     module = nnx.LinearGeneral(2, (3, 4), rngs=nnx.Rngs(0))
     y = module(jnp.ones((1, 2)))
 
     assert y.shape == (1, 3, 4)
-    assert module.kernel.shape == (2, 3, 4)
-    assert module.bias is not None
-    assert module.bias.shape == (3, 4)
+    assert module.kernel.value.shape == (2, 3, 4)
+    assert module.bias.value is not None
+    assert module.bias.value.shape == (3, 4)
 
 
 class TestLinenConsistency(parameterized.TestCase):
-
   @parameterized.product(
-      use_bias = [True, False],
-      dtype = [jnp.float32, jnp.float16],
-      param_dtype = [jnp.float32, jnp.float16],
-      precision = [Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
+    use_bias=[True, False],
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    precision=[Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
   )
   def test_nnx_linen_equivalence(
     self,
@@ -83,9 +82,9 @@ class TestLinenConsistency(parameterized.TestCase):
       precision=precision,
     )
     variables = model.init(key, x)
-    model_nnx.kernel = variables['params']['kernel']
+    model_nnx.kernel.value = variables['params']['kernel']
     if use_bias:
-      model_nnx.bias = variables['params']['bias']
+      model_nnx.bias.value = variables['params']['bias']
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)

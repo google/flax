@@ -17,12 +17,12 @@ from typing import Optional, Sequence
 import jax.numpy as jnp
 from jax import lax, random
 
-from flax.experimental.nnx.nnx import dataclasses as nnx_dataclasses
 from flax.experimental.nnx.nnx import flaglib, rnglib
 from flax.experimental.nnx.nnx.module import Module, first_from
+import dataclasses
 
 
-@nnx_dataclasses.dataclass
+@dataclasses.dataclass
 class Dropout(Module):
   """Create a dropout layer.
 

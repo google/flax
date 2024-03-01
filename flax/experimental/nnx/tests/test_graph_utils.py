@@ -25,8 +25,8 @@ class TestGraphUtils:
 
     state, static = nnx.graph_utils.graph_flatten(g)
 
-    state['0']['b'] = 2
-    state['3'] = 4
+    state['0']['b'].raw_value = 2
+    state['3'].raw_value = 4
 
   def test_unflatten(self):
     a = {'a': 1, 'b': nnx.Param(2)}
@@ -45,8 +45,8 @@ class TestGraphUtils:
     g = static.merge(nnx.State({}))
 
     assert g[0] is g[2]
-    assert g[0]['b'].value is nnx.EMPTY
-    assert g[3].value is nnx.EMPTY
+    assert g[0]['b'].raw_value is nnx.EMPTY
+    assert g[3].raw_value is nnx.EMPTY
 
   def test_update_dynamic(self):
     a = {'a': 1, 'b': nnx.Param(2)}
@@ -54,11 +54,11 @@ class TestGraphUtils:
 
     state, static = nnx.graph_utils.graph_flatten(g)
 
-    state['0']['b'] = 3
+    state['0']['b'].raw_value = 3
     nnx.graph_utils.graph_update_dynamic(g, state)
 
-    assert g[0]['b'].value == 3
-    assert g[2]['b'].value == 3
+    assert g[0]['b'].raw_value == 3
+    assert g[2]['b'].raw_value == 3
 
   def test_update_static(self):
     a = {'a': 1, 'b': nnx.Param(2)}
@@ -110,12 +110,12 @@ class TestGraphUtils:
 
     state, static = nnx.graph_utils.graph_flatten(ls)
 
-    assert state['0']['kernel'].shape == (2, 2)
-    assert state['0']['bias'].shape == (2,)
-    assert state['1']['scale'].shape == (2,)
-    assert state['1']['bias'].shape == (2,)
-    assert state['1']['mean'].shape == (2,)
-    assert state['1']['var'].shape == (2,)
+    assert state['0']['kernel'].raw_value.shape == (2, 2)
+    assert state['0']['bias'].raw_value.shape == (2,)
+    assert state['1']['scale'].raw_value.shape == (2,)
+    assert state['1']['bias'].raw_value.shape == (2,)
+    assert state['1']['mean'].raw_value.shape == (2,)
+    assert state['1']['var'].raw_value.shape == (2,)
 
   def test_shared_variables(self):
     v = nnx.Param(1)
@@ -136,7 +136,7 @@ class TestGraphUtils:
         self.baz = nnx.Linear(2, 2, rngs=rngs)
 
         # tie the weights
-        self.baz.variables.kernel = self.bar.variables.kernel
+        self.baz.kernel = self.bar.kernel
 
     node = Foo(rngs=nnx.Rngs(0))
     state, static = nnx.graph_utils.graph_flatten(node)
@@ -145,7 +145,7 @@ class TestGraphUtils:
 
     node2 = static.merge(state)
 
-    assert node2.bar.variables.kernel is node2.baz.variables.kernel
+    assert node2.bar.kernel is node2.baz.kernel
 
   def test_tied_weights_example(self):
     class LinearTranspose(nnx.Module):
@@ -155,7 +155,7 @@ class TestGraphUtils:
         )
 
       def __call__(self, x):
-        return x @ self.kernel.T
+        return x @ self.kernel.value.T
 
     class Encoder(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs) -> None:
@@ -164,7 +164,7 @@ class TestGraphUtils:
         self.linear_out = LinearTranspose(10, 2, rngs=rngs)
 
         # tie the weights
-        self.linear_out.variables.kernel = self.embed.variables.embedding
+        self.linear_out.kernel = self.embed.embedding
 
       def __call__(self, x):
         x = self.embed(x)
@@ -189,17 +189,17 @@ class TestGraphUtils:
     m = Foo()
     state, static = m.split()
 
-    assert isinstance(m.variables.a, nnx.Param)
-    assert isinstance(state.variables.a, nnx.Param)
-    assert m.variables.a is not state.variables.a
-    assert m.a == state.a
+    assert isinstance(m.a, nnx.Param)
+    assert isinstance(state.a, nnx.Param)
+    assert m.a is not state.a
+    assert m.a.value == state.a.raw_value
 
     m2 = static.merge(state)
 
-    assert isinstance(m2.variables.a, nnx.Param)
-    assert isinstance(state.variables.a, nnx.Param)
-    assert m2.variables.a is not state.variables.a
-    assert m2.a == state.a
+    assert isinstance(m2.a, nnx.Param)
+    assert isinstance(state.a, nnx.Param)
+    assert m2.a is not state.a
+    assert m2.a.value == state.a.raw_value
 
   def test_shared_state_variables_not_shared_with_graph(self):
     class Foo(nnx.Module):
@@ -211,22 +211,22 @@ class TestGraphUtils:
     m = Foo()
     state, static = m.split()
 
-    assert isinstance(m.variables.a, nnx.Param)
-    assert isinstance(m.variables.b, nnx.Param)
-    assert isinstance(state.variables.a, nnx.Param)
+    assert isinstance(m.a, nnx.Param)
+    assert isinstance(m.b, nnx.Param)
+    assert isinstance(state.a, nnx.Param)
     assert 'b' not in state
-    assert m.variables.a is not state.variables.a
-    assert m.variables.b is not state.variables.a
-    assert m.a == state.a
-    assert m.b == state.a
+    assert m.a is not state.a
+    assert m.b is not state.a
+    assert m.a.value == state.a.raw_value
+    assert m.b.value == state.a.raw_value
 
     m2 = static.merge(state)
 
-    assert isinstance(m2.variables.a, nnx.Param)
-    assert isinstance(m2.variables.b, nnx.Param)
-    assert isinstance(state.variables.a, nnx.Param)
-    assert m2.variables.a is not state.variables.a
-    assert m2.variables.b is not state.variables.a
-    assert m2.a == state.a
-    assert m2.b == state.a
+    assert isinstance(m2.a, nnx.Param)
+    assert isinstance(m2.b, nnx.Param)
+    assert isinstance(state.a, nnx.Param)
+    assert m2.a is not state.a
+    assert m2.b is not state.a
+    assert m2.a.value == state.a.raw_value
+    assert m2.b.value == state.a.raw_value
     assert m2.a is m2.b

@@ -534,27 +534,27 @@ def train_and_evaluate(config: default.Config, workdir: str):
   # Since the inputs and rngkey args for predict_step will be batched,
   # we must vmap them, otherwise the global arrays will be seen in each device
   jit_pred_step = jax.jit(
-      jax.vmap(
-          predict_step,
-          in_axes=(
-              0,
-              jax.tree_util.tree_map(lambda x: None, state.params),
-              0,
-              None,
-              None,
-              None,
-              None,
-              None,
-              None,
-          ),
+    jax.vmap(
+      predict_step,
+      in_axes=(
+        0,
+        jax.tree_map(lambda x: None, state.params),
+        0,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
       ),
-      in_shardings=(
-          data_sharding,
-          state_sharding.params,
-          data_sharding,
-      ),  # type: ignore
-      out_shardings=data_sharding,  # type: ignore
-      static_argnums=tuple(range(3, 9)),
+    ),
+    in_shardings=(
+      data_sharding,
+      state_sharding.params,
+      data_sharding,
+    ),  # type: ignore
+    out_shardings=data_sharding,  # type: ignore
+    static_argnums=tuple(range(3, 9)),
   )
 
   # Main Train Loop
@@ -582,7 +582,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation('train', step_num=step):
         batch = next(train_iter)
-        batch = jax.tree_util.tree_map(lambda x: jnp.asarray(x), batch)
+        batch = jax.tree_map(lambda x: jnp.asarray(x), batch)
         state, metrics = jit_train_step(
           state, batch, learning_rate_fn, 0.0, dropout_rngs
         )

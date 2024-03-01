@@ -94,7 +94,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     def __getattribute__(self, name: str) -> tp.Any:
       value = object.__getattribute__(self, name)
       if isinstance(value, variables.Variable):
-        return value.value
+        return value.raw_value
       return value
 
     def __setattr__(self, name: str, value: tp.Any) -> None:
@@ -125,7 +125,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
             )
           vars_dict[name] = value
         else:
-          variable.set_value(value)
+          variable.value = value
       else:
         vars_dict[name] = value
     else:

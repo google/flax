@@ -36,7 +36,7 @@ class Linear(nnx.Module):
     self.b = nnx.Param(jnp.zeros((dout,)))
 
   def __call__(self, x):
-    return x @ self.w + self.b
+    return x @ self.w.value + self.b.value
 
 
 class Count(nnx.Variable[nnx.A]):
@@ -50,7 +50,7 @@ class MLP(nnx.Module):
     self.linear2 = Linear(dhidden, dout, rngs=rngs)
 
   def __call__(self, x):
-    self.count += 1
+    self.count.value += 1
     x = self.linear1(x)
     x = jax.nn.relu(x)
     x = self.linear2(x)
@@ -74,7 +74,7 @@ def train_step(params, counts, batch):
 
   grad, counts = jax.grad(loss_fn, has_aux=True)(params)
   #                          |-------- sgd ---------|
-  params = jax.tree_util.tree_map(lambda w, g: w - 0.1 * g, params, grad)
+  params = jax.tree_map(lambda w, g: w - 0.1 * g, params, grad)
 
   return params, counts
 
@@ -99,7 +99,7 @@ for step, batch in enumerate(dataset(32)):
     break
 
 model = modeldef.merge(params, counts)
-print('times called:', model.count)
+print('times called:', model.count.value)
 
 y_pred = model(X)
 

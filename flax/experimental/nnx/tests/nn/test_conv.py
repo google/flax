@@ -23,25 +23,20 @@ from numpy.testing import assert_array_equal
 
 from flax import linen
 from flax.experimental import nnx
-from flax.typing import (
-  PaddingLike,
-  Dtype,
-  PrecisionLike
-)
+from flax.typing import PaddingLike, Dtype, PrecisionLike
 
 
 class TestConvLinenConsistency(parameterized.TestCase):
-
   @parameterized.product(
-      strides = [None, (2, 3)],
-      padding = ['VALID', (4, 2)],
-      input_dilation = [(2, 3)],
-      kernel_dilation = [(2, 3)],
-      feature_group_count = [3],
-      use_bias = [True, False],
-      dtype = [jnp.float32],
-      param_dtype = [jnp.float16],
-      precision = [Precision.HIGHEST],
+    strides=[None, (2, 3)],
+    padding=['VALID', (4, 2)],
+    input_dilation=[(2, 3)],
+    kernel_dilation=[(2, 3)],
+    feature_group_count=[3],
+    use_bias=[True, False],
+    dtype=[jnp.float32],
+    param_dtype=[jnp.float16],
+    precision=[Precision.HIGHEST],
   )
   def test_nnx_linen_equivalence(
     self,
@@ -96,9 +91,9 @@ class TestConvLinenConsistency(parameterized.TestCase):
       precision=precision,
     )
     variables = model.init(key, x)
-    model_nnx.kernel = variables['params']['kernel']
+    model_nnx.kernel.value = variables['params']['kernel']
     if use_bias:
-      model_nnx.bias = variables['params']['bias']
+      model_nnx.bias.value = variables['params']['bias']
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
