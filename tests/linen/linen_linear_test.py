@@ -980,7 +980,7 @@ class LinearTest(parameterized.TestCase):
     conv_module = nn.ConvTranspose(
       features=4,
       use_bias=use_bias,
-      strides=(2, 2),
+      strides=2,
       kernel_size=(6, 6),
       padding='CIRCULAR',
       transpose_kernel=True,
