@@ -35,7 +35,7 @@ import jax.tree_util as jtu
 from flax import traverse_util
 from flax.experimental.nnx.nnx import filterlib, reprlib
 from flax.experimental.nnx.nnx.variables import Variable
-from flax.typing import Path, Leaf
+from flax.typing import Leaf, Path
 
 A = tp.TypeVar('A')
 
@@ -180,7 +180,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     return traverse_util.flatten_dict(self._mapping, sep='/')  # type: ignore
 
   @classmethod
-  def from_flat_path(cls, flat_state: FlatState) -> State:
+  def from_flat_path(cls, flat_state: FlatState, /) -> State:
     nested_state = traverse_util.unflatten_dict(flat_state, sep='/')
     return cls(nested_state)
 
@@ -274,8 +274,11 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     if not other:
       return self
 
-    _mapping = {k: v for k, v in self._mapping.items() if k not in other}
-    return State(_mapping)
+    self_flat = self.flat_state()
+    other_flat = other.flat_state()
+    diff = {k: v for k, v in self_flat.items() if k not in other_flat}
+
+    return State.from_flat_path(diff)
 
 
 def _state_flatten_with_keys(x: State):
