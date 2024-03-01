@@ -519,27 +519,74 @@ def _module_pytree_hash_recursive(
   return type(module), static
 
 
-def _check_field_is_hashable(name: str, x: Any):
-  """Checks if a field is hashable."""
+def _is_hashable(x):
   try:
     hash(x)
-  except Exception as e:
+    return True
+  except Exception:
+    return False
+
+
+def _recursive_find_unhashable_iter(
+    path: tuple[str, ...], obj: Any, seen_ids: set[int]
+) -> Iterable[tuple[tuple[str, ...], Any]]:
+  if id(obj) in seen_ids:
+    return
+  seen_ids.add(id(obj))
+  if serialization.is_serializable(obj):
+    for k, v in serialization.to_state_dict(obj).items():
+      next_path = (*path, k)
+      if not _is_hashable(v):
+        yield next_path, v
+        yield from _recursive_find_unhashable_iter(next_path, v, seen_ids)
+  elif dataclasses.is_dataclass(obj):
+    ignore = ('parent', 'name') if isinstance(obj, Module) else ()
+    for field in dataclasses.fields(obj):
+      if field.name in ignore:
+        continue
+      value = getattr(obj, field.name)
+      next_path = (*path, field.name)
+      if not _is_hashable(value):
+        yield next_path, value
+        yield from _recursive_find_unhashable_iter(next_path, value, seen_ids)
+  elif not _is_hashable(obj):
+    yield path, obj
+
+
+def _recursive_find_unhashable(name: str, obj: Any):
+  return (
+      ('/'.join(path), obj)
+      for path, obj in _recursive_find_unhashable_iter((name,), obj, set())
+  )
+
+
+def _check_field_is_hashable(name: str, x: Any):
+  """Checks if a field is hashable."""
+  if not _is_hashable(x):
+    unhashable_paths = ''.join(
+        f'\n- {path}: {type(value)}'
+        for path, value in _recursive_find_unhashable(name, x)
+    )
     if dataclasses.is_dataclass(x):
       if x.__hash__ is None:
         raise ValueError(
             f"field '{name}' of type '{type(x)}' is a dataclass but its not"
             ' hashable, using `dataclass(frozen=True, eq=True)` to make it'
             ' immutable and hashable, or `dataclass(unsafe_hash=True)` for'
-            ' mutable types.'
-        ) from e
+            f' mutable types. Unhashable fields: {unhashable_paths}'
+        )
       else:
         raise ValueError(
             f"field '{name}' of type '{type(x)}' is a hashable dataclass but"
             ' hashing failed, this probably means that at least one of its'
-            ' fields is not hashable.'
-        ) from e
+            ' fields is not hashable. Unhashable fields:'
+            f' {unhashable_paths}'
+        )
     else:
-      raise ValueError(f"type '{type(x)}' is not hashable.") from e
+      raise ValueError(
+          f"type '{type(x)}' is not hashable. Unhashable fields:"
+          f' {unhashable_paths}'
+      )
 
 
 def decorator_lift_transform_jit(class_fn, **trafo_kwargs):
