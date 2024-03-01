@@ -53,14 +53,14 @@ class TestModule:
 
     state, static = m.split()
 
-    state = jax.tree_util.tree_map(lambda x: x + 1, state)
+    state = jax.tree_map(lambda x: x + 1, state)
 
   def test_split_2(self):
     m = nnx.Dict(a=nnx.Param(1))
 
     empty, some, static = m.split(None, ...)
 
-    some = jax.tree_util.tree_map(lambda x: x + 1, some)
+    some = jax.tree_map(lambda x: x + 1, some)
 
   def test_split_merge(self):
     m = nnx.Dict(a=nnx.Param(1))
@@ -97,7 +97,7 @@ class TestModule:
 
       def __call__(self, x, *, rngs: nnx.Rngs):
         key = rngs.e()
-        return self.w * x + jax.random.normal(key, ()) + self.c
+        return self.w.value * x + jax.random.normal(key, ()) + self.c
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 
@@ -159,16 +159,16 @@ class TestModule:
     m = nnx.Dict(a=nnx.Param(1))
 
     @jax.jit
-    def g(state: nnx.State, graphdef: nnx.GraphDef[nnx.Dict[int]]):
+    def g(state: nnx.State, graphdef: nnx.GraphDef[nnx.Dict[nnx.Param[int]]]):
       m = graphdef.merge(state)
-      m.a += 1
+      m.a.value += 1
       return m.split()
 
     state, graphdef = g(*m.split())
     m2 = graphdef.merge(state)
     assert m2 is not m
-    assert m.a == 1
-    assert m2.a == 2
+    assert m.a.value == 1
+    assert m2.a.value == 2
 
   def test_no_rejit(self):
     n = 0
@@ -179,15 +179,15 @@ class TestModule:
       nonlocal n
       n += 1
       m = nnx.merge(state_and_def)
-      m.a += 1
+      m.a.value += 1
       return m.split()
 
     m2 = nnx.merge(g(m.split()))
 
     assert n == 1
     assert m2 is not m
-    assert m.a == 1
-    assert m2.a == 2
+    assert m.a.value == 1
+    assert m2.a.value == 2
 
     g(m.split())
     assert n == 1
@@ -262,15 +262,15 @@ class TestModule:
 
     assert y1 == 3
     assert y2 == 11
-    assert m.y == (3, 11)
+    assert m.y.value == (3, 11)
 
     intermediates = m.pop(nnx.Intermediate)
 
-    assert isinstance(intermediates.variables.y, nnx.Intermediate)
-    assert intermediates['y'] == (3, 11)
+    assert isinstance(intermediates.y, nnx.Intermediate)
+    assert intermediates['y'].raw_value == (3, 11)
 
     assert hasattr(m, 'y')
-    assert m.y is nnx.EMPTY
+    assert m.y.value is nnx.EMPTY
 
   def test_sow_existing_non_variable_field(self):
     class Foo(nnx.Module):
@@ -441,8 +441,8 @@ class TestModule:
   def test_create_abstract(self):
     linear = nnx.Linear.create_abstract(2, 3, rngs=nnx.Rngs(0))
 
-    assert linear.kernel == jax.ShapeDtypeStruct((2, 3), jnp.float32)
-    assert linear.bias == jax.ShapeDtypeStruct((3,), jnp.float32)
+    assert linear.kernel.value == jax.ShapeDtypeStruct((2, 3), jnp.float32)
+    assert linear.bias.value == jax.ShapeDtypeStruct((3,), jnp.float32)
 
   def test_partial_init(self):
     linear = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
@@ -454,9 +454,9 @@ class TestModule:
       2, 3, bias_init=nnx.initializers.ones_init(), rngs=nnx.Rngs(1)
     )
 
-    np.testing.assert_allclose(linear.kernel, linear2.kernel)
-    np.testing.assert_allclose(linear.bias, 0)
-    np.testing.assert_allclose(linear2.bias, 1)
+    np.testing.assert_allclose(linear.kernel.value, linear2.kernel.value)
+    np.testing.assert_allclose(linear.bias.value, 0)
+    np.testing.assert_allclose(linear2.bias.value, 1)
 
   def test_deepcopy(self):
     class Foo(nnx.Module):
@@ -485,9 +485,9 @@ class TestModulePytree:
 
     m = Foo()
 
-    m = jax.tree_util.tree_map(lambda x: x + 1, m)
+    m = jax.tree_map(lambda x: x + 1, m)
 
-    assert m.node == 2
+    assert m.node.value == 2
     assert m.static == 1
 
 
@@ -514,20 +514,10 @@ class TestModuleDataclass:
     state, graphdef = m.split()
 
     assert len(state) == 4
-    assert state.variables.b == nnx.TreeNode(2)
-    assert state.variables.c == nnx.Param(3)
-    assert state.variables.d == nnx.BatchStat(4)
-    assert state.variables.f == nnx.Variable(6)
-
-  def test_no_override(self):
-    @nnx.dataclass
-    class Foo(nnx.Module):
-      a: int = nnx.treenode_field()
-
-    with pytest.raises(ValueError, match='is not compatible with return type'):
-      _m = Foo(a=nnx.Param(1))
-
-    _m = Foo(a=nnx.TreeNode(1))
+    assert state.b == nnx.TreeNode(2)
+    assert state.c == nnx.Param(3)
+    assert state.d == nnx.BatchStat(4)
+    assert state.f == nnx.Variable(6)
 
   def test_context_none_after_init(self):
     @dataclasses.dataclass
@@ -575,7 +565,7 @@ class TestModuleDef:
 
       def __call__(self, x, *, rngs: nnx.Rngs):
         key = rngs.e()
-        return self.w * x + jax.random.normal(key, ()) + self.c
+        return self.w.value * x + jax.random.normal(key, ()) + self.c
 
     rngs = nnx.Rngs(0)
     foo = Foo(c=1.0, rngs=rngs)
@@ -583,7 +573,7 @@ class TestModuleDef:
     states, graphdef = foo.split()
 
     assert isinstance(states, nnx.State)
-    assert isinstance(states.variables.w, nnx.Param)
+    assert isinstance(states.w, nnx.Param)
     # assert isinstance(states["c"], jax.Array)
 
     y, _updates = graphdef.apply(states)(x=2.0, rngs=nnx.Rngs(e=1))
@@ -600,7 +590,7 @@ class TestModuleDef:
 
       def __call__(self, x, *, rngs: nnx.Rngs):
         key = rngs.e()
-        return self.w * x + jax.random.normal(key, ()) + self.c
+        return self.w.value * x + jax.random.normal(key, ()) + self.c.value
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 
@@ -608,8 +598,8 @@ class TestModuleDef:
 
     assert isinstance(graphdef, nnx.GraphDef)
     assert isinstance(state, nnx.State)
-    assert isinstance(state.variables.w, nnx.Param)
-    assert isinstance(state.variables.c, nnx.Variable)
+    assert isinstance(state.w, nnx.Param)
+    assert isinstance(state.c, nnx.Variable)
 
     y, (state, graphdef) = graphdef.apply(state)(x=2.0, rngs=nnx.Rngs(e=1))
 

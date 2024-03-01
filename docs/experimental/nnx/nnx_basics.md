@@ -38,7 +38,7 @@ class Linear(nnx.Module):
     self.din, self.dout = din, dout
 
   def __call__(self, x: jax.Array):
-    return x @ self.w + self.b
+    return x @ self.w.value + self.b.value
 ```
 
 As shown above dynamic state is stored in `nnx.Variable`s such as `nnx.Param`,
@@ -54,12 +54,12 @@ for inspection.
 model = Linear(din=2, dout=3, rngs=nnx.Rngs(params=0))
 
 print(f'{model = }')
-print(f'{model.w = }')
-print(f'{model.b = }')
+print(f'{model.w.value = }')
+print(f'{model.b.value = }')
 ```
 
 This is very handy for debugging as it allows accessing the entire structure or
-modify it. Similarly, computation can ran directly.
+modify it. Similarly, computation can be ran directly.
 
 ```{code-cell} ipython3
 x = jnp.ones((1, 2))
@@ -84,12 +84,12 @@ class Counter(nnx.Module):
     self.count = nnx.Variable(0)
 
   def __call__(self):
-    self.count += 1
+    self.count.value += 1
 
 counter = Counter()
-print(f'{counter.count = }')
+print(f'{counter.count.value = }')
 counter()
-print(f'{counter.count = }')
+print(f'{counter.count.value = }')
 ```
 
 **This looks too easy, what is the catch?** 
@@ -136,8 +136,8 @@ One of the benefits of NNX is that nested Modules as easy to inspect and
 static analyzers can help you while doing so.
 
 ```{code-cell} ipython3
-print(f'{model.blocks[1].linear.kernel = }')
-print(f'{model.blocks[0].bn.scale = }')
+print(f'{model.blocks[1].linear.kernel.value = }')
+print(f'{model.blocks[0].bn.scale.value = }')
 ```
 
 #### Model Surgery
@@ -160,7 +160,7 @@ def awesome_layer(x): return x
 model.blocks[2] = awesome_layer
 
 # Variable sharing (weight tying)
-model.blocks[-1].linear.variables.kernel = model.blocks[0].linear.variables.kernel
+model.blocks[-1].linear.kernel = model.blocks[0].linear.kernel
 
 model(jnp.ones((1, 2)))
 ```
@@ -187,8 +187,8 @@ class StatefulLinear(nnx.Module):
     self.count = Count(0)
 
   def __call__(self, x: jax.Array):
-    self.count += 1
-    return x @ self.w + self.b
+    self.count.value += 1
+    return x @ self.w.value + self.b.value
   
 model = StatefulLinear(din=2, dout=3, rngs=nnx.Rngs(0))
 ```
@@ -236,7 +236,7 @@ y, state = forward(static, state, x=jnp.ones((1, 2)))
 # 5. Update the state of the original Module
 model.update(state)
 
-print(f'{model.count = }')
+print(f'{model.count.value = }')
 ```
 
 The key insight of this pattern is that using mutable references is 

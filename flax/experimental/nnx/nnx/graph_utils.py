@@ -20,7 +20,7 @@ import typing as tp
 
 import jax
 
-from flax.experimental.nnx.nnx import filterlib, reprlib
+from flax.experimental.nnx.nnx import filterlib, reprlib, tracers
 from flax.experimental.nnx.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -191,13 +191,15 @@ class VariableDef(reprlib.Representable):
   @classmethod
   def from_variable(cls, variable: Variable[tp.Any], index: int) -> VariableDef:
     metadata = vars(variable).copy()
-    del metadata['value']
+    del metadata['raw_value']
+    del metadata['_trace_state']
     return cls(type(variable), index, metadata)
 
   def to_variable(self, value: Node) -> Variable[Node]:
     variables = object.__new__(self._type)
-    variables.value = value
-    vars(variables).update(self._metadata)
+    vars(variables).update(
+      self._metadata, raw_value=value, _trace_state=tracers.TraceState()
+    )
     return variables
 
   def __init__(
@@ -457,6 +459,7 @@ def _graph_unflatten(
   if graphdef.index in index_to_node:
     raise RuntimeError(f'GraphDef index {graphdef.index} already used.')
 
+  # TODO(cgarciae): why copy here?
   state = state.copy()
   node_impl = get_node_impl(graphdef.type)
 

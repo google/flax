@@ -17,7 +17,6 @@ import typing as tp
 from typing import Any
 
 from flax import linen
-from flax.experimental.nnx.nnx import helpers
 from flax.experimental.nnx.nnx import variables as variableslib
 from flax.experimental.nnx.nnx.module import GraphDef, Module
 from flax.experimental.nnx.nnx.rnglib import Rngs
@@ -75,10 +74,10 @@ class LinenWrapper(Module):
 
     variables = module.init(_rngs, *args, **kwargs)
 
-    self.states = helpers.Dict(
-      (collection, variableslib.variable_type(collection)(value))
+    self.states = {
+      collection: variableslib.variable_type(collection)(value)
       for collection, value in variables.items()
-    )
+    }
 
   def __call__(
     self, *args: Any, rngs: tp.Optional[Rngs] = None, **kwargs: Any
@@ -87,7 +86,9 @@ class LinenWrapper(Module):
       {name: stream.key for name, stream in rngs._rngs.items()} if rngs else {}
     )
 
-    variables = {collection: value for collection, value in self.states.items()}
+    variables = {
+      collection: value.value for collection, value in self.states.items()
+    }
     out = self.module.apply(variables, *args, rngs=_rngs, **kwargs)
 
     if kwargs.get('mutable', False) != False:

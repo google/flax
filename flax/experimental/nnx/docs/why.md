@@ -61,7 +61,7 @@ class CounterLinear(nnx.Module):
     self.count = Count(jnp.zeros((), jnp.int32)) # typed Variable collections
 
   def __call__(self, x):
-    self.count += 1  # in-place stateful updates
+    self.count.value += 1  # in-place stateful updates
     return self.linear(x)
 
 

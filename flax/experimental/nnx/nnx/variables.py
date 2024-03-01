@@ -36,8 +36,7 @@ from typing import Any
 import jax
 import jax.tree_util as jtu
 
-from flax.experimental.nnx.nnx import reprlib
-from flax.typing import Sharding
+from flax.experimental.nnx.nnx import reprlib, tracers
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -76,43 +75,23 @@ EMPTY = Empty()
 
 @dataclasses.dataclass
 class VariableMetadata(tp.Generic[A]):
-  value: A
+  raw_value: A
+  set_value_hooks: tuple[SetValueHook[A], ...] = ()
+  get_value_hooks: tuple[GetValueHook[A], ...] = ()
+  create_value_hooks: tuple[CreateValueHook[A], ...] = ()
+  add_axis_hooks: tuple[AddAxisHook['Variable[A]'], ...] = ()
+  remove_axis_hooks: tuple[RemoveAxisHook['Variable[A]'], ...] = ()
+  metadata: tp.Mapping[str, tp.Any] = dataclasses.field(default_factory=dict)
+
+
+class Variable(tp.Generic[A], reprlib.Representable):
+  raw_value: A
   set_value_hooks: tuple[SetValueHook[A], ...]
   get_value_hooks: tuple[GetValueHook[A], ...]
   create_value_hooks: tuple[CreateValueHook[A], ...]
   add_axis_hooks: tuple[AddAxisHook['Variable[A]'], ...]
   remove_axis_hooks: tuple[RemoveAxisHook['Variable[A]'], ...]
-  metadata: tp.Mapping[str, tp.Any]
-
-
-class VariableMetaclass(ABCMeta):
-  def __call__(self, value: A, **metadata: tp.Any) -> A:
-    if isinstance(value, Variable):
-      container = value
-      value = container.value
-    else:
-      container = None
-
-    obj = super().__call__(value, **metadata)
-
-    if container is not None and not container.is_equivalent(obj):
-      raise ValueError(
-        f"input value of type '{type(container).__name__}' is not compatible "
-        f"with return type '{type(obj).__name__}'"
-      )
-
-    return obj
-
-
-class Variable(
-  tp.Generic[A], reprlib.Representable, metaclass=VariableMetaclass
-):
-  value: A
-  set_value_hooks: tuple[SetValueHook[A], ...]
-  get_value_hooks: tuple[GetValueHook[A], ...]
-  create_value_hooks: tuple[CreateValueHook[A], ...]
-  add_axis_hooks: tuple[AddAxisHook['Variable[A]'], ...]
-  remove_axis_hooks: tuple[RemoveAxisHook['Variable[A]'], ...]
+  _trace_state: tracers.TraceState
 
   def __init__(
     self,
@@ -135,6 +114,7 @@ class Variable(
     ] = (),
     **metadata: tp.Any,
   ):
+    vars(self)['_trace_state'] = tracers.TraceState()
     if set_value_hooks:
       if callable(set_value_hooks):
         set_value_hooks = (set_value_hooks,)
@@ -198,7 +178,7 @@ class Variable(
         remove_axis_hooks = value.remove_axis_hooks
 
       metadata.update(value_metadata)
-      value = tp.cast(A, value.value)
+      value = tp.cast(A, value.raw_value)
 
     if hasattr(self, 'on_get_value'):
       on_get_value = getattr(type(self), 'on_get_value')
@@ -225,7 +205,7 @@ class Variable(
       if on_remove_axis not in remove_axis_hooks:
         remove_axis_hooks = (on_remove_axis, *remove_axis_hooks)
 
-    self.value = value
+    self.raw_value = value
     self.get_value_hooks = get_value_hooks
     self.set_value_hooks = set_value_hooks
     self.create_value_hooks = create_value_hooks
@@ -234,23 +214,27 @@ class Variable(
     vars(self).update(metadata)
 
     # run create_value hooks
-    self.value = self.create_value(self.value)
-
-  @property
-  def is_empty(self) -> bool:
-    return self.value is EMPTY
+    self.raw_value = self.create_value(self.raw_value)
 
   if tp.TYPE_CHECKING:
 
     def __getattr__(self, name: str) -> tp.Any:
       ...
+  else:
+    def __setattr__(self, name: str, value: Any) -> None:
+      return self._setattr(name, value)
 
-  def get_value(self) -> A:
-    value = self.value
-    if self.get_value_hooks:
-      for hook in self.get_value_hooks:
-        value = hook(self, value)
-    return value
+  def _setattr(self, name: str, value: tp.Any):
+    if not self._trace_state.is_valid():
+      raise ValueError(
+        'Cannot mutate Variable from a different trace level'
+      )
+
+    object.__setattr__(self, name, value)
+
+  @property
+  def is_empty(self) -> bool:
+    return self.raw_value is EMPTY
 
   def copy_from(self, other: 'Variable[A]') -> None:
     if not self.is_equivalent(other):
@@ -264,11 +248,24 @@ class Variable(
     vars_dict.clear()
     vars_dict.update(vars(other))
 
-  def set_value(self, value: A):
+  @property
+  def value(self) -> A:
+    value = self.raw_value
+    if self.get_value_hooks:
+      for hook in self.get_value_hooks:
+        value = hook(self, value)
+    return value
+
+  @value.setter
+  def value(self, value: A):
+    if isinstance(value, Variable):
+      raise ValueError(
+        'Cannot set value to a Variable, ' 'use `copy_from` method instead'
+      )
     if self.set_value_hooks:
       for hook in self.set_value_hooks:
         value = hook(self, value)
-    self.value = value
+    self.raw_value = value
 
   def create_value(self, value: A):
     for hook in self.create_value_hooks:
@@ -284,8 +281,6 @@ class Variable(
       hook(self, axis_name, axis_index)
 
   def __eq__(self, other: object) -> bool:
-    if not isinstance(other, Variable):
-      return False
     return type(self) is type(other) and vars(other) == vars(self)
 
   @tp.overload
@@ -298,9 +293,11 @@ class Variable(
 
   def replace(self, **kwargs) -> 'Variable[tp.Any]':
     # return `value` if it is a Variable
-    if 'value' in kwargs and isinstance(value := kwargs['value'], Variable):
+    if 'raw_value' in kwargs and isinstance(
+      value := kwargs['raw_value'], Variable
+    ):
       # remove value from kwargs
-      kwargs.pop('value')
+      kwargs.pop('raw_value')
       if not self.is_equivalent(value):
         raise ValueError(
           'Cannot replace value from incompatible container, '
@@ -322,20 +319,22 @@ class Variable(
     return obj
 
   def as_empty(self: V) -> V:
-    return self.replace(value=EMPTY)
+    return self.replace(raw_value=EMPTY)
 
   def is_equivalent(self, other: tp.Any) -> bool:
     return type(self) is type(other)
 
   def copy(self: 'Variable[A]') -> 'Variable[A]':
     obj = object.__new__(type(self))
-    vars(obj).update(vars(self))
+    attributes = vars(self).copy()
+    attributes['_trace_state'] = tracers.TraceState()
+    vars(obj).update(attributes)
     return obj
 
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
     for name, value in vars(self).items():
-      if name.endswith('_hooks'):
+      if name.endswith('_hooks') or name == "_trace_state":
         continue
       yield reprlib.Attr(name, repr(value))
 
@@ -364,15 +363,18 @@ class Variable(
     def on_add_axis(self: V, axis_name: AxisName, axis_index: AxisIndex) -> V:
       raise NotImplementedError
 
-    def on_remove_axis(self: V, axis_name: AxisName, axis_index: AxisIndex) -> V:
+    def on_remove_axis(
+      self: V, axis_name: AxisName, axis_index: AxisIndex
+    ) -> V:
       raise NotImplementedError
 
 
 def _variable_flatten(x: Variable[tp.Any], *, with_keys: bool):
   attributes = vars(x).copy()
-  value = attributes.pop('value')
+  del attributes['_trace_state']
+  value = attributes.pop('raw_value')
   if with_keys:
-    node = (jtu.GetAttrKey('value'), value)
+    node = (jtu.GetAttrKey('raw_value'), value)
   else:
     node = value
 
@@ -386,8 +388,7 @@ def _variable_unflatten(
   cls: type[Variable[A]],
 ) -> Variable[A]:
   variable = object.__new__(cls)
-  variable.value = children[0]
-  vars(variable).update(metadata)
+  vars(variable).update(metadata, _trace_state=tracers.TraceState(), raw_value=children[0])
   return variable
 
 
@@ -422,7 +423,7 @@ class Rng(Variable[jax.Array]):
     super().__init__(value, tag=tag, **metadata)
 
   def on_get_value(self, value: jax.Array):
-    self.value, value = jax.random.split(value)
+    self.raw_value, value = jax.random.split(value)
     return value
 
 

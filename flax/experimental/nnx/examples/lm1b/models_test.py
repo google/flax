@@ -18,7 +18,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 # add project_root to import lm1b Linen model
 project_root = str(Path(__file__).parents[6])
 sys.path.append(project_root)
@@ -36,11 +35,11 @@ from jax import random
 from flax import traverse_util
 from flax.experimental import nnx
 from flax.experimental.nnx.examples.lm1b.configs import default
-from flax.experimental.nnx.examples.lm1b.utils import HasCache
 from flax.experimental.nnx.examples.lm1b.models import (
   TransformerConfig,
   TransformerLM,
 )
+from flax.experimental.nnx.examples.lm1b.utils import HasCache
 
 jax.config.update('jax_disable_most_optimizations', True)
 
@@ -91,10 +90,10 @@ class ModelTest(absltest.TestCase):
 
     def copy_var(nnx_name, linen_name):
       assert (
-        flat_params_nnx[nnx_name].value.shape
+        flat_params_nnx[nnx_name].raw_value.shape
         == flat_params_linen[linen_name].value.shape
       )
-      flat_params_nnx[nnx_name].value = flat_params_linen[linen_name].value
+      flat_params_nnx[nnx_name].raw_value = flat_params_linen[linen_name].value
       assert flat_params_nnx[nnx_name].sharding == apply_rules(
         flat_params_linen[linen_name].names
       )
@@ -171,10 +170,10 @@ class ModelTest(absltest.TestCase):
 
     def copy_var(nnx_name, linen_name):
       assert (
-        flat_cache_nnx[nnx_name].value.shape
+        flat_cache_nnx[nnx_name].raw_value.shape
         == flat_cache_linen[linen_name].shape
       )
-      flat_cache_nnx[nnx_name].value = flat_cache_linen[linen_name]
+      flat_cache_nnx[nnx_name].raw_value = flat_cache_linen[linen_name]
 
     for idx in range(config.num_layers):
       copy_var(

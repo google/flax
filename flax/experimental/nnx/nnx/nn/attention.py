@@ -521,7 +521,7 @@ class MultiHeadAttention(Module):
         max_length,
         num_heads,
         depth_per_head,
-      ) = self.cached_key.shape
+      ) = self.cached_key.value.shape
       # shape check of cached keys against query input
       expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
       if expected_shape != query.shape:
@@ -531,14 +531,14 @@ class MultiHeadAttention(Module):
           % (expected_shape, query.shape)
         )
       # update key, value caches with our new 1d spatial slices
-      cur_index = self.cache_index
+      cur_index = self.cache_index.value
       zero = jnp.array(0, dtype=lax.dtype(cur_index.dtype))
       indices = (zero,) * len(batch_dims) + (cur_index, zero, zero)
-      key = lax.dynamic_update_slice(self.cached_key, key, indices)
-      value = lax.dynamic_update_slice(self.cached_value, value, indices)
-      self.cached_key = key
-      self.cached_value = value
-      self.cache_index += 1
+      key = lax.dynamic_update_slice(self.cached_key.value, key, indices)
+      value = lax.dynamic_update_slice(self.cached_value.value, value, indices)
+      self.cached_key.value = key
+      self.cached_value.value = value
+      self.cache_index.value += 1
       # causal mask for cached decoder self-attention:
       # our single query position should only attend to those key
       # positions that have already been generated and cached,

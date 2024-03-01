@@ -33,7 +33,7 @@ class TestPytree:
     leaves = jax.tree_util.tree_leaves(pytree)
     assert leaves == [3]
 
-    pytree = jax.tree_util.tree_map(lambda x: x * 2, pytree)
+    pytree = jax.tree_map(lambda x: x * 2, pytree)
     assert pytree.x == 2
     assert pytree.y == 6
 
@@ -57,7 +57,7 @@ class TestPytree:
     leaves = jax.tree_util.tree_leaves(pytree)
     assert leaves == [3]
 
-    pytree = jax.tree_util.tree_map(lambda x: x * 2, pytree)
+    pytree = jax.tree_map(lambda x: x * 2, pytree)
     assert pytree.x == 2
     assert pytree.y == 6
 
@@ -150,8 +150,8 @@ class TestPytree:
     path_values, treedef = jax.tree_util.tree_flatten_with_path(foo)
     path_values = [(list(map(str, path)), value) for path, value in path_values]
 
-    assert path_values[0] == (['.x', '.value'], 3)
-    assert path_values[1] == (['.z', '.value', '.a', '.value'], 1)
+    assert path_values[0] == (['.x', '.raw_value'], 3)
+    assert path_values[1] == (['.z', '.raw_value', '.a', '.raw_value'], 1)
 
   def test_replace_unknown_fields_error(self):
     class Foo(nnx.Pytree):
@@ -184,7 +184,7 @@ class TestPytree:
 
     pytree = A(a=1)
 
-    pytree = jax.tree_util.tree_map(lambda x: x * 2, pytree)
+    pytree = jax.tree_map(lambda x: x * 2, pytree)
 
   def test_deterministic_order(self):
     class A(nnx.Pytree):
@@ -217,7 +217,7 @@ class TestMutablePytree:
     leaves = jax.tree_util.tree_leaves(pytree)
     assert leaves == [3]
 
-    pytree = jax.tree_util.tree_map(lambda x: x * 2, pytree)
+    pytree = jax.tree_map(lambda x: x * 2, pytree)
     assert pytree.x == 2
     assert pytree.y == 6
 
@@ -251,7 +251,7 @@ class TestMutablePytree:
     leaves = jax.tree_util.tree_leaves(pytree)
     assert leaves == [3]
 
-    pytree = jax.tree_util.tree_map(lambda x: x * 2, pytree)
+    pytree = jax.tree_map(lambda x: x * 2, pytree)
     assert pytree.x == 2
     assert pytree.y == 6
 
