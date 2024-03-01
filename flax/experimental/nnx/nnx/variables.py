@@ -232,10 +232,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
     object.__setattr__(self, name, value)
 
-  @property
-  def is_empty(self) -> bool:
-    return self.raw_value is EMPTY
-
   def copy_from(self, other: 'Variable[A]') -> None:
     if not self.is_equivalent(other):
       raise ValueError(
@@ -317,9 +313,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
     obj = object.__new__(type(self))
     vars(obj).update(attributes)
     return obj
-
-  def as_empty(self: V) -> V:
-    return self.replace(raw_value=EMPTY)
 
   def is_equivalent(self, other: tp.Any) -> bool:
     return type(self) is type(other)

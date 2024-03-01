@@ -269,8 +269,7 @@ class TestModule:
     assert isinstance(intermediates.y, nnx.Intermediate)
     assert intermediates['y'].raw_value == (3, 11)
 
-    assert hasattr(m, 'y')
-    assert m.y.value is nnx.EMPTY
+    assert not hasattr(m, 'y')
 
   def test_sow_existing_non_variable_field(self):
     class Foo(nnx.Module):

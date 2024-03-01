@@ -46,27 +46,21 @@ NODE_TYPES: dict[type, 'NodeImpl[tp.Any, tp.Any, tp.Any]'] = {}
 class NodeImpl(tp.Generic[Node, Leaf, AuxData]):
   type: type
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[str, Leaf]], AuxData]]
-  get_key: tp.Callable[[Node, str], Leaf]
-  set_key: tp.Callable[[Node, str, Leaf], Node]
-  has_key: tp.Callable[[Node, str], bool]
-  all_keys: tp.Callable[[Node], tuple[str, ...]]
+  set_key: tp.Callable[[Node, str, Leaf], None] | None
+  pop_key: tp.Callable[[Node, str], Leaf] | None
   unflatten: tp.Callable[[tuple[tuple[str, Leaf], ...], AuxData], Node] | None
   create_empty: tp.Callable[[AuxData], Node] | None
   init: tp.Callable[[Node, tuple[tuple[str, Leaf], ...]], None] | None
 
-  def items(self, node: Node) -> tp.Iterator[tuple[str, Leaf]]:
-    for key in self.all_keys(node):
-      yield key, self.get_key(node, key)
+  def node_dict(self, node: Node) -> dict[str, Leaf]:
+    nodes, _ = self.flatten(node)
+    return dict(nodes)
 
 
 @tp.overload
 def register_node_type(
   type: type,
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[str, Leaf]], AuxData]],
-  get_key: tp.Callable[[Node, str], Leaf],
-  set_key: tp.Callable[[Node, str, Leaf], Node],
-  has_key: tp.Callable[[Node, str], bool],
-  all_keys: tp.Callable[[Node], tuple[str, ...]],
   *,
   unflatten: tp.Callable[[tuple[tuple[str, Leaf], ...], AuxData], Node],
 ):
@@ -77,11 +71,9 @@ def register_node_type(
 def register_node_type(
   type: type,
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[str, Leaf]], AuxData]],
-  get_key: tp.Callable[[Node, str], Leaf],
-  set_key: tp.Callable[[Node, str, Leaf], Node],
-  has_key: tp.Callable[[Node, str], bool],
-  all_keys: tp.Callable[[Node], tuple[str, ...]],
   *,
+  set_key: tp.Callable[[Node, str, Leaf], None],
+  pop_key: tp.Callable[[Node, str], Leaf],
   create_empty: tp.Callable[[AuxData], Node],
   init: tp.Callable[[Node, tuple[tuple[str, Leaf], ...]], None],
 ):
@@ -91,11 +83,9 @@ def register_node_type(
 def register_node_type(
   type: type,
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[str, Leaf]], AuxData]],
-  get_key: tp.Callable[[Node, str], Leaf],
-  set_key: tp.Callable[[Node, str, Leaf], Node],
-  has_key: tp.Callable[[Node, str], bool],
-  all_keys: tp.Callable[[Node], tuple[str, ...]],
   *,
+  set_key: tp.Callable[[Node, str, Leaf], None] | None = None,
+  pop_key: tp.Callable[[Node, str], Leaf] | None = None,
   unflatten: tp.Callable[[tuple[tuple[str, Leaf], ...], AuxData], Node]
   | None = None,
   create_empty: tp.Callable[[AuxData], Node] | None = None,
@@ -104,15 +94,13 @@ def register_node_type(
   if type in NODE_TYPES:
     raise ValueError(f"Node type '{type}' already registered.")
   NODE_TYPES[type] = NodeImpl(
-    type,
-    flatten,
-    get_key,
-    set_key,
-    has_key,
-    all_keys,
-    unflatten,
-    create_empty,
-    init,
+    type=type,
+    flatten=flatten,
+    set_key=set_key,
+    pop_key=pop_key,
+    unflatten=unflatten,
+    create_empty=create_empty,
+    init=init,
   )
 
 
@@ -578,15 +566,13 @@ def _graph_pop(
 
   id_to_index[id(node)] = len(id_to_index)
   node_impl = get_node_impl(node)
+  node_dict = node_impl.node_dict(node)
 
-  for name in node_impl.all_keys(node):
-    value = node_impl.get_key(node, name)
+  for name, value in node_dict.items():
     if is_node(value):
       _graph_pop(value, id_to_index, (*path_parts, name), states, predicates)
       continue
     elif not isinstance(value, Variable):
-      continue
-    elif value.is_empty:
       continue
     elif id(value) in id_to_index:
       continue
@@ -595,10 +581,13 @@ def _graph_pop(
     node_impl = get_node_impl(node)
     for state, predicate in zip(states, predicates):
       if predicate(path, value):
+        if node_impl.pop_key is None:
+          raise ValueError(
+            f'Cannot pop key {name!r} from node of type {type(node).__name__}'
+          )
         state[path] = value.copy()
         id_to_index[id(value)] = len(id_to_index)
-        # empty Variable attributes
-        node_impl.set_key(node, name, value.as_empty())
+        node_impl.pop_key(node, name)
         break
     else:
       # NOTE: should we raise an error here?
@@ -628,24 +617,42 @@ def _graph_update_dynamic(
     raise RuntimeError(f'Unsupported type: {type(node)}')
 
   node_impl = get_node_impl(node)
+  node_dict = node_impl.node_dict(node)
   for key, value in state.items():
-    if is_node(value):
+    # case 1: new state is being added
+    if key not in node_dict:
+      if node_impl.set_key is None:
+        raise ValueError(
+          f'Cannot set key {key!r} on immutable node of '
+          f'type {type(node).__name__}'
+        )
+      if isinstance(value, Variable):
+        value = value.copy()
+      node_impl.set_key(node, key, value)
+      continue
+
+    # check values are of the same type
+    current_value = node_dict[key]
+
+    # case 2: subgraph is being updated
+    if is_node(current_value):
       if isinstance(value, Variable):
         raise ValueError(
-          f'Expected a subgraph for {key!r}, but got a Variable.'
+          f'Expected a subgraph for {key!r}, but got a Variable: {value!r}'
         )
-      _graph_update_dynamic(node_impl.get_key(node, key), value)
+      _graph_update_dynamic(current_value, value)
     else:
-      # we skip if trying to replace a non-empty Variable with an empty one
-      if (
-        isinstance(value, Variable)
-        and value.is_empty
-        and isinstance(current_value := node_impl.get_key(node, key), Variable)
-        and not current_value.is_empty
-      ):
-        continue
-
-      node_impl.set_key(node, key, value)
+      # case 3: Variable is being updated
+      # assert isinstance(value, Variable)
+      # assert isinstance(current_value, Variable)
+      if not isinstance(value, Variable):
+        raise ValueError(f'Expected a Variable for attribute {key!r}')
+      if not isinstance(current_value, Variable):
+        raise ValueError(
+          f'Trying to update a non-Variable attribute {key!r} with a Variable: '
+          f'{value!r}'
+        )
+      current_value.copy_from(value)
 
 
 class _StaticModuleStatus(enum.Enum):
@@ -692,20 +699,33 @@ def _graph_update_static(
   cache[id(updates)] = status
 
   node_impl = get_node_impl(node)
-  for name, value_updates in node_impl.items(updates):
+  node_dict = node_impl.node_dict(node)
+  updates_dict = node_impl.node_dict(updates)
+  for name, value_updates in updates_dict.items():
+    # case 1: trying to update a Variable, skip
     if isinstance(value_updates, Variable):
       continue
     elif is_node(value_updates):
-      if node_impl.has_key(node, name):
+      # case 2: updating an existing subgraph
+      if name in node_dict:
         _graph_update_static(
-          node_impl.get_key(node, name),
+          node_dict[name],
           value_updates,
           cache,
           _StaticModuleStatus.UPDATED,
           (*path, name),
         )
       else:
+        # case 3: adding a new subgraph
+        if node_impl.set_key is None:
+          raise ValueError(
+            f'Cannot set key {name!r} on immutable node of '
+            f'type {type(node).__name__}'
+          )
+
+        # check if the subgraph is already in the cache
         if id(value_updates) in cache:
+          # if its in the cache, check its status is not NEW
           if cache[id(value_updates)] is not _StaticModuleStatus.NEW:
             raise ValueError(
               f'Trying to add a new node at path {name!r} but a '
@@ -716,6 +736,17 @@ def _graph_update_static(
 
         node_impl.set_key(node, name, value_updates)
     else:  # static field
+      if node_impl.set_key is None:
+        if name in node_dict and node_dict[name] == value_updates:
+          # if the value is the same, skip
+          continue
+        # if trying
+        raise ValueError(
+          f'Cannot update key {name!r} on immutable node of '
+          f'type {type(node).__name__}. Current value is {node_dict[name]!r}, '
+          f'new value is {value_updates!r}.'
+        )
+
       node_impl.set_key(node, name, value_updates)
 
 
@@ -741,7 +772,8 @@ def _iter_nodes(
   path = '/'.join(path_parts)
   yield path, node
   node_impl = get_node_impl(node)
-  for key, value in node_impl.items(node):
+  node_dict = node_impl.node_dict(node)
+  for key, value in node_dict.items():
     yield from _iter_nodes(value, visited, (*path_parts, key))
 
 
@@ -755,23 +787,12 @@ def _flatten_dict(
   return tuple(node.items()), None
 
 
-def _get_key_dict(node: dict[str, tp.Any], key: str) -> tp.Any:
-  return node[key]
-
-
-def _set_key_dict(
-  node: dict[str, tp.Any], key: str, value: tp.Any
-) -> dict[str, tp.Any]:
+def _set_key_dict(node: dict[str, tp.Any], key: str, value: tp.Any):
   node[key] = value
-  return node
 
 
-def _has_key_dict(node: dict[str, tp.Any], key: str) -> bool:
-  return key in node
-
-
-def _all_keys_dict(node: dict[str, tp.Any]) -> tuple[str, ...]:
-  return tuple(node.keys())
+def _pop_key_dict(node: dict[str, tp.Any], key: str):
+  return node.pop(key)
 
 
 def _create_empty_dict(metadata: None) -> dict[str, tp.Any]:
@@ -784,11 +805,9 @@ def _init_dict(node: dict[str, tp.Any], items: tuple[tuple[str, tp.Any], ...]):
 
 register_node_type(
   dict,
-  _flatten_dict,
-  _get_key_dict,
-  _set_key_dict,
-  _has_key_dict,
-  _all_keys_dict,
+  flatten=_flatten_dict,
+  set_key=_set_key_dict,
+  pop_key=_pop_key_dict,
   create_empty=_create_empty_dict,
   init=_init_dict,
 )
@@ -801,24 +820,18 @@ def _flatten_list(
   return tuple((str(i), value) for i, value in enumerate(node)), len(node)
 
 
-def _get_key_list(node: list[tp.Any], key: str) -> tp.Any:
-  return node[int(key)]
-
-
-def _set_key_list(node: list[tp.Any], key: str, value: tp.Any) -> list[tp.Any]:
+def _set_key_list(node: list[tp.Any], key: str, value: tp.Any):
   int_key = int(key)
   if int_key >= len(node):
     node.extend([EMPTY] * (int_key - len(node) + 1))
   node[int_key] = value
-  return node
 
 
-def _has_key_list(node: list[tp.Any], key: str) -> bool:
-  return int(key) < len(node)
-
-
-def _all_keys_list(node: list[tp.Any]) -> tuple[str, ...]:
-  return tuple(str(i) for i in range(len(node)))
+def _pop_key_list(node: list[tp.Any], key: str):
+  int_key = int(key)
+  value = node[int_key]
+  node[int_key] = EMPTY
+  return value
 
 
 def _create_empty_list(length: int) -> list[tp.Any]:
@@ -831,12 +844,10 @@ def _init_list(node: list[tp.Any], items: tuple[tuple[str, tp.Any], ...]):
 
 
 register_node_type(
-  list,
-  _flatten_list,
-  _get_key_list,
-  _set_key_list,
-  _has_key_list,
-  _all_keys_list,
+  type=list,
+  flatten=_flatten_list,
+  set_key=_set_key_list,
+  pop_key=_pop_key_list,
   create_empty=_create_empty_list,
   init=_init_list,
 )
@@ -858,32 +869,8 @@ def _unflatten_tuple(
   return tuple(node)
 
 
-def _get_key_tuple(node: tuple[tp.Any, ...], key: str) -> tp.Any:
-  return node[int(key)]
-
-
-def _set_key_tuple(node: tuple[tp.Any, ...], key: str, value: tp.Any):
-  current_value = _get_key_tuple(node, key)
-  if current_value is value or current_value == value:
-    return
-  else:
-    raise ValueError("'tuple' object is immutable, does not support assignment")
-
-
-def _has_key_tuple(node: tuple[tp.Any, ...], key: str) -> bool:
-  return int(key) < len(node)
-
-
-def _all_keys_tuple(node: tuple[tp.Any, ...]) -> tuple[str, ...]:
-  return tuple(str(i) for i in range(len(node)))
-
-
 register_node_type(
-  tuple,
-  _flatten_tuple,
-  _get_key_tuple,
-  _set_key_tuple,
-  _has_key_tuple,
-  _all_keys_tuple,
+  type=tuple,
+  flatten=_flatten_tuple,
   unflatten=_unflatten_tuple,
 )
