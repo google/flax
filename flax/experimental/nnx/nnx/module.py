@@ -461,13 +461,12 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
   def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
     super().__init_subclass__()
 
-    graph_utils.register_node_type(
+    graph_utils.register_mutable_node_type(
       type=cls,
       flatten=_module_graph_flatten,
       set_key=_module_graph_set_key,
       pop_key=_module_graph_pop_key,
       create_empty=_module_graph_create_empty,
-      init=_module_graph_init,
     )
 
     if experimental_pytree:
@@ -536,10 +535,6 @@ def _module_graph_create_empty(cls: tp.Type[M]) -> M:
   module = object.__new__(cls)
   vars(module).update(_module__state=ModuleState())
   return module
-
-
-def _module_graph_init(node: Module, items: tuple[tuple[str, tp.Any], ...]):
-  vars(node).update(items)
 
 
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:
