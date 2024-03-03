@@ -427,7 +427,16 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       graph_utils.graph_update_static(self, module_update)
 
     if states:
-      graph_utils.graph_update_dynamic(self, states)
+      graph_utils.graph_update_dynamic(
+        self, states, graph_utils.UpdateAction.PARTIAL
+      )
+
+  def move(self, state: State, /, *states: State) -> None:
+    states = (state, *states)
+    self._module__state._trace_state = tracers.TraceState()
+    graph_utils.graph_update_dynamic(
+      self, states, graph_utils.UpdateAction.MOVE
+    )
 
   def sow(
     self,

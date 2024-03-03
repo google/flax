@@ -56,7 +56,9 @@ class TestGraphUtils:
     state, static = nnx.graph_utils.graph_flatten(g)
 
     state['0']['b'].raw_value = 3
-    nnx.graph_utils.graph_update_dynamic(g, state)
+    nnx.graph_utils.graph_update_dynamic(
+      g, state, nnx.graph_utils.UpdateAction.PARTIAL
+    )
 
     assert g[0]['b'].raw_value == 3
     assert g[2]['b'].raw_value == 3

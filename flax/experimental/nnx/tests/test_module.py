@@ -474,6 +474,39 @@ class TestModule:
     assert m1.c is not m2.c
     assert m1.self is m1
 
+  def test_move_basic(self):
+    class Foo(nnx.Module):
+      def __init__(self) -> None:
+        self.a = nnx.Param(2)
+        self.b = 3
+
+    m = Foo()
+
+    @jax.jit
+    def f(state):
+      m.move(state)
+      m.a.value *= 2
+      m.b *= 2
+      return m.split()[0]
+
+    state = m.split()[0]
+    state2 = f(state)
+    m.move(state2)
+
+    assert m.a.value == 4
+    assert m.b == 6
+
+  def test_move_incomplete_state(self):
+    class Foo(nnx.Module):
+      def __init__(self) -> None:
+        self.a = nnx.Param(2)
+        self.b = 3
+
+    m = Foo()
+
+    with pytest.raises(ValueError, match='Found a remaining node or Variable'):
+      m.move(nnx.State({}))
+
 
 class TestModulePytree:
   def test_tree_map(self):

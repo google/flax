@@ -592,24 +592,27 @@ def _graph_pop(
       pass
 
 
+class UpdateAction(enum.Enum):
+  PARTIAL = enum.auto()
+  MOVE = enum.auto()
+
+
 def graph_update_dynamic(
-  node: tp.Any,
-  updates: State | tp.Sequence[State],
+  node: tp.Any, updates: State | tp.Sequence[State], action: UpdateAction
 ) -> None:
   if not is_node(node):
     raise ValueError(f'Unsupported type: {type(node)}')
 
-  if isinstance(updates, State):
-    new_states = (updates,)
-  else:
-    new_states = updates
+  if not isinstance(updates, State):
+    updates = State.merge(*updates)
 
-  for state in new_states:
-    _graph_update_dynamic(node, state.raw_mapping)
+  _graph_update_dynamic(node, updates.raw_mapping, action)
 
 
 def _graph_update_dynamic(
-  node: tp.Any, state: dict[str, Variable[tp.Any] | dict[str, tp.Any]]
+  node: tp.Any,
+  state: dict[str, Variable[tp.Any] | dict[str, tp.Any]],
+  action: UpdateAction,
 ):
   if not is_node(node):
     raise RuntimeError(f'Unsupported type: {type(node)}')
@@ -619,6 +622,11 @@ def _graph_update_dynamic(
   for key, value in state.items():
     # case 1: new state is being added
     if key not in node_dict:
+      if action is UpdateAction.MOVE:
+        raise ValueError(
+          f'Detected new key {key!r} during a move operation. '
+          'Move operations cannot add new keys.'
+        )
       if isinstance(node_impl, ImmutableNodeImpl):
         raise ValueError(
           f'Cannot set key {key!r} on immutable node of '
@@ -629,8 +637,7 @@ def _graph_update_dynamic(
       node_impl.set_key(node, key, value)
       continue
 
-    # check values are of the same type
-    current_value = node_dict[key]
+    current_value = node_dict.pop(key)
 
     # case 2: subgraph is being updated
     if is_node(current_value):
@@ -638,7 +645,7 @@ def _graph_update_dynamic(
         raise ValueError(
           f'Expected a subgraph for {key!r}, but got a Variable: {value!r}'
         )
-      _graph_update_dynamic(current_value, value)
+      _graph_update_dynamic(current_value, value, action)
     else:
       # case 3: Variable is being updated
       # assert isinstance(value, Variable)
@@ -651,6 +658,14 @@ def _graph_update_dynamic(
           f'{value!r}'
         )
       current_value.copy_from(value)
+
+  # during MOVE we expect no remaining node or Variable keys
+  if action is UpdateAction.MOVE:
+    for key, value in node_dict.items():
+      if is_node(value) or isinstance(value, Variable):
+        raise ValueError(
+          f'Found a remaining node or Variable key {key!r} during a move operation'
+        )
 
 
 class _StaticModuleStatus(enum.Enum):
