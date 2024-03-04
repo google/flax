@@ -997,7 +997,7 @@ class RecurrentTest(parameterized.TestCase):
   def test_lstm(self):
     lstm = nn.LSTMCell(features=4)
     rng = random.key(0)
-    key1, key2 = random.split(rng)
+    rng, key1, key2 = random.split(rng, 3)
     x = random.normal(key1, (2, 3))
     c0, h0 = lstm.initialize_carry(rng, x.shape)
     self.assertEqual(c0.shape, (2, 4))
@@ -1053,7 +1053,7 @@ class RecurrentTest(parameterized.TestCase):
   def test_gated_units(self, module_cls, expected_param_shapes):
     module = module_cls(features=4)
     rng = random.key(0)
-    key1, key2 = random.split(rng)
+    rng, key1, key2 = random.split(rng, 3)
     x = random.normal(key1, (2, 3))
     carry0 = module.initialize_carry(rng, x.shape)
     self.assertEqual(carry0.shape, (2, 4))
@@ -1084,7 +1084,7 @@ class RecurrentTest(parameterized.TestCase):
   def test_complex_input_gated_units(self, module_cls):
     module_instance = module_cls(features=4)
     rng = random.key(0)
-    key1, key2 = random.split(rng)
+    rng, key1, key2 = random.split(rng, 3)
     x = random.normal(key1, (2, 3), dtype=jnp.complex64)
     carry0 = module_instance.initialize_carry(rng, x.shape)
     self.assertEqual(carry0.shape, (2, 4))
@@ -1095,7 +1095,7 @@ class RecurrentTest(parameterized.TestCase):
   def test_convlstm(self):
     lstm = nn.ConvLSTMCell(features=6, kernel_size=(3, 3))
     rng = random.key(0)
-    key1, key2 = random.split(rng)
+    rng, key1, key2 = random.split(rng, 3)
     x = random.normal(key1, (2, 4, 4, 3))
     c0, h0 = lstm.initialize_carry(rng, x.shape)
     self.assertEqual(c0.shape, (2, 4, 4, 6))
@@ -1117,7 +1117,7 @@ class RecurrentTest(parameterized.TestCase):
     # Create regular LSTMCell.
     lstm = nn.LSTMCell(features=4)
     rng = random.key(0)
-    key1, key2 = random.split(rng)
+    rng, key1, key2 = random.split(rng, 3)
     x = random.normal(key1, (2, 3))
     c0, h0 = lstm.initialize_carry(rng, x.shape)
     self.assertEqual(c0.shape, (2, 4))
@@ -1127,7 +1127,7 @@ class RecurrentTest(parameterized.TestCase):
     # Create OptimizedLSTMCell.
     lstm_opt = nn.OptimizedLSTMCell(features=4)
     rng = random.key(0)
-    key1, key2 = random.split(rng)
+    rng, key1, key2 = random.split(rng, 3)
     x = random.normal(key1, (2, 3))
     c0, h0 = lstm_opt.initialize_carry(rng, x.shape)
     self.assertEqual(c0.shape, (2, 4))

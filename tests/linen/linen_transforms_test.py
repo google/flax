@@ -221,9 +221,9 @@ class TransformTest(parameterized.TestCase):
     self.assertEqual(y.shape, (1, 3))
 
   def test_vmap(self):
-    key1, key2 = random.split(random.key(3), 2)
+    key1, key2, key3 = random.split(random.key(3), 3)
     x = random.uniform(key1, (4, 4))
-    x2 = random.uniform(key1, (5, 4, 4))
+    x2 = random.uniform(key2, (5, 4, 4))
 
     def vmap(cls):
       return nn.vmap(
@@ -235,7 +235,7 @@ class TransformTest(parameterized.TestCase):
 
     normal_model = TransformedMLP(features=[3, 4, 5])
     vmap_model = TransformedMLP(features=[3, 4, 5], transform=vmap)
-    init_variables = normal_model.init(key2, x)
+    init_variables = normal_model.init(key3, x)
     # simulate vmap in python for comparison:
     y1 = jnp.vstack([
         normal_model.apply(init_variables, x2[i])[None, ...]
@@ -245,9 +245,9 @@ class TransformTest(parameterized.TestCase):
     np.testing.assert_allclose(y1, y2, atol=1e-7)
 
   def test_vmap_decorated(self):
-    key1, key2 = random.split(random.key(3), 2)
+    key1, key2, key3 = random.split(random.key(3), 3)
     x = random.uniform(key1, (4, 4))
-    x2 = random.uniform(key1, (5, 4, 4))
+    x2 = random.uniform(key2, (5, 4, 4))
 
     def vmap(fn):
       return nn.vmap(
@@ -259,7 +259,7 @@ class TransformTest(parameterized.TestCase):
 
     normal_model = decorated_MLP()(features=[3, 4, 5])
     vmap_model = decorated_MLP(vmap)(features=[3, 4, 5])
-    init_variables = normal_model.init(key2, x)
+    init_variables = normal_model.init(key3, x)
     # simulate vmap in python for comparison:
     y1 = jnp.vstack([
         normal_model.apply(init_variables, x2[i])[None, ...]
@@ -269,9 +269,9 @@ class TransformTest(parameterized.TestCase):
     np.testing.assert_allclose(y1, y2, atol=1e-7)
 
   def test_vmap_batchnorm(self):
-    key1, key2 = random.split(random.key(3), 2)
+    key1, key2, key3 = random.split(random.key(3), 3)
     x = random.uniform(key1, (4, 4))
-    x2 = random.uniform(key1, (5, 4, 4))
+    x2 = random.uniform(key2, (5, 4, 4))
 
     def vmap(cls):
       return nn.vmap(
@@ -293,7 +293,7 @@ class TransformTest(parameterized.TestCase):
 
     normal_model = MlpBn()
     vmap_model = vmap(MlpBn)(axis_name='batch')
-    init_variables = normal_model.init(key2, x)
+    init_variables = normal_model.init(key3, x)
     y1 = normal_model.apply(
         init_variables, x2.reshape((-1, 4)), mutable=['batch_stats']
     )[0]

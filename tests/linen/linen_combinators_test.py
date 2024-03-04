@@ -160,10 +160,10 @@ class SequentialTest(absltest.TestCase):
       ]
     )
 
-    key1, key2 = random.split(random.key(0), 2)
+    key1, key2, key3 = random.split(random.key(0), 3)
     query = random.uniform(key1, (3, 5))
-    key_value = random.uniform(key1, (9, 5))
-    params_1 = sequential.init(key2, query, key_value)
+    key_value = random.uniform(key2, (9, 5))
+    params_1 = sequential.init(key3, query, key_value)
     outputs = sequential.apply(params_1, query, key_value)
     np.testing.assert_equal(len(outputs), 2)
     out_query, out_key_value = outputs['query'], outputs['key_value']

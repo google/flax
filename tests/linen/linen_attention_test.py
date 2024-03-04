@@ -272,7 +272,7 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_kv_args(self):
     key1, key2 = random.split(random.key(0), 2)
     query = random.uniform(key1, (3, 5))
-    key_value = random.uniform(key1, (9, 5))
+    key_value = random.uniform(key2, (9, 5))
     module = nn.MultiHeadDotProductAttention(
       num_heads=8,
       qkv_features=16,
@@ -280,14 +280,15 @@ class AttentionTest(parameterized.TestCase):
       bias_init=initializers.zeros,
       deterministic=False,
     )
+    key = lambda: random.key(43279)
     y0, v0 = module.init_with_output(
-      key2, query, inputs_k=key_value, inputs_v=key_value
+      key(), query, inputs_k=key_value, inputs_v=key_value
     )
-    y1, v1 = module.init_with_output(key2, query, inputs_k=key_value)
+    y1, v1 = module.init_with_output(key(), query, inputs_k=key_value)
     with self.assertWarnsRegex(
       DeprecationWarning, 'The inputs_kv arg will be deprecated soon.'
     ):
-      y2, v2 = module.init_with_output(key2, query, inputs_kv=key_value)
+      y2, v2 = module.init_with_output(key(), query, inputs_kv=key_value)
     self.assertTrue((y0 == y1).all() and (y1 == y2).all())
     self.assertTrue(
         jax.tree_util.tree_all(
@@ -300,20 +301,20 @@ class AttentionTest(parameterized.TestCase):
     with self.assertRaisesRegex(
       ValueError, '`inputs_k` cannot be None if `inputs_v` is not None.'
     ):
-      y3, v3 = module.init_with_output(key2, query, inputs_v=key_value)
+      y3, v3 = module.init_with_output(key(), query, inputs_v=key_value)
     with self.assertRaisesRegex(
       ValueError,
       'If either `inputs_k` or `inputs_v` is not None, `inputs_kv` must be None.',
     ):
       y3, v3 = module.init_with_output(
-        key2, query, inputs_kv=key_value, inputs_v=key_value
+        key(), query, inputs_kv=key_value, inputs_v=key_value
       )
     with self.assertRaisesRegex(
       ValueError,
       'If either `inputs_k` or `inputs_v` is not None, `inputs_kv` must be None.',
     ):
       y3, v3 = module.init_with_output(
-        key2, query, key_value, key_value, inputs_kv=key_value
+        key(), query, key_value, key_value, inputs_kv=key_value
       )
 
   def test_multihead_mask_warning(self):
@@ -423,7 +424,7 @@ class AttentionTest(parameterized.TestCase):
   def test_attention_alias_equivalence(self):
     key1, key2 = random.split(random.key(0), 2)
     query = random.uniform(key1, (3, 5))
-    key_value = random.uniform(key1, (9, 5))
+    key_value = random.uniform(key2, (9, 5))
     attention_kwargs = dict(
       num_heads=8,
       qkv_features=16,
@@ -433,8 +434,9 @@ class AttentionTest(parameterized.TestCase):
     )
     module1 = nn.MultiHeadDotProductAttention(**attention_kwargs)
     module2 = nn.MultiHeadAttention(**attention_kwargs)
-    out1, v1 = module1.init_with_output(key2, query, key_value)
-    out2, v2 = module2.init_with_output(key2, query, key_value, key_value)
+    key = lambda: random.key(43279)
+    out1, v1 = module1.init_with_output(key(), query, key_value)
+    out2, v2 = module2.init_with_output(key(), query, key_value, key_value)
     self.assertTrue((out1 == out2).all())
     self.assertTrue(
         jax.tree_util.tree_all(
@@ -445,7 +447,7 @@ class AttentionTest(parameterized.TestCase):
   def test_attention_alias_submodule(self):
     key1, key2 = random.split(random.key(0), 2)
     query = random.uniform(key1, (3, 5))
-    key_value = random.uniform(key1, (9, 5))
+    key_value = random.uniform(key2, (9, 5))
     attention_kwargs = dict(
       num_heads=8,
       qkv_features=16,
@@ -470,10 +472,11 @@ class AttentionTest(parameterized.TestCase):
       def __call__(self, query, key, value):
         return nn.MultiHeadAttention(**self.attention_kwargs)(query, key, value)
 
+    key = lambda: random.key(5478392)
     module1 = Foo1(attention_kwargs)
     module2 = Foo2(attention_kwargs)
-    out1, v1 = module1.init_with_output(key2, query, key_value)
-    out2, v2 = module2.init_with_output(key2, query, key_value, key_value)
+    out1, v1 = module1.init_with_output(key(), query, key_value)
+    out2, v2 = module2.init_with_output(key(), query, key_value, key_value)
 
     # test different output and variables if layer names are different
     self.assertTrue((out1 != out2).all())
@@ -507,7 +510,7 @@ class AttentionTest(parameterized.TestCase):
         )(query, key, value)
 
     module2 = Foo2(attention_kwargs)
-    out2, v2 = module2.init_with_output(key2, query, key_value, key_value)
+    out2, v2 = module2.init_with_output(key(), query, key_value, key_value)
     self.assertTrue((out1 == out2).all())
     self.assertTrue(
         jax.tree_util.tree_all(
