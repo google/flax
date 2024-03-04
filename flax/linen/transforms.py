@@ -40,17 +40,17 @@ import dataclasses
 import functools
 import inspect
 from typing import (
-  Any,
-  Callable,
-  Dict,
-  Iterable,
-  Mapping,
-  Optional,
-  Sequence,
-  Tuple,
-  Type,
-  TypeVar,
-  Union,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
 )
 
 from flax import errors, struct, traceback_util
@@ -58,17 +58,18 @@ from flax import serialization
 from flax.core import Scope, lift, meta
 from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (
-  CollectionFilter,
-  PRNGSequenceFilter,
+    CollectionFilter,
+    PRNGSequenceFilter,
+    freeze_filter,
 )
 from flax.ids import FlaxId
 from flax.linen import module as linen_module
 from flax.linen.module import (
-  Module,
-  Variable,
-  _derive_profiling_name,
-  _get_unbound_fn,
-  wrap_method_once,
+    Module,
+    Variable,
+    _derive_profiling_name,
+    _get_unbound_fn,
+    wrap_method_once,
 )
 from flax.typing import (
   InOutAxis,
@@ -117,7 +118,7 @@ def _memoize_by_id(fn, refs):
 
   @functools.wraps(fn)
   def wrapped_fn(x):
-    nonlocal refs
+    nonlocal refs  # Can be deleted?
     if isinstance(x, (VariablePlaceholder, InstancePlaceholder)):
       x_id = x.id
     elif isinstance(x, (Variable, Module)):
@@ -460,15 +461,19 @@ class _HashableProxy:
   """
 
   module: Module
+  hash_key: int
+
+  @classmethod
+  def from_module(cls, module: Module) -> '_HashableProxy':
+    fingerprint = _module_pytree_hash(module)
+    hash_key = hash(fingerprint)
+    return cls(module, hash_key)
 
   def __hash__(self):
-    key = _module_pytree_hash(self.module)
-    return hash(key)
+    return self.hash_key
 
   def __eq__(self, other):
-    return isinstance(other, _HashableProxy) and _module_pytree_hash(
-        self.module
-    ) == _module_pytree_hash(other.module)
+    return isinstance(other, _HashableProxy) and self.hash_key == other.hash_key
 
 
 def _recursive_freeze(name: str, x: Any, seen_modules: dict[FlaxId, int]):
@@ -500,8 +505,6 @@ def _module_pytree_hash_recursive(
     # if its a new module we add it to the cache and give it
     # a new index
     seen_modules[module._id] = len(seen_modules)
-    # TODO(cgarciae): define a way for the user of nn.jit to define
-    # what fields it wants to ignore per Module instance.
     values = []
     for field in dataclasses.fields(module):
       if field.init and field.name not in ('parent', 'name'):
@@ -514,106 +517,150 @@ def _module_pytree_hash_recursive(
         else:
           _check_field_is_hashable(field.name, value)
         values.append((field.name, value))
+    # add state static values
+    static_state = (
+        ('in_compact_method', module._state.in_compact_method),
+        ('in_setup', module._state.in_setup),
+        ('setup_called', module._state.setup_called),
+        ('is_initialized', module._state.is_initialized),
+        ('autoname_cursor', tuple(module._state.autoname_cursor.items())),
+    )
+    _check_field_is_hashable('_state', static_state)
+    values.append(('_state', static_state))
+    # add scope static values
+    scope = module.scope
+    if scope is not None:
+      static_scope = (
+          ('mutable', freeze_filter(scope.mutable)),
+          ('flags', _freeze_collections(scope.flags)),
+          ('rng_counts', _freeze_collections(scope.rng_counters.items())),
+          ('reservations', _freeze_collections(scope.reservations)),
+      )
+      _check_field_is_hashable('scope', static_scope)
+      values.append(('scope', static_scope))
+    # build static tuple
     static = tuple(values)
 
   return type(module), static
 
 
-def _check_field_is_hashable(name: str, x: Any):
-  """Checks if a field is hashable."""
+def _freeze_collections(x: Any) -> Any:
+  if isinstance(x, str):
+    return x
+  if isinstance(x, Mapping):
+    return FrozenDict((k, _freeze_collections(v)) for k, v in x.items())
+  elif isinstance(x, Iterable):
+    return tuple(_freeze_collections(v) for v in x)
+  else:
+    return x
+
+
+def _is_hashable(x):
   try:
     hash(x)
-  except Exception as e:
+    return True
+  except Exception:
+    return False
+
+
+def _recursive_find_unhashable_iter(
+    path: tuple[str, ...], obj: Any, seen_ids: set[int]
+) -> Iterable[tuple[tuple[str, ...], Any]]:
+  if id(obj) in seen_ids:
+    return
+  seen_ids.add(id(obj))
+  if serialization.is_serializable(obj):
+    for k, v in serialization.to_state_dict(obj).items():
+      next_path = (*path, k)
+      if not _is_hashable(v):
+        yield next_path, v
+        yield from _recursive_find_unhashable_iter(next_path, v, seen_ids)
+  elif dataclasses.is_dataclass(obj):
+    ignore = ('parent', 'name') if isinstance(obj, Module) else ()
+    for field in dataclasses.fields(obj):
+      if field.name in ignore:
+        continue
+      value = getattr(obj, field.name)
+      next_path = (*path, field.name)
+      if not _is_hashable(value):
+        yield next_path, value
+        yield from _recursive_find_unhashable_iter(next_path, value, seen_ids)
+  elif not _is_hashable(obj):
+    yield path, obj
+
+
+def _recursive_find_unhashable(name: str, obj: Any):
+  return (
+      ('/'.join(path), obj)
+      for path, obj in _recursive_find_unhashable_iter((name,), obj, set())
+  )
+
+
+def _check_field_is_hashable(name: str, x: Any):
+  """Checks if a field is hashable."""
+  if not _is_hashable(x):
+    unhashable_paths = ''.join(
+        f'\n- {path}: {type(value)}'
+        for path, value in _recursive_find_unhashable(name, x)
+    )
     if dataclasses.is_dataclass(x):
       if x.__hash__ is None:
         raise ValueError(
             f"field '{name}' of type '{type(x)}' is a dataclass but its not"
             ' hashable, using `dataclass(frozen=True, eq=True)` to make it'
             ' immutable and hashable, or `dataclass(unsafe_hash=True)` for'
-            ' mutable types.'
-        ) from e
+            f' mutable types. Unhashable fields: {unhashable_paths}'
+        )
       else:
         raise ValueError(
             f"field '{name}' of type '{type(x)}' is a hashable dataclass but"
             ' hashing failed, this probably means that at least one of its'
-            ' fields is not hashable.'
-        ) from e
+            ' fields is not hashable. Unhashable fields:'
+            f' {unhashable_paths}'
+        )
     else:
-      raise ValueError(f"type '{type(x)}' is not hashable.") from e
+      raise ValueError(
+          f"type '{x}' is not hashable. Unhashable fields: {unhashable_paths}"
+      )
 
 
 def decorator_lift_transform_jit(class_fn, **trafo_kwargs):
-  """Decorator for lifted transform.
+  def core_fn(
+      static: StaticModule[Module],
+      variables,
+      rngs,
+      *args,
+      **kwargs,
+  ):
+    # self = hash_key.obj
+    module = static.merge(variables, rngs)
+    res = class_fn(module, *args, **kwargs)
+    static, variables, _ = module.split()
+    return res, static, variables
 
-  Similar to `decorator_lift_transform` but specialized for `jit`, it reuses the
-  previous transform when available to avoid retracing.
-  """
-  # TODO(marcvanzee): Improve docstrings (#1977).
-  # Due to the ordering of method decorators, we must wrap the class_fn
-  # with the module state management wrapper first to maintain Module state
-  # correctly.
-  transform = lift.jit
-  multi_scope = True
+  # here we apply the given lifting transform to the scope-ingesting fn
+  static_argnums = trafo_kwargs.get('static_argnums', ())
+  if isinstance(static_argnums, int):
+    static_argnums = (static_argnums,)
+  static_argnums = tuple(a + 1 for a in static_argnums)
+  trafo_kwargs['static_argnums'] = (0, *static_argnums)
 
-  if isinstance(class_fn, tuple):
-    class_fns = class_fn
-  else:
-    class_fns = (class_fn,)
-  prewrapped_fns = [wrap_method_once(class_fn) for class_fn in class_fns]
-  trafo_fn = None
+  trafo_fn = jax.jit(core_fn, **trafo_kwargs)
 
-  @functools.wraps(prewrapped_fns[0])
+  @functools.wraps(class_fn)
   def wrapped_fn(self: Module, *args, **kwargs):
     nonlocal trafo_fn
-    state = self._state.export()
+    static, variables, rngs = self.split()
 
-    # make a scope-function to transform
-    def core_fn(
-        prewrapped_fn,
-        class_fn,
-        scopes,
-        module_hash,
-        *args,
-        **kwargs,
-    ):
-      # self = hash_key.obj
-      self: Module = module_hash.module
-      if not multi_scope:
-        scopes = [scopes]
-      cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
-      object.__setattr__(cloned, '_state', state.export())
-      res = prewrapped_fn(cloned, *args, **kwargs)
-      self._state.reimport(cloned._state)
-      _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
-      return res
+    res, static, variables = trafo_fn(static, variables, rngs, *args, **kwargs)
 
-    core_fns = [
-        functools.partial(core_fn, prewrapped_fn, class_fn)
-        for prewrapped_fn, class_fn in zip(prewrapped_fns, class_fns)
-    ]
+    _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
+    # --------------------
+    # perform updates
+    # --------------------
+    self.update(static, variables)
 
-    # here we apply the given lifting transform to the scope-ingesting fn
-    if trafo_fn is None:
-      trafo_fn = transform(*core_fns, **trafo_kwargs)
-
-    module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
-    if not multi_scope:
-      if len(module_scopes) != 1:
-        # TODO(levskaya): transforms like jvp & vjp have args that follow the
-        # pytree structure of scopes. The user doesn't explicitly control shared
-        # modules passed as arguments to methods or as attributes to Module
-        # constructors. Therefore, there is no obvious API for specifying
-        # arguments per lifted Module.
-        raise NotImplementedError(
-            'This transform does not yet support'
-            ' Modules that include other Modules passed as arguments.'
-        )
-      module_scopes = module_scopes[0]
-
-    # get a hash for the Module by using its repr as a proxy
-    hash_key = _HashableProxy(self)
-
-    return trafo_fn(module_scopes, hash_key, *args, **kwargs)
+    return res
 
   return wrapped_fn
 
@@ -684,7 +731,7 @@ def module_class_lift_transform_jit(module_class, methods=None, **trafo_kwargs):
       module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
 
       # get a hash for the Module by using its repr as a proxy
-      hash_key = _HashableProxy(self)
+      hash_key = _HashableProxy.from_module(self)
 
       ret = trafo_fn(module_scopes, hash_key, *args, **kwargs)
       return ret
