@@ -99,6 +99,7 @@ from .linear import (
     Conv as Conv,
     DenseGeneral as DenseGeneral,
     Dense as Dense,
+    Einsum as Einsum,
     Embed as Embed,
 )
 from .module import (

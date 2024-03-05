@@ -28,6 +28,10 @@ Linear Modules
 
 .. flax_module::
   :module: flax.linen
+  :class: Einsum
+
+.. flax_module::
+  :module: flax.linen
   :class: Embed
 
 Pooling
@@ -157,6 +161,7 @@ BatchApply
   Conv
   ConvTranspose
   ConvLocal
+  Einsum
   Embed
   BatchNorm
   LayerNorm
