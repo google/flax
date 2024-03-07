@@ -1173,7 +1173,9 @@ class Fp8Test(absltest.TestCase):
       p = nn.DenseGeneral(features=64, name='dense')
       if fp8_injection:
         p.dot_general_cls = nn.Fp8DotGeneralOp
-      y, initial_vars = p.init_with_output(init_key, x)
+
+      init_fn = jax.jit(p.init_with_output)
+      y, initial_vars = init_fn(init_key, x)
       var_shapes = jax.tree_util.tree_map(jnp.shape, initial_vars)
       self.assertEqual(var_shapes, expected_shapes)
 
@@ -1218,7 +1220,9 @@ class Fp8Test(absltest.TestCase):
     dense = nn.DenseGeneral(
       features=32, use_bias=True, dot_general_cls=nn.Fp8DotGeneralOp
     )
-    variables = dense.init(init_key, x)
+
+    init_fn = jax.jit(dense.init)
+    variables = init_fn(init_key, x)
     opt = optax.adam(learning_rate=0.1)
     state = train_state.TrainState.create(
       params=variables, tx=opt, apply_fn=dense.apply
@@ -1253,15 +1257,15 @@ class Fp8Test(absltest.TestCase):
       k = state.params['params']['kernel']
 
       # Manually compute the expected amax history and scaling factors.
-      amax_history_x = _roll_and_update(amax_history_x, jnp.max(jnp.abs(x)))
-      amax_history_k = _roll_and_update(amax_history_k, jnp.max(jnp.abs(k)))
-      amax_history_g = _roll_and_update(amax_history_g, jnp.max(jnp.abs(g)))
       amax_from_history_x = jnp.max(amax_history_x, axis=0)
       amax_from_history_k = jnp.max(amax_history_k, axis=0)
       amax_from_history_g = jnp.max(amax_history_g, axis=0)
       scale_x = fp8_ops.compute_scale(amax_from_history_x, scale_x, e4m3_max)
       scale_k = fp8_ops.compute_scale(amax_from_history_k, scale_k, e4m3_max)
       scale_g = fp8_ops.compute_scale(amax_from_history_g, scale_g, e5m2_max)
+      amax_history_x = _roll_and_update(amax_history_x, jnp.max(jnp.abs(x)))
+      amax_history_k = _roll_and_update(amax_history_k, jnp.max(jnp.abs(k)))
+      amax_history_g = _roll_and_update(amax_history_g, jnp.max(jnp.abs(g)))
 
       state = train_fn(state, x, g)
 
@@ -1291,6 +1295,39 @@ class Fp8Test(absltest.TestCase):
       np.testing.assert_allclose(fp8_vars['input_scale'][0], scale_x)
       np.testing.assert_allclose(fp8_vars['kernel_scale'][0], scale_k)
       np.testing.assert_allclose(fp8_vars['output_grad_scale'][0], scale_g)
+
+  def test_fp8_meta_dtype(self):
+    f32 = jnp.dtype('float32')
+    fm32 = fp8_ops.fm32
+
+    # Create a scan loop with reused ah_f32 and sf_f32. So, the autograd will
+    # accumulate the grads of them. We expect the max op (rather than add op)
+    # for the accumulation by converting them to fm32 dtype.
+    def outer(x, ah_f32, sf_f32):
+      ah_fm32 = jax.lax.convert_element_type(ah_f32, fm32)
+      sf_fm32 = jax.lax.convert_element_type(sf_f32, fm32)
+      array_x = jnp.array([x], f32)
+      def body_fun(carry, _):
+        carry = fp8_ops.in_qdq(f32, carry, sf_fm32, ah_fm32)
+        return carry, None
+      array_x, _ = jax.lax.scan(body_fun, array_x, None, length=3)
+      return array_x[0]
+
+    outer_fn = jax.jit(jax.grad(outer, (0, 1, 2)))
+    ah = jnp.array([0., 0., 0.], f32)
+    sf = jnp.array([1.], f32)
+    # 1st iteration
+    grads, new_ah, new_sf = outer_fn(2.0, ah, sf)
+    np.testing.assert_allclose(new_ah, [2., 0., 0.])
+    np.testing.assert_allclose(new_sf, [1.])
+    # 2nd iteration
+    grads, new_ah, new_sf = outer_fn(3., new_ah, new_sf)
+    np.testing.assert_allclose(new_ah, [3., 0., 2.])
+    np.testing.assert_allclose(new_sf, [2. / 448])
+    # 3rd iteration
+    grads, new_ah, new_sf = outer_fn(4., new_ah, new_sf)
+    np.testing.assert_allclose(new_ah, [4., 2., 3.])
+    np.testing.assert_allclose(new_sf, [3. / 448])
 
 
 if __name__ == '__main__':
