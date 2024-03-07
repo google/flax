@@ -19,12 +19,7 @@ from flax.linen.pooling import pool as pool
 from flax.typing import Initializer as Initializer
 
 from .nnx import compatibility as compatibility
-from .nnx.dataclasses import dataclass as dataclass
-from .nnx.dataclasses import field as field
 from .nnx import graph_utils as graph_utils
-from .nnx.dataclasses import param_field as param_field
-from .nnx.dataclasses import treenode_field as treenode_field
-from .nnx.dataclasses import variable_field as variable_field
 from .nnx.errors import TraceContextError as TraceContextError
 from .nnx.filterlib import All as All
 from .nnx.filterlib import Not as Not

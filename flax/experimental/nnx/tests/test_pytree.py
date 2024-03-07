@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 from typing import Generic, TypeVar
 
 import jax
@@ -47,12 +48,12 @@ class TestPytree:
       pytree.x = 4
 
   def test_immutable_pytree_dataclass(self):
-    @nnx.dataclass(frozen=True)
+    @dataclasses.dataclass(frozen=True)
     class Foo(nnx.Pytree):
-      y: int = nnx.treenode_field()
-      x: int = nnx.field(default=2)
+      y: nnx.TreeNode[int]
+      x: int = dataclasses.field(default=2)
 
-    pytree = Foo(y=3)
+    pytree = Foo(y=nnx.TreeNode(3))
 
     leaves = jax.tree_util.tree_leaves(pytree)
     assert leaves == [3]
@@ -69,12 +70,12 @@ class TestPytree:
       pytree.x = 4
 
   def test_jit(self):
-    @nnx.dataclass
+    @dataclasses.dataclass
     class Foo(nnx.Pytree):
-      a: int = nnx.treenode_field()
-      b: int = nnx.field()
+      a: nnx.TreeNode[int]
+      b: int = dataclasses.field()
 
-    module = Foo(a=1, b=2)
+    module = Foo(a=nnx.TreeNode(1), b=2)
 
     @jax.jit
     def f(m: Foo):
@@ -88,13 +89,13 @@ class TestPytree:
         self.a = a
         self.b = nnx.Variable(b)
 
-    @nnx.dataclass
+    @dataclasses.dataclass
     class Foo(nnx.Pytree):
       bar: Bar
-      c: int = nnx.treenode_field()
-      d: int = nnx.field()
+      c: nnx.TreeNode[int]
+      d: int = dataclasses.field()
 
-    foo: Foo = Foo(bar=Bar(a=1, b=2), c=3, d=4)
+    foo: Foo = Foo(bar=Bar(a=1, b=2), c=nnx.TreeNode(3), d=4)
 
     state_dict = serialization.to_state_dict(foo)
 
@@ -134,16 +135,16 @@ class TestPytree:
     MyClass[int]
 
   def test_key_paths(self):
-    @nnx.dataclass
+    @dataclasses.dataclass
     class Bar(nnx.Pytree):
-      a: int = nnx.treenode_field(default=1)
-      b: int = nnx.field(default=2)
+      a: nnx.TreeNode[int] = dataclasses.field(default_factory=lambda: nnx.TreeNode(1))
+      b: int = dataclasses.field(default=2)
 
-    @nnx.dataclass
+    @dataclasses.dataclass
     class Foo(nnx.Pytree):
-      x: int = nnx.treenode_field(default=3)
-      y: int = nnx.field(default=4)
-      z: Bar = nnx.treenode_field(default_factory=Bar)
+      x: nnx.TreeNode[int] = dataclasses.field(default_factory=lambda: nnx.TreeNode(3))
+      y: int = dataclasses.field(default=4)
+      z: nnx.TreeNode[Bar] = dataclasses.field(default_factory=lambda: nnx.TreeNode(Bar()))
 
     foo = Foo()
 
@@ -161,14 +162,14 @@ class TestPytree:
       Foo().replace(y=1)
 
   def test_dataclass_inheritance(self):
-    @nnx.dataclass
+    @dataclasses.dataclass
     class A(nnx.Pytree):
-      a: int = nnx.treenode_field(default=1)
-      b: int = nnx.field(default=2)
+      a: nnx.TreeNode[int] = dataclasses.field(default_factory=lambda: nnx.TreeNode(1))
+      b: int = dataclasses.field(default=2)
 
-    @nnx.dataclass
+    @dataclasses.dataclass
     class B(A):
-      c: int = nnx.treenode_field(default=3)
+      c: nnx.TreeNode[int] = dataclasses.field(default_factory=lambda: nnx.TreeNode(3))
 
     pytree = B()
     leaves = jax.tree_util.tree_leaves(pytree)
@@ -241,12 +242,12 @@ class TestMutablePytree:
       foo.y = 2
 
   def test_pytree_dataclass(self):
-    @nnx.dataclass
+    @dataclasses.dataclass
     class Foo(nnx.Pytree, mutable=True):
-      y: int = nnx.treenode_field()
-      x: int = nnx.field(default=2)
+      y: nnx.TreeNode[int]
+      x: int = dataclasses.field(default=2)
 
-    pytree: Foo = Foo(y=3)
+    pytree: Foo = Foo(y=nnx.TreeNode(3))
 
     leaves = jax.tree_util.tree_leaves(pytree)
     assert leaves == [3]

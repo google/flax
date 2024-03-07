@@ -68,17 +68,6 @@ class PytreeMeta(ABCMeta):
     with _mutable(obj), _initializing(obj):
       obj.__init__(*args, **kwargs)
 
-    if dataclasses.is_dataclass(obj):
-      assert isinstance(obj, Pytree)
-      for field in dataclasses.fields(obj):
-        if 'nnx_variable_constructor' not in field.metadata:
-          continue
-
-        container_fn = field.metadata['nnx_variable_constructor']
-        value = vars(obj)[field.name]
-        value = container_fn(value)
-        vars(obj)[field.name] = value
-
     vars(obj)['_pytree__sorted_fields'] = sorted(vars(obj))
 
     return obj
