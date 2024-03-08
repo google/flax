@@ -493,22 +493,22 @@ class TestModulePytree:
 
 class TestModuleDataclass:
   def test_basic(self):
-    @nnx.dataclass
+    @dataclasses.dataclass
     class Foo(nnx.Module):
       a: int
-      b: int = nnx.treenode_field()
-      c: int = nnx.param_field()
-      d: int = nnx.variable_field(nnx.BatchStat)
-      e: int
+      b: nnx.TreeNode[int]
+      c: nnx.Param[int]
+      d: nnx.Variable[int]
+      e: nnx.Variable[int]
       f: int
 
     m = Foo(
       a=1,  # static
-      b=2,  # node
-      c=3,  # param
-      d=4,  # var
-      e=5,  # static int
-      f=nnx.Variable(6),  # test that we can pass in a node
+      b=nnx.TreeNode(2),  # node
+      c=nnx.Param(3),  # param
+      d=nnx.Variable(4),  # var
+      e=nnx.BatchStat(5),  # var
+      f=6,  # static int
     )
 
     state, graphdef = m.split()
@@ -516,8 +516,8 @@ class TestModuleDataclass:
     assert len(state) == 4
     assert state.b == nnx.TreeNode(2)
     assert state.c == nnx.Param(3)
-    assert state.d == nnx.BatchStat(4)
-    assert state.f == nnx.Variable(6)
+    assert state.d == nnx.Variable(4)
+    assert state.e == nnx.BatchStat(5)
 
   def test_context_none_after_init(self):
     @dataclasses.dataclass

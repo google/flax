@@ -109,12 +109,6 @@ class ModuleMeta(ABCMeta):
           vars(module)[field.name] = None
           continue
 
-        if 'nnx_variable_constructor' not in field.metadata:
-          continue
-
-        variable_constructor = field.metadata['nnx_variable_constructor']
-        vars(module)[field.name] = variable_constructor(value)
-
     return module
 
 
