@@ -70,10 +70,10 @@ class TestSPMD:
     )
     state_spec = nnx.get_partition_spec(state)
 
-    assert state_spec.params['w'].raw_value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].mu['w'].raw_value == PartitionSpec(
+    assert state_spec.params.value['w'].raw_value == PartitionSpec('row', 'col')
+    assert state_spec.opt_state.value[0].mu.value['w'].raw_value == PartitionSpec(
       'row', 'col'
     )
-    assert state_spec.opt_state[0].nu['w'].raw_value == PartitionSpec(
+    assert state_spec.opt_state.value[0].nu.value['w'].raw_value == PartitionSpec(
       'row', 'col'
     )
