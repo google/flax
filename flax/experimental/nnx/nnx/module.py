@@ -405,7 +405,6 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
             states.append(leaf.get_state())
           else:
             module = leaf.make_empty()
-            module
         elif isinstance(leaf, State):
           states.append(leaf)
         else:
@@ -457,12 +456,10 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
     super().__init_subclass__()
 
     graph_utils.register_node_type(
-      cls,
-      _module_graph_flatten,
-      _module_graph_get_key,
-      _module_graph_set_key,
-      _module_graph_has_key,
-      _module_graph_all_keys,
+      type=cls,
+      flatten=_module_graph_flatten,
+      set_key=_module_graph_set_key,
+      pop_key=_module_graph_pop_key,
       create_empty=_module_graph_create_empty,
       init=_module_graph_init,
     )
@@ -514,10 +511,6 @@ def _module_graph_flatten(module: Module):
   return nodes, type(module)
 
 
-def _module_graph_get_key(module: Module, name: str) -> tp.Any:
-  return vars(module)[name]
-
-
 def _module_graph_set_key(module: Module, name: str, value: tp.Any):
   if (
     hasattr(module, name)
@@ -529,12 +522,8 @@ def _module_graph_set_key(module: Module, name: str, value: tp.Any):
     setattr(module, name, value)
 
 
-def _module_graph_has_key(module: Module, name: str) -> bool:
-  return hasattr(module, name)
-
-
-def _module_graph_all_keys(module: Module) -> tuple[str, ...]:
-  return tuple(name for name in vars(module).keys() if name != '_module__state')
+def _module_graph_pop_key(module: Module, name: str):
+  return vars(module).pop(name)
 
 
 def _module_graph_create_empty(cls: tp.Type[M]) -> M:
