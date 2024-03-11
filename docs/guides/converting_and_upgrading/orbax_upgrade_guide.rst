@@ -37,6 +37,9 @@ Throughout the guide, you will be able to compare code examples with and without
     shutil.rmtree('/tmp/orbax_upgrade')
   os.makedirs('/tmp/orbax_upgrade')
 
+  import absl
+  absl.logging.set_verbosity(absl.logging.ERROR)
+
 
 Setup
 *****
