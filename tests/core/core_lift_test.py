@@ -124,13 +124,19 @@ class LiftTest(absltest.TestCase):
     np.testing.assert_allclose(y_t, jnp.ones_like(x))
 
   def test_while_loop(self):
+    def clone(key):
+      if hasattr(jax.random, "clone"):
+        # jax v0.4.26+
+        return jax.random.clone(key)
+      return key
+
     def f(scope, x):
       key_zero = random.key(0)
       key_zero = jnp.broadcast_to(key_zero, (2, *key_zero.shape))
       scope.param('inc', lambda _: 1)
       scope.put_variable('state', 'acc', 0)
       scope.put_variable('state', 'rng_params', key_zero)
-      scope.put_variable('state', 'rng_loop', key_zero)
+      scope.put_variable('state', 'rng_loop', clone(key_zero))
 
       def cond_fn(scope, c):
         acc = scope.get_variable('state', 'acc')
@@ -172,11 +178,12 @@ class LiftTest(absltest.TestCase):
     np.testing.assert_array_equal(
       vars['state']['rng_params'][0], vars['state']['rng_params'][1]
     )
-    np.testing.assert_array_compare(
-      operator.__ne__,
-      vars['state']['rng_loop'][0],
-      vars['state']['rng_loop'][1],
-    )
+    with jax.enable_key_reuse_checks(False):
+      np.testing.assert_array_compare(
+        operator.__ne__,
+        vars['state']['rng_loop'][0],
+        vars['state']['rng_loop'][1],
+      )
 
   def test_cond(self):
     def f(scope, x, pred):

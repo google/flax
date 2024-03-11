@@ -2038,11 +2038,12 @@ class TransformTest(parameterized.TestCase):
     np.testing.assert_array_equal(
         vars['state']['rng_params'][0], vars['state']['rng_params'][1]
     )
-    np.testing.assert_array_compare(
-        operator.__ne__,
-        vars['state']['rng_loop'][0],
-        vars['state']['rng_loop'][1],
-    )
+    with jax.enable_key_reuse_checks(False):
+      np.testing.assert_array_compare(
+          operator.__ne__,
+          vars['state']['rng_loop'][0],
+          vars['state']['rng_loop'][1],
+      )
 
   def test_cond(self):
     class Foo(nn.Module):

@@ -88,6 +88,12 @@ class AttentionTest(parameterized.TestCase):
     self.assertEqual(y.shape, x.shape)
 
   def test_multihead_self_attention_explicit_dropout(self):
+    def clone(key):
+      if hasattr(jax.random, "clone"):
+        # JAX v0.4.26+
+        return jax.tree.map(jax.random.clone, key)
+      return key
+
     class Foo(nn.Module):
       attention_kwargs: dict
 
@@ -96,6 +102,8 @@ class AttentionTest(parameterized.TestCase):
         a = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
           x, x, dropout_rng=dropout_rng
         )
+        if dropout_rng is not None:
+          dropout_rng = clone(dropout_rng)
         b = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
           x, x, dropout_rng=dropout_rng
         )
@@ -115,17 +123,17 @@ class AttentionTest(parameterized.TestCase):
     x = jnp.ones((4, 2, 3, 5))
     rngs = {'params': rng1, 'dropout': rng2}
     v = module.init(rngs, x)
-    a, b = module.apply(v, x, rngs=rngs)
-    c, d = module.apply(v, x, rngs={'dropout': rng2})
+    a, b = module.apply(v, x, rngs=clone(rngs))
+    c, d = module.apply(v, x, rngs={'dropout': clone(rng2)})
     e, f = module.apply(v, x, rngs={'dropout': rng3})
-    self.assertTrue(not (a == b).all())
+    self.assertFalse((a == b).all())
     self.assertTrue((a == c).all())
     self.assertTrue((b == d).all())
-    self.assertTrue(not (a == e).all())
-    self.assertTrue(not (b == f).all())
-    a, b = module.apply(v, x, rngs=rngs, dropout_rng=rng4)
+    self.assertFalse((a == e).all())
+    self.assertFalse((b == f).all())
+    a, b = module.apply(v, x, rngs=clone(rngs), dropout_rng=rng4)
     self.assertTrue((a == b).all())
-    a, b = module.apply(v, x, dropout_rng=rng4)
+    a, b = module.apply(v, x, dropout_rng=clone(rng4))
     self.assertTrue((a == b).all())
     self.assertTrue(a.shape == b.shape == x.shape)
 
