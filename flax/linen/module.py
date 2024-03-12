@@ -373,7 +373,7 @@ def intercept_methods(interceptor: Interceptor):
   The following methods couldn't be intercepted:
 
   1. Methods decoratored with ``nn.nowrap``.
-  2. Dunder methods including '__eq__', '__repr__', '__init__', '__hash__', and '__post_init__'.
+  2. Dunder methods including ``__eq__``, ``__repr__``, ``__init__``, ``__hash__``, and ``__post_init__``.
   3. Module dataclass fields.
   4. Module descriptors.
 
