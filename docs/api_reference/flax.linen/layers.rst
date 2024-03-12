@@ -124,6 +124,10 @@ Recurrent
 
 .. flax_module::
   :module: flax.linen
+  :class: ConvLSTMCell
+
+.. flax_module::
+  :module: flax.linen
   :class: SimpleCell
 
 .. flax_module::
