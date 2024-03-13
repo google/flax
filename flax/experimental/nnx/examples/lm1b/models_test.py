@@ -217,8 +217,8 @@ class ModelTest(absltest.TestCase):
     self.transfer_params(config, params_nnx, params_linen)
     model_nnx.update(params_nnx)
 
-    with nnx.flags(deterministic=True, decode=False):
-      output_nnx = model_nnx(sample_inputs)
+    model_nnx.set_attributes(deterministic=True, decode=False)
+    output_nnx = model_nnx(sample_inputs)
 
     output_linen: jax.Array = model_linen.apply(
       {'params': params_linen}, sample_inputs
@@ -263,13 +263,13 @@ class ModelTest(absltest.TestCase):
     self.transfer_params(config, params_nnx, params_linen)
     self.transfer_cache(config, cache_nnx, cache_linen)
     model_nnx.update(params_nnx, cache_nnx)
+    model_nnx.set_attributes(deterministic=True, decode=True)
 
     outputs_nnx = []
     outputs_linen = []
 
     for inputs in ar_decode_inputs:
-      with nnx.flags(deterministic=True, decode=True):
-        output_nnx = model_nnx(inputs)
+      output_nnx = model_nnx(inputs)
       outputs_nnx.append(output_nnx)
 
     output_linen: jax.Array

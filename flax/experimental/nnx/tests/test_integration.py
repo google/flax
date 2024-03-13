@@ -50,19 +50,21 @@ class TestIntegration:
     def train_step(model: Model, x, y):
       @nnx.grad
       def loss_fn(model: Model):
-        with nnx.flags(use_running_average=False):
-          y_pred = model(x)
+        y_pred = model(x)
         return jnp.mean((y - y_pred) ** 2)
 
       grads = loss_fn(model)
       model.update(
-        jax.tree_map(lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads)
+        jax.tree_util.tree_map(
+          lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
+        )
       )
 
     model = Model(rngs=nnx.Rngs(0))
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
+    model.set_attributes(use_running_average=False)
 
     for _i in range(3):
       train_step(model, x, y)
@@ -96,16 +98,18 @@ class TestIntegration:
     @jax.jit
     def train_step(state: nnx.State, graphdef: nnx.GraphDef[Model], x, y):
       model = graphdef.merge(state)
+      model.set_attributes(use_running_average=False)
 
       @nnx.grad
       def loss_fn(model: Model):
-        with nnx.flags(use_running_average=False):
-          y_pred = model(x)
+        y_pred = model(x)
         return jnp.mean((y - y_pred) ** 2)
 
       grads = loss_fn(model)
       model.update(
-        jax.tree_map(lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads)
+        jax.tree_util.tree_map(
+          lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
+        )
       )
 
       return model.split()
@@ -158,7 +162,9 @@ class TestIntegration:
       grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
       # SGD update
       model.update(
-        jax.tree_map(lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads)
+        jax.tree_util.tree_map(
+          lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
+        )
       )
 
     # execute the training step

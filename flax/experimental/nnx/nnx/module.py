@@ -452,6 +452,65 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       if isinstance(value, Module):
         yield path, value
 
+  def set_attributes(
+    self,
+    *filters: filterlib.Filter,
+    raise_if_not_found: bool = True,
+    **attributes: tp.Any,
+  ) -> None:
+    """Sets the attributes of nested Modules including the current Module.
+    If the attribute is not found in the Module, it is ignored.
+
+    Example::
+
+      >>> from flax.experimental import nnx
+      ...
+      >>> class Block(nnx.Module):
+      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...     self.dropout = nnx.Dropout(0.5, deterministic=False)
+      ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=False, rngs=rngs)
+      ...
+      >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (False, False)
+      >>> block.set_attributes(deterministic=True, use_running_average=True)
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (True, True)
+
+    ``Filter``s can be used to set the attributes of specific Modules::
+
+      >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+      >>> block.set_attributes(nnx.Dropout, deterministic=True, use_running_average=True)
+      >>> # Only the dropout will be modified
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (True, False)
+
+    Args:
+      *filters: Filters to select the Modules to set the attributes of.
+      raise_if_not_found: If True (default), raises a ValueError if at least one attribute
+        instance is not found in one of the selected Modules.
+      **attributes: The attributes to set.
+    """
+    remaining_attributes = set(attributes.keys())
+    if not filters:
+      filters = (True,)
+    predicates = tuple(map(filterlib.to_predicate, filters))
+    for path, module in self.modules():
+      for predicate in predicates:
+        if predicate(path, module):
+          for name, value in attributes.items():
+            if hasattr(module, name):
+              if name in remaining_attributes:
+                remaining_attributes.remove(name)
+              setattr(module, name, value)
+          break
+
+    if remaining_attributes and raise_if_not_found:
+      raise ValueError(
+        f'Could not find at least one instance of the following attributes: {remaining_attributes}'
+      )
+
   def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
     super().__init_subclass__()
 

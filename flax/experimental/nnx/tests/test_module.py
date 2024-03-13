@@ -28,8 +28,7 @@ A = TypeVar('A')
 
 class TestModule:
   def test_has_module_state(self):
-    class Foo(nnx.Module):
-      ...
+    class Foo(nnx.Module): ...
 
     foo = Foo()
 
@@ -473,6 +472,55 @@ class TestModule:
     assert m1.b is not m2.b
     assert m1.c is not m2.c
     assert m1.self is m1
+
+  def test_set_attributes(self):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    assert block.dropout.deterministic == False
+    assert block.batch_norm.use_running_average == False
+
+    block.set_attributes(deterministic=True, use_running_average=True)
+    assert block.dropout.deterministic == True
+    assert block.batch_norm.use_running_average == True
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    block.set_attributes(nnx.Dropout, deterministic=True)
+    # Only the dropout will be modified
+    assert block.dropout.deterministic == True
+    assert block.batch_norm.use_running_average == False
+
+  def test_set_attribute_error(self):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+
+    with pytest.raises(
+      ValueError,
+      match="Could not find at least one instance of the following attributes: {'unknown'}",
+    ):
+      block.set_attributes(
+        deterministic=True, use_running_average=True, unknown=True
+      )
+
+    block.set_attributes(
+      deterministic=True,
+      use_running_average=True,
+      unknown=True,
+      raise_if_not_found=False,
+    )
 
 
 class TestModulePytree:

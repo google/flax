@@ -65,9 +65,9 @@ class TestMultiHeadAttention:
       ),
       rng,
     )
+    module.set_attributes(decode=False)
 
-    with nnx.flags(decode=False):
-      _ = module(x, True)
+    _ = module(x, True)
     intermediates = module.pop(nnx.Intermediate)
     assert intermediates['attention_layers/0/attention_weights'].raw_value[
       0
@@ -77,8 +77,7 @@ class TestMultiHeadAttention:
       0
     ].shape == (4, 8, 6, 6)
 
-    with nnx.flags(decode=False):
-      _ = module(x)
+    _ = module(x)
     intermediates = module.pop(nnx.Intermediate)
     assert not intermediates  # empty
 

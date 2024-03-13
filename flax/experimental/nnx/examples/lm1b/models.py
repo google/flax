@@ -33,7 +33,6 @@ import numpy as np
 from jax import lax
 
 from flax.experimental import nnx
-from flax.experimental.nnx.nnx import flaglib
 from flax.experimental.nnx.examples.lm1b.configs import default
 
 Shape = tuple[int, ...]
@@ -126,9 +125,11 @@ class AddPositionEmbs(nnx.Module):
     self,
     config: TransformerConfig,
     *,
+    decode: bool = False,
     rngs: nnx.Rngs,
   ):
     self.config = config
+    self.decode = decode
     self.pos_emb_shape = (1, config.max_len, config.emb_dim)
 
     if config.posemb_init is not None:
@@ -168,7 +169,7 @@ class AddPositionEmbs(nnx.Module):
       pos_embedding = self.pos_embedding.value
 
     # We use a cache position index for tracking decoding position.
-    if flaglib.flags.get('decode', False):
+    if self.decode:
       _, _, df = pos_embedding.shape
       # equivalent to pos_embedding[:, i:i+1] but traceable
       pos_embedding = lax.dynamic_slice(
@@ -336,9 +337,11 @@ class Decoder(nnx.Module):
     config: TransformerConfig,
     shared_embedding: nnx.Embed | None = None,
     *,
+    decode: bool = False,
     rngs: nnx.Rngs,
   ):
     self.config = config
+    self.decode = decode
     self.shared_embedding = shared_embedding
 
     # Target Embedding
@@ -413,7 +416,7 @@ class Decoder(nnx.Module):
     assert inputs.ndim == 2  # (batch, len)
 
     y = inputs.astype('int32')
-    if not flaglib.flags.get('decode', False):
+    if not self.decode:
       y = shift_inputs(y, segment_ids=inputs_segmentation)
     y = self.output_embed(y)
     y = self.posembed_output(y, inputs_positions=inputs_positions)
@@ -450,8 +453,11 @@ class TransformerLM(nnx.Module):
     config: TransformerConfig dataclass containing hyperparameters.
   """
 
-  def __init__(self, config: TransformerConfig, *, rngs: nnx.Rngs):
+  def __init__(
+    self, config: TransformerConfig, *, decode: bool = False, rngs: nnx.Rngs
+  ):
     self.config = config
+    self.decode = decode
     self.decoder = Decoder(config=config, shared_embedding=None, rngs=rngs)
 
   def __call__(
@@ -475,7 +481,7 @@ class TransformerLM(nnx.Module):
     config = self.config
 
     # Make padding attention masks.
-    if flaglib.flags.get('decode', False):
+    if self.decode:
       # for fast autoregressive decoding we use no decoder mask
       decoder_mask = None
     else:
