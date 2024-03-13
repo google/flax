@@ -75,7 +75,7 @@ def _as_default(summary_writer: tf.summary.SummaryWriter, auto_flush: bool):
     old_flush = summary_writer.flush
     new_flush = old_flush if auto_flush else lambda: None
     summary_writer.flush = new_flush
-    context_manager.__exit__()
+    context_manager.__exit__(None, None, None)
     summary_writer.flush = old_flush
 
 
