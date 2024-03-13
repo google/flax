@@ -93,7 +93,7 @@ For example:
 
   # At the top level
   mgr_options = orbax.checkpoint.CheckpointManagerOptions(
-    create=True, max_to_keep=3, keep_period=2, step_prefix='test_')
+    create=True, max_to_keep=3, keep_period=2, step_prefix='test')
   ckpt_mgr = orbax.checkpoint.CheckpointManager(
     CKPT_DIR,
     orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler()), mgr_options)

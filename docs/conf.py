@@ -149,4 +149,24 @@ always_document_param_types = True
 doctest_global_setup = """
 import jax
 import jax.numpy as jnp
+
+import logging as slog
+from absl import logging as alog
+
+# Avoid certain absl logging messages to break doctest
+filtered_message = [
+  'SaveArgs.aggregate is deprecated',
+  '',
+]
+
+class _CustomLogFilter(slog.Formatter):
+  def format(self, record):
+    message = super(_CustomLogFilter, self).format(record)
+    for m in filtered_message:
+      if m in message:
+        return ''
+    return message
+
+alog.use_absl_handler()
+alog.get_absl_handler().setFormatter(_CustomLogFilter())
 """
