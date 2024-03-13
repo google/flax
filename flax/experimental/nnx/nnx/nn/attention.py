@@ -25,7 +25,6 @@ from jax import lax, random
 
 from flax.experimental import nnx
 from flax.experimental.nnx.nnx import rnglib
-from flax.experimental.nnx.nnx import flaglib
 from flax.experimental.nnx.nnx.module import Module, first_from
 from flax.experimental.nnx.nnx.nn import initializers
 from flax.experimental.nnx.nnx.nn.dtypes import promote_dtype
@@ -510,7 +509,6 @@ class MultiHeadAttention(Module):
     decode = first_from(
       decode,
       self.decode,
-      flaglib.flags.get('decode'),
       error_msg="""No `decode` argument was provided to MultiHeadAttention
         as either a __call__ argument, class attribute, or nnx.flag.""",
     )
@@ -557,7 +555,6 @@ class MultiHeadAttention(Module):
       deterministic = first_from(
         deterministic,
         self.deterministic,
-        flaglib.flags.get('deterministic'),
         error_msg="""No `deterministic` argument was provided to MultiHeadAttention
           as either a __call__ argument, class attribute, or nnx.flag.""",
       )

@@ -194,13 +194,13 @@ def train_step(
   def loss_fn(params):
     """loss function used for training."""
     module = state.graphdef.merge(params)
-    with nnx.flags(deterministic=False, decode=False):
-      logits = module(
-        inputs,
-        inputs_positions=inputs_positions,
-        inputs_segmentation=inputs_segmentation,
-        rngs=nnx.Rngs(dropout=dropout_rng),
-      )
+    module.set_attributes(deterministic=False, decode=False)
+    logits = module(
+      inputs,
+      inputs_positions=inputs_positions,
+      inputs_segmentation=inputs_segmentation,
+      rngs=nnx.Rngs(dropout=dropout_rng),
+    )
 
     loss, weight_sum = compute_weighted_cross_entropy(
       logits, inputs, weights, label_smoothing
@@ -229,8 +229,8 @@ def eval_step(
   inputs = batch['inputs']
   weights = jnp.where(inputs > 0, 1.0, 0.0)
   module = static.merge(params)
-  with nnx.flags(deterministic=True, decode=False):
-    logits = module(inputs)
+  module.set_attributes(deterministic=True, decode=False)
+  logits = module(inputs)
 
   return compute_metrics(logits, inputs, weights, label_smoothing)
 
@@ -261,8 +261,8 @@ def predict_step(
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
     module = static.merge(params, cache)
-    with nnx.flags(deterministic=True, decode=True):
-      logits = module(flat_ids)
+    module.set_attributes(deterministic=True, decode=True)
+    logits = module(flat_ids)
     cache = module.extract(nnx.Cache)
     # Remove singleton sequence-length dimension:
     # [batch, 1, vocab] --> [batch, vocab]
@@ -538,7 +538,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
       predict_step,
       in_axes=(
         0,
-        jax.tree_map(lambda x: None, state.params),
+        jax.tree_util.tree_map(lambda x: None, state.params),
         0,
         None,
         None,

@@ -17,7 +17,7 @@ from typing import Optional, Sequence
 import jax.numpy as jnp
 from jax import lax, random
 
-from flax.experimental.nnx.nnx import flaglib, rnglib
+from flax.experimental.nnx.nnx import rnglib
 from flax.experimental.nnx.nnx.module import Module, first_from
 import dataclasses
 
@@ -61,7 +61,6 @@ class Dropout(Module):
     deterministic = first_from(
       deterministic,
       self.deterministic,
-      flaglib.flags.get('deterministic'),
       error_msg="""No `deterministic` argument was provided to Dropout
           as either a __call__ argument, class attribute, or nnx.flag.""",
     )

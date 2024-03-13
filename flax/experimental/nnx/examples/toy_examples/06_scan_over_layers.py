@@ -80,8 +80,8 @@ class ScanMLP(nnx.Module):
 model = ScanMLP(10, n_layers=5, rngs=nnx.Rngs(0))
 
 x = jnp.ones((3, 10))
-with nnx.flags(deterministic=False):
-  y = model(x, rngs=nnx.Rngs(dropout=1))
+model.set_attributes(deterministic=False)
+y = model(x, rngs=nnx.Rngs(dropout=1))
 
 print(jax.tree_map(jnp.shape, model.get_state()))
 print(y.shape)

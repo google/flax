@@ -23,7 +23,6 @@ from .nnx import graph_utils as graph_utils
 from .nnx.errors import TraceContextError as TraceContextError
 from .nnx.filterlib import All as All
 from .nnx.filterlib import Not as Not
-from .nnx.flaglib import flags as flags
 from .nnx.graph_utils import GraphDef as GraphDef
 from .nnx.helpers import Dict as Dict
 from .nnx.helpers import Sequence as Sequence

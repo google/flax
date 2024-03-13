@@ -391,14 +391,14 @@ class TestScan:
     )
 
     module = MLP(rngs=nnx.Rngs(0))
+    module.set_attributes(deterministic=False, use_running_average=False)
 
     assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
     assert module.scan_module.linear.bias.value.shape == (5, 3)
     assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
-    with nnx.flags(deterministic=False, use_running_average=False):
-      y = module(x, rngs=nnx.Rngs(1))
+    y = module(x, rngs=nnx.Rngs(1))
 
     assert y.shape == (1, 3)
 
@@ -427,14 +427,14 @@ class TestScan:
     )
 
     module = MLP(rngs=nnx.Rngs(0))
+    module.set_attributes(deterministic=False, use_running_average=False)
 
     assert module.scan_module.linear.kernel.value.shape == (5, 3, 3)
     assert module.scan_module.linear.bias.value.shape == (5, 3)
     assert module.scan_module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
-    with nnx.flags(deterministic=False, use_running_average=False):
-      y = module(x, rngs=nnx.Rngs(1))
+    y = module(x, rngs=nnx.Rngs(1))
 
     assert y.shape == (1, 3)
 
@@ -465,6 +465,7 @@ class TestScan:
         return x, None
 
     module = Block(rngs=nnx.Rngs(0))
+    module.set_attributes(deterministic=False, use_running_average=False)
 
     assert module.d == 3
     assert module.linear.kernel.value.shape == (5, 3, 3)
@@ -472,8 +473,7 @@ class TestScan:
     assert module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
-    with nnx.flags(deterministic=False, use_running_average=False):
-      y, out = module(x, None, rngs=nnx.Rngs(dropout=1))
+    y, out = module(x, None, rngs=nnx.Rngs(dropout=1))
 
     assert y.shape == (1, 3)
     assert out is None

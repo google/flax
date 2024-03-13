@@ -19,7 +19,7 @@ import jax.numpy as jnp
 from jax import lax
 
 from flax.experimental import nnx
-from flax.experimental.nnx.nnx import flaglib, rnglib
+from flax.experimental.nnx.nnx import rnglib
 from flax.experimental.nnx.nnx.module import Module, first_from
 from flax.experimental.nnx.nnx.nn import dtypes, initializers
 from flax.typing import (
@@ -283,7 +283,6 @@ class BatchNorm(Module):
     use_running_average = first_from(
       use_running_average,
       self.use_running_average,
-      flaglib.flags.get('use_running_average'),
       error_msg="""No `use_running_average` argument was provided to BatchNorm
         as either a __call__ argument, class attribute, or nnx.flag.""",
     )
