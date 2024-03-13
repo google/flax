@@ -16,6 +16,7 @@ import jax
 import pytest
 
 from flax.experimental import nnx
+from flax import struct
 
 
 class TestGraphUtils:
@@ -230,3 +231,49 @@ class TestGraphUtils:
     assert m2.a.value == state.a.raw_value
     assert m2.b.value == state.a.raw_value
     assert m2.a is m2.b
+
+  def test_pytree_flatten(self):
+    @struct.dataclass
+    class Tree:
+      a: int
+      b: str = struct.field(pytree_node=False)
+
+    p = Tree(1, 'a')
+
+    leaves, treedef = nnx.graph_utils._flatten_pytree(p)
+    fields = dict(leaves)
+
+    assert 'a' in fields
+    assert 'b' not in fields
+    assert fields['a'] == 1
+
+    p2 = nnx.graph_utils._unflatten_pytree(leaves, treedef)
+
+    assert isinstance(p2, Tree)
+    assert p2.a == 1
+
+  def test_pytree_node(self):
+    @struct.dataclass
+    class Tree:
+      a: nnx.Param[int]
+      b: str = struct.field(pytree_node=False)
+
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.tree = Tree(nnx.Param(1), 'a')
+
+    m = Foo()
+
+    state, static = m.split()
+
+    assert 'tree' in state
+    assert 'a' in state.tree
+    assert static.subgraphs['tree'].type is nnx.graph_utils.PytreeType
+
+    m2 = static.merge(state)
+
+    assert isinstance(m2.tree, Tree)
+    assert m2.tree.a.raw_value == 1
+    assert m2.tree.b == 'a'
+    assert m2.tree.a is not m.tree.a
+    assert m2.tree is not m.tree
