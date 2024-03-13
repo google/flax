@@ -107,6 +107,7 @@ To contribute code to Flax on GitHub, follow these steps:
    Then sync your code with the main repository:
 
    ```bash
+   git fetch upstream
    git rebase upstream/main
    ```
 
