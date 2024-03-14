@@ -22,7 +22,7 @@ from numpy.testing import assert_array_equal
 
 from flax import linen
 from flax.experimental import nnx
-from flax.typing import Dtype, PrecisionLike
+from flax.typing import Dtype, PrecisionLike, Shape
 
 
 class TestLinearGeneral:
@@ -52,7 +52,7 @@ class TestLinenConsistency(parameterized.TestCase):
     param_dtype=[jnp.float32, jnp.float16],
     precision=[Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
   )
-  def test_nnx_linen_equivalence(
+  def test_nnx_linear_equivalence(
     self,
     use_bias: bool,
     dtype: tp.Optional[Dtype],
@@ -86,6 +86,61 @@ class TestLinenConsistency(parameterized.TestCase):
     if use_bias:
       model_nnx.bias.value = variables['params']['bias']
 
+    out_nnx = model_nnx(x)
+    out = model.apply(variables, x)
+    assert_array_equal(out, out_nnx)
+
+  @parameterized.product(
+    einsum_str=['defab,bcef->adefc', 'd...ab,bc...->ad...c'],
+    bias_shape=[None, (6, 7, 5)],
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    precision=[Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
+  )
+  def test_nnx_einsum_equivalence(
+    self,
+    einsum_str,
+    bias_shape: tp.Optional[Shape],
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+    precision: PrecisionLike,
+  ):
+    key = jax.random.key(42)
+    rngs = nnx.Rngs(42)
+    INPUT_SHAPE = (8, 6, 7, 3, 4)
+    KERNEL_SHAPE = (4, 5, 6, 7)
+
+    x = jax.random.normal(key, INPUT_SHAPE)
+    model_nnx = nnx.Einsum(
+      einsum_str,
+      KERNEL_SHAPE,
+      bias_shape,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+      rngs=rngs,
+    )
+    model = linen.Einsum(
+      KERNEL_SHAPE,
+      einsum_str,
+      use_bias=True if bias_shape is not None else False,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+    )
+
+    variables = model.init(key, x)
+    variables['params']['kernel'] = model_nnx.kernel.value
+    if bias_shape is not None:
+      variables['params']['bias'] = model_nnx.bias.value
+    out_nnx = model_nnx(x)
+    out = model.apply(variables, x)
+    assert_array_equal(out, out_nnx)
+
+    variables = model.init(key, x)
+    model_nnx.kernel.value = variables['params']['kernel']
+    if bias_shape is not None:
+      model_nnx.bias.value = variables['params']['bias']
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
     assert_array_equal(out, out_nnx)

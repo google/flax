@@ -34,14 +34,16 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import lax
+import opt_einsum
 
 from flax.experimental import nnx
 from flax.experimental.nnx.nnx import rnglib, variables
-from flax.experimental.nnx.nnx.module import Module
+from flax.experimental.nnx.nnx.module import Module, first_from
 from flax.experimental.nnx.nnx.nn import dtypes, initializers
 from flax.typing import (
   Array,
   Dtype,
+  Shape,
   Initializer,
   PrecisionLike,
   DotGeneralT,
@@ -354,6 +356,157 @@ class Linear(Module):
     if bias is not None:
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
+
+
+class Einsum(Module):
+  """An einsum transformation with learnable kernel and bias.
+
+  Example usage::
+
+    >>> from flax.experimental import nnx
+    >>> import jax.numpy as jnp
+
+    >>> layer = nnx.Einsum('abc,cde->abde', (3, 4, 5), (5, 6, 7), rngs=nnx.Rngs(0))
+    >>> assert layer.kernel.value.shape == (5, 6, 7)
+    >>> assert layer.bias.value.shape == (6, 7)
+    >>> out = layer(jnp.ones((3, 4, 5)))
+    >>> assert out.shape == (3, 4, 6, 7)
+
+  Attributes:
+    einsum_str: a string to denote the einsum equation. The equation must
+      have exactly two operands, the lhs being the input passed in, and
+      the rhs being the learnable kernel. Exactly one of ``einsum_str``
+      in the constructor argument and call argument must be not None,
+      while the other must be None.
+    kernel_shape: the shape of the kernel.
+    bias_shape: the shape of the bias. If this is None, a bias won't be used.
+    dtype: the dtype of the computation (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    precision: numerical precision of the computation see ``jax.lax.Precision``
+      for details.
+    kernel_init: initializer function for the weight matrix.
+    bias_init: initializer function for the bias.
+    rngs: rng key.
+  """
+
+  def __init__(
+    self,
+    einsum_str: str,
+    kernel_shape: Shape,
+    bias_shape: tp.Optional[Shape] = None,
+    *,
+    dtype: tp.Optional[Dtype] = None,
+    param_dtype: Dtype = jnp.float32,
+    precision: PrecisionLike = None,
+    kernel_init: Initializer = default_kernel_init,
+    bias_init: Initializer = initializers.zeros_init(),
+    rngs: rnglib.Rngs,
+  ):
+    einsum_str = einsum_str.replace(' ', '')
+    self._einsum_str_check(einsum_str)
+
+    kernel_key = rngs.params()
+    self.kernel = nnx.Param(kernel_init(kernel_key, kernel_shape, param_dtype))
+
+    if bias_shape is not None:
+      bias_key = rngs.params()
+      self.bias = nnx.Param(bias_init(bias_key, bias_shape, param_dtype))
+    else:
+      self.bias = None
+
+    self.einsum_str = einsum_str
+    self.kernel_shape = kernel_shape
+    self.bias_shape = bias_shape
+    self.dtype = dtype
+    self.param_dtype = param_dtype
+    self.precision = precision
+    self.kernel_init = kernel_init
+    self.bias_init = bias_init
+
+  def __call__(
+    self, inputs: Array, einsum_str: tp.Optional[str] = None
+  ) -> Array:
+    """Applies a linear transformation to the inputs along the last dimension.
+
+    Args:
+      inputs: The nd-array to be transformed.
+      einsum_str: a string to denote the einsum equation. The equation must
+        have exactly two operands, the lhs being the input passed in, and
+        the rhs being the learnable kernel. Exactly one of ``einsum_str``
+        in the constructor argument and call argument must be not None,
+        while the other must be None.
+
+    Returns:
+      The transformed input.
+    """
+    einsum_str = first_from(
+      einsum_str,
+      self.einsum_str,
+      error_msg="""No `einsum_str` argument was provided to Einsum
+        as either a __call__ argument, or class attribute.""",
+    )
+    einsum_str = einsum_str.replace(' ', '')
+    self._einsum_str_check(einsum_str)
+
+    inputs, kernel, bias = dtypes.promote_dtype(
+      inputs,
+      self.kernel.value,
+      self.bias.value if self.bias is not None else self.bias,
+      dtype=self.dtype,
+    )
+
+    y = jnp.einsum(einsum_str, inputs, kernel, precision=self.precision)
+
+    if bias is not None:
+      broadcasted_bias_shape = self._infer_broadcasted_bias_shape(
+        einsum_str, inputs, kernel
+      )
+      y += jnp.reshape(bias, broadcasted_bias_shape)
+    return y
+
+  def _infer_broadcasted_bias_shape(
+    self, einsum_str: str, lhs: Array, rhs: Array
+  ):
+    """Infer the broadcasted bias shape given the ``einsum_str``, ``lhs``
+    and ``rhs`` arrays. This is needed reshaping the bias and it to the
+    output during forward inference.
+
+    This function first replaces all ellipses with actual letter characters,
+    then computes the broadcasted bias shape by checking to see which axes in
+    the rhs array remain in the resulting array after einsumming. These axes
+    are the embedding/feature dimensions, and all other axes in rhs are
+    reduction axes.
+    """
+    # More details on the parsing function: https://github.com/dgasmith/opt_einsum/blob/c826bb7df16f470a69f7bf90598fc27586209d11/opt_einsum/parser.py#L246
+    # returns the einsum string representation of the operands and result, with
+    # ellipsis replaced by actual letter characters
+    operands_str, result_str, _ = opt_einsum.parser.parse_einsum_input(
+      (einsum_str, lhs, rhs)
+    )
+
+    # rhs_dict is a dict{character:index} mapping that maps every character in
+    # the rhs einsum string representation to its corresponding index position in the string
+    rhs_dict = {c: i for i, c in enumerate(operands_str.split(',')[1])}
+    assert len(rhs_dict) == len(self.kernel_shape)
+
+    broadcasted_bias_shape = [1] * len(result_str)
+    for i, c in enumerate(result_str):
+      if c in rhs_dict:
+        broadcasted_bias_shape[i] = self.kernel_shape[rhs_dict[c]]
+
+    return broadcasted_bias_shape
+
+  def _einsum_str_check(self, einsum_str):
+    if '->' not in einsum_str:
+      raise ValueError(
+        '`einsum_str` equation must be explicit and include "->".'
+      )
+    if einsum_str.count(',') != 1:
+      raise ValueError(
+        '`einsum_str` equation must have exactly two operands and '
+        'therefore, exactly one comma character, instead of '
+        f'{einsum_str.count(",")}'
+      )
 
 
 class Conv(Module):

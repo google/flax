@@ -65,6 +65,7 @@ from .nnx.nn.linear import Conv as Conv
 from .nnx.nn.linear import Embed as Embed
 from .nnx.nn.linear import Linear as Linear
 from .nnx.nn.linear import LinearGeneral as LinearGeneral
+from .nnx.nn.linear import Einsum as Einsum
 from .nnx.nn.normalization import BatchNorm as BatchNorm
 from .nnx.nn.normalization import LayerNorm as LayerNorm
 from .nnx.nn.normalization import RMSNorm as RMSNorm
