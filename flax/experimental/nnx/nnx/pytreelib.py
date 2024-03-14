@@ -80,12 +80,6 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
 
   if not tp.TYPE_CHECKING:
 
-    def __getattribute__(self, name: str) -> tp.Any:
-      value = object.__getattribute__(self, name)
-      if isinstance(value, variables.Variable):
-        return value.raw_value
-      return value
-
     def __setattr__(self, name: str, value: tp.Any) -> None:
       self._setattr(name, value)
 
@@ -103,29 +97,14 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         f'{type(self)} is immutable, trying to update field {name}'
       )
 
-    if name in vars_dict:
-      if isinstance(variable := vars_dict[name], variables.Variable):
-        if isinstance(value, variables.Variable):
-          if type(value) != type(variable):
-            raise ValueError(
-              f"Trying to assign a Variable of type '{type(value).__name__}' "
-              f"to the Module attribute '{name}' of a different type "
-              f"'{type(variable).__name__}'."
-            )
-          vars_dict[name] = value
-        else:
-          variable.value = value
-      else:
-        vars_dict[name] = value
-    else:
-      if isinstance(value, (jax.Array, np.ndarray, State)):
-        raise ValueError(
-          f"Trying to assign a '{type(value).__name__}' to the Module"
-          f" attribute '{name}'. This is not supported. Non-hashable "
-          'objects are not valid static state in JAX. Please wrap '
-          'the value in a Variable type instead.'
-        )
-      vars_dict[name] = value
+    if isinstance(value, (jax.Array, np.ndarray, State)):
+      raise ValueError(
+        f"Trying to assign a '{type(value).__name__}' to the Module"
+        f" attribute '{name}'. This is not supported. Non-hashable "
+        'objects are not valid static state in JAX. Please wrap '
+        'the value in a Variable type instead.'
+      )
+    vars_dict[name] = value
 
   def __init_subclass__(cls, mutable: bool = False):
     super().__init_subclass__()

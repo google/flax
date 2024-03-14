@@ -165,16 +165,16 @@ class TrainState(pytreelib.Pytree, tp.Generic[M]):
     states = (state, *states)
 
     _states = (
-      getattr(self, state) if isinstance(state, str) else state
+      getattr(self, state).value if isinstance(state, str) else state.value
       for state in states
     )
 
     return self.graphdef.apply(*_states)
 
   def apply_gradients(self, grads: State, **kwargs) -> 'TrainState[M]':
-    updates, opt_state = self.tx.update(grads, self.opt_state, self.params)
+    updates, opt_state = self.tx.update(grads, self.opt_state.value, self.params.value)
     params = optax.apply_updates(self.params, updates)  # type: ignore
-    step = self.step + 1
+    step = self.step.replace(value=self.step.value + 1)
     return self.replace(
       params=params,
       opt_state=opt_state,

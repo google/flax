@@ -36,11 +36,11 @@ class TestPytree:
 
     pytree = jax.tree_map(lambda x: x * 2, pytree)
     assert pytree.x == 2
-    assert pytree.y == 6
+    assert pytree.y.value == 6
 
     pytree = pytree.replace(x=3)
     assert pytree.x == 3
-    assert pytree.y == 6
+    assert pytree.y.value == 6
 
     with pytest.raises(
       AttributeError, match='is immutable, trying to update field'
@@ -60,11 +60,11 @@ class TestPytree:
 
     pytree = jax.tree_map(lambda x: x * 2, pytree)
     assert pytree.x == 2
-    assert pytree.y == 6
+    assert pytree.y.value == 6
 
     pytree = pytree.replace(x=3)
     assert pytree.x == 3
-    assert pytree.y == 6
+    assert pytree.y.value == 6
 
     with pytest.raises(AttributeError, match='cannot assign to field'):
       pytree.x = 4
@@ -79,7 +79,7 @@ class TestPytree:
 
     @jax.jit
     def f(m: Foo):
-      return m.a + m.b
+      return m.a.value + m.b
 
     assert f(module) == 3
 
@@ -101,16 +101,16 @@ class TestPytree:
 
     assert state_dict == {
       'bar': {
-        'b': 2,
+        'b': nnx.Variable(2),
       },
-      'c': 3,
+      'c': nnx.TreeNode(3),
     }
 
-    state_dict['bar']['b'] = 5
+    state_dict['bar']['b'] = nnx.Variable(5)
 
     foo = serialization.from_state_dict(foo, state_dict)
 
-    assert foo.bar.b == 5
+    assert foo.bar.b == nnx.Variable(5)
 
     del state_dict['bar']['b']
 
@@ -220,11 +220,11 @@ class TestMutablePytree:
 
     pytree = jax.tree_map(lambda x: x * 2, pytree)
     assert pytree.x == 2
-    assert pytree.y == 6
+    assert pytree.y.value == 6
 
     pytree = pytree.replace(x=3)
     assert pytree.x == 3
-    assert pytree.y == 6
+    assert pytree.y.value == 6
 
     # test mutation
     pytree.x = 4
@@ -254,11 +254,11 @@ class TestMutablePytree:
 
     pytree = jax.tree_map(lambda x: x * 2, pytree)
     assert pytree.x == 2
-    assert pytree.y == 6
+    assert pytree.y.value == 6
 
     pytree = pytree.replace(x=3)
     assert pytree.x == 3
-    assert pytree.y == 6
+    assert pytree.y.value == 6
 
     # test mutation
     pytree.x = 4
