@@ -37,6 +37,7 @@ import jax
 import jax.tree_util as jtu
 
 from flax.experimental.nnx.nnx import reprlib, tracers
+from flax.experimental import nnx
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -243,6 +244,12 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars_dict = vars(self)
     vars_dict.clear()
     vars_dict.update(vars(other))
+
+  def copy_from_def(self, other: 'nnx.graph_utils.VariableDef', /, value: A):
+    _trace_state = self._trace_state
+    variable_vars = vars(self)
+    variable_vars.clear()
+    variable_vars.update(other.metadata, _trace_state=_trace_state, raw_value=value)
 
   @property
   def value(self) -> A:

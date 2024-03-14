@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 import jax
 import pytest
 
@@ -24,7 +25,7 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    state, static = nnx.graph_utils.graph_flatten(g)
+    state, static, _ = nnx.graph_utils.graph_flatten(g)
 
     state['0']['b'].raw_value = 2
     state['3'].raw_value = 4
@@ -33,7 +34,7 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    state, static = nnx.graph_utils.graph_flatten(g)
+    state, static, _ = nnx.graph_utils.graph_flatten(g)
     g = static.merge(state)
 
     assert g[0] is g[2]
@@ -42,7 +43,7 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    state, static = nnx.graph_utils.graph_flatten(g)
+    state, static, _ = nnx.graph_utils.graph_flatten(g)
     g = static.merge(nnx.State({}))
 
     assert g[0] is g[2]
@@ -53,7 +54,7 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    state, static = nnx.graph_utils.graph_flatten(g)
+    state, static, _ = nnx.graph_utils.graph_flatten(g)
 
     state['0']['b'].raw_value = 3
     nnx.graph_utils.graph_update_dynamic(g, state)
@@ -109,7 +110,7 @@ class TestGraphUtils:
       nnx.BatchNorm(2, rngs=rngs),
     ]
 
-    state, static = nnx.graph_utils.graph_flatten(ls)
+    state, static, _ = nnx.graph_utils.graph_flatten(ls)
 
     assert state['0']['kernel'].raw_value.shape == (2, 2)
     assert state['0']['bias'].raw_value.shape == (2,)
@@ -122,7 +123,7 @@ class TestGraphUtils:
     v = nnx.Param(1)
     g = [v, v]
 
-    state, static = nnx.graph_utils.graph_flatten(g)
+    state, static, _ = nnx.graph_utils.graph_flatten(g)
 
     assert len(state.flat_state()) == 1
 
@@ -140,7 +141,7 @@ class TestGraphUtils:
         self.baz.kernel = self.bar.kernel
 
     node = Foo(rngs=nnx.Rngs(0))
-    state, static = nnx.graph_utils.graph_flatten(node)
+    state, static, _ = nnx.graph_utils.graph_flatten(node)
 
     assert len(state.flat_state()) == 3  # 2 bias + 1 kernel
 
@@ -277,3 +278,122 @@ class TestGraphUtils:
     assert m2.tree.b == 'a'
     assert m2.tree.a is not m.tree.a
     assert m2.tree is not m.tree
+
+  def test_cached_unflatten(self):
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.a = nnx.Linear(2, 2, rngs=rngs)
+        self.b = nnx.BatchNorm(2, rngs=rngs)
+
+    def f(m: Foo):
+      m.a, m.b = m.b, m.a
+
+    m = Foo(rngs=nnx.Rngs(0))
+    a = m.a
+    b = m.b
+
+    static: nnx.graph_utils.GraphDef[Foo]
+    state, static, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def f_pure(static: nnx.graph_utils.GraphDef[Foo], state):
+      m, idx_out_ref_in = nnx.graph_utils.graph_unflatten(static, state)
+      f(m)
+      state, static, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
+      idx_out_idx_in = nnx.graph_utils.compose_mapping(
+        idx_out_ref_in, ref_in_idx_in
+      )
+      static_out = nnx.graph_utils.Static((static, idx_out_idx_in))
+      return state, static_out
+
+    static_out: nnx.graph_utils.Static
+    state, static_out = f_pure(static, state)
+    idx_out_idx_in: dict[int, int]
+    static, idx_out_idx_in = static_out.value
+    idx_in_ref_out = nnx.graph_utils.compose_mapping_reversed(
+      ref_out_idx_out, idx_out_idx_in
+    )
+    m2, _ = nnx.graph_utils.graph_unflatten(
+      static, state, ref_cache=idx_in_ref_out
+    )
+    assert m2 is m
+    assert m2.a is b
+    assert m2.b is a
+
+  def test_cached_unflatten_swap_variables(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.a = nnx.Param(1)
+        self.b = nnx.Param(2)
+
+    def f(m: Foo):
+      m.a, m.b = m.b, m.a
+
+    m = Foo()
+    a = m.a
+    b = m.b
+
+    static: nnx.graph_utils.GraphDef[Foo]
+    state, static, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def f_pure(static: nnx.graph_utils.GraphDef[Foo], state):
+      m, idx_out_ref_in = nnx.graph_utils.graph_unflatten(static, state)
+      f(m)
+      state, static, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
+      idx_out_idx_in = nnx.graph_utils.compose_mapping(
+        idx_out_ref_in, ref_in_idx_in
+      )
+      static_out = nnx.graph_utils.Static((static, idx_out_idx_in))
+      return state, static_out
+
+    static_out: nnx.graph_utils.Static
+    state, static_out = f_pure(static, state)
+    idx_out_idx_in: dict[int, int]
+    static, idx_out_idx_in = static_out.value
+    idx_in_ref_out = nnx.graph_utils.compose_mapping_reversed(
+      ref_out_idx_out, idx_out_idx_in
+    )
+    m2, _ = nnx.graph_utils.graph_unflatten(
+      static, state, ref_cache=idx_in_ref_out
+    )
+    assert m2 is m
+    assert m2.a is b
+    assert m2.b is a
+
+  def test_cached_unflatten_add_self_reference(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.ref = None
+
+    def f(m: Foo):
+      m.ref = m
+
+    m = Foo()
+
+    static: nnx.graph_utils.GraphDef[Foo]
+    state, static, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def f_pure(static: nnx.graph_utils.GraphDef[Foo], state):
+      m, idx_out_ref_in = nnx.graph_utils.graph_unflatten(static, state)
+      f(m)
+      state, static, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
+      idx_out_idx_in = nnx.graph_utils.compose_mapping(
+        idx_out_ref_in, ref_in_idx_in
+      )
+      static_out = nnx.graph_utils.Static((static, idx_out_idx_in))
+      return state, static_out
+
+    static_out: nnx.graph_utils.Static
+    state, static_out = f_pure(static, state)
+    idx_out_idx_in: dict[int, int]
+    static, idx_out_idx_in = static_out.value
+    idx_in_ref_out = nnx.graph_utils.compose_mapping_reversed(
+      ref_out_idx_out, idx_out_idx_in
+    )
+    m2, _ = nnx.graph_utils.graph_unflatten(
+      static, state, ref_cache=idx_in_ref_out
+    )
+    assert m2 is m
+    assert m2.ref is m2
