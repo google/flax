@@ -220,7 +220,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       module.update(state, *states)
 
     However, thanks to dead code elimination the resulting constructor will only
-    initialize the subset of ``Variable``s that were part of the given state(s).
+    initialize the subset of ``Variable``'s that were part of the given state(s).
 
     Example::
 
@@ -478,7 +478,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       >>> block.dropout.deterministic, block.batch_norm.use_running_average
       (True, True)
 
-    ``Filter``s can be used to set the attributes of specific Modules::
+    ``Filter``'s can be used to set the attributes of specific Modules::
 
       >>> block = Block(2, 5, rngs=nnx.Rngs(0))
       >>> block.set_attributes(nnx.Dropout, deterministic=True, use_running_average=True)
@@ -610,5 +610,6 @@ def first_from(*args: tp.Optional[A], error_msg: str) -> A:
 def merge(
   state_and_def: tuple[tpe.Unpack[tuple[State, ...]], GraphDef[M]],
 ) -> M:
+  # TODO: add docstring of example usage
   *states, graphdef = state_and_def
   return graphdef.merge(*states)
