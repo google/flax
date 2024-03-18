@@ -1893,9 +1893,10 @@ class Module(ModuleBase):
     ``make_rng`` returns a new RNG key, while still guaranteeing full
     reproducibility.
 
-    NOTE: if an invalid name is passed (i.e. no RNG key was passed by
-    the user in ``.init`` or ``.apply`` for this name), then ``name``
-    will default to ``'params'``.
+    .. note::
+      If an invalid name is passed (i.e. no RNG key was passed by
+      the user in ``.init`` or ``.apply`` for this name), then ``name``
+      will default to ``'params'``.
 
     TODO: Link to Flax RNG design note.
 
