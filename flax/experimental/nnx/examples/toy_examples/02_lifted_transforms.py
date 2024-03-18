@@ -17,6 +17,7 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+import optax
 
 from flax.experimental import nnx
 
@@ -58,10 +59,11 @@ class MLP(nnx.Module):
 
 
 model = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0))
-
+tx = optax.sgd(1e-3)
+optimizer = nnx.Optimizer(model, tx)
 
 @nnx.jit
-def train_step(model: MLP, batch):
+def train_step(optimizer: nnx.Optimizer, batch):
   x, y = batch
 
   def loss_fn(model: MLP):
@@ -69,37 +71,35 @@ def train_step(model: MLP, batch):
     return jnp.mean((y - y_pred) ** 2)
 
   #                                   |--default--|
-  grad: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
-  # sdg update
-  model.update(
-    jax.tree_map(lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grad)
-  )
+  grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(optimizer.model)
+  # sgd update
+  optimizer.update(grads=grads)
 
   # no return!!!
 
 
 @nnx.jit
-def test_step(model: MLP, batch):
+def test_step(optimizer: nnx.Optimizer, batch):
   x, y = batch
-  y_pred = model(x)
+  y_pred = optimizer.model(x)
   loss = jnp.mean((y - y_pred) ** 2)
   return {'loss': loss}
 
 
 total_steps = 10_000
 for step, batch in enumerate(dataset(32)):
-  train_step(model, batch)
+  train_step(optimizer, batch)
 
   if step % 1000 == 0:
-    logs = test_step(model, (X, Y))
+    logs = test_step(optimizer, (X, Y))
     print(f"step: {step}, loss: {logs['loss']}")
 
   if step >= total_steps - 1:
     break
 
-print('times called:', model.count.value)
+print('times called:', optimizer.model.count.value)
 
-y_pred = model(X)
+y_pred = optimizer.model(X)
 
 plt.scatter(X, Y, color='blue')
 plt.plot(X, y_pred, color='black')
