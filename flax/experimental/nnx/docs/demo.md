@@ -24,15 +24,11 @@ from flax.experimental import nnx
 
 class Block(nnx.Module):
   def __init__(self, din, dout, *, rngs):
-    self.linear = nnx.Linear(din, dout, rngs=rngs,
-                    kernel_init=nnx.with_partitioning(nnx.initializers.lecun_normal() , ('data', 'mp')))
+    self.linear = nnx.Linear(din, dout, rngs=rngs)
     self.bn = nnx.BatchNorm(dout, rngs=rngs)
 
-  def __call__(self, x, *, train: bool):
-    x = self.linear(x)
-    x = self.bn(x, use_running_average=not train)
-    x = nnx.relu(x)
-    return x
+  def __call__(self, x):
+    return nnx.relu(self.bn(self.linear(x)))
 
 
 class MLP(nnx.Module):
@@ -42,17 +38,18 @@ class MLP(nnx.Module):
     ]
     self.count = Count(0)  # stateful variables are defined as attributes
 
-  def __call__(self, x, *, train: bool):
-    self.count += 1  # in-place stateful updates
+  def __call__(self, x):
+    self.count.value += 1  # in-place stateful updates
     for block in self.blocks:
-      x = block(x, train=train)
+      x = block(x)
     return x
 
 class Count(nnx.Variable):   # custom Variable types define the "collections"
   pass
 
 model = MLP(5, 4, rngs=nnx.Rngs(0))  # no special `init` method
-y = model(jnp.ones((2, 4)), train=False)  # call methods directly
+model.set_attributes(deterministic=False, use_running_average=False)  # set flags
+y = model(jnp.ones((2, 4)))  # call methods directly
 
 print(f'{model = }'[:500] + '\n...')
 ```
@@ -75,12 +72,12 @@ print(f'{model.blocks[0].linear.kernel = }')
 # Module sharing
 model.blocks[1] = model.blocks[3]
 # Weight tying
-model.blocks[0].linear.variables.kernel = model.blocks[-1].linear.variables.kernel
+model.blocks[0].linear.kernel = model.blocks[-1].linear.kernel
 # Monkey patching
-def my_optimized_layer(x, *, train: bool): return x
+def my_optimized_layer(x): return x
 model.blocks[2] = my_optimized_layer
 
-y = model(jnp.ones((2, 4)), train=False)  # still works
+y = model(jnp.ones((2, 4)))  # still works
 print(f'{y.shape = }')
 ```
 
@@ -94,7 +91,7 @@ state, static = model.split()
 # state is a dictionary-like JAX pytree
 print(f'{state = }'[:500] + '\n...')
 
-# static is also a JAX pytree, but containing no data, just metadata
+# static is also a JAX pytree, but just metadata
 print(f'\n{static = }'[:300] + '\n...')
 ```
 
@@ -106,7 +103,7 @@ state, static = model.split()
 @jax.jit
 def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):
   model = static.merge(state)
-  y = model(x, train=True)
+  y = model(x)
   state, _ = model.split()
   return y, state
 
@@ -116,7 +113,7 @@ y, state = forward(static,state, x)
 model.update(state)
 
 print(f'{y.shape = }')
-print(f'{model.count = }')
+print(f'{model.count.value = }')
 ```
 
 ```{code-cell} ipython3
@@ -140,31 +137,32 @@ print(f'{model.count = }')
 
 ```{code-cell} ipython3
 class Parent(nnx.Module):
-
     def __init__(self, model: MLP):
         self.model = model
 
-    def __call__(self, x, *, train: bool):
-
+    def __call__(self, x):
         params, batch_stats, counts, static = self.model.split(nnx.Param, nnx.BatchStat, Count)
 
         @jax.jit
         def forward(static: nnx.GraphDef, params, batch_stats, counts, x: jax.Array):
             model = static.merge(params, batch_stats, counts)
-            y = model(x, train=True)
+            y = model(x)
             params, batch_stats, counts, _ = model.split(nnx.Param, nnx.BatchStat, Count)
             return y, params, batch_stats, counts
 
         y, params, batch_stats, counts = forward(static, params, batch_stats, counts, x)
 
         self.model.update(params, batch_stats, counts)
-
         return y
 
 parent = Parent(model)
 
-y = parent(jnp.ones((2, 4)), train=False)
+y = parent(jnp.ones((2, 4)))
 
 print(f'{y.shape = }')
-print(f'{parent.model.count = }')
+print(f'{parent.model.count.value = }')
+```
+
+```{code-cell} ipython3
+
 ```
