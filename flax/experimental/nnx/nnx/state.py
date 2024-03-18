@@ -229,25 +229,20 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
 def _state_flatten_with_keys(x: State):
   items = sorted(x._mapping.items(), key=lambda item: item[0])
   children = tuple((jtu.DictKey(key), value) for key, value in items)
-  return children, tuple(x._mapping.keys())
+  return children, tuple(key for key, _ in items)
 
 
 def _state_unflatten(
-  static: tp.Tuple[Path, ...] | None,
+  static: tp.Tuple[Path, ...],
   leaves: tp.Tuple[Variable, ...] | tuple[dict[str, Variable]],
 ):
-  return State(zip(static, leaves)) if static else State(leaves[0])
-
-
-def _state_flatten(x: State):
-  return (x._mapping,), None
+  return State(zip(static, leaves))
 
 
 jax.tree_util.register_pytree_with_keys(
   State,
   _state_flatten_with_keys,
   _state_unflatten,
-  flatten_func=_state_flatten,
 )
 
 

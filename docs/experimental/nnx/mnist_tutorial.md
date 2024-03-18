@@ -28,6 +28,7 @@ Since NNX is under active development, we recommend using the latest version fro
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
+# TODO: Fix text descriptions in this tutorial
 !pip install git+https://github.com/google/flax.git
 ```
 
@@ -92,7 +93,7 @@ class CNN(nnx.Module):
 model = CNN(rngs=nnx.Rngs(0))
 
 print(f'model = {model}'[:500] + '\n...\n')  # print a part of the model
-print(f'{model.conv1.kernel.shape = }') # inspect the shape of the kernel of the first convolutional layer
+print(f'{model.conv1.kernel.value.shape = }') # inspect the shape of the kernel of the first convolutional layer
 ```
 
 ### Run model
@@ -120,13 +121,13 @@ To track our model's performance, we'll use the [clu](https://github.com/google/
 Let's create a compound metric using clu.metrics.Collection.  This will include both an Accuracy metric for tracking how well our model classifies images, and an Average metric to monitor the average loss over each training epoch.
 
 ```{code-cell} ipython3
-from clu import metrics
-from flax import struct   # Flax pytree dataclasses
+# from clu import metrics
+# from flax import struct   # Flax pytree dataclasses
 
-@struct.dataclass
-class Metrics(metrics.Collection):
-  accuracy: metrics.Accuracy
-  loss: metrics.Average.from_output('loss')
+# @struct.dataclass
+# class Metrics(metrics.Collection):
+#   accuracy: metrics.Accuracy
+#   loss: metrics.Average.from_output('loss')
 ```
 
 ## 5. Create the `TrainState`
@@ -134,22 +135,25 @@ class Metrics(metrics.Collection):
 In Flax, a common practice is to use a dataclass to encapsulate the training state, including the step number, parameters, and optimizer state. The [`flax.training.train_state.TrainState`](https://flax.readthedocs.io/en/latest/flax.training.html#train-state) class is ideal for basic use cases, simplifying the process by allowing you to pass a single argument to functions like `train_step`.
 
 ```{code-cell} ipython3
-from flax.training import train_state  # Useful dataclass to keep train state
-import optax  
+import optax
+import dataclasses
 
-params, static = model.split(nnx.Param)
-
-class TrainState(train_state.TrainState):
-  static: nnx.GraphDef[CNN]
-  metrics: Metrics
+@dataclasses.dataclass
+class TrainState(nnx.Module):
+  optimizer: nnx.optimizer.Optimizer
+  model: nnx.Module
+  train_metrics: nnx.metrics.Metric
+  test_metrics: nnx.metrics.Metric
 
 learning_rate = 0.005
 momentum = 0.9
 
 tx = optax.adamw(learning_rate, momentum)
-state = TrainState.create(
-  apply_fn=None, params=params, tx=tx,
-  static=static, metrics=Metrics.empty()
+train_state = TrainState(
+  optimizer=nnx.optimizer.Optimizer(model=model, tx=tx),
+  model=model,
+  train_metrics=nnx.metrics.MultiMetric(accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()),
+  test_metrics=nnx.metrics.MultiMetric(accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average())
 )
 ```
 
@@ -170,18 +174,23 @@ This function takes the `state` and a data `batch` and does the following:
 
 ```{code-cell} ipython3
 @jax.jit
-def train_step(state: TrainState, batch):
+def train_step(state: nnx.State, static: nnx.GraphDef, batch):
   """Train for a single step."""
-  def loss_fn(params):
-    model = state.static.merge(params)
+  train_state = static.merge(state)
+  model_state, model_static = train_state.model.split()
+
+  def loss_fn(model_state):
+    model = model_static.merge(model_state)
     logits = model(batch['image'])
     loss = optax.softmax_cross_entropy_with_integer_labels(
         logits=logits, labels=batch['label']).mean()
-    return loss
-  grad_fn = jax.grad(loss_fn)
-  grads = grad_fn(state.params)
-  state = state.apply_gradients(grads=grads)
-  return state
+    return loss, logits
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  (loss, logits), grads = grad_fn(model_state)
+
+  train_state.train_metrics.update(values=loss, logits=logits, labels=batch['label'])
+  train_state.optimizer.apply_gradients(grads=grads)
+  return train_state.split()
 ```
 
 The [@jax.jit](https://jax.readthedocs.io/en/latest/jax.html#jax.jit) decorator
@@ -195,16 +204,13 @@ Create a separate function to calculate loss and accuracy metrics. Loss is deter
 
 ```{code-cell} ipython3
 @jax.jit
-def compute_metrics(*, state: TrainState, batch):
-  model = state.static.merge(state.params)
-  logits = model(batch['image'])
+def compute_test_metrics(*, state: nnx.State, static: nnx.GraphDef, batch):
+  train_state = static.merge(state)
+  logits = train_state.model(batch['image'])
   loss = optax.softmax_cross_entropy_with_integer_labels(
-        logits=logits, labels=batch['label']).mean()
-  metric_updates = state.metrics.single_from_model_output(
-    logits=logits, labels=batch['label'], loss=loss)
-  metrics = state.metrics.merge(metric_updates)
-  state = state.replace(metrics=metrics)
-  return state
+      logits=logits, labels=batch['label']).mean()
+  train_state.test_metrics.update(values=loss, logits=logits, labels=batch['label'])
+  return train_state.split()
 ```
 
 ## 9. Seed randomness
@@ -244,23 +250,25 @@ metrics_history = {
   'test_accuracy': []
 }
 
+state, static = train_state.split()
 for step,batch in enumerate(train_ds.as_numpy_iterator()):
   # Run optimization steps over training batches and compute batch metrics
-  state = train_step(state, batch) # get updated train state (which contains the updated parameters)
-  state = compute_metrics(state=state, batch=batch) # aggregate batch metrics
+  state, static = train_step(state, static, batch) # get updated train state (which contains the updated parameters)
 
   if (step+1) % num_steps_per_epoch == 0: # one training epoch has passed
-    for metric,value in state.metrics.compute().items(): # compute metrics
-      metrics_history[f'train_{metric}'].append(value) # record metrics
-    state = state.replace(metrics=state.metrics.empty()) # reset train_metrics for next training epoch
-
     # Compute metrics on the test set after each training epoch
-    test_state = state
     for test_batch in test_ds.as_numpy_iterator():
-      test_state = compute_metrics(state=test_state, batch=test_batch)
+      state, static = compute_test_metrics(state=state, static=static, batch=test_batch)
 
-    for metric,value in test_state.metrics.compute().items():
+    train_state = static.merge(state)
+    for metric,value in train_state.train_metrics.compute().items(): # compute metrics
+      metrics_history[f'train_{metric}'].append(value) # record metrics
+    for metric,value in train_state.test_metrics.compute().items():
       metrics_history[f'test_{metric}'].append(value)
+
+    train_state.train_metrics.reset() # reset metrics for next training epoch
+    train_state.test_metrics.reset()
+    state, static = train_state.split()
 
     print(f"train epoch: {(step+1) // num_steps_per_epoch}, "
           f"loss: {metrics_history['train_loss'][-1]}, "
@@ -298,9 +306,9 @@ Define a jitted inference function, `pred_step`, to generate predictions on the 
 
 ```{code-cell} ipython3
 @jax.jit
-def pred_step(state: TrainState, batch):
-  model = state.static.merge(state.params)
-  logits = model(test_batch['image'])
+def pred_step(state: nnx.State, static: nnx.GraphDef, batch):
+  train_state = static.merge(state)
+  logits = train_state.model(batch['image'])
   return logits.argmax(axis=1)
 ```
 
@@ -308,13 +316,13 @@ def pred_step(state: TrainState, batch):
 :outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e
 
 test_batch = test_ds.as_numpy_iterator().next()
-pred = pred_step(state, test_batch)
+pred = pred_step(state, static, test_batch)
 
 fig, axs = plt.subplots(5, 5, figsize=(12, 12))
 for i, ax in enumerate(axs.flatten()):
-    ax.imshow(test_batch['image'][i, ..., 0], cmap='gray')
-    ax.set_title(f"label={pred[i]}")
-    ax.axis('off')
+  ax.imshow(test_batch['image'][i, ..., 0], cmap='gray')
+  ax.set_title(f"label={pred[i]}")
+  ax.axis('off')
 ```
 
 Congratulations! You made it to the end of the annotated MNIST example.
