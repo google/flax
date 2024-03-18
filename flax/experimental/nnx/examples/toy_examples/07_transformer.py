@@ -377,7 +377,7 @@ class Decoder(nnx.Module):
         )
       )
     else:
-      self.layers = nnx.Sequence(
+      self.layers = nnx.List(
         DecoderBlock(cfg, rngs=rngs) for _ in range(cfg.layers)
       )
 
@@ -406,7 +406,7 @@ class Decoder(nnx.Module):
       )
       self.layers.update(state)
     else:
-      assert isinstance(self.layers, nnx.Sequence)
+      assert isinstance(self.layers, nnx.List)
       for decoder_block in self.layers:
         x = decoder_block(cfg, x, rngs=rngs)
 

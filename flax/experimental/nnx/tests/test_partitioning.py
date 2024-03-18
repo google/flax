@@ -22,7 +22,7 @@ from flax.experimental import nnx
 class TestPartitioning:
   def test_partition(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1), nnx.BatchStat(2)]),
+      a=nnx.List([nnx.Param(1), nnx.BatchStat(2)]),
       b=nnx.Param(2),
       c=100,
     )
@@ -48,7 +48,7 @@ class TestPartitioning:
 
   def test_complete_partitioning(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
+      a=nnx.List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
       b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
@@ -57,7 +57,7 @@ class TestPartitioning:
 
   def test_complete_partitioning_plus_ellipsis(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
+      a=nnx.List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
       b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
@@ -66,7 +66,7 @@ class TestPartitioning:
 
   def test_inclomplete_partition_error(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
+      a=nnx.List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
       b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
@@ -77,7 +77,7 @@ class TestPartitioning:
 
   def test_ellipsis_not_last_error(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
+      a=nnx.List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
       b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
@@ -88,7 +88,7 @@ class TestPartitioning:
 
   def test_update_from(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1), nnx.BatchStat(3)]),
+      a=nnx.List([nnx.Param(1), nnx.BatchStat(3)]),
       b=nnx.Param(2),
       c=100,
     )
@@ -105,7 +105,7 @@ class TestPartitioning:
 
   def test_update_from_with_array_leaf(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1), nnx.BatchStat(3)]),
+      a=nnx.List([nnx.Param(1), nnx.BatchStat(3)]),
       b=nnx.Param(2),
       c=nnx.Variable(jax.numpy.array(100)),
     )
@@ -122,7 +122,7 @@ class TestPartitioning:
 
   def test_grad_example(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1.0), nnx.BatchStat(-10)]),
+      a=nnx.List([nnx.Param(1.0), nnx.BatchStat(-10)]),
       b=nnx.Param(2.0),
       c=100,
     )
@@ -142,7 +142,7 @@ class TestPartitioning:
 
   def test_get_paritition(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(10.0), nnx.Param(20.0)]),
+      a=nnx.List([nnx.Param(10.0), nnx.Param(20.0)]),
       b=nnx.Param(10.0),
       c=7,
       d=5.0,

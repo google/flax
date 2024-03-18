@@ -514,7 +514,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
   def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
     super().__init_subclass__()
 
-    graph_utils.register_mutable_node_type(
+    graph_utils.register_graph_node_type(
       type=cls,
       flatten=_module_graph_flatten,
       set_key=_module_graph_set_key,

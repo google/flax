@@ -47,12 +47,12 @@ M = tp.TypeVar('M', bound=Module)
 
 class Dict(Module, tp.Mapping[str, A]):
   @tp.overload
-  def __init__(self, __iterable: tp.Iterable[tp.Tuple[str, A]]):
+  def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /):
     ...
 
   @tp.overload
   def __init__(
-    self, __mapping: tp.Optional[tp.Mapping[str, A]] = None, **kwargs: A
+    self, mapping: tp.Optional[tp.Mapping[str, A]] = None, /, **kwargs: A
   ):
     ...
 
@@ -79,10 +79,10 @@ class Dict(Module, tp.Mapping[str, A]):
     return len(vars(self))
 
 
-class Sequence(Module, tp.Generic[A]):
-  def __init__(self, layers: tp.Iterable[A]):
+class List(Module, tp.Generic[A]):
+  def __init__(self, elems: tp.Iterable[A], /):
     i = 0
-    for i, value in enumerate(layers):
+    for i, value in enumerate(elems):
       setattr(self, str(i), value)
     self._length = i + 1
 
@@ -103,6 +103,7 @@ class Sequence(Module, tp.Generic[A]):
   def __len__(self) -> int:
     return self._length
 
+class Sequential(List):
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
     output: tp.Any = None
 

@@ -132,7 +132,7 @@ class TestModule:
     r1 = nnx.Variable(1)
     r2 = nnx.Variable(2)
 
-    m = m0 = nnx.Dict({'a': nnx.Sequence([r1, r2]), 'b': r1})
+    m = m0 = nnx.Dict({'a': nnx.List([r1, r2]), 'b': r1})
 
     @jax.jit
     def f(state: nnx.State, graphdef: nnx.GraphDef[nnx.Dict[Any]]):
@@ -205,7 +205,7 @@ class TestModule:
     v1 = 3
     m = nnx.Dict(
       {
-        'a': nnx.Sequence([r1, r2, v1]),
+        'a': nnx.List([r1, r2, v1]),
         'b': nnx.Dict({'c': r1, 'd': r2}),
       }
     )
@@ -226,14 +226,14 @@ class TestModule:
     ):
       m = nnx.Dict(
         {
-          'a': nnx.Sequence([r1, r2, v1]),
+          'a': nnx.List([r1, r2, v1]),
           'b': nnx.Dict({'c': r1, 'd': r2}),
         }
       )
 
   def test_clone(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(1), nnx.Param(2), 3]),
+      a=nnx.List([nnx.Param(1), nnx.Param(2), 3]),
       b=nnx.Dict(c=nnx.Param(1), d=nnx.Param(2)),
     )
 
