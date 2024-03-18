@@ -24,6 +24,50 @@ vNext
 -
 -
 
+0.8.2
+-----
+- fixed rng guide outputs by @chiamp in https://github.com/google/flax/pull/3685
+- enforce mask kwarg in norm layers by @chiamp in https://github.com/google/flax/pull/3663
+- added kwargs to self.param and self.variable by @chiamp in https://github.com/google/flax/pull/3675
+- added nnx normalization tests by @chiamp in https://github.com/google/flax/pull/3689
+- added NNX init_cache docstring example by @chiamp in https://github.com/google/flax/pull/3688
+- added nnx attention equivalence test by @chiamp in https://github.com/google/flax/pull/3687
+- Fix bug that assumed frozen-dict keys were strings. by @copybara-service in https://github.com/google/flax/pull/3692
+- added nnx rmsnorm by @chiamp in https://github.com/google/flax/pull/3691
+- updated nnx compute_stats by @chiamp in https://github.com/google/flax/pull/3693
+- fixed intercept_methods docstring by @chiamp in https://github.com/google/flax/pull/3694
+- [nnx] Add Sphinx Docs by @cgarciae in https://github.com/google/flax/pull/3678
+- Fix pointless docstring example of nn.checkpoint / nn.remat. by @levskaya in https://github.com/google/flax/pull/3703
+- added default params rng to .apply by @chiamp in https://github.com/google/flax/pull/3698
+- [nnx] add partial_init by @cgarciae in https://github.com/google/flax/pull/3674
+- make make_rng default to 'params' by @chiamp in https://github.com/google/flax/pull/3699
+- Add SimpleCell. by @carlosgmartin in https://github.com/google/flax/pull/3697
+- fix Module.module_paths docstring by @cgarciae in https://github.com/google/flax/pull/3709
+- Guarantee the latest JAX version on CI by @cgarciae in https://github.com/google/flax/pull/3705
+- Replace deprecated API `jax.tree_map` by @copybara-service in https://github.com/google/flax/pull/3715
+- Use `jax.tree_util.tree_map` instead of deprecated `jax.tree_map`. by @copybara-service in https://github.com/google/flax/pull/3714
+- [nnx] simplify readme by @cgarciae in https://github.com/google/flax/pull/3707
+- [nnx] add demo.ipynb by @cgarciae in https://github.com/google/flax/pull/3680
+- Fix Tabulate's compute_flops by @cgarciae in https://github.com/google/flax/pull/3721
+- [nnx] simplify TraceState by @cgarciae in https://github.com/google/flax/pull/3724
+- Add broadcast of `strides` and `kernel_dilation` to `nn.ConvTranspose` by @IvyZX in https://github.com/google/flax/pull/3731
+- [nnx] Fix State.__sub__ by @cgarciae in https://github.com/google/flax/pull/3704
+- [nnx] always fold_in on fork + new ForkedKeys return type by @cgarciae in https://github.com/google/flax/pull/3722
+- [nnx] explicit Variables by @cgarciae in https://github.com/google/flax/pull/3720
+- Improves fingerprint definition for Modules in nn.jit. by @copybara-service in https://github.com/google/flax/pull/3736
+- Flax: avoid key reuse in tests by @copybara-service in https://github.com/google/flax/pull/3740
+- added Einsum layer by @chiamp in https://github.com/google/flax/pull/3710
+- nn.jit: automatic fingerprint definition for dataclass attributes by @cgarciae in https://github.com/google/flax/pull/3737
+- [NVIDIA] Use custom grad accumulation for FP8 params by @kaixih in https://github.com/google/flax/pull/3623
+- removed nnx dataclass by @chiamp in https://github.com/google/flax/pull/3742
+- [nnx] cleanup graph_utils by @cgarciae in https://github.com/google/flax/pull/3728
+- Fix doctest and unbreak head by @IvyZX in https://github.com/google/flax/pull/3753
+- [nnx] add pytree support by @cgarciae in https://github.com/google/flax/pull/3732
+- fixed intercept_methods docstring by @chiamp in https://github.com/google/flax/pull/3752
+- Add ConvLSTMCell to docs. by @carlosgmartin in https://github.com/google/flax/pull/3712
+- [nnx] remove flagslib by @cgarciae in https://github.com/google/flax/pull/3733
+- Fix tests after applying JAX key-reuse checker. See: by @copybara-service in https://github.com/google/flax/pull/3748
+
 0.8.1
 -----
 - Added default collection in `make_rng`.
