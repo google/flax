@@ -292,7 +292,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
   def split(
     self: M, *filters: filterlib.Filter
   ) -> tuple[State, tpe.Unpack[tuple[State, ...]], GraphDef[M]]:
-    state, graphdef = graph_utils.graph_flatten(self)
+    state, graphdef, _ = graph_utils.graph_flatten(self)
 
     if len(filters) == 0:
       states = (state,)
@@ -520,6 +520,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       set_key=_module_graph_set_key,
       pop_key=_module_graph_pop_key,
       create_empty=_module_graph_create_empty,
+      clear=_module_graph_clear,
     )
 
     if experimental_pytree:
@@ -588,6 +589,12 @@ def _module_graph_create_empty(cls: tp.Type[M]) -> M:
   module = object.__new__(cls)
   vars(module).update(_module__state=ModuleState())
   return module
+
+def _module_graph_clear(module: Module, cls: tp.Type[M]):
+  module_state = module._module__state
+  module_vars = vars(module)
+  module_vars.clear()
+  module_vars['_module__state'] = module_state
 
 
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:

@@ -18,6 +18,9 @@ import threading
 import typing as tp
 from abc import ABC, abstractmethod
 
+A = tp.TypeVar('A')
+B = tp.TypeVar('B')
+
 
 @dataclasses.dataclass
 class ReprContext(threading.local):
@@ -106,3 +109,10 @@ def get_repr(obj: Representable) -> str:
   )
 
   return f'{type_repr}{config.start}{elems}{config.end}'
+
+class MappingReprMixin(tp.Mapping[A, B]):
+  def __nnx_repr__(self):
+    yield Object(type='', value_sep=': ', start='{', end='}')
+
+    for key, value in self.items():
+      yield Attr(repr(key), value)
