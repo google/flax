@@ -152,7 +152,8 @@ def dot_product_attention(
   https://arxiv.org/abs/1706.03762. It calculates the attention weights given
   query and key and combines the values using the attention weights.
 
-  Note: query, key, value needn't have any batch dimensions.
+  .. note::
+    ``query``, ``key``, ``value`` needn't have any batch dimensions.
 
   Args:
     query: queries for calculating attention with shape of ``[batch..., q_length,

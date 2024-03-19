@@ -229,8 +229,9 @@ class Cursor(Generic[A]):
     """Create and return a copy of the original object with accumulated changes.
     This method is to be called after making changes to the Cursor object.
 
-    NOTE: The new object is built bottom-up, the changes will be first applied
-    to the leaf nodes, and then its parent, all the way up to the root.
+    .. note::
+      The new object is built bottom-up, the changes will be first applied
+      to the leaf nodes, and then its parent, all the way up to the root.
 
     Example::
 
@@ -300,19 +301,18 @@ class Cursor(Generic[A]):
     - The output is the new value (either modified by the ``update_fn`` or same as the
       input value if the condition wasn't fulfilled)
 
-    NOTES:
-
-    - If the ``update_fn`` returns a modified value, this method will not recurse any further
-      down that branch to record changes. For example, if we intend to replace an attribute that points
-      to a dictionary with an int, we don't need to look for further changes inside the dictionary,
-      since the dictionary will be replaced anyways.
-    - The ``is`` operator is used to determine whether the return value is modified (by comparing it
-      to the input value). Therefore if the ``update_fn`` modifies a mutable container (e.g. lists,
-      dicts, etc.) and returns the same container, ``.apply_update`` will treat the returned value as
-      unmodified as it contains the same ``id``. To avoid this, return a copy of the modified value.
-    - ``.apply_update`` WILL NOT call the ``update_fn`` to the value at the top-most level of
-      the pytree (i.e. the root node). The ``update_fn`` will first be called on the root node's
-      children, and then the pytree traversal will continue recursively from there.
+    .. note::
+      - If the ``update_fn`` returns a modified value, this method will not recurse any further
+        down that branch to record changes. For example, if we intend to replace an attribute that points
+        to a dictionary with an int, we don't need to look for further changes inside the dictionary,
+        since the dictionary will be replaced anyways.
+      - The ``is`` operator is used to determine whether the return value is modified (by comparing it
+        to the input value). Therefore if the ``update_fn`` modifies a mutable container (e.g. lists,
+        dicts, etc.) and returns the same container, ``.apply_update`` will treat the returned value as
+        unmodified as it contains the same ``id``. To avoid this, return a copy of the modified value.
+      - ``.apply_update`` WILL NOT call the ``update_fn`` to the value at the top-most level of
+        the pytree (i.e. the root node). The ``update_fn`` will first be called on the root node's
+        children, and then the pytree traversal will continue recursively from there.
 
     Example::
 
@@ -396,13 +396,12 @@ class Cursor(Generic[A]):
     error because the user should always expect this method to return the only object whose
     corresponding key path and value fulfill the condition of the ``cond_fn``.
 
-    NOTES:
-
-    - If the ``cond_fn`` evaluates to True at a particular key path, this method will not recurse
-      any further down that branch; i.e. this method will find and return the "earliest" child node
-      that fulfills the condition in ``cond_fn`` in a particular key path
-    - ``.find`` WILL NOT search the the value at the top-most level of the pytree (i.e. the root
-      node). The ``cond_fn`` will be evaluated recursively, starting at the root node's children.
+    .. note::
+      - If the ``cond_fn`` evaluates to True at a particular key path, this method will not recurse
+        any further down that branch; i.e. this method will find and return the "earliest" child node
+        that fulfills the condition in ``cond_fn`` in a particular key path
+      - ``.find`` WILL NOT search the the value at the top-most level of the pytree (i.e. the root
+        node). The ``cond_fn`` will be evaluated recursively, starting at the root node's children.
 
     Example::
 
@@ -485,13 +484,12 @@ class Cursor(Generic[A]):
       by ``'/'``) and value at that current key path
     - The output is a boolean, denoting whether to return the child Cursor object at this path
 
-    NOTES:
-
-    - If the ``cond_fn`` evaluates to True at a particular key path, this method will not recurse
-      any further down that branch; i.e. this method will find and return the "earliest" child nodes
-      that fulfill the condition in ``cond_fn`` in a particular key path
-    - ``.find_all`` WILL NOT search the the value at the top-most level of the pytree (i.e. the root
-      node). The ``cond_fn`` will be evaluated recursively, starting at the root node's children.
+    .. note::
+      - If the ``cond_fn`` evaluates to True at a particular key path, this method will not recurse
+        any further down that branch; i.e. this method will find and return the "earliest" child nodes
+        that fulfill the condition in ``cond_fn`` in a particular key path
+      - ``.find_all`` WILL NOT search the the value at the top-most level of the pytree (i.e. the root
+        node). The ``cond_fn`` will be evaluated recursively, starting at the root node's children.
 
     Example::
 

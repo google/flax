@@ -153,15 +153,16 @@ def dot_product_attention(
   https://arxiv.org/abs/1706.03762. It calculates the attention weights given
   query and key and combines the values using the attention weights.
 
-  Note: query, key, value needn't have any batch dimensions.
+  .. note::
+    ``query``, ``key``, ``value`` needn't have any batch dimensions.
 
   Args:
-    query: queries for calculating attention with shape of `[batch..., q_length,
-      num_heads, qk_depth_per_head]`.
-    key: keys for calculating attention with shape of `[batch..., kv_length,
-      num_heads, qk_depth_per_head]`.
-    value: values to be used in attention with shape of `[batch..., kv_length,
-      num_heads, v_depth_per_head]`.
+    query: queries for calculating attention with shape of ``[batch..., q_length,
+      num_heads, qk_depth_per_head]``.
+    key: keys for calculating attention with shape of ``[batch..., kv_length,
+      num_heads, qk_depth_per_head]``.
+    value: values to be used in attention with shape of ``[batch..., kv_length,
+      num_heads, v_depth_per_head]``.
     bias: bias for the attention weights. This should be broadcastable to the
       shape `[batch..., num_heads, q_length, kv_length]`. This can be used for
       incorporating causal masks, padding masks, proximity bias, etc.

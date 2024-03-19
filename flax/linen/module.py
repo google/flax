@@ -2653,10 +2653,11 @@ class Module(ModuleBase):
     intermediate gradients of ``value`` by running ``jax.grad`` on the perturbation
     argument.
 
-    Note: this is an experimental API and may be tweaked later for better
-    performance and usability.
-    At its current stage, it creates extra dummy variables that occupies extra
-    memory space. Use it only to debug gradients in training.
+    .. note::
+      This is an experimental API and may be tweaked later for better
+      performance and usability.
+      At its current stage, it creates extra dummy variables that occupies extra
+      memory space. Use it only to debug gradients in training.
 
     Example::
 

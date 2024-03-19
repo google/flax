@@ -23,9 +23,11 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
   """Helper function to define pooling functions.
 
   Pooling functions are implemented using the ReduceWindow XLA op.
-  NOTE: Be aware that pooling is not generally differentiable.
-  That means providing a reduce_fn that is differentiable does not imply that
-  pool is differentiable.
+
+  .. note::
+    Be aware that pooling is not generally differentiable.
+    That means providing a reduce_fn that is differentiable does not imply that
+    pool is differentiable.
 
   Args:
     inputs: input data with dimensions (batch, window dims..., features).

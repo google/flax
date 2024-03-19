@@ -26,9 +26,12 @@ from flax.typing import PRNGKey
 class Dropout(Module):
   """Create a dropout layer.
 
-  Note: When using :meth:`Module.apply() <flax.linen.Module.apply>`, make sure
-  to include an RNG seed named ``'dropout'``. Dropout isn't necessary for
-  variable initialization. Example usage::
+  .. note::
+    When using :meth:`Module.apply() <flax.linen.Module.apply>`, make sure
+    to include an RNG seed named ``'dropout'``. Dropout isn't necessary for
+    variable initialization.
+
+  Example usage::
 
     >>> import flax.linen as nn
     >>> import jax, jax.numpy as jnp
