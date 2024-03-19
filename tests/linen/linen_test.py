@@ -261,6 +261,24 @@ class NormalizationTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
+      {'batch_stats_dtype': jnp.float16},
+      {'batch_stats_dtype': jnp.float32},
+  )
+  def test_batch_norm_batch_stats_dtype(self, batch_stats_dtype):
+    rng = random.key(0)
+    key1, key2 = random.split(rng, 2)
+    x = random.normal(key1, (4, 3, 2), dtype=jnp.float32)
+    model_cls = nn.BatchNorm(
+      use_running_average=False,
+      batch_stats_dtype=batch_stats_dtype,
+    )
+    params = model_cls.init(key2, x)
+
+    ema = params['batch_stats']
+    self.assertEqual(ema['mean'].dtype, batch_stats_dtype)
+    self.assertEqual(ema['var'].dtype, batch_stats_dtype)
+
+  @parameterized.parameters(
     {'reduction_axes': -1},
     {'reduction_axes': 1},
     {'reduction_axes': (1, 2)},

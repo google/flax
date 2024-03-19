@@ -266,6 +266,7 @@ class BatchNorm(Module):
     epsilon: a small float added to variance to avoid dividing by zero.
     dtype: the dtype of the result (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
+    batch_stats_dtype: the dtype passed to batch stats initializers (default: float32).
     use_bias:  if True, bias (beta) is added.
     use_scale: if True, multiply by scale (gamma). When the next layer is linear
       (also e.g. nn.relu), this can be disabled since the scaling will be done
@@ -292,6 +293,7 @@ class BatchNorm(Module):
   epsilon: float = 1e-5
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
+  batch_stats_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Initializer = initializers.zeros
@@ -338,11 +340,14 @@ class BatchNorm(Module):
     ra_mean = self.variable(
       'batch_stats',
       'mean',
-      lambda s: jnp.zeros(s, jnp.float32),
+      lambda s: jnp.zeros(s, self.batch_stats_dtype),
       feature_shape,
     )
     ra_var = self.variable(
-      'batch_stats', 'var', lambda s: jnp.ones(s, jnp.float32), feature_shape
+      'batch_stats',
+      'var',
+      lambda s: jnp.ones(s, self.batch_stats_dtype),
+      feature_shape,
     )
 
     if use_running_average:
