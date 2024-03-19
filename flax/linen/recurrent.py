@@ -763,7 +763,7 @@ class ConvLSTMCell(RNNCellBase):
   i_t, f_t, o_t are input, forget and output gate activations,
   and g_t is a vector of cell updates.
 
-  Notes:
+  .. note::
     Forget gate initialization:
       Following jozefowicz2015empirical we add 1.0 to b_f
       after initialization in order to reduce the scale of forgetting in

@@ -35,8 +35,9 @@ def field(pytree_node=True, **kwargs):
 def dataclass(clz: _T, **kwargs) -> _T:
   """Create a class which can be passed to functional transformations.
 
-  NOTE: Inherit from ``PyTreeNode`` instead to avoid type checking issues when
-  using PyType.
+  .. note::
+    Inherit from ``PyTreeNode`` instead to avoid type checking issues when
+    using PyType.
 
   Jax transformations such as ``jax.jit`` and ``jax.grad`` require objects that are
   immutable and can be mapped over using the ``jax.tree_util`` methods.

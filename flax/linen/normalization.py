@@ -310,12 +310,12 @@ class BatchNorm(Module):
   ):
     """Normalizes the input using batch statistics.
 
-    NOTE:
-    During initialization (when ``self.is_initializing()`` is ``True``) the running
-    average of the batch statistics will not be updated. Therefore, the inputs
-    fed during initialization don't need to match that of the actual input
-    distribution and the reduction axis (set with ``axis_name``) does not have
-    to exist.
+    .. note::
+      During initialization (when ``self.is_initializing()`` is ``True``) the running
+      average of the batch statistics will not be updated. Therefore, the inputs
+      fed during initialization don't need to match that of the actual input
+      distribution and the reduction axis (set with ``axis_name``) does not have
+      to exist.
 
     Args:
       x: the input to be normalized.
@@ -389,9 +389,10 @@ class LayerNorm(Module):
   i.e. applies a transformation that maintains the mean activation within
   each example close to 0 and the activation standard deviation close to 1.
 
-  NOTE: This normalization operation is identical to InstanceNorm and GroupNorm;
-  the difference is simply which axes are reduced and the shape of the feature axes
-  (i.e. the shape of the learnable scale and bias parameters).
+  .. note::
+    This normalization operation is identical to InstanceNorm and GroupNorm;
+    the difference is simply which axes are reduced and the shape of the feature
+    axes (i.e. the shape of the learnable scale and bias parameters).
 
   Example usage::
 
@@ -602,8 +603,9 @@ class GroupNorm(Module):
   The user should either specify the total number of channel groups or the
   number of channels per group.
 
-  NOTE: LayerNorm is a special case of GroupNorm where ``num_groups=1``, and
-  InstanceNorm is a special case of GroupNorm where ``group_size=1``.
+  .. note::
+    LayerNorm is a special case of GroupNorm where ``num_groups=1``, and
+    InstanceNorm is a special case of GroupNorm where ``group_size=1``.
 
   Example usage::
 
@@ -778,9 +780,10 @@ class InstanceNorm(Module):
   within each channel within each example close to 0 and the activation standard
   deviation close to 1.
 
-  NOTE: This normalization operation is identical to LayerNorm and GroupNorm; the
-  difference is simply which axes are reduced and the shape of the feature axes
-  (i.e. the shape of the learnable scale and bias parameters).
+  .. note::
+    This normalization operation is identical to LayerNorm and GroupNorm; the
+    difference is simply which axes are reduced and the shape of the feature axes
+    (i.e. the shape of the learnable scale and bias parameters).
 
   Example usage::
 
@@ -903,17 +906,17 @@ class SpectralNorm(Module):
   where each wrapped layer will have its params spectral normalized before
   computing its ``__call__`` output.
 
-  Usage Note:
-  The initialized variables dict will contain, in addition to a 'params'
-  collection, a separate 'batch_stats' collection that will contain a
-  ``u`` vector and ``sigma`` value, which are intermediate values used
-  when performing spectral normalization. During training, we pass in
-  ``update_stats=True`` and ``mutable=['batch_stats']`` so that ``u``
-  and ``sigma`` are updated with the most recently computed values using
-  power iteration. This will help the power iteration method approximate
-  the true singular value more accurately over time. During eval, we pass
-  in ``update_stats=False`` to ensure we get deterministic behavior from
-  the model. For example::
+  .. note::
+    The initialized variables dict will contain, in addition to a 'params'
+    collection, a separate 'batch_stats' collection that will contain a
+    ``u`` vector and ``sigma`` value, which are intermediate values used
+    when performing spectral normalization. During training, we pass in
+    ``update_stats=True`` and ``mutable=['batch_stats']`` so that ``u``
+    and ``sigma`` are updated with the most recently computed values using
+    power iteration. This will help the power iteration method approximate
+    the true singular value more accurately over time. During eval, we pass
+    in ``update_stats=False`` to ensure we get deterministic behavior from
+    the model.
 
   Example usage::
 
