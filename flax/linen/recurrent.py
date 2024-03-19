@@ -635,6 +635,16 @@ class MGUCell(RNNCellBase):
 
   where x is the input and h is the output of the previous time step.
 
+  If ``reset_gate`` is false, the above becomes
+
+  .. math::
+
+      \begin{array}{ll}
+      f = \sigma(W_{if} x + b_{if} + W_{hf} h) \\
+      n = \tanh(W_{in} x + b_{in} + W_{hn} h) \\
+      h' = (1 - f) * n + f * h \\
+      \end{array}
+
   Example usage::
 
     >>> import flax.linen as nn
@@ -663,6 +673,7 @@ class MGUCell(RNNCellBase):
       output (default: initializers.zeros_init()).
     dtype: the dtype of the computation (default: None).
     param_dtype: the dtype passed to parameter initializers (default: float32).
+    reset_gate: flag for applying reset gating.
   """
 
   features: int
@@ -675,6 +686,7 @@ class MGUCell(RNNCellBase):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   carry_init: Initializer = initializers.zeros_init()
+  reset_gate: bool = True
 
   @compact
   def __call__(self, carry, inputs):
@@ -713,10 +725,12 @@ class MGUCell(RNNCellBase):
       dense_i(name='if', bias_init=self.forget_bias_init)(inputs)
       + dense_h(name='hf')(h)
     )
-    # add bias because the linear transformations aren't directly summed.
+    # add bias when the linear transformations aren't directly summed.
+    x = dense_h(name="hn", use_bias=self.reset_gate)(h)
+    if self.reset_gate:
+      x *= f
     n = self.activation_fn(
-      dense_i(name='in', bias_init=self.activation_bias_init)(inputs)
-      + f * dense_h(name='hn', use_bias=True)(h)
+      dense_i(name="in", bias_init=self.activation_bias_init)(inputs) + x
     )
     new_h = (1.0 - f) * n + f * h
     return new_h, new_h
