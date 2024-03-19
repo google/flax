@@ -40,6 +40,7 @@ import jax.stages
 
 from flax.experimental.nnx.nnx import (
   filterlib,
+  graph_utils,
   rnglib,
   spmd,
   variables,
@@ -62,6 +63,7 @@ N = tp.TypeVar('N', bound=Module)
 
 AxisName = tp.Hashable
 Leaves = tp.List[Leaf]
+Index = int
 
 
 def _check_args(args: tuple[tp.Any, ...]):
@@ -175,8 +177,13 @@ class JITMeta(ModuleMeta):
 
 class JittedFn(tp.Protocol, tp.Generic[M]):
   def __call__(
-    self, state_and_def: tuple[State | tuple[State, ...], GraphDef[M]]
-  ) -> tuple[tuple[State | tuple[State, ...], GraphDef[M]], tp.Any]:
+    self, state_and_def: tuple[State, GraphDef[M]]
+  ) -> tuple[
+    State,
+    GraphDef[M],
+    graph_utils.Static[dict[Index, Index]],
+    tp.Any,
+  ]:
     ...
 
 
@@ -185,24 +192,23 @@ def get_jitted_fn(_module_type: type[M], f, options: JITOptions) -> JittedFn[M]:
 
   @functools.partial(jax.jit, **jit_kwargs)
   def jitted_fn(
-    state_and_def: tuple[State | tuple[State, ...], GraphDef[M]],
+    state_and_def: tuple[State, GraphDef[M]],
     *args,
     **kwargs,
   ):
     _check_args(args)
-    states, graphdef = state_and_def
-
-    if isinstance(states, State):
-      states = (states,)
+    state, graphdef = state_and_def
 
     if 'rngs' in kwargs:
       kwargs['rngs'] = rnglib.Rngs(kwargs['rngs'])
-    module = graphdef.merge(*states)
+    module, outer_idx_inner_ref = graph_utils.graph_unflatten(graphdef, state)
     out = f(module, *args, **kwargs)
 
-    updates = module.split()
-    out = (updates, out)
-
+    state, graphdef, inner_ref_inner_idx = graph_utils.graph_flatten(module)
+    outer_idx_inner_idx = graph_utils.compose_mapping(
+      outer_idx_inner_ref, inner_ref_inner_idx
+    )
+    out = (state, graphdef, graph_utils.Static(outer_idx_inner_idx), out)
     return out
 
   return jitted_fn
@@ -222,10 +228,10 @@ def jit_init(
   if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], rnglib.Rngs):
     kwargs['rngs'] = rngs.fork()
 
-  state_and_def = module.split()
-  out = jitted_fn(state_and_def, *args, **kwargs)
-  updates, _ = out
-  module.update(updates)
+  state, static, ref_idx = graph_utils.graph_flatten(module)
+  state, static, idx_mapping, _ = jitted_fn((state, static), *args, **kwargs)
+  idx_ref = graph_utils.compose_mapping_reversed(ref_idx, idx_mapping.value)
+  graph_utils.graph_unflatten(static, state, ref_cache=idx_ref)
 
 
 def jit_apply(
@@ -242,9 +248,10 @@ def jit_apply(
   if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], rnglib.Rngs):
     kwargs['rngs'] = rngs.fork()
 
-  state_and_def = module.split()
-  updates, out = jitted_fn(state_and_def, *args, **kwargs)
-  module.update(updates)
+  state, static, ref_idx = graph_utils.graph_flatten(module)
+  state, static, idx_mapping, out = jitted_fn((state, static), *args, **kwargs)
+  idx_ref = graph_utils.compose_mapping_reversed(ref_idx, idx_mapping.value)
+  graph_utils.graph_unflatten(static, state, ref_cache=idx_ref)
   return out
 
 
