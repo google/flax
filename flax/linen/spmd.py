@@ -34,7 +34,7 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import jax
 from jax import lax
-from jax.experimental import maps
+from jax.interpreters import pxla
 
 from flax import struct
 from flax.core import meta
@@ -209,9 +209,9 @@ def logical_to_mesh_sharding(
 
 
 def _global_mesh_defined() -> bool:
-  """Checks if global xmap/jit mesh resource environment is defined."""
-  maps_env = maps.thread_resources.env
-  return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
+  """Checks if global mesh resource environment is defined."""
+  env = pxla.thread_resources.env
+  return env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
 
 class RulesFallback(enum.Enum):

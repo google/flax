@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from flax import errors, struct
 from flax.typing import LogicalNames
 import jax
-from jax.experimental import maps
+from jax.interpreters import pxla
 
 A = TypeVar('A')
 B = TypeVar('B')
@@ -178,9 +178,9 @@ PARTITION_NAME = 'partition_name'
 
 
 def _global_mesh_defined() -> bool:
-  """Checks if global xmap/pjit mesh resource environment is defined."""
-  maps_env = maps.thread_resources.env
-  return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
+  """Checks if global mesh resource environment is defined."""
+  env = pxla.thread_resources.env
+  return env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
 
 class Partitioned(struct.PyTreeNode, AxisMetadata[A]):

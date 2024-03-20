@@ -16,7 +16,7 @@ import functools
 import typing as tp
 
 import jax
-from jax.experimental import maps
+from jax.interpreters import pxla
 from jax.sharding import Mesh, PartitionSpec
 
 from flax.experimental.nnx.nnx import variables
@@ -126,9 +126,9 @@ def get_named_sharding(tree: A, mesh: jax.sharding.Mesh) -> A:
 
 
 def _global_mesh_defined() -> bool:
-  """Checks if global xmap/pjit mesh resource environment is defined."""
-  maps_env = maps.thread_resources.env
-  return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
+  """Checks if global mesh resource environment is defined."""
+  env = pxla.thread_resources.env
+  return env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
 
 def _with_sharding_constraint(
