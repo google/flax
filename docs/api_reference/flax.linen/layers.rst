@@ -183,6 +183,7 @@ BatchApply
   OptimizedLSTMCell
   SimpleCell
   GRUCell
+  MGUCell
   RNN
   Bidirectional
   BatchApply
