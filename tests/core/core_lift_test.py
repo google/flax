@@ -23,6 +23,10 @@ from jax import random
 from flax import errors
 from flax.core import FrozenDict, apply, copy, init, lift, nn
 
+# TODO(jakevdp): use jax.debug_key_reuse directly once min jax version is 0.4.26
+jax_debug_key_reuse = getattr(jax, 'debug_key_reuse',
+                              getattr(jax, 'enable_key_reuse_checks'))
+
 
 class LiftTest(absltest.TestCase):
   def test_aliasing(self):
@@ -178,7 +182,7 @@ class LiftTest(absltest.TestCase):
     np.testing.assert_array_equal(
       vars['state']['rng_params'][0], vars['state']['rng_params'][1]
     )
-    with jax.enable_key_reuse_checks(False):
+    with jax_debug_key_reuse(False):
       np.testing.assert_array_compare(
         operator.__ne__,
         vars['state']['rng_loop'][0],
