@@ -2831,6 +2831,41 @@ class ModuleTest(absltest.TestCase):
     assert y_up.shape == (1, 3)
     assert y_down.shape == (1, 3)
 
+  def test_split_basic(self):
+    class Foo(nn.Module):
+      a: int
+
+    m = Foo(a=1)
+
+    m = m.bind({})
+
+    moduledef, variables, rngs = m.split()
+    moduledef
+
+  def test_split_basic_with_variables(self):
+    m = nn.Dense(3)
+    variables = m.init(random.key(0), jnp.ones((1, 2)))
+
+    m = m.bind(variables)
+
+    moduledef, variables, rngs = m.split()
+
+    self.assertIn('params', variables)
+    self.assertIn('kernel', variables['params'])
+
+  def test_split_with_submodules(self):
+    m = nn.Sequential([nn.Dense(3)])
+    variables = m.init(random.key(0), jnp.ones((1, 2)))
+
+    m = m.bind(variables)
+
+    moduledef, variables, rngs = m.split()
+    moduledef.state
+
+    self.assertIn('params', variables)
+    self.assertIn('layers_0', variables['params'])
+    self.assertIn('kernel', variables['params']['layers_0'])
+
 
 class LeakTests(absltest.TestCase):
   def test_tracer_leaks(self):
