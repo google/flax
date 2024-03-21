@@ -101,7 +101,7 @@ class NodeImplBase(tp.Generic[Node, Leaf, AuxData]):
 
 
 @dataclasses.dataclass(frozen=True)
-class MutableNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
+class GraphNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
   set_key: tp.Callable[[Node, str, Leaf], None]
   pop_key: tp.Callable[[Node, str], Leaf]
   create_empty: tp.Callable[[AuxData], Node]
@@ -113,26 +113,17 @@ class MutableNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
 
 
 @dataclasses.dataclass(frozen=True)
-class ImmutableNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
+class PytreeNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
   unflatten: tp.Callable[[tuple[tuple[str, Leaf], ...], AuxData], Node]
 
 
 NodeImpl = tp.Union[
-  MutableNodeImpl[Node, Leaf, AuxData], ImmutableNodeImpl[Node, Leaf, AuxData]
+  GraphNodeImpl[Node, Leaf, AuxData], PytreeNodeImpl[Node, Leaf, AuxData]
 ]
 
 
-def register_immutable_node_type(
-  type: type,
-  flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[str, Leaf]], AuxData]],
-  unflatten: tp.Callable[[tuple[tuple[str, Leaf], ...], AuxData], Node],
-):
-  NODE_TYPES[type] = ImmutableNodeImpl(
-    type=type, flatten=flatten, unflatten=unflatten
-  )
 
-
-def register_mutable_node_type(
+def register_graph_node_type(
   type: type,
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[str, Leaf]], AuxData]],
   set_key: tp.Callable[[Node, str, Leaf], None],
@@ -140,7 +131,7 @@ def register_mutable_node_type(
   create_empty: tp.Callable[[AuxData], Node],
   clear: tp.Callable[[Node, AuxData], None],
 ):
-  NODE_TYPES[type] = MutableNodeImpl(
+  NODE_TYPES[type] = GraphNodeImpl(
     type=type,
     flatten=flatten,
     set_key=set_key,
@@ -159,7 +150,7 @@ def is_node(x: tp.Any) -> bool:
 
 
 def is_node_type(x: type[tp.Any]) -> bool:
-  return x in NODE_TYPES
+  return x in NODE_TYPES or x is PytreeType
 
 
 def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any]:
@@ -170,7 +161,7 @@ def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any]:
 
   if node_type not in NODE_TYPES:
     if is_pytree_node(x):
-      node_type = PytreeType
+      return PYTREE_NODE_IMPL
     else:
       raise ValueError(f'Unknown node type: {x}')
 
@@ -178,6 +169,8 @@ def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any]:
 
 
 def get_node_impl_for_type(x: type[Node]) -> NodeImpl[Node, tp.Any, tp.Any]:
+  if x is PytreeType:
+    return PYTREE_NODE_IMPL
   return NODE_TYPES[x]
 
 
@@ -439,14 +432,19 @@ def _graph_flatten(
   if node in ref_to_index:
     return ref_to_index[node]
 
-  index = len(ref_to_index)
-  ref_to_index[node] = index
+  node_impl = get_node_impl(node)
+
+  # only cache graph nodes
+  if isinstance(node_impl, GraphNodeImpl):
+    index = len(ref_to_index)
+    ref_to_index[node] = index
+  else:
+    index = -1
 
   subgraphs: list[tuple[str, tp.Union[GraphDef[Node], int]]] = []
   static_fields: list[tuple[str, tp.Any]] = []
   variables: list[tuple[str, VariableDef | int]] = []
 
-  node_impl = get_node_impl(node)
   values, metadata = node_impl.flatten(node)
   for key, value in values:
     if not isinstance(key, str):
@@ -557,7 +555,6 @@ def _graph_unflatten(
             node = new_state[key] = _graph_unflatten(
               subgraphdef, substate, index_to_ref, ref_cache
             )
-            index_to_ref[subgraphdef.index] = node
         elif key in graphdef.variables:
           variable_def = graphdef.variables[key]
           if isinstance(variable_def, int):
@@ -596,7 +593,6 @@ def _graph_unflatten(
             node = new_state[key] = _graph_unflatten(
               subgraphdef, value, index_to_ref, ref_cache
             )
-            index_to_ref[subgraphdef.index] = node
 
         elif key in graphdef.variables:
           variable_def = graphdef.variables[key]
@@ -628,7 +624,7 @@ def _graph_unflatten(
 
     return new_state
 
-  if isinstance(node_impl, MutableNodeImpl):
+  if isinstance(node_impl, GraphNodeImpl):
     # we create an empty node first and add it to the index
     # this avoids infinite recursion when there is a reference cycle
     if ref_cache is not None and graphdef.index in ref_cache:
@@ -649,7 +645,6 @@ def _graph_unflatten(
     # that it cannot reference itself, so we can create its children first
     children = _get_children()
     node = node_impl.unflatten(tuple(children.items()), graphdef.metadata)
-    index_to_ref[graphdef.index] = node
 
   return node
 
@@ -696,7 +691,7 @@ def _graph_pop(
     node_impl = get_node_impl(node)
     for state, predicate in zip(states, predicates):
       if predicate(path, value):
-        if isinstance(node_impl, ImmutableNodeImpl):
+        if isinstance(node_impl, PytreeNodeImpl):
           raise ValueError(
             f'Cannot pop key {name!r} from node of type {type(node).__name__}'
           )
@@ -736,7 +731,7 @@ def _graph_update_dynamic(
   for key, value in state.items():
     # case 1: new state is being added
     if key not in node_dict:
-      if isinstance(node_impl, ImmutableNodeImpl):
+      if isinstance(node_impl, PytreeNodeImpl):
         raise ValueError(
           f'Cannot set key {key!r} on immutable node of '
           f'type {type(node).__name__}'
@@ -832,7 +827,7 @@ def _graph_update_static(
         )
       else:
         # case 3: adding a new subgraph
-        if isinstance(node_impl, ImmutableNodeImpl):
+        if isinstance(node_impl, PytreeNodeImpl):
           raise ValueError(
             f'Cannot set key {name!r} on immutable node of '
             f'type {type(node).__name__}'
@@ -851,7 +846,7 @@ def _graph_update_static(
 
         node_impl.set_key(node, name, value_updates)
     else:  # static field
-      if isinstance(node_impl, ImmutableNodeImpl):
+      if isinstance(node_impl, PytreeNodeImpl):
         if name in node_dict and node_dict[name] == value_updates:
           # if the value is the same, skip
           continue
@@ -916,106 +911,9 @@ class Static(tp.Generic[A]):
 jax.tree_util.register_static(Static)
 
 
-# -----------------------------
-# register node types
-# -----------------------------
-# dict
-def _flatten_dict(
-  node: dict[str, tp.Any],
-) -> tuple[tuple[tuple[str, tp.Any], ...], None]:
-  return tuple(node.items()), None
-
-
-def _set_key_dict(node: dict[str, tp.Any], key: str, value: tp.Any):
-  node[key] = value
-
-
-def _pop_key_dict(node: dict[str, tp.Any], key: str):
-  return node.pop(key)
-
-
-def _create_empty_dict(metadata: None) -> dict[str, tp.Any]:
-  return {}
-
-def _clear_dict(node: dict[str, tp.Any], metadata: None):
-  node.clear()
-
-
-register_mutable_node_type(
-  dict,
-  flatten=_flatten_dict,
-  set_key=_set_key_dict,
-  pop_key=_pop_key_dict,
-  create_empty=_create_empty_dict,
-  clear=_clear_dict,
-)
-
-
-# list
-def _flatten_list(
-  node: list[tp.Any],
-) -> tuple[tuple[tuple[str, tp.Any], ...], int]:
-  return tuple((str(i), value) for i, value in enumerate(node)), len(node)
-
-
-def _set_key_list(node: list[tp.Any], key: str, value: tp.Any):
-  int_key = int(key)
-  if int_key >= len(node):
-    node.extend([EMPTY] * (int_key - len(node) + 1))
-  node[int_key] = value
-
-
-def _pop_key_list(node: list[tp.Any], key: str):
-  int_key = int(key)
-  value = node[int_key]
-  node[int_key] = EMPTY
-  return value
-
-
-def _create_empty_list(length: int) -> list[tp.Any]:
-  return [EMPTY] * length
-
-def _clear_list(node: list[tp.Any], length: int):
-  node.clear()
-  node.extend([EMPTY] * length)
-
-
-register_mutable_node_type(
-  type=list,
-  flatten=_flatten_list,
-  set_key=_set_key_list,
-  pop_key=_pop_key_list,
-  create_empty=_create_empty_list,
-  clear=_clear_list,
-)
-
-
-# tuple
-def _flatten_tuple(
-  node: tuple[tp.Any, ...],
-) -> tuple[tuple[tuple[str, tp.Any], ...], int]:
-  return tuple((str(i), value) for i, value in enumerate(node)), len(node)
-
-
-def _unflatten_tuple(
-  items: tuple[tuple[str, tp.Any], ...], length: int
-) -> tuple[tp.Any, ...]:
-  node = [EMPTY] * length
-  for key, value in items:
-    node[int(key)] = value
-  return tuple(node)
-
-
-register_immutable_node_type(
-  type=tuple,
-  flatten=_flatten_tuple,
-  unflatten=_unflatten_tuple,
-)
-
-
 # Pytree
 class PytreeType:
-  pass
+  ...
 
 
 def is_pytree_node(x: tp.Any) -> bool:
@@ -1050,7 +948,8 @@ def _unflatten_pytree(
   pytree = treedef.unflatten(value for _, value in nodes)
   return pytree
 
-
-register_immutable_node_type(
-  PytreeType, flatten=_flatten_pytree, unflatten=_unflatten_pytree
+PYTREE_NODE_IMPL = PytreeNodeImpl(
+  type=PytreeType,
+  flatten=_flatten_pytree,
+  unflatten=_unflatten_pytree,
 )

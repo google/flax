@@ -25,7 +25,7 @@ from .nnx.filterlib import All as All
 from .nnx.filterlib import Not as Not
 from .nnx.graph_utils import GraphDef as GraphDef
 from .nnx.helpers import Dict as Dict
-from .nnx.helpers import Sequence as Sequence
+from .nnx.helpers import List as List
 from .nnx.helpers import TrainState as TrainState
 from .nnx.module import GraphDef as GraphDef
 from .nnx.module import M as M

@@ -123,7 +123,7 @@ class TestGrad:
     p2 = nnx.Param(20.0)
 
     m = nnx.Dict(
-      a=nnx.Sequence([p1, p2]),
+      a=nnx.List([p1, p2]),
       b=p1,
       c=7,
       d=5.0,
@@ -155,7 +155,7 @@ class TestGrad:
 
   def test_grad_with_multiple_ref_types(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(10.0), nnx.BatchStat(20.0)]),
+      a=nnx.List([nnx.Param(10.0), nnx.BatchStat(20.0)]),
       b=nnx.Param(10.0),
       c=7,
       d=5.0,
@@ -183,7 +183,7 @@ class TestGrad:
 
   def test_grad_with_type_predicate(self):
     m = nnx.Dict(
-      a=nnx.Sequence([nnx.Param(10.0), nnx.BatchStat(20.0)]),
+      a=nnx.List([nnx.Param(10.0), nnx.BatchStat(20.0)]),
       b=nnx.Param(10.0),
       c=7,
       d=5.0,

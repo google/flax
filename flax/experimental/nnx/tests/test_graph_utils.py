@@ -25,23 +25,36 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    state, static, _ = nnx.graph_utils.graph_flatten(g)
+    state, static, ref_idx = nnx.graph_utils.graph_flatten(g)
 
     state['0']['b'].raw_value = 2
     state['3'].raw_value = 4
 
+    assert len(ref_idx) == 2
+    assert a['b'] in ref_idx
+    assert g[3] in ref_idx
+
   def test_unflatten(self):
-    a = {'a': 1, 'b': nnx.Param(2)}
-    g = [a, 3, a, nnx.Param(4)]
+    a = nnx.Dict(a=1, b=nnx.Param(2))
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     state, static, _ = nnx.graph_utils.graph_flatten(g)
     g = static.merge(state)
 
     assert g[0] is g[2]
 
-  def test_unflatten_empty(self):
+  def test_unflatten_pytree(self):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
+
+    state, static, _ = nnx.graph_utils.graph_flatten(g)
+    g = static.merge(state)
+
+    assert g[0] is not g[2]
+
+  def test_unflatten_empty(self):
+    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     state, static, _ = nnx.graph_utils.graph_flatten(g)
     g = static.merge(nnx.State({}))
@@ -63,8 +76,8 @@ class TestGraphUtils:
     assert g[2]['b'].raw_value == 3
 
   def test_update_static(self):
-    a = {'a': 1, 'b': nnx.Param(2)}
-    g = [a, 3, a, nnx.Param(4)]
+    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     g2 = nnx.graph_utils.clone(g)
     g2[0]['a'] = 5
@@ -85,10 +98,10 @@ class TestGraphUtils:
       nnx.graph_utils.graph_update_static(g, g2)
 
   def test_update_static_add_new(self):
-    a = {'a': 1, 'b': nnx.Param(2)}
-    b = [5, 6]
-    g = [a, 3, a, nnx.Param(4)]
-    g2 = [a, 3, a, nnx.Param(4), b]
+    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
+    b = nnx.List([5, 6])
+    g = nnx.List([a, 3, a, nnx.Param(4)])
+    g2 = nnx.List([a, 3, a, nnx.Param(4), b])
 
     nnx.graph_utils.graph_update_static(g, g2)
 
@@ -96,9 +109,9 @@ class TestGraphUtils:
     assert g[4][1] == 6
 
   def test_update_static_add_shared_error(self):
-    a = {'a': 1, 'b': nnx.Param(2)}
-    g = [a, 3, a, nnx.Param(4)]
-    g2 = [a, 3, a, nnx.Param(4), a]
+    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
+    g = nnx.List([a, 3, a, nnx.Param(4)])
+    g2 = nnx.List([a, 3, a, nnx.Param(4), a])
 
     with pytest.raises(ValueError, match='Trying to add a new node at path'):
       nnx.graph_utils.graph_update_static(g, g2)
