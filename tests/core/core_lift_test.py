@@ -24,8 +24,8 @@ from flax import errors
 from flax.core import FrozenDict, apply, copy, init, lift, nn
 
 # TODO(jakevdp): use jax.debug_key_reuse directly once min jax version is 0.4.26
-jax_debug_key_reuse = getattr(jax, 'debug_key_reuse',
-                              getattr(jax, 'enable_key_reuse_checks'))
+jax_debug_key_reuse = (jax.debug_key_reuse if hasattr(jax, 'debug_key_reuse')
+                       else jax.enable_key_reuse_checks)
 
 
 class LiftTest(absltest.TestCase):

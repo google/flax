@@ -31,8 +31,8 @@ import jax.numpy as jnp
 import numpy as np
 
 # TODO(jakevdp): use jax.debug_key_reuse directly once min jax version is 0.4.26
-jax_debug_key_reuse = getattr(jax, 'debug_key_reuse',
-                              getattr(jax, 'enable_key_reuse_checks'))
+jax_debug_key_reuse = (jax.debug_key_reuse if hasattr(jax, 'debug_key_reuse')
+                       else jax.enable_key_reuse_checks)
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
