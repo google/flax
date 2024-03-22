@@ -227,8 +227,8 @@ class PyTreeNode:
     >>> model_grad = jax.grad(loss_fn)(model)
   """
 
-  def __init_subclass__(cls):
-    dataclass(cls)  # pytype: disable=wrong-arg-types
+  def __init_subclass__(cls, **kwargs):
+    dataclass(cls, **kwargs)  # pytype: disable=wrong-arg-types
 
   def __init__(self, *args, **kwargs):
     # stub for pytype
