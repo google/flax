@@ -756,6 +756,57 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('inputs:', lines[5])
     self.assertIn('x: \x1b[2mfloat32\x1b[0m[1,1]', lines[6])
 
+  def test_tabulate_norm_wrapper(self):
+    class SubModel(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.SpectralNorm(nn.Dense(5))(x, update_stats=False)
+        x = nn.Dense(6)(x)
+        x = nn.WeightNorm(nn.Dense(7))(x)
+        return x
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.WeightNorm(nn.Dense(3))(x)
+        x = nn.Dense(4)(x)
+        x = SubModel()(x)
+        x = nn.Dense(8)(x)
+        x = nn.SpectralNorm(nn.Dense(9))(x, update_stats=False)
+        return x
+
+    x = jnp.ones((1, 2))
+    key = jax.random.key(0)
+    model = Model()
+
+    lines = model.tabulate(
+      key,
+      x,
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
+    ).splitlines()
+
+    self.assertIn('Model', lines[5])
+    self.assertIn('WeightNorm_0', lines[7])
+    self.assertIn('Dense_0/kernel/scale', lines[7])
+    self.assertIn('Dense_0', lines[11])
+    self.assertIn('Dense_1', lines[16])
+    self.assertIn('SubModel_0', lines[21])
+    self.assertIn('SubModel_0/SpectralNorm_0', lines[23])
+    self.assertIn('Dense_0/kernel/sigma', lines[23])
+    self.assertIn('Dense_0/kernel/u', lines[24])
+    self.assertIn('SubModel_0/Dense_0', lines[28])
+    self.assertIn('SubModel_0/Dense_1', lines[33])
+    self.assertIn('SubModel_0/WeightNorm_0', lines[38])
+    self.assertIn('Dense_2/kernel/scale', lines[38])
+    self.assertIn('SubModel_0/Dense_2', lines[42])
+    self.assertIn('Dense_2', lines[47])
+    self.assertIn('SpectralNorm_0', lines[52])
+    self.assertIn('Dense_3/kernel/sigma', lines[52])
+    self.assertIn('Dense_3/kernel/u', lines[53])
+    self.assertIn('Dense_3', lines[57])
+
 
 if __name__ == '__main__':
   absltest.main()

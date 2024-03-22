@@ -460,7 +460,7 @@ def _get_module_table(
       call_depth = len(c.path)
       inputs = _process_inputs(c.args, c.kwargs)
 
-      if c.path in visited_paths:
+      if c.path in visited_paths or not hasattr(c.module, c.method):
         if not show_repeated:
           continue
         module_vars = {}
