@@ -92,7 +92,7 @@ class CNN(nnx.Module):
 model = CNN(rngs=nnx.Rngs(0))
 
 print(f'model = {model}'[:500] + '\n...\n')  # print a part of the model
-print(f'{model.conv1.kernel.shape = }') # inspect the shape of the kernel of the first convolutional layer
+print(f'{model.conv1.kernel.value.shape = }') # inspect the shape of the kernel of the first convolutional layer
 ```
 
 ### Run model
