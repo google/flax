@@ -1,14 +1,14 @@
-Upgrading my codebase to Optax
-==============================
+Upgrading my codebase to Optax from ``flax.optim``
+==================================================
 
-We have proposed to replace :py:mod:`flax.optim` with `Optax
-<https://optax.readthedocs.io>`_ in 2021 with `FLIP #1009
-<https://github.com/google/flax/blob/main/docs/flip/1009-optimizer-api.md>`_ and
-the Flax optimizers have been removed in v0.6.0 - this guide is targeted
-towards :py:mod:`flax.optim` users to help them update their code to Optax.
+**`Open in Colab <https://colab.research.google.com/github/google/flax/blob/main/docs/guides/converting_and_upgrading/optax_update_guide.ipynb>`_**
 
-See also Optax's quick start documentation:
-https://optax.readthedocs.io/en/latest/optax-101.html
+In 2021, `FLIP #1009 <https://github.com/google/flax/blob/main/docs/flip/1009-optimizer-api.md>`_
+proposed to replace :py:mod:`flax.optim` with `Optax <https://optax.readthedocs.io>`_.
+And since Flax v0.6.0, Optax has been the default Flax optimizer library.
+This guide shows how to update your :py:mod:`flax.optim` code to Optax.
+
+You can also refer to the `Optax 101 (quick start) <https://optax.readthedocs.io/en/latest/optax-101.html>`_.
 
 .. testsetup::
 
@@ -31,15 +31,14 @@ https://optax.readthedocs.io/en/latest/optax-101.html
 Replacing ``flax.optim`` with ``optax``
 ---------------------------------------
 
-Optax has drop-in replacements for all of Flax's optimizers. Refer to Optax's
-documentation `Common Optimizers <https://optax.readthedocs.io/en/latest/api.html>`_
-for API details.
+Optax has drop-in replacements for all of Flax's optimizers. Refer to the Optax
+`Common Optimizers API docs <https://optax.readthedocs.io/en/latest/api.html>`_
+for more details.
 
-The usage is very similar, with the difference that ``optax`` does not keep a
-copy of the ``params``, so they need to be passed around separately. Flax
-provides the utility :py:class:`~flax.training.train_state.TrainState` to store
-optimizer state, parameters, and other associated data in a single dataclass
-(not used in code below).
+The usage is very similar, with some differences that include:
+
+- Optax (``optax``) does not keep a copy of the ``params``, so they need to be passed around separately.
+- Flax provides the utility :py:class:`~flax.training.train_state.TrainState` to store the optimizer state, parameters, and other associated data in a single dataclass (not used in the code example below).
 
 .. codediff::
   :title_left: flax.optim
@@ -77,7 +76,7 @@ optimizer state, parameters, and other associated data in a single dataclass
     params, opt_state = train_step(params, opt_state, batch)
 
 
-Composable Gradient Transformations
+Composable gradient transformations
 -----------------------------------
 
 The function |optax.sgd()|_ used in the code snippet above is simply a wrapper
@@ -112,13 +111,11 @@ generic building blocks.
       optax.scale(-learning_rate),
   )
 
-Weight Decay
+Weight decay
 ------------
 
-Some of Flax's optimizers also include a weight decay. In Optax, some optimizers
-also have a weight decay parameter (such as |optax.adamw()|_), and to others the
-weight decay can be added as another "gradient transformation"
-|optax.add_decayed_weights()|_ that adds an update derived from the parameters.
+- Some of `flax.optim` optimizers include the weight decay parameter.
+- In Optax, some optimizers also have a weight decay parameter (such as |optax.adamw()|_).. For other optimizers that don't have it by default, the weight decay can be added as another "gradient transformation" |optax.add_decayed_weights()|_ that adds an update derived from the parameters.
 
 .. |optax.adamw()| replace:: ``optax.adamw()``
 .. _optax.adamw(): https://optax.readthedocs.io/en/latest/api.html#optax.adamw
@@ -146,13 +143,14 @@ weight decay can be added as another "gradient transformation"
   # Note that you'll need to specify `params` when computing the udpates:
   # tx.update(grads, opt_state, params)
 
-Gradient Clipping
+Gradient clipping
 -----------------
 
 Training can be stabilized by clipping gradients to a global norm (`Pascanu et
-al, 2012 <https://arxiv.org/abs/1211.5063>`_). In Flax this is often done by
-processing the gradients before passing them to the optimizer. With Optax this
-becomes just another gradient transformation |optax.clip_by_global_norm()|_.
+al, 2012 <https://arxiv.org/abs/1211.5063>`_).
+
+- In Flax this is often done by processing the gradients before passing them to the optimizer.
+- With Optax this becomes just another gradient transformation |optax.clip_by_global_norm()|_.
 
 .. |optax.clip_by_global_norm()| replace:: ``optax.clip_by_global_norm()``
 .. _optax.clip_by_global_norm(): https://optax.readthedocs.io/en/latest/api.html#optax.clip_by_global_norm
@@ -178,20 +176,17 @@ becomes just another gradient transformation |optax.clip_by_global_norm()|_.
       optax.scale(-learning_rate),
   )
 
-Learning Rate Schedules
+Learning rate schedules
 -----------------------
 
-For learning rate schedules, Flax allows overwriting hyper parameters when
-applying the gradients. Optax maintains a step counter and provides this as an
-argument to a function for scaling the updates added with
-|optax.scale_by_schedule()|_. Optax also allows specifying a functions to
-inject arbitrary scalar values for other gradient updates via
-|optax.inject_hyperparams()|_.
+For learning rate schedules:
 
-Read more about learning rate schedules in the :doc:`lr_schedule` guide.
+- Flax allows overwriting hyperparameters when applying the gradients.
+- Optax maintains a step counter and provides this as an argument to a function for scaling the updates added with |optax.scale_by_schedule()|_. Optax also allows specifying functions to inject arbitrary scalar values for other gradient updates via |optax.inject_hyperparams()|_.
 
-Read more about schedules defined in Optax under `Optimizer Schedules
-<https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules>`_. the
+You can learn more in the `Learning rate scheduling
+<https://flax.readthedocs.io/en/latest/guides/training_techniques/lr_schedule.html>`_ guide and the Optax `Optimizer schedules
+<https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules>`_ API docs. Note that the
 standard optimizers (like ``optax.adam()``, ``optax.sgd()`` etc.) also accept a
 learning rate schedule as a parameter for ``learning_rate``.
 
@@ -218,20 +213,21 @@ learning rate schedule as a parameter for ``learning_rate``.
       optax.scale_by_schedule(lambda step: -schedule(step)),
   )
 
-Multiple Optimizers / Updating a Subset of Parameters
+Multiple optimizers / Updating a subset of parameters
 -----------------------------------------------------
 
 In Flax, traversals are used to specify which parameters should be updated by an
-optimizer. And you can combine traversals using
-:py:class:`flax.optim.MultiOptimizer` to apply different optimizers on different
-parameters. The equivalent in Optax is |optax.masked()|_ and |optax.chain()|_.
+optimizer.
+
+- Combining traversals using :py:class:`flax.optim.MultiOptimizer` to apply different optimizers on different parameters.
+- In Opytax, the equivalent methods are |optax.masked()|_ and |optax.chain()|_.
 
 Note that the example below is using :py:mod:`flax.traverse_util` to create the
-boolean masks required by |optax.masked()|_ - alternatively you could also
+boolean masks required by |optax.masked()|_. Alternatively, you could also
 create them manually, or use |optax.multi_transform()|_ that takes a
 multivalent pytree to specify gradient transformations.
 
-Beware that |optax.masked()|_ flattens the pytree internally and the inner
+Beware that |optax.masked()|_ flattens the pytree internally, and the inner
 gradient transformations will only be called with that partial flattened view of
 the params/gradients. This is not a problem usually, but it makes it hard to
 nest multiple levels of masked gradient transformations (because the inner
@@ -275,9 +271,9 @@ that is not readily available outside the outer mask).
       optax.masked(optax.scale(-learning_rate * 0.1), biases_mask),
   )
 
-Final Words
+Final words
 -----------
 
-All above patterns can of course also be mixed and Optax makes it possible to
-encapsulate all these transformations into a single place outside the main
+The patterns described in this guide can be mixed together, and Optax makes it possible to
+encapsulate the transformations mentioned here into a single place outside of the main
 training loop, which makes testing much easier.
