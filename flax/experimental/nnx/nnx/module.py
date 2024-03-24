@@ -140,7 +140,24 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
         'Cannot mutate Module from different trace level'
       )
 
-    if isinstance(value, (jax.Array, np.ndarray, State)):
+    if graph_utils.is_pytree_node(value):
+      leaves = jax.tree_util.tree_leaves(value)
+      for leaf in leaves:
+        if isinstance(leaf, Module):
+          raise ValueError(
+            'Trying to assign a pytree that contains a sub-Module to the'
+            f" attribute '{name}'. This is not supported. If you need container"
+            ' like behavior, please use nnx.List or nnx.Dict instead.'
+          )
+
+        if isinstance(value, (jax.Array, np.ndarray)):
+          raise ValueError(
+            f"Trying to assign a pytree that contains a '{type(value).__name__}'"
+            f" to the Module attribute '{name}'. This is not supported. Non-hashable"
+            ' objects are not valid static state in JAX. Please wrap'
+            ' the pytree value in a Variable type instead.'
+          )
+    elif isinstance(value, (jax.Array, np.ndarray)):
       raise ValueError(
         f"Trying to assign a '{type(value).__name__}' to the Module"
         f" attribute '{name}'. This is not supported. Non-hashable "
@@ -176,7 +193,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
     SEEN_MODULES_REPR.add(self._module__state.id)
 
     try:
-      for name, value in vars(self).items():
+      for name, value in sorted(vars(self).items()):
         if isinstance(value, Module) or (
           not isinstance(value, Variable) and not name.startswith('_')
         ):
@@ -521,6 +538,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
       pop_key=_module_graph_pop_key,
       create_empty=_module_graph_create_empty,
       clear=_module_graph_clear,
+      update_static=_module_graph_update_static,
     )
 
     if experimental_pytree:
@@ -562,12 +580,18 @@ def _module_unflatten(
 # Graph Definition
 # -------------------------
 def _module_graph_flatten(module: Module):
-  nodes = tuple(
-    (name, value)
-    for name, value in vars(module).items()
-    if name != '_module__state'
-  )
-  return nodes, type(module)
+  static_fields: list[tuple[str, tp.Any]] = []
+  nodes: list[tuple[str, tp.Any]] = []
+
+  for name, value in sorted(vars(module).items()):
+    if name == '_module__state':
+      continue
+    if graph_utils.is_graph_node(value) or isinstance(value, Variable):
+      nodes.append((name, value))
+    else:
+      static_fields.append((name, value))
+
+  return tuple(nodes), (type(module), tuple(static_fields))
 
 
 def _module_graph_set_key(module: Module, name: str, value: tp.Any):
@@ -585,16 +609,29 @@ def _module_graph_pop_key(module: Module, name: str):
   return vars(module).pop(name)
 
 
-def _module_graph_create_empty(cls: tp.Type[M]) -> M:
+def _module_graph_create_empty(
+  static: tuple[tp.Type[M], tuple[tuple[str, tp.Any], ...]],
+) -> M:
+  cls, static_fields = static
   module = object.__new__(cls)
-  vars(module).update(_module__state=ModuleState())
+  vars(module).update(static_fields, _module__state=ModuleState())
   return module
 
-def _module_graph_clear(module: Module, cls: tp.Type[M]):
+def _module_graph_clear(
+  module: Module,
+  static: tuple[tp.Type[M], tuple[tuple[str, tp.Any], ...]],
+):
+  cls, static_fields = static
   module_state = module._module__state
   module_vars = vars(module)
   module_vars.clear()
-  module_vars['_module__state'] = module_state
+  module_vars.update(static_fields, _module__state=module_state)
+
+def _module_graph_update_static(
+  module: Module, static: tuple[tp.Type[M], tuple[tuple[str, tp.Any], ...]]
+):
+  _, static_fields = static
+  vars(module).update(static_fields)
 
 
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:

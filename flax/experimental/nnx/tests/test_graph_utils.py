@@ -64,8 +64,8 @@ class TestGraphUtils:
     assert g[3].raw_value is nnx.EMPTY
 
   def test_update_dynamic(self):
-    a = {'a': 1, 'b': nnx.Param(2)}
-    g = [a, 3, a, nnx.Param(4)]
+    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     state, static, _ = nnx.graph_utils.graph_flatten(g)
 
@@ -265,32 +265,6 @@ class TestGraphUtils:
 
     assert isinstance(p2, Tree)
     assert p2.a == 1
-
-  def test_pytree_node(self):
-    @struct.dataclass
-    class Tree:
-      a: nnx.Param[int]
-      b: str = struct.field(pytree_node=False)
-
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.tree = Tree(nnx.Param(1), 'a')
-
-    m = Foo()
-
-    state, static = m.split()
-
-    assert 'tree' in state
-    assert 'a' in state.tree
-    assert static.subgraphs['tree'].type is nnx.graph_utils.PytreeType
-
-    m2 = static.merge(state)
-
-    assert isinstance(m2.tree, Tree)
-    assert m2.tree.a.raw_value == 1
-    assert m2.tree.b == 'a'
-    assert m2.tree.a is not m.tree.a
-    assert m2.tree is not m.tree
 
   def test_cached_unflatten(self):
     class Foo(nnx.Module):

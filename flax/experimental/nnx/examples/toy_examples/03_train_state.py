@@ -62,7 +62,7 @@ params, counts, static = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)).split(
   nnx.Param, ...
 )
 
-state = nnx.TrainState(
+state = nnx.TrainState.create(
   static,
   params=params,
   tx=optax.sgd(0.1),
@@ -81,7 +81,7 @@ def train_step(state: nnx.TrainState[MLP], batch):
     loss = jnp.mean((y - y_pred) ** 2)
     return loss, counts
 
-  grads, counts = jax.grad(loss_fn, has_aux=True)(state.params)
+  grads, counts = jax.grad(loss_fn, has_aux=True)(state.params.value)
   # sdg update
   state = state.apply_gradients(grads=grads, counts=counts)
 

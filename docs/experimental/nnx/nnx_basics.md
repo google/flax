@@ -106,9 +106,11 @@ thus preventing tracer leakage.
 As expected, Modules can used to compose other Modules in a nested
 structure, this includes standard Modules such as `nnx.Linear`,
 `nnx.Conv`, etc, or any custom Module created by users. Modules can 
-be assigned as attributes of a Module, but shown by `MLP.blocks` in the
-example below, they can also be stored in attributes of type `list`, `dict`, `tuple`, 
-or nested structues of the previous.
+be assigned as attributes of a Module, all other attributes except for
+`Variable` will be treaten as static components. If some container-like
+structures (e.g. list/dict) are needed to store Modules, NNX provides 
+the `nnx.List` and `nnx.Dict` Modules that expose similar APIs to their
+python counterparts (see `MLP.blocks` in the example below).
 
 ```{code-cell} ipython3
 class Block(nnx.Module):
@@ -121,7 +123,7 @@ class Block(nnx.Module):
   
 class MLP(nnx.Module):
   def __init__(self, num_layers: int, dim: int, *, rngs: nnx.Rngs):
-    self.blocks = [Block(dim, rngs=rngs) for _ in range(num_layers)]
+    self.blocks = nnx.List(Block(dim, rngs=rngs) for _ in range(num_layers))
   
   def __call__(self, x: jax.Array):
     for block in self.blocks:
