@@ -30,6 +30,7 @@ from flax.linen.linear import (
 )
 from flax.linen.module import Module, compact, merge_param
 from flax.linen.normalization import LayerNorm
+from flax.linen.partitioning import variable_with_axes
 from flax.typing import (
   Array,
   PRNGKey,
@@ -38,8 +39,8 @@ from flax.typing import (
   Initializer,
   PrecisionLike,
   DotGeneralT,
+  Tuple,
 )
-
 
 def dot_product_attention_weights(
   query: Array,
@@ -288,6 +289,16 @@ class MultiHeadDotProductAttention(Module):
       num_heads, value_channels]``
     decode: Whether to prepare and use an autoregressive cache.
     normalize_qk: Should QK normalization be applied (arxiv.org/abs/2302.05442).
+    in_proj_kernel_axes: a tuple of axes over which to shard the kernel for
+      the attention in-projection.
+    in_proj_bias_axes: a tuple of axis names associated with the bias for
+      the attention in-projection.
+    out_proj_kernel_axes: a tuple of axis names associated with the kernel for
+      the attention out-projection.
+    out_proj_bias_axes: a tuple of axis names associated with the bias for
+      the attention out-projection.
+    decode_axes: a tuple of axis names associated with auroregressive cache.
+      Only used when decode=True.
   """
 
   num_heads: int
@@ -310,6 +321,11 @@ class MultiHeadDotProductAttention(Module):
   out_dot_general: Optional[DotGeneralT] = None
   qkv_dot_general_cls: Any = None
   out_dot_general_cls: Any = None
+  in_proj_kernel_axes: Tuple[str, ...] = None
+  in_proj_bias_axes: Tuple[str, ...] = None
+  out_proj_kernel_axes: Tuple[str, ...] = None
+  out_proj_bias_axes: Tuple[str, ...] = None
+  decode_axes: Tuple[str, ...] = None
 
   @overload
   def __call__(
@@ -448,6 +464,8 @@ class MultiHeadDotProductAttention(Module):
       precision=self.precision,
       dot_general=self.qkv_dot_general,
       dot_general_cls=self.qkv_dot_general_cls,
+      kernel_axes=self.in_proj_kernel_axes,
+      bias_axes=self.in_proj_bias_axes,
     )
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
@@ -478,14 +496,14 @@ class MultiHeadDotProductAttention(Module):
     if self.decode:
       # detect if we're initializing by absence of existing cache data.
       is_initialized = self.has_variable('cache', 'cached_key')
-      cached_key = self.variable(
-        'cache', 'cached_key', jnp.zeros, key.shape, key.dtype
+      cached_key = variable_with_axes('cache', 'cached_key',
+        jnp.zeros, key.shape, key.dtype, axes=self.decode_axes
       )
-      cached_value = self.variable(
-        'cache', 'cached_value', jnp.zeros, value.shape, value.dtype
+      cached_value = variable_with_axes('cache', 'cached_value',
+        jnp.zeros, value.shape, value.dtype, axes=self.decode_axes
       )
-      cache_index = self.variable(
-        'cache', 'cache_index', lambda: jnp.array(0, dtype=jnp.int32)
+      cache_index = variable_with_axes('cache', 'cache_index',
+        lambda: jnp.array(0, dtype=jnp.int32), axes=None
       )
       if is_initialized:
         (
@@ -581,6 +599,8 @@ class MultiHeadDotProductAttention(Module):
       dot_general=self.out_dot_general,
       dot_general_cls=self.out_dot_general_cls,
       name='out',  # type: ignore[call-arg]
+      kernel_axes=self.out_proj_kernel_axes,
+      bias_axes=self.out_proj_bias_axes,
     )(x)
     return out
 
