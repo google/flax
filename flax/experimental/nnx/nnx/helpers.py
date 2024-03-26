@@ -32,14 +32,13 @@ import typing as tp
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 
-from flax.experimental.nnx.nnx import pytreelib
 from flax.experimental.nnx.nnx.module import GraphDef, Module
 from flax.experimental.nnx.nnx.proxy_caller import ApplyCaller
 from flax.experimental.nnx.nnx.rnglib import Rngs
 from flax.experimental.nnx.nnx.state import State
+from flax.training.train_state import struct
 
 A = tp.TypeVar('A')
 M = tp.TypeVar('M', bound=Module)
@@ -87,8 +86,10 @@ class List(Module, tp.Generic[A]):
     self._length = i + 1
 
   def __getitem__(self, key: int) -> A:
-    if key >= len(self):
+    if key >= len(self) or key < -len(self):
       raise IndexError(f'index {key} out of range for {self}')
+    if key < 0:
+      key = self._length + key
     return getattr(self, str(key))
 
   def __setitem__(self, key: int, value: A):
@@ -135,9 +136,16 @@ class ModuleDefApply(tp.Protocol, tp.Generic[M]):
     ...
 
 
-class TrainState(pytreelib.Pytree, tp.Generic[M]):
-  def __init__(
-    self,
+class TrainState(struct.PyTreeNode, tp.Generic[M]):
+  graphdef: GraphDef[M]
+  params: State
+  tx: optax.GradientTransformation = struct.field(pytree_node=False)
+  opt_state: optax.OptState
+  step: jax.Array
+
+  @classmethod
+  def create(
+    cls,
     graphdef: GraphDef[M],
     *,
     params: State,
@@ -145,15 +153,14 @@ class TrainState(pytreelib.Pytree, tp.Generic[M]):
     step: int = 0,
     **kwargs,
   ):
-    self.graphdef = graphdef
-    self.params: State = pytreelib.TreeNode(params)
-    self.tx = tx
-    self.opt_state = pytreelib.TreeNode(tx.init(self.params))
-    self.step = pytreelib.TreeNode(jnp.asarray(step))
-    for name, value in kwargs.items():
-      if isinstance(value, (jax.Array, np.ndarray, State)):
-        value = pytreelib.TreeNode(value)
-      setattr(self, name, value)
+    return cls(
+      graphdef=graphdef,
+      params=params,
+      tx=tx,
+      opt_state=tx.init(params),
+      step=jnp.asarray(step),
+      **kwargs,
+    )
 
   if tp.TYPE_CHECKING:
 
@@ -165,17 +172,24 @@ class TrainState(pytreelib.Pytree, tp.Generic[M]):
   ) -> ApplyCaller[tuple[State, GraphDef[M]]]:
     states = (state, *states)
 
-    _states = (
-      getattr(self, state).value if isinstance(state, str) else state.value
-      for state in states
-    )
+    _states: list[State] = []
+
+    for _state in states:
+      if isinstance(_state, str):
+        _state_key = _state
+        _state = getattr(self, _state_key)
+        if not isinstance(_state, State):
+          raise TypeError(
+            f'Expected {self.__class__.__name__}.{_state_key} to be a State, got {type(_state)}'
+          )
+      _states.append(_state)
 
     return self.graphdef.apply(*_states)
 
   def apply_gradients(self, grads: State, **kwargs) -> 'TrainState[M]':
-    updates, opt_state = self.tx.update(grads, self.opt_state.value, self.params.value)
+    updates, opt_state = self.tx.update(grads, self.opt_state, self.params)
     params = optax.apply_updates(self.params, updates)  # type: ignore
-    step = self.step.replace(value=self.step.value + 1)
+    step = self.step + 1
     return self.replace(
       params=params,
       opt_state=opt_state,

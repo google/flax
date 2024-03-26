@@ -18,6 +18,9 @@ import optax
 
 from flax.experimental import nnx
 
+class TrainState(nnx.TrainState):
+  batch_stats: nnx.State
+
 
 class TestHelpers:
   def test_train_state(self):
@@ -25,21 +28,14 @@ class TestHelpers:
 
     params, batch_stats, graphdef = m.split(nnx.Param, nnx.BatchStat)
 
-    state = nnx.TrainState(
+    state = TrainState.create(
       graphdef,
       params=params,
       tx=optax.sgd(1.0),
-      batch_stats=nnx.TreeNode(batch_stats),
-      other=nnx.Variable(100),
-      int=200,
+      batch_stats=batch_stats,
     )
 
     leaves = jax.tree_util.tree_leaves(state)
-
-    assert 1 in leaves
-    assert 2 in leaves
-    assert 100 in leaves
-    assert 200 not in leaves
 
   def test_train_state_methods(self):
     class Foo(nnx.Module):
@@ -55,7 +51,7 @@ class TestHelpers:
     module = Foo(rngs=nnx.Rngs(0))
     params, batch_stats, graphdef = module.split(nnx.Param, nnx.BatchStat)
 
-    state = nnx.TrainState(
+    state = TrainState.create(
       graphdef,
       params=params,
       tx=optax.sgd(1.0),

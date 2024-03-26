@@ -62,7 +62,7 @@ params, counts, static = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)).split(
   nnx.Param, ...
 )
 
-state = nnx.TrainState(
+state = nnx.TrainState.create(
   static,
   params=params,
   tx=optax.sgd(0.1),
