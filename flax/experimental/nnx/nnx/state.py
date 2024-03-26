@@ -74,29 +74,23 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
-  def __getitem__(self, key: Key | int) -> Variable | State:
+  def __getitem__(self, key: Key | int) -> State:
     if isinstance(key, int):
       key = str(key)
     value = self._mapping[key]
-    if isinstance(value, Variable):
-      return value
-    return State(value)
+    if isinstance(value, dict):
+      return State(value)
+    return value
 
-  def __getattr__(self, key: Key) -> Variable | State:
+  def __getattr__(self, key: Key) -> tp.Any:
     if '_mapping' not in vars(self) or key not in self._mapping:
-      raise AttributeError(f'No attribute {key} in State')
-
+      raise AttributeError(f"No attribute '{key}' in State")
     return self[key]
 
-  def __setitem__(self, key: Key | int, value: Variable | State) -> None:
+  def __setitem__(self, key: Key | int, value: tp.Any) -> None:
     if isinstance(key, int):
       key = str(key)
 
-    if not isinstance(value, (Variable, State)):
-      raise ValueError(
-        f'Trying to set key {key} to a value'
-        f' that is not a Variable or State, got: {value}.'
-      )
     if isinstance(value, State):
       self._mapping[key] = value._mapping
     else:

@@ -53,7 +53,9 @@ class StateTest(TestCase):
   def test_integer_access(self):
     class Foo(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
-        self.layers = [nnx.Linear(1, 2, rngs=rngs), nnx.Linear(2, 3, rngs=rngs)]
+        self.layers = nnx.List(
+          [nnx.Linear(1, 2, rngs=rngs), nnx.Linear(2, 3, rngs=rngs)]
+        )
 
     module = Foo(rngs=nnx.Rngs(0))
     state = module.get_state()

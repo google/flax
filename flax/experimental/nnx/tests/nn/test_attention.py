@@ -42,9 +42,9 @@ class TestMultiHeadAttention:
       attention_kwargs: dict
 
       def __init__(self, attention_kwargs, rng):
-        self.attention_layers = [
+        self.attention_layers = nnx.List(
           nnx.MultiHeadAttention(**attention_kwargs, rngs=rng) for i in range(3)
-        ]
+        )
 
       def __call__(self, x, sow_weights=False):
         x = self.attention_layers[0](x, sow_weights=sow_weights)

@@ -433,7 +433,7 @@ class TestModule:
 
     m2 = m2.clone()  # clone to sort the fields
 
-    with pytest.raises(ValueError, match='Trying to add a new node at path'):
+    with pytest.raises(ValueError, match='Trying to update a node at path'):
       m1.update(m2)
 
   def test_create_abstract(self):
@@ -655,19 +655,27 @@ class TestModuleDef:
   def test_modules_iterator(self):
     class Foo(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
-        self.submodules = [
-          {'a': nnx.Linear(1, 1, rngs=rngs)},
-          {'b': nnx.Conv(1, 1, 1, rngs=rngs)},
-        ]
+        self.submodules = nnx.List(
+          [
+            nnx.Dict({'a': nnx.Linear(1, 1, rngs=rngs)}),
+            nnx.Dict({'b': nnx.Conv(1, 1, 1, rngs=rngs)}),
+          ]
+        )
 
     module = Foo(rngs=nnx.Rngs(0))
 
     modules = list(module.modules())
 
-    assert len(modules) == 3
+    assert len(modules) == 6
     assert modules[0][0] == ''
     assert isinstance(modules[0][1], Foo)
-    assert modules[1][0] == 'submodules/0/a'
-    assert isinstance(modules[1][1], nnx.Linear)
-    assert modules[2][0] == 'submodules/1/b'
-    assert isinstance(modules[2][1], nnx.Conv)
+    assert modules[1][0] == 'submodules'
+    assert isinstance(modules[1][1], nnx.List)
+    assert modules[2][0] == 'submodules/0'
+    assert isinstance(modules[2][1], nnx.Dict)
+    assert modules[3][0] == 'submodules/0/a'
+    assert isinstance(modules[3][1], nnx.Linear)
+    assert modules[4][0] == 'submodules/1'
+    assert isinstance(modules[4][1], nnx.Dict)
+    assert modules[5][0] == 'submodules/1/b'
+    assert isinstance(modules[5][1], nnx.Conv)

@@ -106,6 +106,7 @@ class GraphNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
   pop_key: tp.Callable[[Node, str], Leaf]
   create_empty: tp.Callable[[AuxData], Node]
   clear: tp.Callable[[Node, AuxData], None]
+  update_static: tp.Callable[[Node, AuxData], None]
 
   def init(self, node: Node, items: tuple[tuple[str, Leaf], ...]):
     for key, value in items:
@@ -130,6 +131,7 @@ def register_graph_node_type(
   pop_key: tp.Callable[[Node, str], Leaf],
   create_empty: tp.Callable[[AuxData], Node],
   clear: tp.Callable[[Node, AuxData], None],
+  update_static: tp.Callable[[Node, AuxData], None],
 ):
   NODE_TYPES[type] = GraphNodeImpl(
     type=type,
@@ -138,6 +140,7 @@ def register_graph_node_type(
     pop_key=pop_key,
     create_empty=create_empty,
     clear=clear,
+    update_static=update_static,
   )
 
 
@@ -147,6 +150,9 @@ def is_node(x: tp.Any) -> bool:
   elif type(x) in NODE_TYPES:
     return True
   return is_pytree_node(x)
+
+def is_graph_node(x: tp.Any) -> bool:
+  return type(x) in NODE_TYPES
 
 
 def is_node_type(x: type[tp.Any]) -> bool:
@@ -284,7 +290,6 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     '_index',
     '_attributes',
     '_subgraphs',
-    '_static_fields',
     '_variables',
     '_metadata',
   )
@@ -295,7 +300,6 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     index: int,
     attributes: tuple[str, ...],
     subgraphs: tp.Iterable[tuple[str, tp.Union['GraphDef[tp.Any]', int]]],
-    static_fields: tp.Iterable[tuple[str, tp.Any]],
     variables: tp.Iterable[tuple[str, VariableDef | int]],
     metadata: tp.Any,
   ):
@@ -303,7 +307,6 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     self._index = index
     self._attributes = attributes
     self._subgraphs = _HashableMapping(subgraphs)
-    self._static_fields = _HashableMapping(static_fields)
     self._variables = _HashableMapping(variables)
     self._metadata = metadata
 
@@ -314,7 +317,6 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     yield reprlib.Attr('index', self._index)
     yield reprlib.Attr('attributes', self._attributes)
     yield reprlib.Attr('subgraphs', _MappingRepr(self._subgraphs))
-    yield reprlib.Attr('static_fields', _MappingRepr(self._static_fields))
     yield reprlib.Attr('variables', _MappingRepr(self._variables))
     yield reprlib.Attr('metadata', self._metadata)
 
@@ -341,10 +343,6 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
   @property
   def subgraphs(self):
     return self._subgraphs
-
-  @property
-  def static_fields(self):
-    return self._static_fields
 
   @property
   def variables(self):
@@ -384,7 +382,6 @@ def _gradphdef_flatten(graphdef: GraphDef[tp.Any]):
     graphdef._index,
     graphdef._attributes,
     graphdef._subgraphs,
-    graphdef._static_fields,
     graphdef._variables,
     graphdef._metadata,
   )
@@ -442,7 +439,6 @@ def _graph_flatten(
     index = -1
 
   subgraphs: list[tuple[str, tp.Union[GraphDef[Node], int]]] = []
-  static_fields: list[tuple[str, tp.Any]] = []
   variables: list[tuple[str, VariableDef | int]] = []
 
   values, metadata = node_impl.flatten(node)
@@ -466,14 +462,14 @@ def _graph_flatten(
           (key, VariableDef.from_variable(value, variable_index))
         )
     else:
-      static_fields.append((key, value))
+      str_path = '/'.join((*path, key))
+      flat_state[str_path] = value
 
   graphdef = GraphDef(
     type=node_impl.type,
     index=index,
     attributes=tuple(key for key, _ in values),
     subgraphs=subgraphs,
-    static_fields=static_fields,
     variables=variables,
     metadata=metadata,
   )
@@ -539,9 +535,7 @@ def _graph_unflatten(
     new_state: dict[str, tp.Any] = {}
 
     for key in graphdef.attributes:
-      if key in graphdef.static_fields:
-        new_state[key] = graphdef.static_fields[key]
-      elif key not in state:
+      if key not in state:
         # if key is not present create an empty types
         if key in graphdef.subgraphs:
           # if the key is a subgraph we create an empty node
@@ -577,7 +571,7 @@ def _graph_unflatten(
             new_state[key] = node
             index_to_ref[variable_def.index] = node
         else:
-          raise RuntimeError(f'Unknown static field: {key!r}')
+          raise RuntimeError(f'Unknown field: {key!r}')
       else:
         value = state[key]
         if key in graphdef.subgraphs:
@@ -618,6 +612,8 @@ def _graph_unflatten(
               variable = value.copy()
             new_state[key] = variable
             index_to_ref[variable_def.index] = variable
+        else:
+          new_state[key] = value
 
     for new_key in set(state) - set(graphdef.attributes):
       new_state[new_key] = state[new_key]
@@ -751,18 +747,22 @@ def _graph_update_dynamic(
           f'Expected a subgraph for {key!r}, but got a Variable: {value!r}'
         )
       _graph_update_dynamic(current_value, value)
-    else:
+    elif isinstance(value, Variable):
       # case 3: Variable is being updated
-      # assert isinstance(value, Variable)
-      # assert isinstance(current_value, Variable)
-      if not isinstance(value, Variable):
-        raise ValueError(f'Expected a Variable for attribute {key!r}')
       if not isinstance(current_value, Variable):
         raise ValueError(
           f'Trying to update a non-Variable attribute {key!r} with a Variable: '
           f'{value!r}'
         )
       current_value.copy_from(value)
+    else:
+      # case 4: non-Variable key is being updated
+      if isinstance(node_impl, PytreeNodeImpl):
+        raise ValueError(
+          f'Cannot update key {key!r} on immutable node of '
+          f'type {type(node).__name__}'
+        )
+      node_impl.set_key(node, key, value)
 
 
 class _StaticModuleStatus(enum.Enum):
@@ -810,13 +810,14 @@ def _graph_update_static(
 
   node_impl = get_node_impl(node)
   node_dict = node_impl.node_dict(node)
-  updates_dict = node_impl.node_dict(updates)
+  updates_leaves, updates_static = node_impl.flatten(updates)
+  updates_dict = dict(updates_leaves)
+  if isinstance(node_impl, GraphNodeImpl):
+    node_impl.update_static(node, updates_static)
+
   for name, value_updates in updates_dict.items():
-    # case 1: trying to update a Variable, skip
-    if isinstance(value_updates, Variable):
-      continue
-    elif is_node(value_updates):
-      # case 2: updating an existing subgraph
+    if is_node(value_updates):
+      # case 1: updating an existing subgraph
       if name in node_dict:
         _graph_update_static(
           node_dict[name],
@@ -826,7 +827,7 @@ def _graph_update_static(
           (*path, name),
         )
       else:
-        # case 3: adding a new subgraph
+        # case 2: adding a new subgraph
         if isinstance(node_impl, PytreeNodeImpl):
           raise ValueError(
             f'Cannot set key {name!r} on immutable node of '
@@ -845,19 +846,6 @@ def _graph_update_static(
           cache[id(value_updates)] = _StaticModuleStatus.NEW
 
         node_impl.set_key(node, name, value_updates)
-    else:  # static field
-      if isinstance(node_impl, PytreeNodeImpl):
-        if name in node_dict and node_dict[name] == value_updates:
-          # if the value is the same, skip
-          continue
-        # if trying
-        raise ValueError(
-          f'Cannot update key {name!r} on immutable node of '
-          f'type {type(node).__name__}. Current value is {node_dict[name]!r}, '
-          f'new value is {value_updates!r}.'
-        )
-
-      node_impl.set_key(node, name, value_updates)
 
 
 def clone(node: Node) -> Node:
