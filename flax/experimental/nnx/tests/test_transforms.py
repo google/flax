@@ -17,6 +17,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from flax.experimental import nnx
@@ -115,6 +116,207 @@ class TestJIT:
     assert n == 1
     y = m(jnp.ones((1, 2)))
     assert n == 1
+
+  def test_cached_unflatten(self):
+    n = 0
+
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.a = nnx.Linear(2, 2, rngs=rngs)
+        self.b = nnx.BatchNorm(2, rngs=rngs)
+
+    @nnx.jit
+    def f(m: Foo):
+      nonlocal n
+      n += 1
+      m.a, m.b = m.b, m.a
+
+    m = Foo(rngs=nnx.Rngs(0))
+    a = m.a
+    b = m.b
+    a_kernel = a.kernel.value
+    a_bias = a.bias.value
+    b_scale = b.scale.value
+    b_bias = b.bias.value
+    b_mean = b.mean.value
+    b_var = b.var.value
+
+    f(m)
+
+    assert n == 1
+    assert m.a is b
+    assert m.b is a
+    np.testing.assert_allclose(a_kernel, a.kernel.value)
+    np.testing.assert_allclose(a_bias, a.bias.value)
+    np.testing.assert_allclose(b_scale, b.scale.value)
+    np.testing.assert_allclose(b_bias, b.bias.value)
+    np.testing.assert_allclose(b_mean, b.mean.value)
+    np.testing.assert_allclose(b_var, b.var.value)
+
+    f(m)
+
+    assert n == 2
+    assert m.a is a
+    assert m.b is b
+
+    f(m)
+
+    assert n == 2
+    assert m.a is b
+    assert m.b is a
+
+    f(m)
+
+    assert n == 2
+    assert m.a is a
+    assert m.b is b
+
+  def test_cached_unflatten_same_type(self):
+    n = 0
+
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.a = nnx.Linear(2, 2, rngs=rngs)
+        self.b = nnx.Linear(2, 2, rngs=rngs)
+
+    @nnx.jit
+    def f(m: Foo):
+      nonlocal n
+      n += 1
+      m.a, m.b = m.b, m.a
+
+    m = Foo(rngs=nnx.Rngs(0))
+    a = m.a
+    b = m.b
+
+    f(m)
+
+    assert n == 1
+    assert m.a is b
+    assert m.b is a
+
+    f(m)
+
+    assert n == 1
+    assert m.a is a
+    assert m.b is b
+
+  def test_objects_in_pytree(self):
+    n = 0
+
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.a = nnx.Linear(2, 2, rngs=rngs)
+        self.b = nnx.Linear(2, 2, rngs=rngs)
+
+    class FooDict(tp.TypedDict):
+      foo: Foo
+
+    @nnx.jit
+    def f(tree: tuple[FooDict]):
+      nonlocal n
+      n += 1
+      m = tree[0]['foo']
+      m.a, m.b = m.b, m.a
+
+    m = Foo(rngs=nnx.Rngs(0))
+    a = m.a
+    b = m.b
+
+    f(({'foo': m},))
+
+    assert n == 1
+    assert m.a is b
+    assert m.b is a
+
+    f(({'foo': m},))
+
+    assert n == 1
+    assert m.a is a
+    assert m.b is b
+
+  def test_cached_unflatten_swap_variables(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.a = nnx.Param(1)
+        self.b = nnx.Param(2)
+
+    @nnx.jit
+    def f(m: Foo):
+      m.a, m.b = m.b, m.a
+
+    m = Foo()
+    a = m.a
+    b = m.b
+
+    f(m)
+
+    assert m.a is b
+    assert m.b is a
+
+  def test_cached_unflatten_add_self_reference(self):
+    n = 0
+
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.ref: tp.Optional[Foo] = None
+
+    @nnx.jit
+    def f(m: Foo):
+      nonlocal n
+      n += 1
+      m.ref = m
+
+    m = Foo()
+
+    f(m)
+
+    assert n == 1
+    assert m.ref is m
+
+    f(m)
+
+    assert n == 2
+    assert m.ref is m
+
+    f(m)
+
+    assert n == 2
+    assert m.ref is m
+
+  def test_cached_unflatten_ref_in_output(self):
+    n = 0
+
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.ref: tp.Optional[Foo] = None
+
+    @nnx.jit
+    def f(m: Foo):
+      nonlocal n
+      n += 1
+      m.ref = m
+      return m
+
+    m = Foo()
+
+    m2 = f(m)
+
+    assert n == 1
+    assert m.ref is m
+    assert m2 is m
+
+    m2 = f(m)
+
+    assert n == 2
+    assert m.ref is m
+    assert m2 is m
+
+    m2 = f(m)
+
+    assert n == 2
+    assert m.ref is m
+    assert m2 is m
 
 
 class TestGrad:
