@@ -23,6 +23,7 @@ from functools import partial
 import jax
 import jax.tree_util as jtu
 import numpy as np
+import chex
 import typing_extensions as tpe
 
 from flax.experimental.nnx.nnx import (
@@ -122,6 +123,7 @@ Updates = tp.Union[
   tuple[tuple[State, ...], GraphDef[M]],
   State,
   tuple[State, ...],
+  chex.ArrayTree,
 ]
 
 
