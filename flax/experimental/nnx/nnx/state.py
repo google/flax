@@ -28,9 +28,11 @@
 from __future__ import annotations
 
 import typing as tp
+import typing_extensions as tpe
 
 import jax
 import jax.tree_util as jtu
+import numpy as np
 
 from flax import traverse_util
 from flax.experimental.nnx.nnx import filterlib, reprlib
@@ -40,7 +42,12 @@ from flax.typing import Path
 A = tp.TypeVar('A')
 
 Key = str
-FlatState = dict[Path, Variable[Variable]]
+StateLeaf = tp.Union[Variable[tp.Any], np.ndarray, jax.Array]
+FlatState = dict[Path, StateLeaf]
+
+
+def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
+  return isinstance(x, (Variable, np.ndarray, jax.Array))
 
 
 class NestedStateRepr(reprlib.Representable):
@@ -61,7 +68,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     self,
     mapping: tp.Union[
       tp.Mapping[Key, tp.Any],
-      tp.Iterator[tp.Tuple[Key, tp.Any]],
+      tp.Iterator[tuple[Key, tp.Any]],
     ],
     /,
   ):
@@ -74,29 +81,23 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
-  def __getitem__(self, key: Key | int) -> Variable | State:
+  def __getitem__(self, key: Key | int) -> State | StateLeaf:
     if isinstance(key, int):
       key = str(key)
     value = self._mapping[key]
-    if isinstance(value, Variable):
+    if is_state_leaf(value):
       return value
     return State(value)
 
-  def __getattr__(self, key: Key) -> Variable | State:
+  def __getattr__(self, key: Key) -> State | StateLeaf:
     if '_mapping' not in vars(self) or key not in self._mapping:
-      raise AttributeError(f'No attribute {key} in State')
-
+      raise AttributeError(f"No attribute '{key}' in State")
     return self[key]
 
-  def __setitem__(self, key: Key | int, value: Variable | State) -> None:
+  def __setitem__(self, key: Key | int, value: State | StateLeaf) -> None:
     if isinstance(key, int):
       key = str(key)
 
-    if not isinstance(value, (Variable, State)):
-      raise ValueError(
-        f'Trying to set key {key} to a value'
-        f' that is not a Variable or State, got: {value}.'
-      )
     if isinstance(value, State):
       self._mapping[key] = value._mapping
     else:
@@ -140,12 +141,12 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tp.Tuple['State', ...]:
+  ) -> tuple['State', ...]:
     ...
 
   def split(
     self, first: filterlib.Filter, /, *filters: filterlib.Filter
-  ) -> tp.Union['State', tp.Tuple['State', ...]]:
+  ) -> tp.Union['State', tuple['State', ...]]:
     filters = (first, *filters)
     *states, rest = _split_state(self, *filters)
 
@@ -176,7 +177,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tp.Tuple['State', ...]:
+  ) -> tuple['State', ...]:
     ...
 
   def extract(
@@ -184,7 +185,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     first: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tp.Union['State', tp.Tuple['State', ...]]:
+  ) -> tp.Union['State', tuple['State', ...]]:
     *states, _rest = _split_state(self, first, *filters)
 
     assert len(states) == len(filters) + 1
@@ -229,32 +230,27 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
 def _state_flatten_with_keys(x: State):
   items = sorted(x._mapping.items(), key=lambda item: item[0])
   children = tuple((jtu.DictKey(key), value) for key, value in items)
-  return children, tuple(x._mapping.keys())
+  return children, tuple(key for key, _ in items)
 
 
 def _state_unflatten(
-  static: tp.Tuple[Path, ...] | None,
-  leaves: tp.Tuple[Variable, ...] | tuple[dict[str, Variable]],
+  static: tuple[Path, ...],
+  leaves: tuple[Variable, ...] | tuple[dict[str, Variable]],
 ):
-  return State(zip(static, leaves)) if static else State(leaves[0])
-
-
-def _state_flatten(x: State):
-  return (x._mapping,), None
+  return State(zip(static, leaves))
 
 
 jax.tree_util.register_pytree_with_keys(
   State,
   _state_flatten_with_keys,
   _state_unflatten,
-  flatten_func=_state_flatten,
 )
 
 
 def _split_state(
   state: State,
   *filters: filterlib.Filter,
-) -> tp.Tuple[State, ...]:
+) -> tuple[State, ...]:
   for i, filter_ in enumerate(filters):
     if filter_ is ... and i != len(filters) - 1:
       raise ValueError(
@@ -267,7 +263,7 @@ def _split_state(
 
   # we have n + 1 states, where n is the number of predicates
   # the last state is for values that don't match any predicate
-  flat_states: tp.Tuple[FlatState, ...] = tuple(
+  flat_states: tuple[FlatState, ...] = tuple(
     {} for _ in range(len(predicates) + 1)
   )
 

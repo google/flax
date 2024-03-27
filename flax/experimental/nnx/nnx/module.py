@@ -22,7 +22,6 @@ from functools import partial
 
 import jax
 import jax.tree_util as jtu
-import numpy as np
 import typing_extensions as tpe
 
 from flax.experimental.nnx.nnx import (
@@ -138,14 +137,6 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
     if not self._module__state.trace_state.is_valid():
       raise errors.TraceContextError(
         'Cannot mutate Module from different trace level'
-      )
-
-    if isinstance(value, (jax.Array, np.ndarray, State)):
-      raise ValueError(
-        f"Trying to assign a '{type(value).__name__}' to the Module"
-        f" attribute '{name}'. This is not supported. Non-hashable "
-        'objects are not valid static state in JAX. Please wrap '
-        'the value in a Variable type instead.'
       )
 
     object.__setattr__(self, name, value)

@@ -41,10 +41,12 @@ class Linear(nnx.Module):
     return x @ self.w.value + self.b.value
 ```
 
-As shown above dynamic state is stored in `nnx.Variable`s such as `nnx.Param`,
+As shown above dynamic state is usually stored in `nnx.Variable`s such as `nnx.Param`,
 and static state (all types not handled by NNX) such as integers or strings 
-are stored directly. RNG keys can be requested from the `nnx.Rngs` object
-by calling `rngs.<stream_name>()` where the stream name show match on of the names provided to the `Rngs` constructor (shown below).
+are stored directly. JAX array and Numpy array attributes are also treated as dynamic state,
+although storing them inside `nnx.Variable`s is preferred. Also, RNG keys can be requested from the 
+`nnx.Rngs` object by calling `rngs.<stream_name>()` where the stream name show match on of 
+the names provided to the `Rngs` constructor (shown below).
 
 To actually initialize a Module is very easy: simply call the constructor. All of the
 parameters of a Module will be created right then and there, and are immediately available
