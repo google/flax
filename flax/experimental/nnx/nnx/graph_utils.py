@@ -16,23 +16,37 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import threading
 import typing as tp
+from abc import ABCMeta
+from copy import deepcopy
 
 import jax
+import typing_extensions as tpe
 
-from flax.experimental.nnx.nnx import filterlib, reprlib, tracers
+from flax.experimental.nnx.nnx import (
+  errors,
+  filterlib,
+  graph_utils,
+  ids,
+  reprlib,
+  tracers,
+)
 from flax.experimental.nnx.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
   DelayedAccessor,
 )
 from flax.experimental.nnx.nnx.state import State, StateLeaf, is_state_leaf
+from flax.experimental.nnx.nnx.rnglib import Rngs
+from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import EMPTY, Empty, Variable
 from flax.typing import Path, PathParts
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
 C = tp.TypeVar('C')
+G = tp.TypeVar('G', bound='GraphNode')
 HA = tp.TypeVar('HA', bound=tp.Hashable)
 HB = tp.TypeVar('HB', bound=tp.Hashable)
 
@@ -42,7 +56,24 @@ Node = tp.TypeVar('Node')
 Leaf = tp.TypeVar('Leaf')
 AuxData = tp.TypeVar('AuxData')
 
-NODE_TYPES: dict[type, 'NodeImpl[tp.Any, tp.Any, tp.Any]'] = {}
+Updates = tp.Union[
+  A,
+  'GraphDef[A]',
+  tuple[State, 'GraphDef[A]'],
+  tuple[tuple[State, ...], 'GraphDef[A]'],
+  State,
+  tuple[State, ...],
+]
+
+@dataclasses.dataclass
+class GraphUtilsContext(threading.local):
+  node_types: dict[
+    type, 'NodeImpl[tp.Any, tp.Any, tp.Any]'
+  ] = dataclasses.field(default_factory=dict)
+  seen_modules_repr: tp.Optional[tp.Set[ids.UUID]] = None
+
+
+CONTEXT = GraphUtilsContext()
 
 
 class _HashById(tp.Hashable, tp.Generic[A]):
@@ -131,7 +162,7 @@ def register_graph_node_type(
   create_empty: tp.Callable[[AuxData], Node],
   clear: tp.Callable[[Node, AuxData], None],
 ):
-  NODE_TYPES[type] = GraphNodeImpl(
+  CONTEXT.node_types[type] = GraphNodeImpl(
     type=type,
     flatten=flatten,
     set_key=set_key,
@@ -144,13 +175,17 @@ def register_graph_node_type(
 def is_node(x: tp.Any) -> bool:
   if isinstance(x, Variable):
     return False
-  elif type(x) in NODE_TYPES:
+  elif type(x) in CONTEXT.node_types:
     return True
   return is_pytree_node(x)
 
 
+def is_graph_node(x: tp.Any) -> bool:
+  return type(x) in CONTEXT.node_types
+
+
 def is_node_type(x: type[tp.Any]) -> bool:
-  return x in NODE_TYPES or x is PytreeType
+  return x in CONTEXT.node_types or x is PytreeType
 
 
 def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any]:
@@ -159,19 +194,19 @@ def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any]:
 
   node_type = type(x)
 
-  if node_type not in NODE_TYPES:
+  if node_type not in CONTEXT.node_types:
     if is_pytree_node(x):
       return PYTREE_NODE_IMPL
     else:
       raise ValueError(f'Unknown node type: {x}')
 
-  return NODE_TYPES[node_type]
+  return CONTEXT.node_types[node_type]
 
 
 def get_node_impl_for_type(x: type[Node]) -> NodeImpl[Node, tp.Any, tp.Any]:
   if x is PytreeType:
     return PYTREE_NODE_IMPL
-  return NODE_TYPES[x]
+  return CONTEXT.node_types[x]
 
 
 class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
@@ -872,6 +907,99 @@ def _graph_update_static(
       node_impl.set_key(node, name, value_updates)
 
 
+@tp.overload
+def split(graph_node: A) -> tuple[State, GraphDef[A]]:
+  ...
+
+
+@tp.overload
+def split(
+  graph_node: A, first: filterlib.Filter, /
+) -> tuple[State, GraphDef[A]]:
+  ...
+
+
+@tp.overload
+def split(
+  graph_node: A,
+  first: filterlib.Filter,
+  second: filterlib.Filter,
+  /,
+  *filters: filterlib.Filter,
+) -> tuple[State, tpe.Unpack[tuple[State, ...]], GraphDef[A]]:
+  ...
+
+
+def split(
+  graph_node: A, *filters: filterlib.Filter
+) -> tuple[State, tpe.Unpack[tuple[State, ...]], GraphDef[A]]:
+  state, graphdef, _ = graph_flatten(graph_node)
+
+  if len(filters) == 0:
+    states = (state,)
+  elif len(filters) == 1:
+    states = (state.split(filters[0]),)
+  else:
+    states = state.split(filters[0], filters[1], *filters[2:])
+
+  return *states, graphdef
+
+
+def merge(
+  *states_and_def: tpe.Unpack[
+    tuple[tpe.Unpack[tuple[State, ...]], GraphDef[A]]
+  ],
+) -> A:
+  # TODO: add docstring of example usage
+  *states, graphdef = states_and_def
+  return graphdef.merge(*states)
+
+
+def update(graph_node: A, update: Updates[A], /, *updates: Updates[A]) -> None:
+  updates = (update, *updates)
+
+  # find states and module_update
+  leaves = jax.tree_util.tree_leaves(
+    updates, is_leaf=lambda x: isinstance(x, (GraphDef, State))
+  )
+  states: list[State] = []
+  module_update: tp.Optional[A] = None
+
+  for leaf in leaves:
+    if is_graph_node(leaf) or isinstance(leaf, GraphDef):
+      if module_update is not None:
+        raise ValueError(
+          'Expected only one GraphDef or GraphNode in the updates'
+        )
+
+      if is_graph_node(leaf):
+        if not isinstance(leaf, type(graph_node)):
+          raise ValueError(
+            'Expected a GraphNode of the same type as the input, '
+            f'got {type(leaf).__name__} instead.'
+          )
+        module_update = leaf
+        states.append(split(leaf)[0])
+      elif isinstance(leaf, GraphDef):
+        module_update = leaf.make_empty()
+      else:
+        raise ValueError(
+          'Expected a GraphDef or graph node, got' f' {type(leaf).__name__}'
+        )
+    elif isinstance(leaf, State):
+      states.append(leaf)
+    else:
+      raise ValueError(
+        'Expected a GraphDef, GraphNode or State, got' f' {type(leaf).__name__}'
+      )
+
+  if module_update is not None:
+    graph_update_static(graph_node, module_update)
+
+  if states:
+    graph_update_dynamic(graph_node, states)
+
+
 def clone(node: Node) -> Node:
   state, static = graph_flatten(node)[:2]
   return static.merge(state)
@@ -922,8 +1050,169 @@ class Static(tp.Generic[A]):
 
 jax.tree_util.register_static(Static)
 
+# ---------------------------------------------------------
+# GraphNode
+# ---------------------------------------------------------
 
+
+@tp.runtime_checkable
+class _HasSetup(tp.Protocol):
+  def setup(self) -> None:
+    ...
+
+
+class ModuleState(reprlib.Representable):
+  __slots__ = ('_trace_state', '_id')
+
+  def __init__(self):
+    self._trace_state = tracers.TraceState()
+    self._id = ids.uuid()
+
+  @property
+  def trace_state(self) -> tracers.TraceState:
+    return self._trace_state
+
+  @property
+  def id(self) -> ids.UUID:
+    return self._id
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type(self))
+    yield reprlib.Attr('trace_state', self._trace_state)
+
+
+class GraphNodeMeta(ABCMeta):
+  if not tp.TYPE_CHECKING:
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+      return self._meta_call(*args, **kwargs)
+
+  def _meta_call(cls: tp.Type[G], *args, **kwargs) -> G:
+    node = cls.__new__(cls, *args, **kwargs)
+    vars(node)['_graph_node__state'] = ModuleState()
+    node.__init__(*args, **kwargs)
+
+    if dataclasses.is_dataclass(node):
+      if isinstance(node, _HasSetup):
+        node.setup()
+
+      assert isinstance(node, GraphNode)
+
+      for field in dataclasses.fields(node):
+        if not field.init:
+          continue
+        value = vars(node)[field.name]
+        # set Rngs instances to None
+        if isinstance(value, Rngs):
+          vars(node)[field.name] = None
+
+    return node
+
+
+class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
+  if tp.TYPE_CHECKING:
+    _graph_node__state: ModuleState
+
+  if not tp.TYPE_CHECKING:
+
+    def __setattr__(self, name: str, value: Any) -> None:
+      self._setattr(name, value)
+
+  def _setattr(self, name: str, value: tp.Any) -> None:
+    if not self._graph_node__state.trace_state.is_valid():
+      raise errors.TraceContextError(
+        'Cannot mutate GraphNode from different trace level'
+      )
+
+    object.__setattr__(self, name, value)
+
+  def __deepcopy__(self: G, memo=None) -> G:
+    state, graphdef, _ = graph_utils.graph_flatten(self)
+    graphdef = deepcopy(graphdef)
+    state = deepcopy(state)
+    return graphdef.merge(state)
+
+  def __hash__(self) -> int:
+    return hash(self._graph_node__state.id)
+
+  def __nnx_repr__(self):
+    if CONTEXT.seen_modules_repr is None:
+      CONTEXT.seen_modules_repr = set()
+      clear_seen = True
+    else:
+      clear_seen = False
+
+    if self._graph_node__state.id in CONTEXT.seen_modules_repr:
+      yield reprlib.Object(type=type(self), empty_repr='...')
+      return
+
+    yield reprlib.Object(type=type(self))
+    CONTEXT.seen_modules_repr.add(self._graph_node__state.id)
+
+    try:
+      for name, value in vars(self).items():
+        if isinstance(value, GraphNode) or (
+          not isinstance(value, Variable) and not name.startswith('_')
+        ):
+          yield reprlib.Attr(name, repr(value))
+    finally:
+      if clear_seen:
+        CONTEXT.seen_modules_repr = None
+
+  def __init_subclass__(cls) -> None:
+    super().__init_subclass__()
+
+    graph_utils.register_graph_node_type(
+      type=cls,
+      flatten=_graph_node_flatten,
+      set_key=_graph_node_set_key,
+      pop_key=_graph_node_pop_key,
+      create_empty=_graph_node_create_empty,
+      clear=_graph_node_clear,
+    )
+
+
+# Graph Definition
+def _graph_node_flatten(node: GraphNode):
+  nodes = tuple(
+    (name, value)
+    for name, value in sorted(vars(node).items())
+    if name != '_graph_node__state'
+  )
+  return nodes, type(node)
+
+
+def _graph_node_set_key(node: GraphNode, name: str, value: tp.Any):
+  if (
+    hasattr(node, name)
+    and isinstance(variable := getattr(node, name), Variable)
+    and isinstance(value, Variable)
+  ):
+    variable.copy_from(value)
+  else:
+    setattr(node, name, value)
+
+
+def _graph_node_pop_key(node: GraphNode, name: str):
+  return vars(node).pop(name)
+
+
+def _graph_node_create_empty(cls: tp.Type[G]) -> G:
+  node = object.__new__(cls)
+  vars(node).update(_graph_node__state=ModuleState())
+  return node
+
+
+def _graph_node_clear(node: GraphNode, cls: tp.Type[G]):
+  module_state = node._graph_node__state
+  module_vars = vars(node)
+  module_vars.clear()
+  module_vars['_graph_node__state'] = module_state
+
+
+# ---------------------------------------------------------
 # Pytree
+# ---------------------------------------------------------
 class PytreeType:
   ...
 
@@ -959,6 +1248,7 @@ def _unflatten_pytree(
 ):
   pytree = treedef.unflatten(value for _, value in nodes)
   return pytree
+
 
 PYTREE_NODE_IMPL = PytreeNodeImpl(
   type=PytreeType,
