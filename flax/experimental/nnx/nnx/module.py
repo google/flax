@@ -14,10 +14,7 @@
 
 from __future__ import annotations
 
-import dataclasses
 import typing as tp
-from abc import ABCMeta
-from copy import deepcopy
 from functools import partial
 
 import jax
@@ -25,12 +22,8 @@ import jax.tree_util as jtu
 import typing_extensions as tpe
 
 from flax.experimental.nnx.nnx import (
-  errors,
   filterlib,
   graph_utils,
-  ids,
-  reprlib,
-  tracers,
 )
 from flax.experimental.nnx.nnx import variables as variableslib
 from flax.experimental.nnx.nnx.graph_utils import GraphDef
@@ -51,131 +44,11 @@ S = tp.TypeVar('S', bound=tp.Union[State, tuple[State, ...]])
 V = tp.TypeVar('V', bound=variableslib.Variable[tp.Any])
 
 StateMapping = tp.Mapping[Path, tp.Any]
-
-
-@tp.runtime_checkable
-class _HasSetup(tp.Protocol):
-  def setup(self) -> None:
-    ...
-
-
-SEEN_MODULES_REPR: tp.Optional[tp.Set[ids.UUID]] = None
-
-
-class ModuleState(reprlib.Representable):
-  __slots__ = ('_trace_state', '_id')
-
-  def __init__(self):
-    self._trace_state = tracers.TraceState()
-    self._id = ids.uuid()
-
-  @property
-  def trace_state(self) -> tracers.TraceState:
-    return self._trace_state
-
-  @property
-  def id(self) -> ids.UUID:
-    return self._id
-
-  def __nnx_repr__(self):
-    yield reprlib.Object(type(self))
-    yield reprlib.Attr('trace_state', self._trace_state)
-
-
-class ModuleMeta(ABCMeta):
-  if not tp.TYPE_CHECKING:
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-      return self._meta_call(*args, **kwargs)
-
-  def _meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
-    module = cls.__new__(cls, *args, **kwargs)
-    vars(module)['_module__state'] = ModuleState()
-    module.__init__(*args, **kwargs)
-
-    if dataclasses.is_dataclass(module):
-      if isinstance(module, _HasSetup):
-        module.setup()
-
-      assert isinstance(module, Module)
-
-      for field in dataclasses.fields(module):
-        if not field.init:
-          continue
-        value = vars(module)[field.name]
-        # set Rngs instances to None
-        if isinstance(value, Rngs):
-          vars(module)[field.name] = None
-          continue
-
-    return module
-
-
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
-Updates = tp.Union[
-  M,
-  GraphDef[M],
-  tuple[State, GraphDef[M]],
-  tuple[tuple[State, ...], GraphDef[M]],
-  State,
-  tuple[State, ...],
-]
 
-
-class Module(reprlib.Representable, metaclass=ModuleMeta):
-  if tp.TYPE_CHECKING:
-    _module__state: ModuleState
-
-  if not tp.TYPE_CHECKING:
-
-    def __setattr__(self, name: str, value: Any) -> None:
-      self._setattr(name, value)
-
-  def _setattr(self, name: str, value: tp.Any) -> None:
-    if not self._module__state.trace_state.is_valid():
-      raise errors.TraceContextError(
-        'Cannot mutate Module from different trace level'
-      )
-
-    object.__setattr__(self, name, value)
-
-  def __deepcopy__(self: M, memo=None) -> M:
-    state, graphdef = self.split()
-    graphdef = deepcopy(graphdef)
-    state = deepcopy(state)
-    return graphdef.merge(state)
-
-  def __hash__(self) -> int:
-    return hash(self._module__state.id)
-
-  def __nnx_repr__(self):
-    global SEEN_MODULES_REPR
-
-    if SEEN_MODULES_REPR is None:
-      SEEN_MODULES_REPR = set()
-      clear_seen = True
-    else:
-      clear_seen = False
-
-    if self._module__state.id in SEEN_MODULES_REPR:
-      yield reprlib.Object(type=type(self), empty_repr='...')
-      return
-
-    yield reprlib.Object(type=type(self))
-    SEEN_MODULES_REPR.add(self._module__state.id)
-
-    try:
-      for name, value in vars(self).items():
-        if isinstance(value, Module) or (
-          not isinstance(value, Variable) and not name.startswith('_')
-        ):
-          yield reprlib.Attr(name, repr(value))
-    finally:
-      if clear_seen:
-        SEEN_MODULES_REPR = None
-
+class Module(graph_utils.GraphNode):
   @classmethod
   def init(cls: type[M], *args, **kwargs) -> tuple[State, GraphDef[M]]:
     return cls(*args, **kwargs).split()
@@ -260,7 +133,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
     return CallableProxy(_partial_init)  # type: ignore
 
   def clone(self: M) -> M:
-    return merge(self.split())
+    return graph_utils.merge(*self.split())
 
   @tp.overload
   def split(self: M) -> tuple[State, GraphDef[M]]:
@@ -283,16 +156,7 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
   def split(
     self: M, *filters: filterlib.Filter
   ) -> tuple[State, tpe.Unpack[tuple[State, ...]], GraphDef[M]]:
-    state, graphdef, _ = graph_utils.graph_flatten(self)
-
-    if len(filters) == 0:
-      states = (state,)
-    elif len(filters) == 1:
-      states = (state.split(filters[0]),)
-    else:
-      states = state.split(filters[0], filters[1], *filters[2:])
-
-    return *states, graphdef
+    return graph_utils.split(self, *filters)
 
   def get_state(self) -> State:
     state, _ = self.split()
@@ -372,47 +236,10 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
 
     return CallableProxy(_apply)  # type: ignore
 
-  def update(self: M, update: Updates[M], /, *updates: Updates[M]) -> None:
-    updates = (update, *updates)
-
-    def _states_and_moduledef(
-      updates,
-    ) -> tuple[list[State], tp.Optional[Module]]:
-      leaves = jax.tree_util.tree_leaves(
-        updates, is_leaf=lambda x: isinstance(x, (GraphDef, State))
-      )
-      states: list[State] = []
-      module: tp.Optional[Module] = None
-
-      for leaf in leaves:
-        if isinstance(leaf, (Module, GraphDef)):
-          if module is not None:
-            raise ValueError(
-              'Expected only one GraphDef or Module in the updates'
-            )
-
-          if isinstance(leaf, Module):
-            module = leaf
-            states.append(leaf.get_state())
-          else:
-            module = leaf.make_empty()
-        elif isinstance(leaf, State):
-          states.append(leaf)
-        else:
-          raise ValueError(
-            'Expected a GraphDef, Module or State, got'
-            f' {type(leaf).__name__}'
-          )
-
-      return states, module
-
-    states, module_update = _states_and_moduledef(updates)
-
-    if module_update is not None:
-      graph_utils.graph_update_static(self, module_update)
-
-    if states:
-      graph_utils.graph_update_dynamic(self, states)
+  def update(
+    self: M, update: graph_utils.Updates[M], /, *updates: graph_utils.Updates[M]
+  ) -> None:
+    graph_utils.update(self, update, *updates)
 
   def sow(
     self,
@@ -505,15 +332,6 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
   def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
     super().__init_subclass__()
 
-    graph_utils.register_graph_node_type(
-      type=cls,
-      flatten=_module_graph_flatten,
-      set_key=_module_graph_set_key,
-      pop_key=_module_graph_pop_key,
-      create_empty=_module_graph_create_empty,
-      clear=_module_graph_clear,
-    )
-
     if experimental_pytree:
       jtu.register_pytree_with_keys(
         cls,
@@ -528,17 +346,15 @@ class Module(reprlib.Representable, metaclass=ModuleMeta):
 # -------------------------
 def _module_flatten(module: Module, *, with_keys: bool):
   state, graphdef = module.split()
-  variables = state.raw_mapping
-  paths = tuple(variables.keys())
+  key_values = sorted(state.raw_mapping.items())
+  keys = tuple(key for key, _ in key_values)
 
   if with_keys:
-    children = tuple(
-      (jtu.DictKey(path), variable) for path, variable in variables.items()
-    )
+    children = tuple((jtu.DictKey(key), value) for key, value in key_values)
   else:
-    children = tuple(variables.values())
+    children = tuple(value for _, value in key_values)
 
-  return children, (paths, graphdef)
+  return children, (keys, graphdef)
 
 
 def _module_unflatten(
@@ -547,45 +363,6 @@ def _module_unflatten(
 ) -> M:
   paths, graphdef = paths_moduledef
   return graphdef.merge(State(zip(paths, variables)))
-
-
-# -------------------------
-# Graph Definition
-# -------------------------
-def _module_graph_flatten(module: Module):
-  nodes = tuple(
-    (name, value)
-    for name, value in vars(module).items()
-    if name != '_module__state'
-  )
-  return nodes, type(module)
-
-
-def _module_graph_set_key(module: Module, name: str, value: tp.Any):
-  if (
-    hasattr(module, name)
-    and isinstance(variable := getattr(module, name), Variable)
-    and isinstance(value, Variable)
-  ):
-    variable.copy_from(value)
-  else:
-    setattr(module, name, value)
-
-
-def _module_graph_pop_key(module: Module, name: str):
-  return vars(module).pop(name)
-
-
-def _module_graph_create_empty(cls: tp.Type[M]) -> M:
-  module = object.__new__(cls)
-  vars(module).update(_module__state=ModuleState())
-  return module
-
-def _module_graph_clear(module: Module, cls: tp.Type[M]):
-  module_state = module._module__state
-  module_vars = vars(module)
-  module_vars.clear()
-  module_vars['_module__state'] = module_state
 
 
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:

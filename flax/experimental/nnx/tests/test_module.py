@@ -33,7 +33,7 @@ class TestModule:
 
     foo = Foo()
 
-    assert hasattr(foo, '_module__state')
+    assert hasattr(foo, '_graph_node__state')
 
   def test_trace_level(self):
     m = nnx.Dict(a=nnx.Param(1))
@@ -42,7 +42,7 @@ class TestModule:
     def f():
       with pytest.raises(
         nnx.TraceContextError,
-        match='Cannot mutate Module from different trace level',
+        match='Cannot mutate GraphNode from different trace level',
       ):
         m.a = 2
 
@@ -109,7 +109,7 @@ class TestModule:
     m1 = nnx.Dict(a=nnx.Param(1), b=nnx.Param(2))
     m2 = nnx.Dict(x=m1, y=m1, z=nnx.Param(3))
 
-    m3 = nnx.merge(m2.split())
+    m3 = nnx.merge(*m2.split())
 
     assert m3['x'] is m3['y']
     assert m3['x']['a'] is m3['y']['a']
@@ -178,11 +178,11 @@ class TestModule:
     def g(state_and_def):
       nonlocal n
       n += 1
-      m = nnx.merge(state_and_def)
+      m = nnx.merge(*state_and_def)
       m.a.value += 1
       return m.split()
 
-    m2 = nnx.merge(g(m.split()))
+    m2 = nnx.merge(*g(m.split()))
 
     assert n == 1
     assert m2 is not m
@@ -417,7 +417,7 @@ class TestModule:
 
     m2 = m2.clone()  # clone to sort the fields
 
-    with pytest.raises(ValueError, match='Trying to add a new node at path'):
+    with pytest.raises(ValueError, match='Trying to update a node at path'):
       m1.update(m2)
 
   def test_create_abstract(self):
