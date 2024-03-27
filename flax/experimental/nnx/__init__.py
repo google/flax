@@ -30,7 +30,9 @@ from .nnx.helpers import TrainState as TrainState
 from .nnx.module import GraphDef as GraphDef
 from .nnx.module import M as M
 from .nnx.module import Module as Module
-from .nnx.module import merge as merge
+from .nnx.graph_utils import merge as merge
+from .nnx.graph_utils import split as split
+from .nnx.graph_utils import update as update
 from .nnx.nn import initializers as initializers
 from .nnx.nn.activations import celu as celu
 from .nnx.nn.activations import elu as elu

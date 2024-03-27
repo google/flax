@@ -50,7 +50,7 @@ class ScanMLP(nnx.Module):
 
     # call vmap over create_block, passing the split `params` key
     # and immediately merge to get a Block instance
-    self.layers = nnx.merge(jax.vmap(create_block)(keys))
+    self.layers = nnx.merge(*jax.vmap(create_block)(keys))
 
   def __call__(self, x: jax.Array, *, rngs: nnx.Rngs) -> jax.Array:
     # fork Rngs, split keys into `n_layers`
