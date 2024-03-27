@@ -8,7 +8,7 @@ the Flax optimizers have been removed in v0.6.0 - this guide is targeted
 towards :py:mod:`flax.optim` users to help them update their code to Optax.
 
 See also Optax's quick start documentation:
-https://optax.readthedocs.io/en/latest/optax-101.html
+https://optax.readthedocs.io/en/latest/getting_started.html
 
 .. testsetup::
 
@@ -32,7 +32,7 @@ Replacing ``flax.optim`` with ``optax``
 ---------------------------------------
 
 Optax has drop-in replacements for all of Flax's optimizers. Refer to Optax's
-documentation `Common Optimizers <https://optax.readthedocs.io/en/latest/api.html>`_
+documentation `Common Optimizers <https://optax.readthedocs.io/en/latest/api/optimizers.html>`_
 for API details.
 
 The usage is very similar, with the difference that ``optax`` does not keep a
@@ -86,9 +86,9 @@ this alias, it is common to use |optax.chain()|_ to combine multiple of these
 generic building blocks.
 
 .. |optax.sgd()| replace:: ``optax.sgd()``
-.. _optax.sgd(): https://optax.readthedocs.io/en/latest/api.html#optax.sgd
+.. _optax.sgd(): https://optax.readthedocs.io/en/latest/api/optimizers.html#optax.sgd
 .. |optax.chain()| replace:: ``optax.chain()``
-.. _optax.chain(): https://optax.readthedocs.io/en/latest/api.html#chain
+.. _optax.chain(): https://optax.readthedocs.io/en/latest/api/combining_optimizers.html#optax.chain
 
 .. codediff::
   :title_left: Pre-defined alias
@@ -121,9 +121,9 @@ weight decay can be added as another "gradient transformation"
 |optax.add_decayed_weights()|_ that adds an update derived from the parameters.
 
 .. |optax.adamw()| replace:: ``optax.adamw()``
-.. _optax.adamw(): https://optax.readthedocs.io/en/latest/api.html#optax.adamw
+.. _optax.adamw(): https://optax.readthedocs.io/en/latest/api/optimizers.html#optax.adamw
 .. |optax.add_decayed_weights()| replace:: ``optax.add_decayed_weights()``
-.. _optax.add_decayed_weights(): https://optax.readthedocs.io/en/latest/api.html#optax.add_decayed_weights
+.. _optax.add_decayed_weights(): https://optax.readthedocs.io/en/latest/api/transformations.html#optax.add_decayed_weights
 
 .. codediff::
   :title_left: flax.optim
@@ -155,7 +155,7 @@ processing the gradients before passing them to the optimizer. With Optax this
 becomes just another gradient transformation |optax.clip_by_global_norm()|_.
 
 .. |optax.clip_by_global_norm()| replace:: ``optax.clip_by_global_norm()``
-.. _optax.clip_by_global_norm(): https://optax.readthedocs.io/en/latest/api.html#optax.clip_by_global_norm
+.. _optax.clip_by_global_norm(): https://optax.readthedocs.io/en/latest/api/transformations.html#optax.clip_by_global_norm
 
 .. codediff::
   :title_left: flax.optim
@@ -191,15 +191,15 @@ inject arbitrary scalar values for other gradient updates via
 Read more about learning rate schedules in the :doc:`lr_schedule` guide.
 
 Read more about schedules defined in Optax under `Optimizer Schedules
-<https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules>`_. the
+<https://optax.readthedocs.io/en/latest/api/optimizer_schedules.html>`_. the
 standard optimizers (like ``optax.adam()``, ``optax.sgd()`` etc.) also accept a
 learning rate schedule as a parameter for ``learning_rate``.
 
 
 .. |optax.scale_by_schedule()| replace:: ``optax.scale_by_schedule()``
-.. _optax.scale_by_schedule(): https://optax.readthedocs.io/en/latest/api.html#optax.scale_by_schedule
+.. _optax.scale_by_schedule(): https://optax.readthedocs.io/en/latest/api/transformations.html#optax.scale_by_schedule
 .. |optax.inject_hyperparams()| replace:: ``optax.inject_hyperparams()``
-.. _optax.inject_hyperparams(): https://optax.readthedocs.io/en/latest/api.html#optax.inject_hyperparams
+.. _optax.inject_hyperparams(): https://optax.readthedocs.io/en/latest/api/optimizer_schedules.html#optax.inject_hyperparams
 
 .. codediff::
   :title_left: flax.optim
@@ -239,9 +239,9 @@ masks will expect the mask to be defined in terms of the partial flattened view
 that is not readily available outside the outer mask).
 
 .. |optax.masked()| replace:: ``optax.masked()``
-.. _optax.masked(): https://optax.readthedocs.io/en/latest/api.html#optax.masked
+.. _optax.masked(): https://optax.readthedocs.io/en/latest/api/optimizer_wrappers.html#optax.masked
 .. |optax.multi_transform()| replace:: ``optax.multi_transform()``
-.. _optax.multi_transform(): https://optax.readthedocs.io/en/latest/api.html#optax.multi_transform
+.. _optax.multi_transform(): https://optax.readthedocs.io/en/latest/api/combining_optimizers.html#optax.multi_transform
 
 .. codediff::
   :title_left: flax.optim
