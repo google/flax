@@ -44,7 +44,8 @@ from flax.experimental.nnx.nnx import (
   spmd,
   variables,
 )
-from flax.experimental.nnx.nnx.module import GraphDef, Module, ModuleMeta
+from flax.experimental.nnx.nnx.graph_utils import GraphNodeMeta
+from flax.experimental.nnx.nnx.module import GraphDef, Module
 from flax.experimental.nnx.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
@@ -133,7 +134,7 @@ class JITOptions:
     return kwargs
 
 
-class JITMeta(ModuleMeta):
+class JITMeta(GraphNodeMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -383,7 +384,7 @@ class GradOptions:
   return_value: bool
 
 
-class GradMeta(ModuleMeta):
+class GradMeta(GraphNodeMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -639,7 +640,7 @@ class ScanOptions:
   scan_output: bool
 
 
-class ScanMeta(ModuleMeta):
+class ScanMeta(GraphNodeMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -1108,7 +1109,7 @@ def scan(
 # -------------------------------
 
 
-class RematMeta(ModuleMeta):
+class RematMeta(GraphNodeMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -1292,7 +1293,7 @@ class VmapOptions:
   vmap_metadata: tp.Mapping[str, tp.Any]
 
 
-class VmapMeta(ModuleMeta):
+class VmapMeta(GraphNodeMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
