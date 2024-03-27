@@ -28,7 +28,8 @@ A = TypeVar('A')
 
 class TestModule:
   def test_has_module_state(self):
-    class Foo(nnx.Module): ...
+    class Foo(nnx.Module):
+      ...
 
     foo = Foo()
 
@@ -213,23 +214,6 @@ class TestModule:
     p, graphdef = m.split()
     assert len(p.flat_state()) == 2
     assert len(jax.tree_util.tree_leaves(p)) == 2
-
-  def test_deref_array_attributes_not_allowed(self):
-    # test arrays are nodes
-    r1 = nnx.Variable(1)
-    r2 = nnx.Variable(2)
-    v1 = jax.numpy.array(3)
-
-    with pytest.raises(
-      ValueError,
-      match=f"Trying to assign a '{type(v1).__name__}' to the Module",
-    ):
-      m = nnx.Dict(
-        {
-          'a': nnx.List([r1, r2, v1]),
-          'b': nnx.Dict({'c': r1, 'd': r2}),
-        }
-      )
 
   def test_clone(self):
     m = nnx.Dict(
@@ -671,3 +655,35 @@ class TestModuleDef:
     assert isinstance(modules[1][1], nnx.Linear)
     assert modules[2][0] == 'submodules/1/b'
     assert isinstance(modules[2][1], nnx.Conv)
+
+  def test_array_in_module(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.a = jnp.array(1.0)
+
+    foo = Foo()
+
+    state, graphdef = foo.split()
+
+    assert isinstance(state, nnx.State)
+    assert isinstance(state.a, jax.Array)
+
+    foo2 = graphdef.merge(state)
+
+    assert isinstance(foo2.a, jax.Array)
+
+  def test_state_in_module(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.a = nnx.State({'b': jnp.array(1.0)})
+
+    foo = Foo()
+
+    state, graphdef = foo.split()
+
+    assert isinstance(state, nnx.State)
+    assert isinstance(state.a, nnx.State)
+
+    foo2 = graphdef.merge(state)
+
+    assert isinstance(foo2.a, nnx.State)
