@@ -1787,8 +1787,8 @@ def while_loop(
 
     >>> k = jax.random.key(0)
     >>> x = jnp.ones((2, 2))
-    >>> intial_vars = WhileLoopExample().init(k, x)
-    >>> result, state = WhileLoopExample().apply(intial_vars, x, mutable=['state'])
+    >>> initial_vars = WhileLoopExample().init(k, x)
+    >>> result, state = WhileLoopExample().apply(initial_vars, x, mutable=['state'])
 
   Args:
     cond_fn: Should return True as long as the loop should continue.
