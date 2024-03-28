@@ -38,16 +38,16 @@ class TestRngs:
   def test_rng_stream(self):
     key0 = jax.random.key(0)
     rngs = nnx.Rngs(params=key0)
-    assert rngs._rngs['params'].count == 0
+    assert rngs._rngs['params'].count.value == 0
 
     key1 = rngs.params()
-    assert rngs._rngs['params'].count == 1
-    assert rngs._rngs['params'].key is key0
+    assert rngs._rngs['params'].count.value == 1
+    assert rngs._rngs['params'].key.value is key0
     assert not jnp.allclose(key0, key1)
 
     key2 = rngs.params()
-    assert rngs._rngs['params'].count == 2
-    assert rngs._rngs['params'].key is key0
+    assert rngs._rngs['params'].count.value == 2
+    assert rngs._rngs['params'].key.value is key0
     assert not jnp.allclose(key1, key2)
 
   def test_rng_fork(self):
@@ -55,7 +55,7 @@ class TestRngs:
     rngs1 = nnx.Rngs(params=key0)
     rngs2 = nnx.Rngs(rngs1.fork())
 
-    assert rngs2._rngs['params'].count == 0
+    assert rngs2._rngs['params'].count.value == 0
 
     key1 = rngs1.params()
     key2 = rngs2.params()
@@ -68,8 +68,8 @@ class TestRngs:
     @jax.jit
     def f():
       with pytest.raises(
-        nnx.TraceContextError,
-        match='Cannot use Rngs from a different trace level',
+        nnx.errors.TraceContextError,
+        match="Cannot call 'make_rng' from a different trace level",
       ):
         rngs.params()
 
@@ -78,8 +78,8 @@ class TestRngs:
     @jax.jit
     def f():
       with pytest.raises(
-        nnx.TraceContextError,
-        match='Cannot use Rngs from a different trace level',
+        nnx.errors.TraceContextError,
+        match="Cannot call 'make_rng' from a different trace level",
       ):
         rngs.fork()
 
@@ -96,8 +96,8 @@ class TestRngs:
 
     assert isinstance(rngs1, nnx.Rngs)
     with pytest.raises(
-      nnx.TraceContextError,
-      match='Cannot use Rngs from a different trace level',
+      nnx.errors.TraceContextError,
+      match="Cannot call 'make_rng' from a different trace level",
     ):
       rngs1.params()
 
@@ -181,3 +181,34 @@ class TestRngs:
     assert set(keys.keys()) == set(keys2.keys())
     assert set(keys.splits.keys()) == set(keys2.splits.keys())
     assert set(keys.broadcasts.keys()) == set(keys2.broadcasts.keys())
+
+  def test_jit_updates(self):
+    class Foo(nnx.Module):
+      def __init__(self, not_rngs):
+        rngs = not_rngs
+        self.linear = nnx.Linear(2, 2, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+
+      def __call__(self, x, rngs):
+        x = self.linear(x)
+        x = self.dropout(x, rngs=rngs)
+        return x
+
+    rngs = nnx.Rngs(0)
+    m = Foo(rngs)
+
+    # +1 for the Linear kernel, +1 for the Linear bias
+    assert rngs._rngs['default'].count.value == 2
+
+    @nnx.jit
+    def f(m: Foo, x: jax.Array, not_rngs: nnx.Rngs):
+      rngs = not_rngs
+      x = m(x, rngs)
+      x = m(x, rngs)
+      return x
+
+    x = jnp.ones((2, 2))
+    x = f(m, x, rngs)
+
+    # +1 for the Dropout mask
+    assert rngs._rngs['default'].count.value == 4

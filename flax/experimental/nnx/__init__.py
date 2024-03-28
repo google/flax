@@ -20,7 +20,7 @@ from flax.typing import Initializer as Initializer
 
 from .nnx import compatibility as compatibility
 from .nnx import graph_utils as graph_utils
-from .nnx.errors import TraceContextError as TraceContextError
+from .nnx import errors as errors
 from .nnx.filterlib import All as All
 from .nnx.filterlib import Not as Not
 from .nnx.graph_utils import GraphDef as GraphDef

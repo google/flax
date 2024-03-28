@@ -14,6 +14,7 @@
 
 from typing import Optional, Sequence
 
+import jax
 import jax.numpy as jnp
 from jax import lax, random
 
@@ -46,7 +47,7 @@ class Dropout(Module):
     *,
     deterministic: Optional[bool] = None,
     rngs: Optional[rnglib.Rngs] = None,
-  ):
+  ) -> jax.Array:
     """Applies a random dropout mask to the input.
 
     Args:

@@ -38,8 +38,6 @@ from flax.experimental.nnx.nnx.proxy_caller import (
   DelayedAccessor,
 )
 from flax.experimental.nnx.nnx.state import State, StateLeaf, is_state_leaf
-from flax.experimental.nnx.nnx.rnglib import Rngs
-from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import EMPTY, Empty, Variable
 from flax.typing import Path, PathParts
 
@@ -1098,12 +1096,6 @@ def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
 # ---------------------------------------------------------
 
 
-@tp.runtime_checkable
-class _HasSetup(tp.Protocol):
-  def setup(self) -> None:
-    ...
-
-
 class ModuleState(reprlib.Representable):
   __slots__ = ('_trace_state', '_id')
 
@@ -1127,29 +1119,16 @@ class ModuleState(reprlib.Representable):
 class GraphNodeMeta(ABCMeta):
   if not tp.TYPE_CHECKING:
 
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-      return self._meta_call(*args, **kwargs)
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
+      return _graph_node_meta_call(cls, *args, **kwargs)
 
-  def _meta_call(cls: tp.Type[G], *args, **kwargs) -> G:
-    node = cls.__new__(cls, *args, **kwargs)
-    vars(node)['_graph_node__state'] = ModuleState()
-    node.__init__(*args, **kwargs)
 
-    if dataclasses.is_dataclass(node):
-      if isinstance(node, _HasSetup):
-        node.setup()
+def _graph_node_meta_call(cls: tp.Type[G], *args, **kwargs) -> G:
+  node = cls.__new__(cls, *args, **kwargs)
+  vars(node)['_graph_node__state'] = ModuleState()
+  node.__init__(*args, **kwargs)
 
-      assert isinstance(node, GraphNode)
-
-      for field in dataclasses.fields(node):
-        if not field.init:
-          continue
-        value = vars(node)[field.name]
-        # set Rngs instances to None
-        if isinstance(value, Rngs):
-          vars(node)[field.name] = None
-
-    return node
+  return node
 
 
 class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
@@ -1162,12 +1141,14 @@ class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
       self._setattr(name, value)
 
   def _setattr(self, name: str, value: tp.Any) -> None:
-    if not self._graph_node__state.trace_state.is_valid():
-      raise errors.TraceContextError(
-        'Cannot mutate GraphNode from different trace level'
-      )
-
+    self.check_valid_context(
+      f"Cannot mutate '{type(self).__name__}' from different trace level"
+    )
     object.__setattr__(self, name, value)
+
+  def check_valid_context(self, error_msg: str) -> None:
+    if not self._graph_node__state.trace_state.is_valid():
+      raise errors.TraceContextError(error_msg)
 
   def __deepcopy__(self: G, memo=None) -> G:
     state, graphdef, _ = graph_utils.graph_flatten(self)

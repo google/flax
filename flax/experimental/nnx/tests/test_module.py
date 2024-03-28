@@ -41,8 +41,8 @@ class TestModule:
     @jax.jit
     def f():
       with pytest.raises(
-        nnx.TraceContextError,
-        match='Cannot mutate GraphNode from different trace level',
+        nnx.errors.TraceContextError,
+        match="Cannot mutate 'Dict' from different trace level",
       ):
         m.a = 2
 
