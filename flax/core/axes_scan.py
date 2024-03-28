@@ -40,6 +40,7 @@ def scan(
   length: Optional[int] = None,
   reverse: bool = False,
   unroll: int = 1,
+  _split_transpose: bool = False
 ):
   """A wrapper around `jax.lax.scan` with in_axes/out_axes api.
 
@@ -74,6 +75,8 @@ def scan(
     reverse: scan in reverse order from end to start.
     unroll: how many scan iterations to unroll within a single
       iteration of a loop (default: 1).
+    _split_transpose: An experimental feature to split the transpose of scan
+       into a scan and a map, backed by an experimental Jax lax.scan() feature.
   Returns:
      the function that performs the scan of the form:
      (broadcast_in, carry_in, *args) -> (broadcast_out, carry_out, scan_out).
@@ -158,9 +161,15 @@ def scan(
       out_tree(), out_flat
     )
 
-    c, ys = lax.scan(
-      body_fn, init, xs, length=length, reverse=reverse, unroll=unroll
-    )
+    if jax.version.__version_info__ > (0, 4, 25):
+      c, ys = lax.scan(
+        body_fn, init, xs, length=length, reverse=reverse, unroll=unroll,
+        _split_transpose=_split_transpose
+      )
+    else:
+      c, ys = lax.scan(
+        body_fn, init, xs, length=length, reverse=reverse, unroll=unroll
+      )
     ys = jax.tree_util.tree_map(transpose_from_front, out_axes, ys)
     ys = jax.tree_util.tree_map(
       lambda ax, const, y: (const if ax is broadcast else y),

@@ -872,6 +872,7 @@ def scan(
   length: Optional[int] = None,
   reverse: bool = False,
   unroll: int = 1,
+  _split_transpose: bool = False,
   data_transform: Optional[Callable[..., Any]] = None,
   metadata_params: Dict[Any, Any] = {},
 ) -> Callable[..., Any]:
@@ -935,6 +936,8 @@ def scan(
     reverse: If true, scan from end to start in reverse order.
     unroll: how many scan iterations to unroll within a single
       iteration of a loop (default: 1).
+    _split_transpose: An experimental feature to split the transpose of a scan
+       into a scan and a map, backed by an experimental Jax lax.scan() feature.
     data_transform: optional function to transform raw variable and rng groups,
       intended for inline SPMD annotations.
     metadata_params: arguments dict passed to AxisMetadata instances in the
@@ -993,6 +996,7 @@ def scan(
         length=length,
         reverse=reverse,
         unroll=unroll,
+        _split_transpose=_split_transpose
     )
     def scanned(broadcast_vars, carry, scan_variable_groups, rng_groups, args):
       carry_vars, c = carry

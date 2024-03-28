@@ -1143,6 +1143,7 @@ def scan(
   data_transform: Optional[Callable[..., Any]] = None,
   metadata_params: Mapping[Any, Any] = {},
   methods=None,
+  _split_transpose: bool = False,
 ) -> Target:
   """A lifted version of ``jax.lax.scan``.
 
@@ -1280,6 +1281,8 @@ def scan(
     metadata_params: arguments dict passed to AxisMetadata instances in the
       variable tree.
     methods: If ``target`` is a ``Module``, the methods of ``Module`` to scan over.
+    _split_transpose: An experimental feature to split the transpose of a scan
+       into a scan and a map, backed by an experimental Jax lax.scan() feature.
 
   Returns:
     The scan function with the signature ``(module, carry, *xs) -> (carry,
@@ -1298,6 +1301,7 @@ def scan(
     length=length,
     reverse=reverse,
     unroll=unroll,
+    _split_transpose=_split_transpose,
     data_transform=data_transform,
     metadata_params=metadata_params,
     methods=methods,
