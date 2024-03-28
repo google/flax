@@ -40,6 +40,7 @@ import jax.stages
 
 from flax.experimental.nnx.nnx import (
   filterlib,
+  graph_utils,
   rnglib,
   spmd,
   variables,
@@ -60,9 +61,10 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 G = tp.TypeVar('G', bound=tp.Callable[..., tp.Any])
 M = tp.TypeVar('M', bound=Module)
 N = tp.TypeVar('N', bound=Module)
-
+StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
 Leaves = tp.List[Leaf]
+Index = int
 
 
 def _check_args(args: tuple[tp.Any, ...]):
@@ -73,6 +75,16 @@ def _check_args(args: tuple[tp.Any, ...]):
         "Rngs must be passed as a keyword argument named 'rngs', not a"
         ' positional argument'
       )
+
+def _normalize_sequence(
+  x: StrInt | tp.Iterable[StrInt] | None, /
+) -> tuple[StrInt, ...]:
+  if x is None:
+    return ()
+  elif isinstance(x, (str, int)):
+    return (x,)  # type: ignore
+  else:
+    return tuple(x)
 
 
 class LiftedModule(Module, tp.Generic[M]):
@@ -111,26 +123,92 @@ class LiftedModule(Module, tp.Generic[M]):
 
 UNSPECIFIED = object()
 
+@dataclasses.dataclass(frozen=True)
+class JitStaticInputs:
+  graphdef: GraphDef[tuple[tp.Any, ...]]
+
+
+jax.tree_util.register_static(JitStaticInputs)
+
+
+@dataclasses.dataclass(frozen=True)
+class JitStaticOutputs:
+  graphdef: GraphDef[tuple[tp.Any, ...]]
+  index_mapping: dict[Index, Index]
+
+
+jax.tree_util.register_static(JitStaticOutputs)
+
 
 @dataclasses.dataclass
 class JITOptions:
   in_shardings: tp.Any
   out_shardings: tp.Any
-  static_argnums: tp.Union[int, tp.Sequence[int], None]
-  static_argnames: tp.Union[str, tp.Iterable[str], None]
-  donate_argnums: tp.Union[int, tp.Sequence[int]]
+  static_argnums: tuple[int, ...]
+  static_argnames: tuple[str, ...]
+  donate_argnums: tuple[int, ...]
+  donate_argnames: tuple[str, ...]
   keep_unused: bool
   device: tp.Optional[jax.Device]
   backend: tp.Optional[str]
   inline: bool
   abstracted_axes: tp.Optional[tp.Any]
+  donate_object_state: bool
 
-  def get_kwargs(self) -> dict[str, tp.Any]:
+  @classmethod
+  def from_jit_kwargs(
+    cls,
+    in_shardings: tp.Any,
+    out_shardings: tp.Any,
+    static_argnums: int | tp.Sequence[int] | None,
+    static_argnames: str | tp.Iterable[str] | None,
+    donate_argnums: int | tp.Sequence[int] | None,
+    donate_argnames: str | tp.Iterable[str] | None,
+    keep_unused: bool,
+    device: tp.Optional[jax.Device],
+    backend: tp.Optional[str],
+    inline: bool,
+    abstracted_axes: tp.Optional[tp.Any],
+    donate_object_state: bool,
+  ):
+    _static_argnums = _normalize_sequence(static_argnums)
+    _static_argnames = _normalize_sequence(static_argnames)
+    _donate_argnums = _normalize_sequence(donate_argnums)
+    _donate_argnames = _normalize_sequence(donate_argnames)
+
+    if donate_object_state:
+      _donate_argnames = (*_donate_argnames, '_nnx_jit_state')
+
+    return cls(
+      in_shardings=in_shardings,
+      out_shardings=out_shardings,
+      static_argnums=_static_argnums,
+      static_argnames=_static_argnames,
+      donate_argnums=_donate_argnums,
+      donate_argnames=_donate_argnames,
+      keep_unused=keep_unused,
+      device=device,
+      backend=backend,
+      inline=inline,
+      abstracted_axes=abstracted_axes,
+      donate_object_state=donate_object_state,
+    )
+
+  def get_jit_kwargs(self) -> dict[str, tp.Any]:
     kwargs = vars(self).copy()
+    del kwargs['donate_object_state']
     if kwargs['in_shardings'] is UNSPECIFIED:
       kwargs.pop('in_shardings')
+    else:
+      raise ValueError('in_shardings is not supported yet')
     if kwargs['out_shardings'] is UNSPECIFIED:
       kwargs.pop('out_shardings')
+    else:
+      raise ValueError('out_shardings is not supported yet')
+    if kwargs['donate_argnums'] != ():
+      raise ValueError('donate_argnums is not supported yet')
+    if kwargs['abstracted_axes'] is not None:
+      raise ValueError('abstracted_axes is not supported yet')
     return kwargs
 
 
@@ -141,9 +219,10 @@ class JITMeta(GraphNodeMeta):
     *,
     in_shardings: tp.Any = UNSPECIFIED,
     out_shardings: tp.Any = UNSPECIFIED,
-    static_argnums: tp.Union[int, tp.Sequence[int], None] = None,
-    static_argnames: tp.Union[str, tp.Iterable[str], None] = None,
-    donate_argnums: tp.Union[int, tp.Sequence[int]] = (),
+    static_argnums: int | tp.Sequence[int] | None = None,
+    static_argnames: str | tp.Iterable[str] | None = None,
+    donate_argnums: int | tp.Sequence[int] | None = None,
+    donate_argnames: str | tp.Iterable[str] | None = None,
     keep_unused: bool = False,
     device: tp.Optional[jax.Device] = None,
     backend: tp.Optional[str] = None,
@@ -161,6 +240,7 @@ class JITMeta(GraphNodeMeta):
         static_argnums=static_argnums,
         static_argnames=static_argnames,
         donate_argnums=donate_argnums,
+        donate_argnames=donate_argnames,
         keep_unused=keep_unused,
         device=device,
         backend=backend,
@@ -174,78 +254,91 @@ class JITMeta(GraphNodeMeta):
     return _create_jit
 
 
-class JittedFn(tp.Protocol, tp.Generic[M]):
+class JittedFn(tp.Protocol):
   def __call__(
-    self, state_and_def: tuple[State | tuple[State, ...], GraphDef[M]]
-  ) -> tuple[tuple[State | tuple[State, ...], GraphDef[M]], tp.Any]:
+    self,
+    *args: tp.Any,
+    _nnx_jit_static: JitStaticInputs,
+    _nnx_jit_state: State,
+    **kwargs: tp.Any,
+  ) -> tuple[tp.Any, State, JitStaticOutputs]:
     ...
 
 
-def get_jitted_fn(_module_type: type[M], f, options: JITOptions) -> JittedFn[M]:
-  jit_kwargs = options.get_kwargs()
+def get_jitted_fn(f, options: JITOptions) -> JittedFn:
+  jit_kwargs = options.get_jit_kwargs()
 
   @functools.partial(jax.jit, **jit_kwargs)
   def jitted_fn(
-    state_and_def: tuple[State | tuple[State, ...], GraphDef[M]],
-    *args,
-    **kwargs,
+    *args: tp.Any,
+    _nnx_jit_static: JitStaticInputs,
+    _nnx_jit_state: State,
+    **kwargs: tp.Any,
   ):
-    _check_args(args)
-    states, graphdef = state_and_def
+    graphdef = _nnx_jit_static.graphdef
+    state = _nnx_jit_state
 
-    if isinstance(states, State):
-      states = (states,)
+    input_graph_nodes, outer_idx_inner_ref = graph_utils.graph_unflatten(
+      graphdef, state
+    )
+
+    (args, kwargs) = graph_utils.insert_graph_nodes(
+      (args, kwargs), input_graph_nodes
+    )
 
     if 'rngs' in kwargs:
       kwargs['rngs'] = rnglib.Rngs(kwargs['rngs'])
-    module = graphdef.merge(*states)
-    out = f(module, *args, **kwargs)
 
-    updates = module.split()
-    out = (updates, out)
+    out = f(*args, **kwargs)
 
+    out, output_graph_nodes = graph_utils.extract_graph_nodes(out)
+
+    state, graphdef, inner_ref_inner_idx = graph_utils.graph_flatten(
+      (input_graph_nodes, output_graph_nodes)
+    )
+    outer_idx_inner_idx = graph_utils.compose_mapping(
+      outer_idx_inner_ref, inner_ref_inner_idx
+    )
+    output_static = JitStaticOutputs(graphdef, outer_idx_inner_idx)
+    out = (out, state, output_static)
     return out
 
   return jitted_fn
 
 
-def jit_init(
-  jitted_fn: JittedFn[M],
-  module: M,
-  args: tuple[tp.Any, ...],
-  kwargs: dict[str, tp.Any],
-) -> None:
-  if not isinstance(module, Module):
-    raise TypeError(f'Expected Module, got {type(module).__name__}')
-
-  module = tp.cast(M, module)
-
-  if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], rnglib.Rngs):
-    kwargs['rngs'] = rngs.fork()
-
-  state_and_def = module.split()
-  out = jitted_fn(state_and_def, *args, **kwargs)
-  updates, _ = out
-  module.update(updates)
-
-
 def jit_apply(
-  jitted_fn: JittedFn[M],
-  module: M,
+  options: JITOptions,
+  jitted_fn: JittedFn,
   args: tuple[tp.Any, ...],
   kwargs: dict[str, tp.Any],
 ) -> tp.Any:
-  if not isinstance(module, Module):
-    raise TypeError(f'Expected Module, got {type(module).__name__}')
-
-  module = tp.cast(M, module)
-
   if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], rnglib.Rngs):
     kwargs['rngs'] = rngs.fork()
 
-  state_and_def = module.split()
-  updates, out = jitted_fn(state_and_def, *args, **kwargs)
-  module.update(updates)
+  (args, kwargs), input_graph_nodes = graph_utils.extract_graph_nodes(
+    (args, kwargs)
+  )
+
+  state, graphdef, outer_ref_outer_idx = graph_utils.graph_flatten(
+    input_graph_nodes
+  )
+
+  out, output_state, output_static = jitted_fn(
+    *args,
+    _nnx_jit_static=JitStaticInputs(graphdef),
+    _nnx_jit_state=state,
+    **kwargs,
+  )
+  outer_idx_inner_idx = output_static.index_mapping
+  output_graphdef = output_static.graphdef
+  inner_idx_outer_ref = graph_utils.compose_mapping_reversed(
+    outer_ref_outer_idx, outer_idx_inner_idx
+  )
+  (input_graph_nodes, output_graph_nodes), _ = graph_utils.graph_unflatten(
+    output_graphdef, output_state, ref_cache=inner_idx_outer_ref
+  )
+  out = graph_utils.insert_graph_nodes(out, output_graph_nodes)
+
   return out
 
 
@@ -256,9 +349,10 @@ class JIT(LiftedModule[M], metaclass=JITMeta):
     *,
     in_shardings: tp.Any = UNSPECIFIED,
     out_shardings: tp.Any = UNSPECIFIED,
-    static_argnums: tp.Union[int, tp.Sequence[int], None] = None,
-    static_argnames: tp.Union[str, tp.Iterable[str], None] = None,
-    donate_argnums: tp.Union[int, tp.Sequence[int]] = (),
+    static_argnums: int | tp.Sequence[int] | None = None,
+    static_argnames: str | tp.Iterable[str] | None = None,
+    donate_argnums: int | tp.Sequence[int] | None = None,
+    donate_argnames: str | tp.Iterable[str] | None = None,
     keep_unused: bool = False,
     device: tp.Optional[jax.Device] = None,
     backend: tp.Optional[str] = None,
@@ -267,18 +361,21 @@ class JIT(LiftedModule[M], metaclass=JITMeta):
     # submodule args
     module_init_args: tuple[tp.Any, ...],
     module_init_kwargs: dict[str, tp.Any],
+    donate_object_state: bool = False,
   ):
-    self.options = JITOptions(
+    self.options = JITOptions.from_jit_kwargs(
       in_shardings=in_shardings,
       out_shardings=out_shardings,
       static_argnums=static_argnums,
       static_argnames=static_argnames,
       donate_argnums=donate_argnums,
+      donate_argnames=donate_argnames,
       keep_unused=keep_unused,
       device=device,
       backend=backend,
       inline=inline,
       abstracted_axes=abstracted_axes,
+      donate_object_state=donate_object_state,
     )
     self.accessor: tp.Optional[DelayedAccessor] = None
 
@@ -287,9 +384,7 @@ class JIT(LiftedModule[M], metaclass=JITMeta):
       f = self.accessor(module)
       return f(*args, **kwargs)
 
-    self.jitted_fn: JittedFn[M] = get_jitted_fn(
-      M, jit_call_module, self.options
-    )
+    self.jitted_fn: JittedFn[M] = get_jitted_fn(jit_call_module, self.options)
     self.module_constructor = module_constructor
     self.jit_module = self.module_constructor(
       *module_init_args, **module_init_kwargs
@@ -302,7 +397,9 @@ class JIT(LiftedModule[M], metaclass=JITMeta):
   def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> Any:
     self.accessor = accessor
     try:
-      out = jit_apply(self.jitted_fn, self.jit_module, args, kwargs)
+      out = jit_apply(
+        self.options, self.jitted_fn, (self.jit_module, *args), kwargs
+      )
     finally:
       self.accessor = None
     return out
@@ -313,55 +410,52 @@ def jit(
   *,
   in_shardings: tp.Any = UNSPECIFIED,
   out_shardings: tp.Any = UNSPECIFIED,
-  static_argnums: tp.Union[int, tp.Sequence[int], None] = None,
-  static_argnames: tp.Union[str, tp.Iterable[str], None] = None,
-  donate_argnums: tp.Union[int, tp.Sequence[int]] = (),
+  static_argnums: int | tp.Sequence[int] | None = None,
+  static_argnames: str | tp.Iterable[str] | None = None,
+  donate_argnums: int | tp.Sequence[int] | None = None,
+  donate_argnames: str | tp.Iterable[str] | None = None,
   keep_unused: bool = False,
   device: tp.Optional[jax.Device] = None,
   backend: tp.Optional[str] = None,
   inline: bool = False,
   abstracted_axes: tp.Optional[tp.Any] = None,
   is_init: tp.Optional[bool] = None,
+  donate_object_state: bool = False,
 ) -> F:
   if is_init is None:
     is_init = f.__name__ == '__init__'
 
-  if static_argnames is None:
-    static_argnames = []
-  elif isinstance(static_argnames, str):
-    static_argnames = [static_argnames]
-  else:
-    static_argnames = list(static_argnames)
-
-  options = JITOptions(
+  options = JITOptions.from_jit_kwargs(
     in_shardings=in_shardings,
     out_shardings=out_shardings,
     static_argnums=static_argnums,
     static_argnames=static_argnames,
     donate_argnums=donate_argnums,
+    donate_argnames=donate_argnames,
     keep_unused=keep_unused,
     device=device,
     backend=backend,
     inline=inline,
     abstracted_axes=abstracted_axes,
+    donate_object_state=donate_object_state,
   )
-  jitted_fn = get_jitted_fn(Module, f, options)
+  jitted_fn = get_jitted_fn(f, options)
 
   if is_init:
 
     @functools.wraps(f)
-    def jit_init_wrapper(module: Module, *args, **kwargs):
+    def jit_init_wrapper(*args, **kwargs):
       _check_args(args)
-      jit_init(jitted_fn, module, args, kwargs)
+      jit_apply(options, jitted_fn, args, kwargs)
 
     wrapper = jit_init_wrapper
     wrapper.inner = jitted_fn
   else:
 
     @functools.wraps(f)
-    def jit_apply_wrapper(module: Module, *args, **kwargs):
+    def jit_apply_wrapper(*args, **kwargs):
       _check_args(args)
-      return jit_apply(jitted_fn, module, args, kwargs)
+      return jit_apply(options, jitted_fn, args, kwargs)
 
     wrapper = jit_apply_wrapper
     wrapper.inner = jitted_fn

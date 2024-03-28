@@ -65,6 +65,7 @@ Updates = tp.Union[
   tuple[State, ...],
 ]
 
+
 @dataclasses.dataclass
 class GraphUtilsContext(threading.local):
   node_types: dict[
@@ -447,6 +448,7 @@ jax.tree_util.register_pytree_node(
 
 def graph_flatten(
   x: Node,
+  /,
 ) -> tuple[State, GraphDef[Node], tp.Mapping[tp.Any, Index]]:
   ref_to_index = RefMap[tp.Any, Index]()
   flat_state: dict[Path, StateLeaf] = {}
@@ -1049,6 +1051,47 @@ class Static(tp.Generic[A]):
 
 
 jax.tree_util.register_static(Static)
+
+# ---------------------------------------------------------
+# insert/extract_graph_nodes API
+# ---------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class GraphNodeIndex:
+  """Index of a graph node in a Pytree structure."""
+
+  index: int
+
+
+jax.tree_util.register_static(GraphNodeIndex)
+
+
+def extract_graph_nodes(pytree: A, /) -> tuple[A, tuple[tp.Any, ...]]:
+  """Extracts all graph nodes from a pytree."""
+  nodes = RefMap[tp.Any, Index]()
+
+  def _maybe_extract(x):
+    if is_graph_node(x):
+      index = nodes.setdefault(x, len(nodes))
+      return GraphNodeIndex(index)
+    return x
+
+  return jax.tree_map(_maybe_extract, pytree), tuple(nodes)
+
+
+def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
+  """Inserts graph nodes into a pytree."""
+
+  def _maybe_insert(x):
+    if isinstance(x, GraphNodeIndex):
+      return nodes[x.index]
+    return x
+
+  return jax.tree_map(
+    _maybe_insert, pytree, is_leaf=lambda x: isinstance(x, GraphNodeIndex)
+  )
+
 
 # ---------------------------------------------------------
 # GraphNode
