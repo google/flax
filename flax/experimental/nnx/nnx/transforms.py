@@ -289,7 +289,7 @@ def get_jitted_fn(f, options: JITOptions) -> JittedFn:
 
     out, output_graph_nodes = graph_utils.extract_graph_nodes(out)
 
-    state, graphdef, inner_ref_inner_idx = graph_utils.graph_flatten(
+    graphdef, state, inner_ref_inner_idx = graph_utils.graph_flatten(
       (input_graph_nodes, output_graph_nodes)
     )
     outer_idx_inner_idx = graph_utils.compose_mapping(
@@ -312,7 +312,7 @@ def jit_apply(
     (args, kwargs)
   )
 
-  state, graphdef, outer_ref_outer_idx = graph_utils.graph_flatten(
+  graphdef, state, outer_ref_outer_idx = graph_utils.graph_flatten(
     input_graph_nodes
   )
 
@@ -538,7 +538,7 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
 
   predicate = filterlib.to_predicate(options.wrt)
 
-  diff, nondiff, graphdef = module.split(predicate, ...)
+  graphdef, diff, nondiff = module.split(predicate, ...)
   transform = jax.value_and_grad if options.return_value else jax.grad
 
   @functools.partial(
@@ -555,7 +555,7 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
     module = graphdef.merge(diff, nondiff)
     out = f(module, *args, **kwargs)
 
-    updates, graphdef = module.split()
+    graphdef, updates = module.split()
     if options.has_aux:
       loss, aux = out
       out = (loss, (updates, aux))
@@ -876,7 +876,7 @@ def scan_init(
     # lift module
     filters = (*options.variable_axes.keys(), ...)
 
-    *states, graphdef = module.split(*filters)
+    graphdef, *states = module.split(*filters)
 
     return tuple(states)
 
@@ -916,7 +916,7 @@ def scan_apply(
 
   # split module state
   filters = (*options.variable_axes.keys(), ...)
-  *scan_states, carry_state, graphdef = module.split(*filters)
+  graphdef, *scan_states, carry_state = module.split(*filters)
 
   # transpose axes state
   scan_states = tuple(
@@ -1055,7 +1055,7 @@ def scan_apply(
       scan_out = None
 
     # split module state
-    *scan_states_out, carry_state_out, moduledef_out = module.split(*filters)
+    moduledef_out, *scan_states_out, carry_state_out = module.split(*filters)
     carry_state_new = carry_state_out - carry_state
 
     # remove new carry state
@@ -1284,14 +1284,14 @@ def remat_apply(
 ):
   _check_args(args)
 
-  state, graphdef = module.split()
+  graphdef, state = module.split()
   keys = rngs.fork() if rngs is not None else None
 
   def _remat_fn(
     state: State,
     keys: tp.Optional[dict[str, jax.Array]],
     *args,
-  ) -> tuple[tuple[State, GraphDef[Module]], tp.Any]:
+  ) -> tuple[tuple[GraphDef[Module], State], tp.Any]:
     kwargs = {}
     if keys is not None:
       kwargs['rngs'] = rnglib.Rngs(keys)
@@ -1299,19 +1299,18 @@ def remat_apply(
     module = graphdef.merge(state)
     out = f(module, *args, **kwargs)
 
-    state_and_def = module.split()
+    def_and_state = module.split()
+    return def_and_state, out
 
-    return state_and_def, out
-
-  state_and_def: tuple[State, GraphDef[Module]]
-  state_and_def, out = jax.checkpoint(
+  def_and_state: tuple[GraphDef[Module], State]
+  def_and_state, out = jax.checkpoint(
     _remat_fn,
     prevent_cse=options.prevent_cse,
     static_argnums=options.static_argnums,
     policy=options.policy,
   )(state, keys, *args)
 
-  module.update(state_and_def)
+  module.update(def_and_state)
 
   return out
 
@@ -1513,7 +1512,7 @@ def vmap_init(
     # lift module
     filters = (*options.variable_axes.keys(), ...)
 
-    *states, graphdef = module.split(*filters)
+    graphdef, *states = module.split(*filters)
 
     return tuple(states)
 
@@ -1551,7 +1550,7 @@ def vmap_apply(
 
   # split module state
   filters = (*options.variable_axes.keys(), ...)
-  *vectorized_states, broadcast_state, graphdef = module.split(*filters)
+  graphdef, *vectorized_states, broadcast_state = module.split(*filters)
 
   # infer length
   axis_sizes: tp.Set[int] = set()
@@ -1649,7 +1648,7 @@ def vmap_apply(
     output = f(module, *args, **kwargs)
 
     # split module state
-    *vectorized_states_out, broadcast_state_out, moduledef_out = module.split(
+    moduledef_out, *vectorized_states_out, broadcast_state_out = module.split(
       *filters
     )
 

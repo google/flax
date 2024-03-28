@@ -152,7 +152,7 @@ The `Module.split` method allows you to convert into a `State` dict-like object 
 
 model = CounterLinear(4, 4, rngs=nnx.Rngs(0))
 
-state, static = model.split()
+static, state = model.split()
 
 # state is a dictionary-like JAX pytree
 print(f'{state = }')
@@ -359,7 +359,7 @@ class AnnotatedLinear(nnx.Module):
 model = AnnotatedLinear(4, 8, rngs=nnx.Rngs(0))
 y = model(jnp.ones((2, 4)))
 
-state, static = model.split()
+static, state = model.split()
 
 print(f"{state.variables['kernel'].meta=}\n{state.variables['kernel'].other_meta=}")
 print(f"{state.variables['bias'].meta=}\n{state.variables['bias'].other_meta=}")
@@ -404,6 +404,6 @@ model = Example(in_filters=3,
                 input_shape=(2, 6, 6, 3),
                 rngs=nnx.Rngs(0))
 
-state, static = model.split()
+static, state = model.split()
 jax.tree_map(jnp.shape, state)
 ```

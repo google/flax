@@ -25,7 +25,7 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    state, static, ref_idx = nnx.graph_utils.graph_flatten(g)
+    static, state, ref_idx = nnx.graph_utils.graph_flatten(g)
 
     state['0']['b'].raw_value = 2
     state['3'].raw_value = 4
@@ -38,7 +38,7 @@ class TestGraphUtils:
     a = nnx.Dict(a=1, b=nnx.Param(2))
     g = nnx.List([a, 3, a, nnx.Param(4)])
 
-    state, static, _ = nnx.graph_utils.graph_flatten(g)
+    static, state, _ = nnx.graph_utils.graph_flatten(g)
     g = static.merge(state)
 
     assert g[0] is g[2]
@@ -47,7 +47,7 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    state, static, _ = nnx.graph_utils.graph_flatten(g)
+    static, state, _ = nnx.graph_utils.graph_flatten(g)
     g = static.merge(state)
 
     assert g[0] is not g[2]
@@ -56,7 +56,7 @@ class TestGraphUtils:
     a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
     g = nnx.List([a, 3, a, nnx.Param(4)])
 
-    state, static, _ = nnx.graph_utils.graph_flatten(g)
+    static, state, _ = nnx.graph_utils.graph_flatten(g)
     g = static.merge(nnx.State({}))
 
     assert g[0] is g[2]
@@ -67,7 +67,7 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    state, static, _ = nnx.graph_utils.graph_flatten(g)
+    static, state, _ = nnx.graph_utils.graph_flatten(g)
 
     state['0']['b'].raw_value = 3
     nnx.graph_utils.graph_update_dynamic(g, state)
@@ -123,7 +123,7 @@ class TestGraphUtils:
       nnx.BatchNorm(2, rngs=rngs),
     ]
 
-    state, static, _ = nnx.graph_utils.graph_flatten(ls)
+    static, state, _ = nnx.graph_utils.graph_flatten(ls)
 
     assert state['0']['kernel'].raw_value.shape == (2, 2)
     assert state['0']['bias'].raw_value.shape == (2,)
@@ -136,7 +136,7 @@ class TestGraphUtils:
     v = nnx.Param(1)
     g = [v, v]
 
-    state, static, _ = nnx.graph_utils.graph_flatten(g)
+    static, state, _ = nnx.graph_utils.graph_flatten(g)
 
     assert len(state.flat_state()) == 1
 
@@ -154,7 +154,7 @@ class TestGraphUtils:
         self.baz.kernel = self.bar.kernel
 
     node = Foo(rngs=nnx.Rngs(0))
-    state, static, _ = nnx.graph_utils.graph_flatten(node)
+    static, state, _ = nnx.graph_utils.graph_flatten(node)
 
     assert len(state.flat_state()) == 3  # 2 bias + 1 kernel
 
@@ -187,7 +187,7 @@ class TestGraphUtils:
         return self.linear_out(x)
 
     model = Encoder(rngs=nnx.Rngs(0))
-    state, static = model.split()
+    static, state = model.split()
 
     assert len(state.flat_state()) == 1
 
@@ -202,7 +202,7 @@ class TestGraphUtils:
         self.a = nnx.Param(1)
 
     m = Foo()
-    state, static = m.split()
+    static, state = m.split()
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(state.a, nnx.Param)
@@ -224,7 +224,7 @@ class TestGraphUtils:
         self.b = p
 
     m = Foo()
-    state, static = m.split()
+    static, state = m.split()
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(m.b, nnx.Param)
@@ -278,7 +278,7 @@ class TestGraphUtils:
 
     m = Foo()
 
-    state, static = m.split()
+    static, state = m.split()
 
     assert 'tree' in state
     assert 'a' in state.tree
@@ -306,13 +306,13 @@ class TestGraphUtils:
     b = m.b
 
     static: nnx.graph_utils.GraphDef[Foo]
-    state, static, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
+    static, state, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(static: nnx.graph_utils.GraphDef[Foo], state):
       m, idx_out_ref_in = nnx.graph_utils.graph_unflatten(static, state)
       f(m)
-      state, static, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
+      static, state, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
       idx_out_idx_in = nnx.graph_utils.compose_mapping(
         idx_out_ref_in, ref_in_idx_in
       )
@@ -347,13 +347,13 @@ class TestGraphUtils:
     b = m.b
 
     static: nnx.graph_utils.GraphDef[Foo]
-    state, static, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
+    static, state, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(static: nnx.graph_utils.GraphDef[Foo], state):
       m, idx_out_ref_in = nnx.graph_utils.graph_unflatten(static, state)
       f(m)
-      state, static, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
+      static, state, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
       idx_out_idx_in = nnx.graph_utils.compose_mapping(
         idx_out_ref_in, ref_in_idx_in
       )
@@ -385,13 +385,13 @@ class TestGraphUtils:
     m = Foo()
 
     static: nnx.graph_utils.GraphDef[Foo]
-    state, static, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
+    static, state, ref_out_idx_out = nnx.graph_utils.graph_flatten(m)
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(static: nnx.graph_utils.GraphDef[Foo], state):
       m, idx_out_ref_in = nnx.graph_utils.graph_unflatten(static, state)
       f(m)
-      state, static, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
+      static, state, ref_in_idx_in = nnx.graph_utils.graph_flatten(m)
       idx_out_idx_in = nnx.graph_utils.compose_mapping(
         idx_out_ref_in, ref_in_idx_in
       )

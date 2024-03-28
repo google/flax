@@ -389,7 +389,7 @@ class Decoder(nnx.Module):
     if cfg.scanned:
       assert isinstance(self.layers, DecoderBlock)
 
-      state, static = self.layers.split()
+      static, state = self.layers.split()
       rngs, rngsdef = rngs.fork()
       dropout_key = jax.random.split(rngs['dropout'], cfg.layers)
 

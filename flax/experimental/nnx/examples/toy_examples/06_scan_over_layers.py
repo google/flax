@@ -56,7 +56,7 @@ class ScanMLP(nnx.Module):
     # fork Rngs, split keys into `n_layers`
     keys = rngs.fork(self.n_layers)
     # split Module to get params
-    params, static = self.layers.split(nnx.Param)
+    static, params = self.layers.split(nnx.Param)
 
     def scan_fn(
       x: jax.Array, inputs: Tuple[nnx.State, dict[str, nnx.RngStream]]

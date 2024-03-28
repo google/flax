@@ -42,6 +42,7 @@ from flax.training.train_state import struct
 
 A = tp.TypeVar('A')
 M = tp.TypeVar('M', bound=Module)
+TS = tp.TypeVar('TS', bound='TrainState')
 
 
 class Dict(Module, tp.Mapping[str, A]):
@@ -136,7 +137,7 @@ class ModuleDefApply(tp.Protocol, tp.Generic[M]):
     ...
 
 
-class TrainState(struct.PyTreeNode, tp.Generic[M]):
+class TrainState(tp.Generic[M], struct.PyTreeNode):
   graphdef: GraphDef[M]
   params: State
   tx: optax.GradientTransformation = struct.field(pytree_node=False)
@@ -169,7 +170,7 @@ class TrainState(struct.PyTreeNode, tp.Generic[M]):
 
   def apply(
     self, state: tp.Union[State, str], *states: tp.Union[State, str]
-  ) -> ApplyCaller[tuple[State, GraphDef[M]]]:
+  ) -> ApplyCaller[tuple[GraphDef[M], State]]:
     states = (state, *states)
 
     _states: list[State] = []
@@ -186,7 +187,7 @@ class TrainState(struct.PyTreeNode, tp.Generic[M]):
 
     return self.graphdef.apply(*_states)
 
-  def apply_gradients(self, grads: State, **kwargs) -> 'TrainState[M]':
+  def apply_gradients(self: TS, grads: State, **kwargs) -> TS:
     updates, opt_state = self.tx.update(grads, self.opt_state, self.params)
     params = optax.apply_updates(self.params, updates)  # type: ignore
     step = self.step + 1

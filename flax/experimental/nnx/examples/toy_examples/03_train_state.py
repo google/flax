@@ -58,11 +58,15 @@ class MLP(nnx.Module):
     return x
 
 
-params, counts, static = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)).split(
+static, params, counts = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)).split(
   nnx.Param, ...
 )
 
-state = nnx.TrainState.create(
+class TrainState(nnx.TrainState[MLP]):
+  counts: nnx.State
+
+
+state = TrainState.create(
   static,
   params=params,
   tx=optax.sgd(0.1),
@@ -72,11 +76,11 @@ del params, counts
 
 
 @jax.jit
-def train_step(state: nnx.TrainState[MLP], batch):
+def train_step(state: TrainState, batch):
   x, y = batch
 
   def loss_fn(params):
-    y_pred, (updates, _) = state.apply(params, 'counts')(x)
+    y_pred, (_, updates) = state.apply(params, 'counts')(x)
     counts = updates.extract(Count)
     loss = jnp.mean((y - y_pred) ** 2)
     return loss, counts
@@ -89,7 +93,7 @@ def train_step(state: nnx.TrainState[MLP], batch):
 
 
 @jax.jit
-def test_step(state: nnx.TrainState[MLP], batch):
+def test_step(state: TrainState, batch):
   x, y = batch
   y_pred, _ = state.apply('params', 'counts')(x)
   loss = jnp.mean((y - y_pred) ** 2)

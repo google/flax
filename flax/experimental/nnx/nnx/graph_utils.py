@@ -57,8 +57,8 @@ AuxData = tp.TypeVar('AuxData')
 Updates = tp.Union[
   A,
   'GraphDef[A]',
-  tuple[State, 'GraphDef[A]'],
-  tuple[tuple[State, ...], 'GraphDef[A]'],
+  tuple['GraphDef[A]', State],
+  tuple['GraphDef[A]', tuple[State, ...]],
   State,
   tuple[State, ...],
 ]
@@ -104,6 +104,9 @@ class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin[A, B]):
 
   def __getitem__(self, key: A) -> B:
     return self._mapping[_HashById(key)]
+
+  def __contains__(self, key: object) -> bool:
+    return _HashById(key) in self._mapping
 
   def __setitem__(self, key: A, value: B):
     self._mapping[_HashById(key)] = value
@@ -395,12 +398,12 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
 
   def apply(
     self, state: State, *states: State
-  ) -> ApplyCaller[tuple[State, 'GraphDef[Node]']]:
+  ) -> ApplyCaller[tuple['GraphDef[Node]', State]]:
     accessor = DelayedAccessor()
 
     def _apply(
       accessor: DelayedAccessor, *args, **kwargs
-    ) -> tuple[tp.Any, tuple[State, GraphDef[Node]]]:
+    ) -> tuple[tp.Any, tuple[GraphDef[Node], State]]:
       module = self.merge(state, *states)
       fn = accessor(module)
       out = fn(*args, **kwargs)
@@ -447,12 +450,12 @@ jax.tree_util.register_pytree_node(
 def graph_flatten(
   x: Node,
   /,
-) -> tuple[State, GraphDef[Node], tp.Mapping[tp.Any, Index]]:
+) -> tuple[GraphDef[Node], State, tp.Mapping[tp.Any, Index]]:
   ref_to_index = RefMap[tp.Any, Index]()
   flat_state: dict[Path, StateLeaf] = {}
   graphdef = _graph_flatten((), ref_to_index, flat_state, x)
   assert not isinstance(graphdef, int)
-  return State.from_flat_path(flat_state), graphdef, ref_to_index
+  return graphdef, State.from_flat_path(flat_state), ref_to_index
 
 
 def _graph_flatten(
@@ -908,14 +911,14 @@ def _graph_update_static(
 
 
 @tp.overload
-def split(graph_node: A) -> tuple[State, GraphDef[A]]:
+def split(graph_node: A) -> tuple[GraphDef[A], State]:
   ...
 
 
 @tp.overload
 def split(
   graph_node: A, first: filterlib.Filter, /
-) -> tuple[State, GraphDef[A]]:
+) -> tuple[GraphDef[A], State]:
   ...
 
 
@@ -926,14 +929,14 @@ def split(
   second: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
-) -> tuple[State, tpe.Unpack[tuple[State, ...]], GraphDef[A]]:
+) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:
   ...
 
 
 def split(
   graph_node: A, *filters: filterlib.Filter
-) -> tuple[State, tpe.Unpack[tuple[State, ...]], GraphDef[A]]:
-  state, graphdef, _ = graph_flatten(graph_node)
+) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:
+  graphdef, state, _ = graph_flatten(graph_node)
 
   if len(filters) == 0:
     states = (state,)
@@ -942,17 +945,16 @@ def split(
   else:
     states = state.split(filters[0], filters[1], *filters[2:])
 
-  return *states, graphdef
+  return graphdef, states[0], *states[1:]
 
 
 def merge(
-  *states_and_def: tpe.Unpack[
-    tuple[tpe.Unpack[tuple[State, ...]], GraphDef[A]]
-  ],
+  graphdef: GraphDef[A],
+  state: State,
+  *states: State,
 ) -> A:
   # TODO: add docstring of example usage
-  *states, graphdef = states_and_def
-  return graphdef.merge(*states)
+  return graphdef.merge(state, *states)
 
 
 def update(graph_node: A, update: Updates[A], /, *updates: Updates[A]) -> None:
@@ -979,7 +981,7 @@ def update(graph_node: A, update: Updates[A], /, *updates: Updates[A]) -> None:
             f'got {type(leaf).__name__} instead.'
           )
         module_update = leaf
-        states.append(split(leaf)[0])
+        states.append(split(leaf)[1])
       elif isinstance(leaf, GraphDef):
         module_update = leaf.make_empty()
       else:
@@ -1001,7 +1003,7 @@ def update(graph_node: A, update: Updates[A], /, *updates: Updates[A]) -> None:
 
 
 def clone(node: Node) -> Node:
-  state, static = graph_flatten(node)[:2]
+  static, state, _ = graph_flatten(node)
   return static.merge(state)
 
 
@@ -1151,7 +1153,7 @@ class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
       raise errors.TraceContextError(error_msg)
 
   def __deepcopy__(self: G, memo=None) -> G:
-    state, graphdef, _ = graph_utils.graph_flatten(self)
+    graphdef, state, _ = graph_utils.graph_flatten(self)
     graphdef = deepcopy(graphdef)
     state = deepcopy(state)
     return graphdef.merge(state)

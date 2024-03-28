@@ -157,7 +157,7 @@ def setup_initial_state(
 
   with mesh:
     model = constructor(config, rng)
-    params, static = model.split(nnx.Param)
+    static, params = model.split(nnx.Param)
     state = TrainState.create(
       apply_fn=static.apply, params=params, tx=tx, graphdef=static
     )

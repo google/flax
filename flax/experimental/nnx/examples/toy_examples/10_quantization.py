@@ -106,7 +106,7 @@ class MLP(nnx.Module):
     return x
 
 
-params, static = MLP(
+static, params = MLP(
   din=np.prod(image_shape), dmid=256, dout=10, rngs=nnx.Rngs(0)
 ).split(nnx.Param)
 
@@ -181,7 +181,7 @@ y_pred = forward(state, x_sample)
 # plot predictions
 figure = plt.figure(figsize=(3 * 5, 3 * 2))
 
-for i in range(10):
+for i in range(5):
   plt.subplot(2, 5, i + 1)
   plt.imshow(x_sample[i].reshape(image_shape), cmap='gray')
   plt.title(f'{y_pred[i]}')
@@ -234,7 +234,7 @@ class QLinear(nnx.Module):
     num_steps: int = 100,
     debug: bool = False,
   ):
-    q_hparams, rest, static = self.split(QHParam, ...)
+    static, q_hparams, rest = self.split(QHParam, ...)
     tx = optax.adam(1e-3)
     opt_state = tx.init(q_hparams)
 
@@ -436,6 +436,8 @@ idxs = np.random.randint(0, len(X_test), size=(100,))
 x_optimize = jnp.asarray(X_test[idxs], dtype=jnp.float32)
 x_optimize = x_optimize.reshape((x_optimize.shape[0], -1))
 print(x_optimize.shape)
-qlinear1.optimize(model.linear1, x_optimize, num_steps=1000, debug=True)
+qlinear1.optimize(model.linear1, x_optimize, num_steps=100, debug=True)
+
+# %%
 
 # %%
