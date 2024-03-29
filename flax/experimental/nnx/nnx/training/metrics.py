@@ -91,7 +91,7 @@ class MultiMetric(Metric):
 
     >>> metrics = nnx.MultiMetric(
     ...   accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()
-    >>> )
+    ... )
     >>> metrics.compute()
     {'accuracy': Array(nan, dtype=float32), 'loss': Array(nan, dtype=float32)}
     >>> metrics.update(logits=logits, labels=labels, values=batch_loss)

@@ -146,6 +146,8 @@ filterwarnings = [
     "ignore:.*Deprecated call to.*pkg_resources.declare_namespace.*:DeprecationWarning",
     # DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
     "ignore:.*jax.tree_map is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: the imp module is deprecated in favour of importlib and slated for removal in Python 3.12; see the module's documentation for alternative uses
+    "ignore:.*the imp module is deprecated in favour of importlib.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]

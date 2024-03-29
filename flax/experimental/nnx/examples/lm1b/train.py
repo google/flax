@@ -255,7 +255,9 @@ def predict_step(
       input_shape = (inputs.shape[0], max_decode_len, config.emb_dim)
       m.init_cache(input_shape, dtype=config.dtype)
 
-  cache = module.extract(nnx.Cache)
+  # passed in static argument does not contain cache
+  # need to split module to get updated static that contains cache
+  static, params, cache = module.split(nnx.Param, nnx.Cache)
 
   def tokens_ids_to_logits(flat_ids, cache: nnx.State):
     """Token slice to logits from decoder model."""

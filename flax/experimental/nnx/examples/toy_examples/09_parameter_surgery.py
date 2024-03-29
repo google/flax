@@ -46,11 +46,11 @@ model.backbone = load_pretrained()
 # create a filter to select all the parameters that are not part of the
 # backbone, i.e. the classifier parameters
 is_trainable = lambda path, node: (
-  path.startswith('backbone') and isinstance(node, nnx.Param)
+  (path[0] == 'backbone') and isinstance(node, nnx.Param)
 )
 
 # split the parameters into trainable and non-trainable parameters
-trainable_params, non_trainable, static = model.split(is_trainable, ...)
+static, trainable_params, non_trainable = model.split(is_trainable, ...)
 
 print('trainable_params =', jax.tree_util.tree_map(jax.numpy.shape, trainable_params))
 print('non_trainable = ', jax.tree_util.tree_map(jax.numpy.shape, non_trainable))
