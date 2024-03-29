@@ -149,6 +149,7 @@ always_document_param_types = True
 doctest_global_setup = """
 import jax
 import jax.numpy as jnp
+from flax.experimental import nnx
 
 import logging as slog
 from absl import logging as alog

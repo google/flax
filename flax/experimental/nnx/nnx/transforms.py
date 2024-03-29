@@ -451,25 +451,26 @@ def jit(
 
 @dataclasses.dataclass
 class GradOptions:
-  wrt: filterlib.Filter
+  argnums: tuple[int, ...]
   has_aux: bool
   holomorphic: bool
   allow_int: bool
   reduce_axes: tp.Sequence[AxisName]
   return_value: bool
+  wrt: filterlib.Filter
 
 
 class GradMeta(ModuleMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
-    *,
-    wrt: filterlib.Filter = variables.Param,
     has_aux: bool = False,
     holomorphic: bool = False,
     allow_int: bool = False,
     reduce_axes: tp.Sequence[AxisName] = (),
     return_value: bool = False,
+    *,
+    wrt: filterlib.Filter = variables.Param,
   ) -> tp.Callable[..., 'Grad[M]']:
     super_call = super().__call__
 
@@ -495,24 +496,27 @@ class Grad(LiftedModule[M], metaclass=GradMeta):
   def __init__(
     self,
     module_constructor: tp.Callable[..., M],
-    *,
-    wrt: filterlib.Filter = variables.Param,
+    argnums: int | tp.Sequence[int] = 0,
     has_aux: bool = False,
     holomorphic: bool = False,
     allow_int: bool = False,
     reduce_axes: tp.Sequence[AxisName] = (),
     return_value: bool = False,
+    *,
+    wrt: filterlib.Filter = variables.Param,
     # submodule args
     module_init_args: tuple[tp.Any, ...],
     module_init_kwargs: dict[str, tp.Any],
   ):
+    _argnums = _normalize_sequence(argnums)
     self.options = GradOptions(
-      wrt=wrt,
+      argnums=_argnums,
       has_aux=has_aux,
       holomorphic=holomorphic,
       allow_int=allow_int,
       reduce_axes=reduce_axes,
       return_value=return_value,
+      wrt=wrt,
     )
     self.module_constructor = module_constructor
     self.grad_module = self.module_constructor(
@@ -527,35 +531,50 @@ class Grad(LiftedModule[M], metaclass=GradMeta):
     def grad_call_apply(module, *args, **kwargs):
       return accessor(module)(*args, **kwargs)
 
-    return grad_apply(
-      self.options, grad_call_apply, self.grad_module, *args, **kwargs
-    )
+    return grad_apply(self.options, grad_call_apply, (self.grad_module, *args))
 
 
-def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
-  if not isinstance(module, Module):
-    raise TypeError(f'Expected a Module, got {type(module).__name__}')
+def grad_apply(options: GradOptions, f, args: tuple[tp.Any, ...]):
+  _, input_nodes = graph_utils.extract_graph_nodes(args)
 
-  predicate = filterlib.to_predicate(options.wrt)
+  _args = list(args)
+  diff_graph_nodes: dict[int, tp.Any] = {
+    i: arg
+    for i, arg in enumerate(args)
+    if i in options.argnums and graph_utils.is_node(arg)
+  }
 
-  graphdef, diff, nondiff = module.split(predicate, ...)
+  _, diff_state, _ = graph_utils.split(diff_graph_nodes, options.wrt, ...)
+  for i in diff_graph_nodes:
+    _args[i] = diff_state[i]
+
   transform = jax.value_and_grad if options.return_value else jax.grad
+  out_nodes = None
+
+  argnums = options.argnums[0] if len(options.argnums) == 1 else options.argnums
 
   @functools.partial(
     transform,
-    argnums=0,  # we'll handle this ourselves
+    argnums=argnums,
     has_aux=True,
     holomorphic=options.holomorphic,
     allow_int=options.allow_int,
     reduce_axes=options.reduce_axes,
   )
-  def grad_fn(diff: State):
-    nonlocal graphdef
+  def grad_fn(*args):
+    nonlocal out_nodes
 
-    module = graphdef.merge(diff, nondiff)
-    out = f(module, *args, **kwargs)
+    _args = list(args)
+    for i, graph_node in diff_graph_nodes.items():
+      diff_state: State = _args[i]
+      graph_utils.graph_update_dynamic(graph_node, diff_state)
+      _args[i] = graph_node
 
-    graphdef, updates = module.split()
+    out = f(*_args)
+    out, out_nodes = graph_utils.extract_graph_nodes(out)
+
+    _, updates, _ = graph_utils.graph_flatten((input_nodes, out_nodes))
+
     if options.has_aux:
       loss, aux = out
       out = (loss, (updates, aux))
@@ -564,7 +583,7 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
 
     return out
 
-  out = grad_fn(diff)
+  out = grad_fn(*_args)
 
   updates: State
   if options.return_value:
@@ -581,48 +600,84 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
     else:
       out, updates = out
 
-  module.update(updates, graphdef)
+  graph_utils.graph_update_dynamic((input_nodes, out_nodes), updates)
   return out
 
 
-@tp.overload
 def grad(
   f: tp.Callable[..., tp.Any],
-  wrt: filterlib.Filter = variables.Param,
-  *,
-  holomorphic: bool = False,
-  allow_int: bool = False,
-  reduce_axes: tp.Sequence[AxisName] = (),
-) -> tp.Callable[..., State]:
-  ...
-
-
-@tp.overload
-def grad(
-  f: tp.Callable[..., tp.Any],
-  wrt: filterlib.Filter = variables.Param,
-  *,
-  has_aux: tp.Literal[True],
-  holomorphic: bool = False,
-  allow_int: bool = False,
-  reduce_axes: tp.Sequence[AxisName] = (),
-) -> tp.Callable[..., tuple[State, tp.Any]]:
-  ...
-
-
-def grad(
-  f: tp.Callable[..., tp.Any],
-  wrt: filterlib.Filter = variables.Param,
-  *,
+  argnums: int | tp.Sequence[int] = 0,
   has_aux: bool = False,
   holomorphic: bool = False,
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
-) -> tp.Callable[..., tp.Union[tuple[State, tp.Any], State]]:
+  *,
+  wrt: filterlib.Filter = variables.Param,
+) -> tp.Callable[..., tp.Any]:
+  """Lifted version of ``jax.grad`` that can handle Modules / graph nodes as
+  arguments.
+
+  The differentiable state of each graph node is defined by the `wrt` filter,
+  which by default is set to `nnx.Param`. Internally the ``State`` of
+  graph nodes is extracted, filtered according to `wrt` filter, and
+  passed to the underlying ``jax.grad`` function. The gradients
+  of graph nodes are of type ``State``.
+
+  Example::
+
+    >>> m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> x = jnp.ones((1, 2))
+    >>> y = jnp.ones((1, 3))
+    ...
+    >>> loss_fn = lambda m, x, y: jnp.mean((m(x) - y) ** 2)
+    >>> grad_fn = nnx.grad(loss_fn, wrt=nnx.Param)
+    ...
+    >>> grads = grad_fn(m, x, y)
+    >>> jax.tree_util.tree_map(jnp.shape, grads)
+    State({
+      'bias': Param(
+        raw_value=(3,)
+      ),
+      'kernel': Param(
+        raw_value=(2, 3)
+      )
+    })
+
+  Args:
+    fun: Function to be differentiated. Its arguments at positions specified by
+      ``argnums`` should be arrays, scalars, graph nodes or standard Python
+      containers. Argument arrays in the positions specified by ``argnums`` must
+      be of inexact (i.e., floating-point or complex) type. It should return a
+      scalar (which includes arrays with shape ``()`` but not arrays with shape
+      ``(1,)`` etc.)
+    argnums: Optional, integer or sequence of integers. Specifies which
+      positional argument(s) to differentiate with respect to (default 0).
+    has_aux: Optional, bool. Indicates whether ``fun`` returns a pair where the
+      first element is considered the output of the mathematical function to be
+      differentiated and the second element is auxiliary data. Default False.
+    holomorphic: Optional, bool. Indicates whether ``fun`` is promised to be
+      holomorphic. If True, inputs and outputs must be complex. Default False.
+    allow_int: Optional, bool. Whether to allow differentiating with
+      respect to integer valued inputs. The gradient of an integer input will
+      have a trivial vector-space dtype (float0). Default False.
+    reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
+      ``fun`` implicitly broadcasts a value over that axis, the backward pass
+      will perform a ``psum`` of the corresponding gradient. Otherwise, the
+      gradient will be per-example over named axes. For example, if ``'batch'``
+      is a named batch axis, ``grad(f, reduce_axes=('batch',))`` will create a
+      function that computes the total gradient while ``grad(f)`` will create
+      one that computes the per-example gradient.
+    wrt: Optional, filterlib.Filter. Filter to extract the differentiable state
+      of each graph node. Default is `nnx.Param`.
+
+  """
+
   if f.__name__ == '__init__':
     raise ValueError('Cannot use `grad` with `__init__`')
 
+  _argnums = _normalize_sequence(argnums)
   options = GradOptions(
+    argnums=_argnums,
     wrt=wrt,
     has_aux=has_aux,
     holomorphic=holomorphic,
@@ -632,66 +687,42 @@ def grad(
   )
 
   @functools.wraps(f)
-  def grad_wrapper(module: Module, *args, **kwargs):
-    _check_args(args)
-    return grad_apply(options, f, module, *args, **kwargs)
+  def grad_wrapper(*args):
+    return grad_apply(options, f, args)
 
   return grad_wrapper  # type: ignore
 
 
-@tp.overload
-def value_and_grad(
-  f: tp.Callable[..., tp.Any],
-  wrt: filterlib.Filter = variables.Param,
-  *,
-  holomorphic: bool = False,
-  allow_int: bool = False,
-  reduce_axes: tp.Sequence[AxisName] = (),
-) -> tp.Callable[..., tuple[jax.Array, State]]:
-  ...
-
-
-@tp.overload
-def value_and_grad(
-  f: tp.Callable[..., tp.Any],
-  wrt: filterlib.Filter = variables.Param,
-  *,
-  has_aux: tp.Literal[True],
-  holomorphic: bool = False,
-  allow_int: bool = False,
-  reduce_axes: tp.Sequence[AxisName] = (),
-) -> tp.Callable[..., tuple[tuple[jax.Array, tp.Any], State]]:
-  ...
 
 
 def value_and_grad(
   f: tp.Callable[..., tp.Any],
-  wrt: filterlib.Filter = variables.Param,
-  *,
+  argnums: int | tp.Sequence[int] = 0,
   has_aux: bool = False,
   holomorphic: bool = False,
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
-) -> tp.Callable[
-  ...,
-  tp.Union[tuple[tuple[jax.Array, tp.Any], State], tuple[jax.Array, State]],
-]:
+  *,
+  wrt: filterlib.Filter = variables.Param,
+) -> tp.Callable[..., tp.Any]:
   if f.__name__ == '__init__':
     raise ValueError('Cannot use `value_and_grad` with `__init__`')
 
+  _argnums = _normalize_sequence(argnums)
   options = GradOptions(
-    wrt=wrt,
+    argnums=_argnums,
     has_aux=has_aux,
     holomorphic=holomorphic,
     allow_int=allow_int,
     reduce_axes=reduce_axes,
     return_value=True,
+    wrt=wrt,
   )
 
   @functools.wraps(f)
-  def value_and_grad_wrapper(module: Module, *args, **kwargs):
+  def value_and_grad_wrapper(*args):
     _check_args(args)
-    return grad_apply(options, f, module, *args, **kwargs)
+    return grad_apply(options, f, args)
 
   return value_and_grad_wrapper  # type: ignore
 
