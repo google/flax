@@ -110,7 +110,7 @@ params, static = MLP(
   din=np.prod(image_shape), dmid=256, dout=10, rngs=nnx.Rngs(0)
 ).split(nnx.Param)
 
-state = nnx.TrainState(
+state = nnx.TrainState.create(
   static,
   params=params,
   tx=optax.adam(1e-3),
