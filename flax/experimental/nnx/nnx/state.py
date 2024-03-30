@@ -37,13 +37,12 @@ import numpy as np
 from flax import traverse_util
 from flax.experimental.nnx.nnx import filterlib, reprlib
 from flax.experimental.nnx.nnx.variables import Variable
-from flax.typing import Path
+from flax.typing import Key, PathParts
 
 A = tp.TypeVar('A')
 
-Key = str
 StateLeaf = tp.Union[Variable[tp.Any], np.ndarray, jax.Array]
-FlatState = dict[Path, StateLeaf]
+FlatState = dict[PathParts, StateLeaf]
 
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
@@ -81,9 +80,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
-  def __getitem__(self, key: Key | int) -> State | StateLeaf:
-    if isinstance(key, int):
-      key = str(key)
+  def __getitem__(self, key: Key) -> State | StateLeaf:
     value = self._mapping[key]
     if is_state_leaf(value):
       return value
@@ -94,10 +91,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       raise AttributeError(f"No attribute '{key}' in State")
     return self[key]
 
-  def __setitem__(self, key: Key | int, value: State | StateLeaf) -> None:
-    if isinstance(key, int):
-      key = str(key)
-
+  def __setitem__(self, key: Key, value: State | StateLeaf) -> None:
     if isinstance(value, State):
       self._mapping[key] = value._mapping
     else:
@@ -122,12 +116,12 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
         v = NestedStateRepr(v)
       yield reprlib.Attr(repr(k), v)
 
-  def flat_state(self) -> dict[Key, Variable[Variable]]:
-    return traverse_util.flatten_dict(self._mapping, sep='/')  # type: ignore
+  def flat_state(self) -> FlatState:
+    return traverse_util.flatten_dict(self._mapping)  # type: ignore
 
   @classmethod
   def from_flat_path(cls, flat_state: FlatState, /) -> State:
-    nested_state = traverse_util.unflatten_dict(flat_state, sep='/')
+    nested_state = traverse_util.unflatten_dict(flat_state)
     return cls(nested_state)
 
   @tp.overload
@@ -226,16 +220,15 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
 
     return State.from_flat_path(diff)
 
-
 def _state_flatten_with_keys(x: State):
-  items = sorted(x._mapping.items(), key=lambda item: item[0])
+  items = sorted(x._mapping.items())
   children = tuple((jtu.DictKey(key), value) for key, value in items)
   return children, tuple(key for key, _ in items)
 
 
 def _state_unflatten(
-  static: tuple[Path, ...],
-  leaves: tuple[Variable, ...] | tuple[dict[str, Variable]],
+  static: tuple[Key, ...],
+  leaves: tuple[StateLeaf, ...] | tuple[dict[Key, StateLeaf]],
 ):
   return State(zip(static, leaves))
 

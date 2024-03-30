@@ -39,7 +39,7 @@ from flax.experimental.nnx.nnx.proxy_caller import (
 )
 from flax.experimental.nnx.nnx.state import State, StateLeaf, is_state_leaf
 from flax.experimental.nnx.nnx.variables import EMPTY, Empty, Variable
-from flax.typing import Path, PathParts
+from flax.typing import PathParts, Key
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -127,28 +127,28 @@ class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin[A, B]):
 @dataclasses.dataclass(frozen=True)
 class NodeImplBase(tp.Generic[Node, Leaf, AuxData]):
   type: type
-  flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[str, Leaf]], AuxData]]
+  flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[Key, Leaf]], AuxData]]
 
-  def node_dict(self, node: Node) -> dict[str, Leaf]:
+  def node_dict(self, node: Node) -> dict[Key, Leaf]:
     nodes, _ = self.flatten(node)
     return dict(nodes)
 
 
 @dataclasses.dataclass(frozen=True)
 class GraphNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
-  set_key: tp.Callable[[Node, str, Leaf], None]
-  pop_key: tp.Callable[[Node, str], Leaf]
+  set_key: tp.Callable[[Node, Key, Leaf], None]
+  pop_key: tp.Callable[[Node, Key], Leaf]
   create_empty: tp.Callable[[AuxData], Node]
   clear: tp.Callable[[Node, AuxData], None]
 
-  def init(self, node: Node, items: tuple[tuple[str, Leaf], ...]):
+  def init(self, node: Node, items: tuple[tuple[Key, Leaf], ...]):
     for key, value in items:
       self.set_key(node, key, value)
 
 
 @dataclasses.dataclass(frozen=True)
 class PytreeNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
-  unflatten: tp.Callable[[tuple[tuple[str, Leaf], ...], AuxData], Node]
+  unflatten: tp.Callable[[tuple[tuple[Key, Leaf], ...], AuxData], Node]
 
 
 NodeImpl = tp.Union[
@@ -158,9 +158,9 @@ NodeImpl = tp.Union[
 
 def register_graph_node_type(
   type: type,
-  flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[str, Leaf]], AuxData]],
-  set_key: tp.Callable[[Node, str, Leaf], None],
-  pop_key: tp.Callable[[Node, str], Leaf],
+  flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[Key, Leaf]], AuxData]],
+  set_key: tp.Callable[[Node, Key, Leaf], None],
+  pop_key: tp.Callable[[Node, Key], Leaf],
   create_empty: tp.Callable[[AuxData], Node],
   clear: tp.Callable[[Node, AuxData], None],
 ):
@@ -241,7 +241,7 @@ class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
 
 @dataclasses.dataclass(repr=False)
 class _MappingRepr(reprlib.Representable):
-  mapping: tp.Mapping[str, tp.Any]
+  mapping: tp.Mapping[Key, tp.Any]
 
   def __nnx_repr__(self):
     yield reprlib.Object(type='', value_sep=': ', start='{', end='}')
@@ -261,7 +261,7 @@ class VariableDef(reprlib.Representable):
     self,
     type: tp.Type[Variable[tp.Any]],
     index: int,
-    metadata: dict[str, tp.Any],
+    metadata: dict[Key, tp.Any],
   ):
     self._type = type
     self._index = index
@@ -330,10 +330,10 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     self,
     type: tp.Type[Node],
     index: int,
-    attributes: tuple[str, ...],
-    subgraphs: tp.Iterable[tuple[str, tp.Union['GraphDef[tp.Any]', int]]],
-    static_fields: tp.Iterable[tuple[str, tp.Any]],
-    variables: tp.Iterable[tuple[str, VariableDef | int]],
+    attributes: tuple[Key, ...],
+    subgraphs: tp.Iterable[tuple[Key, tp.Union['GraphDef[tp.Any]', int]]],
+    static_fields: tp.Iterable[tuple[Key, tp.Any]],
+    variables: tp.Iterable[tuple[Key, VariableDef | int]],
     metadata: tp.Any,
   ):
     self._type: type[Node] = type
@@ -431,10 +431,10 @@ def _graphdef_unflatten(
   metadata: tuple[
     tp.Type[Node],
     int,
-    tuple[str, ...],
-    tuple[tuple[str, GraphDef[Node] | int], ...],
-    tuple[tuple[str, tp.Any], ...],
-    tuple[tuple[str, Variable[Empty] | int], ...],
+    tuple[Key, ...],
+    tuple[tuple[Key, GraphDef[Node] | int], ...],
+    tuple[tuple[Key, tp.Any], ...],
+    tuple[tuple[Key, Variable[Empty] | int], ...],
     tp.Any,
   ],
   _,
@@ -452,7 +452,7 @@ def graph_flatten(
   /,
 ) -> tuple[GraphDef[Node], State, tp.Mapping[tp.Any, Index]]:
   ref_to_index = RefMap[tp.Any, Index]()
-  flat_state: dict[Path, StateLeaf] = {}
+  flat_state: dict[PathParts, StateLeaf] = {}
   graphdef = _graph_flatten((), ref_to_index, flat_state, x)
   assert not isinstance(graphdef, int)
   return graphdef, State.from_flat_path(flat_state), ref_to_index
@@ -461,7 +461,7 @@ def graph_flatten(
 def _graph_flatten(
   path: PathParts,
   ref_to_index: RefMap[tp.Any, Index],
-  flat_state: dict[Path, StateLeaf],
+  flat_state: dict[PathParts, StateLeaf],
   node: Node,
 ) -> GraphDef[Node] | int:
   if not is_node(node):
@@ -479,33 +479,26 @@ def _graph_flatten(
   else:
     index = -1
 
-  subgraphs: list[tuple[str, tp.Union[GraphDef[Node], int]]] = []
-  static_fields: list[tuple[str, tp.Any]] = []
-  variables: list[tuple[str, VariableDef | int]] = []
+  subgraphs: list[tuple[Key, tp.Union[GraphDef[Node], int]]] = []
+  static_fields: list[tuple[Key, tp.Any]] = []
+  variables: list[tuple[Key, VariableDef | int]] = []
 
   values, metadata = node_impl.flatten(node)
   for key, value in values:
-    if not isinstance(key, str):
-      raise TypeError(
-        f'Node (of type {type(node).__name__}) has a key of non-string '
-        f'type {type(key).__name__}.'
-      )
     if is_node(value):
       graphdef = _graph_flatten((*path, key), ref_to_index, flat_state, value)
       subgraphs.append((key, graphdef))
     elif isinstance(value, Variable):
-      str_path = '/'.join((*path, key))
       if value in ref_to_index:
         variables.append((key, ref_to_index[value]))
       else:
-        flat_state[str_path] = value.copy()
+        flat_state[(*path, key)] = value.copy()
         variable_index = ref_to_index[value] = len(ref_to_index)
         variables.append(
           (key, VariableDef.from_variable(value, variable_index))
         )
     elif is_state_leaf(value):
-      str_path = '/'.join((*path, key))
-      flat_state[str_path] = value
+      flat_state[(*path, key)] = value
     else:
       static_fields.append((key, value))
 
@@ -700,16 +693,16 @@ def graph_pop(
   id_to_index: dict[int, Index] = {}
   path_parts: PathParts = ()
   predicates = tuple(filterlib.to_predicate(filter) for filter in filters)
-  states = tuple({} for _ in predicates)
-  _graph_pop(node, id_to_index, path_parts, states, predicates)
-  return tuple(State(x) for x in states)
+  flat_states: tuple[FlatState, ...] = tuple({} for _ in predicates)
+  _graph_pop(node, id_to_index, path_parts, flat_states, predicates)
+  return tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
 
 
 def _graph_pop(
   node: tp.Any,
   id_to_index: dict[int, Index],
   path_parts: PathParts,
-  states: tuple[dict[Path, tp.Any], ...],
+  flat_states: tuple[FlatState, ...],
   predicates: tuple[filterlib.Predicate, ...],
 ) -> None:
   if not is_node(node):
@@ -724,17 +717,19 @@ def _graph_pop(
 
   for name, value in node_dict.items():
     if is_node(value):
-      _graph_pop(value, id_to_index, (*path_parts, name), states, predicates)
+      _graph_pop(
+        value, id_to_index, (*path_parts, name), flat_states, predicates
+      )
       continue
     elif not is_state_leaf(value):
       continue
     elif id(value) in id_to_index:
       continue
 
-    path = '/'.join((*path_parts, name))
+    node_path = (*path_parts, name)
     node_impl = get_node_impl(node)
-    for state, predicate in zip(states, predicates):
-      if predicate(path, value):
+    for state, predicate in zip(flat_states, predicates):
+      if predicate(node_path, value):
         if isinstance(node_impl, PytreeNodeImpl):
           raise ValueError(
             f'Cannot pop key {name!r} from node of type {type(node).__name__}'
@@ -743,7 +738,7 @@ def _graph_pop(
         node_impl.pop_key(node, name)
         if isinstance(value, Variable):
           value = value.copy()
-        state[path] = value
+        state[node_path] = value
         break
     else:
       # NOTE: should we raise an error here?
@@ -1007,7 +1002,7 @@ def clone(node: Node) -> Node:
   return static.merge(state)
 
 
-def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[Path, tp.Any]]:
+def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[PathParts, tp.Any]]:
   visited: set[int] = set()
   path_parts: PathParts = ()
   yield from _iter_nodes(node, visited, path_parts)
@@ -1015,14 +1010,13 @@ def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[Path, tp.Any]]:
 
 def _iter_nodes(
   node: tp.Any, visited: set[int], path_parts: PathParts
-) -> tp.Iterator[tuple[Path, tp.Any]]:
+) -> tp.Iterator[tuple[PathParts, tp.Any]]:
   if not is_node(node):
     return
   if id(node) in visited:
     return
   visited.add(id(node))
-  path = '/'.join(path_parts)
-  yield path, node
+  yield path_parts, node
   node_impl = get_node_impl(node)
   node_dict = node_impl.node_dict(node)
   for key, value in node_dict.items():
@@ -1137,6 +1131,18 @@ class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
   if tp.TYPE_CHECKING:
     _graph_node__state: ModuleState
 
+  def __init_subclass__(cls) -> None:
+    super().__init_subclass__()
+
+    graph_utils.register_graph_node_type(
+      type=cls,
+      flatten=cls._graph_node_flatten,
+      set_key=cls._graph_node_set_key,
+      pop_key=cls._graph_node_pop_key,
+      create_empty=cls._graph_node_create_empty,
+      clear=cls._graph_node_clear,
+    )
+
   if not tp.TYPE_CHECKING:
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1185,55 +1191,43 @@ class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
       if clear_seen:
         CONTEXT.seen_modules_repr = None
 
-  def __init_subclass__(cls) -> None:
-    super().__init_subclass__()
-
-    graph_utils.register_graph_node_type(
-      type=cls,
-      flatten=_graph_node_flatten,
-      set_key=_graph_node_set_key,
-      pop_key=_graph_node_pop_key,
-      create_empty=_graph_node_create_empty,
-      clear=_graph_node_clear,
+  # Graph Definition
+  def _graph_node_flatten(self):
+    nodes = sorted(
+      (key, value)
+      for key, value in vars(self).items()
+      if key != '_graph_node__state'
     )
+    return nodes, type(self)
 
+  def _graph_node_set_key(self, key: Key, value: tp.Any):
+    if not isinstance(key, str):
+      raise KeyError(f'Invalid key: {key!r}')
+    elif (
+      hasattr(self, key)
+      and isinstance(variable := getattr(self, key), Variable)
+      and isinstance(value, Variable)
+    ):
+      variable.copy_from(value)
+    else:
+      setattr(self, key, value)
 
-# Graph Definition
-def _graph_node_flatten(node: GraphNode):
-  nodes = tuple(
-    (name, value)
-    for name, value in sorted(vars(node).items())
-    if name != '_graph_node__state'
-  )
-  return nodes, type(node)
+  def _graph_node_pop_key(self, key: Key):
+    if not isinstance(key, str):
+      raise KeyError(f'Invalid key: {key!r}')
+    return vars(self).pop(key)
 
+  @staticmethod
+  def _graph_node_create_empty(node_type: tp.Type[G]) -> G:
+    node = object.__new__(node_type)
+    vars(node).update(_graph_node__state=ModuleState())
+    return node
 
-def _graph_node_set_key(node: GraphNode, name: str, value: tp.Any):
-  if (
-    hasattr(node, name)
-    and isinstance(variable := getattr(node, name), Variable)
-    and isinstance(value, Variable)
-  ):
-    variable.copy_from(value)
-  else:
-    setattr(node, name, value)
-
-
-def _graph_node_pop_key(node: GraphNode, name: str):
-  return vars(node).pop(name)
-
-
-def _graph_node_create_empty(cls: tp.Type[G]) -> G:
-  node = object.__new__(cls)
-  vars(node).update(_graph_node__state=ModuleState())
-  return node
-
-
-def _graph_node_clear(node: GraphNode, cls: tp.Type[G]):
-  module_state = node._graph_node__state
-  module_vars = vars(node)
-  module_vars.clear()
-  module_vars['_graph_node__state'] = module_state
+  def _graph_node_clear(self, cls: tp.Type[G]):
+    module_state = self._graph_node__state
+    module_vars = vars(self)
+    module_vars.clear()
+    module_vars['_graph_node__state'] = module_state
 
 
 # ---------------------------------------------------------
@@ -1247,13 +1241,13 @@ def is_pytree_node(x: tp.Any) -> bool:
   return not jax.tree_util.all_leaves([x])
 
 
-def _key_path_to_str(key: tp.Any) -> str:
+def _key_path_to_key(key: tp.Any) -> Key:
   if isinstance(key, jax.tree_util.SequenceKey):
-    return str(key.idx)
+    return key.idx
   elif isinstance(
     key, (jax.tree_util.DictKey, jax.tree_util.FlattenedIndexKey)
   ):
-    return str(key.key)
+    return key.key
   elif isinstance(key, jax.tree_util.GetAttrKey):
     return key.name
   else:
@@ -1264,13 +1258,13 @@ def _flatten_pytree(pytree: tp.Any):
   leaves, treedef = jax.tree_util.tree_flatten_with_path(
     pytree, is_leaf=lambda x: x is not pytree
   )
-  nodes = tuple((_key_path_to_str(path[0]), value) for path, value in leaves)
+  nodes = tuple((_key_path_to_key(path[0]), value) for path, value in leaves)
 
   return nodes, treedef
 
 
 def _unflatten_pytree(
-  nodes: tuple[tuple[str, tp.Any], ...], treedef: jax.tree_util.PyTreeDef
+  nodes: tuple[tuple[Key, tp.Any], ...], treedef: jax.tree_util.PyTreeDef
 ):
   pytree = treedef.unflatten(value for _, value in nodes)
   return pytree

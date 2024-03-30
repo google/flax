@@ -36,7 +36,7 @@ from flax.experimental.nnx.nnx.proxy_caller import (
 from flax.experimental.nnx.nnx.rnglib import Rngs
 from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import Variable
-from flax.typing import Path
+from flax.typing import Path, PathParts
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -298,7 +298,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
 
-  def modules(self) -> tp.Iterator[tuple[Path, Module]]:
+  def modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
     for path, value in graph_utils.iter_nodes(self):
       if isinstance(value, Module):
         yield path, value

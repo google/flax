@@ -27,8 +27,8 @@ class TestGraphUtils:
 
     static, state, ref_idx = nnx.graph_utils.graph_flatten(g)
 
-    state['0']['b'].raw_value = 2
-    state['3'].raw_value = 4
+    state[0]['b'].raw_value = 2
+    state[3].raw_value = 4
 
     assert len(ref_idx) == 2
     assert a['b'] in ref_idx
@@ -69,7 +69,7 @@ class TestGraphUtils:
 
     static, state, _ = nnx.graph_utils.graph_flatten(g)
 
-    state['0']['b'].raw_value = 3
+    state[0]['b'].raw_value = 3
     nnx.graph_utils.graph_update_dynamic(g, state)
 
     assert g[0]['b'].raw_value == 3
@@ -125,12 +125,12 @@ class TestGraphUtils:
 
     static, state, _ = nnx.graph_utils.graph_flatten(ls)
 
-    assert state['0']['kernel'].raw_value.shape == (2, 2)
-    assert state['0']['bias'].raw_value.shape == (2,)
-    assert state['1']['scale'].raw_value.shape == (2,)
-    assert state['1']['bias'].raw_value.shape == (2,)
-    assert state['1']['mean'].raw_value.shape == (2,)
-    assert state['1']['var'].raw_value.shape == (2,)
+    assert state[0]['kernel'].raw_value.shape == (2, 2)
+    assert state[0]['bias'].raw_value.shape == (2,)
+    assert state[1]['scale'].raw_value.shape == (2,)
+    assert state[1]['bias'].raw_value.shape == (2,)
+    assert state[1]['mean'].raw_value.shape == (2,)
+    assert state[1]['var'].raw_value.shape == (2,)
 
   def test_shared_variables(self):
     v = nnx.Param(1)

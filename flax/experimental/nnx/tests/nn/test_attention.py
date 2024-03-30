@@ -69,11 +69,12 @@ class TestMultiHeadAttention:
 
     _ = module(x, True)
     intermediates = module.pop(nnx.Intermediate)
-    assert intermediates['attention_layers/0/attention_weights'].raw_value[
+    # assert intermediates['attention_layers/0/attention_weights'].raw_value[
+    assert intermediates['attention_layers'][0]['attention_weights'].raw_value[
       0
     ].shape == (4, 8, 6, 6)
-    assert 'attention_layers/1/attention_weights' not in intermediates
-    assert intermediates['attention_layers/2/attention_weights'].raw_value[
+    assert 1 not in intermediates['attention_layers']
+    assert intermediates['attention_layers'][2]['attention_weights'].raw_value[
       0
     ].shape == (4, 8, 6, 6)
 
