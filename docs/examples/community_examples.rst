@@ -76,12 +76,12 @@ Tutorials
       - Author
       - Task type
       - Reference
-    * - `Graph Convolutional Network (GCN) <https://github.com/mashaan14/YouTube-channel/blob/main/notebooks/2024_03_21_jraph_GCN.ipynb>`
-      - `@mashaan14 <https://github.com/mashaan14>`
+    * - `Graph Convolutional Network (GCN) <https://github.com/mashaan14/YouTube-channel/blob/main/notebooks/2024_03_21_jraph_GCN.ipynb>`__
+      - `@mashaan14 <https://github.com/mashaan14>`__
       - Node Classification
       - https://arxiv.org/abs/1609.02907
-    * - `Graph Attention Networks <https://github.com/mashaan14/YouTube-channel/blob/main/notebooks/2024_03_18_jraph_GAT.ipynb>`
-      - `@mashaan14 <https://github.com/mashaan14>`
+    * - `Graph Attention Networks <https://github.com/mashaan14/YouTube-channel/blob/main/notebooks/2024_03_18_jraph_GAT.ipynb>`__
+      - `@mashaan14 <https://github.com/mashaan14>`__
       - Node Classification
       - https://arxiv.org/abs/1710.10903
 
