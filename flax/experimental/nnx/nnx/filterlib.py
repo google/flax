@@ -26,10 +26,14 @@ Predicate = tp.Callable[[PathParts, tp.Any], bool]
 FilterLiteral = tp.Union[type, str, Predicate, bool, ellipsis, None]
 Filter = tp.Union[FilterLiteral, tuple[FilterLiteral, ...], list[FilterLiteral]]
 
+@tp.runtime_checkable
+class _HasTag(tp.Protocol):
+  tag: str
+
 
 def to_predicate(filter: Filter) -> Predicate:
   if isinstance(filter, str):
-    return AtPath(filter)
+    return WithTag(filter)
   elif isinstance(filter, type):
     return OfType(filter)
   elif isinstance(filter, bool):
@@ -47,11 +51,11 @@ def to_predicate(filter: Filter) -> Predicate:
 
 
 @dataclasses.dataclass
-class AtPath:
-  str_key: str
+class WithTag:
+  tag: str
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return self.str_key in path
+    return isinstance(x, _HasTag) and x.tag == self.tag
 
 
 @dataclasses.dataclass
