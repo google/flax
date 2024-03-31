@@ -565,8 +565,6 @@ def _graph_unflatten(
   if graphdef.index in index_to_ref:
     raise RuntimeError(f'GraphDef index {graphdef.index} already used.')
 
-  # TODO(cgarciae): why copy here?
-  state = state.copy()
   node_impl = get_node_impl_for_type(graphdef.type)
 
   def _get_children():
