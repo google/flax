@@ -38,7 +38,7 @@ class Functional(tp.Generic[M]):
     if rngs is not None:
       kwargs['rngs'] = rngs
     module = self.module_type(*self.args, **self.kwargs, **kwargs)
-    state, graphdef = module.split()
+    graphdef, state = module.split()
     self.graphdef = graphdef
     return state
 

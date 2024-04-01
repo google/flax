@@ -27,7 +27,7 @@ class TestPartitioning:
       c=100,
     )
 
-    params, rest, graphdef = m.split(nnx.Param, ...)
+    graphdef, params, rest = m.split(nnx.Param, ...)
 
     assert len(params) == 2
     assert len(rest) == 1
@@ -93,7 +93,7 @@ class TestPartitioning:
       c=100,
     )
 
-    state = m.split()[0]
+    state = m.split()[1]
     state = jax.tree_map(lambda x: x * 2, state)
 
     m.update(state)
@@ -110,7 +110,7 @@ class TestPartitioning:
       c=nnx.Variable(jax.numpy.array(100)),
     )
 
-    state, graphdef = m.split()
+    graphdef, state = m.split()
     state = jax.tree_map(lambda x: x * 2, state)
 
     m.update(state)

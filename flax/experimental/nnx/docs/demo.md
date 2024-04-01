@@ -86,7 +86,7 @@ print(f'{y.shape = }')
 ```{code-cell} ipython3
 :outputId: 9a3f378b-739e-4f45-9968-574651200ede
 
-state, static = model.split()
+static, state = model.split()
 
 # state is a dictionary-like JAX pytree
 print(f'{state = }'[:500] + '\n...')
@@ -98,7 +98,7 @@ print(f'\n{static = }'[:300] + '\n...')
 ```{code-cell} ipython3
 :outputId: 0007d357-152a-449e-bcb9-b1b5a91d2d8d
 
-state, static = model.split()
+static, state = model.split()
 
 @jax.jit
 def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):

@@ -47,7 +47,7 @@ def create_and_save(seed: int, path: str):
 
 def load_model(path: str) -> MLP:
   # create that model with abstract shapes
-  state, static = jax.eval_shape(lambda: create_model(0).split())
+  static, state = jax.eval_shape(lambda: create_model(0).split())
   # Load the parameters
   checkpointer = orbax.PyTreeCheckpointer()
   state = checkpointer.restore(f'{path}/state', item=state)

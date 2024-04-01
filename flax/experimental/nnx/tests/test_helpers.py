@@ -26,7 +26,7 @@ class TestHelpers:
   def test_train_state(self):
     m = nnx.Dict(a=nnx.Param(1), b=nnx.BatchStat(2))
 
-    params, batch_stats, graphdef = m.split(nnx.Param, nnx.BatchStat)
+    graphdef, params, batch_stats = m.split(nnx.Param, nnx.BatchStat)
 
     state = TrainState.create(
       graphdef,
@@ -49,7 +49,7 @@ class TestHelpers:
         return x
 
     module = Foo(rngs=nnx.Rngs(0))
-    params, batch_stats, graphdef = module.split(nnx.Param, nnx.BatchStat)
+    graphdef, params, batch_stats = module.split(nnx.Param, nnx.BatchStat)
 
     state = TrainState.create(
       graphdef,

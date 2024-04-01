@@ -72,7 +72,7 @@ NNX has two very simple APIs to interact with JAX: `split` and `merge`.
 The `Module.split` method allows you to convert into a `State` dict-like object that contains the dynamic state of the Module, and a `ModuleDef` object that contains the static structure of the Module.
 
 ```python
-state, static = model.split()
+static, state = model.split()
 ```
 ```
 state = State({
@@ -91,7 +91,7 @@ Using `split` and `merge` in conjunction allows you to carry your Module in and 
 def forward(static: nnx.ModuleDef, state: nnx.State, x: jax.Array):
   model = static.merge(state)
   y = model(x)
-  state, _ = model.split()
+  _, state = model.split()
   return y, state
 
 x = jnp.ones((2, 4))
@@ -104,7 +104,7 @@ state["count"] = Array(2, dtype=int32)
 For simple use cases, you can use `nnx.jit` which is a lifted transform that automatically splits, merges, and updates the outside Module for you:
 
 ```python
-state, static = model.split()
+static, state = model.split()
 
 @nnx.jit
 def forward(model: Linear, x: jax.Array):
@@ -120,7 +120,7 @@ assert model.count == 3 # state automatically updated!
 Using `split` and `merge` (the [Functional API](#functional-api)) is the recommended way to use NNX as it provides tight control over the state, allows you to use regular JAX transformations, and it minimizes overhead. In this example we will create a simple training step that implements Stochastic Gradient Descent (SGD):
 
 ```python
-params, counts, static = model.split(nnx.Param, Count)
+static, params, counts = model.split(nnx.Param, Count)
 
 @jax.jit
 def train_step(params, counts, x, y):
@@ -224,7 +224,7 @@ this means you can naturally have e.g. `list`s or `dict`s of Modules.
 NNX Modules are not pytrees so they cannot be passed to JAX transformations. In order to interact with JAX, a Module must be partitioned into a `State` and `GraphDef` objects. The `State` object is a flat dictionary-like pytree structure that contains all the deduplicated node attributes, and the `GraphDef` contains the static attributes and structural information needed to reconstruct the Module.
 
 ```python
-state, static = model.split()
+static, state = model.split()
 ```
 ```
 State({
@@ -251,11 +251,11 @@ This can be use to e.g. recreate a module inside a JAX transformation. The `appl
 
 ```python
 # run __call__
-y, (state, static) = static.apply(state)(x)
+y, (static, state) = static.apply(state)(x)
 # run some_method
-y, (state, static) = static.apply(state).some_method(x)
+y, (static, state) = static.apply(state).some_method(x)
 # run submodule
-y, (state, static) = static.apply(state).submodule(x)
+y, (static, state) = static.apply(state).submodule(x)
 ```
 
 `apply` can call any nested method or submodule as long as it can be accessed via the `.` or `[]` operators.
@@ -267,9 +267,9 @@ Here are various examples of how you can use the `split` method to split a modul
 
 ```python
 # split the module into the state with all the nodes and the static
-state, static = model.split()
+static, state = model.split()
 # verify that the state contains only params, else raise an error
-params, static = model.split(nnx.Param)
+static, params = model.split(nnx.Param)
 # split the state into params and batch_stats, verify no nodes are left
 params, batch_stats, static = model.split(nnx.Param, nnx.BatchStat)
 # if there are any nodes left, use the `...` filter to capture them
@@ -291,7 +291,7 @@ model = static.merge(params, batch_stats, rest)
 The same is true for `apply`.
 
 ```python
-y, (state, static) = static.apply(params, batch_stats, rest)(x)
+y, (static, state) = static.apply(params, batch_stats, rest)(x)
 ```
 
  Note that `apply` will return a single `state` object, if you need to `split` the state you can use `State`'s own `split` method:
@@ -368,8 +368,8 @@ State({
 If you use the functional API to call the module instead, the `Intermediate` nodes will be present in the output `state`. To retrieve the `Intermediate` nodes and optionally separate them from the output `state` you can use `State.split`:
 
 ```python
-state, static = model.split()
-y, (state, static) = static.apply(state)(jnp.ones((8, 12)))
+static, state = model.split()
+y, (static, state) = static.apply(state)(jnp.ones((8, 12)))
 # "pop" the intermediates from the state
 intermediates, state = state.split(nnx.Intermediate, ...)
 ```
@@ -417,7 +417,7 @@ class ScanMLP(nnx.Module):
     def __init__(self, dim: int, *, n_layers: int, rngs: nnx.Rngs):
         params_key = jax.random.split(rngs.params(), n_layers)
         self.n_layers = n_layers
-        state, static = jax.vmap(
+        static, state = jax.vmap(
             lambda key: Block(dim, rngs=nnx.Rngs(params=key)).split()
         )(params_key)
         self.layers = static.merge(state)
@@ -432,7 +432,7 @@ apply it to the input `x`, passing the sliced `dropout_key` as part of the `Rngs
 ```python
     def __call__(self, x: jax.Array, *, train: bool, rngs: nnx.Rngs) -> jax.Array:
         dropout_key = jax.random.split(rngs.dropout(), self.n_layers)
-        params, static = self.layers.split(nnx.Param)
+        static, params = self.layers.split(nnx.Param)
 
         def scan_fn(x, inputs):
             params, dropout_key = inputs

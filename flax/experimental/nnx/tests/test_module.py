@@ -51,7 +51,7 @@ class TestModule:
   def test_tree_map(self):
     m = nnx.Dict(a=nnx.Param(1))
 
-    state, static = m.split()
+    static, state = m.split()
 
     state = jax.tree_map(lambda x: x + 1, state)
 
@@ -66,12 +66,12 @@ class TestModule:
     m = nnx.Dict(a=nnx.Param(1))
 
     @jax.jit
-    def g(state: nnx.State, graphdef: nnx.GraphDef[nnx.Dict[int]]):
+    def g(graphdef: nnx.GraphDef[nnx.Dict[int]], state: nnx.State):
       m = graphdef.merge(state)
       m.a = 2
       return m.split()
 
-    state, graphdef = g(*m.split())
+    graphdef, state = g(*m.split())
     m2 = graphdef.merge(state)
 
     assert m2.a == 2
@@ -123,7 +123,7 @@ class TestModule:
 
     m = Foo()
 
-    state, graphdef = m.split()
+    graphdef, state = m.split()
     assert len(state) == 1
 
     m2 = graphdef.merge(state)
@@ -136,7 +136,7 @@ class TestModule:
     m = m0 = nnx.Dict({'a': nnx.List([r1, r2]), 'b': r1})
 
     @jax.jit
-    def f(state: nnx.State, graphdef: nnx.GraphDef[nnx.Dict[Any]]):
+    def f(graphdef: nnx.GraphDef[nnx.Dict[Any]], state: nnx.State):
       m = graphdef.merge(state)
 
       assert m['a'][0] is m['b']
@@ -144,7 +144,7 @@ class TestModule:
 
       return m.split()
 
-    state, graphdef = f(*m.split())
+    graphdef, state = f(*m.split())
     m = graphdef.merge(state)
 
     assert m['a'][0] is m['b']
@@ -159,12 +159,12 @@ class TestModule:
     m = nnx.Dict(a=nnx.Param(1))
 
     @jax.jit
-    def g(state: nnx.State, graphdef: nnx.GraphDef[nnx.Dict[nnx.Param[int]]]):
+    def g(graphdef: nnx.GraphDef[nnx.Dict[nnx.Param[int]]], state: nnx.State):
       m = graphdef.merge(state)
       m.a.value += 1
       return m.split()
 
-    state, graphdef = g(*m.split())
+    graphdef, state = g(*m.split())
     m2 = graphdef.merge(state)
     assert m2 is not m
     assert m.a.value == 1
@@ -211,7 +211,7 @@ class TestModule:
       }
     )
 
-    p, graphdef = m.split()
+    graphdef, p = m.split()
     assert len(p.flat_state()) == 2
     assert len(jax.tree_util.tree_leaves(p)) == 2
 
@@ -542,7 +542,7 @@ class TestModuleDataclass:
       f=6,  # static int
     )
 
-    state, graphdef = m.split()
+    graphdef, state = m.split()
 
     assert len(state) == 4
     assert state.b == nnx.TreeNode(2)
@@ -601,7 +601,7 @@ class TestModuleDef:
     rngs = nnx.Rngs(0)
     foo = Foo(c=1.0, rngs=rngs)
 
-    states, graphdef = foo.split()
+    graphdef, states = foo.split()
 
     assert isinstance(states, nnx.State)
     assert isinstance(states.w, nnx.Param)
@@ -625,14 +625,14 @@ class TestModuleDef:
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 
-    state, graphdef = foo.split()
+    graphdef, state = foo.split()
 
     assert isinstance(graphdef, nnx.GraphDef)
     assert isinstance(state, nnx.State)
     assert isinstance(state.w, nnx.Param)
     assert isinstance(state.c, nnx.Variable)
 
-    y, (state, graphdef) = graphdef.apply(state)(x=2.0, rngs=nnx.Rngs(e=1))
+    y, (graphdef, state) = graphdef.apply(state)(x=2.0, rngs=nnx.Rngs(e=1))
 
     assert isinstance(y, jax.Array)
 
@@ -663,7 +663,7 @@ class TestModuleDef:
 
     foo = Foo()
 
-    state, graphdef = foo.split()
+    graphdef, state = foo.split()
 
     assert isinstance(state, nnx.State)
     assert isinstance(state.a, jax.Array)
@@ -679,7 +679,7 @@ class TestModuleDef:
 
     foo = Foo()
 
-    state, graphdef = foo.split()
+    graphdef, state = foo.split()
 
     assert isinstance(state, nnx.State)
     assert isinstance(state.a, nnx.State)

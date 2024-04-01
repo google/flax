@@ -113,7 +113,7 @@ class VAE(nnx.Module):
     return nnx.sigmoid(logits)
 
 
-params, static = VAE(
+static, params = VAE(
   din=int(np.prod(image_shape)),
   hidden_size=256,
   latent_size=latent_size,
@@ -133,7 +133,7 @@ state = nnx.TrainState.create(
 def train_step(state: nnx.TrainState[VAE], x: jax.Array, key: jax.Array):
   def loss_fn(params: nnx.State):
     rngs = nnx.Rngs(noise=jax.random.fold_in(key, state.step))
-    logits, (updates, _) = state.apply(params)(x, rngs=rngs)
+    logits, (_, updates) = state.apply(params)(x, rngs=rngs)
 
     losses = updates.extract(Loss)
     kl_loss = sum(jax.tree_util.tree_leaves(losses), 0.0)

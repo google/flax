@@ -115,13 +115,13 @@ class TestIntegration:
       return model.split()
 
     graphdef: nnx.GraphDef[Model]
-    state, graphdef = Model(rngs=nnx.Rngs(0)).split()
+    graphdef, state = Model(rngs=nnx.Rngs(0)).split()
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
 
     for _i in range(3):
-      state, graphdef = train_step(state, graphdef, x, y)
+      graphdef, state = train_step(state, graphdef, x, y)
 
     model = graphdef.merge(state)
 
@@ -192,12 +192,12 @@ class TestIntegration:
     y = model(x)
     assert model.count.value == 1
 
-    params, counts, graphdef = model.split(nnx.Param, Count)
+    graphdef, params, counts = model.split(nnx.Param, Count)
 
     @jax.jit
     def train_step(params, counts, x, y):
       def loss_fn(params):
-        y_pred, (updates, _) = graphdef.apply(params, counts)(x)
+        y_pred, (_, updates) = graphdef.apply(params, counts)(x)
         loss = jax.numpy.mean((y_pred - y) ** 2)
         return loss, updates.extract(Count)
 
@@ -247,9 +247,9 @@ class TestIntegration:
 
     model = Linear(12, 2, rngs=nnx.Rngs(0))
 
-    state, graphdef = model.split()
+    graphdef, state = model.split()
 
-    y, (state, _) = graphdef.apply(state)(jnp.ones((8, 12)))
+    y, (_, state) = graphdef.apply(state)(jnp.ones((8, 12)))
 
     intermediates, state = state.split(nnx.Intermediate, ...)
 

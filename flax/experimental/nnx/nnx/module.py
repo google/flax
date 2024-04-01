@@ -83,7 +83,7 @@ def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
 
 class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
   @classmethod
-  def init(cls: type[M], *args, **kwargs) -> tuple[State, GraphDef[M]]:
+  def init(cls: type[M], *args, **kwargs) -> tuple[GraphDef[M], State]:
     return cls(*args, **kwargs).split()
 
   @classmethod
@@ -98,7 +98,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
       constructor = accessor(cls)
       if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], Rngs):
         kwargs['rngs'] = rngs.fork()
-      state, graphdef = jax.eval_shape(
+      graphdef, state = jax.eval_shape(
         lambda: constructor(*args, **lift_rngs(kwargs)).split()
       )
       return graphdef.merge(state)
@@ -159,7 +159,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
 
       graphdef: GraphDef[M]
       state: State
-      state, graphdef = jax.jit(_partial_init_constructor)()
+      graphdef, state = jax.jit(_partial_init_constructor)()
       module = graphdef.merge(state)
       return module
 
@@ -169,11 +169,11 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
     return graph_utils.merge(*self.split())
 
   @tp.overload
-  def split(self: M) -> tuple[State, GraphDef[M]]:
+  def split(self: M) -> tuple[GraphDef[M], State]:
     ...
 
   @tp.overload
-  def split(self: M, first: filterlib.Filter, /) -> tuple[State, GraphDef[M]]:
+  def split(self: M, first: filterlib.Filter, /) -> tuple[GraphDef[M], State]:
     ...
 
   @tp.overload
@@ -183,20 +183,20 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tuple[State, tpe.Unpack[tuple[State, ...]], GraphDef[M]]:
+  ) -> tuple[GraphDef[M], State, tpe.Unpack[tuple[State, ...]]]:
     ...
 
   def split(
     self: M, *filters: filterlib.Filter
-  ) -> tuple[State, tpe.Unpack[tuple[State, ...]], GraphDef[M]]:
+  ) -> tuple[GraphDef[M], State, tpe.Unpack[tuple[State, ...]]]:
     return graph_utils.split(self, *filters)
 
   def get_state(self) -> State:
-    state, _ = self.split()
+    _, state = self.split()
     return state
 
   def get_graphdef(self: M) -> GraphDef[M]:
-    _, graphdef = self.split()
+    graphdef, _ = self.split()
     return graphdef
 
   @tp.overload
@@ -378,7 +378,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
 # Pytree Definition
 # -------------------------
 def _module_flatten(module: Module, *, with_keys: bool):
-  state, graphdef = module.split()
+  graphdef, state = module.split()
   key_values = sorted(state.raw_mapping.items())
   keys = tuple(key for key, _ in key_values)
 
@@ -415,9 +415,3 @@ def first_from(*args: tp.Optional[A], error_msg: str) -> A:
   raise ValueError(error_msg)
 
 
-def merge(
-  state_and_def: tuple[tpe.Unpack[tuple[State, ...]], GraphDef[M]],
-) -> M:
-  # TODO: add docstring of example usage
-  *states, graphdef = state_and_def
-  return graphdef.merge(*states)
