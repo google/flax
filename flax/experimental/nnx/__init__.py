@@ -82,6 +82,11 @@ from .nnx.spmd import get_named_sharding as get_named_sharding
 from .nnx.spmd import with_partitioning as with_partitioning
 from .nnx.spmd import with_sharding_constraint as with_sharding_constraint
 from .nnx.state import State as State
+from .nnx.training import metrics as metrics
+from .nnx.training import optimizer as optimizer
+from .nnx.training.metrics import Metric as Metric
+from .nnx.training.metrics import MultiMetric as MultiMetric
+from .nnx.training.optimizer import Optimizer as Optimizer
 from .nnx.transforms import JIT as JIT
 from .nnx.transforms import Remat as Remat
 from .nnx.transforms import Scan as Scan
