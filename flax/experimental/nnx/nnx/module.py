@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import typing as tp
 from functools import partial
 
@@ -26,7 +27,7 @@ from flax.experimental.nnx.nnx import (
   graph_utils,
 )
 from flax.experimental.nnx.nnx import variables as variableslib
-from flax.experimental.nnx.nnx.graph_utils import GraphDef
+from flax.experimental.nnx.nnx.graph_utils import GraphDef, GraphNodeMeta
 from flax.experimental.nnx.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -47,8 +48,40 @@ StateMapping = tp.Mapping[Path, tp.Any]
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
+@tp.runtime_checkable
+class _HasSetup(tp.Protocol):
+  def setup(self) -> None:
+    ...
 
-class Module(graph_utils.GraphNode):
+
+class ModuleMeta(GraphNodeMeta):
+  if not tp.TYPE_CHECKING:
+
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
+      return _module_meta_call(cls, *args, **kwargs)
+
+
+def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
+  module: M = GraphNodeMeta.__call__(cls, *args, **kwargs)
+
+  if dataclasses.is_dataclass(module):
+    if isinstance(module, _HasSetup):
+      module.setup()
+
+    assert isinstance(module, Module)
+
+    for field in dataclasses.fields(module):
+      if not field.init:
+        continue
+      value = vars(module)[field.name]
+      # set Rngs instances to None
+      if isinstance(value, Rngs):
+        vars(module)[field.name] = None
+
+  return module
+
+
+class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
   @classmethod
   def init(cls: type[M], *args, **kwargs) -> tuple[State, GraphDef[M]]:
     return cls(*args, **kwargs).split()

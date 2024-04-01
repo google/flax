@@ -65,7 +65,9 @@ class LinenWrapper(Module):
     self.module = module
 
     _rngs = (
-      {name: stream.key for name, stream in rngs._rngs.items()} if rngs else {}
+      {name: stream.key.raw_value for name, stream in rngs._rngs.items()}
+      if rngs
+      else {}
     )
     # rename default to params
     if 'params' not in _rngs and 'default' in _rngs:
@@ -83,7 +85,9 @@ class LinenWrapper(Module):
     self, *args: Any, rngs: tp.Optional[Rngs] = None, **kwargs: Any
   ) -> Any:
     _rngs = (
-      {name: stream.key for name, stream in rngs._rngs.items()} if rngs else {}
+      {name: stream.key.value for name, stream in rngs._rngs.items()}
+      if rngs
+      else {}
     )
 
     variables = {

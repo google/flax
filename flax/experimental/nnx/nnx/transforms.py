@@ -45,8 +45,7 @@ from flax.experimental.nnx.nnx import (
   spmd,
   variables,
 )
-from flax.experimental.nnx.nnx.graph_utils import GraphNodeMeta
-from flax.experimental.nnx.nnx.module import GraphDef, Module
+from flax.experimental.nnx.nnx.module import GraphDef, Module, ModuleMeta
 from flax.experimental.nnx.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
@@ -212,7 +211,7 @@ class JITOptions:
     return kwargs
 
 
-class JITMeta(GraphNodeMeta):
+class JITMeta(ModuleMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -286,9 +285,6 @@ def get_jitted_fn(f, options: JITOptions) -> JittedFn:
       (args, kwargs), input_graph_nodes
     )
 
-    if 'rngs' in kwargs:
-      kwargs['rngs'] = rnglib.Rngs(kwargs['rngs'])
-
     out = f(*args, **kwargs)
 
     out, output_graph_nodes = graph_utils.extract_graph_nodes(out)
@@ -312,9 +308,6 @@ def jit_apply(
   args: tuple[tp.Any, ...],
   kwargs: dict[str, tp.Any],
 ) -> tp.Any:
-  if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], rnglib.Rngs):
-    kwargs['rngs'] = rngs.fork()
-
   (args, kwargs), input_graph_nodes = graph_utils.extract_graph_nodes(
     (args, kwargs)
   )
@@ -441,24 +434,12 @@ def jit(
   )
   jitted_fn = get_jitted_fn(f, options)
 
-  if is_init:
+  @functools.wraps(f)
+  def jit_apply_wrapper(*args, **kwargs):
+    return jit_apply(options, jitted_fn, args, kwargs)
 
-    @functools.wraps(f)
-    def jit_init_wrapper(*args, **kwargs):
-      _check_args(args)
-      jit_apply(options, jitted_fn, args, kwargs)
-
-    wrapper = jit_init_wrapper
-    wrapper.inner = jitted_fn
-  else:
-
-    @functools.wraps(f)
-    def jit_apply_wrapper(*args, **kwargs):
-      _check_args(args)
-      return jit_apply(options, jitted_fn, args, kwargs)
-
-    wrapper = jit_apply_wrapper
-    wrapper.inner = jitted_fn
+  wrapper = jit_apply_wrapper
+  wrapper.inner = jitted_fn
 
   return wrapper  # type: ignore
 
@@ -478,7 +459,7 @@ class GradOptions:
   return_value: bool
 
 
-class GradMeta(GraphNodeMeta):
+class GradMeta(ModuleMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -734,7 +715,7 @@ class ScanOptions:
   scan_output: bool
 
 
-class ScanMeta(GraphNodeMeta):
+class ScanMeta(ModuleMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -1203,7 +1184,7 @@ def scan(
 # -------------------------------
 
 
-class RematMeta(GraphNodeMeta):
+class RematMeta(ModuleMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -1387,7 +1368,7 @@ class VmapOptions:
   vmap_metadata: tp.Mapping[str, tp.Any]
 
 
-class VmapMeta(GraphNodeMeta):
+class VmapMeta(ModuleMeta):
   def __call__(
     self,
     module_constructor: tp.Callable[..., M],

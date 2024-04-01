@@ -227,8 +227,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
   def _setattr(self, name: str, value: tp.Any):
     if not self._trace_state.is_valid():
-      raise ValueError(
-        'Cannot mutate Variable from a different trace level'
+      raise nnx.errors.TraceContextError(
+        f'Cannot mutate {type(self).__name__} from a different trace level'
       )
 
     object.__setattr__(self, name, value)

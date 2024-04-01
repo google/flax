@@ -32,8 +32,11 @@ import functools
 import typing as tp
 
 import jax
+import jax.numpy as jnp
 
-from flax.experimental.nnx.nnx import errors, filterlib, tracers
+from flax.experimental.nnx.nnx.variables import Variable
+from flax.experimental.nnx.nnx import filterlib
+from flax.experimental.nnx.nnx.graph_utils import GraphNode
 
 Counts = list[int]
 AxesValue = tp.Union[int, None]
@@ -46,20 +49,31 @@ class Missing:
 
 MISSING = Missing()
 
+class RngState(Variable[jax.Array]):
+  pass
+
 
 @dataclasses.dataclass
-class RngStream:
-  key: jax.Array  # dynamic
-  count: int  # static
+class RngStream(GraphNode):
+  def __init__(
+    self,
+    key: jax.Array,
+    count: jax.Array,
+  ):
+    self.key = RngState(key)
+    self.count = RngState(count)
 
   def __post_init__(self):
     if not isinstance(self.key, jax.Array):
       raise TypeError(f'key must be a jax.Array, got {type(self.key)}')
 
   def make_rng(self) -> jax.Array:
-    count = self.count
-    self.count += 1
-    return jax.random.fold_in(self.key, count)
+    self.check_valid_context(
+      "Cannot call 'make_rng' from a different trace level"
+    )
+    key = jax.random.fold_in(self.key.value, self.count.value)
+    self.count.value += 1
+    return key
 
   def fork(self, pattern: Pattern) -> jax.Array:
     if pattern is None:
@@ -70,8 +84,8 @@ class RngStream:
         num_splits = pattern
       else:
         num_splits = tuple(x if x is not None else 1 for x in pattern)
-      key = jax.random.split(self.key, num_splits)
-      self.count += 1
+      key = jax.random.split(self.key.value, num_splits)
+      self.count.value += 1
     return key
 
 
@@ -83,9 +97,7 @@ RngDict = tp.Union[
 ]
 
 
-class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
-  __slots__ = ('_trace_state', '_rngs', '_counts')
-
+class Rngs(GraphNode, tp.Mapping[str, tp.Callable[[], jax.Array]]):
   def __init__(
     self,
     default: RngValue | RngDict | None = None,
@@ -101,17 +113,12 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
     self._rngs = {
       name: RngStream(
         key=jax.random.key(value) if isinstance(value, int) else value,
-        count=0,
+        count=jnp.array(0, dtype=jnp.uint32),
       )
       for name, value in rngs.items()
     }
-    self._trace_state = tracers.TraceState()
 
   def _make_rng(self, name: str, error_type: Exception) -> jax.Array:
-    if not self.is_valid():
-      raise errors.TraceContextError(
-        'Cannot use Rngs from a different trace level'
-      )
     if name not in self._rngs:
       if 'default' not in self._rngs:
         raise error_type(f"No RNG named {name!r} or 'default' found in Rngs.")
@@ -144,8 +151,6 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
     rngs.update(kwargs)
     return Rngs(**rngs)
 
-  def is_valid(self) -> bool:
-    return self._trace_state.is_valid()
 
   def fork(
     self,
@@ -153,11 +158,6 @@ class Rngs(tp.Mapping[str, tp.Callable[[], jax.Array]]):
     /,
     **patterns: Pattern,
   ) -> ForkedKeys:
-    if not self.is_valid():
-      raise errors.TraceContextError(
-        'Cannot use Rngs from a different trace level'
-      )
-
     filter_patterns: list[tuple[filterlib.Filter, Pattern]]
     if isinstance(_default, dict):
       # merge default and patterns
