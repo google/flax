@@ -14,7 +14,6 @@
 
 """Linear modules."""
 
-import dataclasses
 from typing import (
   Any,
   Iterable,
@@ -1104,8 +1103,6 @@ class Embed(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   embedding_init: Initializer = default_embed_init
-
-  embedding: Array = dataclasses.field(init=False)
 
   def setup(self):
     self.embedding = self.param(
