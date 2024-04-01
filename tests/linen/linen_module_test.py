@@ -513,18 +513,29 @@ class ModuleTest(absltest.TestCase):
 
     Foo({'a': ()}).apply({})
 
-  def test_only_one_compact_method(self):
-    msg = 'Only one method per class can be @compact'
-    with self.assertRaisesRegex(errors.MultipleMethodsCompactError, msg):
+  def test_multiple_compact_methods(self):
+    """Test that multiple methods with the @compact decorator can be used.
 
-      class MultipleCompactMethods(nn.Module):
-        @compact
-        def call1(self):
-          pass
+    NOTE: in the near future we might want to have compact methods reset the
+    autoname_cursor such that Dense would be reused in the second method.
+    """
 
-        @compact
-        def call2(self):
-          pass
+    class MultipleCompactMethods(nn.Module):
+      @compact
+      def __call__(self, x):
+        x = nn.Dense(1)(x)
+        return self.method(x)
+
+      @compact
+      def method(self, x):
+        x = nn.Dense(1)(x)
+        return x
+
+    m = MultipleCompactMethods()
+    variables = m.init(random.key(0), jnp.ones((1, 1)))
+    params = variables['params']
+    self.assertIn('Dense_0', params)
+    self.assertIn('Dense_1', params)
 
   def test_only_one_compact_method_subclass(self):
     class Dummy(nn.Module):
