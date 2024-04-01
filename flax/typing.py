@@ -17,8 +17,10 @@ from typing import (
   Callable,
   Dict,
   Generic,
+  Hashable,
   Mapping,
   Optional,
+  Protocol,
   Sequence,
   Tuple,
   TypeVar,
@@ -38,9 +40,16 @@ PRNGKey = jax.Array
 RNGSequences = Dict[str, PRNGKey]
 Dtype = Union[jax.typing.DTypeLike, Any]
 Shape = Sequence[int]
+K = TypeVar('K')
+
+
+class Key(Hashable, Protocol):
+  def __lt__(self: K, value: K, /) -> bool:
+    ...
+
 
 Path = str
-PathParts = Tuple[str, ...]
+PathParts = Tuple[Key, ...]
 
 Leaf = Any
 

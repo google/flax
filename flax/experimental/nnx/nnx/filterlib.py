@@ -14,7 +14,7 @@
 
 import builtins
 import dataclasses
-from flax.typing import Path
+from flax.typing import PathParts
 import typing as tp
 
 if tp.TYPE_CHECKING:
@@ -22,7 +22,7 @@ if tp.TYPE_CHECKING:
 else:
   ellipsis = tp.Any
 
-Predicate = tp.Callable[[Path, tp.Any], bool]
+Predicate = tp.Callable[[PathParts, tp.Any], bool]
 FilterLiteral = tp.Union[type, str, Predicate, bool, ellipsis, None]
 Filter = tp.Union[FilterLiteral, tuple[FilterLiteral, ...], list[FilterLiteral]]
 
@@ -48,17 +48,17 @@ def to_predicate(filter: Filter) -> Predicate:
 
 @dataclasses.dataclass
 class AtPath:
-  path: str
+  str_key: str
 
-  def __call__(self, path: Path, x: tp.Any):
-    return self.path == path
+  def __call__(self, path: PathParts, x: tp.Any):
+    return self.str_key in path
 
 
 @dataclasses.dataclass
 class OfType:
   type: type
 
-  def __call__(self, path: Path, x: tp.Any):
+  def __call__(self, path: PathParts, x: tp.Any):
     return isinstance(x, self.type)
 
 
@@ -68,7 +68,7 @@ class Any:
       to_predicate(collection_filter) for collection_filter in filters
     )
 
-  def __call__(self, path: Path, x: tp.Any):
+  def __call__(self, path: PathParts, x: tp.Any):
     return any(predicate(path, x) for predicate in self.predicates)
 
 
@@ -78,7 +78,7 @@ class All:
       to_predicate(collection_filter) for collection_filter in filters
     )
 
-  def __call__(self, path: Path, x: tp.Any):
+  def __call__(self, path: PathParts, x: tp.Any):
     return all(predicate(path, x) for predicate in self.predicates)
 
 
@@ -86,15 +86,15 @@ class Not:
   def __init__(self, collection_filter: Filter):
     self.predicate = to_predicate(collection_filter)
 
-  def __call__(self, path: Path, x: tp.Any):
+  def __call__(self, path: PathParts, x: tp.Any):
     return not self.predicate(path, x)
 
 
 class Everything:
-  def __call__(self, path: Path, x: tp.Any):
+  def __call__(self, path: PathParts, x: tp.Any):
     return True
 
 
 class Nothing:
-  def __call__(self, path: Path, x: tp.Any):
+  def __call__(self, path: PathParts, x: tp.Any):
     return False

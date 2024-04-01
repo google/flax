@@ -34,6 +34,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from flax.experimental.nnx.nnx.graph_utils import Key
 from flax.experimental.nnx.nnx.module import GraphDef, Module
 from flax.experimental.nnx.nnx.proxy_caller import ApplyCaller
 from flax.experimental.nnx.nnx.rnglib import Rngs
@@ -104,6 +105,26 @@ class List(Module, tp.Generic[A]):
 
   def __len__(self) -> int:
     return self._length
+
+  def _graph_node_flatten(self):
+    nodes: list[tuple[Key, tp.Any]] = sorted(
+      (int(key), value)
+      for key, value in vars(self).items()
+      if key not in ('_graph_node__state', '_length')
+    )
+    nodes.append(('_length', self._length))
+    return nodes, type(self)
+
+  def _graph_node_set_key(self, key: Key, value: tp.Any):
+    if isinstance(key, int):
+      key = str(key)
+    return super()._graph_node_set_key(key, value)
+
+  def _graph_node_pop_key(self, key: Key):
+    if isinstance(key, int):
+      key = str(key)
+    return super()._graph_node_pop_key(key)
+
 
 class Sequential(List):
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:

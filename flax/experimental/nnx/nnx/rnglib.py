@@ -183,7 +183,8 @@ class Rngs(GraphNode, tp.Mapping[str, tp.Callable[[], jax.Array]]):
 
     for name, stream in self._rngs.items():
       for predicate, pattern in predicate_pattern:
-        if predicate(name, stream):
+        stream_path = (name,)
+        if predicate(stream_path, stream):
           fork = stream.fork(pattern)
           if pattern is None:
             broadcasts[name] = fork

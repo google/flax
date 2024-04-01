@@ -340,10 +340,10 @@ class TestGrad:
 
     assert m.a[0] is m.b
     assert isinstance(grads, nnx.State)
-    assert grads['a']['0'].raw_value == 2.0
-    assert isinstance(grads.a['0'], nnx.Variable)
-    assert grads['a']['1'].raw_value == 1.0
-    assert isinstance(grads.a['1'], nnx.Variable)
+    assert grads['a'][0].raw_value == 2.0
+    assert isinstance(grads.a[0], nnx.Variable)
+    assert grads['a'][1].raw_value == 1.0
+    assert isinstance(grads.a[1], nnx.Variable)
     assert len(grads.flat_state()) == 2
 
     m.update(grads)
@@ -371,8 +371,8 @@ class TestGrad:
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a']['0'].raw_value == 1.0
-    assert isinstance(grads.a['0'], nnx.Param)
+    assert grads['a'][0].raw_value == 1.0
+    assert isinstance(grads.a[0], nnx.Param)
     assert len(grads) == 2
 
     m.update(grads)
@@ -399,8 +399,8 @@ class TestGrad:
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a']['1'].raw_value == 1.0
-    assert isinstance(grads.a['1'], nnx.BatchStat)
+    assert grads['a'][1].raw_value == 1.0
+    assert isinstance(grads.a[1], nnx.BatchStat)
     assert len(grads) == 1
 
     m.update(grads)
