@@ -49,27 +49,37 @@ class Missing:
 
 MISSING = Missing()
 
+
 class RngState(Variable[jax.Array]):
   pass
+
+
+class RngCount(RngState):
+  pass
+
+
+class RngKey(RngState):
+  tag: str
 
 
 @dataclasses.dataclass
 class RngStream(GraphNode):
   def __init__(
     self,
+    tag: str,
     key: jax.Array,
     count: jax.Array,
   ):
-    self.key = RngState(key)
-    self.count = RngState(count)
+    self.key = RngKey(key, tag=tag)
+    self.count = RngCount(count)
 
   def __post_init__(self):
     if not isinstance(self.key, jax.Array):
       raise TypeError(f'key must be a jax.Array, got {type(self.key)}')
 
-  def make_rng(self) -> jax.Array:
+  def __call__(self) -> jax.Array:
     self.check_valid_context(
-      "Cannot call 'make_rng' from a different trace level"
+      'Cannot call RngStream from a different trace level'
     )
     key = jax.random.fold_in(self.key.value, self.count.value)
     self.count.value += 1
@@ -78,7 +88,7 @@ class RngStream(GraphNode):
   def fork(self, pattern: Pattern) -> jax.Array:
     if pattern is None:
       # broadcast key
-      key = self.make_rng()
+      key = self()
     else:
       if isinstance(pattern, int):
         num_splits = pattern
@@ -110,44 +120,48 @@ class Rngs(GraphNode, tp.Mapping[str, tp.Callable[[], jax.Array]]):
       else:
         rngs['default'] = default
 
-    self._rngs = {
-      name: RngStream(
+    for name, value in rngs.items():
+      stream = RngStream(
+        tag=name,
         key=jax.random.key(value) if isinstance(value, int) else value,
         count=jnp.array(0, dtype=jnp.uint32),
       )
-      for name, value in rngs.items()
-    }
+      setattr(self, name, stream)
 
-  def _make_rng(self, name: str, error_type: Exception) -> jax.Array:
-    if name not in self._rngs:
-      if 'default' not in self._rngs:
+  def _get_stream(self, name: str, error_type: Exception) -> RngStream:
+    rngs_vars = vars(self)
+    if name not in rngs_vars:
+      if 'default' not in rngs_vars:
         raise error_type(f"No RNG named {name!r} or 'default' found in Rngs.")
-      stream = self._rngs['default']
+      stream = rngs_vars['default']
     else:
-      stream = self._rngs[name]
+      stream = rngs_vars[name]
 
-    return stream.make_rng()
+    return stream
 
-  def __getitem__(self, name: str) -> tp.Callable[[], jax.Array]:
-    return lambda: self._make_rng(name, KeyError)
+  def __getitem__(self, name: str):
+    return self._get_stream(name, KeyError)
 
-  def __getattr__(self, name: str) -> tp.Callable[[], jax.Array]:
-    return lambda: self._make_rng(name, AttributeError)
+  def __getattr__(self, name: str):
+    return self._get_stream(name, AttributeError)
 
   def __call__(self):
     return self.default()
 
   def __iter__(self) -> tp.Iterator[str]:
-    return iter(self._rngs)
+    for name in vars(self):
+      if name != '_graph_node__state':
+        yield name
 
   def __len__(self) -> int:
-    return len(self._rngs)
+    return len(vars(self)) - 1
 
   def __contains__(self, name: tp.Any) -> bool:
-    return name in self._rngs
+    return name in vars(self)
 
   def replace(self, **kwargs: tp.Union[int, jax.Array, RngStream]) -> 'Rngs':
-    rngs: dict[str, tp.Any] = self._rngs.copy()
+    rngs: dict[str, tp.Any] = vars(self).copy()
+    del rngs['_graph_node__state']
     rngs.update(kwargs)
     return Rngs(**rngs)
 
@@ -181,10 +195,12 @@ class Rngs(GraphNode, tp.Mapping[str, tp.Callable[[], jax.Array]]):
     splits: dict[str, jax.Array] = {}
     broadcasts: dict[str, jax.Array] = {}
 
-    for name, stream in self._rngs.items():
+    for name, stream in self.items():
       for predicate, pattern in predicate_pattern:
         stream_path = (name,)
-        if predicate(stream_path, stream):
+        # here we check if the stream's RngKey tag matches the predicate
+        # the stream_path is no longer needed, but we keep it for consistency
+        if predicate(stream_path, stream.key):
           fork = stream.fork(pattern)
           if pattern is None:
             broadcasts[name] = fork

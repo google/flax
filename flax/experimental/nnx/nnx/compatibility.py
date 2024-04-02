@@ -65,7 +65,7 @@ class LinenWrapper(Module):
     self.module = module
 
     _rngs = (
-      {name: stream.key.raw_value for name, stream in rngs._rngs.items()}
+      {name: stream.key.raw_value for name, stream in rngs.items()}
       if rngs
       else {}
     )
@@ -85,9 +85,7 @@ class LinenWrapper(Module):
     self, *args: Any, rngs: tp.Optional[Rngs] = None, **kwargs: Any
   ) -> Any:
     _rngs = (
-      {name: stream.key.value for name, stream in rngs._rngs.items()}
-      if rngs
-      else {}
+      {name: stream.key.value for name, stream in rngs.items()} if rngs else {}
     )
 
     variables = {

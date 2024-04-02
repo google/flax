@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 from typing import Any
 
 import jax
@@ -38,16 +39,16 @@ class TestRngs:
   def test_rng_stream(self):
     key0 = jax.random.key(0)
     rngs = nnx.Rngs(params=key0)
-    assert rngs._rngs['params'].count.value == 0
+    assert rngs.params.count.value == 0
 
     key1 = rngs.params()
-    assert rngs._rngs['params'].count.value == 1
-    assert rngs._rngs['params'].key.value is key0
+    assert rngs.params.count.value == 1
+    assert rngs.params.key.value is key0
     assert not jnp.allclose(key0, key1)
 
     key2 = rngs.params()
-    assert rngs._rngs['params'].count.value == 2
-    assert rngs._rngs['params'].key.value is key0
+    assert rngs.params.count.value == 2
+    assert rngs.params.key.value is key0
     assert not jnp.allclose(key1, key2)
 
   def test_rng_fork(self):
@@ -55,7 +56,7 @@ class TestRngs:
     rngs1 = nnx.Rngs(params=key0)
     rngs2 = nnx.Rngs(rngs1.fork())
 
-    assert rngs2._rngs['params'].count.value == 0
+    assert rngs2['params'].count.value == 0
 
     key1 = rngs1.params()
     key2 = rngs2.params()
@@ -69,35 +70,35 @@ class TestRngs:
     def f():
       with pytest.raises(
         nnx.errors.TraceContextError,
-        match="Cannot call 'make_rng' from a different trace level",
+        match='Cannot call RngStream from a different trace level',
       ):
         rngs.params()
 
     f()
 
     @jax.jit
-    def f():
+    def g():
       with pytest.raises(
         nnx.errors.TraceContextError,
-        match="Cannot call 'make_rng' from a different trace level",
+        match='Cannot call RngStream from a different trace level',
       ):
         rngs.fork()
 
-    f()
+    g()
 
     rngs1: Any = None
 
     @jax.jit
-    def g():
+    def h():
       nonlocal rngs1
       rngs1 = nnx.Rngs(1)
 
-    g()
+    h()
 
     assert isinstance(rngs1, nnx.Rngs)
     with pytest.raises(
       nnx.errors.TraceContextError,
-      match="Cannot call 'make_rng' from a different trace level",
+      match='Cannot call RngStream from a different trace level',
     ):
       rngs1.params()
 
@@ -198,7 +199,7 @@ class TestRngs:
     m = Foo(rngs)
 
     # +1 for the Linear kernel, +1 for the Linear bias
-    assert rngs._rngs['default'].count.value == 2
+    assert rngs['default'].count.value == 2
 
     @nnx.jit
     def f(m: Foo, x: jax.Array, not_rngs: nnx.Rngs):
@@ -211,4 +212,65 @@ class TestRngs:
     x = f(m, x, rngs)
 
     # +1 for the Dropout mask
-    assert rngs._rngs['default'].count.value == 4
+    assert rngs['default'].count.value == 4
+
+  def test_lifting_rng_state(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.rngs = rngs
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.dropout(x, rngs=self.rngs)
+        return x
+
+    rngs = nnx.Rngs(params=0, dropout=1)
+    m = Foo(rngs)
+    _, params, dropout_keys, param_keys, rng_counts = m.split(
+      nnx.Param, 'dropout', 'params', nnx.RngCount
+    )
+
+    assert m.rngs.params.count.value == 2
+    assert m.rngs['dropout'].count.value == 0
+    assert len(dropout_keys.flat_state()) == 1
+    assert len(param_keys.flat_state()) == 1
+    assert len(rng_counts.flat_state()) == 2
+
+    # split dropout keys
+    split_dropout_keys = jax.tree_util.tree_map(
+      lambda x: jax.random.split(x, 4), dropout_keys
+    )
+    # replicate params
+    params = jax.tree_util.tree_map(
+      lambda x: jnp.stack([x] * 4, axis=0), params
+    )
+
+    @partial(
+      jax.vmap,
+      in_axes=(0, 0, None, None, 0),
+      out_axes=(0, 0, None),
+    )
+    def f(params, dropout_keys, param_keys, rng_counts, x):
+      m.update(params, dropout_keys, param_keys, rng_counts)
+      y = m(x)
+      _, params, dropout_keys, param_keys, rng_counts = m.split(
+        nnx.Param, 'dropout', 'params', nnx.RngCount
+      )
+      return y, params, rng_counts
+
+    x = jnp.ones((4, 1, 2))
+    y, params, rng_counts = f(
+      params,
+      split_dropout_keys,
+      param_keys,
+      rng_counts,
+      x,
+    )
+
+    m.update(params, dropout_keys, param_keys, rng_counts)
+
+    assert y.shape == (4, 1, 3)
+    assert m.rngs.params.count.value == 2
+    assert m.rngs['dropout'].count.value == 1
