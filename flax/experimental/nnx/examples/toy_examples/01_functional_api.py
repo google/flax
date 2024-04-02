@@ -67,10 +67,11 @@ def train_step(params, counts, batch):
   x, y = batch
 
   def loss_fn(params):
-    y_pred, (_, updates) = static.apply(params, counts)(x)
-    counts_ = updates.extract(Count)
+    model = static.merge(params, counts)
+    y_pred = model(x)
+    new_counts = model.extract(Count)
     loss = jnp.mean((y - y_pred) ** 2)
-    return loss, counts_
+    return loss, new_counts
 
   grad, counts = jax.grad(loss_fn, has_aux=True)(params)
   #                          |-------- sgd ---------|
@@ -82,7 +83,8 @@ def train_step(params, counts, batch):
 @jax.jit
 def test_step(params: nnx.State, counts: nnx.State, batch):
   x, y = batch
-  y_pred, _ = static.apply(params, counts)(x)
+  model = static.merge(params, counts)
+  y_pred = model(x)
   loss = jnp.mean((y - y_pred) ** 2)
   return {'loss': loss}
 
