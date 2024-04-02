@@ -550,7 +550,7 @@ class TestModuleDataclass:
     assert state.d == nnx.Variable(4)
     assert state.e == nnx.BatchStat(5)
 
-  def test_context_none_after_init(self):
+  def test_post_init(self):
     @dataclasses.dataclass
     class DFoo(nnx.Module):
       din: int
@@ -566,7 +566,6 @@ class TestModuleDataclass:
     m = DFoo(1, 1, rngs=nnx.Rngs(0))
 
     assert hasattr(m, 'bar')
-    assert m.rngs is None
 
   def test_setup_is_called(self):
     @dataclasses.dataclass
@@ -584,7 +583,6 @@ class TestModuleDataclass:
     m = DFoo(1, 1, rngs=nnx.Rngs(0))
 
     assert hasattr(m, 'bar')
-    assert m.rngs is None
 
 
 class TestModuleDef:

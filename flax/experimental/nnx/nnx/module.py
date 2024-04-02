@@ -68,16 +68,6 @@ def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
     if isinstance(module, _HasSetup):
       module.setup()
 
-    assert isinstance(module, Module)
-
-    for field in dataclasses.fields(module):
-      if not field.init:
-        continue
-      value = vars(module)[field.name]
-      # set Rngs instances to None
-      if isinstance(value, Rngs):
-        vars(module)[field.name] = None
-
   return module
 
 
