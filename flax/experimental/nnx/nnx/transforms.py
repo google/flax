@@ -198,16 +198,8 @@ class JITOptions:
     del kwargs['donate_object_state']
     if kwargs['in_shardings'] is UNSPECIFIED:
       kwargs.pop('in_shardings')
-    else:
-      raise ValueError('in_shardings is not supported yet')
     if kwargs['out_shardings'] is UNSPECIFIED:
       kwargs.pop('out_shardings')
-    else:
-      raise ValueError('out_shardings is not supported yet')
-    if kwargs['donate_argnums'] != ():
-      raise ValueError('donate_argnums is not supported yet')
-    if kwargs['abstracted_axes'] is not None:
-      raise ValueError('abstracted_axes is not supported yet')
     return kwargs
 
 
