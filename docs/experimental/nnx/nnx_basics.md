@@ -204,7 +204,7 @@ a Module graph, its analogous to JAX's `PyTreeDef`, and for convenience it
 implements an empty pytree.
 
 ```{code-cell} ipython3
-state, static = model.split()
+static, state = model.split()
 
 print(f'{state = }\n')
 print(f'{static = }'[:200] + '...')
@@ -222,7 +222,7 @@ updates from a transform back to the source object outside.
 print(f'{model.count = }')
 
 # 1. Use split to create a pytree representation of the Module
-state, static = model.split()
+static, state = model.split()
 
 @jax.jit
 def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):
@@ -269,7 +269,7 @@ Variable types as shown below.
 
 ```{code-cell} ipython3
 # use Variable type filters to split into multiple States
-params, counts, static = model.split(nnx.Param, Count)
+static, params, counts = model.split(nnx.Param, Count)
 
 print(f'{params = }\n')
 print(f'{counts = }')
