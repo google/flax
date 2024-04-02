@@ -1,10 +1,14 @@
-rnglib
+helpers
 ------------------------
 
 .. automodule:: flax.experimental.nnx
 .. currentmodule:: flax.experimental.nnx
 
-.. autoclass:: Rngs
+.. autoclass:: Dict
    :members:
-.. autoclass:: RngStream
+.. autoclass:: List
+   :members:
+.. autoclass:: Sequential
+   :members:
+.. autoclass:: TrainState
    :members:

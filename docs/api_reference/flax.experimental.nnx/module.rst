@@ -1,4 +1,4 @@
-Module
+module
 ------------------------
 
 .. automodule:: flax.experimental.nnx

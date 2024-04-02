@@ -1,4 +1,4 @@
-Variables
+variables
 ------------------------
 
 .. automodule:: flax.experimental.nnx

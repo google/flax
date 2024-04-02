@@ -1,4 +1,4 @@
-SPMD
+spmd
 ------------------------
 
 .. automodule:: flax.experimental.nnx

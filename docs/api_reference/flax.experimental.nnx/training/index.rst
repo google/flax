@@ -1,4 +1,4 @@
-flax.experimental.nnx.nnx.training
+training
 ----------------------------
 
 Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/experimental/nnx/index.html>`__ for more details.
