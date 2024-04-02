@@ -63,43 +63,41 @@ tx = optax.sgd(1e-3)
 optimizer = nnx.Optimizer(model, tx)
 
 @nnx.jit
-def train_step(optimizer: nnx.Optimizer, batch):
+def train_step(model: MLP, optimizer: nnx.Optimizer, batch):
   x, y = batch
 
   def loss_fn(model: MLP):
     y_pred = model(x)
     return jnp.mean((y - y_pred) ** 2)
 
-  #                                   |--default--|
-  grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(optimizer.model)
+  #                                    |--default--|
+  grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
   # sgd update
   optimizer.update(grads=grads)
 
-  # no return!!!
-
 
 @nnx.jit
-def test_step(optimizer: nnx.Optimizer, batch):
+def test_step(model: MLP, batch):
   x, y = batch
-  y_pred = optimizer.model(x)
+  y_pred = model(x)
   loss = jnp.mean((y - y_pred) ** 2)
   return {'loss': loss}
 
 
 total_steps = 10_000
 for step, batch in enumerate(dataset(32)):
-  train_step(optimizer, batch)
+  train_step(model, optimizer, batch)
 
   if step % 1000 == 0:
-    logs = test_step(optimizer, (X, Y))
+    logs = test_step(model, (X, Y))
     print(f"step: {step}, loss: {logs['loss']}")
 
   if step >= total_steps - 1:
     break
 
-print('times called:', optimizer.model.count.value)
+print('times called:', model.count.value)
 
-y_pred = optimizer.model(X)
+y_pred = model(X)
 
 plt.scatter(X, Y, color='blue')
 plt.plot(X, y_pred, color='black')
