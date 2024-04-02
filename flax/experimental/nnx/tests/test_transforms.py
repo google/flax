@@ -411,6 +411,58 @@ class TestGrad:
     assert m.c == 7
     assert m.d == 5.0
 
+  def test_multiple_inputs(self):
+    rngs = nnx.Rngs(0)
+    m = nnx.Linear(2, 3, rngs=rngs)
+    loss_fn = lambda m, x, y: jnp.mean((m(x) - y) ** 2)
+    grad_fn = nnx.grad(loss_fn, wrt=nnx.Param)
+    x = jax.random.uniform(rngs(), (1, 2))
+    y = jnp.ones((1, 3))
+    grads = grad_fn(m, x, y)
+
+    assert 'kernel' in grads
+    assert grads.kernel.raw_value.shape == (2, 3)
+    assert 'bias' in grads
+    assert grads.bias.raw_value.shape == (3,)
+
+  def test_multiple_graph_nodes(self):
+    rngs = nnx.Rngs(0)
+    m1 = nnx.Linear(2, 3, rngs=rngs)
+    m2 = nnx.Linear(3, 3, rngs=rngs)
+    loss_fn = lambda m1, m2, x, y: jnp.mean((m2(m1(x)) - y) ** 2)
+    grad_fn = nnx.grad(loss_fn, argnums=(0, 1), wrt=nnx.Param)
+    x = jax.random.uniform(rngs(), (1, 2))
+    y = jnp.ones((1, 3))
+    grads_m1, grads_m2 = grad_fn(m1, m2, x, y)
+
+    assert 'kernel' in grads_m1
+    assert grads_m1.kernel.raw_value.shape == (2, 3)
+    assert 'bias' in grads_m1
+    assert grads_m1.bias.raw_value.shape == (3,)
+    assert 'kernel' in grads_m2
+    assert grads_m2.kernel.raw_value.shape == (3, 3)
+    assert 'bias' in grads_m2
+    assert grads_m2.bias.raw_value.shape == (3,)
+
+  def test_multiple_graph_nodes_mix_positions(self):
+    rngs = nnx.Rngs(0)
+    m1 = nnx.Linear(2, 3, rngs=rngs)
+    m2 = nnx.Linear(3, 3, rngs=rngs)
+    loss_fn = lambda x, m1, y, m2: jnp.mean((m2(m1(x)) - y) ** 2)
+    grad_fn = nnx.grad(loss_fn, argnums=(1, 3), wrt=nnx.Param)
+    x = jax.random.uniform(rngs(), (1, 2))
+    y = jnp.ones((1, 3))
+    grads_m1, grads_m2 = grad_fn(x, m1, y, m2)
+
+    assert 'kernel' in grads_m1
+    assert grads_m1.kernel.raw_value.shape == (2, 3)
+    assert 'bias' in grads_m1
+    assert grads_m1.bias.raw_value.shape == (3,)
+    assert 'kernel' in grads_m2
+    assert grads_m2.kernel.raw_value.shape == (3, 3)
+    assert 'bias' in grads_m2
+    assert grads_m2.bias.raw_value.shape == (3,)
+
 
 class TestScan:
   def test_basic(self):
