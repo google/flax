@@ -1,4 +1,4 @@
-Transformations
+transforms
 ------------------------
 
 .. automodule:: flax.experimental.nnx

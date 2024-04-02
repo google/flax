@@ -21,12 +21,14 @@ from flax.typing import Initializer as Initializer
 from .nnx import compatibility as compatibility
 from .nnx import graph_utils as graph_utils
 from .nnx import errors as errors
+from .nnx import errors as helpers
 from .nnx.filterlib import All as All
 from .nnx.filterlib import Not as Not
 from .nnx.graph_utils import GraphDef as GraphDef
 from .nnx.graph_utils import GraphNode as GraphNode
 from .nnx.helpers import Dict as Dict
 from .nnx.helpers import List as List
+from .nnx.helpers import Sequential as Sequential
 from .nnx.helpers import TrainState as TrainState
 from .nnx.module import M as M
 from .nnx.module import Module as Module
