@@ -140,12 +140,8 @@ import dataclasses
 @dataclasses.dataclass
 class TrainState(nnx.GraphNode):
   optimizer: nnx.Optimizer
-  model: nnx.Module
-  train_metrics: nnx.Metric
-  test_metrics: nnx.Metric
-  def reset_metrics(self):
-    self.train_metrics.reset()
-    self.test_metrics.reset()
+  model: CNN
+  metrics: nnx.MultiMetric
 
 learning_rate = 0.005
 momentum = 0.9
@@ -154,8 +150,7 @@ tx = optax.adamw(learning_rate, momentum)
 state = TrainState(
   optimizer=nnx.Optimizer(model=model, tx=tx),
   model=model,
-  train_metrics=nnx.MultiMetric(accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()),
-  test_metrics=nnx.MultiMetric(accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average())
+  metrics=nnx.MultiMetric(accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()),
 )
 ```
 
@@ -186,7 +181,7 @@ def train_step(state: TrainState, batch):
   """Train for a single step."""
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
   (loss, logits), grads = grad_fn(state.model, batch)
-  state.train_metrics.update(values=loss, logits=logits, labels=batch['label'])
+  state.metrics.update(values=loss, logits=logits, labels=batch['label'])
   state.optimizer.update(grads=grads)
 ```
 
@@ -203,7 +198,7 @@ Create a separate function to calculate loss and accuracy metrics. Loss is deter
 @nnx.jit
 def compute_test_metrics(*, state: TrainState, batch):
   loss, logits = loss_fn(state.model, batch)
-  state.test_metrics.update(values=loss, logits=logits, labels=batch['label'])
+  state.metrics.update(values=loss, logits=logits, labels=batch['label'])
 ```
 
 ## 9. Seed randomness
@@ -248,15 +243,19 @@ for step,batch in enumerate(train_ds.as_numpy_iterator()):
   train_step(state, batch) # get updated train state (which contains the updated parameters)
 
   if (step+1) % num_steps_per_epoch == 0: # one training epoch has passed
+    # log train metrics
+    for metric, value in state.metrics.compute().items(): # compute metrics
+      metrics_history[f'train_{metric}'].append(value) # record metrics
+    state.metrics.reset() # reset metrics for test set
+
     # Compute metrics on the test set after each training epoch
     for test_batch in test_ds.as_numpy_iterator():
       compute_test_metrics(state=state, batch=test_batch)
 
-    for metric, value in state.train_metrics.compute().items(): # compute metrics
-      metrics_history[f'train_{metric}'].append(value) # record metrics
-    for metric, value in state.test_metrics.compute().items():
+    # log test metrics
+    for metric, value in state.metrics.compute().items():
       metrics_history[f'test_{metric}'].append(value)
-    state.reset_metrics() # reset metrics for next training epoch
+    state.metrics.reset() # reset metrics for next training epoch
 
     print(f"train epoch: {(step+1) // num_steps_per_epoch}, "
           f"loss: {metrics_history['train_loss'][-1]}, "
