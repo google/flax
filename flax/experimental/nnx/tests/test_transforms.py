@@ -19,6 +19,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from jax.experimental import mesh_utils
 
 from flax.experimental import nnx
 
@@ -317,6 +318,31 @@ class TestJIT:
     assert n == 2
     assert m.ref is m
     assert m2 is m
+
+  def test_apply_shardings(self):
+    n_devices = max(jax.local_device_count() // 2, 1)
+    devices = mesh_utils.create_device_mesh((n_devices, n_devices))
+    mesh = jax.sharding.Mesh(devices, ('a', 'b'))
+
+    rngs = nnx.Rngs(0)
+    m = nnx.Linear(
+      16,
+      32,
+      rngs=rngs,
+      kernel_init=nnx.with_partitioning(
+        nnx.initializers.lecun_normal(), ('a', 'b')
+      ),
+    )
+
+    @partial(nnx.jit, constrain_object_state=True)
+    def constrain_object(m):
+      pass
+
+    with mesh:
+      constrain_object(m)
+
+    m.kernel.value.sharding
+
 
 
 class TestGrad:
