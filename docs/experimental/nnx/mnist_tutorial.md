@@ -38,9 +38,9 @@ We'll use TensorFlow Datasets (TFDS) for loading and preparing the MNIST dataset
 
 ```{code-cell} ipython3
 import tensorflow_datasets as tfds  # TFDS for MNIST
-import tensorflow as tf             # TensorFlow operations
+import tensorflow as tf  # TensorFlow operations
 
-tf.random.set_seed(0) # set random seed for reproducibility
+tf.random.set_seed(0)  # set random seed for reproducibility
 
 num_epochs = 10
 batch_size = 32
@@ -48,17 +48,27 @@ batch_size = 32
 train_ds: tf.data.Dataset = tfds.load('mnist', split='train')
 test_ds: tf.data.Dataset = tfds.load('mnist', split='test')
 
-train_ds = train_ds.map(lambda sample: {
-  'image': tf.cast(sample['image'],tf.float32) / 255,
-  'label': sample['label']}) # normalize train set
-test_ds = test_ds.map(lambda sample: {
-  'image': tf.cast(sample['image'], tf.float32) / 255,
-  'label': sample['label']}) # normalize test set
+train_ds = train_ds.map(
+  lambda sample: {
+    'image': tf.cast(sample['image'], tf.float32) / 255,
+    'label': sample['label'],
+  }
+)  # normalize train set
+test_ds = test_ds.map(
+  lambda sample: {
+    'image': tf.cast(sample['image'], tf.float32) / 255,
+    'label': sample['label'],
+  }
+)  # normalize test set
 
-train_ds = train_ds.repeat(num_epochs).shuffle(1024) # create shuffled dataset by allocating a buffer size of 1024 to randomly draw elements from
-train_ds = train_ds.batch(batch_size, drop_remainder=True).prefetch(1) # group into batches of batch_size and skip incomplete batch, prefetch the next sample to improve latency
-test_ds = test_ds.shuffle(1024) # create shuffled dataset by allocating a buffer size of 1024 to randomly draw elements from
-test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1) # group into batches of batch_size and skip incomplete batch, prefetch the next sample to improve latency
+# create shuffled dataset by allocating a buffer size of 1024 to randomly draw elements from
+train_ds = train_ds.repeat(num_epochs).shuffle(1024)
+# group into batches of batch_size and skip incomplete batch, prefetch the next sample to improve latency
+train_ds = train_ds.batch(batch_size, drop_remainder=True).prefetch(1)
+# create shuffled dataset by allocating a buffer size of 1024 to randomly draw elements from
+test_ds = test_ds.shuffle(1024)
+# group into batches of batch_size and skip incomplete batch, prefetch the next sample to improve latency
+test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1)
 ```
 
 ## 3. Define the Network with NNX
@@ -72,8 +82,12 @@ class CNN(nnx.Module):
   """A simple CNN model."""
 
   def __init__(self, *, rngs: nnx.Rngs):
-    self.conv1 = nnx.Conv(in_features=1, out_features=32, kernel_size=(3, 3), rngs=rngs)
-    self.conv2 = nnx.Conv(in_features=32, out_features=64, kernel_size=(3, 3), rngs=rngs)
+    self.conv1 = nnx.Conv(
+      in_features=1, out_features=32, kernel_size=(3, 3), rngs=rngs
+    )
+    self.conv2 = nnx.Conv(
+      in_features=32, out_features=64, kernel_size=(3, 3), rngs=rngs
+    )
     self.linear1 = nnx.Linear(in_features=3136, out_features=256, rngs=rngs)
     self.linear2 = nnx.Linear(in_features=256, out_features=10, rngs=rngs)
 
@@ -90,10 +104,13 @@ class CNN(nnx.Module):
     x = self.linear2(x)
     return x
 
+
 model = CNN(rngs=nnx.Rngs(0))
 
 print(f'model = {model}'[:500] + '\n...\n')  # print a part of the model
-print(f'{model.conv1.kernel.value.shape = }') # inspect the shape of the kernel of the first convolutional layer
+print(
+  f'{model.conv1.kernel.value.shape = }'
+)  # inspect the shape of the kernel of the first convolutional layer
 ```
 
 ### Run model
@@ -109,104 +126,84 @@ y = model(jnp.ones((1, 28, 28, 1)))
 y
 ```
 
-## 4. Define Metrics
+## 4. Create the `TrainState`
 
-To track our model's performance, we'll use the [clu](https://github.com/google/CommonLoopUtils) library. If you haven't already, install it with:
-
-```{code-cell} ipython3
-!pip install -q clu
-```
-
-Let's create a compound metric using clu.metrics.Collection.  This will include both an Accuracy metric for tracking how well our model classifies images, and an Average metric to monitor the average loss over each training epoch.
+In Flax, a common practice is to use a dataclass to encapsulate the entire training state, which would allow you to simply pass only two arguments (the train state and batched data) to functions like `train_step`. The training state would typically contain an [`nnx.Optimizer`](https://flax.readthedocs.io/en/latest/api_reference/flax.experimental.nnx/training/optimizer.html#flax.experimental.nnx.optimizer.Optimizer) (which contains the step number, model and optimizer state) and an `nnx.Module` (for easier access to the model from the top-level of the train state). The training state can also be easily extended to add training and test metrics, as you will see in this tutorial (see [`nnx.metrics`](https://flax.readthedocs.io/en/latest/api_reference/flax.experimental.nnx/training/metrics.html#module-flax.experimental.nnx.metrics) for more detail on NNX's metric classes).
 
 ```{code-cell} ipython3
-# from clu import metrics
-# from flax import struct   # Flax pytree dataclasses
-
-# @struct.dataclass
-# class Metrics(metrics.Collection):
-#   accuracy: metrics.Accuracy
-#   loss: metrics.Average.from_output('loss')
-```
-
-## 5. Create the `TrainState`
-
-In Flax, a common practice is to use a dataclass to encapsulate the training state, including the step number, parameters, and optimizer state. The [`flax.training.train_state.TrainState`](https://flax.readthedocs.io/en/latest/flax.training.html#train-state) class is ideal for basic use cases, simplifying the process by allowing you to pass a single argument to functions like `train_step`.
-
-```{code-cell} ipython3
-import optax
 import dataclasses
 
 @dataclasses.dataclass
 class TrainState(nnx.GraphNode):
   optimizer: nnx.Optimizer
-  model: nnx.Module
-  train_metrics: nnx.Metric
-  test_metrics: nnx.Metric
-  def reset_metrics(self):
-    self.train_metrics.reset()
-    self.test_metrics.reset()
+  model: CNN
+  metrics: nnx.MultiMetric
+```
+
+We use `optax` to create an optimizer ([`adamw`](https://optax.readthedocs.io/en/latest/api/optimizers.html#optax.adamw)) and initialize the `nnx.Optimizer`. We use `nnx.MultiMetric` to keep track of both the accuracy and average loss for both training and test batches.
+
+```{code-cell} ipython3
+import optax
 
 learning_rate = 0.005
 momentum = 0.9
-
 tx = optax.adamw(learning_rate, momentum)
+
 state = TrainState(
   optimizer=nnx.Optimizer(model=model, tx=tx),
   model=model,
-  train_metrics=nnx.MultiMetric(accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()),
-  test_metrics=nnx.MultiMetric(accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average())
+  metrics=nnx.MultiMetric(
+    accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()
+  ),
 )
 ```
 
-Since `TrainState` is a JAX pytree, `Module.split` splits the model into `State` and `GraphDef` pytree objects (representing parameters and the graph definition). A custom `TrainState` type holds the static `GraphDef` and metrics.  We use `optax` to create an optimizer (`adamw`) and initialize the `TrainState`.
+## 5. Training step
 
-+++
-
-## 6. Training step
-
-This function takes the `state` and a data `batch` and does the following:
-
-* Reconstructs the model with `static.merge` on the `params`.
-* Runs the neural network on the input image batch.
-* Calculates cross-entropy loss using 
-  [optax.softmax_cross_entropy_with_integer_labels()](https://optax.readthedocs.io/en/latest/api.html#optax.softmax_cross_entropy_with_integer_labels). Integer labels eliminate the need for one-hot encoding.
-* Computes the loss function's gradient with `jax.grad`.
-* Updates model parameters by applying the gradient pytree to the optimizer.
+We define a loss function using cross entropy loss (see more details in [`optax.softmax_cross_entropy_with_integer_labels()`](https://optax.readthedocs.io/en/latest/api/losses.html#optax.softmax_cross_entropy_with_integer_labels)) that our model will optimize over. In addition to the loss, the logits are also outputted since they will be used to calculate the accuracy metric during training and testing.
 
 ```{code-cell} ipython3
 def loss_fn(model, batch):
-    logits = model(batch['image'])
-    loss = optax.softmax_cross_entropy_with_integer_labels(
-        logits=logits, labels=batch['label']).mean()
-    return loss, logits
+  logits = model(batch['image'])
+  loss = optax.softmax_cross_entropy_with_integer_labels(
+    logits=logits, labels=batch['label']
+  ).mean()
+  return loss, logits
+```
 
+Next, we create the training step function. This function takes the `state` and a data `batch` and does the following:
+
+* Computes the loss, logits and gradients with respect to the loss function using `nnx.value_and_grad`.
+* Updates the training loss using the loss and updates the training accuracy using the logits and batch labels
+* Updates model parameters and optimizer state by applying the gradient pytree to the optimizer.
+
+```{code-cell} ipython3
 @nnx.jit
 def train_step(state: TrainState, batch):
   """Train for a single step."""
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
   (loss, logits), grads = grad_fn(state.model, batch)
-  state.train_metrics.update(values=loss, logits=logits, labels=batch['label'])
-  state.optimizer.update(grads)
+  state.metrics.update(values=loss, logits=logits, labels=batch['label'])
+  state.optimizer.update(grads=grads)
 ```
 
-The [@jax.jit](https://jax.readthedocs.io/en/latest/jax.html#jax.jit) decorator
-traces the `train_step` function for just-in-time compilation with 
+The [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_reference/flax.experimental.nnx/transforms.html#flax.experimental.nnx.jit) decorator traces the `train_step` function for just-in-time compilation with 
 [XLA](https://www.tensorflow.org/xla), optimizing performance on 
-hardware accelerators.
+hardware accelerators. `nnx.jit` is similar to [`jax.jit`](https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html#jax.jit),
+except it can decorate functions that make stateful updates to NNX classes.
 
-## 7. Metric Computation
+## 6. Metric Computation
 
-Create a separate function to calculate loss and accuracy metrics. Loss is determined using the `optax.softmax_cross_entropy_with_integer_labels` function, and accuracy is computed using `clu.metrics`.
+Create a separate function to calculate loss and accuracy metrics for the test batch, since this will be outside the `train_step` function. Loss is determined using the `optax.softmax_cross_entropy_with_integer_labels` function, since we're reusing the loss function defined earlier.
 
 ```{code-cell} ipython3
 @nnx.jit
 def compute_test_metrics(*, state: TrainState, batch):
   loss, logits = loss_fn(state.model, batch)
-  state.test_metrics.update(values=loss, logits=logits, labels=batch['label'])
+  state.metrics.update(values=loss, logits=logits, labels=batch['label'])
 ```
 
-## 9. Seed randomness
+## 7. Seed randomness
 
 For reproducible dataset shuffling (using `tf.data.Dataset.shuffle`), set the TF random seed.
 
@@ -214,7 +211,7 @@ For reproducible dataset shuffling (using `tf.data.Dataset.shuffle`), set the TF
 tf.random.set_seed(0)
 ```
 
-## 10. Train and Evaluate
+## 8. Train and Evaluate
 
 **Dataset Preparation:** create a "shuffled" dataset
 - Repeat the dataset for the desired number of training epochs.
@@ -240,33 +237,44 @@ metrics_history = {
   'train_loss': [],
   'train_accuracy': [],
   'test_loss': [],
-  'test_accuracy': []
+  'test_accuracy': [],
 }
 
-for step,batch in enumerate(train_ds.as_numpy_iterator()):
-  # Run optimization steps over training batches and compute batch metrics
-  train_step(state, batch) # get updated train state (which contains the updated parameters)
+for step, batch in enumerate(train_ds.as_numpy_iterator()):
+  # Run the optimization for one step and make a stateful update to the following:
+  # - the train state's model parameters
+  # - the optimizer state
+  # - the training loss and accuracy batch metrics
+  train_step(state, batch)
 
-  if (step+1) % num_steps_per_epoch == 0: # one training epoch has passed
+  if (step + 1) % num_steps_per_epoch == 0:  # one training epoch has passed
+    # Log training metrics
+    for metric, value in state.metrics.compute().items():  # compute metrics
+      metrics_history[f'train_{metric}'].append(value)  # record metrics
+    state.metrics.reset()  # reset metrics for test set
+
     # Compute metrics on the test set after each training epoch
     for test_batch in test_ds.as_numpy_iterator():
       compute_test_metrics(state=state, batch=test_batch)
 
-    for metric, value in state.train_metrics.compute().items(): # compute metrics
-      metrics_history[f'train_{metric}'].append(value) # record metrics
-    for metric, value in state.test_metrics.compute().items():
+    # Log test metrics
+    for metric, value in state.metrics.compute().items():
       metrics_history[f'test_{metric}'].append(value)
-    state.reset_metrics() # reset metrics for next training epoch
+    state.metrics.reset()  # reset metrics for next training epoch
 
-    print(f"train epoch: {(step+1) // num_steps_per_epoch}, "
-          f"loss: {metrics_history['train_loss'][-1]}, "
-          f"accuracy: {metrics_history['train_accuracy'][-1] * 100}")
-    print(f"test epoch: {(step+1) // num_steps_per_epoch}, "
-          f"loss: {metrics_history['test_loss'][-1]}, "
-          f"accuracy: {metrics_history['test_accuracy'][-1] * 100}")
+    print(
+      f"train epoch: {(step+1) // num_steps_per_epoch}, "
+      f"loss: {metrics_history['train_loss'][-1]}, "
+      f"accuracy: {metrics_history['train_accuracy'][-1] * 100}"
+    )
+    print(
+      f"test epoch: {(step+1) // num_steps_per_epoch}, "
+      f"loss: {metrics_history['test_loss'][-1]}, "
+      f"accuracy: {metrics_history['test_accuracy'][-1] * 100}"
+    )
 ```
 
-## 11. Visualize Metrics
+## 9. Visualize Metrics
 
 Use Matplotlib to create plots for loss and accuracy.
 
@@ -279,7 +287,7 @@ import matplotlib.pyplot as plt  # Visualization
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
 ax1.set_title('Loss')
 ax2.set_title('Accuracy')
-for dataset in ('train','test'):
+for dataset in ('train', 'test'):
   ax1.plot(metrics_history[f'{dataset}_loss'], label=f'{dataset}_loss')
   ax2.plot(metrics_history[f'{dataset}_accuracy'], label=f'{dataset}_accuracy')
 ax1.legend()
@@ -288,7 +296,7 @@ plt.show()
 plt.clf()
 ```
 
-## 12. Perform inference on test set
+## 10. Perform inference on test set
 
 Define a jitted inference function, `pred_step`, to generate predictions on the test set using the learned model parameters. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
 
@@ -308,7 +316,7 @@ pred = pred_step(state, test_batch)
 fig, axs = plt.subplots(5, 5, figsize=(12, 12))
 for i, ax in enumerate(axs.flatten()):
   ax.imshow(test_batch['image'][i, ..., 0], cmap='gray')
-  ax.set_title(f"label={pred[i]}")
+  ax.set_title(f'label={pred[i]}')
   ax.axis('off')
 ```
 
