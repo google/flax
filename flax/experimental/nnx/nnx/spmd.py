@@ -20,7 +20,6 @@ from jax.interpreters import pxla
 from jax.sharding import Mesh, PartitionSpec
 
 from flax.experimental.nnx.nnx import variables
-from flax.experimental.nnx.nnx.pytreelib import TreeNode
 from flax.experimental.nnx.nnx.state import State
 from flax.typing import (
   Array,
@@ -107,17 +106,16 @@ def get_partition_spec(tree: A) -> A:
 
     return _maybe_replicate(x)
 
-  return jax.tree_util.tree_map(
-    f,
-    tree,
-    is_leaf=lambda x: isinstance(x, variables.Variable)
-    and not isinstance(x, TreeNode),
+  return jax.tree_map(
+    f, tree, is_leaf=lambda x: isinstance(x, variables.Variable)
   )
 
 
 def get_named_sharding(tree: A, mesh: jax.sharding.Mesh) -> A:
   spec = get_partition_spec(tree)
-  sharding = jax.tree_util.tree_map(lambda p: jax.sharding.NamedSharding(mesh, p), spec)
+  sharding = jax.tree_util.tree_map(
+    lambda p: jax.sharding.NamedSharding(mesh, p), spec
+  )
   return sharding
 
 
