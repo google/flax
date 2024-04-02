@@ -187,7 +187,7 @@ def train_step(state: TrainState, batch):
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
   (loss, logits), grads = grad_fn(state.model, batch)
   state.train_metrics.update(values=loss, logits=logits, labels=batch['label'])
-  state.optimizer.update(grads=grads)
+  state.optimizer.update(grads)
 ```
 
 The [@jax.jit](https://jax.readthedocs.io/en/latest/jax.html#jax.jit) decorator

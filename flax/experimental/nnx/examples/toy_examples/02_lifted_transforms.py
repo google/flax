@@ -73,7 +73,7 @@ def train_step(model: MLP, optimizer: nnx.Optimizer, batch):
   #                                    |--default--|
   grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
   # sgd update
-  optimizer.update(grads=grads)
+  optimizer.update(grads)
 
 
 @nnx.jit
