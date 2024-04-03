@@ -422,7 +422,7 @@ def update(variables, rng):
     )
     return jnp.mean((y - out) ** 2)
   grads = jax.grad(loss)(variables['params'])
-  params = jax.tree_map(lambda p, g: p - 1e-3 * g, variables['params'], grads)
+  params = jax.tree_util.tree_map(lambda p, g: p - 1e-3 * g, variables['params'], grads)
   return {
     'params': params,
     'other_collection': variables['other_collection'],

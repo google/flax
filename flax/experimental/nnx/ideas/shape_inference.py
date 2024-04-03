@@ -150,12 +150,12 @@ print('test Linear')
 # eager
 m1 = Linear(din=32, dout=10, rngs=nnx.Rngs(params=0))
 y = m1(x=jnp.ones((1, 32)))
-print(jax.tree_map(jnp.shape, m1.get_state()))
+print(jax.tree_util.tree_map(jnp.shape, m1.get_state()))
 
 # lazy
 m2 = Linear(dout=10)
 y = m2.init(x=jnp.ones((1, 32)), rngs=nnx.Rngs(params=0))
-print(jax.tree_map(jnp.shape, m2.get_state()))
+print(jax.tree_util.tree_map(jnp.shape, m2.get_state()))
 
 # usage
 y1 = m1(x=jnp.ones((1, 32)))
@@ -199,7 +199,7 @@ MLP = nnx.Scan(
 mlp = MLP(din=10, dout=10, rngs=nnx.Rngs(params=0))
 y, _ = mlp.call(jnp.ones((1, 10)), None, train=True, rngs=nnx.Rngs(dropout=1))
 print(f'{y.shape=}')
-print('state =', jax.tree_map(jnp.shape, mlp.get_state()))
+print('state =', jax.tree_util.tree_map(jnp.shape, mlp.get_state()))
 print()
 
 # lazy
@@ -207,4 +207,4 @@ mlp = MLP(dout=10)
 mlp.init(jnp.ones((1, 10)), None, train=False, rngs=nnx.Rngs(params=0))
 y, _ = mlp.call(jnp.ones((1, 10)), None, train=True, rngs=nnx.Rngs(dropout=1))
 print(f'{y.shape=}')
-print('state =', jax.tree_map(jnp.shape, mlp.get_state()))
+print('state =', jax.tree_util.tree_map(jnp.shape, mlp.get_state()))

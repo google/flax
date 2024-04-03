@@ -64,6 +64,6 @@ class TestHelpers:
     assert y.shape == (1, 4)
 
     # fake gradient
-    grads = jax.tree_map(jnp.ones_like, state.params)
+    grads = jax.tree_util.tree_map(jnp.ones_like, state.params)
     # test apply_gradients
     state = state.apply_gradients(grads)

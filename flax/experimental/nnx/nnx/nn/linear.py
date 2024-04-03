@@ -117,12 +117,12 @@ class LinearGeneral(Module):
     >>> # output features (4, 5)
     >>> layer = nn.LinearGeneral(features=(4, 5))
     >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
-    >>> jax.tree_map(jnp.shape, params)
+    >>> jax.tree_util.tree_map(jnp.shape, params)
     {'params': {'bias': (4, 5), 'kernel': (3, 4, 5)}}
     >>> # apply transformation on the the second and last axes
     >>> layer = nn.LinearGeneral(features=(4, 5), axis=(1, -1))
     >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3, 6, 7)))
-    >>> jax.tree_map(jnp.shape, params)
+    >>> jax.tree_util.tree_map(jnp.shape, params)
     {'params': {'bias': (4, 5), 'kernel': (3, 7, 4, 5)}}
 
   Attributes:
@@ -195,7 +195,7 @@ class LinearGeneral(Module):
         * np.prod(shape[n_batch_axis : n_in_features + n_batch_axis]),
         np.prod(shape[-n_out_features:]),
       )
-      flat_shape = jax.tree_map(int, flat_shape)
+      flat_shape = jax.tree_util.tree_map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, variables.VariableMetadata):
         kernel.raw_value = jnp.reshape(kernel.raw_value, shape)

@@ -26,7 +26,7 @@ class TestVariable:
     r1 = nnx.Variable(1)
     assert r1.raw_value == 1
 
-    r2 = jax.tree_map(lambda x: x + 1, r1)
+    r2 = jax.tree_util.tree_map(lambda x: x + 1, r1)
 
     assert r1.raw_value == 1
     assert r2.raw_value == 2

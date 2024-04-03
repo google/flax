@@ -83,5 +83,5 @@ x = jnp.ones((3, 10))
 model.set_attributes(deterministic=False)
 y = model(x, rngs=nnx.Rngs(dropout=1))
 
-print(jax.tree_map(jnp.shape, model.get_state()))
+print(jax.tree_util.tree_map(jnp.shape, model.get_state()))
 print(y.shape)

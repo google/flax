@@ -23,7 +23,7 @@ Orbax provides a variety of features for saving and loading model data, which yo
 *  [`jax.sharding`](https://jax.readthedocs.io/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html)-based API to save and load in multi-host scenarios
 
 ---
-**_Ongoing migration to Orbax:_** 
+**_Ongoing migration to Orbax:_**
 
 After July 30 2023, Flax's legacy `flax.training.checkpoints` API will be deprecated in favor of [Orbax](https://github.com/google/orbax).
 
@@ -34,7 +34,7 @@ After July 30 2023, Flax's legacy `flax.training.checkpoints` API will be deprec
    * **Migrating your code to Orbax (Recommended)**: Migrate your API calls to `orbax.checkpoint` API by following this [migration guide](https://flax.readthedocs.io/en/latest/guides/converting_and_upgrading/orbax_upgrade_guide.html).
 
    * **Automatically use the Orbax backend**: Add `flax.config.update('flax_use_orbax_checkpointing', True)` to your project, which will let your `flax.training.checkpoints` calls automatically use the Orbax backend to save your checkpoints.
-     
+
      * **Scheduled flip**: This will become the default mode after **May 2023** (tentative date).
 
      * Visit [Orbax-as-backend troubleshooting section](https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#orbax-as-backend-troubleshooting) if you meet any issue in the automatic migration.
@@ -103,7 +103,7 @@ state = train_state.TrainState.create(
     params=variables['params'],
     tx=tx)
 # Perform a simple gradient update similar to the one during a normal training workflow.
-state = state.apply_gradients(grads=jax.tree_map(jnp.ones_like, state.params))
+state = state.apply_gradients(grads=jax.tree_util.tree_map(jnp.ones_like, state.params))
 
 # Some arbitrary nested pytree with a dictionary and a NumPy array.
 config = {'dimensions': np.array([5, 3])}
@@ -128,7 +128,7 @@ save_args = orbax_utils.save_args_from_target(ckpt)
 orbax_checkpointer.save('/tmp/flax_ckpt/orbax/single_save', ckpt, save_args=save_args)
 ```
 
-Next, to use versioning and automatic bookkeeping features, you need to wrap `orbax.checkpoint.CheckpointManager` over `orbax.checkpoint.PyTreeCheckpointer`. 
+Next, to use versioning and automatic bookkeeping features, you need to wrap `orbax.checkpoint.CheckpointManager` over `orbax.checkpoint.PyTreeCheckpointer`.
 
 In addition, provide `orbax.checkpoint.CheckpointManagerOptions` that customizes your needs, such as how often and on what criteria you prefer old checkpoints be deleted. See [documentation](https://github.com/google/orbax/blob/main/docs/checkpoint.md#checkpointmanager) for a full list of options offered.
 
@@ -184,7 +184,7 @@ checkpoint_manager.restore(step)
 
 Note that with the migration to Orbax in progress, `flax.training.checkpointing.restore_checkpoint` can automatically identify whether a checkpoint is saved in the legacy Flax format or with an Orbax backend, and restore the pytree correctly. Therefore, adding `flax.config.update('flax_use_orbax_checkpointing', True)` won't hurt your ability to restore old checkpoints.
 
-Here's how to restore checkpoints using the legacy API: 
+Here's how to restore checkpoints using the legacy API:
 
 ```python outputId="85ffceca-f38d-46b8-e567-d9d38b7885f9"
 raw_restored = checkpoints.restore_checkpoint(ckpt_dir='/tmp/flax_ckpt/flax-checkpointing', target=None)
@@ -206,7 +206,7 @@ Note: Data that was a JAX NumPy array (`jnp.array`) format will be restored as a
 ```python outputId="110c6b6e-fe42-4179-e5d8-6b92d355e11b"
 empty_state = train_state.TrainState.create(
     apply_fn=model.apply,
-    params=jax.tree_map(np.zeros_like, variables['params']),  # values of the tree leaf doesn't matter
+    params=jax.tree_util.tree_map(np.zeros_like, variables['params']),  # values of the tree leaf doesn't matter
     tx=tx,
 )
 empty_config = {'dimensions': np.array([0, 0])}
@@ -267,7 +267,7 @@ Below are examples of a few common scenarios.
 
 ### Scenario 1: When a reference object is partial
 
-If your reference object is a subtree of your checkpoint, the restoration will ignore the additional field(s) and restore a checkpoint with the same structure as the reference. 
+If your reference object is a subtree of your checkpoint, the restoration will ignore the additional field(s) and restore a checkpoint with the same structure as the reference.
 
 Like in the example below, the `batch_stats` field in `CustomTrainState` was ignored, and the checkpoint was restored as a `TrainState`.
 

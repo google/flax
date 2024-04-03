@@ -1069,7 +1069,7 @@ def extract_graph_nodes(pytree: A, /) -> tuple[A, tuple[tp.Any, ...]]:
       return GraphNodeIndex(index)
     return x
 
-  return jax.tree_map(_maybe_extract, pytree), tuple(nodes)
+  return jax.tree_util.tree_map(_maybe_extract, pytree), tuple(nodes)
 
 
 def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
@@ -1080,7 +1080,7 @@ def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
       return nodes[x.index]
     return x
 
-  return jax.tree_map(
+  return jax.tree_util.tree_map(
     _maybe_insert, pytree, is_leaf=lambda x: isinstance(x, GraphNodeIndex)
   )
 

@@ -582,7 +582,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation('train', step_num=step):
         batch = next(train_iter)
-        batch = jax.tree_map(lambda x: jnp.asarray(x), batch)
+        batch = jax.tree_util.tree_map(lambda x: jnp.asarray(x), batch)
         state, metrics = jit_train_step(
           state, batch, learning_rate_fn, 0.0, dropout_rngs
         )

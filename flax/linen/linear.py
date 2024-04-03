@@ -294,7 +294,7 @@ class Einsum(Module):
 
     >>> layer = nn.Einsum((5, 6, 7), 'abc,cde->abde')
     >>> variables = layer.init(jax.random.key(0), jnp.ones((3, 4, 5)))
-    >>> jax.tree_map(jnp.shape, variables)
+    >>> jax.tree_util.tree_map(jnp.shape, variables)
     {'params': {'bias': (6, 7), 'kernel': (5, 6, 7)}}
 
   Attributes:

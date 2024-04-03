@@ -198,7 +198,7 @@ the random dropout masks.
         return optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
 
     grads = jax.grad(loss_fn)(params)
-    params = jax.tree_map(lambda p, g: p - 0.1 * g, params, grads)
+    params = jax.tree_util.tree_map(lambda p, g: p - 0.1 * g, params, grads)
 
     return params
 
@@ -214,7 +214,7 @@ the random dropout masks.
         return optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
 
     grads = jax.grad(loss_fn)(params)
-    params = jax.tree_map(lambda p, g: p - 0.1 * g, params, grads)
+    params = jax.tree_util.tree_map(lambda p, g: p - 0.1 * g, params, grads)
 
     return params
 
@@ -355,7 +355,7 @@ return value.
       return loss, new_state
 
     grads, new_state = jax.grad(loss_fn, has_aux=True)(params)
-    params = jax.tree_map(lambda p, g: p - 0.1 * g, params, grads)
+    params = jax.tree_util.tree_map(lambda p, g: p - 0.1 * g, params, grads)
 
     return params, new_state
   ---
@@ -371,7 +371,7 @@ return value.
       return loss, updates["batch_stats"]
 
     grads, batch_stats = jax.grad(loss_fn, has_aux=True)(params)
-    params = jax.tree_map(lambda p, g: p - 0.1 * g, params, grads)
+    params = jax.tree_util.tree_map(lambda p, g: p - 0.1 * g, params, grads)
 
     return params, batch_stats
 

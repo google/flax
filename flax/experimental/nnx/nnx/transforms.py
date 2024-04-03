@@ -957,7 +957,7 @@ def scan_apply(
     args,
     is_leaf=lambda x: x is None,
   )
-  broadcast_args = jax.tree_map(
+  broadcast_args = jax.tree_util.tree_map(
     lambda axis, node: node if axis is None else None,
     options.in_args_axes,
     args,

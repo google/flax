@@ -94,7 +94,7 @@ class TestPartitioning:
     )
 
     state = m.split()[1]
-    state = jax.tree_map(lambda x: x * 2, state)
+    state = jax.tree_util.tree_map(lambda x: x * 2, state)
 
     m.update(state)
 
@@ -111,7 +111,7 @@ class TestPartitioning:
     )
 
     graphdef, state = m.split()
-    state = jax.tree_map(lambda x: x * 2, state)
+    state = jax.tree_util.tree_map(lambda x: x * 2, state)
 
     m.update(state)
 

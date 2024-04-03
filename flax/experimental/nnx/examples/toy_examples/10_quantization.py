@@ -166,7 +166,7 @@ for epoch in range(epochs):
     state, loss = train_step(state, x_batch, y_batch)
 
   metrics = eval_step(state, X_test, Y_test)
-  metrics = jax.tree_map(lambda x: x.item(), metrics)
+  metrics = jax.tree_util.tree_map(lambda x: x.item(), metrics)
   print(f'Epoch {epoch} - {metrics}')
 
 # %%
@@ -238,7 +238,7 @@ class QLinear(nnx.Module):
     tx = optax.adam(1e-3)
     opt_state = tx.init(q_hparams)
 
-    print(jax.tree_map(lambda x: x.shape, q_hparams))
+    print(jax.tree_util.tree_map(lambda x: x.shape, q_hparams))
 
     @jax.jit
     def optimization_step(
