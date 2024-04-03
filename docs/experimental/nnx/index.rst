@@ -127,6 +127,13 @@ Learn more
          :class-card: sd-text-black sd-bg-light
          :link: mnist_tutorial.html
 
+   .. grid-item::
+      :columns: 6 6 6 4
+
+      .. card:: :material-regular:`sync_alt;2em` NNX vs JAX Transformations
+         :class-card: sd-text-black sd-bg-light
+         :link: transforms.html
+
 
 ----
 
@@ -136,3 +143,4 @@ Learn more
 
    nnx_basics
    mnist_tutorial
+   transforms
