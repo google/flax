@@ -21,6 +21,8 @@ from jax import custom_jvp, custom_vjp, lax, random
 from jax import numpy as jnp
 from jax._src import core
 from jax._src import dtypes
+from jax._src import earray
+from jax._src.interpreters import pxla
 
 from flax.linen import initializers, module
 
@@ -32,6 +34,11 @@ class Fp8MetaTyRules:
   @staticmethod
   def physical_element_aval(dtype) -> core.ShapedArray:
     return core.ShapedArray((), dtype.float_dtype)
+
+  @staticmethod
+  def replicate_trailing_dims(ctx, val, aval):
+    del ctx, aval
+    return val
 
   # allow conversions to and from the corresponding float type
   @staticmethod
@@ -65,11 +72,21 @@ class Fp8MetaTyRules:
     out_raw = lax.full(shape, fill_value, dtype.float_dtype)
     return lax.convert_element_type(out_raw, dtype)
 
-  # NOTE: by skipping some rules, this dtype can only be used underneath jit
   @staticmethod
-  def global_sharded_result_handler(aval, sharding, committed, is_from_xla):
-    raise NotImplementedError("convert back under the jit")
+  def logical_sharding(aval, phys_sharding):
+    return phys_sharding
 
+  @staticmethod
+  def global_sharded_result_handler(aval, out_sharding, committed):
+    phys_sharding = out_sharding  # unlike KeyTyRules, assume same shape
+    phys_aval = core.physical_aval(aval)
+    phys_handler_maker = pxla.global_result_handlers[core.ShapedArray]
+    phys_handler = phys_handler_maker(phys_aval, phys_sharding, committed)
+    return lambda bufs: earray.EArray(aval, phys_handler(bufs))
+
+  @staticmethod
+  def physical_sharding(aval, sharding):
+    return sharding  # unlike KeyTyRules, assume same shape
 
 # class to use as second argument to jax.dtypes.issubdtype
 class fp8_meta_dtype(dtypes.extended): pass
