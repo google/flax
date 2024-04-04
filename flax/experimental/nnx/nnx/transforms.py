@@ -559,7 +559,7 @@ def grad_apply(options: GradOptions, f, args: tuple[tp.Any, ...]):
     _args = list(args)
     for i, graph_node in diff_graph_nodes.items():
       diff_state: State = _args[i]
-      graph_utils.graph_update_dynamic(graph_node, diff_state)
+      graph_utils.update(graph_node, diff_state)
       _args[i] = graph_node
 
     out = f(*_args)
@@ -592,7 +592,7 @@ def grad_apply(options: GradOptions, f, args: tuple[tp.Any, ...]):
     else:
       out, updates = out
 
-  graph_utils.graph_update_dynamic((input_nodes, out_nodes), updates)
+  graph_utils.update((input_nodes, out_nodes), updates)
   return out
 
 
@@ -922,7 +922,7 @@ def scan_init(
       for state, index in zip(axes_states, options.variable_axes.values())
     ]
 
-  module = graphdef.merge(*axes_states, carry_state)
+  module = graph_utils.merge(graphdef, *axes_states, carry_state)
 
   return module
 
@@ -1558,7 +1558,7 @@ def vmap_init(
       for state, index in zip(axes_states, options.variable_axes.values())
     ]
 
-  module = graphdef.merge(*axes_states, carry_state)
+  module = graph_utils.merge(graphdef, *axes_states, carry_state)
   return module
 
 

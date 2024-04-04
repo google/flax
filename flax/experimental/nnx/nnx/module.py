@@ -20,7 +20,6 @@ from functools import partial
 
 import jax
 import jax.tree_util as jtu
-import typing_extensions as tpe
 
 from flax.experimental.nnx.nnx import (
   filterlib,
@@ -154,13 +153,13 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
 
       def _partial_init_constructor():
         module = constructor(*args, **lift_rngs(kwargs))
-        module.update(*states)
-        return module.split()
+        graph_utils.update(module, *states)
+        return graph_utils.split(module)
 
       graphdef: GraphDef[M]
       state: State
       graphdef, state = jax.jit(_partial_init_constructor)()
-      module = graphdef.merge(state)
+      module = graph_utils.merge(graphdef, state)
       return module
 
     return CallableProxy(_partial_init)  # type: ignore
@@ -192,11 +191,11 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
     return graph_utils.split(self, *filters)
 
   def get_state(self) -> State:
-    _, state = self.split()
+    _, state = graph_utils.split(self)
     return state
 
   def get_graphdef(self: M) -> GraphDef[M]:
-    graphdef, _ = self.split()
+    graphdef, _ = graph_utils.split(self)
     return graphdef
 
   @tp.overload
@@ -262,7 +261,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
   @property
   def apply(self: M) -> ApplyCaller[M]:
     def _apply(accessor: DelayedAccessor, *args, **kwargs) -> tuple[tp.Any, M]:
-      module = self.clone()
+      module = graph_utils.clone(self)
       fn = accessor(module)
       out = fn(*args, **kwargs)
       return out, module
@@ -378,7 +377,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
 # Pytree Definition
 # -------------------------
 def _module_flatten(module: Module, *, with_keys: bool):
-  graphdef, state = module.split()
+  graphdef, state = graph_utils.split(module)
   key_values = sorted(state.raw_mapping.items())
   keys = tuple(key for key, _ in key_values)
 

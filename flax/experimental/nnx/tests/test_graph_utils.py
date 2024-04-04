@@ -25,7 +25,9 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    static, state, ref_idx = nnx.graph_utils.graph_flatten(g)
+    static, state = nnx.split(g)
+    ref_idx = static.flatten_ref_to_index
+    assert ref_idx is not None
 
     state[0]['b'].raw_value = 2
     state[3].raw_value = 4
@@ -38,8 +40,8 @@ class TestGraphUtils:
     a = nnx.Dict(a=1, b=nnx.Param(2))
     g = nnx.List([a, 3, a, nnx.Param(4)])
 
-    static, state, _ = nnx.graph_utils.graph_flatten(g)
-    g = static.merge(state)
+    static, state = nnx.split(g)
+    g = nnx.merge(static, state)
 
     assert g[0] is g[2]
 
@@ -47,8 +49,8 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    static, state, _ = nnx.graph_utils.graph_flatten(g)
-    g = static.merge(state)
+    static, state = nnx.split(g)
+    g = nnx.merge(static, state)
 
     assert g[0] is not g[2]
 
@@ -56,7 +58,7 @@ class TestGraphUtils:
     a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
     g = nnx.List([a, 3, a, nnx.Param(4)])
 
-    static, state, _ = nnx.graph_utils.graph_flatten(g)
+    static, state = nnx.split(g)
     g = static.merge(nnx.State({}))
 
     assert g[0] is g[2]
@@ -67,10 +69,10 @@ class TestGraphUtils:
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    static, state, _ = nnx.graph_utils.graph_flatten(g)
+    static, state = nnx.split(g)
 
     state[0]['b'].raw_value = 3
-    nnx.graph_utils.graph_update_dynamic(g, state)
+    nnx.graph_utils.update(g, state)
 
     assert g[0]['b'].raw_value == 3
     assert g[2]['b'].raw_value == 3
@@ -123,7 +125,7 @@ class TestGraphUtils:
       nnx.BatchNorm(2, rngs=rngs),
     ]
 
-    static, state, _ = nnx.graph_utils.graph_flatten(ls)
+    static, state = nnx.split(ls)
 
     assert state[0]['kernel'].raw_value.shape == (2, 2)
     assert state[0]['bias'].raw_value.shape == (2,)
@@ -136,7 +138,7 @@ class TestGraphUtils:
     v = nnx.Param(1)
     g = [v, v]
 
-    static, state, _ = nnx.graph_utils.graph_flatten(g)
+    static, state = nnx.split(g)
 
     assert len(state.flat_state()) == 1
 
@@ -154,7 +156,7 @@ class TestGraphUtils:
         self.baz.kernel = self.bar.kernel
 
     node = Foo(rngs=nnx.Rngs(0))
-    static, state, _ = nnx.graph_utils.graph_flatten(node)
+    static, state = nnx.split(node)
 
     assert len(state.flat_state()) == 3  # 2 bias + 1 kernel
 
@@ -282,7 +284,7 @@ class TestGraphUtils:
 
     assert 'tree' in state
     assert 'a' in state.tree
-    assert static.subgraphs['tree'].type is nnx.graph_utils.PytreeType
+    assert static.nodedef.subgraphs['tree'].type is nnx.graph_utils.PytreeType
 
     m2 = static.merge(state)
 
