@@ -66,7 +66,7 @@ class TestOptimizer(parameterized.TestCase):
         state = static.merge(state)
         model_static, model_state = state.model.split()
         grads = jax.grad(loss_fn, argnums=1)(model_static, model_state, x, y)
-        state.update(grads=grads)
+        state.update(grads)
         return state.split()
 
       static, state = jit_decorator(train_step)(*state.split(), x, y)
@@ -79,7 +79,7 @@ class TestOptimizer(parameterized.TestCase):
 
       def train_step(state, x, y):
         grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model, x, y)
-        state.update(grads=grads)
+        state.update(grads)
 
       jit_decorator(train_step)(state, x, y)
       new_loss = loss_fn(state.model, x, y)
@@ -97,7 +97,7 @@ class TestOptimizer(parameterized.TestCase):
         super().__init__(model, tx)
       def update(self, *, grads, **updates):
         self.metrics.update(**updates)
-        super().update(grads=grads)
+        super().update(grads)
 
     x = jax.random.normal(jax.random.key(0), (1, 2))
     y = jnp.ones((1, 4))

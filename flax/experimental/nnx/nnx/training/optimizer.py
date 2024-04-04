@@ -67,7 +67,7 @@ class Optimizer(graph_utils.GraphNode):
     >>> loss_fn(state.model)
     1.7055722
     >>> grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model)
-    >>> state.update(grads=grads)
+    >>> state.update(grads)
     >>> loss_fn(state.model)
     1.6925814
 
@@ -82,7 +82,7 @@ class Optimizer(graph_utils.GraphNode):
     ...     super().__init__(model, tx)
     ...   def update(self, *, grads, **updates):
     ...     self.metrics.update(**updates)
-    ...     super().update(grads=grads)
+    ...     super().update(grads)
 
     >>> metrics = nnx.metrics.Average()
     >>> state = TrainState(model, tx, metrics)
@@ -116,7 +116,7 @@ class Optimizer(graph_utils.GraphNode):
   def split(self, *filters: filterlib.Filter):
     return graph_utils.split(self, *filters)
 
-  def update(self, *, grads):
+  def update(self, grads):
     """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
 
     Note that internally this function calls ``.tx.update()`` followed by a call
