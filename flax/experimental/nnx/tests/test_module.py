@@ -53,14 +53,14 @@ class TestModule:
 
     static, state = m.split()
 
-    state = jax.tree_map(lambda x: x + 1, state)
+    state = jax.tree_util.tree_map(lambda x: x + 1, state)
 
   def test_split_2(self):
     m = nnx.Dict(a=nnx.Param(1))
 
     empty, some, static = m.split(None, ...)
 
-    some = jax.tree_map(lambda x: x + 1, some)
+    some = jax.tree_util.tree_map(lambda x: x + 1, some)
 
   def test_split_merge(self):
     m = nnx.Dict(a=nnx.Param(1))
@@ -516,7 +516,7 @@ class TestModulePytree:
 
     m = Foo()
 
-    m = jax.tree_map(lambda x: x + 1, m)
+    m = jax.tree_util.tree_map(lambda x: x + 1, m)
 
     assert m.node.value == 2
     assert m.static == 1

@@ -59,7 +59,7 @@ from flax import struct, traverse_util, linen as nn
 from flax.core import freeze, unfreeze
 from flax.training import train_state, checkpoints
 
-import optax # Optax for common losses and optimizers. 
+import optax # Optax for common losses and optimizers.
 ```
 
 ```{code-cell}
@@ -73,7 +73,7 @@ The code below shows how to import and set up the JAX-level device API, followin
 2. Annotate each axis with a name using the `axis_names` parameter in `jax.sharding.Mesh`. A typical way to annotate axis names is `axis_name=('data', 'model')`, where:
   * `'data'`: the mesh dimension used for data-parallel sharding of the batch dimension of inputs and activations.
   * `'model'`: the mesh dimension used for sharding parameters of the model across devices.
-  
+
 3. Make a simple utility function `mesh_sharding` for generating a sharding object from the mesh and any layout.
 
 ```{code-cell}
@@ -112,8 +112,8 @@ class DotReluDot(nn.Module):
   dense_init: Callable = nn.initializers.xavier_normal()
   @nn.compact
   def __call__(self, x):
-    
-    y = nn.Dense(self.depth, 
+
+    y = nn.Dense(self.depth,
                  kernel_init=nn.with_partitioning(self.dense_init, (None, 'model')),
                  use_bias=False,  # or overwrite with `bias_init`
                  )(x)
@@ -123,10 +123,10 @@ class DotReluDot(nn.Module):
     y = with_sharding_constraint(y, mesh_sharding(PartitionSpec('data', 'model')))
 
     W2 = self.param(
-        'W2', 
+        'W2',
         nn.with_partitioning(self.dense_init, ('model', None)),
         (self.depth, x.shape[-1]))
-    
+
     z = jnp.dot(y, W2)
     # Force a local sharding annotation.
     z = with_sharding_constraint(z, mesh_sharding(PartitionSpec('data', None)))
@@ -160,7 +160,7 @@ To replicate identical layers, you can either use [`flax.linen.scan`](https://fl
 * `flax.linen.scan` can provide faster compilation times.
 * The for-loop can be faster on runtime.
 
-The code below shows how to apply both methods, and default with the for-loop, so that all the parameters are two-dimensional and you can visualize their sharding. 
+The code below shows how to apply both methods, and default with the for-loop, so that all the parameters are two-dimensional and you can visualize their sharding.
 
 The `flax.linen.scan` code is just to show that this API works with [Flax lifted transforms](https://flax.readthedocs.io/en/latest/developer_notes/lift.html#supported-transformations).
 
@@ -172,7 +172,7 @@ class MLP(nn.Module):
   @nn.compact
   def __call__(self, x):
     if self.use_scan:
-      x, _ = nn.scan(DotReluDot, length=self.num_layers, 
+      x, _ = nn.scan(DotReluDot, length=self.num_layers,
                      variable_axes={"params": 0},
                      split_rngs={"params": True},
                      metadata_params={nn.PARTITION_NAME: None}
@@ -267,7 +267,7 @@ jax.debug.visualize_array_sharding(initialized_state.params['DotReluDot_0']['W2'
 
 ## Inspect the Module output
 
-Note that in the output of `initialized_state`, the `params` `W1` and `W2` are of type [`flax.linen.Partitioned`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.Partitioned.html). This is a wrapper around the actual `jax.Array` that allows Flax to record the axis names associated with it. 
+Note that in the output of `initialized_state`, the `params` `W1` and `W2` are of type [`flax.linen.Partitioned`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.Partitioned.html). This is a wrapper around the actual `jax.Array` that allows Flax to record the axis names associated with it.
 
 You can access the raw `jax.Array` by adding `.value` when outside `jit`, or by `.unbox()` when inside.
 
@@ -289,24 +289,24 @@ print(initialized_state.step)
 initialized_state.step.sharding
 ```
 
-You can use [`jax.tree_map`](https://jax.readthedocs.io/en/latest/_autosummary/jax.tree_util.tree_map.html) to perform mass computation on a dict of boxed params, in the same way as on a dict of JAX arrays.
+You can use [`jax.tree_util.tree_map`](https://jax.readthedocs.io/en/latest/_autosummary/jax.tree_util.tree_map.html) to perform mass computation on a dict of boxed params, in the same way as on a dict of JAX arrays.
 
 ```{code-cell}
-diff = jax.tree_map(
-    lambda a, b: a - b, 
+diff = jax.tree_util.tree_map(
+    lambda a, b: a - b,
     initialized_state.params['DotReluDot_0'], initialized_state.params['DotReluDot_0'])
-print(jax.tree_map(jnp.shape, diff))
+print(jax.tree_util.tree_map(jnp.shape, diff))
 diff_array = diff['Dense_0']['kernel'].value
 print(type(diff_array))
 print(diff_array.shape)
 ```
 
-## Compile the train step and inference 
+## Compile the train step and inference
 
 Create a `jit`ted training step as follows:
 
 ```{code-cell}
-@functools.partial(jax.jit, in_shardings=(state_sharding, x_sharding), 
+@functools.partial(jax.jit, in_shardings=(state_sharding, x_sharding),
                    out_shardings=state_sharding)
 def train_step(state, x):
   # A fake loss function.
@@ -332,7 +332,7 @@ jax.debug.visualize_array_sharding(initialized_state.params['DotReluDot_0']['W2'
 Then, create a compiled inference step. Note that the output is also sharded along `(data, None)`.
 
 ```{code-cell}
-@functools.partial(jax.jit, in_shardings=(state_sharding, x_sharding), 
+@functools.partial(jax.jit, in_shardings=(state_sharding, x_sharding),
                    out_shardings=x_sharding)
 def apply_fn(state, x):
   return state.apply_fn({'params': state.params}, x)
@@ -353,7 +353,7 @@ If you are running on a TPU pod or a pod slice, you can use a custom `block_all`
 %%timeit
 
 def block_all(xs):
-  jax.tree_map(lambda x: x.block_until_ready(), xs)
+  jax.tree_util.tree_map(lambda x: x.block_until_ready(), xs)
   return xs
 
 with mesh:
@@ -362,7 +362,7 @@ with mesh:
 
 ## Logical axis annotation
 
-JAX's automatic SPMD encourages users to explore different sharding layouts to find the optimal one. To this end, in Flax you actually can annotate the dimensions of any data with more descriptive axis names (not just device mesh axis names like `'data'` and `'model'`). 
+JAX's automatic SPMD encourages users to explore different sharding layouts to find the optimal one. To this end, in Flax you actually can annotate the dimensions of any data with more descriptive axis names (not just device mesh axis names like `'data'` and `'model'`).
 
 The `LogicalDotReluDot` and `LogicalMLP` Module definition below are similar to the Modules you created earlier, except for the following:
 
@@ -375,8 +375,8 @@ class LogicalDotReluDot(nn.Module):
   depth: int
   dense_init: Callable = nn.initializers.xavier_normal()
   @nn.compact
-  def __call__(self, x):    
-    y = nn.Dense(self.depth, 
+  def __call__(self, x):
+    y = nn.Dense(self.depth,
                  kernel_init=nn.with_logical_partitioning(self.dense_init, ('embed', 'hidden')),
                  use_bias=False,  # or overwrite with `bias_init`
                  )(x)
@@ -386,7 +386,7 @@ class LogicalDotReluDot(nn.Module):
     y = with_sharding_constraint(y, mesh_sharding(PartitionSpec('data', 'model')))
 
     W2 = self.param(
-        'W2', 
+        'W2',
         nn.with_logical_partitioning(self.dense_init, ('hidden', 'embed')),
         (self.depth, x.shape[-1]))
 
@@ -402,7 +402,7 @@ class LogicalMLP(nn.Module):
   @nn.compact
   def __call__(self, x):
     if self.use_scan:
-      x, _ = nn.scan(LogicalDotReluDot, length=self.num_layers, 
+      x, _ = nn.scan(LogicalDotReluDot, length=self.num_layers,
                     variable_axes={"params": 0},
                     split_rngs={"params": True},
                     metadata_params={nn.PARTITION_NAME: 'layer'}
@@ -429,11 +429,11 @@ logical_model = LogicalMLP(LAYERS, DEPTH, USE_SCAN)
 logical_abstract_variables = jax.eval_shape(
     functools.partial(init_fn, model=logical_model, optimizer=optimizer), k, x)
 logical_state_spec = nn.get_partition_spec(logical_abstract_variables)
-print('annotations are logical, not mesh-specific: ', 
+print('annotations are logical, not mesh-specific: ',
       logical_state_spec.params['LogicalDotReluDot_0']['Dense_0']['kernel'])
 
 logical_state_sharding = nn.logical_to_mesh_sharding(logical_state_spec, mesh, rules)
-print('sharding annotations are mesh-specific: ', 
+print('sharding annotations are mesh-specific: ',
       logical_state_sharding.params['LogicalDotReluDot_0']['Dense_0']['kernel'].spec)
 ```
 

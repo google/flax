@@ -204,7 +204,7 @@ class TestIntegration:
       # compute gradient
       grads, counts = jax.grad(loss_fn, has_aux=True)(params)
       # SGD update
-      params = jax.tree_map(lambda w, g: w - 0.1 * g, params, grads)
+      params = jax.tree_util.tree_map(lambda w, g: w - 0.1 * g, params, grads)
 
       return params, counts
 
