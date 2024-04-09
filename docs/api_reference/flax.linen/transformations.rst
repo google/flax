@@ -16,21 +16,3 @@ Transformations
 .. autofunction:: while_loop
 .. autofunction:: cond
 .. autofunction:: switch
-
-.. autosummary::
-  :toctree: _autosummary
-
-  vmap
-  scan
-  jit
-  remat
-  remat_scan
-  map_variables
-  jvp
-  vjp
-  grad
-  value_and_grad
-  custom_vjp
-  while_loop
-  cond
-  switch
