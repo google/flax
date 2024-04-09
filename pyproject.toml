@@ -41,7 +41,6 @@ all = [
 ]
 testing = [
     "clu",  # All examples.
-    "clu<=0.0.9; python_version<'3.10'",
     "einops",
     "gymnasium[atari, accept-rom-license]",
     "jaxlib",
@@ -144,8 +143,6 @@ filterwarnings = [
     "ignore:.*pkg_resources is deprecated as an API.*:DeprecationWarning",
     # DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('google')`.
     "ignore:.*Deprecated call to.*pkg_resources.declare_namespace.*:DeprecationWarning",
-    # DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
-    "ignore:.*jax.tree_map is deprecated.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
