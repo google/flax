@@ -30,7 +30,6 @@ from __future__ import annotations
 import typing as tp
 from types import MappingProxyType
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import lax
@@ -190,13 +189,7 @@ class LinearGeneral(Module):
     n_out_features = len(self.out_features)
 
     def kernel_init_wrap(rng, shape, dtype):
-      flat_shape = (
-        np.prod(shape[:n_batch_axis])
-        * np.prod(shape[n_batch_axis : n_in_features + n_batch_axis]),
-        np.prod(shape[-n_out_features:]),
-      )
-      flat_shape = jax.tree_util.tree_map(int, flat_shape)
-      kernel = self.kernel_init(rng, flat_shape, dtype)
+      kernel = self.kernel_init(rng, shape, dtype)
       if isinstance(kernel, variables.VariableMetadata):
         kernel.raw_value = jnp.reshape(kernel.raw_value, shape)
       else:
@@ -217,8 +210,7 @@ class LinearGeneral(Module):
     if self.use_bias:
 
       def bias_init_wrap(rng, shape, dtype):
-        flat_shape = (int(np.prod(shape)),)
-        bias = self.bias_init(rng, flat_shape, dtype)
+        bias = self.bias_init(rng, shape, dtype)
         if isinstance(bias, variables.VariableMetadata):
           bias.raw_value = jnp.reshape(bias.raw_value, shape)
         else:
