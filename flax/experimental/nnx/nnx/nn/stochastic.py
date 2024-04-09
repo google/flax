@@ -12,7 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Sequence
+# Copyright 2024 The Flax Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from __future__ import annotations
+
+import dataclasses
+from typing import Sequence
 
 import jax
 import jax.numpy as jnp
@@ -20,7 +36,6 @@ from jax import lax, random
 
 from flax.experimental.nnx.nnx import rnglib
 from flax.experimental.nnx.nnx.module import Module, first_from
-import dataclasses
 
 
 @dataclasses.dataclass
@@ -38,15 +53,16 @@ class Dropout(Module):
 
   rate: float
   broadcast_dims: Sequence[int] = ()
-  deterministic: Optional[bool] = None
+  deterministic: bool | None = None
   rng_collection: str = 'dropout'
+  rngs: rnglib.Rngs | None = None
 
   def __call__(
     self,
     inputs,
     *,
-    deterministic: Optional[bool] = None,
-    rngs: Optional[rnglib.Rngs] = None,
+    deterministic: bool | None = None,
+    rngs: rnglib.Rngs | None = None,
   ) -> jax.Array:
     """Applies a random dropout mask to the input.
 
@@ -59,6 +75,7 @@ class Dropout(Module):
     Returns:
       The masked inputs reweighted to preserve mean.
     """
+    rngs = rngs or self.rngs
     deterministic = first_from(
       deterministic,
       self.deterministic,
