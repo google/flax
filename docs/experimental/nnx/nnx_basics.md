@@ -231,7 +231,7 @@ def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):
   # 3. Call the Module
   y = model(x)
   # 4. Use split to propagate State updates
-  state, _ = model.split()
+  _, state = model.split()
   return y, state
 
 y, state = forward(static, state, x=jnp.ones((1, 2)))
