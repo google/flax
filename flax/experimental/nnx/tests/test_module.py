@@ -527,7 +527,7 @@ class TestModuleDataclass:
     @dataclasses.dataclass
     class Foo(nnx.Module):
       a: int
-      b: nnx.TreeNode[int]
+      b: nnx.Variable[int]
       c: nnx.Param[int]
       d: nnx.Variable[int]
       e: nnx.Variable[int]
@@ -535,7 +535,7 @@ class TestModuleDataclass:
 
     m = Foo(
       a=1,  # static
-      b=nnx.TreeNode(2),  # node
+      b=nnx.Variable(2),  # node
       c=nnx.Param(3),  # param
       d=nnx.Variable(4),  # var
       e=nnx.BatchStat(5),  # var
@@ -545,7 +545,7 @@ class TestModuleDataclass:
     graphdef, state = m.split()
 
     assert len(state) == 4
-    assert state.b == nnx.TreeNode(2)
+    assert state.b == nnx.Variable(2)
     assert state.c == nnx.Param(3)
     assert state.d == nnx.Variable(4)
     assert state.e == nnx.BatchStat(5)
