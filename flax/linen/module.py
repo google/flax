@@ -212,6 +212,13 @@ class _Sentinel:
     del memo
     return self  # Do not copy singleton sentinel.
 
+  def __reduce__(self):
+    return _get_unspecified_parent, ()
+
+
+def _get_unspecified_parent():
+  return _unspecified_parent
+
 
 _unspecified_parent = _Sentinel()
 

@@ -2546,6 +2546,17 @@ class ModuleTest(absltest.TestCase):
     self.assertIs(called[0], bar)
     self.assertIs(called[1], foo)
 
+  def test_cloudpickle_class(self):
+    import cloudpickle
+
+    class MyModule(nn.Module):
+      pass
+
+    a = MyModule()
+
+    UnpickledMyModule = cloudpickle.loads(cloudpickle.dumps(MyModule))
+    b = UnpickledMyModule()
+
   def test_cloudpickle_module(self):
     from cloudpickle import cloudpickle_fast
 
