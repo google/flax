@@ -41,6 +41,12 @@ from flax.typing import (
   DotGeneralT,
 )
 
+default_attention_kernel_init = initializers.lecun_normal(
+    in_axis=-3, out_axis=-1, batch_axis=(-2,)
+)
+default_attention_out_kernel_init = initializers.lecun_normal(
+    in_axis=(-3, -2), out_axis=-1
+)
 
 def dot_product_attention_weights(
     query: Array,
@@ -251,16 +257,20 @@ class MultiHeadDotProductAttention(Module):
     >>> import jax
 
     >>> layer = nn.MultiHeadDotProductAttention(num_heads=8, qkv_features=16)
-    >>> key1, key2, key3, key4, key5, key6 = jax.random.split(jax.random.key(0), 6)
+    >>> key1, key2, key3, key4, key5, key6 = jax.random.split(jax.random.key(0),
+    6)
     >>> shape = (4, 3, 2, 5)
-    >>> q, k, v = jax.random.uniform(key1, shape), jax.random.uniform(key2, shape), jax.random.uniform(key3, shape)
+    >>> q, k, v = jax.random.uniform(key1, shape), jax.random.uniform(key2,
+    shape), jax.random.uniform(key3, shape)
     >>> variables = layer.init(jax.random.key(0), q)
 
     >>> # different inputs for inputs_q, inputs_k and inputs_v
     >>> out = layer.apply(variables, q, k, v)
-    >>> # equivalent to layer.apply(variables, inputs_q=q, inputs_k=k, inputs_v=k)
+    >>> # equivalent to layer.apply(variables, inputs_q=q, inputs_k=k,
+    inputs_v=k)
     >>> out = layer.apply(variables, q, k)
-    >>> # equivalent to layer.apply(variables, inputs_q=q, inputs_k=q) and layer.apply(variables, inputs_q=q, inputs_k=q, inputs_v=q)
+    >>> # equivalent to layer.apply(variables, inputs_q=q, inputs_k=q) and
+    layer.apply(variables, inputs_q=q, inputs_k=q, inputs_v=q)
     >>> out = layer.apply(variables, q)
 
     >>> attention_kwargs = dict(
@@ -276,8 +286,10 @@ class MultiHeadDotProductAttention(Module):
     ...
     ...   @nn.compact
     ...   def __call__(self, x, dropout_rng=None):
-    ...     out1 = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x, dropout_rng=dropout_rng)
-    ...     out2 = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x, dropout_rng=dropout_rng)
+    ...     out1 = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x,
+    dropout_rng=dropout_rng)
+    ...     out2 = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x,
+    dropout_rng=dropout_rng)
     ...     return out1, out2
     >>> module = Module(attention_kwargs)
     >>> variables = module.init({'params': key1, 'dropout': key2}, q)
@@ -290,8 +302,10 @@ class MultiHeadDotProductAttention(Module):
     >>> # out1 and out2 are the same.
     >>> out1, out2 = module.apply(variables, q, dropout_rng=key5)
     >>> # out1 and out2 are the same as out3 and out4.
-    >>> # providing a `dropout_rng` arg will take precedence over the `rngs` arg in `.apply`
-    >>> out3, out4 = module.apply(variables, q, rngs={'dropout': key6}, dropout_rng=key5)
+    >>> # providing a `dropout_rng` arg will take precedence over the `rngs` arg
+    in `.apply`
+    >>> out3, out4 = module.apply(variables, q, rngs={'dropout': key6},
+    dropout_rng=key5)
 
   Attributes:
     num_heads: Number of attention heads. Features (i.e. inputs_q.shape[-1])
@@ -307,11 +321,11 @@ class MultiHeadDotProductAttention(Module):
     precision: Numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: Initializer for the kernel of the Dense layers.
-    out_kernel_init: Optional Initializer for the kernel of the output Dense layer,
-      if None, ``kernel_init`` will be used.
+    out_kernel_init: Initializer for the kernel of the output Dense layer, if
+      None, ``kernel_init`` will be used.
     bias_init: Initializer for the bias of the Dense layers.
-    out_bias_init: Optional Initializer for the bias of the output Dense layer,
-      if None, ``bias_init`` will be used.
+    out_bias_init: Initializer for the bias of the output Dense layer, if None,
+      ``bias_init`` will be used.
     use_bias: Whether pointwise QKVO dense transforms use bias.
     attention_fn: dot_product_attention or compatible function. Accepts query,
       key, value, and returns output of shape ``[bs, dim1, dim2, ..., dimN,,
@@ -329,10 +343,10 @@ class MultiHeadDotProductAttention(Module):
   dropout_rate: float = 0.0
   deterministic: Optional[bool] = None
   precision: PrecisionLike = None
-  kernel_init: Initializer = default_kernel_init
-  out_kernel_init: Initializer | None = None
+  kernel_init: Initializer = default_attention_kernel_init
+  out_kernel_init: Initializer = default_attention_out_kernel_init
   bias_init: Initializer = initializers.zeros_init()
-  out_bias_init: Initializer | None = None
+  out_bias_init: Initializer = initializers.zeros_init()
   use_bias: bool = True
   attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False
@@ -603,17 +617,17 @@ class MultiHeadDotProductAttention(Module):
       )
     # back to the original inputs dimensions
     out = DenseGeneral(
-      features=features,
-      axis=(-2, -1),
-      kernel_init=self.out_kernel_init or self.kernel_init,
-      bias_init=self.out_bias_init or self.bias_init,
-      use_bias=self.use_bias,
-      dtype=self.dtype,
-      param_dtype=self.param_dtype,
-      precision=self.precision,
-      dot_general=self.out_dot_general,
-      dot_general_cls=self.out_dot_general_cls,
-      name='out',  # type: ignore[call-arg]
+        features=features,
+        axis=(-2, -1),
+        kernel_init=self.out_kernel_init,
+        bias_init=self.out_bias_init,
+        use_bias=self.use_bias,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        precision=self.precision,
+        dot_general=self.out_dot_general,
+        dot_general_cls=self.out_dot_general_cls,
+        name='out',  # type: ignore[call-arg]
     )(x)
     return out
 
