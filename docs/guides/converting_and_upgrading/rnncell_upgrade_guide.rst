@@ -11,7 +11,7 @@ This guide will walk you through these changes, demonstrating how to update your
 Basic Usage
 -----------
 
-.. testsetup::
+.. testsetup:: New
 
   import flax.linen as nn
   import jax.numpy as jnp
@@ -21,7 +21,7 @@ Basic Usage
 Let's begin by defining some variables and a sample input that represents
 a batch of sequences:
 
-.. testcode::
+.. testcode:: New
 
   batch_size = 32
   seq_len = 10
@@ -34,8 +34,8 @@ First and foremost, it's important to note that all metadata, including the numb
 carry initializer, and so on, is now stored within the cell instance:
 
 .. codediff::
-  :title_left: Legacy
-  :title_right: New
+  :title: Legacy, New
+  :skip_test: Legacy
   :sync:
 
   cell = nn.LSTMCell()
@@ -49,8 +49,8 @@ the cell instance now contains all metadata, the ``initialize_carry`` method's
 signature only requires a PRNG key and a sample input:
 
 .. codediff::
-  :title_left: Legacy
-  :title_right: New
+  :title: Legacy, New
+  :skip_test: Legacy
   :sync:
 
   carry = nn.LSTMCell.initialize_carry(jax.random.key(0), (batch_size,), out_features)
@@ -62,7 +62,7 @@ signature only requires a PRNG key and a sample input:
 Here, ``x[:, 0].shape`` represents the input for the cell (without the time dimension).
 You can also just create the input shape directly when its more convenient:
 
-.. testcode::
+.. testcode:: New
 
   carry = cell.initialize_carry(jax.random.key(0), (batch_size, in_features))
 
@@ -80,8 +80,8 @@ to make the minimal amount of changes to the code to get
 it working, albeit not in the most idiomatic way:
 
 .. codediff::
-  :title_left: Legacy
-  :title_right: New
+  :title: Legacy, New
+  :skip_test: Legacy
   :sync:
 
   class SimpleLSTM(nn.Module):
@@ -129,8 +129,8 @@ here will be that we will add a ``features`` attribute to the module and use it 
 a ``nn.scan``-ed version of the cell in the ``setup`` method:
 
 .. codediff::
-  :title_left: Legacy
-  :title_right: New
+  :title: Legacy, New
+  :skip_test: Legacy
   :sync:
 
   class SimpleLSTM(nn.Module):

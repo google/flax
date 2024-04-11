@@ -10,7 +10,7 @@ of non-differentiable state that must be handled appropriately.
 
 Throughout the guide, you will be able to compare code examples with and without Flax ``BatchNorm``.
 
-.. testsetup::
+.. testsetup:: No BatchNorm, With BatchNorm
 
   import flax.linen as nn
   import jax.numpy as jnp
@@ -36,8 +36,7 @@ or ``tf.keras.Model`` by setting the
 `training <https://www.tensorflow.org/api_docs/python/tf/keras/Model#call>`__ flag).
 
 .. codediff::
-  :title_left: No BatchNorm
-  :title_right: With BatchNorm
+  :title: No BatchNorm, With BatchNorm
   :sync:
 
   class MLP(nn.Module):
@@ -75,8 +74,7 @@ API documentation.
 The ``batch_stats`` collection must be extracted from the ``variables`` for later use.
 
 .. codediff::
-  :title_left: No BatchNorm
-  :title_right: With BatchNorm
+  :title: No BatchNorm, With BatchNorm
   :sync:
 
   mlp = MLP()
@@ -101,8 +99,7 @@ Flax ``BatchNorm`` adds a total of 4 variables: ``mean`` and ``var`` that live i
 collection.
 
 .. codediff::
-  :title_left: No BatchNorm
-  :title_right: With BatchNorm
+  :title: No BatchNorm, With BatchNorm
   :sync:
 
   FrozenDict({
@@ -154,8 +151,7 @@ need to consider the following:
   The updated ``batch_stats`` must be extracted from here.
 
 .. codediff::
-  :title_left: No BatchNorm
-  :title_right: With BatchNorm
+  :title: No BatchNorm, With BatchNorm
   :sync:
 
   y = mlp.apply(
@@ -182,8 +178,7 @@ is handling the additional ``batch_stats`` state. To do this, you need to:
 * Pass the ``batch_stats`` values to the :meth:`train_state.TrainState.create <train_state.TrainState.create>` method.
 
 .. codediff::
-  :title_left: No BatchNorm
-  :title_right: With BatchNorm
+  :title: No BatchNorm, With BatchNorm
   :sync:
 
   from flax.training import train_state
@@ -215,12 +210,11 @@ In addition, update your ``train_step`` function to reflect these changes:
 * The ``batch_stats`` from the ``TrainState`` must be updated.
 
 .. codediff::
-  :title_left: No BatchNorm
-  :title_right: With BatchNorm
+  :title: No BatchNorm, With BatchNorm
   :sync:
 
   @jax.jit
-  def train_step(state: TrainState, batch):
+  def train_step(state: train_state.TrainState, batch):
     """Train for a single step."""
     def loss_fn(params):
       logits = state.apply_fn(
@@ -265,12 +259,11 @@ need to be propagated. Make sure you pass the ``batch_stats`` to ``flax.linen.ap
 and the ``train`` argument is set to ``False``:
 
 .. codediff::
-  :title_left: No BatchNorm
-  :title_right: With BatchNorm
+  :title: No BatchNorm, With BatchNorm
   :sync:
 
   @jax.jit
-  def eval_step(state: TrainState, batch):
+  def eval_step(state: train_state.TrainState, batch):
     """Train for a single step."""
     logits = state.apply_fn(
       {'params': params},

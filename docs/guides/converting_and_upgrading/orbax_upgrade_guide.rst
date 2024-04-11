@@ -17,7 +17,7 @@ You can click on "Open in Colab" above to run the code from this guide.
 
 Throughout the guide, you will be able to compare code examples with and without the Orbax code.
 
-.. testsetup::
+.. testsetup:: orbax.checkpoint
 
   import flax
   from flax.training import checkpoints, orbax_utils
@@ -41,7 +41,7 @@ Throughout the guide, you will be able to compare code examples with and without
 Setup
 *****
 
-.. testcode::
+.. testcode:: orbax.checkpoint
 
   # Create some dummy variables for this example.
   MAX_STEPS = 5
@@ -71,8 +71,8 @@ To upgrade your code:
 For example:
 
 .. codediff::
-  :title_left: flax.checkpoints
-  :title_right: orbax.checkpoint
+  :title: flax.checkpoints, orbax.checkpoint
+  :skip_test: flax.checkpoints
   :sync:
 
   CKPT_DIR = '/tmp/orbax_upgrade/'
@@ -119,8 +119,8 @@ To migrate to Orbax code, instead of using the ``overwrite`` argument in ``flax.
 For example:
 
 .. codediff::
-  :title_left: flax.checkpoints
-  :title_right: orbax.checkpoint
+  :title: flax.checkpoints, orbax.checkpoint
+  :skip_test: flax.checkpoints
   :sync:
 
   PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure'
@@ -149,8 +149,8 @@ If you need to restore your checkpoints without a target pytree, pass ``item=Non
 For example:
 
 .. codediff::
-  :title_left: flax.checkpoints
-  :title_right: orbax.checkpoint
+  :title: flax.checkpoints, orbax.checkpoint
+  :skip_test: flax.checkpoints
   :sync:
 
   NOTARGET_CKPT_DIR = '/tmp/orbax_upgrade/no_target'
@@ -188,8 +188,8 @@ The ``orbax.checkpoint.PyTreeCheckpointHandler`` class, as the name suggests, ca
 For example:
 
 .. codediff::
-  :title_left: flax.checkpoints
-  :title_right: orbax.checkpoint
+  :title: flax.checkpoints, orbax.checkpoint
+  :skip_test: flax.checkpoints
   :sync:
 
   ARR_CKPT_DIR = '/tmp/orbax_upgrade/singleton'

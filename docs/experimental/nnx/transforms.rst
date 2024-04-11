@@ -7,7 +7,7 @@ seamlessly switch between them or use them together. We will be focusing on the 
 
 First, let's set up imports and generate some dummy data:
 
-.. testcode::
+.. testcode:: NNX, JAX
 
   from flax.experimental import nnx
   import jax
@@ -38,8 +38,8 @@ whereas the function signature of JAX-transformed functions can only accept the 
 the transformed function.
 
 .. codediff::
-  :title_left: NNX transforms
-  :title_right: JAX transforms
+  :title: NNX transforms, JAX transforms
+  :groups: NNX, JAX
   :sync:
 
   @nnx.jit
@@ -83,8 +83,8 @@ NNX and JAX transformations can be mixed together, so long as the JAX-transforme
 pure and has valid argument types that are recognized by JAX.
 
 .. codediff::
-  :title_left: Using ``nnx.jit`` with ``jax.grad``
-  :title_right: Using ``jax.jit`` with ``nnx.grad``
+  :title: Using ``nnx.jit`` with ``jax.grad``, Using ``jax.jit`` with ``nnx.grad``
+  :groups: NNX, JAX
   :sync:
 
   @nnx.jit
