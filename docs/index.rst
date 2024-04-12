@@ -325,4 +325,4 @@ Notable examples in Flax include:
    contributing
    experimental
    api_reference/index
-   experimental/index
+   nnx_experimental/index

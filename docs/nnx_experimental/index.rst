@@ -1,14 +1,12 @@
+Flax NNX (Experimental)
+=======================
 
-NNX
-========
-
-
-NNX is a JAX-based neural network library designed for simplicity and power. Its modular
-approach follows standard Python conventions, making it both intuitive and compatible with
-the broader JAX ecosystem.
+Flax NNX is an experimental JAX-based neural network library designed for simplicity and
+power. Its modular approach follows standard Python conventions, making it both intuitive
+and compatible with the broader JAX ecosystem.
 
 .. note::
-   NNX is currently in an experimental state and is subject to change. Linen is still the
+   Flax NNX is in an experimental state and is subject to change. Flax Linen is still the
    recommended option for large-scale projects. Feedback and contributions are welcome!
 
 Features
