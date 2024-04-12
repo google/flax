@@ -33,7 +33,7 @@ For example, consider the following variable dictionary::
 
 In this case, the ``"BatchNorm1"`` key lives in both the ``"params"`` and
 ```"batch_stats""`` collections. This reflects the fact that the submodule
-named ``""BatchNorm1""`` has both trainable parameters (the ``"params"`` collection),
+named ``"BatchNorm1"`` has both trainable parameters (the ``"params"`` collection),
 as well as other non-trainable variables (the ``"batch_stats"`` collection)
 
 TODO: Make "variable dict" design note, and link to it from here.
