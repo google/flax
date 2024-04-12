@@ -349,7 +349,7 @@ def jit_apply(
     outer_ref_outer_idx, outer_idx_inner_idx
   )
   (input_graph_nodes, output_graph_nodes), _ = graph_utils.graph_unflatten(
-    output_graphdef, output_state, ref_cache=inner_idx_outer_ref
+    output_graphdef, output_state, idxmap=inner_idx_outer_ref
   )
   out = graph_utils.insert_graph_nodes(out, output_graph_nodes)
 
@@ -717,7 +717,7 @@ def grad_apply(options: GradOptions, f, args: tuple[tp.Any, ...]):
     _args = list(args)
     for i, graph_node in diff_graph_nodes.items():
       diff_state: State = _args[i]
-      graph_utils.graph_update_dynamic(graph_node, diff_state)
+      graph_utils.update(graph_node, diff_state)
       _args[i] = graph_node
 
     out = f(*_args)
@@ -750,7 +750,7 @@ def grad_apply(options: GradOptions, f, args: tuple[tp.Any, ...]):
     else:
       out, updates = out
 
-  graph_utils.graph_update_dynamic((input_nodes, out_nodes), updates)
+  graph_utils.update((input_nodes, out_nodes), updates)
   return out
 
 
@@ -1080,7 +1080,7 @@ def scan_init(
       for state, index in zip(axes_states, options.variable_axes.values())
     ]
 
-  module = graphdef.merge(*axes_states, carry_state)
+  module = graph_utils.merge(graphdef, *axes_states, carry_state)
 
   return module
 
@@ -1095,9 +1095,10 @@ def scan_apply(
 ) -> tuple[C, B] | C:
   rngs = kwargs.pop('rngs', None)
 
+  ctx = graph_utils.UpdateContext()
   # split module state
   filters = (*options.variable_axes.keys(), ...)
-  graphdef, *scan_states, carry_state = module.split(*filters)
+  graphdef, *scan_states, carry_state = ctx.split(module, *filters)
 
   # transpose axes state
   scan_states = tuple(
@@ -1218,7 +1219,7 @@ def scan_apply(
       ]
 
     # merge module state
-    module = graphdef.merge(*scan_states, carry_state)
+    module = ctx.merge(graphdef, *scan_states, carry_state)
 
     output = f(module, carry_arg, *args, **kwargs)
 
@@ -1236,7 +1237,9 @@ def scan_apply(
       scan_out = None
 
     # split module state
-    moduledef_out, *scan_states_out, carry_state_out = module.split(*filters)
+    moduledef_out, *scan_states_out, carry_state_out = ctx.split(
+      module, *filters
+    )
     carry_state_new = carry_state_out - carry_state
 
     # remove new carry state
@@ -1285,7 +1288,7 @@ def scan_apply(
   # slice new carry state
   carry_state_new = jax.tree_util.tree_map(lambda x: x[0], carry_state_new)
 
-  module.update(((*scan_states, carry_state, carry_state_new), moduledef_out))
+  ctx.update(moduledef_out, *scan_states, carry_state, carry_state_new)
 
   if options.scan_output:
     return carry_out, scan_out
@@ -1334,7 +1337,7 @@ def scan(
         return module
 
       lifted_module = scan_init(options, module_constructor, args, kwargs)
-      module.update(lifted_module)
+      graph_utils.update_from(module, lifted_module)
 
     wrapper = scan_init_wrapper
 
@@ -1465,7 +1468,8 @@ def remat_apply(
 ):
   _check_args(args)
 
-  graphdef, state = module.split()
+  ctx = graph_utils.UpdateContext()
+  graphdef, state = ctx.split(module)
   keys = rngs.fork() if rngs is not None else None
 
   def _remat_fn(
@@ -1477,11 +1481,11 @@ def remat_apply(
     if keys is not None:
       kwargs['rngs'] = rnglib.Rngs(keys)
 
-    module = graphdef.merge(state)
+    module = ctx.merge(graphdef, state)
     out = f(module, *args, **kwargs)
 
-    def_and_state = module.split()
-    return def_and_state, out
+    new_graphdef, new_state = ctx.split(module)
+    return (new_graphdef, new_state), out
 
   def_and_state: tuple[GraphDef[Module], State]
   def_and_state, out = jax.checkpoint(
@@ -1490,8 +1494,9 @@ def remat_apply(
     static_argnums=options.static_argnums,
     policy=options.policy,
   )(state, keys, *args)
+  new_graphdef, new_state = def_and_state
 
-  module.update(def_and_state)
+  ctx.update(new_graphdef, new_state)
 
   return out
 
@@ -1716,7 +1721,7 @@ def vmap_init(
       for state, index in zip(axes_states, options.variable_axes.values())
     ]
 
-  module = graphdef.merge(*axes_states, carry_state)
+  module = graph_utils.merge(graphdef, *axes_states, carry_state)
   return module
 
 
@@ -1729,9 +1734,10 @@ def vmap_apply(
 ) -> tp.Any:
   rngs = kwargs.pop('rngs', None)
 
+  ctx = graph_utils.UpdateContext()
   # split module state
   filters = (*options.variable_axes.keys(), ...)
-  graphdef, *vectorized_states, broadcast_state = module.split(*filters)
+  graphdef, *vectorized_states, broadcast_state = ctx.split(module, *filters)
 
   # infer length
   axis_sizes: tp.Set[int] = set()
@@ -1824,13 +1830,13 @@ def vmap_apply(
       ]
 
     # merge module state
-    module = graphdef.merge(*vectorized_states, broadcast_state)
+    module = ctx.merge(graphdef, *vectorized_states, broadcast_state)
 
     output = f(module, *args, **kwargs)
 
     # split module state
-    moduledef_out, *vectorized_states_out, broadcast_state_out = module.split(
-      *filters
+    moduledef_out, *vectorized_states_out, broadcast_state_out = ctx.split(
+      module, *filters
     )
 
     # add metadata axis name to Variable.sharding
@@ -1849,7 +1855,7 @@ def vmap_apply(
   )
   assert moduledef_out is not None
 
-  module.update(((*vectorized_states, broadcast_state), moduledef_out))
+  ctx.update(moduledef_out, *vectorized_states, broadcast_state)
 
   return output
 
@@ -1893,7 +1899,7 @@ def vmap(
         return module
 
       lifted_module = vmap_init(options, module_constructor, args, kwargs)
-      module.update(lifted_module)
+      graph_utils.update_from(module, lifted_module)
 
     wrapper = vmap_init_wrapper
 

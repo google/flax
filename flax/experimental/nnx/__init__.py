@@ -33,8 +33,11 @@ from .nnx.helpers import TrainState as TrainState
 from .nnx.module import M as M
 from .nnx.module import Module as Module
 from .nnx.graph_utils import merge as merge
+from .nnx.graph_utils import UpdateContext as UpdateContext
 from .nnx.graph_utils import split as split
 from .nnx.graph_utils import update as update
+from .nnx.graph_utils import clone as clone
+from .nnx.graph_utils import pop as pop
 from .nnx.nn import initializers as initializers
 from .nnx.nn.activations import celu as celu
 from .nnx.nn.activations import elu as elu

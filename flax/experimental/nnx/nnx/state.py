@@ -77,7 +77,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       super().__setattr__('_mapping', dict(mapping))
 
   @property
-  def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
+  def raw_mapping(self) -> dict[Key, dict[Key, tp.Any] | tp.Any]:
     return self._mapping
 
   def __getitem__(self, key: Key) -> State | StateLeaf:
