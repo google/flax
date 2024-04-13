@@ -25,6 +25,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 import dataclasses
 import functools
@@ -38,6 +39,7 @@ import jax.tree_util as jtu
 
 from flax.experimental.nnx.nnx import reprlib, tracers
 from flax.experimental import nnx
+from flax.typing import Initializer
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -73,6 +75,9 @@ jtu.register_pytree_node(
 
 EMPTY = Empty()
 
+@tp.runtime_checkable
+class _HashInitializer(tp.Protocol):
+  initializer: Initializer
 
 @dataclasses.dataclass
 class VariableMetadata(tp.Generic[A]):
@@ -155,31 +160,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
     else:
       remove_axis_hooks = ()
 
-    if isinstance(value, VariableMetadata):
-      value_metadata = dict(value.metadata)
-      if set_value_hooks and value.set_value_hooks:
-        set_value_hooks = set_value_hooks + value.set_value_hooks
-      elif value.set_value_hooks:
-        set_value_hooks = value.set_value_hooks
-      if get_value_hooks and value.get_value_hooks:
-        get_value_hooks = get_value_hooks + value.get_value_hooks
-      elif value.get_value_hooks:
-        get_value_hooks = value.get_value_hooks
-      if create_value_hooks and value.create_value_hooks:
-        create_value_hooks = create_value_hooks + value.create_value_hooks
-      elif value.create_value_hooks:
-        create_value_hooks = value.create_value_hooks
-      if add_axis_hooks and value.add_axis_hooks:
-        add_axis_hooks = add_axis_hooks + value.add_axis_hooks
-      elif value.add_axis_hooks:
-        add_axis_hooks = value.add_axis_hooks
-      if remove_axis_hooks and value.remove_axis_hooks:
-        remove_axis_hooks = remove_axis_hooks + value.remove_axis_hooks
-      elif value.remove_axis_hooks:
-        remove_axis_hooks = value.remove_axis_hooks
-
-      metadata.update(value_metadata)
-      value = tp.cast(A, value.raw_value)
 
     if hasattr(self, 'on_get_value'):
       on_get_value = getattr(type(self), 'on_get_value')
@@ -206,7 +186,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
       if on_remove_axis not in remove_axis_hooks:
         remove_axis_hooks = (on_remove_axis, *remove_axis_hooks)
 
-    self.raw_value = value
     self.get_value_hooks = get_value_hooks
     self.set_value_hooks = set_value_hooks
     self.create_value_hooks = create_value_hooks
@@ -215,7 +194,29 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars(self).update(metadata)
 
     # run create_value hooks
-    self.raw_value = self.create_value(self.raw_value)
+    if isinstance(value, jax.ShapeDtypeStruct):
+      self.raw_value = value
+    else:
+      self.raw_value = self.create_value(value)
+
+  def _setup_value(self, value: A | VariableMetadata[A]) -> A:
+    if isinstance(value, VariableMetadata):
+      value_metadata = dict(value.metadata)
+      if value.set_value_hooks:
+        self.set_value_hooks += value.set_value_hooks
+      elif value.get_value_hooks:
+        self.get_value_hooks += value.get_value_hooks
+      elif value.create_value_hooks:
+        self.create_value_hooks += value.create_value_hooks
+      elif value.add_axis_hooks:
+        self.add_axis_hooks += value.add_axis_hooks
+      elif value.remove_axis_hooks:
+        self.remove_axis_hooks += value.remove_axis_hooks
+
+      vars(self).update(value_metadata)
+      value = tp.cast(A, value.raw_value)
+
+    return value
 
   if tp.TYPE_CHECKING:
 
@@ -232,6 +233,13 @@ class Variable(tp.Generic[A], reprlib.Representable):
       )
 
     object.__setattr__(self, name, value)
+
+  def rng_init(self, rngs: 'nnx.Rngs'):
+    value = self.raw_value
+    if isinstance(value, jax.ShapeDtypeStruct) and isinstance(self, _HashInitializer):
+      value = self.initializer(rngs(), value.shape, value.dtype)
+      self.raw_value = self.create_value(value)
+
 
   def copy_from(self, other: 'Variable[A]') -> None:
     if not self.is_equivalent(other):
@@ -270,7 +278,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
         value = hook(self, value)
     self.raw_value = value
 
-  def create_value(self, value: A):
+  def create_value(self, value: A | VariableMetadata[A]):
+    value = self._setup_value(value)
     for hook in self.create_value_hooks:
       value = hook(self, value)
     return value

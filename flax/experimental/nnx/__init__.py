@@ -40,6 +40,8 @@ from .nnx.graph_utils import update as update
 from .nnx.graph_utils import full_update as full_update
 from .nnx.graph_utils import clone as clone
 from .nnx.graph_utils import pop as pop
+from .nnx.rnglib import init as init
+from .nnx.rnglib import empty as empty
 from .nnx.nn import initializers as initializers
 from .nnx.nn.activations import celu as celu
 from .nnx.nn.activations import elu as elu

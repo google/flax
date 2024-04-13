@@ -72,10 +72,6 @@ def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
 
 class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
   @classmethod
-  def init(cls: type[M], *args, **kwargs) -> tuple[GraphDef[M], State]:
-    return cls(*args, **kwargs).split()
-
-  @classmethod
   @property
   def create_abstract(cls: type[M]) -> type[M]:
     def lift_rngs(kwargs: dict[str, tp.Any]):

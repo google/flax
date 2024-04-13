@@ -1117,16 +1117,31 @@ def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[PathParts, tp.Any]]:
 def _iter_nodes(
   node: tp.Any, visited: set[int], path_parts: PathParts
 ) -> tp.Iterator[tuple[PathParts, tp.Any]]:
-  if not is_node(node):
+  for path_parts, value in _iter_all(node, visited, path_parts):
+    if is_node(value):
+      yield path_parts, value
+
+
+def _iter_node_or_variable(
+  x: tp.Any, visited: set[int], path_parts: PathParts
+) -> tp.Iterator[tuple[PathParts, tp.Any]]:
+  for path_parts, value in _iter_all(x, visited, path_parts):
+    if is_node(value) or isinstance(value, Variable):
+      yield path_parts, value
+
+
+def _iter_all(
+  x: tp.Any, visited: set[int], path_parts: PathParts
+) -> tp.Iterator[tuple[PathParts, tp.Any]]:
+  if id(x) in visited:
     return
-  if id(node) in visited:
-    return
-  visited.add(id(node))
-  yield path_parts, node
-  node_impl = get_node_impl(node)
-  node_dict = node_impl.node_dict(node)
-  for key, value in node_dict.items():
-    yield from _iter_nodes(value, visited, (*path_parts, key))
+  visited.add(id(x))
+  yield path_parts, x
+  if is_node(x):
+    node_impl = get_node_impl(x)
+    node_dict = node_impl.node_dict(x)
+    for key, value in node_dict.items():
+      yield from _iter_all(value, visited, (*path_parts, key))
 
 
 def compose_mapping(

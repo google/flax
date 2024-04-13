@@ -411,3 +411,57 @@ class TestGraphUtils:
     )
     assert m2 is m
     assert m2.ref is m2
+
+  def test_init_rngs(self):
+    class Linear(nnx.Module):
+      def __init__(self, din: int, dout: int):
+        self.kernel = nnx.Param(
+          nnx.empty((din, dout)), initializer=nnx.initializers.lecun_normal()
+        )
+        self.bias = nnx.Param(
+          nnx.empty((dout,)), initializer=nnx.initializers.zeros
+        )
+
+      def __call__(self, x):
+        return x @ self.kernel.value + self.bias.value
+
+    m = Linear(2, 2)
+    nnx.init(m, nnx.Rngs(0))
+    assert isinstance(m.kernel.value, jax.Array)
+    assert isinstance(m.bias.value, jax.Array)
+
+  def test_init_seed(self):
+    class Linear(nnx.Module):
+      def __init__(self, din: int, dout: int):
+        self.kernel = nnx.Param(
+          nnx.empty((din, dout)), initializer=nnx.initializers.lecun_normal()
+        )
+        self.bias = nnx.Param(
+          nnx.empty((dout,)), initializer=nnx.initializers.zeros
+        )
+
+      def __call__(self, x):
+        return x @ self.kernel.value + self.bias.value
+
+    m = Linear(2, 2)
+    nnx.init(m, 0)
+    assert isinstance(m.kernel.value, jax.Array)
+    assert isinstance(m.bias.value, jax.Array)
+
+  def test_init_key(self):
+    class Linear(nnx.Module):
+      def __init__(self, din: int, dout: int):
+        self.kernel = nnx.Param(
+          nnx.empty((din, dout)), initializer=nnx.initializers.lecun_normal()
+        )
+        self.bias = nnx.Param(
+          nnx.empty((dout,)), initializer=nnx.initializers.zeros
+        )
+
+      def __call__(self, x):
+        return x @ self.kernel.value + self.bias.value
+
+    m = Linear(2, 2)
+    nnx.init(m, jax.random.key(0))
+    assert isinstance(m.kernel.value, jax.Array)
+    assert isinstance(m.bias.value, jax.Array)
