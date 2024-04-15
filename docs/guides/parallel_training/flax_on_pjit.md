@@ -34,19 +34,19 @@ Import some necessary dependencies.
 
 **Note:** This guide uses the `--xla_force_host_platform_device_count=8` flag to emulate multiple devices in a CPU environment in a Google Colab/Jupyter Notebook. You don't need this if you are already using a multi-device TPU environment.
 
-```{code-cell}
+```{code-cell} ipython3
 :tags: [skip-execution]
 
 # Once Flax v0.6.10 is released, there is no need to do this.
 # ! pip3 install -qq "git+https://github.com/google/flax.git@main#egg=flax"
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 import os
 os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=8'
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 import functools
 from typing import Optional, Callable
 
@@ -62,7 +62,7 @@ from flax.training import train_state, checkpoints
 import optax # Optax for common losses and optimizers.
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 print(f'We have 8 fake JAX devices now: {jax.devices()}')
 ```
 
@@ -76,13 +76,13 @@ The code below shows how to import and set up the JAX-level device API, followin
 
 3. Make a simple utility function `mesh_sharding` for generating a sharding object from the mesh and any layout.
 
-```{code-cell}
+```{code-cell} ipython3
 from jax.sharding import Mesh, PartitionSpec, NamedSharding
 from jax.lax import with_sharding_constraint
 from jax.experimental import mesh_utils
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 # Create a mesh and annotate each axis with a name.
 device_mesh = mesh_utils.create_device_mesh((2, 4))
 print(device_mesh)
@@ -106,7 +106,7 @@ To shard the parameters efficiently, apply the following APIs to annotate the pa
 
   * This step is optional, but can sometimes help auto-SPMD to partition efficiently. In the example below, the call is not required, because XLA will figure out the same sharding layout for `y` and `z` regardless.
 
-```{code-cell}
+```{code-cell} ipython3
 class DotReluDot(nn.Module):
   depth: int
   dense_init: Callable = nn.initializers.xavier_normal()
@@ -164,7 +164,7 @@ The code below shows how to apply both methods, and default with the for-loop, s
 
 The `flax.linen.scan` code is just to show that this API works with [Flax lifted transforms](https://flax.readthedocs.io/en/latest/developer_notes/lift.html#supported-transformations).
 
-```{code-cell}
+```{code-cell} ipython3
 class MLP(nn.Module):
   num_layers: int
   depth: int
@@ -185,7 +185,7 @@ class MLP(nn.Module):
 
 Now, create a `model` instance, and a sample input `x`.
 
-```{code-cell}
+```{code-cell} ipython3
 # MLP hyperparameters.
 BATCH, LAYERS, DEPTH, USE_SCAN = 8, 4, 1024, False
 # Create fake inputs.
@@ -207,7 +207,7 @@ Next, you need to tell `jax.jit` how to shard our data across devices.
 
 For data parallelism, you can shard the batched _input_ `x` across the `data` axis by denoting the batch axis as `'data'`. Then, use [`jax.device_put`](https://jax.readthedocs.io/en/latest/_autosummary/jax.device_put.html) to place it onto the correct `device`s.
 
-```{code-cell}
+```{code-cell} ipython3
 x_sharding = mesh_sharding(PartitionSpec('data', None)) # dimensions: (batch, length)
 x = jax.device_put(x, x_sharding)
 jax.debug.visualize_array_sharding(x)
@@ -224,7 +224,7 @@ To achieve this, luckily, you don't have to hardcode the output's sharding by ha
 1. Use [`flax.linen.get_sharding`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.get_sharding.html) to automatically generate the `jax.sharding.NamedSharding`.
    * This step utilizes the [`flax.linen.with_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.with_partitioning.html) annotations in the earlier definition to generate the correct sharding for the parameters.
 
-```{code-cell}
+```{code-cell} ipython3
 def init_fn(k, x, model, optimizer):
   variables = model.init(k, x) # Initialize the model.
   state = train_state.TrainState.create( # Create a `TrainState`.
@@ -234,7 +234,7 @@ def init_fn(k, x, model, optimizer):
   return state
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 # Create an abstract closure to wrap the function before feeding it in
 # because `jax.eval_shape` only takes pytrees as arguments.
 abstract_variables = jax.eval_shape(
@@ -252,9 +252,9 @@ Now you can apply [`jax.jit`](https://jax.readthedocs.io/en/latest/jax-101/02-ji
 
 Run it to get the `initialized_state`, in which parameters are sharded exactly as instructed:
 
-```{code-cell}
+```{code-cell} ipython3
 jit_init_fn = jax.jit(init_fn, static_argnums=(2, 3),
-                      in_shardings=(mesh_sharding(None), x_sharding),  # PRNG key and x
+                      in_shardings=(mesh_sharding(()), x_sharding),  # PRNG key and x
                       out_shardings=state_sharding)
 
 initialized_state = jit_init_fn(k, x, model, optimizer)
@@ -269,29 +269,37 @@ jax.debug.visualize_array_sharding(initialized_state.params['DotReluDot_0']['W2'
 
 Note that in the output of `initialized_state`, the `params` `W1` and `W2` are of type [`flax.linen.Partitioned`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.Partitioned.html). This is a wrapper around the actual `jax.Array` that allows Flax to record the axis names associated with it.
 
-You can access the raw `jax.Array` by adding `.value` when outside `jit`, or by `.unbox()` when inside.
+You can access the raw `jax.Array`s by calling `flax.linen.meta.unbox()` upon the dictionary, or call `.value` upon individual variable. You can also use `flax.linen.meta.replace_boxed()` to change the underlying `jax.Array` without modifying the sharding annotations.
 
-```{code-cell}
+```{code-cell} ipython3
 print(type(initialized_state.params['DotReluDot_0']['Dense_0']['kernel']))
 print(type(initialized_state.params['DotReluDot_0']['Dense_0']['kernel'].value))
 print(initialized_state.params['DotReluDot_0']['Dense_0']['kernel'].names)
 print(initialized_state.params['DotReluDot_0']['Dense_0']['kernel'].value.shape)
 ```
 
+```{code-cell} ipython3
+# Say for some unknown reason you want to make the whole param tree all-zero
+unboxed_params = nn.meta.unbox(initialized_state.params)
+all_zero = jax.tree.map(jnp.zeros_like, unboxed_params)
+all_zero_params = nn.meta.replace_boxed(initialized_state.params, all_zero)
+assert jnp.sum(nn.meta.unbox(all_zero_params['DotReluDot_0']['Dense_0']['kernel'])) == 0
+```
+
 You can also check the underlying [`jax.sharding`](https://jax.readthedocs.io/en/latest/jax.sharding.html) of each parameter, which is now more internal than `NamedSharding`. Note that numbers like `initialized_state.step` are replicated across all devices.
 
-```{code-cell}
+```{code-cell} ipython3
 initialized_state.params['DotReluDot_0']['Dense_0']['kernel'].value.sharding
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 print(initialized_state.step)
 initialized_state.step.sharding
 ```
 
 You can use [`jax.tree_util.tree_map`](https://jax.readthedocs.io/en/latest/_autosummary/jax.tree_util.tree_map.html) to perform mass computation on a dict of boxed params, in the same way as on a dict of JAX arrays.
 
-```{code-cell}
+```{code-cell} ipython3
 diff = jax.tree_util.tree_map(
     lambda a, b: a - b,
     initialized_state.params['DotReluDot_0'], initialized_state.params['DotReluDot_0'])
@@ -305,7 +313,7 @@ print(diff_array.shape)
 
 Create a `jit`ted training step as follows:
 
-```{code-cell}
+```{code-cell} ipython3
 @functools.partial(jax.jit, in_shardings=(state_sharding, x_sharding),
                    out_shardings=state_sharding)
 def train_step(state, x):
@@ -322,7 +330,7 @@ with mesh:
   new_state = train_step(initialized_state, x)
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 print(f'Sharding of Weight 1:')
 jax.debug.visualize_array_sharding(initialized_state.params['DotReluDot_0']['Dense_0']['kernel'].value)
 print(f'Sharding of Weight 2:')
@@ -331,7 +339,7 @@ jax.debug.visualize_array_sharding(initialized_state.params['DotReluDot_0']['W2'
 
 Then, create a compiled inference step. Note that the output is also sharded along `(data, None)`.
 
-```{code-cell}
+```{code-cell} ipython3
 @functools.partial(jax.jit, in_shardings=(state_sharding, x_sharding),
                    out_shardings=x_sharding)
 def apply_fn(state, x):
@@ -349,7 +357,7 @@ jax.debug.visualize_array_sharding(y)
 
 If you are running on a TPU pod or a pod slice, you can use a custom `block_all` utility function, as defined below, to measure the performance:
 
-```{code-cell}
+```{code-cell} ipython3
 %%timeit
 
 def block_all(xs):
@@ -370,7 +378,7 @@ The `LogicalDotReluDot` and `LogicalMLP` Module definition below are similar to 
 
 2. [`flax.linen.with_logical_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.with_logical_partitioning.html) replaces `flax.linen.with_partitioning`; and [`flax.linen.with_logical_constraint`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.with_logical_constraint.html#flax-linen-with-logical-constraint) replaces `jax.lax.with_sharding_constraint`, to recognize the logical axis names.
 
-```{code-cell}
+```{code-cell} ipython3
 class LogicalDotReluDot(nn.Module):
   depth: int
   dense_init: Callable = nn.initializers.xavier_normal()
@@ -419,7 +427,7 @@ To allow the device mesh to take your model correctly, you need to decide which 
 
 This allows you to change the rules and try out new partition layouts without modifying the model definition.
 
-```{code-cell}
+```{code-cell} ipython3
 # Unspecified rule means unsharded by default, so no need to specify `('embed', None)` and `('layer', None)`.
 rules = (('batch', 'data'),
          ('hidden', 'model'))
@@ -439,19 +447,19 @@ print('sharding annotations are mesh-specific: ',
 
 You can verify that the `logical_state_spec` here has the same content as `state_spec` in the previous ("non-logical") example. This allows you to `jax.jit` your Module's [`flax.linen.Module.init`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.init) and [`flax.linen.Module.apply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.apply) the same way in the above above.
 
-```{code-cell}
+```{code-cell} ipython3
 state_sharding.params['DotReluDot_0'] == logical_state_sharding.params['LogicalDotReluDot_0']
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 logical_jit_init_fn = jax.jit(init_fn, static_argnums=(2, 3),
-                      in_shardings=(mesh_sharding(None), x_sharding),  # PRNG key and x
+                      in_shardings=(mesh_sharding(()), x_sharding),  # PRNG key and x
                       out_shardings=logical_state_sharding)
 
 logical_initialized_state = logical_jit_init_fn(k, x, logical_model, optimizer)
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 print(f'Sharding of Weight 1:')
 jax.debug.visualize_array_sharding(logical_initialized_state.params['LogicalDotReluDot_0']['Dense_0']['kernel'].value)
 print(f'Sharding of Weight 2:')
@@ -473,5 +481,7 @@ Choosing when to use a device or logical axis depends on how much you want to co
 ## Save the data
 
 To save the cross-device array, you can use [`flax.training.checkpoints`](https://flax.readthedocs.io/en/latest/_modules/flax/training/checkpoints.html), as shown in the [Save and load checkpoints guide - Multi-host/multi-process checkpointing](https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#multi-host-multi-process-checkpointing). This is especially required if you are running on a multi-host environment (for example, a TPU pod).
+
+In practice, you might want to save the raw `jax.Array` pytree as checkpoint, instead of the wrapped `Partitioned` values, to reduce complexity. You can restore it as-is and put it back into an annotated pytree with `flax.linen.meta.replace_boxed()`.
 
 Keep in mind that to restore the arrays to the desired partition, you need to provide a sample `target` pytree that has the same structure and has the desired [`jax.sharding.Sharding`](https://jax.readthedocs.io/en/latest/jax.sharding.html#jax.sharding.Sharding) in place for each JAX array. The sharding you use to restore the array doesn't necessarily need to be the same as the ones you used to store the array.
