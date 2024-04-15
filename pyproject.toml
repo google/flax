@@ -146,7 +146,7 @@ filterwarnings = [
     "ignore:.*Deprecated call to.*pkg_resources.declare_namespace.*:DeprecationWarning",
     # DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
     "ignore:.*jax.tree_map is deprecated.*:DeprecationWarning",
-    ]
+]
 
 [tool.coverage.report]
 exclude_lines = [

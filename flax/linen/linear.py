@@ -24,6 +24,7 @@ from typing import (
   Union,
 )
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import eval_shape, lax
@@ -141,7 +142,13 @@ class DenseGeneral(Module):
     n_axis, n_features = len(axis), len(features)
 
     def kernel_init_wrap(rng, shape, dtype=jnp.float32):
-      kernel = self.kernel_init(rng, shape, dtype)
+      flat_shape = (
+        np.prod(shape[:n_batch_dims])
+        * np.prod(shape[n_batch_dims : n_axis + n_batch_dims]),
+        np.prod(shape[-n_features:]),
+      )
+      flat_shape = jax.tree_util.tree_map(int, flat_shape)
+      kernel = self.kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, meta.AxisMetadata):
         return meta.replace_boxed(kernel, jnp.reshape(kernel.unbox(), shape))
       return jnp.reshape(kernel, shape)
@@ -164,7 +171,11 @@ class DenseGeneral(Module):
     if self.use_bias:
 
       def bias_init_wrap(rng, shape, dtype=jnp.float32):
-        bias = self.bias_init(rng, shape, dtype)
+        flat_shape = (
+          np.prod(shape[:n_batch_dims]) * np.prod(shape[-n_features:]),
+        )
+        flat_shape = jax.tree_util.tree_map(int, flat_shape)
+        bias = self.bias_init(rng, flat_shape, dtype)
         if isinstance(bias, meta.AxisMetadata):
           return meta.replace_boxed(bias, jnp.reshape(bias.unbox(), shape))
         return jnp.reshape(bias, shape)
