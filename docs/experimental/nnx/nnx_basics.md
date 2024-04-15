@@ -11,10 +11,14 @@ jupytext:
 # NNX Basics
 
 NNX is a **N**eural **N**etworks JA**X** library that embraces Python's object-oriented programming 
-model to provide an intuitive and highly simplified user experience. It aims to empower users
-by making Modules very easy to integrate with any JAX API, it achieves this through a very small set
-of primitives known as the [Functional API](#the-functional-api). NNX is specifically designed to support 
-all the patterns that allowed Linen to scale to large code bases building upon a much simpler foundation.
+model to provide an intuitive and highly simplified user experience. It uses PyGraphs (instead of PyTrees)
+to represent stateful objects, which allows it to express reference sharing and mutability in Python itself. 
+This makes NNX code look like regular Python code that users from frameworkslike Pytorch and Keras will 
+be familiar with.
+
+NNX is also designed to support 
+all the patterns that allowed Linen to scale to large code bases while building upon a much simpler 
+foundation.
 
 ```{code-cell} ipython3
 from flax.experimental import nnx
