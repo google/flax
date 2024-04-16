@@ -34,10 +34,13 @@ import typing as tp
 import jax
 import jax.numpy as jnp
 
+from flax.experimental.nnx.nnx import graph_utils
 from flax.experimental.nnx.nnx.variables import Variable
 from flax.experimental.nnx.nnx import filterlib
 from flax.experimental.nnx.nnx.graph_utils import GraphNode
+from flax.typing import Dtype, Shape
 
+A = tp.TypeVar('A')
 Counts = list[int]
 AxesValue = tp.Union[int, None]
 Pattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
@@ -276,3 +279,46 @@ jax.tree_util.register_pytree_with_keys(
   _split_rng_unflatten,
   flatten_func=functools.partial(_split_rng_flatten, with_keys=False),
 )
+
+@tp.runtime_checkable
+class _HasRngInit(tp.Protocol):
+  def rng_init(self, rngs: Rngs):
+    ...
+
+
+@tp.overload
+def init(node: A, rngs: Rngs, /) -> A:
+  ...
+
+
+@tp.overload
+def init(
+  node: A,
+  default: RngValue | RngDict | None = None,
+  /,
+  **rngs: RngValue,
+) -> A:
+  ...
+
+
+def init(node: A, *args, **kwargs) -> A:
+  if len(args) > 0 and isinstance(args[0], Rngs):
+    if len(args) > 1:
+      raise ValueError(
+        'Too many positional arguments, expected at most 1 Rngs.'
+      )
+    if len(kwargs) > 0:
+      raise ValueError(
+        'Cannot use keyword arguments with Rngs positional argument.'
+      )
+    rngs = args[0]
+  else:
+    rngs = Rngs(*args, **kwargs)
+  for _, value in graph_utils._iter_node_or_variable(node, set(), ()):
+    if isinstance(value, _HasRngInit):
+      value.rng_init(rngs)
+  return node
+
+
+def empty(shape: Shape, dtype: Dtype = jax.numpy.float32, /) -> jax.Array:
+  return jax.ShapeDtypeStruct(shape, dtype)  # type: ignore

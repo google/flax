@@ -20,7 +20,6 @@ from functools import partial
 
 import jax
 import jax.tree_util as jtu
-import typing_extensions as tpe
 
 from flax.experimental.nnx.nnx import (
   filterlib,
@@ -72,10 +71,6 @@ def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
 
 
 class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
-  @classmethod
-  def init(cls: type[M], *args, **kwargs) -> tuple[GraphDef[M], State]:
-    return cls(*args, **kwargs).split()
-
   @classmethod
   @property
   def create_abstract(cls: type[M]) -> type[M]:
@@ -144,13 +139,13 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
 
       def _partial_init_constructor():
         module = constructor(*args, **lift_rngs(kwargs))
-        module.update(*states)
-        return module.split()
+        graph_utils.update(module, *states)
+        return graph_utils.split(module)
 
       graphdef: GraphDef[M]
       state: State
       graphdef, state = jax.jit(_partial_init_constructor)()
-      module = graphdef.merge(state)
+      module = graph_utils.merge(graphdef, state)
       return module
 
     return CallableProxy(_partial_init)  # type: ignore
@@ -182,11 +177,11 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
     return graph_utils.split(self, *filters)
 
   def get_state(self) -> State:
-    _, state = self.split()
+    _, state = graph_utils.split(self)
     return state
 
   def get_graphdef(self: M) -> GraphDef[M]:
-    graphdef, _ = self.split()
+    graphdef, _ = graph_utils.split(self)
     return graphdef
 
   @tp.overload
@@ -252,17 +247,15 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
   @property
   def apply(self: M) -> ApplyCaller[M]:
     def _apply(accessor: DelayedAccessor, *args, **kwargs) -> tuple[tp.Any, M]:
-      module = self.clone()
+      module = graph_utils.clone(self)
       fn = accessor(module)
       out = fn(*args, **kwargs)
       return out, module
 
     return CallableProxy(_apply)  # type: ignore
 
-  def update(
-    self: M, update: graph_utils.Updates[M], /, *updates: graph_utils.Updates[M]
-  ) -> None:
-    graph_utils.update(self, update, *updates)
+  def update(self, state: State, *states: State) -> None:
+    graph_utils.update(self, state, *states)
 
   def sow(
     self,
@@ -368,7 +361,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
 # Pytree Definition
 # -------------------------
 def _module_flatten(module: Module, *, with_keys: bool):
-  graphdef, state = module.split()
+  graphdef, state = graph_utils.split(module)
   key_values = sorted(state.raw_mapping.items())
   keys = tuple(key for key, _ in key_values)
 
