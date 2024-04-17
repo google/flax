@@ -37,13 +37,8 @@ from flax.experimental.nnx.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
 )
-from flax.experimental.nnx.nnx.state import (
-  FlatState,
-  State,
-  StateLeaf,
-  is_state_leaf,
-)
-from flax.experimental.nnx.nnx.variables import EMPTY, Variable
+from flax.experimental.nnx.nnx.state import State, StateLeaf, is_state_leaf
+from flax.experimental.nnx.nnx.variables import EMPTY, Empty, Variable
 from flax.typing import PathParts, Key
 
 A = tp.TypeVar('A')
@@ -104,11 +99,8 @@ class _HashById(tp.Hashable, tp.Generic[A]):
 class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin[A, B]):
   """A mapping that uses object id as the hash for the keys."""
 
-  def __init__(
-    self, mapping: tp.Mapping[A, B] | tp.Iterable[tuple[A, B]] = (), /
-  ):
+  def __init__(self):
     self._mapping: dict[_HashById[A], B] = {}
-    self.update(mapping)
 
   def __getitem__(self, key: A) -> B:
     return self._mapping[_HashById(key)]
@@ -130,7 +122,6 @@ class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin[A, B]):
 
   def __str__(self) -> str:
     return repr(self)
-
 
 
 @dataclasses.dataclass(frozen=True)
@@ -323,19 +314,20 @@ class VariableDef(reprlib.Representable):
       and self._metadata == other._metadata
     )
 
-@dataclasses.dataclass(frozen=True)
-class NodeDef(tp.Generic[Node], reprlib.Representable):
-  type: tp.Type[Node]
-  index: int
-  attributes: tuple[Key, ...]
-  subgraphs: _HashableMapping[Key, tp.Union['NodeDef[tp.Any]', int]]
-  static_fields: _HashableMapping[Key, tp.Any]
-  variables: _HashableMapping[Key, VariableDef | int]
-  metadata: tp.Any
 
-  @classmethod
-  def create(
-    cls,
+class GraphDef(tp.Generic[Node], reprlib.Representable):
+  __slots__ = (
+    '_type',
+    '_index',
+    '_attributes',
+    '_subgraphs',
+    '_static_fields',
+    '_variables',
+    '_metadata',
+  )
+
+  def __init__(
+    self,
     type: tp.Type[Node],
     index: int,
     attributes: tuple[Key, ...],
@@ -344,51 +336,60 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
     variables: tp.Iterable[tuple[Key, VariableDef | int]],
     metadata: tp.Any,
   ):
-    return cls(
-      type=type,
-      index=index,
-      attributes=attributes,
-      subgraphs=_HashableMapping(subgraphs),
-      static_fields=_HashableMapping(static_fields),
-      variables=_HashableMapping(variables),
-      metadata=metadata,
-    )
+    self._type: type[Node] = type
+    self._index = index
+    self._attributes = attributes
+    self._subgraphs = _HashableMapping(subgraphs)
+    self._static_fields = _HashableMapping(static_fields)
+    self._variables = _HashableMapping(variables)
+    self._metadata = metadata
 
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
 
-    yield reprlib.Attr('type', self.type.__name__)
-    yield reprlib.Attr('index', self.index)
-    yield reprlib.Attr('attributes', self.attributes)
-    yield reprlib.Attr('subgraphs', _MappingRepr(self.subgraphs))
-    yield reprlib.Attr('static_fields', _MappingRepr(self.static_fields))
-    yield reprlib.Attr('variables', _MappingRepr(self.variables))
-    yield reprlib.Attr('metadata', self.metadata)
+    yield reprlib.Attr('type', self._type.__name__)
+    yield reprlib.Attr('index', self._index)
+    yield reprlib.Attr('attributes', self._attributes)
+    yield reprlib.Attr('subgraphs', _MappingRepr(self._subgraphs))
+    yield reprlib.Attr('static_fields', _MappingRepr(self._static_fields))
+    yield reprlib.Attr('variables', _MappingRepr(self._variables))
+    yield reprlib.Attr('metadata', self._metadata)
 
+  def __hash__(self) -> int:
+    return hash((self._type, self._subgraphs))
 
-@dataclasses.dataclass(frozen=True)
-class GraphDef(tp.Generic[Node], reprlib.Representable):
-  nodedef: NodeDef[Node]
-  index_mapping: dict[Index, Index] | None
+  def __eq__(self, other: tp.Any) -> bool:
+    if not isinstance(other, GraphDef):
+      return False
+    return self._type == other._type and self._subgraphs == other._subgraphs
 
-  def __nnx_repr__(self):
-    yield reprlib.Object(type=type(self))
+  @property
+  def type(self) -> tp.Type[Node]:
+    return self._type
 
-    yield reprlib.Attr('nodedef', self.nodedef)
-    yield reprlib.Attr('index_mapping', self.index_mapping)
+  @property
+  def index(self) -> int:
+    return self._index
 
-  def __deepcopy__(self, memo=None):
-    nodedef = deepcopy(self.nodedef, memo)
-    index_mapping = deepcopy(self.index_mapping, memo)
-    return GraphDef(nodedef, index_mapping)
+  @property
+  def attributes(self) -> tuple[str, ...]:
+    return self._attributes
 
-  def __hash__(self):
-    # refmap is opaque
-    return hash(self.nodedef)
+  @property
+  def subgraphs(self):
+    return self._subgraphs
 
-  def __eq__(self, other):
-    # refmap is opaque
-    return isinstance(other, GraphDef) and self.nodedef == other.nodedef
+  @property
+  def static_fields(self):
+    return self._static_fields
+
+  @property
+  def variables(self):
+    return self._variables
+
+  @property
+  def metadata(self) -> tp.Any:
+    return self._metadata
 
   def merge(self, state: State, /, *states: State) -> Node:
     if states:
@@ -403,7 +404,7 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     def _apply(
       accessor: DelayedAccessor, *args, **kwargs
     ) -> tuple[tp.Any, tuple[GraphDef[Node], State]]:
-      module = merge(self, state, *states)
+      module = self.merge(state, *states)
       fn = accessor(module)
       out = fn(*args, **kwargs)
       return out, graph_flatten(module)[:2]
@@ -411,83 +412,88 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     return CallableProxy(_apply, accessor)  # type: ignore
 
   def make_empty(self) -> Node:
-    return merge(self, State({}))
+    return self.merge(State({}))
 
 
-def _graphdef_flatten(graphdef: GraphDef[Node]):
-  # refmap is opaque, we don't propagate it
-  static = (graphdef.nodedef, graphdef.index_mapping)
-  return (), static
+def _gradphdef_flatten(graphdef: GraphDef[tp.Any]):
+  return (), (
+    graphdef._type,
+    graphdef._index,
+    graphdef._attributes,
+    graphdef._subgraphs,
+    graphdef._static_fields,
+    graphdef._variables,
+    graphdef._metadata,
+  )
 
 
 def _graphdef_unflatten(
-  static: tuple[NodeDef[Node], dict[Index, Index] | None], _nodes: tuple[()]
-):
-  nodedef, index_mapping = static
-  return GraphDef(nodedef, index_mapping)
+  metadata: tuple[
+    tp.Type[Node],
+    int,
+    tuple[Key, ...],
+    tuple[tuple[Key, GraphDef[Node] | int], ...],
+    tuple[tuple[Key, tp.Any], ...],
+    tuple[tuple[Key, Variable[Empty] | int], ...],
+    tp.Any,
+  ],
+  _,
+) -> GraphDef[Node]:
+  return GraphDef(*metadata)
 
 
 jax.tree_util.register_pytree_node(
-  GraphDef,
-  _graphdef_flatten,
-  _graphdef_unflatten,
+  GraphDef, _gradphdef_flatten, _graphdef_unflatten
 )
 
 
 def graph_flatten(
   x: Node,
   /,
-  *,
-  idxmap: dict[Index, tp.Any] | None = None,
-) -> tuple[GraphDef[Node], State, RefMap[tp.Any, Index]]:
-  refmap = RefMap[tp.Any, Index]()
+) -> tuple[GraphDef[Node], State, tp.Mapping[tp.Any, Index]]:
+  ref_to_index = RefMap[tp.Any, Index]()
   flat_state: dict[PathParts, StateLeaf] = {}
-  nodedef = _graph_flatten((), refmap, flat_state, x)
-  assert not isinstance(nodedef, int)
-  if idxmap is not None:
-    index_to_index = compose_mapping(idxmap, refmap)
-  else:
-    index_to_index = None
-  graphdef = GraphDef(nodedef, index_to_index)
-  return graphdef, State.from_flat_path(flat_state), refmap
+  graphdef = _graph_flatten((), ref_to_index, flat_state, x)
+  assert not isinstance(graphdef, int)
+  return graphdef, State.from_flat_path(flat_state), ref_to_index
 
 
 def _graph_flatten(
   path: PathParts,
-  refmap: RefMap[tp.Any, Index],
+  ref_to_index: RefMap[tp.Any, Index],
   flat_state: dict[PathParts, StateLeaf],
   node: Node,
-) -> NodeDef[Node] | int:
+) -> GraphDef[Node] | int:
   if not is_node(node):
     raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
 
-  if node in refmap:
-    return refmap[node]
+  if node in ref_to_index:
+    return ref_to_index[node]
 
   node_impl = get_node_impl(node)
 
   # only cache graph nodes
   if isinstance(node_impl, GraphNodeImpl):
-    index = len(refmap)
-    refmap[node] = index
+    index = len(ref_to_index)
+    ref_to_index[node] = index
   else:
     index = -1
 
-  subgraphs: list[tuple[Key, tp.Union[NodeDef[Node], int]]] = []
+  subgraphs: list[tuple[Key, tp.Union[GraphDef[Node], int]]] = []
   static_fields: list[tuple[Key, tp.Any]] = []
   variables: list[tuple[Key, VariableDef | int]] = []
 
   values, metadata = node_impl.flatten(node)
   for key, value in values:
     if is_node(value):
-      nodedef = _graph_flatten((*path, key), refmap, flat_state, value)
-      subgraphs.append((key, nodedef))
+      graphdef = _graph_flatten((*path, key), ref_to_index, flat_state, value)
+      subgraphs.append((key, graphdef))
     elif isinstance(value, Variable):
-      if value in refmap:
-        variables.append((key, refmap[value]))
+      if value in ref_to_index:
+        variables.append((key, ref_to_index[value]))
       else:
         flat_state[(*path, key)] = value.copy()
-        variable_index = refmap[value] = len(refmap)
+        variable_index = ref_to_index[value] = len(ref_to_index)
         variables.append(
           (key, VariableDef.from_variable(value, variable_index))
         )
@@ -496,7 +502,7 @@ def _graph_flatten(
     else:
       static_fields.append((key, value))
 
-  nodedef = NodeDef.create(
+  graphdef = GraphDef(
     type=node_impl.type,
     index=index,
     attributes=tuple(key for key, _ in values),
@@ -505,7 +511,7 @@ def _graph_flatten(
     variables=variables,
     metadata=metadata,
   )
-  return nodedef
+  return graphdef
 
 
 def graph_unflatten(
@@ -513,12 +519,12 @@ def graph_unflatten(
   state: State,
   /,
   *,
-  idxmap: dict[Index, tp.Any] | None = None,
+  ref_cache: dict[Index, tp.Any] | None = None,
 ) -> tuple[Node, dict[Index, tp.Any]]:
   """Unflattens a graphdef into a node with the given state.
 
   Args:
-    graphdef: A NodeDef instance.
+    graphdef: A GraphDef instance.
     state: A State instance.
     ref_cache: A mapping from indexes to existing nodes that can be reused.
       When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
@@ -527,22 +533,20 @@ def graph_unflatten(
       specified by the graphdef.
   """
   index_to_ref: dict[Index, tp.Any] = {}
-  node = _graph_unflatten(
-    graphdef.nodedef, state.raw_mapping, index_to_ref, idxmap
-  )
+  node = _graph_unflatten(graphdef, state.raw_mapping, index_to_ref, ref_cache)
   return node, index_to_ref
 
 
 def _graph_unflatten(
-  nodedef: tp.Union[NodeDef[Node], int],
-  state: dict[Key, StateLeaf | dict[Key, tp.Any]],
+  graphdef: tp.Union[GraphDef[Node], int],
+  state: dict[str, StateLeaf | dict[str, tp.Any]],
   index_to_ref: dict[Index, tp.Any],
-  idxmap: dict[Index, tp.Any] | None,
+  ref_cache: dict[Index, tp.Any] | None,
 ) -> Node:
   """Recursive helper for graph_unflatten.
 
   Args:
-    nodedef: A NodeDef instance or an index to a node in the cache.
+    graphdef: A GraphDef instance or an index to a node in the cache.
     state: A mapping from attribute names to variables or subgraphs.
     index_to_ref: A mapping from indexes to nodes that have been traversed.
       If a node is already in the cache, it won't be traversed again.
@@ -550,31 +554,31 @@ def _graph_unflatten(
       When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
       object in an empty state and then filled by the unflatten process, as a result
       existing graph nodes are mutated to have the new content/topology
-      specified by the nodedef.
+      specified by the graphdef.
   """
-  if isinstance(nodedef, int):
-    return index_to_ref[nodedef]
+  if isinstance(graphdef, int):
+    return index_to_ref[graphdef]
 
-  if not is_node_type(nodedef.type):
-    raise RuntimeError(f'Unsupported type: {nodedef.type}, this is a bug.')
+  if not is_node_type(graphdef.type):
+    raise RuntimeError(f'Unsupported type: {graphdef.type}, this is a bug.')
 
-  if nodedef.index in index_to_ref:
-    raise RuntimeError(f'NodeDef index {nodedef.index} already used.')
+  if graphdef.index in index_to_ref:
+    raise RuntimeError(f'GraphDef index {graphdef.index} already used.')
 
-  node_impl = get_node_impl_for_type(nodedef.type)
+  node_impl = get_node_impl_for_type(graphdef.type)
 
   def _get_children():
     children: dict[str, StateLeaf | Node] = {}
 
-    for key in nodedef.attributes:
-      if key in nodedef.static_fields:
-        children[key] = nodedef.static_fields[key]
+    for key in graphdef.attributes:
+      if key in graphdef.static_fields:
+        children[key] = graphdef.static_fields[key]
       elif key not in state:
         # TODO(cgarcia): maybe we shouldn't support unflattening with missing keys?
         # if key is not present create an empty types
-        if key in nodedef.subgraphs:
+        if key in graphdef.subgraphs:
           # if the key is a subgraph we create an empty node
-          subgraphdef = nodedef.subgraphs[key]
+          subgraphdef = graphdef.subgraphs[key]
           if isinstance(subgraphdef, int):
             # subgraph exists, take it from the cache
             children[key] = index_to_ref[subgraphdef]
@@ -582,17 +586,17 @@ def _graph_unflatten(
             # create an empty node and add it to the cache
             substate = {}
             node = children[key] = _graph_unflatten(
-              subgraphdef, substate, index_to_ref, idxmap
+              subgraphdef, substate, index_to_ref, ref_cache
             )
-        elif key in nodedef.variables:
-          variable_def = nodedef.variables[key]
+        elif key in graphdef.variables:
+          variable_def = graphdef.variables[key]
           if isinstance(variable_def, int):
             # variable exists, take it from the cache
             children[key] = index_to_ref[variable_def]
           else:
             # create an empty variable and add it to the cache
-            if idxmap is not None and variable_def.index in idxmap:
-              node = idxmap[variable_def.index]
+            if ref_cache is not None and variable_def.index in ref_cache:
+              node = ref_cache[variable_def.index]
               if type(node) != variable_def.type:
                 raise ValueError(
                   f'Expected a node of type {variable_def.type.__name__} for '
@@ -609,23 +613,23 @@ def _graph_unflatten(
           raise RuntimeError(f'Unknown static field: {key!r}')
       else:
         value = state[key]
-        if key in nodedef.subgraphs:
+        if key in graphdef.subgraphs:
           if is_state_leaf(value):
             raise ValueError(
               f'Expected a subgraph for {key!r}, but got a Variable.'
             )
           assert isinstance(value, dict)
-          subgraphdef = nodedef.subgraphs[key]
+          subgraphdef = graphdef.subgraphs[key]
 
           if isinstance(subgraphdef, int):
             node = index_to_ref[subgraphdef]
           else:
             node = children[key] = _graph_unflatten(
-              subgraphdef, value, index_to_ref, idxmap
+              subgraphdef, value, index_to_ref, ref_cache
             )
 
-        elif key in nodedef.variables:
-          variable_def = nodedef.variables[key]
+        elif key in graphdef.variables:
+          variable_def = graphdef.variables[key]
           if isinstance(variable_def, int):
             children[key] = index_to_ref[variable_def]
           else:
@@ -635,8 +639,8 @@ def _graph_unflatten(
                 f'for {key!r}, but got a Variable of type {type(value)}.'
               )
             assert isinstance(value, Variable)
-            if idxmap is not None and variable_def.index in idxmap:
-              variable = idxmap[variable_def.index]
+            if ref_cache is not None and variable_def.index in ref_cache:
+              variable = ref_cache[variable_def.index]
               if type(variable) != variable_def.type:
                 raise ValueError(
                   f'Expected a Variable of type {variable_def.type} for '
@@ -650,7 +654,7 @@ def _graph_unflatten(
             index_to_ref[variable_def.index] = variable
         elif is_state_leaf(value):
           children[key] = value
-    for new_key in set(state) - set(nodedef.attributes):
+    for new_key in set(state) - set(graphdef.attributes):
       raise ValueError(f'Unknown key: {new_key!r}')
 
     return children
@@ -658,24 +662,24 @@ def _graph_unflatten(
   if isinstance(node_impl, GraphNodeImpl):
     # we create an empty node first and add it to the index
     # this avoids infinite recursion when there is a reference cycle
-    if idxmap is not None and nodedef.index in idxmap:
-      node = idxmap[nodedef.index]
-      if type(node) != nodedef.type:
+    if ref_cache is not None and graphdef.index in ref_cache:
+      node = ref_cache[graphdef.index]
+      if type(node) != graphdef.type:
         raise ValueError(
-          f'Expected a node of type {nodedef.type} for index '
-          f'{nodedef.index}, but got a node of type {type(node)}.'
+          f'Expected a node of type {graphdef.type} for index '
+          f'{graphdef.index}, but got a node of type {type(node)}.'
         )
-      node_impl.clear(node, nodedef.metadata)
+      node_impl.clear(node, graphdef.metadata)
     else:
-      node = node_impl.create_empty(nodedef.metadata)
-    index_to_ref[nodedef.index] = node
+      node = node_impl.create_empty(graphdef.metadata)
+    index_to_ref[graphdef.index] = node
     children = _get_children()
     node_impl.init(node, tuple(children.items()))
   else:
     # if the node type does not support the creation of an empty object it means
     # that it cannot reference itself, so we can create its children first
     children = _get_children()
-    node = node_impl.unflatten(tuple(children.items()), nodedef.metadata)
+    node = node_impl.unflatten(tuple(children.items()), graphdef.metadata)
 
   return node
 
@@ -712,11 +716,7 @@ def _graph_pop(
   for name, value in node_dict.items():
     if is_node(value):
       _graph_pop(
-        node=value,
-        id_to_index=id_to_index,
-        path_parts=(*path_parts, name),
-        flat_states=flat_states,
-        predicates=predicates,
+        value, id_to_index, (*path_parts, name), flat_states, predicates
       )
       continue
     elif not is_state_leaf(value):
@@ -743,7 +743,23 @@ def _graph_pop(
       pass
 
 
-def _graph_update_dynamic(node: tp.Any, state: dict[Key, tp.Any]):
+def graph_update_dynamic(
+  node: tp.Any,
+  updates: State | tp.Sequence[State],
+) -> None:
+  if not is_node(node):
+    raise ValueError(f'Unsupported type: {type(node)}')
+
+  if isinstance(updates, State):
+    new_states = (updates,)
+  else:
+    new_states = updates
+
+  for state in new_states:
+    _graph_update_dynamic(node, state.raw_mapping)
+
+
+def _graph_update_dynamic(node: tp.Any, state: dict[str, tp.Any]):
   if not is_node(node):
     raise RuntimeError(f'Unsupported type: {type(node)}')
 
@@ -796,14 +812,7 @@ class _StaticModuleStatus(enum.Enum):
   NEW = enum.auto()
   UPDATED = enum.auto()
 
-# TODO(cgarciae): remove once transform init are reimplemented
-def update_from(node: Node, updates: Node) -> None:
-  graph_update_static(node, updates)
-  _, state = split(updates)
-  update(node, state)
 
-
-# TODO(cgarciae): remove once transform init are reimplemented
 def graph_update_static(node: Node, updates: Node) -> None:
   cache: dict[int, _StaticModuleStatus] = {}
   _graph_update_static(node, updates, cache, _StaticModuleStatus.UPDATED, ())
@@ -894,101 +903,14 @@ def _graph_update_static(
       node_impl.set_key(node, name, value_updates)
 
 
-
 @tp.overload
-def full_split(
-  graph_node: A,
-  *,
-  idxmap: dict[Index, tp.Any] | None = None,
-) -> tuple[RefMap[tp.Any, Index], GraphDef[A], State]:
-  ...
-
-
-@tp.overload
-def full_split(
-  graph_node: A,
-  first: filterlib.Filter,
-  /,
-  *,
-  idxmap: dict[Index, tp.Any] | None = None,
-) -> tuple[RefMap[tp.Any, Index], GraphDef[A], State]:
-  ...
-
-
-@tp.overload
-def full_split(
-  graph_node: A,
-  first: filterlib.Filter,
-  second: filterlib.Filter,
-  /,
-  *filters: filterlib.Filter,
-  idxmap: dict[Index, tp.Any] | None = None,
-) -> tuple[
-  RefMap[tp.Any, Index], GraphDef[A], State, tpe.Unpack[tuple[State, ...]]
-]:
-  ...
-
-
-def full_split(
-  graph_node: A,
-  *filters: filterlib.Filter,
-  idxmap: dict[Index, tp.Any] | None = None,
-) -> tuple[
-  RefMap[tp.Any, Index], GraphDef[A], State, tpe.Unpack[tuple[State, ...]]
-]:
-  graphdef, state, refmap = graph_flatten(graph_node, idxmap=idxmap)
-
-  if len(filters) == 0:
-    states = (state,)
-  elif len(filters) == 1:
-    states = (state.split(filters[0]),)
-  else:
-    states = state.split(filters[0], filters[1], *filters[2:])
-
-  return refmap, graphdef, states[0], *states[1:]
-
-
-def full_merge(
-  graphdef: GraphDef[A],
-  state: State,
-  *states: State,
-) -> tuple[A, dict[Index, tp.Any]]:
-  # TODO: add docstring of example usage
-  if states:
-    state = State.merge(state, *states)
-
-  return graph_unflatten(graphdef, state)
-
-
-def full_update(
-  refmap: RefMap[tp.Any, Index],
-  new_graphdef: GraphDef[A],
-  state: State,
-  /,
-  *states: State,
-):
-  if refmap is None:
-    raise ValueError('Cannot update a graphdef without refmap.')
-  if new_graphdef.index_mapping is None:
-    raise ValueError('Cannot update a graphdef without index_mapping.')
-
-  if states:
-    state = State.merge(state, *states)
-
-  index_to_ref = compose_mapping_reversed(refmap, new_graphdef.index_mapping)
-  return graph_unflatten(new_graphdef, state, idxmap=index_to_ref)[0]
-
-
-@tp.overload
-def split(graph_node: A, /) -> tuple[GraphDef[A], State]:
+def split(graph_node: A) -> tuple[GraphDef[A], State]:
   ...
 
 
 @tp.overload
 def split(
-  graph_node: A,
-  first: filterlib.Filter,
-  /,
+  graph_node: A, first: filterlib.Filter, /
 ) -> tuple[GraphDef[A], State]:
   ...
 
@@ -1005,11 +927,18 @@ def split(
 
 
 def split(
-  graph_node: A,
-  *filters: filterlib.Filter,
+  graph_node: A, *filters: filterlib.Filter
 ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:
-  _, graphdef, state, *states = full_split(graph_node, *filters)
-  return graphdef, state, *states
+  graphdef, state, _ = graph_flatten(graph_node)
+
+  if len(filters) == 0:
+    states = (state,)
+  elif len(filters) == 1:
+    states = (state.split(filters[0]),)
+  else:
+    states = state.split(filters[0], filters[1], *filters[2:])
+
+  return graphdef, states[0], *states[1:]
 
 
 def merge(
@@ -1018,94 +947,57 @@ def merge(
   *states: State,
 ) -> A:
   # TODO: add docstring of example usage
-  return full_merge(graphdef, state, *states)[0]
+  return graphdef.merge(state, *states)
 
 
-def update(node, state: State, *states: State) -> None:
-  if states:
-    state = State.merge(state, *states)
+def update(graph_node: A, update: Updates[A], /, *updates: Updates[A]) -> None:
+  updates = (update, *updates)
 
-  _graph_update_dynamic(node, state.raw_mapping)
-
-
-@tp.overload
-def extract(node, first: filterlib.Filter, /) -> State:
-  ...
-
-
-@tp.overload
-def extract(
-  node,
-  first: filterlib.Filter,
-  second: filterlib.Filter,
-  /,
-  *filters: filterlib.Filter,
-) -> tuple[State, ...]:
-  ...
-
-
-def extract(
-  node,
-  first: filterlib.Filter,
-  /,
-  *filters: filterlib.Filter,
-) -> tp.Union[State, tuple[State, ...]]:
-  state = graph_flatten(node)[1]
-
-  if len(filters) == 0:
-    states = state.extract(first)
-  else:
-    states = state.extract(first, filters[0], *filters[1:])
-
-  return states
-
-
-@tp.overload
-def pop(
-  node,
-  filter: filterlib.Filter,
-  /,
-) -> State:
-  ...
-
-
-@tp.overload
-def pop(
-  node,
-  filter: filterlib.Filter,
-  filter2: filterlib.Filter,
-  /,
-  *filters: filterlib.Filter,
-) -> tuple[State, ...]:
-  ...
-
-
-def pop(node, *filters: filterlib.Filter) -> tp.Union[State, tuple[State, ...]]:
-  if len(filters) == 0:
-    raise ValueError('Expected at least one filter')
-
-  id_to_index: dict[int, Index] = {}
-  path_parts: PathParts = ()
-  predicates = tuple(filterlib.to_predicate(filter) for filter in filters)
-  flat_states: tuple[FlatState, ...] = tuple({} for _ in predicates)
-  _graph_pop(
-    node=node,
-    id_to_index=id_to_index,
-    path_parts=path_parts,
-    flat_states=flat_states,
-    predicates=predicates,
+  # find states and module_update
+  leaves = jax.tree_util.tree_leaves(
+    updates, is_leaf=lambda x: isinstance(x, (GraphDef, State))
   )
-  states = tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
+  states: list[State] = []
+  module_update: tp.Optional[A] = None
 
-  if len(states) == 1:
-    return states[0]
-  else:
-    return states
+  for leaf in leaves:
+    if is_graph_node(leaf) or isinstance(leaf, GraphDef):
+      if module_update is not None:
+        raise ValueError(
+          'Expected only one GraphDef or GraphNode in the updates'
+        )
+
+      if is_graph_node(leaf):
+        if not isinstance(leaf, type(graph_node)):
+          raise ValueError(
+            'Expected a GraphNode of the same type as the input, '
+            f'got {type(leaf).__name__} instead.'
+          )
+        module_update = leaf
+        states.append(split(leaf)[1])
+      elif isinstance(leaf, GraphDef):
+        module_update = leaf.make_empty()
+      else:
+        raise ValueError(
+          'Expected a GraphDef or graph node, got' f' {type(leaf).__name__}'
+        )
+    elif isinstance(leaf, State):
+      states.append(leaf)
+    else:
+      raise ValueError(
+        'Expected a GraphDef, GraphNode or State, got' f' {type(leaf).__name__}'
+      )
+
+  if module_update is not None:
+    graph_update_static(graph_node, module_update)
+
+  if states:
+    graph_update_dynamic(graph_node, states)
 
 
 def clone(node: Node) -> Node:
-  static, state = split(node)
-  return merge(static, state)
+  static, state, _ = graph_flatten(node)
+  return static.merge(state)
 
 
 def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[PathParts, tp.Any]]:
@@ -1117,31 +1009,16 @@ def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[PathParts, tp.Any]]:
 def _iter_nodes(
   node: tp.Any, visited: set[int], path_parts: PathParts
 ) -> tp.Iterator[tuple[PathParts, tp.Any]]:
-  for path_parts, value in _iter_all(node, visited, path_parts):
-    if is_node(value):
-      yield path_parts, value
-
-
-def _iter_node_or_variable(
-  x: tp.Any, visited: set[int], path_parts: PathParts
-) -> tp.Iterator[tuple[PathParts, tp.Any]]:
-  for path_parts, value in _iter_all(x, visited, path_parts):
-    if is_node(value) or isinstance(value, Variable):
-      yield path_parts, value
-
-
-def _iter_all(
-  x: tp.Any, visited: set[int], path_parts: PathParts
-) -> tp.Iterator[tuple[PathParts, tp.Any]]:
-  if id(x) in visited:
+  if not is_node(node):
     return
-  visited.add(id(x))
-  yield path_parts, x
-  if is_node(x):
-    node_impl = get_node_impl(x)
-    node_dict = node_impl.node_dict(x)
-    for key, value in node_dict.items():
-      yield from _iter_all(value, visited, (*path_parts, key))
+  if id(node) in visited:
+    return
+  visited.add(id(node))
+  yield path_parts, node
+  node_impl = get_node_impl(node)
+  node_dict = node_impl.node_dict(node)
+  for key, value in node_dict.items():
+    yield from _iter_nodes(value, visited, (*path_parts, key))
 
 
 def compose_mapping(
@@ -1280,10 +1157,10 @@ class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
       raise errors.TraceContextError(error_msg)
 
   def __deepcopy__(self: G, memo=None) -> G:
-    graphdef, state = graph_utils.split(self)
+    graphdef, state, _ = graph_utils.graph_flatten(self)
     graphdef = deepcopy(graphdef)
     state = deepcopy(state)
-    return merge(graphdef, state)
+    return graphdef.merge(state)
 
   def __hash__(self) -> int:
     return hash(self._graph_node__state.id)
