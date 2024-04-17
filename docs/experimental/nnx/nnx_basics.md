@@ -10,11 +10,11 @@ jupytext:
 
 # NNX Basics
 
-NNX is a **N**eural **N**etworks JA**X** library that embraces Python's object-oriented programming 
-model to provide an intuitive and highly simplified user experience. It uses PyGraphs (instead of PyTrees)
-to represent stateful objects, which allows it to express reference sharing and mutability in Python itself. 
-This makes NNX code look like regular Python code that users from frameworks like Pytorch and Keras will
-be familiar with.
+NNX is a **N**eural **N**etworks JA**X** library that embraces Python’s object-oriented 
+programming model to provide an intuitive and highly simplified user experience. It
+represents objects as PyGraphs (instead of PyTrees), which allows NNX to handle reference
+sharing and mutability, making model code be regular Python code that users from frameworks
+like Pytorch will be familiar with.be familiar with.
 
 NNX is also designed to support 
 all the patterns that allowed Linen to scale to large code bases while having a much simpler
@@ -45,12 +45,11 @@ class Linear(nnx.Module):
     return x @ self.w.value + self.b.value
 ```
 
-As shown above dynamic state is usually stored in `nnx.Variable`s (NOTE: the example above does not include Variable; perhaps can stick with Params in the text here and introduce Variable later?) such as `nnx.Param`,
+As shown above dynamic state is usually stored in `nnx.Param`s,
 and static state (all types not handled by NNX) such as integers or strings 
 are stored directly. Attributes of type `jax.Array` and `numpy.ndarray` are also treated as dynamic state,
-although storing them inside `nnx.Variable`s is preferred. Also, RNG keys can be requested from the 
-`nnx.Rngs` object by calling `rngs.<stream_name>()` where the stream name show match (NOTE: clarify) on of
-the names provided to the `Rngs` constructor (shown below).
+although storing them inside `nnx.Variable`s is preferred. Also, the `nnx.Rngs` object by can be used to
+get new unique keys based on a root key passed to the constructor (see below).
 
 To actually initialize a Module is very easy: simply call the constructor. All the
 parameters of a Module will be created right then and there, and are immediately available
@@ -99,15 +98,11 @@ counter()
 print(f'{counter.count.value = }')
 ```
 
-**This looks too easy, what is the catch?**
-
-(NOTE: readers who are NOT familiar with JAX or Linen are not expecting any catch here? Also, maybe "catch" is not the right word, because it suggests a hidden downside)
-
 JAX frameworks have avoided mutable references until now. The key innovations which 
-allows their usage in NNX is that 1) there is a clear boundary between reference 
-semantics and value semantics, defined by [The Functional API](#the-functional-api),
-and 2) there are guards in place to avoid updating NNX objects from a `MainTrace`, 
-thus preventing tracer leakage.
+allows their usage in NNX is that 1) there is a clear boundary between code that uses 
+reference semantics and code that uses value semantics, defined by 
+[The Functional API](#the-functional-api), and 2) there are guards in place to avoid 
+updating NNX objects from a `MainTrace`, thus preventing tracer leakage.
 
 +++
 
@@ -163,9 +158,9 @@ uses the same signature. More over, Variables can also be modified or shared.
 # Module replacement
 pretrained = Block(dim=2, rngs=nnx.Rngs(42)) # imagine this is pretrained
 model.blocks[0] = pretrained
-# Module sharing
+# adhoc Module sharing
 model.blocks[3] = model.blocks[1]
-# Monkey patching
+# monkey patching
 def awesome_layer(x): return x
 model.blocks[2] = awesome_layer
 
@@ -174,8 +169,6 @@ model.blocks[-1].linear.kernel = model.blocks[0].linear.kernel
 
 model(jnp.ones((1, 2)))
 ```
-
-(NOTE: I do not have experience with this, but I would assume that sharing can be used in a more principled way when constructing the model, even without getting into model mutation)
 
 ## The Functional API
 
@@ -207,20 +200,17 @@ model = StatefulLinear(din=2, dout=3, rngs=nnx.Rngs(0))
 
 ### State and GraphDef
 
-A Module can be decomposed into `GraphDef` and `State` pytrees using the
+A Module can be decomposed into `GraphDef` and `State` using the
 `.split()` method. State is a Mapping from strings to Variables or nested 
-States. GraphDef is contains all the static information needed to reconstruct 
-a Module graph, it is analogous to JAX's `PyTreeDef`, and for convenience it
-implements an empty pytree. (NOTE: I found it confusing to read that there are pytrees. I would drop that, because you explain what why are below. I was also confused by the "implements an empty pytree")
+States. GraphDef contains all the static information needed to reconstruct 
+a Module graph, it is analogous to JAX's `PyTreeDef`.
 
 ```{code-cell} ipython3
-static, state = model.split()
+graphdef, state = model.split()
 
 print(f'{state = }\n')
-print(f'{static = }'[:200] + '...')
+print(f'{graphdef = }'[:200] + '...')
 ```
-
-(NOTE: it is confusing to call the graphdef `static`, why not `graphdef`?)
 
 ### Split, Merge, and Update
 
@@ -234,27 +224,24 @@ updates from a transform back to the source object outside.
 print(f'{model.count = }')
 
 # 1. Use split to create a pytree representation of the Module
-static, state = model.split()
+graphdef, state = model.split()
 
 @jax.jit
-def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):
+def forward(graphdef: nnx.GraphDef, state: nnx.State, x: jax.Array) -> tuple[jax.Array, nnx.State]:
   # 2. Use merge to create a new model inside the JAX transformation
-  model = static.merge(state)
+  model = graphdef.merge(state)
   # 3. Call the Module
   y = model(x)
   # 4. Use split to propagate State updates
   _, state = model.split()
   return y, state
 
-y, state = forward(static, state, x=jnp.ones((1, 2)))
+y, state = forward(graphdef, state, x=jnp.ones((1, 2)))
 # 5. Update the state of the original Module
 model.update(state)
 
 print(f'{model.count.value = }')
 ```
-
-(NOTE: Should above `static` be declared as static for jit?)
-(NOTE: I would add return type type annotations for `forward`)
 
 The key insight of this pattern is that using mutable references is 
 fine within a transform context (including the base eager interpreter)
@@ -280,24 +267,23 @@ carry and what part is not when using `scan`.
 
 To solve this, `split` allows you to pass one or more `Filter`s to partition
 the Variables into mutually exclusive States. The most common Filter being
-Variable types as shown below.
+types as shown below.
 
 ```{code-cell} ipython3
 # use Variable type filters to split into multiple States
-static, params, counts = model.split(nnx.Param, Count)
+graphdef, params, counts = model.split(nnx.Param, Count)
 
 print(f'{params = }\n')
 print(f'{counts = }')
 ```
 
-(NOTE: I found it a bit confusing that you can pass Variables to `split` in lieu of filters; perhaps if there was a `filters` kwarg would make it a bit clearer?)
 **Note**: filters must be exhaustive, if a Variable is not matched an error will be raised.
 
 As expected the `merge` and `update` methods naturally consume multiple States:
 
 ```{code-cell} ipython3
 # merge multiple States
-model = static.merge(params, counts)
+model = graphdef.merge(params, counts)
 # update with multiple States
 model.update(params, counts)
 ```
