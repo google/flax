@@ -77,7 +77,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       super().__setattr__('_mapping', dict(mapping))
 
   @property
-  def raw_mapping(self) -> dict[Key, dict[Key, tp.Any] | tp.Any]:
+  def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
   def __getitem__(self, key: Key) -> State | StateLeaf:
@@ -245,11 +245,13 @@ def _split_state(
   *filters: filterlib.Filter,
 ) -> tuple[State, ...]:
   for i, filter_ in enumerate(filters):
-    if filter_ is ... and i != len(filters) - 1:
-      raise ValueError(
-        'Ellipsis `...` can only be used as the last filter, '
-        f'got it at index {i}.'
-      )
+    if filter_ in (..., True) and i != len(filters) - 1:
+      remaining_filters = filters[i + 1 :]
+      if not all(f in (..., True) for f in remaining_filters):
+        raise ValueError(
+          '`...` or `True` can only be used as the last filters, '
+          f'got {filter_} it at index {i}.'
+        )
   predicates = tuple(map(filterlib.to_predicate, filters))
 
   flat_state = state.flat_state()

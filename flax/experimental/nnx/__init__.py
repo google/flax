@@ -38,6 +38,7 @@ from .nnx.graph_utils import split as split
 from .nnx.graph_utils import update as update
 from .nnx.graph_utils import clone as clone
 from .nnx.graph_utils import pop as pop
+from .nnx.graph_utils import extract as extract
 from .nnx.nn import initializers as initializers
 from .nnx.nn.activations import celu as celu
 from .nnx.nn.activations import elu as elu
@@ -82,6 +83,7 @@ from .nnx.rnglib import RngStream as RngStream
 from .nnx.rnglib import RngState as RngState
 from .nnx.rnglib import RngKey as RngKey
 from .nnx.rnglib import RngCount as RngCount
+from .nnx.rnglib import fork as fork
 from .nnx.spmd import PARTITION_NAME as PARTITION_NAME
 from .nnx.spmd import get_partition_spec as get_partition_spec
 from .nnx.spmd import get_named_sharding as get_named_sharding
@@ -110,7 +112,6 @@ from .nnx.variables import Cache as Cache
 from .nnx.variables import Empty as Empty
 from .nnx.variables import Intermediate as Intermediate
 from .nnx.variables import Param as Param
-from .nnx.variables import Rng as Rng
 from .nnx.variables import Variable as Variable
 from .nnx.variables import VariableMetadata as VariableMetadata
 from .nnx.variables import with_metadata as with_metadata

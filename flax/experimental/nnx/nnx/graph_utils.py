@@ -27,7 +27,6 @@ import typing_extensions as tpe
 from flax.experimental.nnx.nnx import (
   errors,
   filterlib,
-  graph_utils,
   ids,
   reprlib,
   tracers,
@@ -1130,7 +1129,7 @@ def clone(node: Node) -> Node:
   return merge(static, state)
 
 
-def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[PathParts, tp.Any]]:
+def iter_nodes(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
   visited: set[int] = set()
   path_parts: PathParts = ()
   yield from _iter_nodes(node, visited, path_parts)
@@ -1262,7 +1261,7 @@ class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
   def __init_subclass__(cls) -> None:
     super().__init_subclass__()
 
-    graph_utils.register_graph_node_type(
+    register_graph_node_type(
       type=cls,
       flatten=cls._graph_node_flatten,
       set_key=cls._graph_node_set_key,
@@ -1287,7 +1286,7 @@ class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
       raise errors.TraceContextError(error_msg)
 
   def __deepcopy__(self: G, memo=None) -> G:
-    graphdef, state = graph_utils.split(self)
+    graphdef, state = split(self)
     graphdef = deepcopy(graphdef)
     state = deepcopy(state)
     return merge(graphdef, state)

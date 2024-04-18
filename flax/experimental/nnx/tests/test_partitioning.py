@@ -82,7 +82,7 @@ class TestPartitioning:
     )
 
     with pytest.raises(
-      ValueError, match='Ellipsis `...` can only be used as the last filter,'
+      ValueError, match='`...` or `True` can only be used as the last filters'
     ):
       m.split(..., nnx.Param)
 

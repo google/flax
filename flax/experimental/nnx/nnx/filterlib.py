@@ -23,8 +23,10 @@ else:
   ellipsis = tp.Any
 
 Predicate = tp.Callable[[PathParts, tp.Any], bool]
+
 FilterLiteral = tp.Union[type, str, Predicate, bool, ellipsis, None]
-Filter = tp.Union[FilterLiteral, tuple[FilterLiteral, ...], list[FilterLiteral]]
+Filter = tp.Union[FilterLiteral, tuple['Filter', ...], list['Filter']]
+
 
 @tp.runtime_checkable
 class _HasTag(tp.Protocol):
@@ -87,7 +89,7 @@ class All:
 
 
 class Not:
-  def __init__(self, collection_filter: Filter):
+  def __init__(self, collection_filter: Filter, /):
     self.predicate = to_predicate(collection_filter)
 
   def __call__(self, path: PathParts, x: tp.Any):

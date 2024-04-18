@@ -416,16 +416,6 @@ class Intermediate(Variable[A]):
   pass
 
 
-class Rng(Variable[jax.Array]):
-  tag: str
-
-  def __init__(self, value: jax.Array, *, tag: str, **metadata: tp.Any):
-    super().__init__(value, tag=tag, **metadata)
-
-  def on_get_value(self, value: jax.Array):
-    self.raw_value, value = jax.random.split(value)
-    return value
-
 
 def with_metadata(
   initializer: F,
