@@ -134,6 +134,13 @@ Learn more
          :class-card: sd-text-black sd-bg-light
          :link: transforms.html
 
+   .. grid-item::
+      :columns: 6 6 6 4
+
+      .. card:: :material-regular:`menu_book;2em` API reference
+         :class-card: sd-text-black sd-bg-light
+         :link: ../../api_reference/index.html
+
 
 ----
 
