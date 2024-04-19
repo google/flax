@@ -95,7 +95,7 @@ from .nnx.training import optimizer as optimizer
 from .nnx.training.metrics import Metric as Metric
 from .nnx.training.metrics import MultiMetric as MultiMetric
 from .nnx.training.optimizer import Optimizer as Optimizer
-from .nnx.transforms import JIT as JIT
+from .nnx.transforms import Jit as Jit
 from .nnx.transforms import Remat as Remat
 from .nnx.transforms import Scan as Scan
 from .nnx.transforms import Vmap as Vmap

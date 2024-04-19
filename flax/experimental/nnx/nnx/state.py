@@ -80,6 +80,9 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
+  def __contains__(self, key: Key) -> bool:
+    return key in self._mapping
+
   def __getitem__(self, key: Key) -> State | StateLeaf:
     value = self._mapping[key]
     if is_state_leaf(value):

@@ -1194,7 +1194,10 @@ def extract_graph_nodes(pytree: A, /) -> tuple[A, tuple[tp.Any, ...]]:
 
   def _maybe_extract(x):
     if is_graph_node(x):
-      index = nodes.setdefault(x, len(nodes))
+      if x not in nodes:
+        index = nodes[x] = len(nodes)
+      else:
+        index = nodes[x]
       return GraphNodeIndex(index)
     return x
 
