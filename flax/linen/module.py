@@ -2533,7 +2533,7 @@ class Module(ModuleBase):
     self.scope.put_variable(col, name, value)
 
   @overload
-  def sow(self, col: str, name: str, value: Any) -> bool:
+  def sow(self, col: str, name: str, value: Any) -> tuple[Any, ...]:
     ...
 
   @overload
@@ -2544,7 +2544,7 @@ class Module(ModuleBase):
     value: T,
     reduce_fn: Callable[[K, T], K] = tuple_reduce,
     init_fn: Callable[[], K] = tuple_init,  # type: ignore
-  ) -> bool:
+  ) -> K:
     ...
 
   def sow(
@@ -2554,14 +2554,11 @@ class Module(ModuleBase):
     value: T,
     reduce_fn: Callable[[K, T], K] = tuple_reduce,
     init_fn: Callable[[], K] = tuple_init,  # type: ignore
-  ) -> bool:
-    """Stores a value in a collection.
+  ) -> T:
+    """Stores a value in a collection, and returns it.
 
     Collections can be used to collect intermediate values without
     the overhead of explicitly passing a container through each Module call.
-
-    If the target collection is not mutable ``sow`` behaves like a no-op
-    and returns ``False``.
 
     Example::
 
@@ -2596,7 +2593,8 @@ class Module(ModuleBase):
              [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
              [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
              [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ]],      dtype=float32),)}
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ]],
+             dtype=float32),)}
 
     By default the values are stored in a tuple and each stored value
     is appended at the end. This way all intermediates can be tracked when
@@ -2628,17 +2626,29 @@ class Module(ModuleBase):
       value: The value of the variable.
       reduce_fn: The function used to combine the existing value with the new
         value. The default is to append the value to a tuple.
-      init_fn: For the first value stored, ``reduce_fn`` will be passed the result
-        of ``init_fn`` together with the value to be stored. The default is an
-        empty tuple.
+      init_fn: For the first value stored, ``reduce_fn`` will be passed the
+        result of ``init_fn`` together with the value to be stored. The default
+        is an empty tuple.
 
     Returns:
-      ``True`` if the value has been stored successfully, ``False`` otherwise.
+      The value.
     """
+    return run_interceptors(
+        Module._sow, self, col, name, value, reduce_fn, init_fn
+    )
+
+  def _sow(
+    self,
+    col: str,
+    name: str,
+    value: T,
+    reduce_fn: Callable[[K, T], K] = tuple_reduce,
+    init_fn: Callable[[], K] = tuple_init,  # type: ignore
+  ) -> T:
     if self.scope is None:
       raise ValueError("Can't store variables on unbound modules")
     if not self.scope.is_mutable_collection(col):
-      return False
+      return value
     if self.scope.has_variable(col, name):
       xs = self.scope.get_variable(col, name)
     else:
@@ -2647,7 +2657,7 @@ class Module(ModuleBase):
       xs = init_fn()
     xs = reduce_fn(xs, value)
     self.scope.put_variable(col, name, xs)
-    return True
+    return value
 
   def perturb(
     self, name: str, value: T, collection: str = 'perturbations'
