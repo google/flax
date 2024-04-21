@@ -349,6 +349,71 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
         f'Could not find at least one instance of the following attributes: {remaining_attributes}'
       )
 
+  def train(self, **attributes):
+    """Sets the Module to training mode.
+
+    ``train`` uses ``set_attributes`` to recursively set attributes ``deterministic=False``
+    and ``use_running_average=False`` of all nested Modules that have these attributes.
+    Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+    Modules.
+
+    Example::
+
+      >>> from flax.experimental import nnx
+      ...
+      >>> class Block(nnx.Module):
+      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...     # initialize Dropout and BatchNorm in eval mode
+      ...     self.dropout = nnx.Dropout(0.5, deterministic=True)
+      ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=True, rngs=rngs)
+      ...
+      >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (True, True)
+      >>> block.train()
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (False, False)
+
+    Args:
+      **attributes: additional attributes passed to ``set_attributes``.
+    """
+    return self.set_attributes(
+      deterministic=False, use_running_average=False, **attributes
+    )
+
+  def eval(self, **attributes):
+    """Sets the Module to evaluation mode.
+
+    ``eval`` uses ``set_attributes`` to recursively set attributes ``deterministic=True``
+    and ``use_running_average=True`` of all nested Modules that have these attributes.
+    Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+    Modules.
+
+    Example::
+
+      >>> from flax.experimental import nnx
+      ...
+      >>> class Block(nnx.Module):
+      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...     self.dropout = nnx.Dropout(0.5)
+      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+      ...
+      >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (False, False)
+      >>> block.eval()
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (True, True)
+
+    Args:
+      **attributes: additional attributes passed to ``set_attributes``.
+    """
+    return self.set_attributes(
+      deterministic=True, use_running_average=True, **attributes
+    )
+
   def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
     super().__init_subclass__()
 
