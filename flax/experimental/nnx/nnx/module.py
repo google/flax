@@ -18,7 +18,6 @@ import dataclasses
 import typing as tp
 from functools import partial
 
-import jax
 import jax.tree_util as jtu
 
 from flax.experimental.nnx.nnx import (
@@ -27,12 +26,6 @@ from flax.experimental.nnx.nnx import (
 )
 from flax.experimental.nnx.nnx import variables as variableslib
 from flax.experimental.nnx.nnx.graph_utils import GraphDef, GraphNodeMeta
-from flax.experimental.nnx.nnx.proxy_caller import (
-  ApplyCaller,
-  CallableProxy,
-  DelayedAccessor,
-)
-from flax.experimental.nnx.nnx.rnglib import Rngs
 from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import Variable
 from flax.typing import Path, PathParts
@@ -71,196 +64,6 @@ def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
 
 
 class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
-  @classmethod
-  def init(cls: type[M], *args, **kwargs) -> tuple[GraphDef[M], State]:
-    return cls(*args, **kwargs).split()
-
-  @classmethod
-  @property
-  def create_abstract(cls: type[M]) -> type[M]:
-    def lift_rngs(kwargs: dict[str, tp.Any]):
-      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], tp.Mapping):
-        kwargs['rngs'] = Rngs(rngs)
-      return kwargs
-
-    def _create_abstract(accessor: DelayedAccessor, *args, **kwargs):
-      constructor = accessor(cls)
-      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], Rngs):
-        kwargs['rngs'] = rngs.fork()
-      graphdef, state = jax.eval_shape(
-        lambda: constructor(*args, **lift_rngs(kwargs)).split()
-      )
-      return graphdef.merge(state)
-
-    return CallableProxy(_create_abstract)  # type: ignore
-
-  @classmethod
-  def partial_init(cls: type[M], state: State, *states: State) -> type[M]:
-    """Creates a constuctor that initializes the Module with the given state.
-
-    ``partial_init`` takes one or more States and returns a constructor that uses
-    ``jax.jit`` to initialize the Module and update its state with the given
-    States. Its semantically equivalent to::
-
-      module = MyModule(*args, **kwargs)
-      module.update(state, *states)
-
-    However, thanks to dead code elimination the resulting constructor will only
-    initialize the subset of ``Variable``'s that were part of the given state(s).
-
-    Example::
-
-      >>> import jax.numpy as jnp
-      >>> import jax
-      >>> from flax.experimental import nnx
-      ...
-      >>> bias = jax.random.normal(jax.random.key(0), (4,))
-      >>> state = nnx.State({'bias': bias}) # in reality load it from a checkpoint
-      >>> linear = nnx.Linear.partial_init(state)(2, 4, rngs=nnx.Rngs(1))
-      >>> y = linear(jnp.ones((1, 2)))
-      ...
-      >>> assert jnp.allclose(linear.bias, bias)
-      >>> assert y.shape == (1, 4)
-
-    Args:
-      state: The State to initialize the Module with.
-      *states: Additional States to initialize the Module with.
-
-    Returns:
-      A constructor that initializes the Module with the given States.
-    """
-    states = (state, *states)
-
-    def lift_rngs(kwargs: dict[str, tp.Any]):
-      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], tp.Mapping):
-        kwargs['rngs'] = Rngs(rngs)
-      return kwargs
-
-    def _partial_init(accessor: DelayedAccessor, *args, **kwargs):
-      constructor: tp.Callable[[], M] = accessor(cls)
-      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], Rngs):
-        kwargs['rngs'] = rngs.fork()
-
-      def _partial_init_constructor():
-        module = constructor(*args, **lift_rngs(kwargs))
-        graph_utils.update(module, *states)
-        return graph_utils.split(module)
-
-      graphdef: GraphDef[M]
-      state: State
-      graphdef, state = jax.jit(_partial_init_constructor)()
-      module = graph_utils.merge(graphdef, state)
-      return module
-
-    return CallableProxy(_partial_init)  # type: ignore
-
-  def clone(self: M) -> M:
-    return graph_utils.merge(*self.split())
-
-  @tp.overload
-  def split(self: M) -> tuple[GraphDef[M], State]:
-    ...
-
-  @tp.overload
-  def split(self: M, first: filterlib.Filter, /) -> tuple[GraphDef[M], State]:
-    ...
-
-  @tp.overload
-  def split(
-    self: M,
-    first: filterlib.Filter,
-    second: filterlib.Filter,
-    /,
-    *filters: filterlib.Filter,
-  ) -> tuple[GraphDef[M], State, tpe.Unpack[tuple[State, ...]]]:
-    ...
-
-  def split(
-    self: M, *filters: filterlib.Filter
-  ) -> tuple[GraphDef[M], State, tpe.Unpack[tuple[State, ...]]]:
-    return graph_utils.split(self, *filters)
-
-  def get_state(self) -> State:
-    _, state = graph_utils.split(self)
-    return state
-
-  def get_graphdef(self: M) -> GraphDef[M]:
-    graphdef, _ = graph_utils.split(self)
-    return graphdef
-
-  @tp.overload
-  def extract(self, first: filterlib.Filter, /) -> State:
-    ...
-
-  @tp.overload
-  def extract(
-    self,
-    first: filterlib.Filter,
-    second: filterlib.Filter,
-    /,
-    *filters: filterlib.Filter,
-  ) -> tuple[State, ...]:
-    ...
-
-  def extract(
-    self,
-    first: filterlib.Filter,
-    /,
-    *filters: filterlib.Filter,
-  ) -> tp.Union[State, tuple[State, ...]]:
-    state = self.get_state()
-
-    if len(filters) == 0:
-      states = state.extract(first)
-    else:
-      states = state.extract(first, filters[0], *filters[1:])
-
-    return states
-
-  @tp.overload
-  def pop(
-    self,
-    filter: filterlib.Filter,
-    /,
-  ) -> State:
-    ...
-
-  @tp.overload
-  def pop(
-    self,
-    filter: filterlib.Filter,
-    filter2: filterlib.Filter,
-    /,
-    *filters: filterlib.Filter,
-  ) -> tuple[State, ...]:
-    ...
-
-  def pop(
-    self, *filters: filterlib.Filter
-  ) -> tp.Union[State, tuple[State, ...]]:
-    if len(filters) == 0:
-      raise ValueError('Expected at least one filter')
-
-    states = graph_utils.graph_pop(self, filters)
-
-    if len(states) == 1:
-      return states[0]
-    else:
-      return states
-
-  @property
-  def apply(self: M) -> ApplyCaller[M]:
-    def _apply(accessor: DelayedAccessor, *args, **kwargs) -> tuple[tp.Any, M]:
-      module = graph_utils.clone(self)
-      fn = accessor(module)
-      out = fn(*args, **kwargs)
-      return out, module
-
-    return CallableProxy(_apply)  # type: ignore
-
-  def update(self, state: State, *states: State) -> None:
-    graph_utils.update(self, state, *states)
-
   def sow(
     self,
     variable_type: tp.Type[variableslib.Variable[tp.Any]],
@@ -285,7 +88,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
 
-  def modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
+  def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
     for path, value in graph_utils.iter_nodes(self):
       if isinstance(value, Module):
         yield path, value
@@ -334,7 +137,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
     if not filters:
       filters = (True,)
     predicates = tuple(map(filterlib.to_predicate, filters))
-    for path, module in self.modules():
+    for path, module in self.iter_modules():
       for predicate in predicates:
         if predicate(path, module):
           for name, value in attributes.items():

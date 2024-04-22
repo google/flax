@@ -111,7 +111,7 @@ class Optimizer(graph_utils.GraphNode):
     self.step = OptState(0)
     self.model = model
     self.tx = tx
-    self.opt_state = tx.init(model.extract(nnx.Param))
+    self.opt_state = tx.init(nnx.state(model, nnx.Param))
 
   def split(self, *filters: filterlib.Filter):
     return graph_utils.split(self, *filters)
@@ -131,7 +131,7 @@ class Optimizer(graph_utils.GraphNode):
       and ``opt_state`` updated by applying ``grads``, and additional attributes
       replaced as specified by ``kwargs``.
     """
-    params = self.model.extract(nnx.Param)
+    params = nnx.state(self.model, nnx.Param)
 
     updates, new_opt_state = self.tx.update(
       grads, self.opt_state, params
@@ -140,6 +140,6 @@ class Optimizer(graph_utils.GraphNode):
     assert isinstance(new_params, nnx.State)
 
     self.step.value += 1
-    self.model.update(new_params)
+    nnx.update(self.model, new_params)
     self.opt_state = new_opt_state
 

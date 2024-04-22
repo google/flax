@@ -39,7 +39,7 @@ def create_model(seed: int):
 
 def create_and_save(seed: int, path: str):
   model = create_model(seed)
-  state = model.get_state()
+  state = nnx.state(model)
   # Save the parameters
   checkpointer = orbax.PyTreeCheckpointer()
   checkpointer.save(f'{path}/state', state)
@@ -47,12 +47,13 @@ def create_and_save(seed: int, path: str):
 
 def load_model(path: str) -> MLP:
   # create that model with abstract shapes
-  static, state = jax.eval_shape(lambda: create_model(0).split())
+  model = nnx.eval_shape(lambda: create_model(0))
+  state = nnx.state(model)
   # Load the parameters
   checkpointer = orbax.PyTreeCheckpointer()
   state = checkpointer.restore(f'{path}/state', item=state)
-  # Merge the parameters into the model
-  model = static.merge(state)
+  # update the model with the loaded state
+  nnx.update(model, state)
   return model
 
 

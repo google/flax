@@ -1042,7 +1042,7 @@ def merge(
   return node
 
 
-def update(node, state: State, *states: State) -> None:
+def update(node, state: State, /, *states: State) -> None:
   if states:
     state = State.merge(state, *states)
 
@@ -1050,12 +1050,17 @@ def update(node, state: State, *states: State) -> None:
 
 
 @tp.overload
-def extract(node, first: filterlib.Filter, /) -> State:
+def state(node, /) -> State:
   ...
 
 
 @tp.overload
-def extract(
+def state(node, first: filterlib.Filter, /) -> State:
+  ...
+
+
+@tp.overload
+def state(
   node,
   first: filterlib.Filter,
   second: filterlib.Filter,
@@ -1065,20 +1070,24 @@ def extract(
   ...
 
 
-def extract(
+def state(
   node,
-  first: filterlib.Filter,
-  /,
   *filters: filterlib.Filter,
 ) -> tp.Union[State, tuple[State, ...]]:
   state = graph_flatten(node)[1]
 
   if len(filters) == 0:
-    states = state.extract(first)
+    states = state
+  elif len(filters) == 1:
+    states = state.filter(filters[0])
   else:
-    states = state.extract(first, filters[0], *filters[1:])
+    states = state.filter(filters[0], filters[1], *filters[1:])
 
   return states
+
+def graphdef(node: tp.Any, /) -> GraphDef[tp.Any]:
+  graphdef, _, _ = graph_flatten(node)
+  return graphdef
 
 
 @tp.overload

@@ -188,7 +188,7 @@ class TestGraphUtils:
         return self.linear_out(x)
 
     model = Encoder(rngs=nnx.Rngs(0))
-    static, state = model.split()
+    static, state = nnx.split(model)
 
     assert len(state.flat_state()) == 1
 
@@ -203,7 +203,7 @@ class TestGraphUtils:
         self.a = nnx.Param(1)
 
     m = Foo()
-    static, state = m.split()
+    static, state = nnx.split(m)
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(state.a, nnx.Param)
@@ -225,7 +225,7 @@ class TestGraphUtils:
         self.b = p
 
     m = Foo()
-    static, state = m.split()
+    static, state = nnx.split(m)
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(m.b, nnx.Param)
@@ -279,7 +279,7 @@ class TestGraphUtils:
 
     m = Foo()
 
-    static, state = m.split()
+    static, state = nnx.split(m)
 
     assert 'tree' in state
     assert 'a' in state.tree

@@ -65,14 +65,17 @@ class TestLinenConsistency(parameterized.TestCase):
     OUT_FEATURES = 64
 
     x = jax.numpy.ones((1, IN_FEATURES))
-    model_nnx = nnx.Linear.create_abstract(
-      IN_FEATURES,
-      OUT_FEATURES,
-      use_bias=use_bias,
-      dtype=dtype,
-      param_dtype=param_dtype,
-      precision=precision,
-      rngs=rngs,
+    model_nnx = nnx.eval_shape(
+      lambda rngs: nnx.Linear(
+        IN_FEATURES,
+        OUT_FEATURES,
+        use_bias=use_bias,
+        dtype=dtype,
+        param_dtype=param_dtype,
+        precision=precision,
+        rngs=rngs,
+      ),
+      rngs,
     )
     model = linen.Dense(
       OUT_FEATURES,

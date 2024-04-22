@@ -44,12 +44,15 @@ class TestLinenConsistency(parameterized.TestCase):
     NUM_EMBEDDINGS = num_embeddings
 
     x = jax.numpy.arange(NUM_EMBEDDINGS, dtype=input_dtype)
-    model_nnx = nnx.Embed.create_abstract(
-      NUM_EMBEDDINGS,
-      IN_FEATURES,
-      dtype=dtype,
-      param_dtype=param_dtype,
-      rngs=rngs,
+    model_nnx = nnx.eval_shape(
+      lambda rngs: nnx.Embed(
+        NUM_EMBEDDINGS,
+        IN_FEATURES,
+        dtype=dtype,
+        param_dtype=param_dtype,
+        rngs=rngs,
+      ),
+      rngs,
     )
     model = linen.Embed(
       NUM_EMBEDDINGS, IN_FEATURES, dtype=dtype, param_dtype=param_dtype

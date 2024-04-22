@@ -160,7 +160,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     return states
 
   @tp.overload
-  def extract(
+  def filter(
     self,
     first: filterlib.Filter,
     /,
@@ -168,7 +168,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     ...
 
   @tp.overload
-  def extract(
+  def filter(
     self,
     first: filterlib.Filter,
     second: filterlib.Filter,
@@ -177,7 +177,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   ) -> tuple['State', ...]:
     ...
 
-  def extract(
+  def filter(
     self,
     first: filterlib.Filter,
     /,

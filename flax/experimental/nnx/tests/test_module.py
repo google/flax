@@ -380,20 +380,26 @@ class TestModule:
     assert hasattr(m1, 'c')
 
   def test_create_abstract(self):
-    linear = nnx.Linear.create_abstract(2, 3, rngs=nnx.Rngs(0))
+    linear = nnx.eval_shape(lambda: nnx.Linear(2, 3, rngs=nnx.Rngs(0)))
 
     assert linear.kernel.value == jax.ShapeDtypeStruct((2, 3), jnp.float32)
     assert linear.bias.value == jax.ShapeDtypeStruct((3,), jnp.float32)
 
   def test_partial_init(self):
     linear = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    state = linear.get_state()
+    state = nnx.state(linear)
 
     del state['bias']
 
-    linear2 = nnx.Linear.partial_init(state)(
-      2, 3, bias_init=nnx.initializers.ones_init(), rngs=nnx.Rngs(1)
-    )
+    @nnx.jit
+    def partial_init(state: nnx.State):
+      m = nnx.Linear(
+        2, 3, bias_init=nnx.initializers.ones_init(), rngs=nnx.Rngs(1)
+      )
+      nnx.update(m, state)
+      return m
+
+    linear2 = partial_init(state)
 
     np.testing.assert_allclose(linear.kernel.value, linear2.kernel.value)
     np.testing.assert_allclose(linear.bias.value, 0)
@@ -558,7 +564,7 @@ class TestModuleDef:
     rngs = nnx.Rngs(0)
     foo = Foo(c=1.0, rngs=rngs)
 
-    graphdef, states = foo.split()
+    graphdef, states = nnx.split(foo)
 
     assert isinstance(states, nnx.State)
     assert isinstance(states.w, nnx.Param)
@@ -582,7 +588,7 @@ class TestModuleDef:
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 
-    graphdef, state = foo.split()
+    graphdef, state = nnx.split(foo)
 
     assert isinstance(graphdef, nnx.GraphDef)
     assert isinstance(state, nnx.State)
@@ -603,7 +609,7 @@ class TestModuleDef:
 
     module = Foo(rngs=nnx.Rngs(0))
 
-    modules = list(module.modules())
+    modules = list(module.iter_modules())
 
     assert len(modules) == 3
     assert modules[0][0] == ()
@@ -620,7 +626,7 @@ class TestModuleDef:
 
     foo = Foo()
 
-    graphdef, state = foo.split()
+    graphdef, state = nnx.split(foo)
 
     assert isinstance(state, nnx.State)
     assert isinstance(state.a, jax.Array)
@@ -636,7 +642,7 @@ class TestModuleDef:
 
     foo = Foo()
 
-    graphdef, state = foo.split()
+    graphdef, state = nnx.split(foo)
 
     assert isinstance(state, nnx.State)
     assert isinstance(state.a, nnx.State)

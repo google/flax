@@ -250,12 +250,12 @@ def predict_step(
   module = static.merge(params)
 
   # TODO(cgarciae): check how pytorch does this.
-  for _path, m in module.modules():
+  for _path, m in module.iter_modules():
     if isinstance(m, HasCache):
       input_shape = (inputs.shape[0], max_decode_len, config.emb_dim)
       m.init_cache(input_shape, dtype=config.dtype)
 
-  cache = module.extract(nnx.Cache)
+  cache = nnx.state(module, nnx.Cache)
 
   def tokens_ids_to_logits(flat_ids, cache: nnx.State):
     """Token slice to logits from decoder model."""
@@ -263,7 +263,7 @@ def predict_step(
     module = static.merge(params, cache)
     module.set_attributes(deterministic=True, decode=True)
     logits = module(flat_ids)
-    cache = module.extract(nnx.Cache)
+    cache = nnx.state(module, nnx.Cache)
     # Remove singleton sequence-length dimension:
     # [batch, 1, vocab] --> [batch, vocab]
     logits = logits.squeeze(axis=1)

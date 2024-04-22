@@ -372,7 +372,7 @@ class TestGrad:
     assert isinstance(grads.a[1], nnx.Variable)
     assert len(grads.flat_state()) == 2
 
-    m.update(grads)
+    nnx.update(m, grads)
 
     assert m.a[0] is m.b
     assert m['a'][0].value == 2.0
@@ -401,7 +401,7 @@ class TestGrad:
     assert isinstance(grads.a[0], nnx.Param)
     assert len(grads) == 2
 
-    m.update(grads)
+    nnx.update(m, grads)
 
     assert m.a[0].value == 1.0
     assert m.a[1].value == 20.0
@@ -429,7 +429,7 @@ class TestGrad:
     assert isinstance(grads.a[1], nnx.BatchStat)
     assert len(grads) == 1
 
-    m.update(grads)
+    nnx.update(m, grads)
 
     assert m.a[0].value == 10.0
     assert m.a[1].value == 1.0
@@ -813,7 +813,7 @@ class TestScan:
         x = self.linear(x)
 
         # test sharding layer axes is not present inside scan
-        state = self.linear.get_state()
+        state = nnx.state(self.linear)
         assert state.kernel.raw_value.shape == (3, 3)
         assert state.kernel.sharding == ('din', 'dout')
         assert state.bias.raw_value.shape == (3,)
@@ -831,7 +831,7 @@ class TestScan:
     m = MLP(rngs=nnx.Rngs(0))
 
     # test sharding layers axes is set
-    state = m.get_state()
+    state = nnx.state(m)
     assert state.scan_module.linear.kernel.raw_value.shape == (
       5,
       3,
@@ -852,7 +852,7 @@ class TestScan:
     y, out = m(x, None)
 
     # test sharding axes is preserved
-    state = m.get_state()
+    state = nnx.state(m)
     assert state.scan_module.linear.kernel.raw_value.shape == (5, 3, 3)
     assert state.scan_module.linear.kernel.sharding == (
       'layers',

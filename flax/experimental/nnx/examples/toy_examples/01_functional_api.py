@@ -57,8 +57,8 @@ class MLP(nnx.Module):
     return x
 
 
-static, params, counts = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)).split(
-  nnx.Param, Count
+static, params, counts = nnx.split(
+  MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)), nnx.Param, Count
 )
 
 
@@ -69,7 +69,7 @@ def train_step(params, counts, batch):
   def loss_fn(params):
     model = static.merge(params, counts)
     y_pred = model(x)
-    new_counts = model.extract(Count)
+    new_counts = nnx.state(model, Count)
     loss = jnp.mean((y - y_pred) ** 2)
     return loss, new_counts
 

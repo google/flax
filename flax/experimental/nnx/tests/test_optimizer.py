@@ -58,28 +58,28 @@ class TestOptimizer(parameterized.TestCase):
     state = nnx.Optimizer(model, tx)
 
     if jit_decorator == jax.jit:
-      model_static, model_state = state.model.split()
+      model_static, model_state = nnx.split(state.model)
       loss_fn = lambda static, state, x, y: ((static.merge(state)(x)-y)**2).mean()
       initial_loss = loss_fn(model_static, model_state, x, y)
 
       def train_step(static, state, x, y):
         state = static.merge(state)
-        model_static, model_state = state.model.split()
+        model_static, model_state = nnx.split(state.model)
         grads = jax.grad(loss_fn, argnums=1)(model_static, model_state, x, y)
         state.update(grads)
         return state.split()
 
       static, state = jit_decorator(train_step)(*state.split(), x, y)
       state = static.merge(state)
-      new_loss = loss_fn(*state.model.split(), x, y)
+      new_loss = loss_fn(*nnx.split(state.model), x, y)
 
     else:
       loss_fn = lambda model, x, y: ((model(x)-y)**2).mean()
       initial_loss = loss_fn(state.model, x, y)
 
-      def train_step(state, x, y):
-        grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model, x, y)
-        state.update(grads)
+      def train_step(optimizer: nnx.Optimizer, x, y):
+        grads = nnx.grad(loss_fn, wrt=nnx.Param)(optimizer.model, x, y)
+        optimizer.update(grads)
 
       jit_decorator(train_step)(state, x, y)
       new_loss = loss_fn(state.model, x, y)

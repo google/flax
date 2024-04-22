@@ -1834,3 +1834,33 @@ def vmap(
   wrapper = vmap_apply_wrapper
 
   return wrapper  # type: ignore
+
+# -------------------------------
+# eval_shape
+# -------------------------------
+
+
+def eval_shape(
+  f: tp.Callable[..., A],
+  *args: tp.Any,
+  **kwargs: tp.Any,
+) -> A:
+  (args, kwargs), input_nodes = graph_utils.extract_graph_nodes((args, kwargs))
+  graphdef, state = graph_utils.split(input_nodes)
+
+  @functools.wraps(f)
+  def _eval_shape_fn(state: State, *args, **kwargs):
+    input_nodes = graphdef.merge(state)
+    args, kwargs = graph_utils.insert_graph_nodes((args, kwargs), input_nodes)
+    out = f(*args, **kwargs)
+    out, output_nodes = graph_utils.extract_graph_nodes(out)
+    graphdef_out, state_out = graph_utils.split(output_nodes)
+    return graphdef_out, state_out, out
+
+  graphdef_out, state_out, out = jax.eval_shape(
+    _eval_shape_fn, state, *args, **kwargs
+  )
+
+  output_nodes = graphdef_out.merge(state_out)
+  out = graph_utils.insert_graph_nodes(out, output_nodes)
+  return out
