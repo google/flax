@@ -188,7 +188,7 @@ class Block(nnx.Module):
 
 MLP = nnx.Scan(
   Block,
-  variable_axes={nnx.Param: 0},
+  state_axes={nnx.Param: 0},
   variable_carry=nnx.BatchStat,
   split_rngs={'params': True, 'dropout': True},
   length=5,

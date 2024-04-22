@@ -274,3 +274,52 @@ class TestRngs:
     assert y.shape == (4, 1, 3)
     assert m.rngs.params.count.value == 2
     assert m.rngs['dropout'].count.value == 1
+
+  def test_state_fork_split(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    graphdef, state = nnx.split(rngs, nnx.RngState)
+    split, broadcast = nnx.fork(state, ..., 4)
+
+    assert len(jax.tree.leaves(split)) == 2
+    assert len(jax.tree.leaves(broadcast)) == 2
+    assert split.params.key.value.shape == (4,)
+    assert split.dropout.key.value.shape == (4,)
+    assert broadcast.params.count.value == 0
+    assert broadcast.dropout.count.value == 0
+
+  def test_state_fork_split_and_broadcast(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    graphdef, state = nnx.split(rngs, nnx.RngState)
+    split, broadcast = nnx.fork(state, 'params', 4)
+
+    assert len(jax.tree.leaves(split)) == 1
+    assert len(jax.tree.leaves(broadcast)) == 3
+    assert split.params.key.value.shape == (4,)
+    assert broadcast.dropout.key.value.shape == ()
+    assert broadcast.params.count.value == 0
+    assert broadcast.dropout.count.value == 0
+
+
+  def test_state_fork_multidimensional_split(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    graphdef, state = nnx.split(rngs, nnx.RngState)
+    split, broadcast = nnx.fork(state, ..., (4, None, 3))
+
+    assert len(jax.tree.leaves(split)) == 2
+    assert len(jax.tree.leaves(broadcast)) == 2
+    assert split.params.key.value.shape == (4, 1, 3)
+    assert split.dropout.key.value.shape == (4, 1, 3)
+    assert broadcast.params.count.value == 0
+    assert broadcast.dropout.count.value == 0
+
+  def test_state_fork_multidimensional_split_mixed(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    graphdef, state = nnx.split(rngs, nnx.RngState)
+    split, broadcast = nnx.fork(state, 'params', (4, None, 3))
+
+    assert len(jax.tree.leaves(split)) == 1
+    assert len(jax.tree.leaves(broadcast)) == 3
+    assert split.params.key.value.shape == (4, 1, 3)
+    assert broadcast.dropout.key.value.shape == ()
+    assert broadcast.params.count.value == 0
+    assert broadcast.dropout.count.value == 0
