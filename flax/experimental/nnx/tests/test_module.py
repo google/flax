@@ -51,14 +51,14 @@ class TestModule:
   def test_tree_map(self):
     m = nnx.Dict(a=nnx.Param(1))
 
-    static, state = m.split()
+    graphdef, state = nnx.split(m)
 
     state = jax.tree_util.tree_map(lambda x: x + 1, state)
 
   def test_split_2(self):
     m = nnx.Dict(a=nnx.Param(1))
 
-    empty, some, static = m.split(None, ...)
+    graphdef, empty, some = nnx.split(m, None, ...)
 
     some = jax.tree_util.tree_map(lambda x: x + 1, some)
 
@@ -69,9 +69,9 @@ class TestModule:
     def g(graphdef: nnx.GraphDef[nnx.Dict[int]], state: nnx.State):
       m = graphdef.merge(state)
       m.a = 2
-      return m.split()
+      return nnx.split(m)
 
-    graphdef, state = g(*m.split())
+    graphdef, state = g(*nnx.split(m))
     m2 = graphdef.merge(state)
 
     assert m2.a == 2
@@ -109,7 +109,7 @@ class TestModule:
     m1 = nnx.Dict(a=nnx.Param(1), b=nnx.Param(2))
     m2 = nnx.Dict(x=m1, y=m1, z=nnx.Param(3))
 
-    m3 = nnx.merge(*m2.split())
+    m3 = nnx.merge(*nnx.split(m2))
 
     assert m3['x'] is m3['y']
     assert m3['x']['a'] is m3['y']['a']
@@ -123,7 +123,7 @@ class TestModule:
 
     m = Foo()
 
-    graphdef, state = m.split()
+    graphdef, state = nnx.split(m)
     assert len(state) == 1
 
     m2 = graphdef.merge(state)
@@ -142,9 +142,9 @@ class TestModule:
       assert m['a'][0] is m['b']
       assert m['a'][1] is not m['b']
 
-      return m.split()
+      return nnx.split(m)
 
-    graphdef, state = f(*m.split())
+    graphdef, state = f(*nnx.split(m))
     m = graphdef.merge(state)
 
     assert m['a'][0] is m['b']
@@ -162,9 +162,9 @@ class TestModule:
     def g(graphdef: nnx.GraphDef[nnx.Dict[nnx.Param[int]]], state: nnx.State):
       m = graphdef.merge(state)
       m.a.value += 1
-      return m.split()
+      return nnx.split(m)
 
-    graphdef, state = g(*m.split())
+    graphdef, state = g(*nnx.split(m))
     m2 = graphdef.merge(state)
     assert m2 is not m
     assert m.a.value == 1
@@ -180,23 +180,23 @@ class TestModule:
       n += 1
       m = nnx.merge(*state_and_def)
       m.a.value += 1
-      return m.split()
+      return nnx.split(m)
 
-    m2 = nnx.merge(*g(m.split()))
+    m2 = nnx.merge(*g(nnx.split(m)))
 
     assert n == 1
     assert m2 is not m
     assert m.a.value == 1
     assert m2.a.value == 2
 
-    g(m.split())
+    g(nnx.split(m))
     assert n == 1
 
-    g(m2.split())
+    g(nnx.split(m2))
     assert n == 1
 
     m2.b = nnx.Param(10)
-    g(m2.split())
+    g(nnx.split(m2))
 
     assert n == 2
 
@@ -211,7 +211,7 @@ class TestModule:
       }
     )
 
-    graphdef, p = m.split()
+    graphdef, p = nnx.split(m)
     assert len(p.flat_state()) == 2
     assert len(jax.tree_util.tree_leaves(p)) == 2
 
@@ -221,7 +221,7 @@ class TestModule:
       b=nnx.Dict(c=nnx.Param(1), d=nnx.Param(2)),
     )
 
-    m2 = m.clone()
+    m2 = nnx.clone(m)
 
     assert m is not m2
     assert m2.a[0] == m2.b.c
@@ -247,7 +247,7 @@ class TestModule:
     assert y2 == 11
     assert m.y.value == (3, 11)
 
-    intermediates = m.pop(nnx.Intermediate)
+    intermediates = nnx.pop(m, nnx.Intermediate)
 
     assert isinstance(intermediates.y, nnx.Intermediate)
     assert intermediates['y'].raw_value == (3, 11)
@@ -284,32 +284,6 @@ class TestModule:
     with pytest.raises(ValueError, match='to be of type'):
       m(2)
 
-  def test_update_static_state(self):
-    class Foo(nnx.Module):
-      def add_field(self):
-        self.a = 1
-
-    m1 = Foo()
-    m2 = Foo()
-    m2.add_field()
-
-    m1.update(m2)
-
-    assert m1.a == 1
-
-  def test_update_moduledef(self):
-    class Foo(nnx.Module):
-      def add_field(self):
-        self.a = 1
-
-    m1 = Foo()
-    m2 = Foo()
-    m2.add_field()
-
-    m1.update(m2.get_graphdef())
-
-    assert m1.a == 1
-
   def test_update_static_state_submodules(self):
     class Bar(nnx.Module):
       def __init__(self) -> None:
@@ -324,10 +298,13 @@ class TestModule:
         self.b = self.a
 
     m1 = Foo()
-    m2 = Foo()
-    m2.a.add_field()
+    with nnx.UpdateContext() as ctx:
+      graphdef, state = ctx.split(m1)
+      m2 = ctx.merge(graphdef, state)
+      m2.a.add_field()
+      new_graphdef, state = ctx.split(m2)
 
-    m1.update(m2)
+      ctx.update(new_graphdef, state)
 
     assert m1.a.x == 1
     assert m1.a.y == 2
@@ -347,10 +324,13 @@ class TestModule:
         self.b = Bar()
 
     m1 = Foo()
-    m2 = Foo()
+    ctx = nnx.UpdateContext()
+    graphdef, state = ctx.split(m1)
+    m2 = ctx.merge(graphdef, state)
     m2.add_module()
+    new_graphdef, state = ctx.split(m2)
 
-    m1.update(m2)
+    ctx.update(new_graphdef, state)
 
     assert m1.a.x == 1
     assert m1.b.x == 1
@@ -366,15 +346,17 @@ class TestModule:
         self.b = self.a
 
     m1 = Foo()
-    m2 = Foo()
+    ctx = nnx.UpdateContext()
+    graphdef, state = ctx.split(m1)
+    m2 = ctx.merge(graphdef, state)
     m2.a.x = 2
-
-    m1.update(m2)
+    new_graphdef, state = ctx.split(m2)
+    ctx.update(new_graphdef, state)
 
     assert m1.a.x == 2
     assert m1.b.x == 2
 
-  def test_update_add_shared_error(self):
+  def test_update_add_shared(self):
     class Bar(nnx.Module):
       def __init__(self) -> None:
         self.x = 1
@@ -388,53 +370,36 @@ class TestModule:
         self.c = self.a
 
     m1 = Foo()
-    m2 = Foo()
+    ctx = nnx.UpdateContext()
+    graphdef, state = ctx.split(m1)
+    m2 = ctx.merge(graphdef, state)
     m2.add_submodule()
+    new_graphdef, state = ctx.split(m2)
+    ctx.update(new_graphdef, state)
 
-    assert hasattr(m2, 'c')
-
-    with pytest.raises(ValueError, match='Trying to add a new node at path'):
-      m1.update(m2)
-
-  def test_update_add_shared_error_new_first(self):
-    class Bar(nnx.Module):
-      def __init__(self) -> None:
-        self.x = 1
-
-    class Foo(nnx.Module):
-      def __init__(self) -> None:
-        self.b = Bar()
-        self.c = self.b
-
-      def add_submodule(self):
-        self.a = self.b
-
-    m1 = Foo()
-    m2 = Foo()
-    m2.add_submodule()
-
-    assert hasattr(m2, 'a')
-
-    m2 = m2.clone()  # clone to sort the fields
-
-    with pytest.raises(ValueError, match='Trying to update a node at path'):
-      m1.update(m2)
+    assert hasattr(m1, 'c')
 
   def test_create_abstract(self):
-    linear = nnx.Linear.create_abstract(2, 3, rngs=nnx.Rngs(0))
+    linear = nnx.eval_shape(lambda: nnx.Linear(2, 3, rngs=nnx.Rngs(0)))
 
     assert linear.kernel.value == jax.ShapeDtypeStruct((2, 3), jnp.float32)
     assert linear.bias.value == jax.ShapeDtypeStruct((3,), jnp.float32)
 
   def test_partial_init(self):
     linear = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    state = linear.get_state()
+    state = nnx.state(linear)
 
     del state['bias']
 
-    linear2 = nnx.Linear.partial_init(state)(
-      2, 3, bias_init=nnx.initializers.ones_init(), rngs=nnx.Rngs(1)
-    )
+    @nnx.jit
+    def partial_init(state: nnx.State):
+      m = nnx.Linear(
+        2, 3, bias_init=nnx.initializers.ones_init(), rngs=nnx.Rngs(1)
+      )
+      nnx.update(m, state)
+      return m
+
+    linear2 = partial_init(state)
 
     np.testing.assert_allclose(linear.kernel.value, linear2.kernel.value)
     np.testing.assert_allclose(linear.bias.value, 0)
@@ -512,14 +477,14 @@ class TestModulePytree:
     class Foo(nnx.Module, experimental_pytree=True):
       def __init__(self):
         self.node = nnx.Param(1)
-        self.static = 1
+        self.graphdef = 1
 
     m = Foo()
 
     m = jax.tree_util.tree_map(lambda x: x + 1, m)
 
     assert m.node.value == 2
-    assert m.static == 1
+    assert m.graphdef == 1
 
 
 class TestModuleDataclass:
@@ -534,15 +499,15 @@ class TestModuleDataclass:
       f: int
 
     m = Foo(
-      a=1,  # static
+      a=1,  # graphdef
       b=nnx.Variable(2),  # node
       c=nnx.Param(3),  # param
       d=nnx.Variable(4),  # var
       e=nnx.BatchStat(5),  # var
-      f=6,  # static int
+      f=6,  # graphdef int
     )
 
-    graphdef, state = m.split()
+    graphdef, state = nnx.split(m)
 
     assert len(state) == 4
     assert state.b == nnx.Variable(2)
@@ -599,7 +564,7 @@ class TestModuleDef:
     rngs = nnx.Rngs(0)
     foo = Foo(c=1.0, rngs=rngs)
 
-    graphdef, states = foo.split()
+    graphdef, states = nnx.split(foo)
 
     assert isinstance(states, nnx.State)
     assert isinstance(states.w, nnx.Param)
@@ -623,7 +588,7 @@ class TestModuleDef:
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 
-    graphdef, state = foo.split()
+    graphdef, state = nnx.split(foo)
 
     assert isinstance(graphdef, nnx.GraphDef)
     assert isinstance(state, nnx.State)
@@ -644,7 +609,7 @@ class TestModuleDef:
 
     module = Foo(rngs=nnx.Rngs(0))
 
-    modules = list(module.modules())
+    modules = list(module.iter_modules())
 
     assert len(modules) == 3
     assert modules[0][0] == ()
@@ -661,7 +626,7 @@ class TestModuleDef:
 
     foo = Foo()
 
-    graphdef, state = foo.split()
+    graphdef, state = nnx.split(foo)
 
     assert isinstance(state, nnx.State)
     assert isinstance(state.a, jax.Array)
@@ -677,7 +642,7 @@ class TestModuleDef:
 
     foo = Foo()
 
-    graphdef, state = foo.split()
+    graphdef, state = nnx.split(foo)
 
     assert isinstance(state, nnx.State)
     assert isinstance(state.a, nnx.State)

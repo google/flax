@@ -130,15 +130,7 @@ y
 
 In Flax, a common practice is to use a dataclass to encapsulate the entire training state, which would allow you to simply pass only two arguments (the train state and batched data) to functions like `train_step`. The training state would typically contain an [`nnx.Optimizer`](https://flax.readthedocs.io/en/latest/api_reference/flax.experimental.nnx/training/optimizer.html#flax.experimental.nnx.optimizer.Optimizer) (which contains the step number, model and optimizer state) and an `nnx.Module` (for easier access to the model from the top-level of the train state). The training state can also be easily extended to add training and test metrics, as you will see in this tutorial (see [`nnx.metrics`](https://flax.readthedocs.io/en/latest/api_reference/flax.experimental.nnx/training/metrics.html#module-flax.experimental.nnx.metrics) for more detail on NNX's metric classes).
 
-```{code-cell} ipython3
-import dataclasses
-
-@dataclasses.dataclass
-class TrainState(nnx.GraphNode):
-  optimizer: nnx.Optimizer
-  model: CNN
-  metrics: nnx.MultiMetric
-```
++++
 
 We use `optax` to create an optimizer ([`adamw`](https://optax.readthedocs.io/en/latest/api/optimizers.html#optax.adamw)) and initialize the `nnx.Optimizer`. We use `nnx.MultiMetric` to keep track of both the accuracy and average loss for both training and test batches.
 
@@ -147,14 +139,12 @@ import optax
 
 learning_rate = 0.005
 momentum = 0.9
-tx = optax.adamw(learning_rate, momentum)
 
-state = TrainState(
-  optimizer=nnx.Optimizer(model=model, tx=tx),
-  model=model,
-  metrics=nnx.MultiMetric(
-    accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()
-  ),
+optimizer = nnx.Optimizer(model, optax.adamw(learning_rate, momentum))
+model = model
+metrics = nnx.MultiMetric(
+  accuracy=nnx.metrics.Accuracy(), 
+  loss=nnx.metrics.Average(),
 )
 ```
 
@@ -163,7 +153,7 @@ state = TrainState(
 We define a loss function using cross entropy loss (see more details in [`optax.softmax_cross_entropy_with_integer_labels()`](https://optax.readthedocs.io/en/latest/api/losses.html#optax.softmax_cross_entropy_with_integer_labels)) that our model will optimize over. In addition to the loss, the logits are also outputted since they will be used to calculate the accuracy metric during training and testing.
 
 ```{code-cell} ipython3
-def loss_fn(model, batch):
+def loss_fn(model: CNN, batch):
   logits = model(batch['image'])
   loss = optax.softmax_cross_entropy_with_integer_labels(
     logits=logits, labels=batch['label']
@@ -179,12 +169,12 @@ Next, we create the training step function. This function takes the `state` and 
 
 ```{code-cell} ipython3
 @nnx.jit
-def train_step(state: TrainState, batch):
+def train_step(model: CNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, batch):
   """Train for a single step."""
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
-  (loss, logits), grads = grad_fn(state.model, batch)
-  state.metrics.update(values=loss, logits=logits, labels=batch['label'])
-  state.optimizer.update(grads=grads)
+  (loss, logits), grads = grad_fn(model, batch)
+  metrics.update(values=loss, logits=logits, labels=batch['label'])
+  optimizer.update(grads=grads)
 ```
 
 The [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_reference/flax.experimental.nnx/transforms.html#flax.experimental.nnx.jit) decorator traces the `train_step` function for just-in-time compilation with 
@@ -198,9 +188,9 @@ Create a separate function to calculate loss and accuracy metrics for the test b
 
 ```{code-cell} ipython3
 @nnx.jit
-def compute_test_metrics(*, state: TrainState, batch):
-  loss, logits = loss_fn(state.model, batch)
-  state.metrics.update(values=loss, logits=logits, labels=batch['label'])
+def compute_test_metrics(model: CNN, metrics: nnx.MultiMetric, batch):
+  loss, logits = loss_fn(model, batch)
+  metrics.update(values=loss, logits=logits, labels=batch['label'])
 ```
 
 ## 7. Seed randomness
@@ -245,22 +235,22 @@ for step, batch in enumerate(train_ds.as_numpy_iterator()):
   # - the train state's model parameters
   # - the optimizer state
   # - the training loss and accuracy batch metrics
-  train_step(state, batch)
+  train_step(model, optimizer, metrics, batch)
 
   if (step + 1) % num_steps_per_epoch == 0:  # one training epoch has passed
     # Log training metrics
-    for metric, value in state.metrics.compute().items():  # compute metrics
+    for metric, value in metrics.compute().items():  # compute metrics
       metrics_history[f'train_{metric}'].append(value)  # record metrics
-    state.metrics.reset()  # reset metrics for test set
+    metrics.reset()  # reset metrics for test set
 
     # Compute metrics on the test set after each training epoch
     for test_batch in test_ds.as_numpy_iterator():
-      compute_test_metrics(state=state, batch=test_batch)
+      compute_test_metrics(model, metrics, test_batch)
 
     # Log test metrics
-    for metric, value in state.metrics.compute().items():
+    for metric, value in metrics.compute().items():
       metrics_history[f'test_{metric}'].append(value)
-    state.metrics.reset()  # reset metrics for next training epoch
+    metrics.reset()  # reset metrics for next training epoch
 
     print(
       f"train epoch: {(step+1) // num_steps_per_epoch}, "
@@ -302,8 +292,8 @@ Define a jitted inference function, `pred_step`, to generate predictions on the 
 
 ```{code-cell} ipython3
 @nnx.jit
-def pred_step(state: TrainState, batch):
-  logits = state.model(batch['image'])
+def pred_step(model: CNN, batch):
+  logits = model(batch['image'])
   return logits.argmax(axis=1)
 ```
 
@@ -311,7 +301,7 @@ def pred_step(state: TrainState, batch):
 :outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e
 
 test_batch = test_ds.as_numpy_iterator().next()
-pred = pred_step(state, test_batch)
+pred = pred_step(model, test_batch)
 
 fig, axs = plt.subplots(5, 5, figsize=(12, 12))
 for i, ax in enumerate(axs.flatten()):

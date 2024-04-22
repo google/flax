@@ -7,4 +7,5 @@ module
 .. autoclass:: Module
    :members:
 
-.. autofunction:: merge
+   .. automethod:: sow
+   .. automethod:: iter_modules

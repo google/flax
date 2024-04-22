@@ -157,9 +157,9 @@ def setup_initial_state(
 
   with mesh:
     model = constructor(config, rng)
-    static, params = model.split(nnx.Param)
+    graphdef, params = nnx.split(model, nnx.Param)
     state = TrainState.create(
-      apply_fn=static.apply, params=params, tx=tx, graphdef=static
+      apply_fn=graphdef.apply, params=params, tx=tx, graphdef=graphdef
     )
     state = jax.tree_util.tree_map(_to_array, state)
     state_spec = nnx.get_partition_spec(state)

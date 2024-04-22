@@ -245,11 +245,11 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars_dict.clear()
     vars_dict.update(vars(other))
 
-  def copy_from_def(self, other: 'nnx.graph_utils.VariableDef', /, value: A):
+  def copy_from_def(self, other: 'nnx.graph.VariableDef', /, value: A):
     _trace_state = self._trace_state
     variable_vars = vars(self)
     variable_vars.clear()
-    variable_vars.update(other.metadata, _trace_state=_trace_state, raw_value=value)
+    variable_vars.update(other.metadata, _trace_state=_trace_state, raw_value=value) # type: ignore
 
   @property
   def value(self) -> A:
@@ -334,6 +334,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
     for name, value in vars(self).items():
+      if name == 'raw_value':
+        name = 'value'
       if name.endswith('_hooks') or name == "_trace_state":
         continue
       yield reprlib.Attr(name, repr(value))
@@ -399,6 +401,57 @@ jtu.register_pytree_with_keys(
   flatten_func=partial(_variable_flatten, with_keys=False),  # type: ignore
 )
 
+class VariableDef(tp.Generic[A], reprlib.Representable):
+
+  def __init__(
+    self,
+    type: tp.Type[Variable[A]],
+    index: int,
+    value: A,
+    metadata: dict[str, tp.Any],
+  ):
+    self.type = type
+    self.index = index
+    self.value = value
+    self.metadata = metadata
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type=type(self))
+
+    yield reprlib.Attr('type', self.type.__name__)
+    yield reprlib.Attr('index', self.index)
+
+    for key in self.metadata:
+      yield reprlib.Attr(key, repr(self.metadata[key]))
+
+
+  @classmethod
+  def from_variable(cls, variable: Variable[A], index: int) -> 'VariableDef[A]':
+    metadata = vars(variable).copy()
+    del metadata['raw_value']
+    del metadata['_trace_state']
+    return cls(type(variable), index, metadata)
+
+  def to_variable(self, value: A) -> Variable[A]:
+    # we use object.__new__ to avoid calling __init__ and bypass the
+    # __init__ logic which should not be called twice
+    variables = object.__new__(self.type)
+    vars(variables).update(
+      self.metadata, raw_value=value, _trace_state=tracers.TraceState()
+    )
+    return variables
+
+  def __hash__(self):
+    return hash((self._type, self._index, tuple(self._metadata.items())))
+
+  def __eq__(self, other):
+    if not isinstance(other, VariableDef):
+      return False
+    return (
+      self._type == other._type
+      and self._index == other._index
+      and self._metadata == other._metadata
+    )
 
 class Param(Variable[A]):
   pass
@@ -415,16 +468,6 @@ class Cache(Variable[A]):
 class Intermediate(Variable[A]):
   pass
 
-
-class Rng(Variable[jax.Array]):
-  tag: str
-
-  def __init__(self, value: jax.Array, *, tag: str, **metadata: tp.Any):
-    super().__init__(value, tag=tag, **metadata)
-
-  def on_get_value(self, value: jax.Array):
-    self.raw_value, value = jax.random.split(value)
-    return value
 
 
 def with_metadata(

@@ -116,3 +116,13 @@ class MappingReprMixin(tp.Mapping[A, B]):
 
     for key, value in self.items():
       yield Attr(repr(key), value)
+
+@dataclasses.dataclass(repr=False)
+class PrettyMapping(Representable):
+  mapping: tp.Mapping
+
+  def __nnx_repr__(self):
+    yield Object(type='', value_sep=': ', start='{', end='}')
+
+    for key, value in self.mapping.items():
+      yield Attr(repr(key), value)

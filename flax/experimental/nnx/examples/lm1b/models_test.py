@@ -206,8 +206,8 @@ class ModelTest(absltest.TestCase):
       decode=False,
     )
 
-    model_nnx = TransformerLM.create_abstract(config, rngs=nnx.Rngs(0))
-    params_nnx, _ = model_nnx.split(nnx.Param)
+    model_nnx = nnx.eval_shape(lambda: TransformerLM(config, rngs=nnx.Rngs(0)))
+    _, params_nnx = nnx.split(model_nnx, nnx.Param)
 
     model_linen = TransformerLinen(config)
 
@@ -215,7 +215,7 @@ class ModelTest(absltest.TestCase):
     params_linen = model_linen.init(random.key(0), sample_inputs)['params']
 
     self.transfer_params(config, params_nnx, params_linen)
-    model_nnx.update(params_nnx)
+    nnx.update(model_nnx, params_nnx)
 
     model_nnx.set_attributes(deterministic=True, decode=False)
     output_nnx = model_nnx(sample_inputs)
@@ -240,13 +240,13 @@ class ModelTest(absltest.TestCase):
       decode=True,
     )
 
-    model_nnx = TransformerLM.create_abstract(config, rngs=nnx.Rngs(0))
-    for _path, m in model_nnx.modules():
+    model_nnx = nnx.eval_shape(lambda: TransformerLM(config, rngs=nnx.Rngs(0)))
+    for _path, m in model_nnx.iter_modules():
       if isinstance(m, HasCache):
         input_shape = (batch_size, config.max_len, config.emb_dim)
         m.init_cache(input_shape, dtype=config.dtype)
 
-    params_nnx, cache_nnx, _ = model_nnx.split(nnx.Param, nnx.Cache)
+    _, params_nnx, cache_nnx = nnx.split(model_nnx, nnx.Param, nnx.Cache)
 
     model_linen = TransformerLinen(config)
 
@@ -262,7 +262,7 @@ class ModelTest(absltest.TestCase):
 
     self.transfer_params(config, params_nnx, params_linen)
     self.transfer_cache(config, cache_nnx, cache_linen)
-    model_nnx.update(params_nnx, cache_nnx)
+    nnx.update(model_nnx, params_nnx, cache_nnx)
     model_nnx.set_attributes(deterministic=True, decode=True)
 
     outputs_nnx = []

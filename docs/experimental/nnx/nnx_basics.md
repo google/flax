@@ -170,6 +170,10 @@ model.blocks[-1].linear.kernel = model.blocks[0].linear.kernel
 model(jnp.ones((1, 2)))
 ```
 
+## NNX Transforms
+
++++
+
 ## The Functional API
 
 The Functional API establishes a clear boundary between reference/object semantics and
@@ -201,15 +205,21 @@ model = StatefulLinear(din=2, dout=3, rngs=nnx.Rngs(0))
 ### State and GraphDef
 
 A Module can be decomposed into `GraphDef` and `State` using the
-`.split()` method. State is a Mapping from strings to Variables or nested 
+`split` function. State is a Mapping from strings to Variables or nested 
 States. GraphDef contains all the static information needed to reconstruct 
 a Module graph, it is analogous to JAX's `PyTreeDef`.
 
 ```{code-cell} ipython3
-graphdef, state = model.split()
+graphdef, state = nnx.split(model)
 
 print(f'{state = }\n')
 print(f'{graphdef = }'[:200] + '...')
+```
+
+```{code-cell} ipython3
+graphdef, state = nnx.split((model, model))
+
+state
 ```
 
 ### Split, Merge, and Update
@@ -217,14 +227,14 @@ print(f'{graphdef = }'[:200] + '...')
 `merge` is the reverse of `split`, it takes the GraphDef + State and reconstructs
 the Module. As shown in the example below, by using `split` and `merge` in sequence
 any Module can be lifted to be used in any JAX transform. `update` can
-update a Module structure from a compatible State. This is often used to propagate the state
-updates from a transform back to the source object outside.
+update an object inplace with the content of a given State. This pattern is used to 
+propagate the state from a transform back to the source object outside.
 
 ```{code-cell} ipython3
-print(f'{model.count = }')
+print(f'{model.count.value = }')
 
 # 1. Use split to create a pytree representation of the Module
-graphdef, state = model.split()
+graphdef, state = nnx.split(model)
 
 @jax.jit
 def forward(graphdef: nnx.GraphDef, state: nnx.State, x: jax.Array) -> tuple[jax.Array, nnx.State]:
@@ -233,12 +243,12 @@ def forward(graphdef: nnx.GraphDef, state: nnx.State, x: jax.Array) -> tuple[jax
   # 3. Call the Module
   y = model(x)
   # 4. Use split to propagate State updates
-  _, state = model.split()
+  _, state = nnx.split(model)
   return y, state
 
 y, state = forward(graphdef, state, x=jnp.ones((1, 2)))
 # 5. Update the state of the original Module
-model.update(state)
+nnx.update(model, state)
 
 print(f'{model.count.value = }')
 ```
@@ -271,7 +281,7 @@ types as shown below.
 
 ```{code-cell} ipython3
 # use Variable type filters to split into multiple States
-graphdef, params, counts = model.split(nnx.Param, Count)
+graphdef, params, counts = nnx.split(model, nnx.Param, Count)
 
 print(f'{params = }\n')
 print(f'{counts = }')
@@ -285,5 +295,5 @@ As expected the `merge` and `update` methods naturally consume multiple States:
 # merge multiple States
 model = graphdef.merge(params, counts)
 # update with multiple States
-model.update(params, counts)
+nnx.update(model, params, counts)
 ```

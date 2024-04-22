@@ -18,22 +18,14 @@ import dataclasses
 import typing as tp
 from functools import partial
 
-import jax
 import jax.tree_util as jtu
-import typing_extensions as tpe
 
 from flax.experimental.nnx.nnx import (
   filterlib,
-  graph_utils,
+  graph,
 )
 from flax.experimental.nnx.nnx import variables as variableslib
-from flax.experimental.nnx.nnx.graph_utils import GraphDef, GraphNodeMeta
-from flax.experimental.nnx.nnx.proxy_caller import (
-  ApplyCaller,
-  CallableProxy,
-  DelayedAccessor,
-)
-from flax.experimental.nnx.nnx.rnglib import Rngs
+from flax.experimental.nnx.nnx.graph import GraphDef, GraphNodeMeta
 from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import Variable
 from flax.typing import Path, PathParts
@@ -71,198 +63,8 @@ def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
   return module
 
 
-class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
-  @classmethod
-  def init(cls: type[M], *args, **kwargs) -> tuple[GraphDef[M], State]:
-    return cls(*args, **kwargs).split()
-
-  @classmethod
-  @property
-  def create_abstract(cls: type[M]) -> type[M]:
-    def lift_rngs(kwargs: dict[str, tp.Any]):
-      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], tp.Mapping):
-        kwargs['rngs'] = Rngs(rngs)
-      return kwargs
-
-    def _create_abstract(accessor: DelayedAccessor, *args, **kwargs):
-      constructor = accessor(cls)
-      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], Rngs):
-        kwargs['rngs'] = rngs.fork()
-      graphdef, state = jax.eval_shape(
-        lambda: constructor(*args, **lift_rngs(kwargs)).split()
-      )
-      return graphdef.merge(state)
-
-    return CallableProxy(_create_abstract)  # type: ignore
-
-  @classmethod
-  def partial_init(cls: type[M], state: State, *states: State) -> type[M]:
-    """Creates a constuctor that initializes the Module with the given state.
-
-    ``partial_init`` takes one or more States and returns a constructor that uses
-    ``jax.jit`` to initialize the Module and update its state with the given
-    States. Its semantically equivalent to::
-
-      module = MyModule(*args, **kwargs)
-      module.update(state, *states)
-
-    However, thanks to dead code elimination the resulting constructor will only
-    initialize the subset of ``Variable``'s that were part of the given state(s).
-
-    Example::
-
-      >>> import jax.numpy as jnp
-      >>> import jax
-      >>> from flax.experimental import nnx
-      ...
-      >>> bias = jax.random.normal(jax.random.key(0), (4,))
-      >>> state = nnx.State({'bias': bias}) # in reality load it from a checkpoint
-      >>> linear = nnx.Linear.partial_init(state)(2, 4, rngs=nnx.Rngs(1))
-      >>> y = linear(jnp.ones((1, 2)))
-      ...
-      >>> assert jnp.allclose(linear.bias, bias)
-      >>> assert y.shape == (1, 4)
-
-    Args:
-      state: The State to initialize the Module with.
-      *states: Additional States to initialize the Module with.
-
-    Returns:
-      A constructor that initializes the Module with the given States.
-    """
-    states = (state, *states)
-
-    def lift_rngs(kwargs: dict[str, tp.Any]):
-      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], tp.Mapping):
-        kwargs['rngs'] = Rngs(rngs)
-      return kwargs
-
-    def _partial_init(accessor: DelayedAccessor, *args, **kwargs):
-      constructor: tp.Callable[[], M] = accessor(cls)
-      if 'rngs' in kwargs and isinstance(rngs := kwargs['rngs'], Rngs):
-        kwargs['rngs'] = rngs.fork()
-
-      def _partial_init_constructor():
-        module = constructor(*args, **lift_rngs(kwargs))
-        module.update(*states)
-        return module.split()
-
-      graphdef: GraphDef[M]
-      state: State
-      graphdef, state = jax.jit(_partial_init_constructor)()
-      module = graphdef.merge(state)
-      return module
-
-    return CallableProxy(_partial_init)  # type: ignore
-
-  def clone(self: M) -> M:
-    return graph_utils.merge(*self.split())
-
-  @tp.overload
-  def split(self: M) -> tuple[GraphDef[M], State]:
-    ...
-
-  @tp.overload
-  def split(self: M, first: filterlib.Filter, /) -> tuple[GraphDef[M], State]:
-    ...
-
-  @tp.overload
-  def split(
-    self: M,
-    first: filterlib.Filter,
-    second: filterlib.Filter,
-    /,
-    *filters: filterlib.Filter,
-  ) -> tuple[GraphDef[M], State, tpe.Unpack[tuple[State, ...]]]:
-    ...
-
-  def split(
-    self: M, *filters: filterlib.Filter
-  ) -> tuple[GraphDef[M], State, tpe.Unpack[tuple[State, ...]]]:
-    return graph_utils.split(self, *filters)
-
-  def get_state(self) -> State:
-    _, state = self.split()
-    return state
-
-  def get_graphdef(self: M) -> GraphDef[M]:
-    graphdef, _ = self.split()
-    return graphdef
-
-  @tp.overload
-  def extract(self, first: filterlib.Filter, /) -> State:
-    ...
-
-  @tp.overload
-  def extract(
-    self,
-    first: filterlib.Filter,
-    second: filterlib.Filter,
-    /,
-    *filters: filterlib.Filter,
-  ) -> tuple[State, ...]:
-    ...
-
-  def extract(
-    self,
-    first: filterlib.Filter,
-    /,
-    *filters: filterlib.Filter,
-  ) -> tp.Union[State, tuple[State, ...]]:
-    state = self.get_state()
-
-    if len(filters) == 0:
-      states = state.extract(first)
-    else:
-      states = state.extract(first, filters[0], *filters[1:])
-
-    return states
-
-  @tp.overload
-  def pop(
-    self,
-    filter: filterlib.Filter,
-    /,
-  ) -> State:
-    ...
-
-  @tp.overload
-  def pop(
-    self,
-    filter: filterlib.Filter,
-    filter2: filterlib.Filter,
-    /,
-    *filters: filterlib.Filter,
-  ) -> tuple[State, ...]:
-    ...
-
-  def pop(
-    self, *filters: filterlib.Filter
-  ) -> tp.Union[State, tuple[State, ...]]:
-    if len(filters) == 0:
-      raise ValueError('Expected at least one filter')
-
-    states = graph_utils.graph_pop(self, filters)
-
-    if len(states) == 1:
-      return states[0]
-    else:
-      return states
-
-  @property
-  def apply(self: M) -> ApplyCaller[M]:
-    def _apply(accessor: DelayedAccessor, *args, **kwargs) -> tuple[tp.Any, M]:
-      module = self.clone()
-      fn = accessor(module)
-      out = fn(*args, **kwargs)
-      return out, module
-
-    return CallableProxy(_apply)  # type: ignore
-
-  def update(
-    self: M, update: graph_utils.Updates[M], /, *updates: graph_utils.Updates[M]
-  ) -> None:
-    graph_utils.update(self, update, *updates)
+class Module(graph.GraphNode, metaclass=ModuleMeta):
+  """"""
 
   def sow(
     self,
@@ -288,8 +90,34 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
 
-  def modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
-    for path, value in graph_utils.iter_nodes(self):
+  def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
+    """Iterates over all nested Modules of the current Module, including the current Module.
+
+    ``iter_modules`` creates a generator that yields the path and the Module instance, where
+    the path is a tuple of strings or integers representing the path to the Module from the
+    root Module.
+
+    Example::
+
+      >>> from flax.experimental import nnx
+      ...
+      >>> class Block(nnx.Module):
+      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...     self.dropout = nnx.Dropout(0.5)
+      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+      ...
+      ...
+      >>> model = Block(2, 5, rngs=nnx.Rngs(0))
+      >>> for path, module in model.iter_modules():
+      ...   print(path, type(module).__name__)
+      ...
+      () Block
+      ('batch_norm',) BatchNorm
+      ('dropout',) Dropout
+      ('linear',) Linear
+    """
+    for path, value in graph.iter_nodes(self):
       if isinstance(value, Module):
         yield path, value
 
@@ -322,7 +150,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
     ``Filter``'s can be used to set the attributes of specific Modules::
 
       >>> block = Block(2, 5, rngs=nnx.Rngs(0))
-      >>> block.set_attributes(nnx.Dropout, deterministic=True, use_running_average=True)
+      >>> block.set_attributes(nnx.Dropout, deterministic=True)
       >>> # Only the dropout will be modified
       >>> block.dropout.deterministic, block.batch_norm.use_running_average
       (True, False)
@@ -337,7 +165,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
     if not filters:
       filters = (True,)
     predicates = tuple(map(filterlib.to_predicate, filters))
-    for path, module in self.modules():
+    for path, module in self.iter_modules():
       for predicate in predicates:
         if predicate(path, module):
           for name, value in attributes.items():
@@ -351,6 +179,77 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
       raise ValueError(
         f'Could not find at least one instance of the following attributes: {remaining_attributes}'
       )
+
+  def train(self, **attributes):
+    """Sets the Module to training mode.
+
+    ``train`` uses ``set_attributes`` to recursively set attributes ``deterministic=False``
+    and ``use_running_average=False`` of all nested Modules that have these attributes.
+    Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+    Modules.
+
+    Example::
+
+      >>> from flax.experimental import nnx
+      ...
+      >>> class Block(nnx.Module):
+      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...     # initialize Dropout and BatchNorm in eval mode
+      ...     self.dropout = nnx.Dropout(0.5, deterministic=True)
+      ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=True, rngs=rngs)
+      ...
+      >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (True, True)
+      >>> block.train()
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (False, False)
+
+    Args:
+      **attributes: additional attributes passed to ``set_attributes``.
+    """
+    return self.set_attributes(
+      deterministic=False,
+      use_running_average=False,
+      **attributes,
+      raise_if_not_found=False,
+    )
+
+  def eval(self, **attributes):
+    """Sets the Module to evaluation mode.
+
+    ``eval`` uses ``set_attributes`` to recursively set attributes ``deterministic=True``
+    and ``use_running_average=True`` of all nested Modules that have these attributes.
+    Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+    Modules.
+
+    Example::
+
+      >>> from flax.experimental import nnx
+      ...
+      >>> class Block(nnx.Module):
+      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...     self.dropout = nnx.Dropout(0.5)
+      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+      ...
+      >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (False, False)
+      >>> block.eval()
+      >>> block.dropout.deterministic, block.batch_norm.use_running_average
+      (True, True)
+
+    Args:
+      **attributes: additional attributes passed to ``set_attributes``.
+    """
+    return self.set_attributes(
+      deterministic=True,
+      use_running_average=True,
+      **attributes,
+      raise_if_not_found=False,
+    )
 
   def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
     super().__init_subclass__()
@@ -368,7 +267,7 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
 # Pytree Definition
 # -------------------------
 def _module_flatten(module: Module, *, with_keys: bool):
-  graphdef, state = module.split()
+  graphdef, state = graph.split(module)
   key_values = sorted(state.raw_mapping.items())
   keys = tuple(key for key, _ in key_values)
 

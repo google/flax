@@ -39,7 +39,7 @@ class TestSPMD:
 
     @jax.jit
     def create_module():
-      return Foo().split()
+      return nnx.split(Foo())
 
     mesh = Mesh(mesh_utils.create_device_mesh((2, 2)), ('model', 'data'))
 
@@ -62,7 +62,7 @@ class TestSPMD:
       def __call__(self, x):
         return x @ self.w
 
-    graphdef, params = Foo().split()
+    graphdef, params = nnx.split(Foo())
     state = nnx.TrainState.create(
       graphdef,
       params=params,

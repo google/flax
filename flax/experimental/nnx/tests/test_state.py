@@ -56,7 +56,7 @@ class StateTest(TestCase):
         self.layers = [nnx.Linear(1, 2, rngs=rngs), nnx.Linear(2, 3, rngs=rngs)]
 
     module = Foo(rngs=nnx.Rngs(0))
-    state = module.get_state()
+    state = nnx.state(module)
 
     assert module.layers[0].kernel.value.shape == (1, 2)
     assert state.layers[0].kernel.raw_value.shape == (1, 2)

@@ -47,12 +47,11 @@ the transformed function.
     def loss_fn(model):
       return ((model(x) - y) ** 2).mean()
     grads = nnx.grad(loss_fn)(model)
-
-    model.update(
-      jax.tree_util.tree_map(
-        lambda p, g: p - 0.1 * g, model.extract(nnx.Param), grads
-      )
+    params = nnx.state(model, nnx.Param)
+    params = jax.tree_util.tree_map(
+      lambda p, g: p - 0.1 * g, params, grads
     )
+    nnx.update(model, params)
 
   model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
   train_step(model, x, y)
@@ -66,14 +65,14 @@ the transformed function.
     grads = jax.grad(loss_fn, argnums=1)(static, state) #!
 
     model = static.merge(state) #!
-    model.update(
-      jax.tree_util.tree_map(
-        lambda p, g: p - 0.1 * g, model.extract(nnx.Param), grads
-      )
+    params = nnx.state(model, nnx.Param)
+    params = jax.tree_util.tree_map(
+      lambda p, g: p - 0.1 * g, params, grads
     )
-    return model.split() #!
+    nnx.update(model, params)
+    return nnx.split(model) #!
 
-  static, state = nnx.Linear(2, 3, rngs=nnx.Rngs(0)).split() #!
+  static, state = nnx.split(nnx.Linear(2, 3, rngs=nnx.Rngs(0))) #!
   static, state = train_step(static, state, x, y) #!
 
 
@@ -93,13 +92,12 @@ pure and has valid argument types that are recognized by JAX.
     def loss_fn(static, state): #!
       model = static.merge(state)
       return ((model(x) - y) ** 2).mean()
-    grads = jax.grad(loss_fn, 1)(*model.split()) #!
-
-    model.update(
-      jax.tree_util.tree_map(
-        lambda p, g: p - 0.1 * g, model.extract(nnx.Param), grads
-      )
+    grads = jax.grad(loss_fn, 1)(*nnx.split(model)) #!
+    params = nnx.state(model, nnx.Param)
+    params = jax.tree_util.tree_map(
+      lambda p, g: p - 0.1 * g, params, grads
     )
+    nnx.update(model, params)
 
   model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
   train_step(model, x, y)
@@ -111,15 +109,14 @@ pure and has valid argument types that are recognized by JAX.
     def loss_fn(model):
       return ((model(x) - y) ** 2).mean()
     grads = nnx.grad(loss_fn)(model)
-
-    model.update(
-      jax.tree_util.tree_map(
-        lambda p, g: p - 0.1 * g, model.extract(nnx.Param), grads
-      )
+    params = nnx.state(model, nnx.Param)
+    params = jax.tree_util.tree_map(
+      lambda p, g: p - 0.1 * g, params, grads
     )
-    return model.split()
+    nnx.update(model, params)
+    return nnx.split(model)
 
-  static, state = nnx.Linear(2, 3, rngs=nnx.Rngs(0)).split()
+  static, state = nnx.split(nnx.Linear(2, 3, rngs=nnx.Rngs(0)))
   static, state = train_step(static, state, x, y)
 
 

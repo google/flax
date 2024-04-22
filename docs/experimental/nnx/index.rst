@@ -68,16 +68,6 @@ Features
             NNX prioritizes simplicity for common use cases, building upon lessons learned from Linen
             to provide a streamlined experience.
 
-
-Installation
-^^^^^^^^^^^^
-NNX is under active development, we recommend using the latest version from Flax's GitHub repository:
-
-.. code-block:: bash
-
-   pip install git+https://github.com/google/flax.git
-
-
 Basic usage
 ^^^^^^^^^^^^
 
@@ -89,22 +79,43 @@ Basic usage
 .. testcode::
 
    from flax.experimental import nnx
+   import optax
 
-   class Linear(nnx.Module):
-     def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-       key = rngs() # get a unique random key
-       self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
-       self.b = nnx.Param(jnp.zeros((dout,))) # initialize parameters
-       self.din, self.dout = din, dout
 
-     def __call__(self, x: jax.Array):
-       return x @ self.w.value + self.b.value
+   class Model(nnx.Module):
+     def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
+       self.linear = nnx.Linear(din, dmid, rngs=rngs)
+       self.bn = nnx.BatchNorm(dmid, rngs=rngs)
+       self.dropout = nnx.Dropout(0.2, rngs=rngs)
+       self.linear_out = nnx.Linear(dmid, dout, rngs=rngs)
 
-   rngs = nnx.Rngs(0) # explicit RNG handling
-   model = Linear(din=2, dout=3, rngs=rngs) # initialize the model
+      def __call__(self, x):
+        x = nnx.relu(self.dropout(self.bn(self.linear(x))))
+        return self.linear_out(x)
 
-   x = jnp.empty((1, 2)) # generate random data
-   y = model(x) # forward pass
+   model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
+   optimizer = nnx.Optimizer(model, optax.adam(1e-3))  # reference sharing
+
+   @nnx.jit # automatic state management
+   def train_step(model, optimizer, x, y):
+     def loss_fn(model):
+       y_pred = model(x)  # call methods directly
+       return ((y_pred - y) ** 2).mean()
+
+   loss, grads = nnx.value_and_grad(loss_fn)(model)
+   optimizer.update(grads)  # inplace updates
+
+   return loss
+
+
+Installation
+^^^^^^^^^^^^
+NNX is under active development, we recommend using the latest version from Flax's GitHub repository:
+
+.. code-block:: bash
+
+   pip install git+https://github.com/google/flax.git
+
 
 ----
 

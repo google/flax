@@ -598,9 +598,9 @@ class MultiHeadAttention(Module):
 
       >>> from flax.experimental import nnx
       >>> import jax.numpy as jnp
-
+      ...
       >>> rngs = nnx.Rngs(42)
-
+      ...
       >>> x = jnp.ones((1, 3))
       >>> model_nnx = nnx.MultiHeadAttention(
       ...   num_heads=2,
@@ -609,10 +609,10 @@ class MultiHeadAttention(Module):
       ...   out_features=6,
       ...   decode=True,
       ...   rngs=rngs,
-      >>> )
-
-      >>> # out_nnx = model_nnx(x) <-- throws an error because cache isn't initialized
-
+      ... )
+      ...
+      >>> # out_nnx = model_nnx(x)  <-- throws an error because cache isn't initialized
+      ...
       >>> model_nnx.init_cache(x.shape)
       >>> out_nnx = model_nnx(x)
     """

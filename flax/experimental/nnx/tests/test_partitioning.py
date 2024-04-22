@@ -27,7 +27,7 @@ class TestPartitioning:
       c=100,
     )
 
-    graphdef, params, rest = m.split(nnx.Param, ...)
+    graphdef, params, rest = nnx.split(m, nnx.Param, ...)
 
     assert len(params) == 2
     assert len(rest) == 1
@@ -53,7 +53,7 @@ class TestPartitioning:
     )
 
     # no error
-    m.split(nnx.Param, nnx.BatchStat, nnx.Variable)
+    nnx.split(m, nnx.Param, nnx.BatchStat, nnx.Variable)
 
   def test_complete_partitioning_plus_ellipsis(self):
     m = nnx.Dict(
@@ -62,7 +62,7 @@ class TestPartitioning:
     )
 
     # no error if additional ... is passed at the end
-    m.split(nnx.Param, nnx.BatchStat, nnx.Variable, ...)
+    nnx.split(m, nnx.Param, nnx.BatchStat, nnx.Variable, ...)
 
   def test_inclomplete_partition_error(self):
     m = nnx.Dict(
@@ -73,7 +73,7 @@ class TestPartitioning:
     with pytest.raises(
       ValueError, match='Non-exhaustive filters, got a non-empty remainder'
     ):
-      m.split(nnx.Param)
+      nnx.split(m, nnx.Param)
 
   def test_ellipsis_not_last_error(self):
     m = nnx.Dict(
@@ -82,9 +82,9 @@ class TestPartitioning:
     )
 
     with pytest.raises(
-      ValueError, match='Ellipsis `...` can only be used as the last filter,'
+      ValueError, match='`...` or `True` can only be used as the last filters'
     ):
-      m.split(..., nnx.Param)
+      nnx.split(m, ..., nnx.Param)
 
   def test_update_from(self):
     m = nnx.Dict(
@@ -93,10 +93,12 @@ class TestPartitioning:
       c=100,
     )
 
-    state = m.split()[1]
+    state = nnx.split(
+      m,
+    )[1]
     state = jax.tree_util.tree_map(lambda x: x * 2, state)
 
-    m.update(state)
+    nnx.update(m, state)
 
     assert m.a[0].value == 2
     assert m.a[1].value == 6
@@ -110,10 +112,12 @@ class TestPartitioning:
       c=nnx.Variable(jax.numpy.array(100)),
     )
 
-    graphdef, state = m.split()
+    graphdef, state = nnx.split(
+      m,
+    )
     state = jax.tree_util.tree_map(lambda x: x * 2, state)
 
-    m.update(state)
+    nnx.update(m, state)
 
     assert m.a[0].value == 2
     assert m.a[1].value == 6
@@ -127,13 +131,13 @@ class TestPartitioning:
       c=100,
     )
 
-    params = m.extract(nnx.Param)
+    params = nnx.state(m, nnx.Param)
 
     def loss(params):
       return sum(2 * p for p in jax.tree_util.tree_leaves(params))
 
     grads = jax.grad(loss)(params)
-    m.update(grads)
+    nnx.update(m, grads)
 
     assert m.a[0].value == 2.0
     assert m.a[1].value == -10
@@ -151,7 +155,7 @@ class TestPartitioning:
     # test Variables not shared
     assert vars(m.a)['0'] is not vars(m)['b']
 
-    state = m.extract(nnx.Variable)
+    state = nnx.state(m, nnx.Variable)
     assert state['a'][0].raw_value == m.a[0].value
     assert state['a'][1].raw_value == m.a[1].value
     assert state['b'].raw_value == m.b.value

@@ -85,7 +85,7 @@ if $RUN_DOCTEST; then
   pytest -n auto flax \
     --doctest-modules \
     --suppress-no-test-exit-code \
-    --ignore=flax/experimental/nnx
+    --ignore=flax/experimental/nnx/examples
 fi
 
 # check that flax is running on editable mode

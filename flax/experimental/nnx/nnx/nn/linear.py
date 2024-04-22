@@ -109,24 +109,32 @@ class LinearGeneral(Module):
 
   Example usage::
 
-    >>> import flax.linen as nn
+    >>> from flax.experimental import nnx
     >>> import jax, jax.numpy as jnp
-
-    >>> # equivalent to `nn.Linear(features=4)`
-    >>> layer = nn.LinearGeneral(features=4)
+    ...
+    >>> # equivalent to `nnx.Linear(2, 4)`
+    >>> layer = nnx.LinearGeneral(2, 4, rngs=nnx.Rngs(0))
+    >>> layer.kernel.value.shape
+    (2, 4)
     >>> # output features (4, 5)
-    >>> layer = nn.LinearGeneral(features=(4, 5))
-    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
-    >>> jax.tree_util.tree_map(jnp.shape, params)
-    {'params': {'bias': (4, 5), 'kernel': (3, 4, 5)}}
+    >>> layer = nnx.LinearGeneral(2, (4, 5), rngs=nnx.Rngs(0))
+    >>> layer.kernel.value.shape
+    (2, 4, 5)
+    >>> layer.bias.value.shape
+    (4, 5)
     >>> # apply transformation on the the second and last axes
-    >>> layer = nn.LinearGeneral(features=(4, 5), axis=(1, -1))
-    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3, 6, 7)))
-    >>> jax.tree_util.tree_map(jnp.shape, params)
-    {'params': {'bias': (4, 5), 'kernel': (3, 7, 4, 5)}}
+    >>> layer = nnx.LinearGeneral((2, 3), (4, 5), axis=(1, -1), rngs=nnx.Rngs(0))
+    >>> layer.kernel.value.shape
+    (2, 3, 4, 5)
+    >>> layer.bias.value.shape
+    (4, 5)
+    >>> y = layer(jnp.ones((16, 2, 3)))
+    >>> y.shape
+    (16, 4, 5)
 
   Attributes:
-    features: int or tuple with number of output features.
+    in_features: int or tuple with number of output features.
+    out_features: int or tuple with number of output features.
     axis: int or tuple with axes to apply the transformation on. For instance,
       (-2, -1) will apply the transformation to the last two axes.
     batch_dims: tuple with batch axes.
@@ -365,12 +373,15 @@ class Einsum(Module):
 
     >>> from flax.experimental import nnx
     >>> import jax.numpy as jnp
-
-    >>> layer = nnx.Einsum('abc,cde->abde', (3, 4, 5), (5, 6, 7), rngs=nnx.Rngs(0))
-    >>> assert layer.kernel.value.shape == (5, 6, 7)
-    >>> assert layer.bias.value.shape == (6, 7)
-    >>> out = layer(jnp.ones((3, 4, 5)))
-    >>> assert out.shape == (3, 4, 6, 7)
+    ...
+    >>> layer = nnx.Einsum('nta,hab->nthb', (8, 2, 4), (8, 4), rngs=nnx.Rngs(0))
+    >>> layer.kernel.value.shape
+    (8, 2, 4)
+    >>> layer.bias.value.shape
+    (8, 4)
+    >>> y = layer(jnp.ones((16, 11, 2)))
+    >>> y.shape
+    (16, 11, 8, 4)
 
   Attributes:
     einsum_str: a string to denote the einsum equation. The equation must
