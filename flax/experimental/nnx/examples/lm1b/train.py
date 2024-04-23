@@ -193,7 +193,7 @@ def train_step(
 
   def loss_fn(params):
     """loss function used for training."""
-    module = state.graphdef.merge(params)
+    module = nnx.merge(state.graphdef, params)
     module.set_attributes(deterministic=False, decode=False)
     logits = module(
       inputs,
@@ -222,13 +222,13 @@ def train_step(
 def eval_step(
   params: nnx.State,
   batch,
-  static: nnx.GraphDef[models.TransformerLM],
+  graphdef: nnx.GraphDef[models.TransformerLM],
   label_smoothing=0.0,
 ):
   """Calculate evaluation metrics on a batch."""
   inputs = batch['inputs']
   weights = jnp.where(inputs > 0, 1.0, 0.0)
-  module = static.merge(params)
+  module = nnx.merge(graphdef, params)
   module.set_attributes(deterministic=True, decode=False)
   logits = module(inputs)
 
@@ -239,7 +239,7 @@ def predict_step(
   inputs,
   params: nnx.State,
   rngkey: jax.Array,
-  static: nnx.GraphDef[models.TransformerLM],
+  graphdef: nnx.GraphDef[models.TransformerLM],
   eos_id: int,
   max_decode_len: int,
   config: models.TransformerConfig,
@@ -247,23 +247,23 @@ def predict_step(
   top_k: int,
 ):
   """Predict language model on a batch."""
-  module = static.merge(params)
+  module = nnx.merge(graphdef, params)
 
   # TODO(cgarciae): check how pytorch does this.
-  for _path, m in module.modules():
+  for _path, m in module.iter_modules():
     if isinstance(m, HasCache):
       input_shape = (inputs.shape[0], max_decode_len, config.emb_dim)
       m.init_cache(input_shape, dtype=config.dtype)
 
-  cache = module.extract(nnx.Cache)
+  graphdef, params, cache = nnx.split(module, nnx.Param, nnx.Cache)
 
   def tokens_ids_to_logits(flat_ids, cache: nnx.State):
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
-    module = static.merge(params, cache)
+    module = nnx.merge(graphdef, params, cache)
     module.set_attributes(deterministic=True, decode=True)
     logits = module(flat_ids)
-    cache = module.extract(nnx.Cache)
+    cache = nnx.state(module, nnx.Cache)
     # Remove singleton sequence-length dimension:
     # [batch, 1, vocab] --> [batch, vocab]
     logits = logits.squeeze(axis=1)
@@ -347,7 +347,7 @@ def evaluate(
 def generate_prediction(
   *,
   jit_pred_step,
-  static: nnx.GraphDef[models.TransformerLM],
+  graphdef: nnx.GraphDef[models.TransformerLM],
   params: nnx.State,
   tokenized_prompts,
   eos_id,
@@ -379,7 +379,7 @@ def generate_prediction(
       pred_batch,
       params,
       inference_rngs,
-      static,
+      graphdef,
       eos_id,
       config.max_predict_length,
       model_config,
@@ -630,7 +630,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
         with report_progress.timed('generate_text'):
           exemplars = generate_prediction(
             jit_pred_step=jit_pred_step,
-            static=state.graphdef,
+            graphdef=state.graphdef,
             params=state.params,
             tokenized_prompts=tokenized_prompts,
             eos_id=eos_id,

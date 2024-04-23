@@ -29,8 +29,8 @@ class TestMetrics(parameterized.TestCase):
 
     accuracy = nnx.metrics.Accuracy()
     accuracy.update(logits=logits, labels=labels)
-    static, state= accuracy.split()
-    accuracy = static.merge(state)
+    graphdef, state = accuracy.split()
+    accuracy = nnx.merge(graphdef, state)
     self.assertEqual(accuracy.compute(), 0.6)
     accuracy.update(logits=logits2, labels=labels2)
     self.assertEqual(accuracy.compute(), 0.7)

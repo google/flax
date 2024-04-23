@@ -34,13 +34,15 @@ import typing as tp
 import jax
 import jax.numpy as jnp
 
+from flax.experimental.nnx.nnx import graph
+from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import Variable
 from flax.experimental.nnx.nnx import filterlib
-from flax.experimental.nnx.nnx.graph_utils import GraphNode
+from flax.experimental.nnx.nnx.graph import GraphNode
 
 Counts = list[int]
 AxesValue = tp.Union[int, None]
-Pattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
+SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
 
 
 class Missing:
@@ -61,8 +63,14 @@ class RngCount(RngState):
 class RngKey(RngState):
   tag: str
 
+class RngKeyBackup(RngState):
+  pass
 
-@dataclasses.dataclass
+
+NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
+
+
+@dataclasses.dataclass(repr=False)
 class RngStream(GraphNode):
   def __init__(
     self,
@@ -72,6 +80,7 @@ class RngStream(GraphNode):
   ):
     self.key = RngKey(key, tag=tag)
     self.count = RngCount(count)
+    self.key_backups: list[RngKeyBackup] = []
 
   def __post_init__(self):
     if not isinstance(self.key, jax.Array):
@@ -85,7 +94,7 @@ class RngStream(GraphNode):
     self.count.value += 1
     return key
 
-  def fork(self, pattern: Pattern) -> jax.Array:
+  def fork(self, pattern: SplitPattern) -> jax.Array:
     if pattern is None:
       # broadcast key
       key = self()
@@ -159,20 +168,16 @@ class Rngs(GraphNode, tp.Mapping[str, tp.Callable[[], jax.Array]]):
   def __contains__(self, name: tp.Any) -> bool:
     return name in vars(self)
 
-  def replace(self, **kwargs: tp.Union[int, jax.Array, RngStream]) -> 'Rngs':
-    rngs: dict[str, tp.Any] = vars(self).copy()
-    del rngs['_graph_node__state']
-    rngs.update(kwargs)
-    return Rngs(**rngs)
-
 
   def fork(
     self,
-    _default: Pattern | dict[filterlib.Filter, Pattern] | Missing = MISSING,
+    _default: SplitPattern
+    | dict[filterlib.Filter, SplitPattern]
+    | Missing = MISSING,
     /,
-    **patterns: Pattern,
+    **patterns: SplitPattern,
   ) -> ForkedKeys:
-    filter_patterns: list[tuple[filterlib.Filter, Pattern]]
+    filter_patterns: list[tuple[filterlib.Filter, SplitPattern]]
     if isinstance(_default, dict):
       # merge default and patterns
       filter_patterns = [
@@ -276,3 +281,46 @@ jax.tree_util.register_pytree_with_keys(
   _split_rng_unflatten,
   flatten_func=functools.partial(_split_rng_flatten, with_keys=False),
 )
+
+def fork(
+  state: State,
+  split_filter: filterlib.Filter,
+  split_pattern: SplitPattern,
+) -> tuple[State, State]:
+  if split_pattern is None:
+    raise RuntimeError('Split pattern cannot be None, this is a bug.')
+  if isinstance(split_pattern, int):
+    num_splits = split_pattern
+  else:
+    num_splits = tuple(x if x is not None else 1 for x in split_pattern)
+
+  not_keys, split_state, broadcast_state = state.split(
+    NotKey, split_filter, ...
+  )
+  broadcast_state = State.merge(not_keys, broadcast_state)
+
+  def split_key(key: tp.Any) -> jax.Array:
+    if not isinstance(key, jax.Array):
+      raise TypeError(f'key must be a jax.Array, got {type(key)}')
+
+    return jax.random.split(key, num_splits)
+
+  split_state = jax.tree.map(split_key, split_state)
+
+  return split_state, broadcast_state
+
+def backup_keys(node: tp.Any, /):
+  streams: list[RngStream] = []
+  for _, stream in graph.iter_nodes(node):
+    if isinstance(stream, RngStream):
+      stream.key_backups.append(RngKeyBackup(stream.key.value))
+      streams.append(stream)
+  return streams
+
+
+def restore_keys(streams: list[RngStream], /):
+  for stream in streams:
+    if not stream.key_backups:
+      raise RuntimeError('No key backups found.')
+    backup = stream.key_backups.pop()
+    stream.key.value = backup.value

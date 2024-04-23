@@ -86,29 +86,29 @@ print(f'{y.shape = }')
 ```{code-cell} ipython3
 :outputId: 9a3f378b-739e-4f45-9968-574651200ede
 
-static, state = model.split()
+graphdef, state = model.split()
 
 # state is a dictionary-like JAX pytree
 print(f'{state = }'[:500] + '\n...')
 
-# static is also a JAX pytree, but just metadata
-print(f'\n{static = }'[:300] + '\n...')
+# graphdef is also a JAX pytree, but just metadata
+print(f'\n{graphdefefefefefef = }'[:300] + '\n...')
 ```
 
 ```{code-cell} ipython3
 :outputId: 0007d357-152a-449e-bcb9-b1b5a91d2d8d
 
-static, state = model.split()
+graphdef, state = model.split()
 
 @jax.jit
-def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):
-  model = static.merge(state)
+def forward(graphdef: nnx.GraphDef, state: nnx.State, x: jax.Array):
+  model = graphdef.merge(state)
   y = model(x)
   state, _ = model.split()
   return y, state
 
 x = jnp.ones((2, 4))
-y, state = forward(static,state, x)
+y, state = forward(graphdef,state, x)
 
 model.update(state)
 
@@ -117,17 +117,17 @@ print(f'{model.count.value = }')
 ```
 
 ```{code-cell} ipython3
-params, batch_stats, counts, static = model.split(nnx.Param, nnx.BatchStat, Count)
+params, batch_stats, counts, graphdef = model.split(nnx.Param, nnx.BatchStat, Count)
 
 @jax.jit
-def forward(static: nnx.GraphDef, params, batch_stats, counts, x: jax.Array):
-  model = static.merge(params, batch_stats, counts)
+def forward(graphdef: nnx.GraphDef, params, batch_stats, counts, x: jax.Array):
+  model = graphdef.merge(params, batch_stats, counts)
   y = model(x, train=True)
   params, batch_stats, counts, _ = model.split(nnx.Param, nnx.BatchStat, Count)
   return y, params, batch_stats, counts
 
 x = jnp.ones((2, 4))
-y, params, batch_stats, counts = forward(static, params, batch_stats, counts, x)
+y, params, batch_stats, counts = forward(graphdef, params, batch_stats, counts, x)
 
 model.update(params, batch_stats, counts)
 
@@ -141,16 +141,16 @@ class Parent(nnx.Module):
         self.model = model
 
     def __call__(self, x):
-        params, batch_stats, counts, static = self.model.split(nnx.Param, nnx.BatchStat, Count)
+        params, batch_stats, counts, graphdef = self.model.split(nnx.Param, nnx.BatchStat, Count)
 
         @jax.jit
-        def forward(static: nnx.GraphDef, params, batch_stats, counts, x: jax.Array):
-            model = static.merge(params, batch_stats, counts)
+        def forward(graphdef: nnx.GraphDef, params, batch_stats, counts, x: jax.Array):
+            model = graphdef.merge(params, batch_stats, counts)
             y = model(x)
             params, batch_stats, counts, _ = model.split(nnx.Param, nnx.BatchStat, Count)
             return y, params, batch_stats, counts
 
-        y, params, batch_stats, counts = forward(static, params, batch_stats, counts, x)
+        y, params, batch_stats, counts = forward(graphdef, params, batch_stats, counts, x)
 
         self.model.update(params, batch_stats, counts)
         return y

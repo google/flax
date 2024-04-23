@@ -88,19 +88,16 @@ def get_repr(obj: Representable) -> str:
 
     value = elem.value if isinstance(elem.value, str) else repr(elem.value)
 
-    if '\n' in value and not isinstance(elem.value, Representable):
-      value = value.replace('\n', '\n' + get_indent())
+    value = value.replace('\n', '\n' + config.elem_indent)
 
-    return (
-      f'{get_indent()}{elem.start}{elem.key}{config.value_sep}{value}{elem.end}'
-    )
+    return f'{config.elem_indent}{elem.start}{elem.key}{config.value_sep}{value}{elem.end}'
 
   with add_indent(config.elem_indent):
     elems = list(map(_repr_elem, iterator))
   elems = ',\n'.join(elems)
 
   if elems:
-    elems = '\n' + elems + '\n' + get_indent()
+    elems = '\n' + elems + '\n'
   else:
     elems = config.empty_repr
 
@@ -115,4 +112,14 @@ class MappingReprMixin(tp.Mapping[A, B]):
     yield Object(type='', value_sep=': ', start='{', end='}')
 
     for key, value in self.items():
+      yield Attr(repr(key), value)
+
+@dataclasses.dataclass(repr=False)
+class PrettyMapping(Representable):
+  mapping: tp.Mapping
+
+  def __nnx_repr__(self):
+    yield Object(type='', value_sep=': ', start='{', end='}')
+
+    for key, value in self.mapping.items():
       yield Attr(repr(key), value)

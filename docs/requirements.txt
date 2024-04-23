@@ -14,6 +14,7 @@ ipython_genutils
 sphinx-design
 jupytext==1.13.8
 dm-haiku
+penzai; python_version>='3.10'
 
 # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
 # ReadTheDocs: https://stackoverflow.com/a/68008428
@@ -32,3 +33,4 @@ tensorflow_text>=2.11.0 # WMT example
 
 # notebooks
 einops
+

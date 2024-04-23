@@ -216,7 +216,7 @@ class BatchNorm(Module):
     self,
     num_features: int,
     *,
-    use_running_average: tp.Optional[bool] = None,
+    use_running_average: bool = False,
     axis: int = -1,
     momentum: float = 0.99,
     epsilon: float = 1e-5,

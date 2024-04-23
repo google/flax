@@ -51,17 +51,6 @@ class TestRngs:
     assert rngs.params.key.value is key0
     assert not jnp.allclose(key1, key2)
 
-  def test_rng_fork(self):
-    key0 = jax.random.key(0)
-    rngs1 = nnx.Rngs(params=key0)
-    rngs2 = nnx.Rngs(rngs1.fork())
-
-    assert rngs2['params'].count.value == 0
-
-    key1 = rngs1.params()
-    key2 = rngs2.params()
-
-    assert not jnp.allclose(key1, key2)
 
   def test_rng_trace_level_constraints(self):
     rngs = nnx.Rngs(0)
@@ -75,16 +64,6 @@ class TestRngs:
         rngs.params()
 
     f()
-
-    @jax.jit
-    def g():
-      with pytest.raises(
-        nnx.errors.TraceContextError,
-        match='Cannot call RngStream from a different trace level',
-      ):
-        rngs.fork()
-
-    g()
 
     rngs1: Any = None
 
@@ -101,87 +80,6 @@ class TestRngs:
       match='Cannot call RngStream from a different trace level',
     ):
       rngs1.params()
-
-  def test_partition_merge(self):
-    rngs = nnx.Rngs(dropout=0)
-
-    keys = rngs.fork()
-
-    assert 'dropout' in keys
-
-    rngs2 = nnx.Rngs(keys)
-
-    key1 = rngs.dropout()
-    key2 = rngs2.dropout()
-    assert not jnp.allclose(key1, key2)
-
-    rngs3 = nnx.Rngs(keys)
-    key3 = rngs3.dropout()
-    assert jnp.allclose(key2, key3)
-
-  def test_fork_broadcast(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    jax.random.key
-
-    keys = rngs.fork()  # all broadcast
-
-    assert keys['params'].shape == ()
-    assert keys['dropout'].shape == ()
-    assert jnp.allclose(
-      keys['params'], jax.random.fold_in(jax.random.key(0), 0)
-    )
-    assert jnp.allclose(
-      keys['dropout'], jax.random.fold_in(jax.random.key(1), 0)
-    )
-
-  def test_fork_split(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    keys = rngs.fork(4)  # split all
-
-    assert keys['params'].shape == (4,)
-    assert keys['dropout'].shape == (4,)
-
-  def test_fork_split_and_broadcast(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    forked = rngs.fork(params=4, dropout=None)
-
-    assert forked['params'].shape == (4,)
-    assert forked['dropout'].shape == ()
-
-  def test_fork_filters(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    forked = rngs.fork({'params': 4})
-
-    assert forked['params'].shape == (4,)
-    assert forked['dropout'].shape == ()
-
-  def test_fork_multidimensional_split(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    keys = rngs.fork((4, None, 3))  # split all
-
-    assert keys['params'].shape == (4, 1, 3)
-    assert keys['dropout'].shape == (4, 1, 3)
-
-  def test_fork_multidimensional_split_mixed(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-    keys = rngs.fork(params=(4, None, 3))  # split all
-
-    assert keys['params'].shape == (4, 1, 3)
-    assert keys['dropout'].shape == ()
-
-  def test_rng_stream_pytree(self):
-    rngs = nnx.Rngs(params=0, dropout=1)
-
-    keys = rngs.fork(dropout=4)
-    keys2 = jax.tree_util.tree_map(lambda x: x, keys)
-
-    assert 'dropout' in keys.splits
-    assert 'params' in keys.broadcasts
-
-    assert keys2 is not keys
-    assert set(keys.keys()) == set(keys2.keys())
-    assert set(keys.splits.keys()) == set(keys2.splits.keys())
-    assert set(keys.broadcasts.keys()) == set(keys2.broadcasts.keys())
 
   def test_jit_updates(self):
     class Foo(nnx.Module):
@@ -228,8 +126,8 @@ class TestRngs:
 
     rngs = nnx.Rngs(params=0, dropout=1)
     m = Foo(rngs)
-    _, params, dropout_keys, param_keys, rng_counts = m.split(
-      nnx.Param, 'dropout', 'params', nnx.RngCount
+    _, params, dropout_keys, param_keys, rng_counts = nnx.split(
+      m, nnx.Param, 'dropout', 'params', nnx.RngCount
     )
 
     assert m.rngs.params.count.value == 2
@@ -253,10 +151,10 @@ class TestRngs:
       out_axes=(0, 0, None),
     )
     def f(params, dropout_keys, param_keys, rng_counts, x):
-      m.update(params, dropout_keys, param_keys, rng_counts)
+      nnx.update(m, params, dropout_keys, param_keys, rng_counts)
       y = m(x)
-      _, params, dropout_keys, param_keys, rng_counts = m.split(
-        nnx.Param, 'dropout', 'params', nnx.RngCount
+      _, params, dropout_keys, param_keys, rng_counts = nnx.split(
+        m, nnx.Param, 'dropout', 'params', nnx.RngCount
       )
       return y, params, rng_counts
 
@@ -269,8 +167,57 @@ class TestRngs:
       x,
     )
 
-    m.update(params, dropout_keys, param_keys, rng_counts)
+    nnx.update(m, params, dropout_keys, param_keys, rng_counts)
 
     assert y.shape == (4, 1, 3)
     assert m.rngs.params.count.value == 2
     assert m.rngs['dropout'].count.value == 1
+
+  def test_state_fork_split(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    graphdef, state = nnx.split(rngs, nnx.RngState)
+    split, broadcast = nnx.fork(state, ..., 4)
+
+    assert len(jax.tree.leaves(split)) == 2
+    assert len(jax.tree.leaves(broadcast)) == 2
+    assert split.params.key.value.shape == (4,)
+    assert split.dropout.key.value.shape == (4,)
+    assert broadcast.params.count.value == 0
+    assert broadcast.dropout.count.value == 0
+
+  def test_state_fork_split_and_broadcast(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    graphdef, state = nnx.split(rngs, nnx.RngState)
+    split, broadcast = nnx.fork(state, 'params', 4)
+
+    assert len(jax.tree.leaves(split)) == 1
+    assert len(jax.tree.leaves(broadcast)) == 3
+    assert split.params.key.value.shape == (4,)
+    assert broadcast.dropout.key.value.shape == ()
+    assert broadcast.params.count.value == 0
+    assert broadcast.dropout.count.value == 0
+
+
+  def test_state_fork_multidimensional_split(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    graphdef, state = nnx.split(rngs, nnx.RngState)
+    split, broadcast = nnx.fork(state, ..., (4, None, 3))
+
+    assert len(jax.tree.leaves(split)) == 2
+    assert len(jax.tree.leaves(broadcast)) == 2
+    assert split.params.key.value.shape == (4, 1, 3)
+    assert split.dropout.key.value.shape == (4, 1, 3)
+    assert broadcast.params.count.value == 0
+    assert broadcast.dropout.count.value == 0
+
+  def test_state_fork_multidimensional_split_mixed(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    graphdef, state = nnx.split(rngs, nnx.RngState)
+    split, broadcast = nnx.fork(state, 'params', (4, None, 3))
+
+    assert len(jax.tree.leaves(split)) == 1
+    assert len(jax.tree.leaves(broadcast)) == 3
+    assert split.params.key.value.shape == (4, 1, 3)
+    assert broadcast.dropout.key.value.shape == ()
+    assert broadcast.params.count.value == 0
+    assert broadcast.dropout.count.value == 0

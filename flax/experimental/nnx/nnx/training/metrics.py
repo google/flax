@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import jax, jax.numpy as jnp
 from flax.experimental.nnx.nnx.variables import Variable
-from flax.experimental.nnx.nnx import filterlib, graph_utils
+from flax.experimental.nnx.nnx import filterlib, graph
 
 import typing as tp
 
@@ -39,7 +39,7 @@ class MetricState(Variable):
   """Wrapper class for Metric Variables."""
   pass
 
-class Metric(graph_utils.GraphNode):
+class Metric(graph.GraphNode):
   def __init__(self):
     raise NotImplementedError('Must override `__init__()` method.')
   def reset(self):
@@ -49,16 +49,22 @@ class Metric(graph_utils.GraphNode):
   def compute(self):
     raise NotImplementedError('Must override `compute()` method.')
   def split(self, *filters: filterlib.Filter):
-    return graph_utils.split(self, *filters)
+    return graph.split(self, *filters)
+
 
 class Average(Metric):
-  def __init__(self):
+  def __init__(self, argname: str = 'values'):
+    self.argname = argname
     self.total = MetricState(jnp.array(0, dtype=jnp.float32))
     self.count = MetricState(jnp.array(0, dtype=jnp.int32))
   def reset(self):
     self.total.value = jnp.array(0, dtype=jnp.float32)
     self.count.value = jnp.array(0, dtype=jnp.int32)
-  def update(self, *, values: tp.Union[int, float, jax.Array], **_):
+
+  def update(self, **kwargs):
+    if self.argname not in kwargs:
+      raise TypeError(f"Expected keyword argument '{self.argname}'")
+    values: tp.Union[int, float, jax.Array] = kwargs[self.argname]
     self.total.value += values if isinstance(values, (int, float)) else values.sum()
     self.count.value += 1 if isinstance(values, (int, float)) else values.size
   def compute(self):
@@ -74,24 +80,24 @@ class Accuracy(Average):
     super().update(values=(logits.argmax(axis=-1)==labels))
 
 class MultiMetric(Metric):
-  '''MultiMetric class to store multiple metrics and update them in a single call.
+  """MultiMetric class to store multiple metrics and update them in a single call.
 
   Example usage::
 
     >>> import jax, jax.numpy as jnp
     >>> from flax.experimental import nnx
-
+    ...
     >>> logits = jax.random.normal(jax.random.key(0), (5, 2))
     >>> labels = jnp.array([1, 1, 0, 1, 0])
     >>> logits2 = jax.random.normal(jax.random.key(1), (5, 2))
     >>> labels2 = jnp.array([0, 1, 1, 1, 1])
-
+    ...
     >>> batch_loss = jnp.array([1, 2, 3, 4])
     >>> batch_loss2 = jnp.array([3, 2, 1, 0])
-
+    ...
     >>> metrics = nnx.MultiMetric(
     ...   accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()
-    >>> )
+    ... )
     >>> metrics.compute()
     {'accuracy': Array(nan, dtype=float32), 'loss': Array(nan, dtype=float32)}
     >>> metrics.update(logits=logits, labels=labels, values=batch_loss)
@@ -103,7 +109,7 @@ class MultiMetric(Metric):
     >>> metrics.reset()
     >>> metrics.compute()
     {'accuracy': Array(nan, dtype=float32), 'loss': Array(nan, dtype=float32)}
-  '''
+  """
   def __init__(self, **metrics):
     # TODO: raise error if a kwarg is passed that is in ('reset', 'update', 'compute'), since these names are reserved for methods
     self._metric_names = []

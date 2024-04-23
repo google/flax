@@ -14,4 +14,5 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/exper
   transforms
   variables
   helpers
+  visualization
 

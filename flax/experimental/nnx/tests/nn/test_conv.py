@@ -62,20 +62,23 @@ class TestConvLinenConsistency(parameterized.TestCase):
       padding = (4, 2)
 
     x = jax.numpy.ones(INPUT_SHAPE)
-    model_nnx = nnx.Conv.create_abstract(
-      IN_FEATURES,
-      OUT_FEATURES,
-      kernel_size,
-      strides,
-      padding=padding,
-      input_dilation=input_dilation,
-      kernel_dilation=kernel_dilation,
-      feature_group_count=feature_group_count,
-      use_bias=use_bias,
-      dtype=dtype,
-      param_dtype=param_dtype,
-      precision=precision,
-      rngs=rngs,
+    model_nnx = nnx.eval_shape(
+      lambda rngs: nnx.Conv(
+        IN_FEATURES,
+        OUT_FEATURES,
+        kernel_size,
+        strides,
+        padding=padding,
+        input_dilation=input_dilation,
+        kernel_dilation=kernel_dilation,
+        feature_group_count=feature_group_count,
+        use_bias=use_bias,
+        dtype=dtype,
+        param_dtype=param_dtype,
+        precision=precision,
+        rngs=rngs,
+      ),
+      rngs,
     )
     model = linen.Conv(
       OUT_FEATURES,
