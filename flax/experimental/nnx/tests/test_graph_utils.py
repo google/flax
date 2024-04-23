@@ -70,11 +70,11 @@ class TestGraphUtils:
 
     graphdef, state = nnx.split(g)
 
-    state[0]['b'].raw_value = 3
+    state[0]['b'].value = 3
     nnx.graph.update(g, state)
 
-    assert g[0]['b'].raw_value == 3
-    assert g[2]['b'].raw_value == 3
+    assert g[0]['b'].value == 3
+    assert g[2]['b'].value == 3
 
   def test_update_static(self):
     a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
@@ -126,12 +126,12 @@ class TestGraphUtils:
 
     graphdef, state = nnx.split(ls)
 
-    assert state[0]['kernel'].raw_value.shape == (2, 2)
-    assert state[0]['bias'].raw_value.shape == (2,)
-    assert state[1]['scale'].raw_value.shape == (2,)
-    assert state[1]['bias'].raw_value.shape == (2,)
-    assert state[1]['mean'].raw_value.shape == (2,)
-    assert state[1]['var'].raw_value.shape == (2,)
+    assert state[0]['kernel'].value.shape == (2, 2)
+    assert state[0]['bias'].value.shape == (2,)
+    assert state[1]['scale'].value.shape == (2,)
+    assert state[1]['bias'].value.shape == (2,)
+    assert state[1]['mean'].value.shape == (2,)
+    assert state[1]['var'].value.shape == (2,)
 
   def test_shared_variables(self):
     v = nnx.Param(1)
@@ -206,16 +206,16 @@ class TestGraphUtils:
     graphdef, state = nnx.split(m)
 
     assert isinstance(m.a, nnx.Param)
-    assert isinstance(state.a, nnx.Param)
+    assert issubclass(state.a.type, nnx.Param)
     assert m.a is not state.a
-    assert m.a.value == state.a.raw_value
+    assert m.a.value == state.a.value
 
     m2 = graphdef.merge(state)
 
     assert isinstance(m2.a, nnx.Param)
-    assert isinstance(state.a, nnx.Param)
+    assert issubclass(state.a.type, nnx.Param)
     assert m2.a is not state.a
-    assert m2.a.value == state.a.raw_value
+    assert m2.a.value == state.a.value
 
   def test_shared_state_variables_not_shared_with_graph(self):
     class Foo(nnx.Module):
@@ -229,22 +229,22 @@ class TestGraphUtils:
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(m.b, nnx.Param)
-    assert isinstance(state.a, nnx.Param)
+    assert issubclass(state.a.type, nnx.Param)
     assert 'b' not in state
     assert m.a is not state.a
     assert m.b is not state.a
-    assert m.a.value == state.a.raw_value
-    assert m.b.value == state.a.raw_value
+    assert m.a.value == state.a.value
+    assert m.b.value == state.a.value
 
     m2 = graphdef.merge(state)
 
     assert isinstance(m2.a, nnx.Param)
     assert isinstance(m2.b, nnx.Param)
-    assert isinstance(state.a, nnx.Param)
+    assert issubclass(state.a.type, nnx.Param)
     assert m2.a is not state.a
     assert m2.b is not state.a
-    assert m2.a.value == state.a.raw_value
-    assert m2.b.value == state.a.raw_value
+    assert m2.a.value == state.a.value
+    assert m2.b.value == state.a.value
     assert m2.a is m2.b
 
   def test_pytree_flatten(self):

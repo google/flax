@@ -29,11 +29,9 @@
 import dataclasses
 import functools
 import typing as tp
-from abc import ABCMeta
 from functools import partial
 from typing import Any
 
-import jax
 import jax.tree_util as jtu
 
 from flax.experimental.nnx.nnx import reprlib, tracers
@@ -222,6 +220,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     def __getattr__(self, name: str) -> tp.Any:
       ...
   else:
+
     def __setattr__(self, name: str, value: Any) -> None:
       return self._setattr(name, value)
 
@@ -233,23 +232,34 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
     object.__setattr__(self, name, value)
 
+  @classmethod
+  def state(cls, value: A, **metadata) -> 'VariableState[A]':
+    return VariableState(cls, value, **metadata)
+
   def copy_from(self, other: 'Variable[A]') -> None:
-    if not self.is_equivalent(other):
+    if type(self) is not type(other):
       raise ValueError(
         f'Cannot copy from incompatible container, '
         f'expected {type(self).__name__}, got {type(other).__name__}'
       )
     if self is other:
       return
+    trace_state = self._trace_state
     vars_dict = vars(self)
+    other_vars = vars(other).copy()
+    del other_vars['_trace_state']
     vars_dict.clear()
-    vars_dict.update(vars(other))
+    vars_dict.update(other_vars, _trace_state=trace_state)
 
-  def copy_from_def(self, other: 'nnx.graph.VariableDef', /, value: A):
-    _trace_state = self._trace_state
+  def copy_from_state(self, variable_state: 'VariableState[A]'):
+    trace_state = self._trace_state
     variable_vars = vars(self)
     variable_vars.clear()
-    variable_vars.update(other.metadata, _trace_state=_trace_state, raw_value=value) # type: ignore
+    variable_vars.update(
+      variable_state.get_metadata(),
+      raw_value=variable_state.value,
+      _trace_state=trace_state,
+    )
 
   @property
   def value(self) -> A:
@@ -301,7 +311,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     ):
       # remove value from kwargs
       kwargs.pop('raw_value')
-      if not self.is_equivalent(value):
+      if type(self) is not type(value):
         raise ValueError(
           'Cannot replace value from incompatible container, '
           f'expected {type(self).__name__}, got {type(value).__name__}'
@@ -321,9 +331,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars(obj).update(attributes)
     return obj
 
-  def is_equivalent(self, other: tp.Any) -> bool:
-    return type(self) is type(other)
-
   def copy(self: 'Variable[A]') -> 'Variable[A]':
     obj = object.__new__(type(self))
     attributes = vars(self).copy()
@@ -331,24 +338,20 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars(obj).update(attributes)
     return obj
 
+  def to_state(self: 'Variable[A]') -> 'VariableState[A]':
+    metadata = vars(self).copy()
+    del metadata['raw_value']
+    del metadata['_trace_state']
+    return VariableState(type(self), self.raw_value, **metadata)
+
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
     for name, value in vars(self).items():
       if name == 'raw_value':
         name = 'value'
-      if name.endswith('_hooks') or name == "_trace_state":
+      if name.endswith('_hooks') or name == '_trace_state':
         continue
       yield reprlib.Attr(name, repr(value))
-
-  def __init_subclass__(cls):
-    super().__init_subclass__()
-
-    jtu.register_pytree_with_keys(
-      cls,
-      partial(_variable_flatten, with_keys=True),  # type: ignore
-      partial(_variable_unflatten, cls=cls),  # type: ignore
-      flatten_func=partial(_variable_flatten, with_keys=False),  # type: ignore
-    )
 
   # hooks API
   if tp.TYPE_CHECKING:
@@ -371,88 +374,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
       raise NotImplementedError
 
 
-def _variable_flatten(x: Variable[tp.Any], *, with_keys: bool):
-  attributes = vars(x).copy()
-  del attributes['_trace_state']
-  value = attributes.pop('raw_value')
-  if with_keys:
-    node = (jtu.GetAttrKey('raw_value'), value)
-  else:
-    node = value
-
-  return (node,), attributes
-
-
-def _variable_unflatten(
-  metadata: tp.Mapping[str, tp.Any],
-  children: tp.Tuple[A],
-  *,
-  cls: type[Variable[A]],
-) -> Variable[A]:
-  variable = object.__new__(cls)
-  vars(variable).update(metadata, _trace_state=tracers.TraceState(), raw_value=children[0])
-  return variable
-
-
-jtu.register_pytree_with_keys(
-  Variable,
-  partial(_variable_flatten, with_keys=True),  # type: ignore
-  partial(_variable_unflatten, cls=Variable),  # type: ignore
-  flatten_func=partial(_variable_flatten, with_keys=False),  # type: ignore
-)
-
-class VariableDef(tp.Generic[A], reprlib.Representable):
-
-  def __init__(
-    self,
-    type: tp.Type[Variable[A]],
-    index: int,
-    value: A,
-    metadata: dict[str, tp.Any],
-  ):
-    self.type = type
-    self.index = index
-    self.value = value
-    self.metadata = metadata
-
-  def __nnx_repr__(self):
-    yield reprlib.Object(type=type(self))
-
-    yield reprlib.Attr('type', self.type.__name__)
-    yield reprlib.Attr('index', self.index)
-
-    for key in self.metadata:
-      yield reprlib.Attr(key, repr(self.metadata[key]))
-
-
-  @classmethod
-  def from_variable(cls, variable: Variable[A], index: int) -> 'VariableDef[A]':
-    metadata = vars(variable).copy()
-    del metadata['raw_value']
-    del metadata['_trace_state']
-    return cls(type(variable), index, metadata)
-
-  def to_variable(self, value: A) -> Variable[A]:
-    # we use object.__new__ to avoid calling __init__ and bypass the
-    # __init__ logic which should not be called twice
-    variables = object.__new__(self.type)
-    vars(variables).update(
-      self.metadata, raw_value=value, _trace_state=tracers.TraceState()
-    )
-    return variables
-
-  def __hash__(self):
-    return hash((self._type, self._index, tuple(self._metadata.items())))
-
-  def __eq__(self, other):
-    if not isinstance(other, VariableDef):
-      return False
-    return (
-      self._type == other._type
-      and self._index == other._index
-      and self._metadata == other._metadata
-    )
-
 class Param(Variable[A]):
   pass
 
@@ -468,6 +389,95 @@ class Cache(Variable[A]):
 class Intermediate(Variable[A]):
   pass
 
+
+class VariableState(tp.Generic[A], reprlib.Representable):
+  def __init__(
+    self,
+    type: tp.Type[Variable[A]],
+    value: A,
+    **metadata,
+  ):
+    self.type = type
+    self.value = value
+    vars(self).update(metadata)
+
+  if tp.TYPE_CHECKING:
+
+    def __getattr__(self, name: str) -> tp.Any:
+      ...
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type=type(self))
+    yield reprlib.Attr('type', self.type.__name__)
+
+    for name, value in vars(self).items():
+      if name == 'type' or name.endswith('_hooks'):
+        continue
+      yield reprlib.Attr(name, repr(value))
+
+  def replace(self, value: B) -> 'VariableState[B]':
+    return VariableState(self.type, value, **self.get_metadata())
+
+  def to_variable(self) -> Variable[A]:
+    # we use object.__new__ to avoid calling __init__ and bypass the
+    # __init__ logic which should not be called twice
+    metadata = self.get_metadata()
+    variables = object.__new__(self.type)
+    vars(variables).update(
+      metadata, raw_value=self.value, _trace_state=tracers.TraceState()
+    )
+    return variables
+
+  def get_metadata(self) -> dict[str, tp.Any]:
+    metadata = vars(self).copy()
+    del metadata['type']
+    del metadata['value']
+    return metadata
+
+  def add_axis(self, axis_name: AxisName, axis_index: AxisIndex):
+    if not hasattr(self, 'add_axis_hooks'):
+      raise ValueError(f'No add_axis_hooks found for VariableState: {self}')
+    for hook in self.add_axis_hooks:
+      hook(self, axis_name, axis_index)
+
+    self
+
+  def remove_axis(self, axis_name: AxisName, axis_index: AxisIndex):
+    if not hasattr(self, 'remove_axis_hooks'):
+      raise ValueError(f'No remove_axis_hooks found for VariableState: {self}')
+    for hook in self.remove_axis_hooks:
+      hook(self, axis_name, axis_index)
+
+    self
+
+
+def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):
+  metadata = tuple(x.get_metadata().items())
+  if with_keys:
+    node = (jtu.GetAttrKey('raw_value'), x.value)
+  else:
+    node = x.value
+
+  return (node,), (x.type, metadata)
+
+
+def _variable_state_unflatten(
+  static: tuple[type[Variable[A]], tuple[tuple[str, tp.Any], ...]],
+  children: tuple[A],
+) -> VariableState[A]:
+  return VariableState(
+    type=static[0],
+    value=children[0],
+    **dict(static[1]),
+  )
+
+
+jtu.register_pytree_with_keys(
+  VariableState,
+  partial(_variable_state_flatten, with_keys=True),  # type: ignore
+  _variable_state_unflatten,  # type: ignore
+  flatten_func=partial(_variable_state_flatten, with_keys=False),  # type: ignore
+)
 
 
 def with_metadata(

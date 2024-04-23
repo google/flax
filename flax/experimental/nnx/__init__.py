@@ -115,5 +115,6 @@ from .nnx.variables import Empty as Empty
 from .nnx.variables import Intermediate as Intermediate
 from .nnx.variables import Param as Param
 from .nnx.variables import Variable as Variable
+from .nnx.variables import VariableState as VariableState
 from .nnx.variables import VariableMetadata as VariableMetadata
 from .nnx.variables import with_metadata as with_metadata

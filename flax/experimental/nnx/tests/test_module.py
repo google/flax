@@ -249,8 +249,8 @@ class TestModule:
 
     intermediates = nnx.pop(m, nnx.Intermediate)
 
-    assert isinstance(intermediates.y, nnx.Intermediate)
-    assert intermediates['y'].raw_value == (3, 11)
+    assert issubclass(intermediates.y.type, nnx.Intermediate)
+    assert intermediates['y'].value == (3, 11)
 
     assert not hasattr(m, 'y')
 
@@ -510,10 +510,14 @@ class TestModuleDataclass:
     graphdef, state = nnx.split(m)
 
     assert len(state) == 4
-    assert state.b == nnx.Variable(2)
-    assert state.c == nnx.Param(3)
-    assert state.d == nnx.Variable(4)
-    assert state.e == nnx.BatchStat(5)
+    assert state.b.value == 2
+    assert state.b.type == nnx.Variable
+    assert state.c.value == 3
+    assert state.c.type == nnx.Param
+    assert state.d.value == 4
+    assert state.d.type == nnx.Variable
+    assert state.e.value == 5
+    assert state.e.type == nnx.BatchStat
 
   def test_post_init(self):
     @dataclasses.dataclass
@@ -567,8 +571,7 @@ class TestModuleDef:
     graphdef, states = nnx.split(foo)
 
     assert isinstance(states, nnx.State)
-    assert isinstance(states.w, nnx.Param)
-    # assert isinstance(states["c"], jax.Array)
+    assert issubclass(states.w.type, nnx.Param)
 
     y, _updates = graphdef.apply(states)(x=2.0, rngs=nnx.Rngs(e=1))
 
@@ -592,8 +595,8 @@ class TestModuleDef:
 
     assert isinstance(graphdef, nnx.GraphDef)
     assert isinstance(state, nnx.State)
-    assert isinstance(state.w, nnx.Param)
-    assert isinstance(state.c, nnx.Variable)
+    assert issubclass(state.w.type, nnx.Param)
+    assert issubclass(state.c.type, nnx.Variable)
 
     y, (graphdef, state) = graphdef.apply(state)(x=2.0, rngs=nnx.Rngs(e=1))
 

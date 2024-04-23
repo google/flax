@@ -19,36 +19,36 @@ from flax.experimental import nnx
 
 class StateTest(TestCase):
   def test_create_state(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
 
-    assert state['a'].raw_value == 1
-    assert state['b']['c'].raw_value == 2
+    assert state['a'].value == 1
+    assert state['b']['c'].value == 2
 
   def test_get_attr(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
 
-    assert state.a.raw_value == 1
-    assert state.b.c.raw_value == 2
+    assert state.a.value == 1
+    assert state.b.c.value == 2
 
   def test_set_attr(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
 
-    state.a.raw_value = 3
-    state.b.c.raw_value = 4
+    state.a.value = 3
+    state.b.c.value = 4
 
-    assert state['a'].raw_value == 3
-    assert state['b']['c'].raw_value == 4
+    assert state['a'].value == 3
+    assert state['b']['c'].value == 4
 
   def test_set_attr_variables(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
 
-    state.a.raw_value = 3
-    state.b.c.raw_value = 4
+    state.a.value = 3
+    state.b.c.value = 4
 
-    assert isinstance(state.a, nnx.Param)
-    assert state.a.raw_value == 3
-    assert isinstance(state.b.c, nnx.Param)
-    assert state.b.c.raw_value == 4
+    assert issubclass(state.a.type, nnx.Param)
+    assert state.a.value == 3
+    assert issubclass(state.b.c.type, nnx.Param)
+    assert state.b.c.value == 4
 
   def test_integer_access(self):
     class Foo(nnx.Module):
@@ -59,6 +59,6 @@ class StateTest(TestCase):
     state = nnx.state(module)
 
     assert module.layers[0].kernel.value.shape == (1, 2)
-    assert state.layers[0].kernel.raw_value.shape == (1, 2)
+    assert state.layers[0].kernel.value.shape == (1, 2)
     assert module.layers[1].kernel.value.shape == (2, 3)
-    assert state.layers[1].kernel.raw_value.shape == (2, 3)
+    assert state.layers[1].kernel.value.shape == (2, 3)

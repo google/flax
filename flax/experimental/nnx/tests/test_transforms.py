@@ -366,10 +366,10 @@ class TestGrad:
 
     assert m.a[0] is m.b
     assert isinstance(grads, nnx.State)
-    assert grads['a'][0].raw_value == 2.0
-    assert isinstance(grads.a[0], nnx.Variable)
-    assert grads['a'][1].raw_value == 1.0
-    assert isinstance(grads.a[1], nnx.Variable)
+    assert grads['a'][0].value == 2.0
+    assert issubclass(grads.a[0].type, nnx.Variable)
+    assert grads['a'][1].value == 1.0
+    assert issubclass(grads.a[1].type, nnx.Variable)
     assert len(grads.flat_state()) == 2
 
     nnx.update(m, grads)
@@ -397,8 +397,8 @@ class TestGrad:
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a'][0].raw_value == 1.0
-    assert isinstance(grads.a[0], nnx.Param)
+    assert grads['a'][0].value == 1.0
+    assert issubclass(grads.a[0].type, nnx.Param)
     assert len(grads) == 2
 
     nnx.update(m, grads)
@@ -425,8 +425,8 @@ class TestGrad:
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a'][1].raw_value == 1.0
-    assert isinstance(grads.a[1], nnx.BatchStat)
+    assert grads['a'][1].value == 1.0
+    assert issubclass(grads.a[1].type, nnx.BatchStat)
     assert len(grads) == 1
 
     nnx.update(m, grads)
@@ -447,9 +447,9 @@ class TestGrad:
     grads = grad_fn(m, x, y)
 
     assert 'kernel' in grads
-    assert grads.kernel.raw_value.shape == (2, 3)
+    assert grads.kernel.value.shape == (2, 3)
     assert 'bias' in grads
-    assert grads.bias.raw_value.shape == (3,)
+    assert grads.bias.value.shape == (3,)
 
   def test_multiple_graph_nodes(self):
     rngs = nnx.Rngs(0)
@@ -462,13 +462,13 @@ class TestGrad:
     grads_m1, grads_m2 = grad_fn(m1, m2, x, y)
 
     assert 'kernel' in grads_m1
-    assert grads_m1.kernel.raw_value.shape == (2, 3)
+    assert grads_m1.kernel.value.shape == (2, 3)
     assert 'bias' in grads_m1
-    assert grads_m1.bias.raw_value.shape == (3,)
+    assert grads_m1.bias.value.shape == (3,)
     assert 'kernel' in grads_m2
-    assert grads_m2.kernel.raw_value.shape == (3, 3)
+    assert grads_m2.kernel.value.shape == (3, 3)
     assert 'bias' in grads_m2
-    assert grads_m2.bias.raw_value.shape == (3,)
+    assert grads_m2.bias.value.shape == (3,)
 
   def test_multiple_graph_nodes_mix_positions(self):
     rngs = nnx.Rngs(0)
@@ -481,13 +481,13 @@ class TestGrad:
     grads_m1, grads_m2 = grad_fn(x, m1, y, m2)
 
     assert 'kernel' in grads_m1
-    assert grads_m1.kernel.raw_value.shape == (2, 3)
+    assert grads_m1.kernel.value.shape == (2, 3)
     assert 'bias' in grads_m1
-    assert grads_m1.bias.raw_value.shape == (3,)
+    assert grads_m1.bias.value.shape == (3,)
     assert 'kernel' in grads_m2
-    assert grads_m2.kernel.raw_value.shape == (3, 3)
+    assert grads_m2.kernel.value.shape == (3, 3)
     assert 'bias' in grads_m2
-    assert grads_m2.bias.raw_value.shape == (3,)
+    assert grads_m2.bias.value.shape == (3,)
 
 
 class TestScan:
@@ -814,9 +814,9 @@ class TestScan:
 
         # test sharding layer axes is not present inside scan
         state = nnx.state(self.linear)
-        assert state.kernel.raw_value.shape == (3, 3)
+        assert state.kernel.value.shape == (3, 3)
         assert state.kernel.sharding == ('din', 'dout')
-        assert state.bias.raw_value.shape == (3,)
+        assert state.bias.value.shape == (3,)
         assert state.bias.sharding == ('dout',)
 
         return x, None
@@ -832,7 +832,7 @@ class TestScan:
 
     # test sharding layers axes is set
     state = nnx.state(m)
-    assert state.scan_module.linear.kernel.raw_value.shape == (
+    assert state.scan_module.linear.kernel.value.shape == (
       5,
       3,
       3,
@@ -842,7 +842,7 @@ class TestScan:
       'din',
       'dout',
     )
-    assert state.scan_module.linear.bias.raw_value.shape == (5, 3)
+    assert state.scan_module.linear.bias.value.shape == (5, 3)
     assert state.scan_module.linear.bias.sharding == (
       'layers',
       'dout',
@@ -853,13 +853,13 @@ class TestScan:
 
     # test sharding axes is preserved
     state = nnx.state(m)
-    assert state.scan_module.linear.kernel.raw_value.shape == (5, 3, 3)
+    assert state.scan_module.linear.kernel.value.shape == (5, 3, 3)
     assert state.scan_module.linear.kernel.sharding == (
       'layers',
       'din',
       'dout',
     )
-    assert state.scan_module.linear.bias.raw_value.shape == (5, 3)
+    assert state.scan_module.linear.bias.value.shape == (5, 3)
     assert state.scan_module.linear.bias.sharding == (
       'layers',
       'dout',

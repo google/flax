@@ -33,11 +33,11 @@ class TestPartitioning:
     assert len(rest) == 1
 
     # check params
-    assert params['a'][0].raw_value == m.a[0].value
-    assert params['b'].raw_value == m.b.value
+    assert params['a'][0].value == m.a[0].value
+    assert params['b'].value == m.b.value
 
     # check rest
-    assert rest['a'][1].raw_value == m.a[1].value
+    assert rest['a'][1].value == m.a[1].value
 
     m2 = graphdef.merge(params, rest)
 
@@ -156,8 +156,8 @@ class TestPartitioning:
     assert vars(m.a)['0'] is not vars(m)['b']
 
     state = nnx.state(m, nnx.Variable)
-    assert state['a'][0].raw_value == m.a[0].value
-    assert state['a'][1].raw_value == m.a[1].value
-    assert state['b'].raw_value == m.b.value
+    assert state['a'][0].value == m.a[0].value
+    assert state['a'][1].value == m.a[1].value
+    assert state['b'].value == m.b.value
     assert state.b is not state.a[0]
     assert len(state.flat_state()) == 3

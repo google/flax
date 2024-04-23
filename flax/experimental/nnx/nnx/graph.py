@@ -43,7 +43,7 @@ from flax.experimental.nnx.nnx.state import (
   StateLeaf,
   is_state_leaf,
 )
-from flax.experimental.nnx.nnx.variables import Variable
+from flax.experimental.nnx.nnx.variables import Variable, VariableState
 from flax.typing import PathParts, Key
 
 A = tp.TypeVar('A')
@@ -67,6 +67,12 @@ Updates = tp.Union[
   State,
   tuple[State, ...],
 ]
+
+NodeLeaf = tp.Union[Variable[tp.Any], np.ndarray, jax.Array]
+
+
+def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
+  return isinstance(x, (Variable, np.ndarray, jax.Array))
 
 
 @dataclasses.dataclass
@@ -183,9 +189,7 @@ def register_graph_node_type(
 
 
 def is_node(x: tp.Any) -> bool:
-  if isinstance(x, Variable):
-    return False
-  elif type(x) in CONTEXT.node_types:
+  if type(x) in CONTEXT.node_types:
     return True
   return is_pytree_node(x)
 
@@ -247,82 +251,14 @@ class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
     return repr(self._mapping)
 
 
-
-
-
-class VariableDef(reprlib.Representable):
-  __slots__ = (
-    '_type',
-    '_index',
-    '_metadata',
-  )
-
-  def __init__(
-    self,
-    type: tp.Type[Variable[tp.Any]],
-    index: int,
-    metadata: dict[Key, tp.Any],
-  ):
-    self._type = type
-    self._index = index
-    self._metadata = metadata
-
-  def __nnx_repr__(self):
-    yield reprlib.Object(type=type(self))
-
-    yield reprlib.Attr('type', self._type.__name__)
-    yield reprlib.Attr('index', self._index)
-    yield reprlib.Attr('metadata', reprlib.PrettyMapping(self._metadata))
-
-  @property
-  def type(self):
-    return self._type
-
-  @property
-  def index(self):
-    return self._index
-
-  @property
-  def metadata(self):
-    return self._metadata
-
-  @classmethod
-  def from_variable(cls, variable: Variable[tp.Any], index: int) -> VariableDef:
-    metadata = vars(variable).copy()
-    del metadata['raw_value']
-    del metadata['_trace_state']
-    return cls(type(variable), index, metadata)
-
-  def to_variable(self, value: Node) -> Variable[Node]:
-    # we use object.__new__ to avoid calling __init__ and bypass the
-    # __init__ logic which should not be called twice
-    variables = object.__new__(self._type)
-    vars(variables).update(
-      self._metadata, raw_value=value, _trace_state=tracers.TraceState()
-    )
-    return variables
-
-  def __hash__(self):
-    return hash((self._type, self._index, tuple(self._metadata.items())))
-
-  def __eq__(self, other):
-    if not isinstance(other, VariableDef):
-      return False
-    return (
-      self._type == other._type
-      and self._index == other._index
-      and self._metadata == other._metadata
-    )
-
-
 @dataclasses.dataclass(frozen=True, repr=False)
 class NodeDef(tp.Generic[Node], reprlib.Representable):
   type: tp.Type[Node]
   index: int
   attributes: tuple[Key, ...]
-  subgraphs: _HashableMapping[Key, tp.Union['NodeDef[tp.Any]', int]]
+  subgraphs: _HashableMapping[Key, tp.Union['NodeDef[tp.Any]', Index]]
   static_fields: _HashableMapping[Key, tp.Any]
-  variables: _HashableMapping[Key, int]
+  variables: _HashableMapping[Key, Index]
   metadata: tp.Any
 
   @classmethod
@@ -331,9 +267,9 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
     type: tp.Type[Node],
     index: int,
     attributes: tuple[Key, ...],
-    subgraphs: tp.Iterable[tuple[Key, tp.Union['GraphDef[tp.Any]', int]]],
+    subgraphs: tp.Iterable[tuple[Key, tp.Union['GraphDef[tp.Any]', Index]]],
     static_fields: tp.Iterable[tuple[Key, tp.Any]],
-    variables: tp.Iterable[tuple[Key, int]],
+    variables: tp.Iterable[tuple[Key, Index]],
     metadata: tp.Any,
   ):
     return cls(
@@ -478,7 +414,7 @@ def _graph_flatten(
       if value in refmap:
         variables.append((key, refmap[value]))
       else:
-        flat_state[(*path, key)] = value.copy()
+        flat_state[(*path, key)] = value.to_state()
         variable_index = refmap[value] = len(refmap)
         variables.append((key, variable_index))
     elif is_state_leaf(value):
@@ -554,7 +490,7 @@ def _graph_unflatten(
   node_impl = get_node_impl_for_type(nodedef.type)
 
   def _get_children():
-    children: dict[Key, StateLeaf | Node] = {}
+    children: dict[Key, NodeLeaf | Node] = {}
 
     for key in nodedef.attributes:
       if key in nodedef.static_fields:
@@ -591,7 +527,8 @@ def _graph_unflatten(
         if key in nodedef.subgraphs:
           if is_state_leaf(value):
             raise ValueError(
-              f'Expected a subgraph for {key!r}, but got a Variable.'
+              f'Expected value of type {nodedef.subgraphs[key]} for '
+              f'{key!r}, but got {value!r}'
             )
           assert isinstance(value, dict)
           subgraphdef = nodedef.subgraphs[key]
@@ -608,7 +545,7 @@ def _graph_unflatten(
           if variable_index in index_to_ref:
             children[key] = index_to_ref[variable_index]
           else:
-            if not isinstance(value, Variable):
+            if not isinstance(value, VariableState):
               raise ValueError(
                 f'Expected a Variable type for {key!r}, but got {type(value)}.'
               )
@@ -618,14 +555,18 @@ def _graph_unflatten(
                 raise ValueError(
                   f'Expected a Variable type for {key!r}, but got {type(variable)}.'
                 )
-              variable.copy_from(value)
+              variable.copy_from_state(value)
             else:
-              assert isinstance(value, Variable)
-              variable = value.copy()
+              assert isinstance(value, VariableState)
+              variable = value.to_variable()
             children[key] = variable
             index_to_ref[variable_index] = variable
         elif is_state_leaf(value):
+          if isinstance(value, VariableState):
+            value = value.to_variable()
           children[key] = value
+        else:
+          raise RuntimeError
     for new_key in set(state) - set(nodedef.attributes):
       raise ValueError(f'Unknown key: {new_key!r}')
 
@@ -695,7 +636,7 @@ def _graph_pop(
         predicates=predicates,
       )
       continue
-    elif not is_state_leaf(value):
+    elif not is_node_leaf(value):
       continue
     elif id(value) in id_to_index:
       continue
@@ -711,7 +652,7 @@ def _graph_pop(
         id_to_index[id(value)] = len(id_to_index)
         node_impl.pop_key(node, name)
         if isinstance(value, Variable):
-          value = value.copy()
+          value = value.to_state()
         state[node_path] = value
         break
     else:
@@ -746,14 +687,14 @@ def _graph_update_dynamic(node: tp.Any, state: dict[Key, tp.Any]):
       if is_state_leaf(value):
         raise ValueError(f'Expected a subgraph for {key!r}, but got: {value!r}')
       _graph_update_dynamic(current_value, value)
-    elif isinstance(value, Variable):
+    elif isinstance(value, VariableState):
       # case 3: state leaf is being updated
       if not isinstance(current_value, Variable):
         raise ValueError(
           f'Trying to update a non-Variable attribute {key!r} with a Variable: '
           f'{value!r}'
         )
-      current_value.copy_from(value)
+      current_value.copy_from_state(value)
     elif is_state_leaf(value):
       # case 4: state field is being updated
       if isinstance(node_impl, PytreeNodeImpl):
@@ -1173,7 +1114,7 @@ jax.tree_util.register_static(Static)
 class GraphNodeIndex:
   """Index of a graph node in a Pytree structure."""
 
-  index: int
+  index: Index
 
 
 jax.tree_util.register_static(GraphNodeIndex)
@@ -1338,9 +1279,9 @@ class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
     elif (
       hasattr(self, key)
       and isinstance(variable := getattr(self, key), Variable)
-      and isinstance(value, Variable)
+      and isinstance(value, VariableState)
     ):
-      variable.copy_from(value)
+      variable.copy_from_state(value)
     else:
       setattr(self, key, value)
 

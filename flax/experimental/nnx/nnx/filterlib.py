@@ -32,6 +32,10 @@ Filter = tp.Union[FilterLiteral, tuple['Filter', ...], list['Filter']]
 class _HasTag(tp.Protocol):
   tag: str
 
+@tp.runtime_checkable
+class _HasType(tp.Protocol):
+  type: type
+
 
 def to_predicate(filter: Filter) -> Predicate:
   if isinstance(filter, str):
@@ -65,7 +69,11 @@ class OfType:
   type: type
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return isinstance(x, self.type)
+    return (
+      isinstance(x, self.type)
+      or isinstance(x, _HasType)
+      and issubclass(x.type, self.type)
+    )
 
 
 class Any:

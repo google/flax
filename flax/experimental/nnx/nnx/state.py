@@ -36,17 +36,17 @@ import numpy as np
 
 from flax import traverse_util
 from flax.experimental.nnx.nnx import filterlib, reprlib
-from flax.experimental.nnx.nnx.variables import Variable
+from flax.experimental.nnx.nnx.variables import VariableState
 from flax.typing import Key, PathParts
 
 A = tp.TypeVar('A')
 
-StateLeaf = tp.Union[Variable[tp.Any], np.ndarray, jax.Array]
+StateLeaf = tp.Union[VariableState[tp.Any], np.ndarray, jax.Array]
 FlatState = dict[PathParts, StateLeaf]
 
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
-  return isinstance(x, (Variable, np.ndarray, jax.Array))
+  return isinstance(x, (VariableState, np.ndarray, jax.Array))
 
 
 class NestedStateRepr(reprlib.Representable):
@@ -66,8 +66,8 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def __init__(
     self,
     mapping: tp.Union[
-      tp.Mapping[Key, tp.Any],
-      tp.Iterator[tuple[Key, tp.Any]],
+      tp.Mapping[Key, tp.Mapping | StateLeaf],
+      tp.Iterator[tuple[Key, tp.Mapping | StateLeaf]],
     ],
     /,
   ):
