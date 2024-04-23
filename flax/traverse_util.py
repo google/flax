@@ -52,18 +52,19 @@ Traversals can also be used to make changes using the ``update`` method::
 Traversals never mutate the original data. Therefore, an update essentially
 returns a copy of the data including the provided updates.
 """
+from __future__ import annotations
 
 import abc
+from collections.abc import Callable, Mapping
 import copy
 import dataclasses
 import warnings
-from typing import Any, Callable
+from typing import Any, Union, overload
 
 import jax
 
 import flax
-from flax.core.scope import VariableDict
-from flax.typing import PathParts
+from flax.typing import PathParts, VariableDict
 
 from . import struct
 
@@ -77,7 +78,37 @@ class _EmptyNode:
 empty_node = _EmptyNode()
 
 
-def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
+# TODO: In Python 3.10, use TypeAlias.
+IsLeafCallable = Callable[[tuple[Any, ...], Mapping[Any, Any]], bool]
+
+
+@overload
+def flatten_dict(xs: Mapping[Any, Any],
+                 /,
+                 *,
+                 keep_empty_nodes: bool = False,
+                 is_leaf: Union[None, IsLeafCallable] = None,
+                 sep: None = None
+                 ) -> dict[tuple[Any, ...], Any]:
+  ...
+
+@overload
+def flatten_dict(xs: Mapping[Any, Any],
+                 /,
+                 *,
+                 keep_empty_nodes: bool = False,
+                 is_leaf: Union[None, IsLeafCallable] = None,
+                 sep: str,
+                 ) -> dict[str, Any]:
+  ...
+
+def flatten_dict(xs: Mapping[Any, Any],
+                 /,
+                 *,
+                 keep_empty_nodes: bool = False,
+                 is_leaf: Union[None, IsLeafCallable] = None,
+                 sep: Union[None, str] = None
+                 ) -> dict[Any, Any]:
   """Flatten a nested dictionary.
 
   The nested keys are flattened to a tuple.
@@ -111,16 +142,16 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
     The flattened dictionary.
   """
   assert isinstance(
-    xs, (flax.core.FrozenDict, dict)
-  ), f'expected (frozen)dict; got {type(xs)}'
+    xs, Mapping
+  ), f'expected Mapping; got {type(xs).__qualname__}'
 
-  def _key(path):
+  def _key(path: tuple[Any, ...]) -> Union[tuple[Any, ...], str]:
     if sep is None:
       return path
     return sep.join(path)
 
-  def _flatten(xs, prefix):
-    if not isinstance(xs, (flax.core.FrozenDict, dict)) or (
+  def _flatten(xs: Any, prefix: tuple[Any, ...]) -> dict[Any, Any]:
+    if not isinstance(xs, Mapping) or (
       is_leaf and is_leaf(prefix, xs)
     ):
       return {_key(prefix): xs}
