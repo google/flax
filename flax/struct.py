@@ -124,7 +124,7 @@ def dataclass(clz: _T, **kwargs) -> _T:
   data_clz.replace = replace
 
   # Remove this guard once minimux JAX version is >0.4.26.
-  if hasattr(jax.tree_util, 'register_pytree_with_keys_dataclass'):
+  if hasattr(jax.tree_util, 'register_dataclass'):
     jax.tree_util.register_dataclass(
         data_clz, data_fields, meta_fields
     )
