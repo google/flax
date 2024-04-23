@@ -123,11 +123,6 @@ def dataclass(clz: _T, **kwargs) -> _T:
 
   data_clz.replace = replace
 
-  def iterate_clz(x):
-    meta = tuple(getattr(x, name) for name in meta_fields)
-    data = tuple(getattr(x, name) for name in data_fields)
-    return data, meta
-
   def iterate_clz_with_keys(x):
     meta = tuple(getattr(x, name) for name in meta_fields)
     data = tuple(
