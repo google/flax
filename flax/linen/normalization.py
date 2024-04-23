@@ -57,19 +57,21 @@ def _abs_sq(x):
 
 
 def _compute_stats(
-  x: Array,
-  axes: Axes,
-  dtype: Optional[Dtype],
-  axis_name: Optional[str] = None,
-  axis_index_groups: Any = None,
-  use_mean: bool = True,
-  use_fast_variance: bool = True,
-  mask: Optional[Array] = None,
+    x: Array,
+    axes: Axes,
+    dtype: Optional[Dtype],
+    axis_name: Optional[str] = None,
+    axis_index_groups: Any = None,
+    use_mean: bool = True,
+    use_fast_variance: bool = True,
+    mask: Optional[Array] = None,
+    force_float32_reductions=True,
 ):
   """Computes mean and variance statistics.
 
   This implementation takes care of a few important details:
-  - Computes in float32 precision for stability in half precision training.
+  - By default, computes in float32 precision for stability
+    in half precision training.
   - If `use_fast_variance` is `True`, mean and variance are computed using
     Var = E[|x|^2] - |E[x]|^2, instead of Var = E[|x - E[x]|^2]), in a single
     XLA fusion.
@@ -93,8 +95,10 @@ def _compute_stats(
       variance without subtracting the mean.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
-    mask: Binary array of shape broadcastable to `inputs` tensor, indicating
-      the positions for which the mean and variance should be computed.
+    mask: Binary array of shape broadcastable to `inputs` tensor, indicating the
+      positions for which the mean and variance should be computed.
+    force_float32_reductions: If false, this will skip float32 promotion and use
+      the input dtype or inherited dtype from ``x``.
 
   Returns:
     A pair ``(mean, var)``.
@@ -103,7 +107,8 @@ def _compute_stats(
     dtype = jnp.result_type(x)
   # promote x to at least float32, this avoids half precision computation
   # but preserves double or complex floating points
-  dtype = jnp.promote_types(dtype, jnp.float32)
+  if force_float32_reductions:
+    dtype = jnp.promote_types(dtype, jnp.float32)
   x = jnp.asarray(x, dtype)
   axes = _canonicalize_axes(x.ndim, axes)
 
@@ -299,6 +304,7 @@ class BatchNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
+  force_float32_reductions: bool = True
 
   @compact
   def __call__(
@@ -349,13 +355,14 @@ class BatchNorm(Module):
       mean, var = ra_mean.value, ra_var.value
     else:
       mean, var = _compute_stats(
-        x,
-        reduction_axes,
-        dtype=self.dtype,
-        axis_name=self.axis_name if not self.is_initializing() else None,
-        axis_index_groups=self.axis_index_groups,
-        use_fast_variance=self.use_fast_variance,
-        mask=mask,
+          x,
+          reduction_axes,
+          dtype=self.dtype,
+          axis_name=self.axis_name if not self.is_initializing() else None,
+          axis_index_groups=self.axis_index_groups,
+          use_fast_variance=self.use_fast_variance,
+          mask=mask,
+          force_float32_reductions=self.force_float32_reductions,
       )
 
       if not self.is_initializing():
@@ -455,6 +462,7 @@ class LayerNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
+  force_float32_reductions: bool = True
 
   @compact
   def __call__(self, x, *, mask: Optional[jax.Array] = None):
@@ -469,13 +477,14 @@ class LayerNorm(Module):
       Normalized inputs (the same shape as inputs).
     """
     mean, var = _compute_stats(
-      x,
-      self.reduction_axes,
-      self.dtype,
-      self.axis_name,
-      self.axis_index_groups,
-      use_fast_variance=self.use_fast_variance,
-      mask=mask,
+        x,
+        self.reduction_axes,
+        self.dtype,
+        self.axis_name,
+        self.axis_index_groups,
+        use_fast_variance=self.use_fast_variance,
+        mask=mask,
+        force_float32_reductions=self.force_float32_reductions,
     )
 
     return _normalize(
@@ -552,6 +561,7 @@ class RMSNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
+  force_float32_reductions: bool = True
 
   @compact
   def __call__(self, x, *, mask: Optional[jax.Array] = None):
@@ -566,14 +576,15 @@ class RMSNorm(Module):
       Normalized inputs (the same shape as inputs).
     """
     mean, var = _compute_stats(
-      x,
-      self.reduction_axes,
-      self.dtype,
-      self.axis_name,
-      self.axis_index_groups,
-      use_mean=False,
-      use_fast_variance=self.use_fast_variance,
-      mask=mask,
+        x,
+        self.reduction_axes,
+        self.dtype,
+        self.axis_name,
+        self.axis_index_groups,
+        use_mean=False,
+        use_fast_variance=self.use_fast_variance,
+        mask=mask,
+        force_float32_reductions=self.force_float32_reductions,
     )
 
     return _normalize(
@@ -675,6 +686,7 @@ class GroupNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
+  force_float32_reductions: bool = True
 
   @compact
   def __call__(self, x, *, mask: Optional[jax.Array] = None):
@@ -742,13 +754,14 @@ class GroupNorm(Module):
       mask = mask.reshape(mask.shape[:-1] + (num_groups, group_size))
 
     mean, var = _compute_stats(
-      x.reshape(group_shape),
-      list(reduction_axes[:-1]) + [-1],
-      self.dtype,
-      self.axis_name,
-      self.axis_index_groups,
-      use_fast_variance=self.use_fast_variance,
-      mask=mask,
+        x.reshape(group_shape),
+        list(reduction_axes[:-1]) + [-1],
+        self.dtype,
+        self.axis_name,
+        self.axis_index_groups,
+        use_fast_variance=self.use_fast_variance,
+        mask=mask,
+        force_float32_reductions=self.force_float32_reductions,
     )
     mean = jnp.repeat(mean, group_size, axis=-1)
     var = jnp.repeat(var, group_size, axis=-1)
@@ -846,6 +859,7 @@ class InstanceNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
+  force_float32_reductions: bool = True
 
   @compact
   def __call__(self, x, *, mask: Optional[jax.Array] = None):
@@ -866,13 +880,14 @@ class InstanceNorm(Module):
     reduction_axes = [i for i in range(1, x.ndim) if i not in feature_axes]
 
     mean, var = _compute_stats(
-      x,
-      reduction_axes,
-      self.dtype,
-      self.axis_name,
-      self.axis_index_groups,
-      use_fast_variance=self.use_fast_variance,
-      mask=mask,
+        x,
+        reduction_axes,
+        self.dtype,
+        self.axis_name,
+        self.axis_index_groups,
+        use_fast_variance=self.use_fast_variance,
+        mask=mask,
+        force_float32_reductions=self.force_float32_reductions,
     )
 
     return _normalize(
