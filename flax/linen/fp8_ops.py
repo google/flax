@@ -21,8 +21,13 @@ from jax import custom_jvp, custom_vjp, lax, random
 from jax import numpy as jnp
 from jax._src import core
 from jax._src import dtypes
-from jax._src import earray
-from jax._src.interpreters import pxla
+
+try:
+  from jax._src import earray
+  from jax._src.interpreters import pxla
+  CAN_USE_EARRAY = True
+except (ModuleNotFoundError, ImportError):
+  CAN_USE_EARRAY = False
 
 from flax.linen import initializers, module
 
@@ -78,6 +83,9 @@ class Fp8MetaTyRules:
 
   @staticmethod
   def global_sharded_result_handler(aval, out_sharding, committed):
+    if not CAN_USE_EARRAY:
+      raise NotImplementedError("convert back under the jit")
+
     phys_sharding = out_sharding  # unlike KeyTyRules, assume same shape
     phys_aval = core.physical_aval(aval)
     phys_handler_maker = pxla.global_result_handlers[core.ShapedArray]
