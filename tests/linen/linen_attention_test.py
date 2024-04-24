@@ -14,16 +14,16 @@
 
 """Tests for flax.linen.attention."""
 
-import jax
-import jax.numpy as jnp
-import numpy as np
+import functools
 from absl.testing import absltest, parameterized
-from jax import lax, random
-from jax.nn import initializers
-
 from flax import errors, jax_utils
 from flax import linen as nn
 from flax.core import pop
+import jax
+from jax import lax, random
+from jax.nn import initializers
+import jax.numpy as jnp
+import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -524,6 +524,36 @@ class AttentionTest(parameterized.TestCase):
         jax.tree_util.tree_all(
             jax.tree_util.tree_map(lambda x, y: (x == y).all(), v1, v2)
         )
+    )
+
+  @parameterized.parameters(
+      {'force_fp32': True, 'attn_weights_dtype': jnp.float32},
+      {'force_fp32': False, 'attn_weights_dtype': jnp.bfloat16},
+  )
+  def test_mixed_precision_multihead_attention(
+      self, force_fp32, attn_weights_dtype
+  ):
+    input_key, params_key, dropout_key = random.split(random.key(0), 3)
+    x = random.uniform(input_key, (2, 4))
+    attention_kwargs = dict(
+        num_heads=2,
+        qkv_features=4,
+        kernel_init=initializers.lecun_normal(),
+        bias_init=initializers.uniform(),
+        attention_fn=functools.partial(
+            nn.dot_product_attention, force_fp32_for_softmax=force_fp32
+        ),
+        deterministic=False,
+        dtype=jnp.bfloat16,
+    )
+    mha = nn.MultiHeadDotProductAttention(**attention_kwargs)
+    init_vars = mha.init({'params': params_key, 'dropout': dropout_key}, x)
+    _, updated_vars = mha.apply(
+        init_vars, x, mutable=['intermediates'], sow_weights=True
+    )
+    self.assertEqual(
+        updated_vars['intermediates']['attention_weights'][0].dtype,
+        attn_weights_dtype,
     )
 
 
