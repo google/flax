@@ -1244,7 +1244,7 @@ class IdsTest(absltest.TestCase):
     self.assertNotEqual(hash(id1), hash(id1dc))
 
 
-class Fp8Test(absltest.TestCase):
+class Fp8Test(parameterized.TestCase):
   def test_fp8_dot_general_injection(self):
     # Used to cast the inputs to be representable in FP8, so that the difference
     # of the results from the original gemm and fp8 gemm is small.
@@ -1389,7 +1389,10 @@ class Fp8Test(absltest.TestCase):
       np.testing.assert_allclose(fp8_vars['kernel_scale'][0], scale_k)
       np.testing.assert_allclose(fp8_vars['output_grad_scale'][0], scale_g)
 
-  def test_fp8_meta_dtype(self):
+  @parameterized.parameters([True, False])
+  def test_fp8_meta_dtype(self, use_jit):
+    if not use_jit and not fp8_ops.CAN_USE_EARRAY:
+      self.skipTest("TODO: requires newer jax that has earray")
     f32 = jnp.dtype('float32')
     fm32 = fp8_ops.fm32
 
@@ -1406,7 +1409,9 @@ class Fp8Test(absltest.TestCase):
       array_x, _ = jax.lax.scan(body_fun, array_x, None, length=3)
       return array_x[0]
 
-    outer_fn = jax.jit(jax.grad(outer, (0, 1, 2)))
+    outer_fn = jax.grad(outer, (0, 1, 2))
+    if use_jit:
+      outer_fn = jax.jit(outer_fn)
     ah = jnp.array([0., 0., 0.], f32)
     sf = jnp.array([1.], f32)
     # 1st iteration
