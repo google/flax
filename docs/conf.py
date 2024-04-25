@@ -108,6 +108,8 @@ html_title = ''
 # so a file named 'default.css' will overwrite the builtin 'default.css'.
 html_static_path = ['_static']
 
+html_extra_path = ['robots.txt']
+
 html_theme_options = {
   'repository_url': 'https://github.com/google/flax',
   'use_repository_button': True,  # add a 'link to repository' button
