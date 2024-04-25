@@ -657,7 +657,7 @@ Refer to [Lifted transformations](https://flax.readthedocs.io/en/latest/develope
 
 +++
 
-We can use [`nn.vmap`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/_autosummary/flax.linen.vmap.html) to create a batched `Dense` layer:
+We can use [`nn.vmap`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/transformations.html#flax.linen.vmap) to create a batched `Dense` layer:
 
 ```{code-cell}
 :outputId: f0830f6b-659c-446f-c933-7b2a430f8004
@@ -760,7 +760,7 @@ BatchModel().init({'params': jax.random.key(0), 'other': jax.random.key(1)}, x)
 
 +++
 
-We can use [`nn.scan`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/_autosummary/flax.linen.scan.html) to create a scanned `Module` layer (this is useful for simplifying repetitively stacked submodules):
+We can use [`nn.scan`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/transformations.html#flax.linen.scan) to create a scanned `Module` layer (this is useful for simplifying repetitively stacked submodules):
 
 ```{code-cell}
 :outputId: 29d1863b-809f-42ce-894c-1b0810faa41e
