@@ -18,7 +18,7 @@ Four years ago we developed the Flax "Linen" API to support modeling research on
 We introduced some ideas that have proven to be good:
  - Organizing variables into [collections](https://flax.readthedocs.io/en/latest/glossary.html#term-Variable-collections) or types to support JAX transforms and segregation of different data types in training loops.
  - Automatic and efficient [PRNG management](https://flax.readthedocs.io/en/latest/glossary.html#term-RNG-sequences) (with support for splitting/broadcast control across map transforms)
- - [Variable Metadata](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/_autosummary/flax.linen.with_partitioning.html#flax.linen.with_partitioning) for SPMD annotations, optimizer metadata, and other uses.
+ - [Variable Metadata](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.with_partitioning) for SPMD annotations, optimizer metadata, and other uses.
 
 However, one choice we made was to use functional "define by call" semantics for NN programming via the lazy initialization of parameters.  This made for concise (`compact`) implementation code, allowed for a single specification when transforming a layer, and aligned our API with  Haiku.  Lazy initialization meant that the semantics of modules and variables in Flax were non-pythonic and often surprising.  It also led to implementation complexity and obscured the core ideas of transformations on neural nets.
 

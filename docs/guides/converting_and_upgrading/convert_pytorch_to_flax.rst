@@ -177,7 +177,7 @@ the estimated statistic with ``(1 − momentum)`` and the new observed value wit
 while Flax multiplies the estimated statistic with ``momentum`` and the new observed value with ``(1 − momentum)``.
 
 .. |nn.BatchNorm| replace:: ``nn.BatchNorm``
-.. _nn.BatchNorm: https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.BatchNorm.html
+.. _nn.BatchNorm: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/layers.html#flax.linen.BatchNorm
 
 .. testcode::
 
@@ -219,10 +219,10 @@ parameter for |nn.avg_pool()|_. However, we can easily implement a wrapper aroun
 operation. ``nn.pool()`` is the core function behind |nn.avg_pool()|_ and |nn.max_pool()|_.
 
 .. |nn.avg_pool()| replace:: ``nn.avg_pool()``
-.. _nn.avg_pool(): https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.avg_pool.html
+.. _nn.avg_pool(): https://flax.readthedocs.io/en/latest/api_reference/flax.linen/layers.html#flax.linen.avg_pool
 
 .. |nn.max_pool()| replace:: ``nn.max_pool()``
-.. _nn.max_pool(): https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.max_pool.html
+.. _nn.max_pool(): https://flax.readthedocs.io/en/latest/api_reference/flax.linen/layers.html#flax.linen.max_pool
 
 
 .. testcode::
@@ -303,7 +303,7 @@ To load ``torch.nn.ConvTranspose2d`` parameters into Flax, we need to use the ``
 .. _`pull request`: https://github.com/google/jax/pull/5772
 
 .. |nn.ConvTranspose| replace:: ``nn.ConvTranspose``
-.. _nn.ConvTranspose: https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.ConvTranspose.html
+.. _nn.ConvTranspose: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/layers.html#flax.linen.ConvTranspose
 
 .. |jax.lax.conv_transpose| replace:: ``jax.lax.conv_transpose``
 .. _jax.lax.conv_transpose: https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.conv_transpose.html

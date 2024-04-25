@@ -100,7 +100,7 @@ Before defining a simple model, create an example layer called `DotReluDot` (by 
 
 To shard the parameters efficiently, apply the following APIs to annotate the parameters and intermediate variables:
 
-1. Use [`flax.linen.with_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.with_partitioning.html#flax.linen.with_partitioning) to decorate the initializer function when creating sub-layers or raw parameters.
+1. Use [`flax.linen.with_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.with_partitioning) to decorate the initializer function when creating sub-layers or raw parameters.
 
 2. Apply [`jax.lax.with_sharding_constraint`](https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.with_sharding_constraint.html) (formerly, `pjit.with_sharding_constraint`) to annotate intermediate variables like `y` and `z` to force a particular sharding pattern when the ideal constraint is known.
 
@@ -135,7 +135,7 @@ class DotReluDot(nn.Module):
     return z, None
 ```
 
-Note that device axis names like `'data'`, `'model'` or `None` are passed into both [`flax.linen.with_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.with_partitioning.html) and [`jax.lax.with_sharding_constraint`](https://github.com/google/jax/blob/main/jax/_src/pjit.py#L1516) API calls. This refers to how each dimension of this data should be sharded — either across one of the device mesh dimensions, or not sharded at all.
+Note that device axis names like `'data'`, `'model'` or `None` are passed into both [`flax.linen.with_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.with_partitioning) and [`jax.lax.with_sharding_constraint`](https://github.com/google/jax/blob/main/jax/_src/pjit.py#L1516) API calls. This refers to how each dimension of this data should be sharded — either across one of the device mesh dimensions, or not sharded at all.
 
 For example:
 
@@ -155,7 +155,7 @@ For example:
 
 Having created `DotReluDot`, you can now define the `MLP` model (by subclassing [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module)) as multiple layers of `DotReluDot`.
 
-To replicate identical layers, you can either use [`flax.linen.scan`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.scan.html), or a for-loop:
+To replicate identical layers, you can either use [`flax.linen.scan`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/transformations.html#flax.linen.scan), or a for-loop:
 
 * `flax.linen.scan` can provide faster compilation times.
 * The for-loop can be faster on runtime.
@@ -221,8 +221,8 @@ To achieve this, luckily, you don't have to hardcode the output's sharding by ha
 
 1. Evaluate `model.init` (in this case, a wrapper of it) abstractly using [`jax.eval_shape`](https://jax.readthedocs.io/en/latest/_autosummary/jax.eval_shape.html).
 
-1. Use [`flax.linen.get_sharding`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.get_sharding.html) to automatically generate the `jax.sharding.NamedSharding`.
-   * This step utilizes the [`flax.linen.with_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.with_partitioning.html) annotations in the earlier definition to generate the correct sharding for the parameters.
+1. Use [`flax.linen.get_sharding`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.get_sharding) to automatically generate the `jax.sharding.NamedSharding`.
+   * This step utilizes the [`flax.linen.with_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.with_partitioning) annotations in the earlier definition to generate the correct sharding for the parameters.
 
 ```{code-cell} ipython3
 def init_fn(k, x, model, optimizer):
@@ -267,7 +267,7 @@ jax.debug.visualize_array_sharding(initialized_state.params['DotReluDot_0']['W2'
 
 ## Inspect the Module output
 
-Note that in the output of `initialized_state`, the `params` `W1` and `W2` are of type [`flax.linen.Partitioned`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.Partitioned.html). This is a wrapper around the actual `jax.Array` that allows Flax to record the axis names associated with it.
+Note that in the output of `initialized_state`, the `params` `W1` and `W2` are of type [`flax.linen.Partitioned`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.Partitioned). This is a wrapper around the actual `jax.Array` that allows Flax to record the axis names associated with it.
 
 You can access the raw `jax.Array`s by calling `flax.linen.meta.unbox()` upon the dictionary, or call `.value` upon individual variable. You can also use `flax.linen.meta.replace_boxed()` to change the underlying `jax.Array` without modifying the sharding annotations.
 
@@ -376,7 +376,7 @@ The `LogicalDotReluDot` and `LogicalMLP` Module definition below are similar to 
 
 1. All axes are annotated with more concrete, meaningful names, such as `'embed'`, `'hidden'`, `'batch'` and `'layer'`. These names are referred to as _logical axis names_ in Flax. They make the dimensional changes inside model definitions more readable.
 
-2. [`flax.linen.with_logical_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.with_logical_partitioning.html) replaces `flax.linen.with_partitioning`; and [`flax.linen.with_logical_constraint`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.with_logical_constraint.html#flax-linen-with-logical-constraint) replaces `jax.lax.with_sharding_constraint`, to recognize the logical axis names.
+2. [`flax.linen.with_logical_partitioning`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.with_logical_partitioning) replaces `flax.linen.with_partitioning`; and [`flax.linen.with_logical_constraint`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.with_logical_constraint) replaces `jax.lax.with_sharding_constraint`, to recognize the logical axis names.
 
 ```{code-cell} ipython3
 class LogicalDotReluDot(nn.Module):
@@ -423,7 +423,7 @@ class LogicalMLP(nn.Module):
 
 Now, initiate a model and try to figure out what sharding its `state` should have.
 
-To allow the device mesh to take your model correctly, you need to decide which of these logical axis names are mapped to the device axis `'data'` or `'model'`. This rule is a list of (`logical_axis_name`, `device_axis_name`) tuples, and [`flax.linen.logical_to_mesh_sharding`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.logical_to_mesh_sharding.html#flax-linen-logical-to-mesh-sharding) will convert them to the kind of sharding that the device mesh can understand.
+To allow the device mesh to take your model correctly, you need to decide which of these logical axis names are mapped to the device axis `'data'` or `'model'`. This rule is a list of (`logical_axis_name`, `device_axis_name`) tuples, and [`flax.linen.logical_to_mesh_sharding`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.logical_to_mesh_sharding) will convert them to the kind of sharding that the device mesh can understand.
 
 This allows you to change the rules and try out new partition layouts without modifying the model definition.
 
