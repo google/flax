@@ -775,6 +775,9 @@ def grad(
 
   Example::
 
+    >>> from flax.experimental import nnx
+    >>> import jax, jax.numpy as jnp
+    ...
     >>> m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     >>> x = jnp.ones((1, 2))
     >>> y = jnp.ones((1, 3))

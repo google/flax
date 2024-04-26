@@ -65,11 +65,11 @@ class Optimizer(graph_utils.GraphNode):
 
     >>> loss_fn = lambda model: ((model(x)-y)**2).mean()
     >>> loss_fn(state.model)
-    1.7055722
+    Array(1.7055722, dtype=float32)
     >>> grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model)
     >>> state.update(grads)
     >>> loss_fn(state.model)
-    1.6925814
+    Array(1.6925814, dtype=float32)
 
   Note that you can easily extend this class by subclassing it for storing
   additional data (e.g. adding metrics).
@@ -90,10 +90,10 @@ class Optimizer(graph_utils.GraphNode):
     >>> grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model)
     >>> state.update(grads=grads, values=loss_fn(state.model))
     >>> state.metrics.compute()
-    1.6925814
+    Array(1.6925814, dtype=float32)
     >>> state.update(grads=grads, values=loss_fn(state.model))
     >>> state.metrics.compute()
-    1.68612
+    Array(1.68612, dtype=float32)
 
   For more exotic usecases (e.g. multiple optimizers) it's probably best to
   fork the class and modify it.

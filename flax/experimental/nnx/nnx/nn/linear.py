@@ -109,21 +109,20 @@ class LinearGeneral(Module):
 
   Example usage::
 
-    >>> import flax.linen as nn
-    >>> import jax, jax.numpy as jnp
+    >>> from flax.experimental import nnx
 
-    >>> # equivalent to `nn.Linear(features=4)`
-    >>> layer = nn.LinearGeneral(features=4)
-    >>> # output features (4, 5)
-    >>> layer = nn.LinearGeneral(features=(4, 5))
-    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
-    >>> jax.tree_util.tree_map(jnp.shape, params)
-    {'params': {'bias': (4, 5), 'kernel': (3, 4, 5)}}
-    >>> # apply transformation on the the second and last axes
-    >>> layer = nn.LinearGeneral(features=(4, 5), axis=(1, -1))
-    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3, 6, 7)))
-    >>> jax.tree_util.tree_map(jnp.shape, params)
-    {'params': {'bias': (4, 5), 'kernel': (3, 7, 4, 5)}}
+    >>> rngs = nnx.Rngs(0)
+    >>> # equivalent to `nn.Linear(3, 4)`
+    >>> layer = nnx.LinearGeneral(3, 4, rngs=rngs)
+    >>> layer.kernel.value.shape
+    (3, 4)
+    >>> layer.bias.value.shape
+    (4,)
+    >>> layer = nnx.LinearGeneral((2, 3), (4, 5), axis=(0, 1), rngs=rngs)
+    >>> layer.kernel.value.shape
+    (2, 3, 4, 5)
+    >>> layer.bias.value.shape
+    (4, 5)
 
   Attributes:
     features: int or tuple with number of output features.
@@ -366,7 +365,7 @@ class Einsum(Module):
     >>> from flax.experimental import nnx
     >>> import jax.numpy as jnp
 
-    >>> layer = nnx.Einsum('abc,cde->abde', (3, 4, 5), (5, 6, 7), rngs=nnx.Rngs(0))
+    >>> layer = nnx.Einsum('abc,cde->abde', (5, 6, 7), (6, 7), rngs=nnx.Rngs(0))
     >>> assert layer.kernel.value.shape == (5, 6, 7)
     >>> assert layer.bias.value.shape == (6, 7)
     >>> out = layer(jnp.ones((3, 4, 5)))

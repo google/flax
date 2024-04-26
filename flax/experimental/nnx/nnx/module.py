@@ -116,11 +116,11 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
       >>> from flax.experimental import nnx
       ...
       >>> bias = jax.random.normal(jax.random.key(0), (4,))
-      >>> state = nnx.State({'bias': bias}) # in reality load it from a checkpoint
+      >>> state = nnx.State({'bias': nnx.Param(bias)}) # in reality load it from a checkpoint
       >>> linear = nnx.Linear.partial_init(state)(2, 4, rngs=nnx.Rngs(1))
       >>> y = linear(jnp.ones((1, 2)))
       ...
-      >>> assert jnp.allclose(linear.bias, bias)
+      >>> assert jnp.allclose(linear.bias.value, bias)
       >>> assert y.shape == (1, 4)
 
     Args:
@@ -322,7 +322,12 @@ class Module(graph_utils.GraphNode, metaclass=ModuleMeta):
     ``Filter``'s can be used to set the attributes of specific Modules::
 
       >>> block = Block(2, 5, rngs=nnx.Rngs(0))
-      >>> block.set_attributes(nnx.Dropout, deterministic=True, use_running_average=True)
+      >>> block.set_attributes(
+      ...   nnx.Dropout,
+      ...   deterministic=True,
+      ...   use_running_average=True,
+      ...   raise_if_not_found=False, # Don't raise an error if the attribute isn't found
+      ... )
       >>> # Only the dropout will be modified
       >>> block.dropout.deterministic, block.batch_norm.use_running_average
       (True, False)

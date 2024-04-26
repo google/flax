@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 # add project_root to import lm1b Linen model
-project_root = str(Path(__file__).parents[6])
+project_root = str(Path(__file__).parents[5])
 sys.path.append(project_root)
 from examples.lm1b.models import TransformerLM as TransformerLinen
 
@@ -98,66 +98,66 @@ class ModelTest(absltest.TestCase):
         flat_params_linen[linen_name].names
       )
 
-    copy_var('decoder/output_embed/embedding', 'decoder/Embed_0/embedding')
+    copy_var(('decoder','output_embed','embedding'), 'decoder/Embed_0/embedding')
     copy_var(
-      'decoder/encoderdecoder_norm/bias', 'decoder/encoderdecoder_norm/bias'
+      ('decoder', 'encoderdecoder_norm', 'bias'), 'decoder/encoderdecoder_norm/bias'
     )
     copy_var(
-      'decoder/encoderdecoder_norm/scale', 'decoder/encoderdecoder_norm/scale'
+      ('decoder', 'encoderdecoder_norm', 'scale'), 'decoder/encoderdecoder_norm/scale'
     )
 
     for idx in range(config.num_layers):
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/ln1/bias',
+        ('decoder', f'encoderdecoderblock_{idx}', 'ln1', 'bias'),
         f'decoder/encoderdecoderblock_{idx}/LayerNorm_0/bias',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/ln1/scale',
+        ('decoder', f'encoderdecoderblock_{idx}', 'ln1', 'scale'),
         f'decoder/encoderdecoderblock_{idx}/LayerNorm_0/scale',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/ln2/bias',
+        ('decoder', f'encoderdecoderblock_{idx}', 'ln2', 'bias'),
         f'decoder/encoderdecoderblock_{idx}/LayerNorm_1/bias',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/ln2/scale',
+        ('decoder', f'encoderdecoderblock_{idx}', 'ln2', 'scale'),
         f'decoder/encoderdecoderblock_{idx}/LayerNorm_1/scale',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/attention/query/kernel',
+        ('decoder', f'encoderdecoderblock_{idx}', 'attention', 'query', 'kernel'),
         f'decoder/encoderdecoderblock_{idx}/MultiHeadDotProductAttention_0/query/kernel',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/attention/key/kernel',
+        ('decoder', f'encoderdecoderblock_{idx}', 'attention', 'key', 'kernel'),
         f'decoder/encoderdecoderblock_{idx}/MultiHeadDotProductAttention_0/key/kernel',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/attention/value/kernel',
+        ('decoder', f'encoderdecoderblock_{idx}', 'attention', 'value', 'kernel'),
         f'decoder/encoderdecoderblock_{idx}/MultiHeadDotProductAttention_0/value/kernel',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/attention/out/kernel',
+        ('decoder', f'encoderdecoderblock_{idx}', 'attention', 'out', 'kernel'),
         f'decoder/encoderdecoderblock_{idx}/MultiHeadDotProductAttention_0/out/kernel',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/mlp/linear1/kernel',
+        ('decoder', f'encoderdecoderblock_{idx}', 'mlp', 'linear1', 'kernel'),
         f'decoder/encoderdecoderblock_{idx}/MlpBlock_0/Dense_0/kernel',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/mlp/linear1/bias',
+        ('decoder', f'encoderdecoderblock_{idx}', 'mlp', 'linear1', 'bias'),
         f'decoder/encoderdecoderblock_{idx}/MlpBlock_0/Dense_0/bias',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/mlp/linear2/kernel',
+        ('decoder', f'encoderdecoderblock_{idx}', 'mlp', 'linear2', 'kernel'),
         f'decoder/encoderdecoderblock_{idx}/MlpBlock_0/Dense_1/kernel',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/mlp/linear2/bias',
+        ('decoder', f'encoderdecoderblock_{idx}', 'mlp', 'linear2', 'bias'),
         f'decoder/encoderdecoderblock_{idx}/MlpBlock_0/Dense_1/bias',
       )
 
-    copy_var('decoder/logitdense/kernel', 'decoder/logitdense/kernel')
-    copy_var('decoder/logitdense/bias', 'decoder/logitdense/bias')
+    copy_var(('decoder', 'logitdense', 'kernel'), 'decoder/logitdense/kernel')
+    copy_var(('decoder', 'logitdense', 'bias'), 'decoder/logitdense/bias')
 
   def transfer_cache(
     self,
@@ -177,20 +177,20 @@ class ModelTest(absltest.TestCase):
 
     for idx in range(config.num_layers):
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/attention/cache_index',
+        ('decoder', f'encoderdecoderblock_{idx}', 'attention', 'cache_index'),
         f'decoder/encoderdecoderblock_{idx}/MultiHeadDotProductAttention_0/cache_index',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/attention/cached_key',
+        ('decoder', f'encoderdecoderblock_{idx}', 'attention', 'cached_key'),
         f'decoder/encoderdecoderblock_{idx}/MultiHeadDotProductAttention_0/cached_key',
       )
       copy_var(
-        f'decoder/encoderdecoderblock_{idx}/attention/cached_value',
+        ('decoder', f'encoderdecoderblock_{idx}', 'attention', 'cached_value'),
         f'decoder/encoderdecoderblock_{idx}/MultiHeadDotProductAttention_0/cached_value',
       )
 
     copy_var(
-      'decoder/posembed_output/cache_index',
+      ('decoder', 'posembed_output', 'cache_index'),
       'decoder/posembed_output/cache_index',
     )
 
@@ -207,7 +207,7 @@ class ModelTest(absltest.TestCase):
     )
 
     model_nnx = TransformerLM.create_abstract(config, rngs=nnx.Rngs(0))
-    params_nnx, _ = model_nnx.split(nnx.Param)
+    _, params_nnx = model_nnx.split(nnx.Param)
 
     model_linen = TransformerLinen(config)
 
@@ -246,7 +246,7 @@ class ModelTest(absltest.TestCase):
         input_shape = (batch_size, config.max_len, config.emb_dim)
         m.init_cache(input_shape, dtype=config.dtype)
 
-    params_nnx, cache_nnx, _ = model_nnx.split(nnx.Param, nnx.Cache)
+    _, params_nnx, cache_nnx = model_nnx.split(nnx.Param, nnx.Cache)
 
     model_linen = TransformerLinen(config)
 
