@@ -36,8 +36,8 @@ class Config:
   def _read(self, name):
     try:
       return self._values[name]
-    except KeyError:
-      raise LookupError(f'Unrecognized config option: {name}')
+    except KeyError as e:
+      raise LookupError(f'Unrecognized config option: {name}') from e
 
   @overload
   def update(self, name: str, value: Any, /) -> None:
