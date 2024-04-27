@@ -16,6 +16,7 @@ import dataclasses
 import typing as tp
 from typing import Any
 
+from flax.experimental import nnx
 from flax import linen
 from flax.experimental.nnx.nnx import variables as variableslib
 from flax.experimental.nnx.nnx.module import GraphDef, Module
@@ -38,7 +39,7 @@ class Functional(tp.Generic[M]):
     if rngs is not None:
       kwargs['rngs'] = rngs
     module = self.module_type(*self.args, **self.kwargs, **kwargs)
-    graphdef, state = module.split()
+    graphdef, state = nnx.split(module)
     self.graphdef = graphdef
     return state
 

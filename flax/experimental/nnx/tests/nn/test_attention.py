@@ -68,18 +68,17 @@ class TestMultiHeadAttention:
     module.set_attributes(decode=False)
 
     _ = module(x, True)
-    intermediates = module.pop(nnx.Intermediate)
-    # assert intermediates['attention_layers/0/attention_weights'].raw_value[
-    assert intermediates['attention_layers'][0]['attention_weights'].raw_value[
+    intermediates = nnx.pop(module, nnx.Intermediate)
+    assert intermediates['attention_layers'][0]['attention_weights'].value[
       0
     ].shape == (4, 8, 6, 6)
     assert 1 not in intermediates['attention_layers']
-    assert intermediates['attention_layers'][2]['attention_weights'].raw_value[
+    assert intermediates['attention_layers'][2]['attention_weights'].value[
       0
     ].shape == (4, 8, 6, 6)
 
     _ = module(x)
-    intermediates = module.pop(nnx.Intermediate)
+    intermediates = nnx.pop(module, nnx.Intermediate)
     assert not intermediates  # empty
 
   def test_autoregressive_decode_with_x64(self):

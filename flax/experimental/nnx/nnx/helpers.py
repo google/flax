@@ -34,7 +34,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from flax.experimental.nnx.nnx.graph_utils import Key
+from flax.experimental.nnx.nnx.graph import Key
 from flax.experimental.nnx.nnx.module import GraphDef, Module
 from flax.experimental.nnx.nnx.proxy_caller import ApplyCaller
 from flax.experimental.nnx.nnx.rnglib import Rngs

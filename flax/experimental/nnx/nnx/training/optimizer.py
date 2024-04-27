@@ -27,12 +27,12 @@
 # limitations under the License.
 from __future__ import annotations
 
-from flax.experimental import nnx
-from flax.experimental.nnx.nnx.variables import Variable
-from flax.experimental.nnx.nnx import filterlib, graph_utils
-
+import jax.numpy as jnp
 import optax
 
+from flax.experimental import nnx
+from flax.experimental.nnx.nnx import filterlib, graph
+from flax.experimental.nnx.nnx.variables import Variable
 
 #TODO: add tests and docstrings
 
@@ -40,7 +40,7 @@ class OptState(Variable):
   """Wrapper class for Optimizer Variables."""
   pass
 
-class Optimizer(graph_utils.GraphNode):
+class Optimizer(graph.GraphNode):
   """Simple train state for the common case with a single Optax optimizer.
 
   Example usage::
@@ -48,28 +48,28 @@ class Optimizer(graph_utils.GraphNode):
     >>> import jax, jax.numpy as jnp
     >>> from flax.experimental import nnx
     >>> import optax
-
+    ...
     >>> class Model(nnx.Module):
     ...   def __init__(self, rngs):
     ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
     ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
     ...   def __call__(self, x):
     ...     return self.linear2(self.linear1(x))
-
+    ...
     >>> x = jax.random.normal(jax.random.key(0), (1, 2))
     >>> y = jnp.ones((1, 4))
-
+    ...
     >>> model = Model(nnx.Rngs(0))
     >>> tx = optax.adam(1e-3)
     >>> state = nnx.Optimizer(model, tx)
-
-    >>> loss_fn = lambda model: ((model(x)-y)**2).mean()
-    >>> loss_fn(state.model)
-    1.7055722
+    ...
+    >>> loss_fn = lambda model: ((model(x) - y) ** 2).mean()
+    >>> loss_fn(model)
+    Array(1.7055722, dtype=float32)
     >>> grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model)
     >>> state.update(grads)
-    >>> loss_fn(state.model)
-    1.6925814
+    >>> loss_fn(model)
+    Array(1.6925814, dtype=float32)
 
   Note that you can easily extend this class by subclassing it for storing
   additional data (e.g. adding metrics).
@@ -83,17 +83,17 @@ class Optimizer(graph_utils.GraphNode):
     ...   def update(self, *, grads, **updates):
     ...     self.metrics.update(**updates)
     ...     super().update(grads)
-
+    ...
     >>> metrics = nnx.metrics.Average()
     >>> state = TrainState(model, tx, metrics)
-
+    ...
     >>> grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model)
     >>> state.update(grads=grads, values=loss_fn(state.model))
     >>> state.metrics.compute()
-    1.6925814
+    Array(1.6925814, dtype=float32)
     >>> state.update(grads=grads, values=loss_fn(state.model))
     >>> state.metrics.compute()
-    1.68612
+    Array(1.68612, dtype=float32)
 
   For more exotic usecases (e.g. multiple optimizers) it's probably best to
   fork the class and modify it.
@@ -108,13 +108,13 @@ class Optimizer(graph_utils.GraphNode):
     model: nnx.Module,
     tx: optax.GradientTransformation,
   ):
-    self.step = OptState(0)
+    self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.model = model
     self.tx = tx
-    self.opt_state = tx.init(model.extract(nnx.Param))
+    self.opt_state = tx.init(nnx.state(model, nnx.Param))
 
   def split(self, *filters: filterlib.Filter):
-    return graph_utils.split(self, *filters)
+    return graph.split(self, *filters)
 
   def update(self, grads):
     """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
@@ -131,7 +131,7 @@ class Optimizer(graph_utils.GraphNode):
       and ``opt_state`` updated by applying ``grads``, and additional attributes
       replaced as specified by ``kwargs``.
     """
-    params = self.model.extract(nnx.Param)
+    params = nnx.state(self.model, nnx.Param)
 
     updates, new_opt_state = self.tx.update(
       grads, self.opt_state, params
@@ -140,6 +140,6 @@ class Optimizer(graph_utils.GraphNode):
     assert isinstance(new_params, nnx.State)
 
     self.step.value += 1
-    self.model.update(new_params)
+    nnx.update(self.model, new_params)
     self.opt_state = new_opt_state
 

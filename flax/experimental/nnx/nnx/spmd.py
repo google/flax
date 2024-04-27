@@ -44,7 +44,7 @@ def add_axis(
   axis_name = _get_partition_name(params)
 
   def _add_axis(x: tp.Any):
-    if isinstance(x, variables.Variable):
+    if isinstance(x, variables.VariableState):
       if isinstance(x, HasSharding) and x.sharding is not None:
         sharding = list(x.sharding)
         while len(sharding) < index:
@@ -56,7 +56,7 @@ def add_axis(
     return x
 
   return jax.tree_util.tree_map(
-    _add_axis, state, is_leaf=lambda x: isinstance(x, variables.Variable)
+    _add_axis, state, is_leaf=lambda x: isinstance(x, variables.VariableState)
   )
 
 
@@ -66,7 +66,7 @@ def remove_axis(
   axis_name = _get_partition_name(params)
 
   def _remove_axis(x: tp.Any):
-    if isinstance(x, variables.Variable):
+    if isinstance(x, variables.VariableState):
       if isinstance(x, HasSharding) and x.sharding is not None:
         sharding = list(x.sharding)
         assert sharding.pop(index) == axis_name
@@ -75,7 +75,9 @@ def remove_axis(
     return x
 
   return jax.tree_util.tree_map(
-    _remove_axis, state, is_leaf=lambda x: isinstance(x, variables.Variable)
+    _remove_axis,
+    state,
+    is_leaf=lambda x: isinstance(x, variables.VariableState),
   )
 
 
@@ -98,16 +100,16 @@ def get_partition_spec(tree: A) -> A:
       return None
 
   def f(x):
-    if isinstance(x, variables.Variable):
+    if isinstance(x, (variables.VariableState, variables.Variable)):
       if isinstance(x, HasSharding) and x.sharding:
-        return x.replace(raw_value=PartitionSpec(*x.sharding))
+        return x.replace(PartitionSpec(*x.sharding))
       else:
-        return x.replace(raw_value=_maybe_replicate(x.raw_value))
+        return x.replace(_maybe_replicate(x.value))
 
     return _maybe_replicate(x)
 
-  return jax.tree_map(
-    f, tree, is_leaf=lambda x: isinstance(x, variables.Variable)
+  return jax.tree_util.tree_map(
+    f, tree, is_leaf=lambda x: isinstance(x, variables.VariableState)
   )
 
 

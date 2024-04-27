@@ -39,7 +39,7 @@ class TestSPMD:
 
     @jax.jit
     def create_module():
-      return Foo().split()
+      return nnx.split(Foo())
 
     mesh = Mesh(mesh_utils.create_device_mesh((2, 2)), ('model', 'data'))
 
@@ -48,6 +48,31 @@ class TestSPMD:
 
     assert m.w.shape == (8, 2)
     assert m.w.sharding.shard_shape(m.w.shape) == (4, 1)
+
+  def test_init_all_devices(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.w = nnx.Param(
+          nnx.with_partitioning(
+            lambda: jnp.ones((8, 2)),
+            sharding=('model', 'data'),
+          )()
+        )
+
+      def __call__(self, x):
+        return x @ self.w
+
+    @jax.jit
+    def create_module():
+      return nnx.split(Foo())
+
+    mesh = Mesh(mesh_utils.create_device_mesh((1, 1)), ('model', 'data'))
+
+    with mesh:
+      m: Foo = nnx.merge(*create_module())
+
+    assert m.w.value.shape == (8, 2)
+    assert m.w.value.sharding.shard_shape(m.w.value.shape) == (8, 2)
 
   def test_get_partition_spec(self):
     class Foo(nnx.Module):
@@ -62,7 +87,7 @@ class TestSPMD:
       def __call__(self, x):
         return x @ self.w
 
-    graphdef, params = Foo().split()
+    graphdef, params = nnx.split(Foo())
     state = nnx.TrainState.create(
       graphdef,
       params=params,
@@ -70,10 +95,6 @@ class TestSPMD:
     )
     state_spec = nnx.get_partition_spec(state)
 
-    assert state_spec.params['w'].raw_value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].mu['w'].raw_value == PartitionSpec(
-      'row', 'col'
-    )
-    assert state_spec.opt_state[0].nu['w'].raw_value == PartitionSpec(
-      'row', 'col'
-    )
+    assert state_spec.params['w'].value == PartitionSpec('row', 'col')
+    assert state_spec.opt_state[0].mu['w'].value == PartitionSpec('row', 'col')
+    assert state_spec.opt_state[0].nu['w'].value == PartitionSpec('row', 'col')

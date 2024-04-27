@@ -14,7 +14,6 @@
 
 # %%
 import typing as tp
-from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -54,8 +53,9 @@ class Encoder(nnx.Module):
     self.linear1 = nnx.Linear(din, dmid, rngs=rngs)
     self.linear_mean = nnx.Linear(dmid, dout, rngs=rngs)
     self.linear_std = nnx.Linear(dmid, dout, rngs=rngs)
+    self.rngs = rngs
 
-  def __call__(self, x: jax.Array, *, rngs: nnx.Rngs) -> jax.Array:
+  def __call__(self, x: jax.Array) -> jax.Array:
     x = x.reshape((x.shape[0], -1))  # flatten
     x = self.linear1(x)
     x = jax.nn.relu(x)
@@ -68,7 +68,7 @@ class Encoder(nnx.Module):
         0.5 * jnp.mean(-jnp.log(std**2) - 1.0 + std**2 + mean**2, axis=-1)
       )
     )
-    key = rngs.noise()
+    key = self.rngs.noise()
     z = mean + std * jax.random.normal(key, mean.shape)
     return z
 
@@ -101,8 +101,8 @@ class VAE(nnx.Module):
       latent_size, hidden_size, int(np.prod(output_shape)), rngs=rngs
     )
 
-  def __call__(self, x: jax.Array, *, rngs: nnx.Rngs) -> jax.Array:
-    z = self.encoder(x, rngs=rngs)
+  def __call__(self, x: jax.Array) -> jax.Array:
+    z = self.encoder(x)
     logits = self.decoder(z)
     logits = jnp.reshape(logits, (-1, *self.output_shape))
     return logits
@@ -113,60 +113,48 @@ class VAE(nnx.Module):
     return nnx.sigmoid(logits)
 
 
-static, params = VAE(
+model = VAE(
   din=int(np.prod(image_shape)),
   hidden_size=256,
   latent_size=latent_size,
   output_shape=image_shape,
-  rngs=nnx.Rngs(0),
-).split(nnx.Param)
-
-state = nnx.TrainState.create(
-  static,
-  params=params,
-  tx=optax.adam(1e-3),
+  rngs=nnx.Rngs(0, noise=1),
 )
+
+optimizer = nnx.Optimizer(model, optax.adam(1e-3))
 
 
 # %%
-@jax.jit
-def train_step(state: nnx.TrainState[VAE], x: jax.Array, key: jax.Array):
-  def loss_fn(params: nnx.State):
-    rngs = nnx.Rngs(noise=jax.random.fold_in(key, state.step))
-    logits, (_, updates) = state.apply(params)(x, rngs=rngs)
-
-    losses = updates.extract(Loss)
+@nnx.jit
+def train_step(model: VAE, optimizer: nnx.Optimizer, x: jax.Array):
+  def loss_fn(model: VAE):
+    logits = model(x)
+    losses = nnx.pop(model, Loss)
     kl_loss = sum(jax.tree_util.tree_leaves(losses), 0.0)
     reconstruction_loss = jnp.mean(
       optax.sigmoid_binary_cross_entropy(logits, x)
     )
-    # jax.debug.print("kl_loss={kl_loss}", kl_loss=kl_loss)
-
     loss = reconstruction_loss + 0.1 * kl_loss
     return loss
 
-  loss, grads = jax.value_and_grad(loss_fn)(state.params)
-  state = state.apply_gradients(grads=grads)
+  loss, grads = nnx.value_and_grad(loss_fn)(model)
+  optimizer.update(grads)
 
-  return state, loss
+  return loss
 
 
-@partial(jax.jit, donate_argnums=(0,))
-def forward(
-  state: nnx.TrainState[VAE], x: jax.Array, key: jax.Array
-) -> jax.Array:
-  rngs = nnx.Rngs(noise=key)
-  y_pred = state.apply('params')(x, rngs=rngs)[0]
+@nnx.jit
+def forward(model: VAE, x: jax.Array) -> jax.Array:
+  y_pred = model(x)
   return jax.nn.sigmoid(y_pred)
 
 
-@jax.jit
-def sample(state: nnx.TrainState[VAE], z: jax.Array) -> jax.Array:
-  return state.apply('params').generate(z)[0]
+@nnx.jit
+def sample(model: VAE, z: jax.Array) -> jax.Array:
+  return model.generate(z)
 
 
 # %%
-key = jax.random.key(0)
 
 for epoch in range(epochs):
   losses = []
@@ -174,7 +162,7 @@ for epoch in range(epochs):
     idxs = np.random.randint(0, len(X_train), size=(batch_size,))
     x_batch = X_train[idxs]
 
-    state, loss = train_step(state, x_batch, key)
+    loss = train_step(model, optimizer, x_batch)
     losses.append(np.asarray(loss))
 
   print(f'Epoch {epoch} loss: {np.mean(losses)}')
@@ -186,7 +174,7 @@ idxs = np.random.randint(0, len(X_test), size=(5,))
 x_sample = X_test[idxs]
 
 # get predictions
-y_pred = forward(state, x_sample, key)
+y_pred = forward(model, x_sample)
 
 # plot reconstruction
 figure = plt.figure(figsize=(3 * 5, 3 * 2))
@@ -203,7 +191,7 @@ plt.show()
 # %%
 # plot generative samples
 z_samples = np.random.normal(scale=1.5, size=(12, latent_size))
-samples = sample(state, z_samples)
+samples = sample(model, z_samples)
 
 figure = plt.figure(figsize=(3 * 5, 3 * 2))
 plt.title('Generative Samples')

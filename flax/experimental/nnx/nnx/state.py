@@ -36,17 +36,17 @@ import numpy as np
 
 from flax import traverse_util
 from flax.experimental.nnx.nnx import filterlib, reprlib
-from flax.experimental.nnx.nnx.variables import Variable
+from flax.experimental.nnx.nnx.variables import VariableState
 from flax.typing import Key, PathParts
 
 A = tp.TypeVar('A')
 
-StateLeaf = tp.Union[Variable[tp.Any], np.ndarray, jax.Array]
+StateLeaf = tp.Union[VariableState[tp.Any], np.ndarray, jax.Array]
 FlatState = dict[PathParts, StateLeaf]
 
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
-  return isinstance(x, (Variable, np.ndarray, jax.Array))
+  return isinstance(x, (VariableState, np.ndarray, jax.Array))
 
 
 class NestedStateRepr(reprlib.Representable):
@@ -66,8 +66,8 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def __init__(
     self,
     mapping: tp.Union[
-      tp.Mapping[Key, tp.Any],
-      tp.Iterator[tuple[Key, tp.Any]],
+      tp.Mapping[Key, tp.Mapping | StateLeaf],
+      tp.Iterator[tuple[Key, tp.Mapping | StateLeaf]],
     ],
     /,
   ):
@@ -80,11 +80,14 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
+  def __contains__(self, key: Key) -> bool:
+    return key in self._mapping
+
   def __getitem__(self, key: Key) -> State | StateLeaf:
     value = self._mapping[key]
-    if is_state_leaf(value):
-      return value
-    return State(value)
+    if isinstance(value, tp.Mapping):
+      return State(value)
+    return value
 
   def __getattr__(self, key: Key) -> State | StateLeaf:
     if '_mapping' not in vars(self) or key not in self._mapping:
@@ -120,7 +123,9 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     return traverse_util.flatten_dict(self._mapping)  # type: ignore
 
   @classmethod
-  def from_flat_path(cls, flat_state: FlatState, /) -> State:
+  def from_flat_path(
+    cls, flat_state: tp.Mapping[PathParts, StateLeaf], /
+  ) -> State:
     nested_state = traverse_util.unflatten_dict(flat_state)
     return cls(nested_state)
 
@@ -157,7 +162,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     return states
 
   @tp.overload
-  def extract(
+  def filter(
     self,
     first: filterlib.Filter,
     /,
@@ -165,7 +170,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     ...
 
   @tp.overload
-  def extract(
+  def filter(
     self,
     first: filterlib.Filter,
     second: filterlib.Filter,
@@ -174,7 +179,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   ) -> tuple['State', ...]:
     ...
 
-  def extract(
+  def filter(
     self,
     first: filterlib.Filter,
     /,
@@ -245,11 +250,13 @@ def _split_state(
   *filters: filterlib.Filter,
 ) -> tuple[State, ...]:
   for i, filter_ in enumerate(filters):
-    if filter_ is ... and i != len(filters) - 1:
-      raise ValueError(
-        'Ellipsis `...` can only be used as the last filter, '
-        f'got it at index {i}.'
-      )
+    if filter_ in (..., True) and i != len(filters) - 1:
+      remaining_filters = filters[i + 1 :]
+      if not all(f in (..., True) for f in remaining_filters):
+        raise ValueError(
+          '`...` or `True` can only be used as the last filters, '
+          f'got {filter_} it at index {i}.'
+        )
   predicates = tuple(map(filterlib.to_predicate, filters))
 
   flat_state = state.flat_state()

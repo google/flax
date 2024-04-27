@@ -54,10 +54,11 @@ class TestIntegration:
         return jnp.mean((y - y_pred) ** 2)
 
       grads = loss_fn(model)
-      model.update(
+      nnx.update(
+        model,
         jax.tree_util.tree_map(
-          lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
-        )
+          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+        ),
       )
 
     model = Model(rngs=nnx.Rngs(0))
@@ -97,7 +98,7 @@ class TestIntegration:
 
     @jax.jit
     def train_step(state: nnx.State, graphdef: nnx.GraphDef[Model], x, y):
-      model = graphdef.merge(state)
+      model = nnx.merge(graphdef, state)
       model.set_attributes(use_running_average=False)
 
       @nnx.grad
@@ -106,16 +107,17 @@ class TestIntegration:
         return jnp.mean((y - y_pred) ** 2)
 
       grads = loss_fn(model)
-      model.update(
+      nnx.update(
+        model,
         jax.tree_util.tree_map(
-          lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
-        )
+          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+        ),
       )
 
-      return model.split()
+      return nnx.split(model)
 
     graphdef: nnx.GraphDef[Model]
-    graphdef, state = Model(rngs=nnx.Rngs(0)).split()
+    graphdef, state = nnx.split(Model(rngs=nnx.Rngs(0)))
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
@@ -123,7 +125,7 @@ class TestIntegration:
     for _i in range(3):
       graphdef, state = train_step(state, graphdef, x, y)
 
-    model = graphdef.merge(state)
+    model = nnx.merge(graphdef, state)
 
     assert model.block1.linear.bias is not None
     assert model.block2.linear.bias is not None
@@ -161,10 +163,11 @@ class TestIntegration:
       # compute gradient
       grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
       # SGD update
-      model.update(
+      nnx.update(
+        model,
         jax.tree_util.tree_map(
-          lambda w, g: w - 0.1 * g, model.extract(nnx.Param), grads
-        )
+          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+        ),
       )
 
     # execute the training step
@@ -192,14 +195,14 @@ class TestIntegration:
     y = model(x)
     assert model.count.value == 1
 
-    graphdef, params, counts = model.split(nnx.Param, Count)
+    graphdef, params, counts = nnx.split(model, nnx.Param, Count)
 
     @jax.jit
     def train_step(params, counts, x, y):
       def loss_fn(params):
         y_pred, (_, updates) = graphdef.apply(params, counts)(x)
         loss = jax.numpy.mean((y_pred - y) ** 2)
-        return loss, updates.extract(Count)
+        return loss, updates.filter(Count)
 
       # compute gradient
       grads, counts = jax.grad(loss_fn, has_aux=True)(params)
@@ -210,7 +213,7 @@ class TestIntegration:
 
     # execute the training step
     params, counts = train_step(params, counts, x, y)
-    model = graphdef.merge(params, counts)
+    model = nnx.merge(graphdef, params, counts)
     assert model.count.value == 2
 
   def test_intermediates_example(self):
@@ -229,7 +232,7 @@ class TestIntegration:
 
     y = model(jnp.ones((8, 12)))
 
-    intermediates = model.pop(nnx.Intermediate)
+    intermediates = nnx.pop(model, nnx.Intermediate)
 
     assert 'y' in intermediates
 
@@ -247,7 +250,7 @@ class TestIntegration:
 
     model = Linear(12, 2, rngs=nnx.Rngs(0))
 
-    graphdef, state = model.split()
+    graphdef, state = nnx.split(model)
 
     y, (_, state) = graphdef.apply(state)(jnp.ones((8, 12)))
 

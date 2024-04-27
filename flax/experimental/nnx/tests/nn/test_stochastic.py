@@ -70,11 +70,6 @@ class TestStochastic:
     m = nnx.Dropout(rate=0.5)
     x = jnp.ones((1, 10))
 
-    # no deterministic arg provided
-    with pytest.raises(
-      ValueError, match='No `deterministic` argument was provided to Dropout'
-    ):
-      m(x)
     # deterministic call arg provided
     m(x, deterministic=True)
     # deterministic constructor arg provided

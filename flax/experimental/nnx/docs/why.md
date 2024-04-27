@@ -145,20 +145,20 @@ While NNX Modules inherently follow reference semantics, they can be easily conv
 
 NNX has two very simple APIs to interact with JAX: `split` and `merge`.
 
-The `Module.split` method allows you to convert into a `State` dict-like object that contains the dynamic state of the Module, and a `GraphDef` object that contains the static structure of the Module.
+The `Module.split` method allows you to convert into a `State` dict-like object that contains the dynamic state of the Module, and a `GraphDef` object that contains the graphdef structure of the Module.
 
 ```{code-cell}
 :outputId: 9a3f378b-739e-4f45-9968-574651200ede
 
 model = CounterLinear(4, 4, rngs=nnx.Rngs(0))
 
-static, state = model.split()
+graphdef, state = model.split()
 
 # state is a dictionary-like JAX pytree
 print(f'{state = }')
 
-# static is also a JAX pytree, but containing no data, just metadata
-print(f'\n{static = }')
+# graphdef is also a JAX pytree, but containing no data, just metadata
+print(f'\n{graphdef = }')
 ```
 
 The `GraphDef.merge` method allows you to take a `GraphDef` and one or more `State` objects and merge them back into a `Module` object.
@@ -169,14 +169,14 @@ Using `split` and `merge` in conjunction allows you to carry your Module in and 
 :outputId: 0007d357-152a-449e-bcb9-b1b5a91d2d8d
 
 @jax.jit
-def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):
-  model = static.merge(state)
+def forward(graphdef: nnx.GraphDef, state: nnx.State, x: jax.Array):
+  model = graphdef.merge(state)
   y = model(x)
   state, _ = model.split()
   return y, state
 
 x = jnp.ones((2, 4))
-y, state = forward(static,state, x)
+y, state = forward(graphdef,state, x)
 
 print(f'{y.shape = }')
 print(f'{state["count"] = }')
@@ -205,34 +205,34 @@ class LinearEnsemble(nnx.Module):
       return CounterLinear(din, dout, rngs=nnx.Rngs(keys)).split(
         nnx.Param, Count
       )
-    params, counts, static = jax.vmap(
+    params, counts, graphdef = jax.vmap(
       vmap_init, in_axes=(0,), out_axes=(0, None, None)
     )(keys)
 
     # update wrapped submodule reference
-    self.models = static.merge(params, counts)
+    self.models = graphdef.merge(params, counts)
 
   def __call__(self, x):
     # get module values, define pure fn,
     # notice that we split the data into two collections by their types.
-    params, counts, static = self.models.split(nnx.Param, Count)
+    params, counts, graphdef = self.models.split(nnx.Param, Count)
 
     # define pure init fn and vmap
-    def vmap_apply(x, params, counts, static):
-      model = static.merge(params, counts)
+    def vmap_apply(x, params, counts, graphdef):
+      model = graphdef.merge(params, counts)
       y = model(x)
-      params, counts, static = model.split(nnx.Param, Count)
-      return y, params, counts, static
+      params, counts, graphdef = model.split(nnx.Param, Count)
+      return y, params, counts, graphdef
 
-    y, params, counts, static = jax.vmap(
+    y, params, counts, graphdef = jax.vmap(
         vmap_apply,
         in_axes=(None, 0, None, None),
         out_axes=(0, 0, None, None)
-    )(x, params, counts, static)
+    )(x, params, counts, graphdef)
 
     # update wrapped module
     # uses `update` to integrate the new state
-    self.models.update(params, counts, static)
+    self.models.update(params, counts, graphdef)
     return y
 
 x = jnp.ones((4,))
@@ -359,7 +359,7 @@ class AnnotatedLinear(nnx.Module):
 model = AnnotatedLinear(4, 8, rngs=nnx.Rngs(0))
 y = model(jnp.ones((2, 4)))
 
-static, state = model.split()
+graphdef, state = model.split()
 
 print(f"{state.variables['kernel'].meta=}\n{state.variables['kernel'].other_meta=}")
 print(f"{state.variables['bias'].meta=}\n{state.variables['bias'].other_meta=}")
@@ -404,6 +404,6 @@ model = Example(in_filters=3,
                 input_shape=(2, 6, 6, 3),
                 rngs=nnx.Rngs(0))
 
-static, state = model.split()
+graphdef, state = model.split()
 jax.tree_util.tree_map(jnp.shape, state)
 ```

@@ -14,8 +14,6 @@ variables
    :members:
 .. autoclass:: Param
    :members:
-.. autoclass:: Rng
-   :members:
 .. autoclass:: Variable
    :members:
 .. autoclass:: VariableMetadata

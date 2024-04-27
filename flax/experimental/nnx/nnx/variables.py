@@ -29,11 +29,9 @@
 import dataclasses
 import functools
 import typing as tp
-from abc import ABCMeta
 from functools import partial
 from typing import Any
 
-import jax
 import jax.tree_util as jtu
 
 from flax.experimental.nnx.nnx import reprlib, tracers
@@ -72,6 +70,11 @@ jtu.register_pytree_node(
 )
 
 EMPTY = Empty()
+
+class _Missing:
+  pass
+
+MISSING = _Missing()
 
 
 @dataclasses.dataclass
@@ -222,6 +225,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     def __getattr__(self, name: str) -> tp.Any:
       ...
   else:
+
     def __setattr__(self, name: str, value: Any) -> None:
       return self._setattr(name, value)
 
@@ -233,23 +237,34 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
     object.__setattr__(self, name, value)
 
+  @classmethod
+  def state(cls, value: A, **metadata) -> 'VariableState[A]':
+    return cls(value, **metadata).to_state()
+
   def copy_from(self, other: 'Variable[A]') -> None:
-    if not self.is_equivalent(other):
+    if type(self) is not type(other):
       raise ValueError(
         f'Cannot copy from incompatible container, '
         f'expected {type(self).__name__}, got {type(other).__name__}'
       )
     if self is other:
       return
+    trace_state = self._trace_state
     vars_dict = vars(self)
+    other_vars = vars(other).copy()
+    del other_vars['_trace_state']
     vars_dict.clear()
-    vars_dict.update(vars(other))
+    vars_dict.update(other_vars, _trace_state=trace_state)
 
-  def copy_from_def(self, other: 'nnx.graph_utils.VariableDef', /, value: A):
-    _trace_state = self._trace_state
+  def copy_from_state(self, variable_state: 'VariableState[A]'):
+    trace_state = self._trace_state
     variable_vars = vars(self)
     variable_vars.clear()
-    variable_vars.update(other.metadata, _trace_state=_trace_state, raw_value=value)
+    variable_vars.update(
+      variable_state.get_metadata(),
+      raw_value=variable_state.value,
+      _trace_state=trace_state,
+    )
 
   @property
   def value(self) -> A:
@@ -287,21 +302,28 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return type(self) is type(other) and vars(other) == vars(self)
 
   @tp.overload
-  def replace(self, *, value: B, **kwargs) -> 'Variable[B]':
+  def replace(self, value: B, **kwargs) -> 'Variable[B]':
     ...
 
   @tp.overload
   def replace(self, **kwargs) -> 'Variable[A]':
     ...
 
-  def replace(self, **kwargs) -> 'Variable[tp.Any]':
+  def replace(self, value: tp.Any = MISSING, **kwargs) -> 'Variable[tp.Any]':
+    if value is not MISSING:
+      kwargs['raw_value'] = value
+
+    # rename `value` to `raw_value`
+    if 'value' in kwargs:
+      kwargs['raw_value'] = kwargs.pop('value')
+
     # return `value` if it is a Variable
     if 'raw_value' in kwargs and isinstance(
       value := kwargs['raw_value'], Variable
     ):
       # remove value from kwargs
       kwargs.pop('raw_value')
-      if not self.is_equivalent(value):
+      if type(self) is not type(value):
         raise ValueError(
           'Cannot replace value from incompatible container, '
           f'expected {type(self).__name__}, got {type(value).__name__}'
@@ -321,9 +343,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars(obj).update(attributes)
     return obj
 
-  def is_equivalent(self, other: tp.Any) -> bool:
-    return type(self) is type(other)
-
   def copy(self: 'Variable[A]') -> 'Variable[A]':
     obj = object.__new__(type(self))
     attributes = vars(self).copy()
@@ -331,22 +350,20 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars(obj).update(attributes)
     return obj
 
+  def to_state(self: 'Variable[A]') -> 'VariableState[A]':
+    metadata = vars(self).copy()
+    del metadata['raw_value']
+    del metadata['_trace_state']
+    return VariableState(type(self), self.raw_value, **metadata)
+
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
     for name, value in vars(self).items():
-      if name.endswith('_hooks') or name == "_trace_state":
+      if name == 'raw_value':
+        name = 'value'
+      if name.endswith('_hooks') or name == '_trace_state':
         continue
       yield reprlib.Attr(name, repr(value))
-
-  def __init_subclass__(cls):
-    super().__init_subclass__()
-
-    jtu.register_pytree_with_keys(
-      cls,
-      partial(_variable_flatten, with_keys=True),  # type: ignore
-      partial(_variable_unflatten, cls=cls),  # type: ignore
-      flatten_func=partial(_variable_flatten, with_keys=False),  # type: ignore
-    )
 
   # hooks API
   if tp.TYPE_CHECKING:
@@ -369,35 +386,171 @@ class Variable(tp.Generic[A], reprlib.Representable):
       raise NotImplementedError
 
 
-def _variable_flatten(x: Variable[tp.Any], *, with_keys: bool):
-  attributes = vars(x).copy()
-  del attributes['_trace_state']
-  value = attributes.pop('raw_value')
-  if with_keys:
-    node = (jtu.GetAttrKey('raw_value'), value)
-  else:
-    node = value
+  # operator overloads
+  def __jax_array__(self):
+    return self.value
 
-  return (node,), attributes
+  def __getitem__(self, key) -> tp.Any:
+    return self.value.__getitem__(key)
 
+  def __add__(self, other) -> A:
+    return self.value.__add__(other)  # type: ignore
 
-def _variable_unflatten(
-  metadata: tp.Mapping[str, tp.Any],
-  children: tp.Tuple[A],
-  *,
-  cls: type[Variable[A]],
-) -> Variable[A]:
-  variable = object.__new__(cls)
-  vars(variable).update(metadata, _trace_state=tracers.TraceState(), raw_value=children[0])
-  return variable
+  def __sub__(self, other) -> A:
+    return self.value.__sub__(other)  # type: ignore
 
+  def __mul__(self, other) -> A:
+    return self.value.__mul__(other)  # type: ignore
 
-jtu.register_pytree_with_keys(
-  Variable,
-  partial(_variable_flatten, with_keys=True),  # type: ignore
-  partial(_variable_unflatten, cls=Variable),  # type: ignore
-  flatten_func=partial(_variable_flatten, with_keys=False),  # type: ignore
-)
+  def __matmul__(self, other) -> A:
+    return self.value.__matmul__(other)  # type: ignore
+
+  def __truediv__(self, other) -> A:
+    return self.value.__truediv__(other)  # type: ignore
+
+  def __floordiv__(self, other) -> A:
+    return self.value.__floordiv__(other)  # type: ignore
+
+  def __mod__(self, other) -> A:
+    return self.value.__mod__(other)  # type: ignore
+
+  def __divmod__(self, other) -> A:
+    return self.value.__divmod__(other)  # type: ignore
+
+  def __pow__(self, other) -> A:
+    return self.value.__pow__(other)  # type: ignore
+
+  def __lshift__(self, other) -> A:
+    return self.value.__lshift__(other)  # type: ignore
+
+  def __rshift__(self, other) -> A:
+    return self.value.__rshift__(other)  # type: ignore
+
+  def __and__(self, other) -> A:
+    return self.value.__and__(other)  # type: ignore
+
+  def __xor__(self, other) -> A:
+    return self.value.__xor__(other)  # type: ignore
+
+  def __or__(self, other) -> A:
+    return self.value.__or__(other)  # type: ignore
+
+  def __radd__(self, other) -> A:
+    return self.value.__radd__(other)  # type: ignore
+
+  def __rsub__(self, other) -> A:
+    return self.value.__rsub__(other)  # type: ignore
+
+  def __rmul__(self, other) -> A:
+    return self.value.__rmul__(other)  # type: ignore
+
+  def __rmatmul__(self, other) -> A:
+    return self.value.__rmatmul__(other)  # type: ignore
+
+  def __rtruediv__(self, other) -> A:
+    return self.value.__rtruediv__(other)  # type: ignore
+
+  def __rfloordiv__(self, other) -> A:
+    return self.value.__rfloordiv__(other)  # type: ignore
+
+  def __rmod__(self, other) -> A:
+    return self.value.__rmod__(other)  # type: ignore
+
+  def __rdivmod__(self, other) -> A:
+    return self.value.__rdivmod__(other)  # type: ignore
+
+  def __rpow__(self, other) -> A:
+    return self.value.__rpow__(other)  # type: ignore
+
+  def __rlshift__(self, other) -> A:
+    return self.value.__rlshift__(other)  # type: ignore
+
+  def __rrshift__(self, other) -> A:
+    return self.value.__rrshift__(other)  # type: ignore
+
+  def __rand__(self, other) -> A:
+    return self.value.__rand__(other)  # type: ignore
+
+  def __rxor__(self, other) -> A:
+    return self.value.__rxor__(other)  # type: ignore
+
+  def __ror__(self, other) -> A:
+    return self.value.__ror__(other)  # type: ignore
+
+  def __iadd__(self, other) -> A:
+    return self.value.__iadd__(other)  # type: ignore
+
+  def __isub__(self, other) -> A:
+    return self.value.__isub__(other)  # type: ignore
+
+  def __imul__(self, other) -> A:
+    return self.value.__imul__(other)  # type: ignore
+
+  def __imatmul__(self, other) -> A:
+    return self.value.__imatmul__(other)  # type: ignore
+
+  def __itruediv__(self, other) -> A:
+    return self.value.__itruediv__(other)  # type: ignore
+
+  def __ifloordiv__(self, other) -> A:
+    return self.value.__ifloordiv__(other)  # type: ignore
+
+  def __imod__(self, other) -> A:
+    return self.value.__imod__(other)  # type: ignore
+
+  def __ipow__(self, other) -> A:
+    return self.value.__ipow__(other)  # type: ignore
+
+  def __ilshift__(self, other) -> A:
+    return self.value.__ilshift__(other)  # type: ignore
+
+  def __irshift__(self, other) -> A:
+    return self.value.__irshift__(other)  # type: ignore
+
+  def __iand__(self, other) -> A:
+    return self.value.__iand__(other)  # type: ignore
+
+  def __ixor__(self, other) -> A:
+    return self.value.__ixor__(other)  # type: ignore
+
+  def __ior__(self, other) -> A:
+    return self.value.__ior__(other)  # type: ignore
+
+  def __neg__(self) -> A:
+    return self.value.__neg__()  # type: ignore
+
+  def __pos__(self) -> A:
+    return self.value.__pos__()  # type: ignore
+
+  def __abs__(self) -> A:
+    return self.value.__abs__()  # type: ignore
+
+  def __invert__(self) -> A:
+    return self.value.__invert__()  # type: ignore
+
+  def __complex__(self) -> A:
+    return self.value.__complex__()  # type: ignore
+
+  def __int__(self) -> A:
+    return self.value.__int__()  # type: ignore
+
+  def __float__(self) -> A:
+    return self.value.__float__()  # type: ignore
+
+  def __index__(self) -> A:
+    return self.value.__index__()  # type: ignore
+
+  def __round__(self, ndigits: int) -> A:
+    return self.value.__round__(ndigits)  # type: ignore
+
+  def __trunc__(self) -> A:
+    return self.value.__trunc__()  # type: ignore
+
+  def __floor__(self) -> A:
+    return self.value.__floor__()  # type: ignore
+
+  def __ceil__(self) -> A:
+    return self.value.__ceil__()  # type: ignore
 
 
 class Param(Variable[A]):
@@ -416,15 +569,90 @@ class Intermediate(Variable[A]):
   pass
 
 
-class Rng(Variable[jax.Array]):
-  tag: str
+class VariableState(tp.Generic[A], reprlib.Representable):
+  def __init__(
+    self,
+    type: tp.Type[Variable[A]],
+    value: A,
+    **metadata,
+  ):
+    self.type = type
+    self.value = value
+    vars(self).update(metadata)
 
-  def __init__(self, value: jax.Array, *, tag: str, **metadata: tp.Any):
-    super().__init__(value, tag=tag, **metadata)
+  if tp.TYPE_CHECKING:
 
-  def on_get_value(self, value: jax.Array):
-    self.raw_value, value = jax.random.split(value)
-    return value
+    def __getattr__(self, name: str) -> tp.Any:
+      ...
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type=type(self))
+    yield reprlib.Attr('type', self.type.__name__)
+
+    for name, value in vars(self).items():
+      if name == 'type' or name.endswith('_hooks'):
+        continue
+      yield reprlib.Attr(name, repr(value))
+
+  def replace(self, value: B) -> 'VariableState[B]':
+    return VariableState(self.type, value, **self.get_metadata())
+
+  def to_variable(self) -> Variable[A]:
+    # we use object.__new__ to avoid calling __init__ and bypass the
+    # __init__ logic which should not be called twice
+    metadata = self.get_metadata()
+    variables = object.__new__(self.type)
+    vars(variables).update(
+      metadata, raw_value=self.value, _trace_state=tracers.TraceState()
+    )
+    return variables
+
+  def get_metadata(self) -> dict[str, tp.Any]:
+    metadata = vars(self).copy()
+    del metadata['type']
+    del metadata['value']
+    return metadata
+
+  def add_axis(self, axis_name: AxisName, axis_index: AxisIndex):
+    if not hasattr(self, 'add_axis_hooks'):
+      raise ValueError(f'No add_axis_hooks found for VariableState: {self}')
+    for hook in self.add_axis_hooks:
+      hook(self, axis_name, axis_index)
+
+  def remove_axis(self, axis_name: AxisName, axis_index: AxisIndex):
+    if not hasattr(self, 'remove_axis_hooks'):
+      raise ValueError(f'No remove_axis_hooks found for VariableState: {self}')
+    for hook in self.remove_axis_hooks:
+      hook(self, axis_name, axis_index)
+
+
+def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):
+  metadata = tuple(x.get_metadata().items())
+  if with_keys:
+    node = (jtu.GetAttrKey('raw_value'), x.value)
+  else:
+    node = x.value
+
+  return (node,), (x.type, metadata)
+
+
+def _variable_state_unflatten(
+  static: tuple[type[Variable[A]], tuple[tuple[str, tp.Any], ...]],
+  children: tuple[A],
+) -> VariableState[A]:
+  return VariableState(
+    type=static[0],
+    value=children[0],
+    **dict(static[1]),
+  )
+
+
+jtu.register_pytree_with_keys(
+  VariableState,
+  partial(_variable_state_flatten, with_keys=True),  # type: ignore
+  _variable_state_unflatten,  # type: ignore
+  flatten_func=partial(_variable_state_flatten, with_keys=False),  # type: ignore
+)
 
 
 def with_metadata(

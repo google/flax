@@ -15,19 +15,50 @@
 import typing as tp
 
 import jax
+import jax.numpy as jnp
 
 from flax.experimental import nnx
 
 A = tp.TypeVar('A')
 
 
-class TestVariable:
-  def test_value(self):
-    r1 = nnx.Variable(1)
-    assert r1.raw_value == 1
+class TestVariableState:
+  def test_pytree(self):
+    r1 = nnx.VariableState(nnx.Param, 1)
+    assert r1.value == 1
 
     r2 = jax.tree_util.tree_map(lambda x: x + 1, r1)
 
-    assert r1.raw_value == 1
-    assert r2.raw_value == 2
+    assert r1.value == 1
+    assert r2.value == 2
     assert r1 is not r2
+
+  def test_overloads_module(self):
+    class Linear(nnx.Module):
+      def __init__(self, din, dout, rngs: nnx.Rngs):
+        key = rngs()
+        self.w = nnx.Param(jax.random.normal(key, (din, dout)))
+        self.b = nnx.Param(jax.numpy.zeros((dout,)))
+
+      def __call__(self, x: jax.Array):
+        return x @ self.w + self.b
+
+    linear = Linear(3, 4, nnx.Rngs(0))
+    x = jax.numpy.ones((3,))
+    y = linear(x)
+    assert y.shape == (4,)
+
+  def test_jax_array(self):
+    class Linear(nnx.Module):
+      def __init__(self, din, dout, rngs: nnx.Rngs):
+        key = rngs()
+        self.w = nnx.Param(jax.random.normal(key, (din, dout)))
+        self.b = nnx.Param(jax.numpy.zeros((dout,)))
+
+      def __call__(self, x: jax.Array):
+        return jnp.dot(x, self.w) + self.b
+
+    linear = Linear(3, 4, nnx.Rngs(0))
+    x = jax.numpy.ones((3,))
+    y = linear(x)
+    assert y.shape == (4,)

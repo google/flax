@@ -57,8 +57,8 @@ class MLP(nnx.Module):
     return x
 
 
-static, params, counts = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)).split(
-  nnx.Param, Count
+graphdef, params, counts = nnx.split(
+  MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)), nnx.Param, Count
 )
 
 
@@ -67,9 +67,9 @@ def train_step(params, counts, batch):
   x, y = batch
 
   def loss_fn(params):
-    model = static.merge(params, counts)
+    model = nnx.merge(graphdef, params, counts)
     y_pred = model(x)
-    new_counts = model.extract(Count)
+    new_counts = nnx.state(model, Count)
     loss = jnp.mean((y - y_pred) ** 2)
     return loss, new_counts
 
@@ -83,7 +83,7 @@ def train_step(params, counts, batch):
 @jax.jit
 def test_step(params: nnx.State, counts: nnx.State, batch):
   x, y = batch
-  model = static.merge(params, counts)
+  model = nnx.merge(graphdef, params, counts)
   y_pred = model(x)
   loss = jnp.mean((y - y_pred) ** 2)
   return {'loss': loss}
@@ -100,7 +100,7 @@ for step, batch in enumerate(dataset(32)):
   if step >= total_steps - 1:
     break
 
-model = static.merge(params, counts)
+model = nnx.merge(graphdef, params, counts)
 print('times called:', model.count.value)
 
 y_pred = model(X)
