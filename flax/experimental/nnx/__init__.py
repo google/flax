@@ -40,6 +40,7 @@ from .nnx.graph import clone as clone
 from .nnx.graph import pop as pop
 from .nnx.graph import state as state
 from .nnx.graph import graphdef as graphdef
+from .nnx.graph import iter_nodes as iter_nodes
 from .nnx.nn import initializers as initializers
 from .nnx.nn.activations import celu as celu
 from .nnx.nn.activations import elu as elu

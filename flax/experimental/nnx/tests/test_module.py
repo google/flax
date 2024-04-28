@@ -639,12 +639,12 @@ class TestModuleDef:
     modules = list(module.iter_modules())
 
     assert len(modules) == 3
-    assert modules[0][0] == ()
-    assert isinstance(modules[0][1], Foo)
-    assert modules[1][0] == ('submodules', 0, 'a')
-    assert isinstance(modules[1][1], nnx.Linear)
-    assert modules[2][0] == ('submodules', 1, 'b')
-    assert isinstance(modules[2][1], nnx.Conv)
+    assert modules[0][0] == ('submodules', 0, 'a')
+    assert isinstance(modules[0][1], nnx.Linear)
+    assert modules[1][0] == ('submodules', 1, 'b')
+    assert isinstance(modules[1][1], nnx.Conv)
+    assert modules[2][0] == ()
+    assert isinstance(modules[2][1], Foo)
 
   def test_array_in_module(self):
     class Foo(nnx.Module):

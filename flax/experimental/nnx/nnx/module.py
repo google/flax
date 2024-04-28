@@ -183,10 +183,10 @@ class Module(graph.GraphNode, metaclass=ModuleMeta):
       >>> for path, module in model.iter_modules():
       ...   print(path, type(module).__name__)
       ...
-      () Block
       ('batch_norm',) BatchNorm
       ('dropout',) Dropout
       ('linear',) Linear
+      () Block
     """
     for path, value in graph.iter_nodes(self):
       if isinstance(value, Module):
