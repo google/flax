@@ -61,6 +61,7 @@ B = tp.TypeVar('B')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 G = tp.TypeVar('G', bound=tp.Callable[..., tp.Any])
 M = tp.TypeVar('M', bound=Module)
+MA = tp.TypeVar('MA', bound=Module)
 N = tp.TypeVar('N', bound=Module)
 StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
@@ -876,54 +877,8 @@ class ScanOptions:
   scan_output: bool
 
 
-class ScanMeta(ModuleMeta):
-  def __call__(
-    self,
-    module_constructor: tp.Callable[..., M],
-    *,
-    length: int | None = None,
-    reverse: bool = False,
-    unroll: int | bool = 1,
-    _split_transpose: bool = False,
-    # extended api
-    in_axes: int | None | tp.Sequence[tp.Any] = 0,
-    in_axes_kwargs: tp.Any = 0,
-    out_axes: tp.Any = 0,
-    carry_argnum: int = 1,
-    # nnx specific
-    state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
-    split_rngs: filterlib.Filter = ...,
-    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-    scan_output: bool = True,
-  ) -> tp.Callable[..., 'Scan[M]']:
-    super_call = super().__call__
 
-    def _create_scan(*args, **kwargs) -> Scan[M]:
-      return super_call(
-        module_constructor=module_constructor,
-        module_init_args=args,
-        module_init_kwargs=kwargs,
-        # base api
-        length=length,
-        reverse=reverse,
-        unroll=unroll,
-        _split_transpose=_split_transpose,
-        # extended api
-        in_axes=in_axes,
-        in_axes_kwargs=in_axes_kwargs,
-        out_axes=out_axes,
-        carry_argnum=carry_argnum,
-        # nnx specific
-        state_axes=state_axes,
-        split_rngs=split_rngs,
-        transform_metadata=transform_metadata,
-        scan_output=scan_output,
-      )
-
-    return _create_scan
-
-
-class Scan(LiftedModule[M], metaclass=ScanMeta):
+class Scan(LiftedModule[M]):
   def __init__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -978,6 +933,49 @@ class Scan(LiftedModule[M], metaclass=ScanMeta):
     )(*module_init_args, **module_init_kwargs)
 
     self.scan_module = vmapped_module.vmap_module
+
+  @staticmethod
+  def constructor(
+    module_constructor: tp.Callable[..., MA],
+    *,
+    length: int | None = None,
+    reverse: bool = False,
+    unroll: int | bool = 1,
+    _split_transpose: bool = False,
+    # extended api
+    in_axes: int | None | tp.Sequence[tp.Any] = 0,
+    in_axes_kwargs: tp.Any = 0,
+    out_axes: tp.Any = 0,
+    carry_argnum: int = 1,
+    # nnx specific
+    state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+    split_rngs: filterlib.Filter = ...,
+    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+    scan_output: bool = True,
+  ) -> tp.Callable[..., 'Scan[MA]']:
+    def _create_scan(*args, **kwargs) -> Scan[MA]:
+      return Scan(
+        module_constructor=module_constructor,
+        module_init_args=args,
+        module_init_kwargs=kwargs,
+        # base api
+        length=length,
+        reverse=reverse,
+        unroll=unroll,
+        _split_transpose=_split_transpose,
+        # extended api
+        in_axes=in_axes,
+        in_axes_kwargs=in_axes_kwargs,
+        out_axes=out_axes,
+        carry_argnum=carry_argnum,
+        # nnx specific
+        state_axes=state_axes,
+        split_rngs=split_rngs,
+        transform_metadata=transform_metadata,
+        scan_output=scan_output,
+      )
+
+    return _create_scan
 
   @property
   def _submodule(self) -> M:
@@ -1373,28 +1371,6 @@ def scan(
 # -------------------------------
 
 
-class RematMeta(ModuleMeta):
-  def __call__(
-    self,
-    module_constructor: tp.Callable[..., M],
-    prevent_cse: bool = True,
-    static_argnums: int | tuple[int, ...] = (),
-    policy: tp.Callable[..., bool] | None = None,
-  ) -> tp.Callable[..., 'Remat[M]']:
-    super_call = super().__call__
-
-    def create_remat(*args, **kwargs) -> Remat[M]:
-      return super_call(
-        module_constructor=module_constructor,
-        module_init_args=args,
-        module_init_kwargs=kwargs,
-        prevent_cse=prevent_cse,
-        static_argnums=static_argnums,
-        policy=policy,
-      )
-
-    return create_remat
-
 
 @dataclasses.dataclass
 class RematOptions:
@@ -1412,7 +1388,7 @@ class RematOptions:
     )
 
 
-class Remat(LiftedModule[M], metaclass=RematMeta):
+class Remat(LiftedModule[M]):
   def __init__(
     self,
     *,
@@ -1433,6 +1409,25 @@ class Remat(LiftedModule[M], metaclass=RematMeta):
     self.remat_module = self.module_constructor(
       *module_init_args, **module_init_kwargs
     )
+
+  @staticmethod
+  def constructor(
+    module_constructor: tp.Callable[..., MA],
+    prevent_cse: bool = True,
+    static_argnums: int | tuple[int, ...] = (),
+    policy: tp.Callable[..., bool] | None = None,
+  ) -> tp.Callable[..., 'Remat[MA]']:
+    def create_remat(*args, **kwargs) -> Remat[MA]:
+      return Remat(
+        module_constructor=module_constructor,
+        module_init_args=args,
+        module_init_kwargs=kwargs,
+        prevent_cse=prevent_cse,
+        static_argnums=static_argnums,
+        policy=policy,
+      )
+
+    return create_remat
 
   @property
   def _submodule(self) -> M:

@@ -533,7 +533,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -562,7 +562,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -591,7 +591,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x, (x, x)
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -626,7 +626,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -661,7 +661,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -697,7 +697,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block, state_axes={nnx.Param: 0}, length=5, scan_output=False
     )
 
@@ -728,7 +728,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -821,7 +821,7 @@ class TestScan:
 
         return x, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -873,7 +873,7 @@ class TestScan:
       def __call__(self):
         return None, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -922,9 +922,9 @@ class TestRemat:
         x = self.linear(x)
         return x, None
 
-    RematLinear = nnx.Remat(LinearBlock)
+    RematLinear = nnx.Remat.constructor(LinearBlock)
 
-    ScanRematLinear = nnx.Scan(
+    ScanRematLinear = nnx.Scan.constructor(
       RematLinear,
       state_axes={nnx.Param: 0},
       length=5,
