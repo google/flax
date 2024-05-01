@@ -142,7 +142,9 @@ jobs:
         fi
     - name: Upload coverage to Codecov
       if: matrix.test-type == 'pytest'
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v4
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with:
         file: ./coverage.xml
     # The below step just reports the success or failure of tests as a "commit status".
