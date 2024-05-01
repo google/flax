@@ -77,10 +77,10 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       super().__setattr__('_mapping', dict(mapping))
 
   @property
-  def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
-    return self._mapping
+  def raw_mapping(self) -> tp.Mapping[Key, tp.Mapping[Key, tp.Any] | StateLeaf]:
+    return self._mapping  # type: ignore
 
-  def __contains__(self, key: Key) -> bool:
+  def __contains__(self, key) -> bool:
     return key in self._mapping
 
   def __getitem__(self, key: Key) -> State | StateLeaf:
@@ -147,7 +147,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     self, first: filterlib.Filter, /, *filters: filterlib.Filter
   ) -> tp.Union['State', tuple['State', ...]]:
     filters = (first, *filters)
-    *states, rest = _split_state(self, *filters)
+    *states_, rest = _split_state(self, *filters)
 
     if rest:
       raise ValueError(
@@ -155,10 +155,11 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
         f'{list(rest.keys())}.\nUse `...` to match all remaining elements.'
       )
 
-    if len(states) == 1:
-      states = states[0]
+    states: State | tuple[State, ...]
+    if len(states_) == 1:
+      states = states_[0]
     else:
-      states = tuple(states)
+      states = tuple(states_)
     return states
 
   @tp.overload
@@ -185,14 +186,15 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     /,
     *filters: filterlib.Filter,
   ) -> tp.Union['State', tuple['State', ...]]:
-    *states, _rest = _split_state(self, first, *filters)
+    *states_, _rest = _split_state(self, first, *filters)
 
-    assert len(states) == len(filters) + 1
+    assert len(states_) == len(filters) + 1
 
-    if len(states) == 1:
-      states = states[0]
+    states: State | tuple[State, ...]
+    if len(states_) == 1:
+      states = states_[0]
     else:
-      states = tuple(states)
+      states = tuple(states_)
 
     return states
 
@@ -241,7 +243,7 @@ def _state_unflatten(
 jax.tree_util.register_pytree_with_keys(
   State,
   _state_flatten_with_keys,
-  _state_unflatten,
+  _state_unflatten,  # type: ignore[arg-type]
 )
 
 

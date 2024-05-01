@@ -79,4 +79,5 @@ def promote_dtype(
     The arguments cast to arrays of the same dtype.
   """
   dtype = canonicalize_dtype(*args, dtype=dtype, inexact=inexact)
-  return tuple(jnp.asarray(x, dtype) if x is not None else None for x in args)
+  arrays = tuple(jnp.asarray(x, dtype) if x is not None else None for x in args)
+  return arrays  # type: ignore[return-value]

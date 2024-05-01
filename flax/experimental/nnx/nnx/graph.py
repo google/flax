@@ -267,7 +267,7 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
     type: tp.Type[Node],
     index: int,
     attributes: tuple[Key, ...],
-    subgraphs: tp.Iterable[tuple[Key, tp.Union['GraphDef[tp.Any]', Index]]],
+    subgraphs: tp.Iterable[tuple[Key, tp.Union['NodeDef[tp.Any]', Index]]],
     static_fields: tp.Iterable[tuple[Key, tp.Any]],
     variables: tp.Iterable[tuple[Key, Index]],
     metadata: tp.Any,
@@ -456,7 +456,7 @@ def unflatten(
 
 def _graph_unflatten(
   nodedef: tp.Union[NodeDef[Node], int],
-  state: dict[Key, StateLeaf | dict[Key, tp.Any]],
+  state: tp.Mapping[Key, StateLeaf | tp.Mapping[Key, tp.Any]],
   index_to_ref: dict[Index, tp.Any],
   idxmap: dict[Index, tp.Any] | None,
 ) -> Node:
@@ -656,7 +656,7 @@ def _graph_pop(
       pass
 
 
-def _graph_update_dynamic(node: tp.Any, state: dict[Key, tp.Any]):
+def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[Key, tp.Any]):
   if not is_node(node):
     raise RuntimeError(f'Unsupported type: {type(node)}')
 
@@ -741,7 +741,7 @@ def _graph_update_static(
 
   if id(updates) in cache:
     if cache[id(updates)] != status:
-      str_path = '/'.join(path)
+      str_path = '/'.join(str(p) for p in path)
       if status is _StaticModuleStatus.NEW:
         raise ValueError(
           f'Trying to add a new node at path {str_path!r} but a'
@@ -859,6 +859,7 @@ class UpdateContext:
       )
     graphdef, state, refmap = flatten(node, idxmap=self.idxmap)
 
+    states: State | tuple[State, ...]
     if len(filters) == 0:
       states = (state,)
     elif len(filters) == 1:
@@ -938,6 +939,7 @@ def split(
 ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:
   graphdef, state, _ = flatten(node)
 
+  states: State | tuple[State, ...]
   if len(filters) == 0:
     states = (state,)
   elif len(filters) == 1:
@@ -995,6 +997,7 @@ def state(
 ) -> tp.Union[State, tuple[State, ...]]:
   state = flatten(node)[1]
 
+  states: State | tuple[State, ...]
   if len(filters) == 0:
     states = state
   elif len(filters) == 1:
@@ -1181,7 +1184,7 @@ class GraphNodeMeta(ABCMeta):
 def _graph_node_meta_call(cls: tp.Type[G], *args, **kwargs) -> G:
   node = cls.__new__(cls, *args, **kwargs)
   vars(node)['_graph_node__state'] = ModuleState()
-  node.__init__(*args, **kwargs)
+  node.__init__(*args, **kwargs)  # type: ignore[misc]
 
   return node
 
@@ -1321,6 +1324,10 @@ def _key_path_to_key(key: tp.Any) -> Key:
   elif isinstance(
     key, (jax.tree_util.DictKey, jax.tree_util.FlattenedIndexKey)
   ):
+    if not isinstance(key.key, Key):
+      raise ValueError(
+        f'Invalid key: {key.key}. May be due to its type not being hashable or comparable.'
+      )
     return key.key
   elif isinstance(key, jax.tree_util.GetAttrKey):
     return key.name

@@ -134,7 +134,7 @@ class Sequential(List):
       if not callable(f):
         raise TypeError(f'Sequence[{i}] is not callable: {f}')
       if i > 0:
-        if isinstance(output, tp.Tuple):
+        if isinstance(output, tuple):
           args = output
           kwargs = {}
         elif isinstance(output, dict):

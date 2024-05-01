@@ -419,6 +419,7 @@ class Einsum(Module):
     kernel_key = rngs.params()
     self.kernel = nnx.Param(kernel_init(kernel_key, kernel_shape, param_dtype))
 
+    self.bias: nnx.Param | None
     if bias_shape is not None:
       bias_key = rngs.params()
       self.bias = nnx.Param(bias_init(bias_key, bias_shape, param_dtype))

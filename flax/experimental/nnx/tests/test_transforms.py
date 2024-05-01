@@ -110,7 +110,7 @@ class TestJIT:
         n += 1
         return jnp.dot(x, self.w.value)
 
-    m = nnx.Jit(Foo)(2, 3, rngs=nnx.Rngs(0))
+    m = nnx.Jit.constructor(Foo)(2, 3, rngs=nnx.Rngs(0))
 
     y = m(jnp.ones((1, 2)))
     assert y.shape == (1, 3)
@@ -130,7 +130,7 @@ class TestJIT:
     def f(m: Foo):
       nonlocal n
       n += 1
-      m.a, m.b = m.b, m.a
+      m.a, m.b = m.b, m.a  # type: ignore
 
     m = Foo(rngs=nnx.Rngs(0))
     a = m.a
@@ -533,7 +533,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -562,7 +562,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -591,7 +591,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x, (x, x)
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -626,7 +626,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -661,7 +661,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -697,7 +697,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block, state_axes={nnx.Param: 0}, length=5, scan_output=False
     )
 
@@ -728,7 +728,7 @@ class TestScan:
         x = nnx.gelu(x)
         return x
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -814,14 +814,14 @@ class TestScan:
 
         # test sharding layer axes is not present inside scan
         state = nnx.state(self.linear)
-        assert state.kernel.value.shape == (3, 3)
-        assert state.kernel.sharding == ('din', 'dout')
-        assert state.bias.value.shape == (3,)
-        assert state.bias.sharding == ('dout',)
+        assert state.kernel.value.shape == (3, 3)  # type: ignore
+        assert state.kernel.sharding == ('din', 'dout')  # type: ignore
+        assert state.bias.value.shape == (3,)  # type: ignore
+        assert state.bias.sharding == ('dout',)  # type: ignore
 
         return x, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -873,7 +873,7 @@ class TestScan:
       def __call__(self):
         return None, None
 
-    MLP = nnx.Scan(
+    MLP = nnx.Scan.constructor(
       Block,
       state_axes={nnx.Param: 0},
       length=5,
@@ -889,7 +889,7 @@ class TestScan:
 
 class TestRemat:
   def test_basic_remat(self):
-    RematLinear = nnx.Remat(nnx.Linear)
+    RematLinear = nnx.Remat.constructor(nnx.Linear)
 
     module = RematLinear(2, 3, rngs=nnx.Rngs(0))
 
@@ -922,9 +922,9 @@ class TestRemat:
         x = self.linear(x)
         return x, None
 
-    RematLinear = nnx.Remat(LinearBlock)
+    RematLinear = nnx.Remat.constructor(LinearBlock)
 
-    ScanRematLinear = nnx.Scan(
+    ScanRematLinear = nnx.Scan.constructor(
       RematLinear,
       state_axes={nnx.Param: 0},
       length=5,
@@ -1121,7 +1121,7 @@ class TestVmap:
         x = nnx.gelu(x)
         return x
 
-    MLP = nnx.Vmap(Block, state_axes={nnx.Param: 0}, axis_size=5)
+    MLP = nnx.Vmap.constructor(Block, state_axes={nnx.Param: 0}, axis_size=5)
 
     module = MLP(rngs=nnx.Rngs(0))
 
@@ -1148,7 +1148,7 @@ class TestVmap:
         x = nnx.gelu(x)
         return x
 
-    MLP = nnx.Vmap(Block, state_axes={nnx.Param: 0}, axis_size=5)
+    MLP = nnx.Vmap.constructor(Block, state_axes={nnx.Param: 0}, axis_size=5)
 
     module = MLP(graphdef='hello', rngs=nnx.Rngs(0))
 

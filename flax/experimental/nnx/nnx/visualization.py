@@ -40,7 +40,7 @@ def display(*args):
       print(x)
     return
 
-  from penzai import pz
+  from penzai import pz  # type: ignore[import-not-found]
 
   with pz.ts.active_autovisualizer.set_scoped(pz.ts.ArrayAutovisualizer()):
     for x in args:
@@ -70,7 +70,7 @@ def _to_dataclass(x, seen_nodes: set[int]):
     }
     dc_type = _make_dataclass_obj(
       type(x),
-      node_dict,
+      {str(key): value for key, value in node_dict.items()},
     )
     return dc_type
   elif isinstance(x, (nnx.Variable, nnx.VariableState)):
@@ -109,7 +109,7 @@ def _treemap_to_dataclass(node, seen_nodes: set[int]):
 
 
 def _make_dataclass_obj(
-  cls, fields: dict[str, tp.Any], penzai_dataclass: bool = True
+  cls, fields: tp.Mapping[str, tp.Any], penzai_dataclass: bool = True
 ) -> tp.Type:
   from penzai import pz
 

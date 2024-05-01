@@ -99,6 +99,7 @@ class RngStream(GraphNode):
       # broadcast key
       key = self()
     else:
+      num_splits: int | tuple[int, ...]
       if isinstance(pattern, int):
         num_splits = pattern
       else:
@@ -137,7 +138,7 @@ class Rngs(GraphNode, tp.Mapping[str, tp.Callable[[], jax.Array]]):
       )
       setattr(self, name, stream)
 
-  def _get_stream(self, name: str, error_type: Exception) -> RngStream:
+  def _get_stream(self, name: str, error_type: type[Exception]) -> RngStream:
     rngs_vars = vars(self)
     if name not in rngs_vars:
       if 'default' not in rngs_vars:
@@ -252,6 +253,7 @@ def _split_rng_flatten(rngs: ForkedKeys, *, with_keys: bool):
   items = [(name, rngs.broadcasts[name]) for name in broadcast_names]
   items += [(name, rngs.splits[name]) for name in split_names]
 
+  nodes: tuple[jax.Array | tuple[jax.tree_util.DictKey, jax.Array], ...]
   if with_keys:
     nodes = tuple((jax.tree_util.DictKey(name), value) for name, value in items)
   else:
@@ -277,9 +279,9 @@ def _split_rng_unflatten(
 
 jax.tree_util.register_pytree_with_keys(
   ForkedKeys,
-  functools.partial(_split_rng_flatten, with_keys=True),
-  _split_rng_unflatten,
-  flatten_func=functools.partial(_split_rng_flatten, with_keys=False),
+  functools.partial(_split_rng_flatten, with_keys=True),  # type: ignore
+  _split_rng_unflatten,  # type: ignore
+  flatten_func=functools.partial(_split_rng_flatten, with_keys=False),  # type: ignore
 )
 
 def fork(
@@ -289,6 +291,8 @@ def fork(
 ) -> tuple[State, State]:
   if split_pattern is None:
     raise RuntimeError('Split pattern cannot be None, this is a bug.')
+
+  num_splits: int | tuple[int, ...]
   if isinstance(split_pattern, int):
     num_splits = split_pattern
   else:

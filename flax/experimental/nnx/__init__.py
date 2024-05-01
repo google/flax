@@ -97,11 +97,11 @@ from .nnx.training.metrics import Metric as Metric
 from .nnx.training.metrics import MultiMetric as MultiMetric
 from .nnx.training.optimizer import Optimizer as Optimizer
 from .nnx.transforms import Jit as Jit
+from .nnx.transforms import jit as jit
 from .nnx.transforms import Remat as Remat
 from .nnx.transforms import Scan as Scan
 from .nnx.transforms import Vmap as Vmap
 from .nnx.transforms import grad as grad
-from .nnx.transforms import jit as jit
 from .nnx.transforms import remat as remat
 from .nnx.transforms import scan as scan
 from .nnx.transforms import value_and_grad as value_and_grad

@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Optional, overload
+from typing import Any, Callable, Optional
 
 import jax
 import jax.numpy as jnp
@@ -368,6 +368,8 @@ class MultiHeadAttention(Module):
     self.key = linear_general(rngs=rngs)
     self.value = linear_general(rngs=rngs)
 
+    self.query_ln: LayerNorm | None
+    self.key_ln: LayerNorm | None
     if self.normalize_qk:
       # Normalizing query and key projections stabilizes training with higher
       # LR. See ViT-22B paper http://arxiv.org/abs/2302.05442 for analysis.
@@ -403,37 +405,7 @@ class MultiHeadAttention(Module):
       dot_general_cls=self.out_dot_general_cls,
       rngs=rngs,
     )
-
-  @overload
-  def __call__(
-    self,
-    inputs_q: Array,
-    inputs_k: Optional[Array] = None,
-    inputs_v: Optional[Array] = None,
-    *,
-    mask: Optional[Array] = None,
-    deterministic: Optional[bool] = None,
-    dropout_rng: Optional[Array] = None,
-    rngs: rnglib.Rngs | None = None,
-    sow_weights: bool = False,
-    decode: bool | None = None,
-  ):
-    ...
-
-  @overload
-  def __call__(
-    self,
-    inputs_q: Array,
-    *,
-    inputs_kv: Array | None = None,
-    mask: Array | None = None,
-    deterministic: bool | None = None,
-    dropout_rng: Array | None = None,
-    rngs: rnglib.Rngs | None = None,
-    sow_weights: bool = False,
-    decode: bool | None = None,
-  ):
-    ...
+    self.rngs = rngs if dropout_rate > 0.0 else None
 
   def __call__(
     self,
@@ -476,6 +448,8 @@ class MultiHeadAttention(Module):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
+    if rngs is None:
+      rngs = self.rngs
 
     if inputs_k is None:
       if inputs_v is not None:
