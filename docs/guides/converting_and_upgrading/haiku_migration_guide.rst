@@ -25,7 +25,7 @@ whereas in Haiku ``name`` must be explicitly defined in the constructor
 signature and passed to the superclass constructor.
 
 .. codediff::
-  :title_left: Haiku
+  :title_left: Haiku123
   :title_right: Flax
   :sync:
 
@@ -358,6 +358,7 @@ return value.
     params = jax.tree_util.tree_map(lambda p, g: p - 0.1 * g, params, grads)
 
     return params, new_state
+
   ---
 
   def train_step(params, batch_stats, inputs, labels):

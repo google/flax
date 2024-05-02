@@ -55,12 +55,29 @@ class CodeDiffParser:
       )
     idx = lines.index(code_sep)
     code_left = self._code_block(lines[0:idx])
+    # if title_left == 'NNX transforms123':
+    #   # TODO: for some reason adding a space character after the separator character causes an error
+    #     # find another example in another file where the space character is already added and it doesn't cause the error
+    #     # and try to find the pattern
+    #   test_code = lines[idx + 1+1 :]
+    # else:
+    #   test_code = lines[idx + 1 :]
     test_code = lines[idx + 1 :]
     code_right = self._code_block(test_code)
 
     output = self._tabs(
       (title_left, code_left), (title_right, code_right), sync=sync
     )
+
+    if title_left == 'NNX transforms123':
+    # if title_left == 'Haiku123':
+      print('\nPRINT START')
+      print('\n'+'='*20+'OUTPUT'+'='*20)
+      print(output)
+      print('\n'+'='*20+'TEST CODE'+'='*20)
+      print(test_code)
+      print('\nEND PRINT')
+      assert False
 
     return output, test_code
 

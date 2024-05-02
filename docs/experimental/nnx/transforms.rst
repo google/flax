@@ -38,7 +38,7 @@ whereas the function signature of JAX-transformed functions can only accept the 
 the transformed function.
 
 .. codediff::
-  :title_left: NNX transforms
+  :title_left: NNX transforms123
   :title_right: JAX transforms
   :sync:
 
@@ -57,6 +57,7 @@ the transformed function.
   train_step(model, x, y)
 
   ---
+
   @jax.jit #!
   def train_step(graphdef, state, x, y): #!
     def loss_fn(graphdef, state): #!
@@ -73,50 +74,4 @@ the transformed function.
     return nnx.split(model) #!
 
   graphdef, state = nnx.split(nnx.Linear(2, 3, rngs=nnx.Rngs(0))) #!
-  graphdef, state = train_step(graphdef, state, x, y) #!
-
-
-Mixing NNX and JAX transformations
-**********************************
-
-NNX and JAX transformations can be mixed together, so long as the JAX-transformed function is
-pure and has valid argument types that are recognized by JAX.
-
-.. codediff::
-  :title_left: Using ``nnx.jit`` with ``jax.grad``
-  :title_right: Using ``jax.jit`` with ``nnx.grad``
-  :sync:
-
-  @nnx.jit
-  def train_step(model, x, y):
-    def loss_fn(graphdef, state): #!
-      model = nnx.merge(graphdef, state)
-      return ((model(x) - y) ** 2).mean()
-    grads = jax.grad(loss_fn, 1)(*nnx.split(model)) #!
-    params = nnx.state(model, nnx.Param)
-    params = jax.tree_util.tree_map(
-      lambda p, g: p - 0.1 * g, params, grads
-    )
-    nnx.update(model, params)
-
-  model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-  train_step(model, x, y)
-
-  ---
-  @jax.jit #!
-  def train_step(graphdef, state, x, y): #!
-    model = nnx.merge(graphdef, state)
-    def loss_fn(model):
-      return ((model(x) - y) ** 2).mean()
-    grads = nnx.grad(loss_fn)(model)
-    params = nnx.state(model, nnx.Param)
-    params = jax.tree_util.tree_map(
-      lambda p, g: p - 0.1 * g, params, grads
-    )
-    nnx.update(model, params)
-    return nnx.split(model)
-
-  graphdef, state = nnx.split(nnx.Linear(2, 3, rngs=nnx.Rngs(0)))
   graphdef, state = train_step(graphdef, state, x, y)
-
-
