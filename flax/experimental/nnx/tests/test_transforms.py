@@ -260,7 +260,7 @@ class TestJIT:
 
     class Foo(nnx.Module):
       def __init__(self):
-        self.ref: tp.Optional[Foo] = None
+        self.ref: tp.Optional[Foo] = None  # type: ignore[name-error]
 
     @nnx.jit
     def f(m: Foo):
@@ -290,7 +290,7 @@ class TestJIT:
 
     class Foo(nnx.Module):
       def __init__(self):
-        self.ref: tp.Optional[Foo] = None
+        self.ref: tp.Optional[Foo] = None  # type: ignore[name-error]
 
     @nnx.jit
     def f(m: Foo):

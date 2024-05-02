@@ -15,9 +15,9 @@
 from typing import Optional
 from flax.typing import Dtype
 from jax import numpy as jnp
-from typing_extensions import TypeVarTuple, Unpack
+import typing as tp
 
-T = TypeVarTuple('T')
+T = tp.TypeVar('T', bound=tuple)
 
 
 def canonicalize_dtype(
@@ -52,9 +52,7 @@ def canonicalize_dtype(
   return dtype
 
 
-def promote_dtype(
-  *args: Unpack[T], dtype=None, inexact=True
-) -> tuple[Unpack[T]]:
+def promote_dtype(args: T, /, dtype=None, inexact=True) -> T:
   """ "Promotes input arguments to a specified or inferred dtype.
 
   All args are cast to the same dtype. See ``canonicalize_dtype`` for how

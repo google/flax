@@ -649,7 +649,7 @@ def _graph_pop(
         node_impl.pop_key(node, name)
         if isinstance(value, Variable):
           value = value.to_state()
-        state[node_path] = value
+        state[node_path] = value  # type: ignore[index] # mypy is wrong here?
         break
     else:
       # NOTE: should we raise an error here?

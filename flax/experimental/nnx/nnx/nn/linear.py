@@ -269,7 +269,7 @@ class LinearGeneral(Module):
     contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs, kernel, bias, dtype=self.dtype
+      (inputs, kernel, bias), dtype=self.dtype
     )
 
     if self.dot_general_cls is not None:
@@ -353,7 +353,7 @@ class Linear(Module):
     bias = self.bias.value
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs, kernel, bias, dtype=self.dtype
+      (inputs, kernel, bias), dtype=self.dtype
     )
     y = self.dot_general(
       inputs,
@@ -461,9 +461,11 @@ class Einsum(Module):
     self._einsum_str_check(einsum_str)
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs,
-      self.kernel.value,
-      self.bias.value if self.bias is not None else self.bias,
+      (
+        inputs,
+        self.kernel.value,
+        self.bias.value if self.bias is not None else self.bias,
+      ),
       dtype=self.dtype,
     )
 
@@ -702,7 +704,7 @@ class Conv(Module):
     bias = self.bias.value
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs, kernel, bias, dtype=self.dtype
+      (inputs, kernel, bias), dtype=self.dtype
     )
 
     y = self.conv_general_dilated(
@@ -788,7 +790,7 @@ class Embed(Module):
     # Use take because fancy indexing numpy arrays with JAX indices does not
     # work correctly.
     (embedding,) = dtypes.promote_dtype(
-      self.embedding.value, dtype=self.dtype, inexact=False
+      (self.embedding.value,), dtype=self.dtype, inexact=False
     )
     if self.num_embeddings == 1:
       return jnp.where(
@@ -813,6 +815,6 @@ class Embed(Module):
       in NLP models.
     """
     query, embedding = dtypes.promote_dtype(
-      query, self.embedding.value, dtype=self.dtype
+      (query, self.embedding.value), dtype=self.dtype
     )
     return jnp.dot(query, embedding.T)

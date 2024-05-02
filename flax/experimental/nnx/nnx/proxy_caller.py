@@ -31,7 +31,7 @@ import dataclasses
 import typing as tp
 
 
-A = tp.TypeVar('A')
+A = tp.TypeVar('A', covariant=True)  # type: ignore[not-supported-yet]
 
 
 def _identity(x):

@@ -88,7 +88,7 @@ def dot_product_attention_weights(
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
   """
-  query, key = promote_dtype(query, key, dtype=dtype)
+  query, key = promote_dtype((query, key), dtype=dtype)  # type: ignore[bad-unpacking]
   dtype = query.dtype
 
   assert query.ndim == key.ndim, 'q, k must have same rank.'
@@ -184,7 +184,7 @@ def dot_product_attention(
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
   """
-  query, key, value = promote_dtype(query, key, value, dtype=dtype)
+  query, key, value = promote_dtype((query, key, value), dtype=dtype)  # type: ignore[bad-unpacking]
   dtype = query.dtype
   assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert (

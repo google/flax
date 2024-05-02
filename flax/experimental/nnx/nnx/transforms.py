@@ -80,15 +80,15 @@ def _normalize_sequence(
     return tuple(x)
 
 
-class LiftedModule(Module, tp.Generic[M]):
+class LiftedModule(tp.Generic[M], Module):  # type: ignore[ignored-abstractmethod]
   @abstractmethod
   def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> tp.Any:
-    ...
+    pass
 
   @property
   @abstractmethod
   def _submodule(self) -> M:
-    ...
+    pass  # type: ignore[bad-return-type] # why pytype?
 
   def __call__(self, *args, **kwargs) -> tp.Any:
     return self.call(*args, **kwargs)  # type: ignore
@@ -287,7 +287,7 @@ def jit_apply(
   return out
 
 
-class Jit(LiftedModule[M]):
+class Jit(tp.Generic[M], LiftedModule[M]):
   @staticmethod
   def constructor(
     module_constructor: tp.Callable[..., MA],
@@ -584,7 +584,7 @@ class GradOptions:
   wrt: filterlib.Filter
 
 
-class Grad(LiftedModule[M]):
+class Grad(tp.Generic[M], LiftedModule[M]):
   @staticmethod
   def constructor(
     module_constructor: tp.Callable[..., MA],
@@ -871,7 +871,7 @@ class ScanOptions:
   scan_output: bool
 
 
-class Scan(LiftedModule[M]):
+class Scan(tp.Generic[M], LiftedModule[M]):
   @staticmethod
   def constructor(
     module_constructor: tp.Callable[..., MA],
@@ -1095,10 +1095,10 @@ def scan_apply(
           'Expected a tuple of length 2 as the output of the scan function, '
           f'got {out}'
         )
-      out = tp.cast(tuple[C, B], out)
+      out = tp.cast(tuple[C, B], out)  # type: ignore[invalid-annotation]
       carry_arg_out, scan_args_out = out
     else:
-      out = tp.cast(C, out)
+      out = tp.cast(C, out)  # type: ignore[invalid-annotation]
       carry_arg_out = out
       scan_args_out = None
 
@@ -1356,7 +1356,7 @@ def scan(
   )
 
   @functools.wraps(f)
-  def scan_apply_wrapper(*args, **kwargs) -> C | tuple[C, tp.Any]:
+  def scan_apply_wrapper(*args, **kwargs) -> tp.Any:
     return scan_apply(options, f, args, kwargs)
 
   return scan_apply_wrapper  # type: ignore
@@ -1385,7 +1385,7 @@ class RematOptions:
     )
 
 
-class Remat(LiftedModule[M]):
+class Remat(tp.Generic[M], LiftedModule[M]):
   @staticmethod
   def constructor(
     module_constructor: tp.Callable[..., MA],
@@ -1512,7 +1512,7 @@ class VmapOptions:
   transform_metadata: tp.Mapping[str, tp.Any]
 
 
-class Vmap(LiftedModule[M]):
+class Vmap(tp.Generic[M], LiftedModule[M]):
   @staticmethod
   def constructor(
     module_constructor: tp.Callable[..., MA],

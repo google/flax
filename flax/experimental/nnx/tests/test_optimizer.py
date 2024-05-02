@@ -97,7 +97,8 @@ class TestOptimizer(parameterized.TestCase):
       def __init__(self, model, tx, metrics):
         self.metrics = metrics
         super().__init__(model, tx)
-      def update(self, *, grads, **updates):
+
+      def update(self, *, grads, **updates):  # type: ignore[signature-mismatch]
         self.metrics.update(**updates)
         super().update(grads)
 

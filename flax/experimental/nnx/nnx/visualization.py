@@ -40,7 +40,7 @@ def display(*args):
       print(x)
     return
 
-  from penzai import pz  # type: ignore[import-not-found]
+  from penzai import pz  # type: ignore[import-not-found,import-untyped]
 
   with pz.ts.active_autovisualizer.set_scoped(pz.ts.ArrayAutovisualizer()):
     for x in args:
@@ -111,7 +111,7 @@ def _treemap_to_dataclass(node, seen_nodes: set[int]):
 def _make_dataclass_obj(
   cls, fields: tp.Mapping[str, tp.Any], penzai_dataclass: bool = True
 ) -> tp.Type:
-  from penzai import pz
+  from penzai import pz  # type: ignore[import-error]
 
   dataclass = pz.pytree_dataclass if penzai_dataclass else dataclasses.dataclass
   base = pz.Layer if penzai_dataclass else object

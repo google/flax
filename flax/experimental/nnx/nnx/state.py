@@ -152,7 +152,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     if rest:
       raise ValueError(
         'Non-exhaustive filters, got a non-empty remainder: '
-        f'{list(rest.keys())}.\nUse `...` to match all remaining elements.'
+        f'{rest}.\nUse `...` to match all remaining elements.'
       )
 
     states: State | tuple[State, ...]
@@ -160,7 +160,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       states = states_[0]
     else:
       states = tuple(states_)
-    return states
+    return states  # type: ignore[bad-return-type]
 
   @tp.overload
   def filter(
@@ -196,7 +196,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     else:
       states = tuple(states_)
 
-    return states
+    return states  # type: ignore[bad-return-type]
 
   @staticmethod
   def merge(state: 'State', /, *states: 'State') -> 'State':
@@ -208,7 +208,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     new_state: FlatState = {}
 
     for state in states:
-      new_state.update(state.flat_state())
+      new_state.update(state.flat_state())  # type: ignore[attribute-error] # pytype is wrong here
 
     return State.from_flat_path(new_state)
 
@@ -272,10 +272,10 @@ def _split_state(
   for path, value in flat_state.items():
     for i, predicate in enumerate(predicates):
       if predicate(path, value):
-        flat_states[i][path] = value
+        flat_states[i][path] = value  # type: ignore[index] # mypy is wrong here?
         break
     else:
       # if we didn't break, set leaf to last state
-      flat_states[-1][path] = value
+      flat_states[-1][path] = value  # type: ignore[index] # mypy is wrong here?
 
   return tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
