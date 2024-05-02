@@ -27,7 +27,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-from collections.abc import Mapping
 import typing as tp
 import typing_extensions as tpe
 
@@ -43,7 +42,7 @@ from flax.typing import Key, PathParts
 A = tp.TypeVar('A')
 
 StateLeaf = tp.Union[VariableState[tp.Any], np.ndarray, jax.Array]
-FlatState = Mapping[PathParts, StateLeaf]
+FlatState = dict[PathParts, StateLeaf]
 
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
@@ -67,8 +66,8 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def __init__(
     self,
     mapping: tp.Union[
-      Mapping[Key, Mapping | StateLeaf],
-      tp.Iterator[tuple[Key, Mapping | StateLeaf]],
+      tp.Mapping[Key, tp.Mapping | StateLeaf],
+      tp.Iterator[tuple[Key, tp.Mapping | StateLeaf]],
     ],
     /,
   ):
