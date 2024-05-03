@@ -77,9 +77,6 @@ def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
 
 @dataclasses.dataclass
 class GraphUtilsContext(threading.local):
-  node_types: dict[
-    type, 'NodeImpl[tp.Any, tp.Any, tp.Any]'
-  ] = dataclasses.field(default_factory=dict)
   seen_modules_repr: set[int] | None = None
 
 
@@ -170,6 +167,9 @@ NodeImpl = tp.Union[
 ]
 
 
+_node_impl_for_type: dict[type, 'NodeImpl[tp.Any, tp.Any, tp.Any]'] = {}
+
+
 def register_graph_node_type(
   type: type,
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[Key, Leaf]], AuxData]],
@@ -178,7 +178,7 @@ def register_graph_node_type(
   create_empty: tp.Callable[[AuxData], Node],
   clear: tp.Callable[[Node, AuxData], None],
 ):
-  CONTEXT.node_types[type] = GraphNodeImpl(
+  _node_impl_for_type[type] = GraphNodeImpl(
     type=type,
     flatten=flatten,
     set_key=set_key,
@@ -189,17 +189,17 @@ def register_graph_node_type(
 
 
 def is_node(x: tp.Any) -> bool:
-  if type(x) in CONTEXT.node_types:
+  if type(x) in _node_impl_for_type:
     return True
   return is_pytree_node(x)
 
 
 def is_graph_node(x: tp.Any) -> bool:
-  return type(x) in CONTEXT.node_types
+  return type(x) in _node_impl_for_type
 
 
 def is_node_type(x: type[tp.Any]) -> bool:
-  return x in CONTEXT.node_types or x is PytreeType
+  return x in _node_impl_for_type or x is PytreeType
 
 
 def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any]:
@@ -208,19 +208,19 @@ def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any]:
 
   node_type = type(x)
 
-  if node_type not in CONTEXT.node_types:
+  if node_type not in _node_impl_for_type:
     if is_pytree_node(x):
       return PYTREE_NODE_IMPL
     else:
       raise ValueError(f'Unknown node type: {x}')
 
-  return CONTEXT.node_types[node_type]
+  return _node_impl_for_type[node_type]
 
 
 def get_node_impl_for_type(x: type[Node]) -> NodeImpl[Node, tp.Any, tp.Any]:
   if x is PytreeType:
     return PYTREE_NODE_IMPL
-  return CONTEXT.node_types[x]
+  return _node_impl_for_type[x]
 
 
 class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):

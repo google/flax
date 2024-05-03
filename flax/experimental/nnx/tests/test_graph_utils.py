@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from functools import partial
+from threading import Thread
 import jax
 import pytest
 
@@ -399,3 +400,22 @@ class TestGraphUtils:
     m2, _ = nnx.graph.unflatten(graphdef, state, idxmap=idx_in_ref_out)
     assert m2 is m
     assert m2.ref is m2
+
+
+class SimpleModule(nnx.Module):
+  pass
+
+
+class SimplePyTreeModule(nnx.Module, experimental_pytree=True):
+  pass
+
+
+@pytest.mark.parametrize(['x'], [(SimpleModule(),), (SimplePyTreeModule(),)])
+def test_threading(x: nnx.Module):
+  class MyThread(Thread):
+    def run(self) -> None:
+      nnx.graph.split(x)
+
+  thread = MyThread()
+  thread.start()
+  thread.join()
