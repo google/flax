@@ -24,7 +24,7 @@ To accommodate the regular dict change, replace usage of ``FrozenDict`` methods 
 These utility functions mimic the behavior of their corresponding ``FrozenDict`` method, and can be called on either ``FrozenDicts`` or regular dicts.
 The following are the utility functions and example upgrade patterns:
 
-.. testsetup::
+.. testsetup:: default, Only ``FrozenDict``, Both ``FrozenDict`` and regular dict
 
   import flax
   import flax.linen as nn
@@ -40,8 +40,7 @@ The following are the utility functions and example upgrade patterns:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. codediff::
-  :title_left: Only ``FrozenDict``
-  :title_right: Both ``FrozenDict`` and regular dict
+  :title: Only ``FrozenDict``, Both ``FrozenDict`` and regular dict
   :sync:
 
   variables = variables.copy(add_or_replace={'other_variables': other_variables})
@@ -54,8 +53,7 @@ The following are the utility functions and example upgrade patterns:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. codediff::
-  :title_left: Only ``FrozenDict``
-  :title_right: Both ``FrozenDict`` and regular dict
+  :title: Only ``FrozenDict``, Both ``FrozenDict`` and regular dict
   :sync:
 
   state, params = variables.pop('params')
@@ -68,8 +66,7 @@ The following are the utility functions and example upgrade patterns:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. codediff::
-  :title_left: Only ``FrozenDict``
-  :title_right: Both ``FrozenDict`` and regular dict
+  :title: Only ``FrozenDict``, Both ``FrozenDict`` and regular dict
   :sync:
 
   str_repr = variables.pretty_repr()
@@ -82,8 +79,7 @@ The following are the utility functions and example upgrade patterns:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. codediff::
-  :title_left: Only ``FrozenDict``
-  :title_right: Both ``FrozenDict`` and regular dict
+  :title: Only ``FrozenDict``, Both ``FrozenDict`` and regular dict
   :sync:
 
   variables = variables.unfreeze()

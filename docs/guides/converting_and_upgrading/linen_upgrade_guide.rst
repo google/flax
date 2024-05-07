@@ -5,12 +5,13 @@ As of Flax v0.4.0, ``flax.nn`` no longer exists, and is replaced with the new
 Linen API at ``flax.linen``. If your codebase is still using the old API, you
 can use this upgrade guide to upgrade it to Linen.
 
-.. testsetup::
+.. testsetup:: Linen
 
   from flax.training import train_state
   from jax import random
   import optax
   import jax
+  import flax.linen as nn
   from flax.linen import initializers
 
   from jax import lax
@@ -29,8 +30,8 @@ Defining simple Flax Modules
 ----------------------------
 
 .. codediff::
-  :title_left: Old Flax
-  :title_right: Linen
+  :title: Old Flax, Linen
+  :skip_test: Old Flax
   :sync:
 
   from flax import nn
@@ -51,8 +52,6 @@ Defining simple Flax Modules
           'bias', (features,), bias_init)
         y = y + bias
       return y
-
-    return new_state, metrics
   ---
   from flax import linen as nn  # [1] #!
 
@@ -95,8 +94,8 @@ Using Flax Modules inside other Modules
 ---------------------------------------
 
 .. codediff::
-  :title_left: Old Flax
-  :title_right: Linen
+  :title: Old Flax, Linen
+  :skip_test: Old Flax
   :sync:
 
   class Encoder(nn.Module):
@@ -127,8 +126,8 @@ Sharing submodules and defining multiple methods
 --------------------------------
 
 .. codediff::
-  :title_left: Old Flax
-  :title_right: Linen
+  :title: Old Flax, Linen
+  :skip_test: Old Flax
   :sync:
 
   class AutoEncoder(nn.Module):
@@ -179,8 +178,8 @@ Sharing submodules and defining multiple methods
 ---------------------------------------
 
 .. codediff::
-  :title_left: Old Flax
-  :title_right: Linen
+  :title: Old Flax, Linen
+  :skip_test: Old Flax
   :sync:
 
   # no import #!
@@ -236,8 +235,8 @@ Top-level training code patterns
 --------------------------------
 
 .. codediff::
-  :title_left: Old Flax
-  :title_right: Linen
+  :title: Old Flax, Linen
+  :skip_test: Old Flax
   :sync:
 
   def create_model(key):
@@ -306,12 +305,12 @@ Non-trainable variables ("state"): Use within Modules
 -----------------------------------------------------
 
 .. codediff::
-  :title_left: Old Flax
-  :title_right: Linen
+  :title: Old Flax, Linen
+  :skip_test: Old Flax
   :sync:
 
   class BatchNorm(nn.Module):
-    def apply(self, x, ...):
+    def apply(self, x):
       # [...]
       ra_mean = self.state(
         'mean', (x.shape[-1], ), initializers.zeros_init())
@@ -338,8 +337,8 @@ Non-trainable variables ("state"): Top-level training code patterns
 -------------------------------------------------------------------
 
 .. codediff::
-  :title_left: Old Flax
-  :title_right: Linen
+  :title: Old Flax, Linen
+  :skip_test: Old Flax
   :sync:
 
   # initial params and state
@@ -360,7 +359,7 @@ Non-trainable variables ("state"): Top-level training code patterns
 
   # reads immutable batch statistics during evaluation
   def eval_step(model, model_state, batch):
-  with nn.stateful(model_state, mutable=False):
+    with nn.stateful(model_state, mutable=False):
       logits = model(batch['image'], train=False)
     return compute_metrics(logits, batch['label'])
   ---
@@ -422,8 +421,8 @@ Randomness
 ----------
 
 .. codediff::
-  :title_left: Old Flax
-  :title_right: Linen
+  :title: Old Flax, Linen
+  :skip_test: Old Flax
   :sync:
 
   def dropout(inputs, rate, deterministic=False):

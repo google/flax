@@ -17,8 +17,7 @@
 Use directive as follows:
 
 .. codediff::
-  :title_left: <LEFT_CODE_BLOCK_TITLE>
-  :title_right: <RIGHT_CODE_BLOCK_TITLE>
+  :title: <LEFT_CODE_BLOCK_TITLE>, <RIGHT_CODE_BLOCK_TITLE>
 
   <CODE_BLOCK_LEFT>
   ---
@@ -26,7 +25,8 @@ Use directive as follows:
 
 In order to highlight a line of code, append "#!" to it.
 """
-from typing import List, Tuple
+
+from typing import List, Optional, Tuple
 
 import sphinx
 from docutils import nodes
@@ -40,29 +40,103 @@ MISSING = object()
 class CodeDiffParser:
   def parse(
     self,
-    lines,
-    title_left='Base',
-    title_right='Diff',
-    code_sep='---',
-    sync=MISSING,
+    lines: List[str],
+    title: str,
+    groups: Optional[List[str]] = None,
+    skip_test: Optional[str] = None,
+    code_sep: str = '---',
+    sync: object = MISSING,
   ):
+    """Parse the code diff block and format it so that it
+    renders in different tabs and is tested by doctest.
+
+    For example:
+
+      .. testcode:: tab0, tab2, tab3
+
+        <CODE_BLOCK_A>
+
+      .. codediff::
+        :title: Tab 0, Tab 1, Tab 2, Tab 3
+        :groups: tab0, tab1, tab2, tab3
+        :skip_test: tab1, tab3
+
+        <CODE_BLOCK_B0>
+
+        ---
+
+        <CODE_BLOCK_B1>
+
+        ---
+
+        <CODE_BLOCK_B2>
+
+        ---
+
+        <CODE_BLOCK_B3>
+
+    For group tab0: <CODE_BLOCK_A> and <CODE_BLOCK_B0> are executed.
+    For group tab1: Nothing is executed.
+    For group tab2: <CODE_BLOCK_A> and <CODE_BLOCK_B2> are executed.
+    For group tab3: <CODE_BLOCK_A> is executed.
+
+    Arguments:
+      lines: a string list, where each element is a single string code line
+      title: a single string that contains the titles of each tab (they should
+        be separated by commas)
+      groups: a single string that contains the group of each tab (they should
+        be separated by commas). Code snippets that are part of the same group
+        will be executed together. If groups=None, then the group names will
+        default to the tab title names.
+      skip_test: a single string denoting which group(s) to skip testing (they
+        should be separated by commas). This is useful for legacy code snippets
+        that no longer run correctly anymore. If skip_test=None, then no tests
+        are skipped.
+      code_sep: the separator character(s) used to denote a separate code block
+        for a new tab. The default code separator is '---'.
+      sync: an option for Sphinx directives, that will sync all tabs together.
+        This means that if the user clicks to switch to another tab, all tabs
+        will switch to the new tab.
+    """
+    titles = [t.strip() for t in title.split(',')]
+    num_tabs = len(titles)
+
     sync = sync is not MISSING
+    # skip legacy code snippets in upgrade guides
+    if skip_test is not None:
+      skip_tests = set([index.strip() for index in skip_test.split(',')])
+    else:
+      skip_tests = set()
 
-    if code_sep not in lines:
+    code_blocks = '\n'.join(lines)
+    if code_blocks.count(code_sep) != num_tabs - 1:
       raise ValueError(
-        'Code separator not found! Code snippets should be '
-        f'separated by {code_sep}.'
+        f'Expected {num_tabs-1} code separator(s) for {num_tabs} tab(s), but got {code_blocks.count(code_sep)} code separator(s) instead.'
       )
-    idx = lines.index(code_sep)
-    code_left = self._code_block(lines[0:idx])
-    test_code = lines[idx + 1 :]
-    code_right = self._code_block(test_code)
+    code_blocks = [
+      code_block.split('\n')
+      for code_block in code_blocks.split(code_sep + '\n')
+    ]  # list[code_tab_list1[string_line1, ...], ...]
 
-    output = self._tabs(
-      (title_left, code_left), (title_right, code_right), sync=sync
-    )
+    # by default, put each code snippet in a different group denoted by an index number, to be executed separately
+    if groups is not None:
+      groups = [group_name.strip() for group_name in groups.split(',')]
+    else:
+      groups = titles
+    if len(groups) != num_tabs:
+      raise ValueError(
+        f'Expected {num_tabs} group assignment(s) for {num_tabs} tab(s), but got {len(groups)} group assignment(s) instead.'
+      )
 
-    return output, test_code
+    tabs = []
+    test_codes = []
+    for i, code_block in enumerate(code_blocks):
+      if groups[i] not in skip_tests:
+        test_codes.append((code_block, groups[i]))
+      tabs.append((titles[i], self._code_block(code_block)))
+    output = self._tabs(*tabs, sync=sync)
+
+    return output, test_codes
 
   def _code_block(self, lines):
     """Creates a codeblock."""
@@ -99,14 +173,15 @@ class CodeDiffParser:
 class CodeDiffDirective(SphinxDirective):
   has_content = True
   option_spec = {
-    'title_left': directives.unchanged,
-    'title_right': directives.unchanged,
+    'title': directives.unchanged,
+    'groups': directives.unchanged,
+    'skip_test': directives.unchanged,
     'code_sep': directives.unchanged,
     'sync': directives.flag,
   }
 
   def run(self):
-    table_code, test_code = CodeDiffParser().parse(
+    table_code, test_codes = CodeDiffParser().parse(
       list(self.content), **self.options
     )
 
@@ -114,21 +189,27 @@ class CodeDiffDirective(SphinxDirective):
     # We add attribute "testnodetype" so it is be picked up by the doctest
     # builder. This functionality is not officially documented but can be found
     # in the source code:
-    # https://github.com/sphinx-doc/sphinx/blob/3.x/sphinx/ext/doctest.py
+    # https://github.com/sphinx-doc/sphinx/blob/master/sphinx/ext/doctest.py
     # (search for 'testnodetype').
-    test_code = '\n'.join(test_code)
-    test_node = nodes.comment(test_code, test_code, testnodetype='testcode')
-    # Set the source info so the error message is correct when testing.
-    self.set_source_info(test_node)
-    test_node['options'] = {}
-    test_node['language'] = 'python3'
+    test_nodes = []
+    for test_code, group in test_codes:
+      test_node = nodes.comment(
+        '\n'.join(test_code),
+        '\n'.join(test_code),
+        testnodetype='testcode',
+        groups=[group],
+      )
+      self.set_source_info(test_node)
+      test_node['options'] = {}
+      test_node['language'] = 'python3'
+      test_nodes.append(test_node)
 
     # The table node is the side-by-side diff view that will be shown on RTD.
     table_node = nodes.paragraph()
     self.content = ViewList(table_code, self.content.parent)
     self.state.nested_parse(self.content, self.content_offset, table_node)
 
-    return [table_node, test_node]
+    return [table_node] + test_nodes
 
 
 def setup(app):

@@ -16,7 +16,7 @@ We will show you how to...
 * train a simple model using that schedule
 
 
-.. testsetup::
+.. testsetup:: Default learning rate, Learning rate schedule
 
   import jax
   import jax.numpy as jnp
@@ -75,7 +75,7 @@ We will show you how to...
     return metrics
 
 
-.. testcode::
+.. testcode:: Default learning rate, Learning rate schedule
 
   def create_learning_rate_fn(config, base_learning_rate, steps_per_epoch):
     """Creates learning rate schedule."""
@@ -99,8 +99,7 @@ For example using this schedule on MNIST would require changing the ``train_step
 .. _Optax: https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules
 
 .. codediff::
-  :title_left: Default learning rate
-  :title_right: Learning rate schedule
+  :title: Default learning rate, Learning rate schedule
   :sync:
 
   @jax.jit
@@ -136,8 +135,7 @@ For example using this schedule on MNIST would require changing the ``train_step
 And the ``train_epoch`` function:
 
 .. codediff::
-  :title_left: Default learning rate
-  :title_right: Learning rate schedule
+  :title: Default learning rate, Learning rate schedule
   :sync:
 
   def train_epoch(state, train_ds, batch_size, epoch, rng):
@@ -193,8 +191,7 @@ And the ``create_train_state`` function:
 
 
 .. codediff::
-  :title_left: Default learning rate
-  :title_right: Learning rate schedule
+  :title: Default learning rate, Learning rate schedule
   :sync:
 
   def create_train_state(rng, config):
@@ -214,7 +211,7 @@ And the ``create_train_state`` function:
         apply_fn=cnn.apply, params=params, tx=tx)
 
 
-.. testcleanup::
+.. testcleanup:: Learning rate schedule
 
   config = get_config()
 

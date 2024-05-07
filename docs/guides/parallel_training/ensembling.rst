@@ -13,7 +13,7 @@ be described as:
 In this HOWTO we omit some of the code such as imports, the CNN module, and
 metrics computation, but they can be found in the `MNIST example`_.
 
-.. testsetup::
+.. testsetup:: Single-model, Ensemble
 
   import functools
   from flax import jax_utils
@@ -69,8 +69,7 @@ XLA (similar to |jax.jit()|_), but execute it in parallel on XLA devices (e.g.,
 GPUs/TPUs).
 
 .. codediff::
-  :title_left: Single-model
-  :title_right: Ensemble
+  :title: Single-model, Ensemble
   :sync:
 
   #!
@@ -108,8 +107,7 @@ the average *across devices*. This also requires us to specify the
 ``axis_name`` to both |jax.pmap()|_ and |jax.lax.pmean()|_.
 
 .. codediff::
-  :title_left: Single-model
-  :title_right: Ensemble
+  :title: Single-model, Ensemble
   :sync:
 
   @jax.jit  #!
@@ -156,8 +154,7 @@ functions from above, we mainly need to take care of duplicating the arguments
 for all devices where necessary, and de-duplicating the return values.
 
 .. codediff::
-  :title_left: Single-model
-  :title_right: Ensemble
+  :title: Single-model, Ensemble
   :sync:
 
   def train_epoch(state, train_ds, batch_size, rng):
@@ -218,8 +215,7 @@ smaller than the train dataset so we can do this for the entire dataset
 directly.
 
 .. codediff::
-  :title_left: Single-model
-  :title_right: Ensemble
+  :title: Single-model, Ensemble
   :sync:
 
   train_ds, test_ds = get_datasets()
