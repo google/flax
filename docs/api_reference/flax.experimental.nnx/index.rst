@@ -6,6 +6,7 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/exper
 .. toctree::
   :maxdepth: 3
 
+  graph
   module
   nn/index
   rnglib

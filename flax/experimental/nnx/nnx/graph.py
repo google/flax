@@ -853,6 +853,57 @@ class UpdateContext:
   def split(
     self, node: A, *filters: filterlib.Filter
   ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:
+    """Split a ``GraphNode`` into a ``GraphDef`` and ``State``. ``State`` is a ``Mapping`` from
+    strings to  ``Variables`` or nested ``States``. ``GraphDef`` contains all the static
+    information needed to reconstruct a ``Module`` graph, it is analogous to JAX’s ``PyTreeDef``.
+    ``nnx.split`` is used in conjunction with ``nnx.merge`` to switch seamlessly between
+    stateful and stateless ``GraphNodes`` (including ``Modules``, which subclass ``GraphNode``).
+
+    Example usage::
+
+      >>> from flax.experimental import nnx
+      >>> import jax, jax.numpy as jnp
+
+      >>> class Model(nnx.Module):
+      ...   def __init__(self, din, dout, rngs):
+      ...     self.batch_norm = nnx.BatchNorm(din, rngs=rngs)
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...   def __call__(self, x, train=True):
+      ...     return self.linear(self.batch_norm(x, use_running_average=not train))
+      >>> model = Model(2, 3, rngs=nnx.Rngs(0))
+
+      >>> # Use split to create a pytree representation of the Module
+      >>> graphdef, state = nnx.split(model)
+
+      >>> @jax.jit
+      ... def train_step(graphdef: nnx.GraphDef, state: nnx.State, x: jax.Array) -> nnx.State:
+      ...   def loss_fn(state):
+      ...     # Use merge to create a new model inside the JAX transformation
+      ...     model = nnx.merge(graphdef, state)
+      ...     return ((model(x, train=True)-jnp.ones((1, 3)))**2).mean(), model
+      ...   # Call the Module and get the gradient and updated batch stats in the model
+      ...   grads, updated_model = jax.grad(loss_fn, has_aux=True)(state)
+      ...   # Use split to propagate gradient updates to the State
+      ...   _, updated_state = nnx.split(updated_model)
+      ...   updated_state = jax.tree.map(lambda s, g: s - 0.1*g, state, grads)
+      ...   return updated_state
+
+      >>> state = train_step(graphdef, state, x=jnp.ones((1, 2)))
+      >>> # Use merge to create an updated state of the Module
+      >>> model = nnx.merge(graphdef, state)
+
+    Arguments:
+      node: ``GraphNode`` to split.
+      filters: Filter the ``GraphNode`` for specific ``Variables``, for example, ``nnx.Param``
+        or ``nnx.BatchStat``. For each filter passed, a separate state is generated that
+        contains the corresponding variable filter. If no filters are passed, then one ``State``
+        is generated that contains all ``Variables`` by default.
+
+    Returns:
+      ``GraphDef`` and a number of ``States`` equal to the number of filters passed (or one
+      ``State`` if no filters were passed).
+    """
+
     if self.refmap is not None and self.idxmap is None:
       raise ValueError(
         "'merge' was not called in-between the first and second call to 'split'"
@@ -877,7 +928,55 @@ class UpdateContext:
     state: State,
     *states: State,
   ) -> A:
-    # TODO: add docstring of example usage
+    """Merge a ``GraphDef`` and ``State`` into a ``GraphNode``. ``State`` is a ``Mapping`` from
+    strings to  ``Variables`` or nested ``States``. ``GraphDef`` contains all the static
+    information needed to reconstruct a ``Module`` graph, it is analogous to JAX’s ``PyTreeDef``.
+    Typically ``GraphDef`` and ``State`` are generated from calling ``nnx.split`` on a ``GraphNode``.
+    ``nnx.merge`` is used in conjunction with ``nnx.split`` to switch seamlessly between
+    stateful and stateless ``GraphNodes`` (including ``Modules``, which subclass ``GraphNode``).
+
+    Example usage::
+
+      >>> from flax.experimental import nnx
+      >>> import jax, jax.numpy as jnp
+
+      >>> class Model(nnx.Module):
+      ...   def __init__(self, din, dout, rngs):
+      ...     self.batch_norm = nnx.BatchNorm(din, rngs=rngs)
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...   def __call__(self, x, train=True):
+      ...     return self.linear(self.batch_norm(x, use_running_average=not train))
+      >>> model = Model(2, 3, rngs=nnx.Rngs(0))
+
+      >>> # Use split to create a pytree representation of the Module
+      >>> graphdef, state = nnx.split(model)
+
+      >>> @jax.jit
+      ... def train_step(graphdef: nnx.GraphDef, state: nnx.State, x: jax.Array) -> nnx.State:
+      ...   def loss_fn(state):
+      ...     # Use merge to create a new model inside the JAX transformation
+      ...     model = nnx.merge(graphdef, state)
+      ...     return ((model(x, train=True)-jnp.ones((1, 3)))**2).mean(), model
+      ...   # Call the Module and get the gradient and updated batch stats in the model
+      ...   grads, updated_model = jax.grad(loss_fn, has_aux=True)(state)
+      ...   # Use split to propagate gradient updates to the State
+      ...   _, updated_state = nnx.split(updated_model)
+      ...   updated_state = jax.tree.map(lambda s, g: s - 0.1*g, state, grads)
+      ...   return updated_state
+
+      >>> state = train_step(graphdef, state, x=jnp.ones((1, 2)))
+      >>> # Use merge to create an updated state of the Module
+      >>> model = nnx.merge(graphdef, state)
+
+    Arguments:
+      graphdef: ``GraphDef`` to merge.
+      state: ``State`` to merge.
+      *states: Additional ``States`` to merge.
+
+    Returns:
+      The merged ``GraphNode``.
+    """
+
     if states:
       state = State.merge(state, *states)
 
@@ -1195,6 +1294,10 @@ class Array:
 
 
 class GraphNode(reprlib.Representable, metaclass=GraphNodeMeta):
+  """The base class of NNX. ``nnx.split`` and ``nnx.merge`` can be used on
+  classes that subclass ``GraphNode``, including ``Modules``.
+  """
+
   if tp.TYPE_CHECKING:
     _graph_node__state: ModuleState
 
