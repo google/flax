@@ -606,7 +606,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
           )  # pylint: disable=cell-var-from-loop
           summary['learning_rate'] = lr
           summary['perplexity'] = jnp.clip(
-            jnp.exp(summary['loss']), a_max=1.0e4
+            jnp.exp(summary['loss']), max=1.0e4
           )
           summary = {'train_' + k: v for k, v in summary.items()}
           writer.write_scalars(step, summary)
@@ -621,7 +621,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
           )
           # (clipped) perplexity after averaging log-perplexitie
           eval_results['perplexity'] = jnp.clip(
-            jnp.exp(eval_results['loss']), a_max=1.0e4
+            jnp.exp(eval_results['loss']), max=1.0e4
           )
           writer.write_scalars(
             step, {'eval_' + k: v for k, v in eval_results.items()}
