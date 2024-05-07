@@ -1,0 +1,32 @@
+root = true
+
+[*.{bash,css,md,py,rst,sh,toml,txt}]
+indent_style = space
+end_of_line = lf
+trim_trailing_whitespace = true
+insert_final_newline = true
+max_line_length = 79
+
+[*.bash]
+indent_size = 4
+
+[*.css]
+indent_size = 2
+
+[*.md]
+indent_size = 2
+
+[*.py]
+indent_size = 2
+
+[*.rst]
+indent_size = 2
+
+[*.sh]
+indent_size = 4
+
+[*.toml]
+indent_size = 4
+
+[*.txt]
+indent_size = 4
