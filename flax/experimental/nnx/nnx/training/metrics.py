@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import jax, jax.numpy as jnp
+from flax.experimental.nnx.nnx.object import Object
 from flax.experimental.nnx.nnx.variables import Variable
 from flax.experimental.nnx.nnx import filterlib, graph
 
@@ -37,9 +38,11 @@ import typing as tp
 
 class MetricState(Variable):
   """Wrapper class for Metric Variables."""
+
   pass
 
-class Metric(graph.GraphNode):
+
+class Metric(Object):
   def __init__(self):
     raise NotImplementedError('Must override `__init__()` method.')
   def reset(self):

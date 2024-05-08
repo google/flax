@@ -25,7 +25,8 @@ from flax.experimental.nnx.nnx import (
   graph,
 )
 from flax.experimental.nnx.nnx import variables as variableslib
-from flax.experimental.nnx.nnx.graph import GraphDef, GraphNode, GraphNodeMeta
+from flax.experimental.nnx.nnx.graph import GraphDef
+from flax.experimental.nnx.nnx.object import Object, ObjectMeta
 from flax.experimental.nnx.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
@@ -49,7 +50,7 @@ class _HasSetup(tp.Protocol):
     ...
 
 
-class ModuleMeta(GraphNodeMeta):
+class ModuleMeta(ObjectMeta):
   if not tp.TYPE_CHECKING:
 
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
@@ -57,16 +58,18 @@ class ModuleMeta(GraphNodeMeta):
 
 
 def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
-  module: M = GraphNodeMeta.__call__(cls, *args, **kwargs)
+  module: M = ObjectMeta.__call__(cls, *args, **kwargs)
 
   if dataclasses.is_dataclass(module):
     if isinstance(module, _HasSetup):
       module.setup()
 
+  assert isinstance(module, Module)
+
   return module
 
 
-class Module(graph.GraphNode, metaclass=ModuleMeta):
+class Module(Object, metaclass=ModuleMeta):
   """"""
 
   def sow(
@@ -136,16 +139,16 @@ class Module(graph.GraphNode, metaclass=ModuleMeta):
 
     def _init_context(accessor: DelayedAccessor, *args, **kwargs):
       for _, value in graph.iter_nodes(self):
-        if isinstance(value, GraphNode):
-          value._graph_node__state._initializing = True
+        if isinstance(value, Object):
+          value._object__state._initializing = True
 
       method = accessor(self)
       try:
         out = method(*args, **kwargs)
       finally:
         for _, value in graph.iter_nodes(self):
-          if isinstance(value, GraphNode):
-            value._graph_node__state._initializing = False
+          if isinstance(value, Object):
+            value._object__state._initializing = False
 
       return out
 
@@ -158,7 +161,7 @@ class Module(graph.GraphNode, metaclass=ModuleMeta):
     under ``init``.
     """
 
-    return self._graph_node__state._initializing
+    return self._object__state._initializing
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
     """Iterates over all nested Modules of the current Module, including the current Module.

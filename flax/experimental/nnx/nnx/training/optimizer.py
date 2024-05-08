@@ -32,6 +32,7 @@ import optax
 
 from flax.experimental import nnx
 from flax.experimental.nnx.nnx import filterlib, graph
+from flax.experimental.nnx.nnx.object import Object
 from flax.experimental.nnx.nnx.variables import Variable
 
 #TODO: add tests and docstrings
@@ -40,7 +41,7 @@ class OptState(Variable):
   """Wrapper class for Optimizer Variables."""
   pass
 
-class Optimizer(graph.GraphNode):
+class Optimizer(Object):
   """Simple train state for the common case with a single Optax optimizer.
 
   Example usage::
