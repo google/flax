@@ -1552,6 +1552,32 @@ class Module(ModuleBase):
 
   @property
   def path(self):
+    """Get the path of this Module. Top-level root modules have an empty path ``()``.
+    Note that this method can only be used on bound modules that have a valid scope.
+
+    Example usage::
+
+      >>> import flax.linen as nn
+      >>> import jax, jax.numpy as jnp
+
+      >>> class SubModel(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     print(f'SubModel path: {self.path}')
+      ...     return x
+
+      >>> class Model(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     print(f'Model path: {self.path}')
+      ...     return SubModel()(x)
+
+      >>> model = Model()
+      >>> variables = model.init(jax.random.key(0), jnp.ones((1, 2)))
+      Model path: ()
+      SubModel path: ('SubModel_0',)
+    """
+
     if self.scope is None:
       raise ValueError("Can't access module paths on unbound modules.")
 
