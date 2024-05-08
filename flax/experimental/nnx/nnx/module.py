@@ -70,6 +70,10 @@ def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
 class Module(graph.GraphNode, metaclass=ModuleMeta):
   """"""
 
+  if tp.TYPE_CHECKING:
+
+    def __call__(self, *args, **kwargs) -> tp.Any: ...
+
   def sow(
     self,
     variable_type: tp.Type[variableslib.Variable[tp.Any]],
