@@ -92,42 +92,51 @@ class PartitioningTest(parameterized.TestCase):
       )
 
   @parameterized.parameters(
-    dict(
-      rules=(('a', ('model', 'data')), ('b', 'data')),
-      axes=('a', 'b'),
-      expected=(('model', 'data'), None),
-    ),
-    dict(
-      rules=(('a', ('model', 'replica')), ('b', 'data')),
-      axes=('a', 'b'),
-      expected=(('model', 'replica'), 'data'),
-    ),
-    dict(
-      rules=(('a', ('model', 'replica')), ('b', ('data', 'model'))),
-      axes=('a', 'b'),
-      expected=(('model', 'replica'), None),
-    ),
-    dict(
-      rules=(('a', ('model', 'replica')), ('b', 'model')),
-      axes=('a', 'b', 'c'),
-      expected=(('model', 'replica'), None, None),
-    ),
-    dict(rules=(), axes=('a', 'b', 'c'), expected=(None, None, None)),
-    dict(
-      rules=(('a', None), ('a', 'model')),
-      axes=('a', 'b'),
-      expected=(None, None),
-    ),
-    dict(
-      rules=(
-        ('baz', 'data'),
-        ('bar', None),
-        ('foo', 'model'),
-        ('foo', 'data'),
+      dict(
+          rules=(('a', ('model', 'data')), ('b', 'data')),
+          axes=('a', 'b'),
+          expected=(('model', 'data'), None),
       ),
-      axes=('baz', 'bar', 'foo'),
-      expected=('data', None, 'model'),
-    ),
+      dict(
+          rules=(('a', ('model', 'replica')), ('b', 'data')),
+          axes=('a', 'b'),
+          expected=(('model', 'replica'), 'data'),
+      ),
+      dict(
+          rules=(('a', ('model', 'replica')), ('b', ('data', 'model'))),
+          axes=('a', 'b'),
+          expected=(('model', 'replica'), None),
+      ),
+      dict(
+          rules=(('a', ('model', 'replica')), ('b', 'model')),
+          axes=('a', 'b', 'c'),
+          expected=(('model', 'replica'), None, None),
+      ),
+      dict(rules=(), axes=('a', 'b', 'c'), expected=(None, None, None)),
+      dict(
+          rules=(('a', None), ('a', 'model')),
+          axes=('a', 'b'),
+          expected=(None, None),
+      ),
+      dict(
+          rules=(
+              ('baz', 'data'),
+              ('bar', None),
+              ('foo', 'model'),
+              ('foo', 'data'),
+          ),
+          axes=('baz', 'bar', 'foo'),
+          expected=('data', None, 'model'),
+      ),
+      dict(
+          rules=(('baz', 'data'), ('foo', ('model', 'emb'))),
+          axes=('baz', jax.sharding.PartitionSpec.UNCONSTRAINED, 'foo'),
+          expected=(
+              'data',
+              jax.sharding.PartitionSpec.UNCONSTRAINED,
+              ('model', 'emb'),
+          ),
+      ),
   )
   def test_logical_to_mesh_axes_cases(self, rules, axes, expected):
     with partitioning.axis_rules(rules):
@@ -136,6 +145,7 @@ class PartitioningTest(parameterized.TestCase):
 
   @mock.patch('flax.linen.spmd._with_sharding_constraint')
   def test_with_sharding_constraint(self, wsc_fn):
+    unconstrained = jax.sharding.PartitionSpec.UNCONSTRAINED
     arr = jnp.ones((2, 2))
     axes = ('foo', 'bar')
     partitioning.set_axis_rules(())
@@ -146,7 +156,11 @@ class PartitioningTest(parameterized.TestCase):
       wsc_fn.assert_not_called()
       _ = partitioning.with_sharding_constraint(arr, axes)
       wsc_fn.assert_called_with(
-        arr, jax.sharding.PartitionSpec('data', 'model'), mesh=None
+          arr, jax.sharding.PartitionSpec('data', 'model'), mesh=None
+      )
+      _ = partitioning.with_sharding_constraint(arr, ('foo', unconstrained))
+      wsc_fn.assert_called_with(
+          arr, jax.sharding.PartitionSpec('data', unconstrained), mesh=None
       )
 
   @mock.patch('flax.linen.spmd._with_sharding_constraint')
