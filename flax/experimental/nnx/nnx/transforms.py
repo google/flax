@@ -47,7 +47,7 @@ from flax.experimental.nnx.nnx import (
   spmd,
   variables,
 )
-from flax.experimental.nnx.nnx.module import GraphDef, Module
+from flax.experimental.nnx.nnx.module import GraphDef, Module, ModuleMeta
 from flax.experimental.nnx.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
@@ -61,13 +61,11 @@ B = tp.TypeVar('B')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 G = tp.TypeVar('G', bound=tp.Callable[..., tp.Any])
 M = tp.TypeVar('M', bound=Module)
-MA = tp.TypeVar('MA', bound=Module)
 N = tp.TypeVar('N', bound=Module)
 StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
 Leaves = tp.List[Leaf]
 Index = int
-
 
 def _normalize_sequence(
   x: StrInt | tp.Iterable[StrInt] | None, /
@@ -80,15 +78,15 @@ def _normalize_sequence(
     return tuple(x)
 
 
-class LiftedModule(tp.Generic[M], Module):  # type: ignore[ignored-abstractmethod]
+class LiftedModule(Module, tp.Generic[M]):
   @abstractmethod
   def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> tp.Any:
-    pass
+    ...
 
   @property
   @abstractmethod
   def _submodule(self) -> M:
-    pass  # type: ignore[bad-return-type] # why pytype?
+    ...
 
   def __call__(self, *args, **kwargs) -> tp.Any:
     return self.call(*args, **kwargs)  # type: ignore
@@ -100,7 +98,7 @@ class LiftedModule(tp.Generic[M], Module):  # type: ignore[ignored-abstractmetho
     def check_and_call(accessor: DelayedAccessor, *args, **kwargs):
       return self._call(accessor, *args, **kwargs)
 
-    proxy = CallableProxy(check_and_call)  # type: ignore[arg-type]
+    proxy = CallableProxy(check_and_call)
 
     while isinstance(module._submodule, LiftedModule):
       module = module._submodule
@@ -114,7 +112,6 @@ class LiftedModule(tp.Generic[M], Module):  # type: ignore[ignored-abstractmetho
 # -------------------------------
 
 UNSPECIFIED = object()
-
 
 @dataclasses.dataclass(frozen=True)
 class JitStaticInputs:
@@ -132,7 +129,6 @@ class JitStaticOutputs:
 
 
 jax.tree_util.register_static(JitStaticOutputs)
-
 
 def _default_constrain_object_state(state: State) -> State:
   state_spec = spmd.get_partition_spec(state)
@@ -216,6 +212,53 @@ class JITOptions:
     return kwargs
 
 
+class JITMeta(ModuleMeta):
+  def __call__(
+    self,
+    module_constructor: tp.Callable[..., M],
+    *,
+    in_shardings: tp.Any = UNSPECIFIED,
+    out_shardings: tp.Any = UNSPECIFIED,
+    static_argnums: int | tp.Sequence[int] | None = None,
+    static_argnames: str | tp.Iterable[str] | None = None,
+    donate_argnums: int | tp.Sequence[int] | None = None,
+    donate_argnames: str | tp.Iterable[str] | None = None,
+    keep_unused: bool = False,
+    device: tp.Optional[jax.Device] = None,
+    backend: tp.Optional[str] = None,
+    inline: bool = False,
+    abstracted_axes: tp.Optional[tp.Any] = None,
+    # nnx specific
+    donate_state: bool = False,
+    constrain_state: bool | tp.Callable[[State], State] = False,
+  ) -> tp.Callable[..., 'Jit[M]']:
+    super_call = super().__call__
+
+    def _create_jit(*args, **kwargs) -> Jit[M]:
+      return super_call(
+        module_constructor=module_constructor,
+        in_shardings=in_shardings,
+        out_shardings=out_shardings,
+        static_argnums=static_argnums,
+        static_argnames=static_argnames,
+        donate_argnums=donate_argnums,
+        donate_argnames=donate_argnames,
+        keep_unused=keep_unused,
+        device=device,
+        backend=backend,
+        inline=inline,
+        abstracted_axes=abstracted_axes,
+        # nnx specific
+        donate_state=donate_state,
+        constrain_state=constrain_state,
+        # submodule args
+        module_init_args=args,
+        module_init_kwargs=kwargs,
+      )
+
+    return _create_jit
+
+
 class JittedFn(tp.Protocol):
   def __call__(
     self,
@@ -287,50 +330,7 @@ def jit_apply(
   return out
 
 
-class Jit(tp.Generic[M], LiftedModule[M]):
-  @staticmethod
-  def constructor(
-    module_constructor: tp.Callable[..., MA],
-    *,
-    in_shardings: tp.Any = UNSPECIFIED,
-    out_shardings: tp.Any = UNSPECIFIED,
-    static_argnums: int | tp.Sequence[int] | None = None,
-    static_argnames: str | tp.Iterable[str] | None = None,
-    donate_argnums: int | tp.Sequence[int] | None = None,
-    donate_argnames: str | tp.Iterable[str] | None = None,
-    keep_unused: bool = False,
-    device: tp.Optional[jax.Device] = None,
-    backend: tp.Optional[str] = None,
-    inline: bool = False,
-    abstracted_axes: tp.Optional[tp.Any] = None,
-    # nnx specific
-    donate_state: bool = False,
-    constrain_state: bool | tp.Callable[[State], State] = False,
-  ) -> tp.Callable[..., 'Jit[MA]']:
-    def _create_jit(*args, **kwargs):
-      return Jit(
-        module_constructor=module_constructor,
-        in_shardings=in_shardings,
-        out_shardings=out_shardings,
-        static_argnums=static_argnums,
-        static_argnames=static_argnames,
-        donate_argnums=donate_argnums,
-        donate_argnames=donate_argnames,
-        keep_unused=keep_unused,
-        device=device,
-        backend=backend,
-        inline=inline,
-        abstracted_axes=abstracted_axes,
-        # nnx specific
-        donate_state=donate_state,
-        constrain_state=constrain_state,
-        # submodule args
-        module_init_args=args,
-        module_init_kwargs=kwargs,
-      )
-
-    return _create_jit
-
+class Jit(LiftedModule[M], metaclass=JITMeta):
   def __init__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -375,7 +375,7 @@ class Jit(tp.Generic[M], LiftedModule[M]):
       method = self.accessor(module)
       return method(*args, **kwargs)
 
-    self.jitted_fn: JittedFn = get_jitted_fn(jit_call_module, self.options)
+    self.jitted_fn: JittedFn[M] = get_jitted_fn(jit_call_module, self.options)
     self.module_constructor = module_constructor
     self.jit_module = self.module_constructor(
       *module_init_args, **module_init_kwargs
@@ -584,10 +584,10 @@ class GradOptions:
   wrt: filterlib.Filter
 
 
-class Grad(tp.Generic[M], LiftedModule[M]):
-  @staticmethod
-  def constructor(
-    module_constructor: tp.Callable[..., MA],
+class GradMeta(ModuleMeta):
+  def __call__(
+    self,
+    module_constructor: tp.Callable[..., M],
     has_aux: bool = False,
     holomorphic: bool = False,
     allow_int: bool = False,
@@ -595,9 +595,11 @@ class Grad(tp.Generic[M], LiftedModule[M]):
     return_value: bool = False,
     *,
     wrt: filterlib.Filter = variables.Param,
-  ) -> tp.Callable[..., 'Grad[MA]']:
-    def _create_grad(*args, **kwargs):
-      return Grad(
+  ) -> tp.Callable[..., 'Grad[M]']:
+    super_call = super().__call__
+
+    def _create_grad(*args, **kwargs) -> Grad[M]:
+      return super_call(
         module_constructor=module_constructor,
         wrt=wrt,
         has_aux=has_aux,
@@ -612,6 +614,8 @@ class Grad(tp.Generic[M], LiftedModule[M]):
 
     return _create_grad
 
+
+class Grad(LiftedModule[M], metaclass=GradMeta):
   def __init__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -664,7 +668,7 @@ def grad_apply(options: GradOptions, f, args: tuple[tp.Any, ...]):
     if i in options.argnums and graph.is_node(arg)
   }
 
-  _, diff_state, _ = graph.split(diff_graph_nodes, options.wrt, ...)  # type: ignore[misc]
+  _, diff_state, _ = graph.split(diff_graph_nodes, options.wrt, ...)
   for i in diff_graph_nodes:
     _args[i] = diff_state[i]
 
@@ -817,6 +821,8 @@ def grad(
   return grad_wrapper  # type: ignore
 
 
+
+
 def value_and_grad(
   f: tp.Callable[..., tp.Any],
   argnums: int | tp.Sequence[int] = 0,
@@ -852,7 +858,6 @@ def value_and_grad(
 # scan
 # -------------------------------
 
-
 @dataclasses.dataclass
 class ScanOptions:
   length: int | None
@@ -871,10 +876,10 @@ class ScanOptions:
   scan_output: bool
 
 
-class Scan(tp.Generic[M], LiftedModule[M]):
-  @staticmethod
-  def constructor(
-    module_constructor: tp.Callable[..., MA],
+class ScanMeta(ModuleMeta):
+  def __call__(
+    self,
+    module_constructor: tp.Callable[..., M],
     *,
     length: int | None = None,
     reverse: bool = False,
@@ -890,9 +895,11 @@ class Scan(tp.Generic[M], LiftedModule[M]):
     split_rngs: filterlib.Filter = ...,
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     scan_output: bool = True,
-  ) -> tp.Callable[..., 'Scan[MA]']:
-    def _create_scan(*args, **kwargs):
-      return Scan(
+  ) -> tp.Callable[..., 'Scan[M]']:
+    super_call = super().__call__
+
+    def _create_scan(*args, **kwargs) -> Scan[M]:
+      return super_call(
         module_constructor=module_constructor,
         module_init_args=args,
         module_init_kwargs=kwargs,
@@ -915,6 +922,8 @@ class Scan(tp.Generic[M], LiftedModule[M]):
 
     return _create_scan
 
+
+class Scan(LiftedModule[M], metaclass=ScanMeta):
   def __init__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -955,7 +964,7 @@ class Scan(tp.Generic[M], LiftedModule[M]):
       scan_output=scan_output,
     )
     # use Vmap to handle initialisation
-    vmapped_module = Vmap.constructor(
+    vmapped_module = Vmap(
       module_constructor,
       in_axes=in_axes,
       out_axes=None,
@@ -1005,7 +1014,7 @@ def scan_apply(
   ctx = graph.UpdateContext()
   # split module state
   filters = (*options.state_axes.keys(), ...)
-  graphdef, rng_state, *scan_states, carry_state = ctx.split(  # type: ignore[misc]
+  graphdef, rng_state, *scan_states, carry_state = ctx.split(
     input_graph_nodes, rnglib.RngState, *filters
   )
 
@@ -1095,10 +1104,10 @@ def scan_apply(
           'Expected a tuple of length 2 as the output of the scan function, '
           f'got {out}'
         )
-      out = tp.cast(tuple[C, B], out)  # type: ignore[invalid-annotation]
+      out = tp.cast(tuple[C, B], out)
       carry_arg_out, scan_args_out = out
     else:
-      out = tp.cast(C, out)  # type: ignore[invalid-annotation]
+      out = tp.cast(C, out)
       carry_arg_out = out
       scan_args_out = None
 
@@ -1113,7 +1122,7 @@ def scan_apply(
       rng_state_out,
       *scan_states_out,
       carry_state_out,
-    ) = ctx.split(  # type: ignore[misc]
+    ) = ctx.split(
       (input_graph_nodes, output_graph_nodes),
       rnglib.RngState,
       *filters,
@@ -1203,9 +1212,7 @@ class FlatDef(tp.Generic[A]):
   treedef: jax.tree_util.PyTreeDef
   flat_axes: list[int | None]
 
-
 jax.tree_util.register_static(FlatDef)
-
 
 def _transpose_tree(tree: A, axes, /, *, axis_is_source: bool) -> A:
   flatdef, flat_transposes, _ = _transpose_and_split(
@@ -1260,7 +1267,6 @@ def _transpose_and_split(
   flatdef = FlatDef(type(tree), treedef, flat_axes)
 
   return flatdef, flat_transposes, flat_broadcasts
-
 
 def _unflatten_splits(
   flatdef: FlatDef[A],
@@ -1356,7 +1362,7 @@ def scan(
   )
 
   @functools.wraps(f)
-  def scan_apply_wrapper(*args, **kwargs) -> tp.Any:
+  def scan_apply_wrapper(*args, **kwargs) -> C | tuple[C, tp.Any]:
     return scan_apply(options, f, args, kwargs)
 
   return scan_apply_wrapper  # type: ignore
@@ -1367,6 +1373,27 @@ def scan(
 # -------------------------------
 
 
+class RematMeta(ModuleMeta):
+  def __call__(
+    self,
+    module_constructor: tp.Callable[..., M],
+    prevent_cse: bool = True,
+    static_argnums: int | tuple[int, ...] = (),
+    policy: tp.Callable[..., bool] | None = None,
+  ) -> tp.Callable[..., 'Remat[M]']:
+    super_call = super().__call__
+
+    def create_remat(*args, **kwargs) -> Remat[M]:
+      return super_call(
+        module_constructor=module_constructor,
+        module_init_args=args,
+        module_init_kwargs=kwargs,
+        prevent_cse=prevent_cse,
+        static_argnums=static_argnums,
+        policy=policy,
+      )
+
+    return create_remat
 
 
 @dataclasses.dataclass
@@ -1385,26 +1412,7 @@ class RematOptions:
     )
 
 
-class Remat(tp.Generic[M], LiftedModule[M]):
-  @staticmethod
-  def constructor(
-    module_constructor: tp.Callable[..., MA],
-    prevent_cse: bool = True,
-    static_argnums: int | tuple[int, ...] = (),
-    policy: tp.Callable[..., bool] | None = None,
-  ) -> tp.Callable[..., 'Remat[MA]']:
-    def create_remat(*args, **kwargs):
-      return Remat(
-        module_constructor=module_constructor,
-        module_init_args=args,
-        module_init_kwargs=kwargs,
-        prevent_cse=prevent_cse,
-        static_argnums=static_argnums,
-        policy=policy,
-      )
-
-    return create_remat
-
+class Remat(LiftedModule[M], metaclass=RematMeta):
   def __init__(
     self,
     *,
@@ -1497,7 +1505,6 @@ def remat(
 # vmap
 # -------------------------------
 
-
 @dataclasses.dataclass
 class VmapOptions:
   in_axes: int | None | tp.Sequence[tp.Any]
@@ -1512,10 +1519,10 @@ class VmapOptions:
   transform_metadata: tp.Mapping[str, tp.Any]
 
 
-class Vmap(tp.Generic[M], LiftedModule[M]):
-  @staticmethod
-  def constructor(
-    module_constructor: tp.Callable[..., MA],
+class VmapMeta(ModuleMeta):
+  def __call__(
+    self,
+    module_constructor: tp.Callable[..., M],
     *,
     in_axes: int | None | tp.Sequence[tp.Any] = 0,
     out_axes: tp.Any = 0,
@@ -1527,9 +1534,11 @@ class Vmap(tp.Generic[M], LiftedModule[M]):
     state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
     split_rngs: filterlib.Filter = ...,
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-  ) -> tp.Callable[..., 'Vmap[MA]']:
-    def _create_vmap(*args, **kwargs):
-      return Vmap(
+  ) -> tp.Callable[..., 'Vmap[M]']:
+    super_call = super().__call__
+
+    def _create_vmap(*args, **kwargs) -> Scan[M]:
+      return super_call(
         module_constructor=module_constructor,
         in_axes=in_axes,
         out_axes=out_axes,
@@ -1548,6 +1557,8 @@ class Vmap(tp.Generic[M], LiftedModule[M]):
 
     return _create_vmap
 
+
+class Vmap(LiftedModule[M], metaclass=VmapMeta):
   def __init__(
     self,
     module_constructor: tp.Callable[..., M],
@@ -1614,7 +1625,6 @@ class Vmap(tp.Generic[M], LiftedModule[M]):
       kwargs,
     )
 
-
 def vmap_apply(
   options: VmapOptions,
   f: tp.Callable[..., A],
@@ -1627,7 +1637,7 @@ def vmap_apply(
   ctx = graph.UpdateContext()
   # split module state
   filters = (*options.state_axes.keys(), ...)
-  graphdef, rng_state, *vectorized_states, broadcast_state = ctx.split(  # type: ignore[misc]
+  graphdef, rng_state, *vectorized_states, broadcast_state = ctx.split(
     input_graph_nodes, rnglib.RngState, *filters
   )
 
@@ -1731,7 +1741,7 @@ def vmap_apply(
       rng_state_out,
       *vectorized_states_out,
       broadcast_state_out,
-    ) = ctx.split(  # type: ignore[misc]
+    ) = ctx.split(
       (input_graph_nodes, output_graph_nodes),
       rnglib.RngState,
       *filters,
@@ -1817,7 +1827,6 @@ def vmap(
   wrapper = vmap_apply_wrapper
 
   return wrapper  # type: ignore
-
 
 # -------------------------------
 # eval_shape

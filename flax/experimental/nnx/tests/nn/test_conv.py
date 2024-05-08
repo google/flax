@@ -58,9 +58,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
     kernel_size = (7, 4)
 
     # Cannot use string padding specification for transpose conv
-    if isinstance(input_dilation, Sequence) or (
-      isinstance(input_dilation, int) and input_dilation > 1
-    ):
+    if isinstance(input_dilation, Sequence) or input_dilation > 1:
       padding = (4, 2)
 
     x = jax.numpy.ones(INPUT_SHAPE)

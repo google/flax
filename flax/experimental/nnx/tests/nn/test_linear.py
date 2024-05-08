@@ -135,7 +135,6 @@ class TestLinenConsistency(parameterized.TestCase):
     variables = model.init(key, x)
     variables['params']['kernel'] = model_nnx.kernel.value
     if bias_shape is not None:
-      assert model_nnx.bias is not None
       variables['params']['bias'] = model_nnx.bias.value
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
@@ -144,7 +143,6 @@ class TestLinenConsistency(parameterized.TestCase):
     variables = model.init(key, x)
     model_nnx.kernel.value = variables['params']['kernel']
     if bias_shape is not None:
-      assert model_nnx.bias is not None
       model_nnx.bias.value = variables['params']['bias']
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)

@@ -30,8 +30,9 @@ from __future__ import annotations
 import dataclasses
 import typing as tp
 
+import typing_extensions as tpe
 
-A = tp.TypeVar('A', covariant=True)  # type: ignore[not-supported-yet]
+A = tp.TypeVar('A')
 
 
 def _identity(x):
@@ -52,9 +53,10 @@ class DelayedAccessor:
     return DelayedAccessor(lambda x: x[key])
 
 
-class _AccessorCall(tp.Protocol):
+class _AccessorCall(tpe.Protocol):
   def __call__(self, accessor: DelayedAccessor, /, *args, **kwargs) -> tp.Any:
     ...
+
 
 class CallableProxy:
   def __init__(

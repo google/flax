@@ -25,7 +25,6 @@ from typing import (
   Tuple,
   TypeVar,
   Union,
-  runtime_checkable,
 )
 
 import jax
@@ -43,7 +42,7 @@ Dtype = Union[jax.typing.DTypeLike, Any]
 Shape = Sequence[int]
 K = TypeVar('K')
 
-@runtime_checkable
+
 class Key(Hashable, Protocol):
   def __lt__(self: K, value: K, /) -> bool:
     ...

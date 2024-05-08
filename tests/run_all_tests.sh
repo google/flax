@@ -135,31 +135,20 @@ if $RUN_PYTEST; then
     fi
     pytest $egd
   done
+
 fi
 
 if $RUN_PYTYPE; then
   echo "=== RUNNING PYTYPE ==="
-  # Validate types in NNX examples.
-  for egd in $(find flax/experimental/nnx/examples -maxdepth 1 -mindepth 1 -type d); do
-    # skip if folder starts with "_" or is "toy_examples"
-    if [[ $egd == *"_"* ]] || [[ $egd == *"toy_examples"* ]]; then
-      continue
-    fi
-    # use cd to make sure pytype cache lives in example dir and doesn't name clash
-    # use *.py to avoid importing configs as a top-level import which leads to import errors
-    # because config files use relative imports (e.g. from config import ...).
-    (cd $egd ; pytype "*.py" --jobs auto --config ../../../../../pyproject.toml)
-  done
   # Validate types in library code.
-  pytype --jobs auto --config pyproject.toml flax/ \
-    --exclude flax/experimental/nnx/examples
+  pytype --jobs auto --config pyproject.toml flax/ --exclude flax/experimental/nnx
 
   # Validate types in examples.
   for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
       # use cd to make sure pytype cache lives in example dir and doesn't name clash
       # use *.py to avoid importing configs as a top-level import which leads to import errors
       # because config files use relative imports (e.g. from config import ...).
-      (cd $egd ; pytype "*.py" --jobs auto --config ../../pyproject.toml)
+      (cd $egd ; pytype --jobs auto --exclude flax/experimental/nnx --config ../../pyproject.toml "*.py")
   done
 fi
 

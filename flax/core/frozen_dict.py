@@ -16,17 +16,7 @@
 
 import collections
 from types import MappingProxyType
-from typing import (
-  Any,
-  Dict,
-  Hashable,
-  Iterable,
-  Mapping,
-  Tuple,
-  TypeVar,
-  Union,
-  overload,
-)
+from typing import Any, Dict, Hashable, Mapping, Tuple, TypeVar, Union
 
 import jax
 
@@ -64,24 +54,6 @@ class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
 
   __slots__ = ('_dict', '_hash')
-
-  @overload
-  def __init__(
-    self,
-    mapping: Mapping[K, V] = MappingProxyType({}),
-    /,
-    __unsafe_skip_copy__=False,
-    **kwargs,
-  ): ...
-
-  @overload
-  def __init__(
-    self,
-    mapping: Iterable[tuple[K, V]] = (),
-    /,
-    __unsafe_skip_copy__=False,
-    **kwargs,
-  ): ...
 
   def __init__(self, *args, __unsafe_skip_copy__=False, **kwargs):  # pylint: disable=invalid-name
     # make sure the dict is as

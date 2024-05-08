@@ -28,16 +28,19 @@ from jax import random
 
 from flax import traverse_util
 from flax.experimental import nnx
-from configs import default
-from models import TransformerConfig, TransformerLM
-from utils import HasCache
+from flax.experimental.nnx.examples.lm1b.configs import default
+from flax.experimental.nnx.examples.lm1b.models import (
+  TransformerConfig,
+  TransformerLM,
+)
+from flax.experimental.nnx.examples.lm1b.utils import HasCache
 
 jax.config.update('jax_disable_most_optimizations', True)
 
 # add project_root to import lm1b Linen model
 project_root = str(Path(__file__).absolute().parents[5])
 sys.path.append(project_root)
-from examples.lm1b.models import TransformerLM as TransformerLinen  # type: ignore[import-error]
+from examples.lm1b.models import TransformerLM as TransformerLinen
 
 sys.path.pop()
 
@@ -205,9 +208,6 @@ class ModelTest(absltest.TestCase):
       deterministic=True,
       decode=False,
     )
-    # Set dropout rates to avoid create dropout states
-    config.dropout_rate = 0.0
-    config.attention_dropout_rate = 0.0
 
     model_nnx = nnx.eval_shape(lambda: TransformerLM(config, rngs=nnx.Rngs(0)))
     _, params_nnx = nnx.split(model_nnx, nnx.Param)
@@ -242,9 +242,6 @@ class ModelTest(absltest.TestCase):
       deterministic=True,
       decode=True,
     )
-    # Set dropout rates to avoid create dropout states
-    config.dropout_rate = 0.0
-    config.attention_dropout_rate = 0.0
 
     model_nnx = nnx.eval_shape(lambda: TransformerLM(config, rngs=nnx.Rngs(0)))
     for _path, m in model_nnx.iter_modules():

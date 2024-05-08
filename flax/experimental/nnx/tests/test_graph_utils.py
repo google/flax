@@ -301,7 +301,7 @@ class TestGraphUtils:
         self.b = nnx.BatchNorm(2, rngs=rngs)
 
     def f(m: Foo):
-      m.a, m.b = m.b, m.a  # type: ignore
+      m.a, m.b = m.b, m.a
 
     m = Foo(rngs=nnx.Rngs(0))
     a = m.a

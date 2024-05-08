@@ -256,7 +256,7 @@ Like linen, for convenience we still provide simple lifted transforms for standa
 :outputId: c4800a49-efd1-4ee5-e703-6e63e18da4cb
 
 # class transform:
-ScannedLinear = nnx.Scan.constructor(nnx.Linear, variable_axes={nnx.Param: 0}, length=4)
+ScannedLinear = nnx.Scan(nnx.Linear, variable_axes={nnx.Param: 0}, length=4)
 
 scanned = ScannedLinear(2, 2, rngs=nnx.Rngs(0))
 scanned.get_state()

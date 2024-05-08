@@ -93,7 +93,8 @@ def get_repr(obj: Representable) -> str:
     return f'{config.elem_indent}{elem.start}{elem.key}{config.value_sep}{value}{elem.end}'
 
   with add_indent(config.elem_indent):
-    elems = ',\n'.join(map(_repr_elem, iterator))
+    elems = list(map(_repr_elem, iterator))
+  elems = ',\n'.join(elems)
 
   if elems:
     elems = '\n' + elems + '\n'

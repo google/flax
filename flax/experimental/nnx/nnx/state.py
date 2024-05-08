@@ -77,10 +77,10 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       super().__setattr__('_mapping', dict(mapping))
 
   @property
-  def raw_mapping(self) -> tp.Mapping[Key, tp.Mapping[Key, tp.Any] | StateLeaf]:
-    return self._mapping  # type: ignore
+  def raw_mapping(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
+    return self._mapping
 
-  def __contains__(self, key) -> bool:
+  def __contains__(self, key: Key) -> bool:
     return key in self._mapping
 
   def __getitem__(self, key: Key) -> State | StateLeaf:
@@ -147,20 +147,19 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     self, first: filterlib.Filter, /, *filters: filterlib.Filter
   ) -> tp.Union['State', tuple['State', ...]]:
     filters = (first, *filters)
-    *states_, rest = _split_state(self, *filters)
+    *states, rest = _split_state(self, *filters)
 
     if rest:
       raise ValueError(
         'Non-exhaustive filters, got a non-empty remainder: '
-        f'{rest}.\nUse `...` to match all remaining elements.'
+        f'{list(rest.keys())}.\nUse `...` to match all remaining elements.'
       )
 
-    states: State | tuple[State, ...]
-    if len(states_) == 1:
-      states = states_[0]
+    if len(states) == 1:
+      states = states[0]
     else:
-      states = tuple(states_)
-    return states  # type: ignore[bad-return-type]
+      states = tuple(states)
+    return states
 
   @tp.overload
   def filter(
@@ -186,17 +185,16 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     /,
     *filters: filterlib.Filter,
   ) -> tp.Union['State', tuple['State', ...]]:
-    *states_, _rest = _split_state(self, first, *filters)
+    *states, _rest = _split_state(self, first, *filters)
 
-    assert len(states_) == len(filters) + 1
+    assert len(states) == len(filters) + 1
 
-    states: State | tuple[State, ...]
-    if len(states_) == 1:
-      states = states_[0]
+    if len(states) == 1:
+      states = states[0]
     else:
-      states = tuple(states_)
+      states = tuple(states)
 
-    return states  # type: ignore[bad-return-type]
+    return states
 
   @staticmethod
   def merge(state: 'State', /, *states: 'State') -> 'State':
@@ -208,7 +206,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     new_state: FlatState = {}
 
     for state in states:
-      new_state.update(state.flat_state())  # type: ignore[attribute-error] # pytype is wrong here
+      new_state.update(state.flat_state())
 
     return State.from_flat_path(new_state)
 
@@ -243,7 +241,7 @@ def _state_unflatten(
 jax.tree_util.register_pytree_with_keys(
   State,
   _state_flatten_with_keys,
-  _state_unflatten,  # type: ignore[arg-type]
+  _state_unflatten,
 )
 
 
@@ -272,10 +270,10 @@ def _split_state(
   for path, value in flat_state.items():
     for i, predicate in enumerate(predicates):
       if predicate(path, value):
-        flat_states[i][path] = value  # type: ignore[index] # mypy is wrong here?
+        flat_states[i][path] = value
         break
     else:
       # if we didn't break, set leaf to last state
-      flat_states[-1][path] = value  # type: ignore[index] # mypy is wrong here?
+      flat_states[-1][path] = value
 
   return tuple(State.from_flat_path(flat_state) for flat_state in flat_states)

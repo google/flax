@@ -44,7 +44,7 @@ class TestSPMD:
     mesh = Mesh(mesh_utils.create_device_mesh((2, 2)), ('model', 'data'))
 
     with mesh:
-      m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
+      m: Foo = nnx.merge(*create_module())
 
     assert m.w.shape == (8, 2)
     assert m.w.sharding.shard_shape(m.w.shape) == (4, 1)
@@ -69,7 +69,7 @@ class TestSPMD:
     mesh = Mesh(mesh_utils.create_device_mesh((1, 1)), ('model', 'data'))
 
     with mesh:
-      m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
+      m: Foo = nnx.merge(*create_module())
 
     assert m.w.value.shape == (8, 2)
     assert m.w.value.sharding.shard_shape(m.w.value.shape) == (8, 2)

@@ -33,7 +33,7 @@ import numpy as np
 from jax import lax
 
 from flax.experimental import nnx
-from configs import default
+from flax.experimental.nnx.examples.lm1b.configs import default
 
 Shape = tuple[int, ...]
 Dtype = Any

@@ -56,7 +56,7 @@ class TestVariableState:
         self.b = nnx.Param(jax.numpy.zeros((dout,)))
 
       def __call__(self, x: jax.Array):
-        return jnp.dot(x, self.w) + self.b  # type: ignore[arg-type]
+        return jnp.dot(x, self.w) + self.b
 
     linear = Linear(3, 4, nnx.Rngs(0))
     x = jax.numpy.ones((3,))

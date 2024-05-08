@@ -30,7 +30,8 @@ from flax.experimental.nnx.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
 )
-from flax.experimental.nnx.nnx.state import State, StateLeaf
+from flax.experimental.nnx.nnx.state import State
+from flax.experimental.nnx.nnx.variables import Variable
 from flax.typing import Path, PathParts
 
 A = tp.TypeVar('A')
@@ -328,7 +329,7 @@ class Module(graph.GraphNode, metaclass=ModuleMeta):
       jtu.register_pytree_with_keys(
         cls,
         partial(_module_flatten, with_keys=True),
-        _module_unflatten,  # type: ignore[arg-type]
+        _module_unflatten,
         flatten_func=partial(_module_flatten, with_keys=False),
       )
 
@@ -341,7 +342,6 @@ def _module_flatten(module: Module, *, with_keys: bool):
   key_values = sorted(state.raw_mapping.items())
   keys = tuple(key for key, _ in key_values)
 
-  children: tuple[tp.Any, ...]
   if with_keys:
     children = tuple((jtu.DictKey(key), value) for key, value in key_values)
   else:
@@ -352,7 +352,7 @@ def _module_flatten(module: Module, *, with_keys: bool):
 
 def _module_unflatten(
   paths_moduledef: tuple[tuple[Path, ...], GraphDef[M]],
-  variables: tuple[StateLeaf, ...],
+  variables: tuple[Variable[tp.Any], ...],
 ) -> M:
   paths, graphdef = paths_moduledef
   return graph.merge(graphdef, State(zip(paths, variables)))

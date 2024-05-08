@@ -52,10 +52,6 @@ class TrainTest(absltest.TestCase):
     config.max_eval_target_length = 32
     config.max_predict_length = 32
 
-    # Set dropout rates to avoid create dropout states
-    config.dropout_rate = 0.0
-    config.attention_dropout_rate = 0.0
-
     workdir = tempfile.mkdtemp()
 
     # Go two directories up to the root of the flax directory.
