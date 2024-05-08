@@ -44,7 +44,8 @@ class Metric(graph.GraphNode):
     raise NotImplementedError('Must override `__init__()` method.')
   def reset(self):
     raise NotImplementedError('Must override `reset()` method.')
-  def update(self):
+
+  def update(self, **kwargs) -> None:
     raise NotImplementedError('Must override `update()` method.')
   def compute(self):
     raise NotImplementedError('Must override `compute()` method.')
@@ -71,7 +72,7 @@ class Average(Metric):
     return self.total.value / self.count.value
 
 class Accuracy(Average):
-  def update(self, *, logits: jax.Array, labels: jax.Array, **_):
+  def update(self, *, logits: jax.Array, labels: jax.Array, **_):  # type: ignore[override]
     if logits.ndim != labels.ndim + 1 or labels.dtype != jnp.int32:
       raise ValueError(
         f"Expected labels.dtype==jnp.int32 and logits.ndim={logits.ndim}=="

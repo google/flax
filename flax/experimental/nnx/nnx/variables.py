@@ -69,7 +69,8 @@ jtu.register_pytree_node(
   lambda _0, _1: EMPTY,
 )
 
-EMPTY = Empty()
+EMPTY: Empty = Empty()
+
 
 class _Missing:
   pass
@@ -391,7 +392,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self.value
 
   def __getitem__(self, key) -> tp.Any:
-    return self.value.__getitem__(key)
+    return self.value.__getitem__(key)  # type: ignore
 
   def __add__(self, other) -> A:
     return self.value.__add__(other)  # type: ignore
@@ -572,7 +573,7 @@ class Intermediate(Variable[A]):
 class VariableState(tp.Generic[A], reprlib.Representable):
   def __init__(
     self,
-    type: tp.Type[Variable[A]],
+    type: type[Variable[tp.Any]],
     value: A,
     **metadata,
   ):

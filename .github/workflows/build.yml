@@ -86,7 +86,7 @@ jobs:
         test-type: [doctest, pytest, pytype, mypy]
         exclude:
           - test-type: pytype
-            python-version: '3.11'
+            python-version: '3.9'
           - test-type: pytype
             python-version: '3.10'
           - test-type: mypy

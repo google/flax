@@ -134,7 +134,7 @@ class Sequential(List):
       if not callable(f):
         raise TypeError(f'Sequence[{i}] is not callable: {f}')
       if i > 0:
-        if isinstance(output, tp.Tuple):
+        if isinstance(output, tuple):
           args = output
           kwargs = {}
         elif isinstance(output, dict):
@@ -161,9 +161,9 @@ class ModuleDefApply(tp.Protocol, tp.Generic[M]):
 class TrainState(tp.Generic[M], struct.PyTreeNode):
   graphdef: GraphDef[M]
   params: State
-  tx: optax.GradientTransformation = struct.field(pytree_node=False)
   opt_state: optax.OptState
   step: jax.Array
+  tx: optax.GradientTransformation = struct.field(pytree_node=False)
 
   @classmethod
   def create(
@@ -178,9 +178,9 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
     return cls(
       graphdef=graphdef,
       params=params,
-      tx=tx,
       opt_state=tx.init(params),
       step=jnp.asarray(step),
+      tx=tx,
       **kwargs,
     )
 
