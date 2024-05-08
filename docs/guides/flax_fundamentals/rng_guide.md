@@ -67,7 +67,7 @@ assert jax.config.jax_default_prng_impl == 'threefry2x32'
 
 +++
 
-The primary method Flax uses to receive, manipulate and create PRNG keys is via the `Module` method [`self.make_rng`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.make_rng). It is a method that accepts a string name that represents an "RNG stream". Each RNG stream has an initial starting seed PRNG key, which the user passes in as a dictionary argument (i.e. into an [`.init`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.init) or [`.apply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.apply) function), and the starting seed is used by `self.make_rng` to generate more PRNG keys for that stream.
+The primary method Flax uses to receive, manipulate and create PRNG keys is via the `Module` method [`self.make_rng`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.make_rng). It is a method that accepts a string name that represents an "RNG stream". Each RNG stream has an initial starting seed PRNG key, which the user passes in as a dictionary argument (i.e. into an [`.init`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.init) or [`.apply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.apply) function), and the starting seed is used by `self.make_rng` to generate more PRNG keys for that stream. If `self.make_rng` is called on a string name that does not have an initial starting seed PRNG key (i.e. the user did not pass a key with the corresponding name into `.init` or `.apply`), then `self.make_rng` will use the `'params'` key as the initial starting seed by default.
 
 Note that this method can only be called with bounded modules (see [The Flax Module lifecycle](https://flax.readthedocs.io/en/latest/developer_notes/module_lifecycle.html#top-level-modules)).
 
@@ -657,7 +657,7 @@ Refer to [Lifted transformations](https://flax.readthedocs.io/en/latest/develope
 
 +++
 
-We can use [`nn.vmap`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/transformations.html#flax.linen.vmap) to create a batched `Dense` layer:
+We can use [`nn.vmap`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/_autosummary/flax.linen.vmap.html) to create a batched `Dense` layer:
 
 ```{code-cell}
 :outputId: f0830f6b-659c-446f-c933-7b2a430f8004
@@ -760,7 +760,7 @@ BatchModel().init({'params': jax.random.key(0), 'other': jax.random.key(1)}, x)
 
 +++
 
-We can use [`nn.scan`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/transformations.html#flax.linen.scan) to create a scanned `Module` layer (this is useful for simplifying repetitively stacked submodules):
+We can use [`nn.scan`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/_autosummary/flax.linen.scan.html) to create a scanned `Module` layer (this is useful for simplifying repetitively stacked submodules):
 
 ```{code-cell}
 :outputId: 29d1863b-809f-42ce-894c-1b0810faa41e

@@ -30,7 +30,9 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       Generating a new PRNG key given an input PRNG key and integer. Typically used when you want to
       generate a new key but still be able to use the original rng key afterwards. You can also do this with
       `jax.random.split <https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html>`__
-      but this will effectively create two RNG keys, which is slower.
+      but this will effectively create two RNG keys, which is slower. See how Flax generates new PRNG keys
+      automatically within ``Modules`` in our
+      `RNG guide <https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/rng_guide.html#how-self-make-rng-works-under-the-hood>`__.
 
     `FrozenDict <https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.FrozenDict>`__
       An immutable dictionary which can be “`unfrozen <https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.unfreeze>`__”
@@ -75,6 +77,8 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       control in a multi-host setup (e.g. initializing parameters identically on different
       hosts, but have different dropout masks) and treating these sequences differently when
       `lifting transformations <https://flax.readthedocs.io/en/latest/developer_notes/lift.html>`__.
+      See the `RNG guide <https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/rng_guide.html>`__
+      for more details.
 
     Scope
       A container class for holding the variables and PRNG keys for each layer.
