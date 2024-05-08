@@ -48,14 +48,12 @@ TS = tp.TypeVar('TS', bound='TrainState')
 
 class Dict(Module, tp.Mapping[str, A]):
   @tp.overload
-  def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /):
-    ...
+  def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /): ...
 
   @tp.overload
   def __init__(
     self, mapping: tp.Optional[tp.Mapping[str, A]] = None, /, **kwargs: A
-  ):
-    ...
+  ): ...
 
   def __init__(self, *args, **kwargs):
     for name, value in dict(*args, **kwargs).items():
@@ -126,15 +124,18 @@ class List(Module, tp.Generic[A]):
     return super()._graph_node_pop_key(key)
 
 
-class Sequential(List):
+class Sequential(Module):
+  def __init__(self, *fns: tp.Callable[..., tp.Any]):
+    self.layers = list(fns)
+
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
     output: tp.Any = None
 
-    for i, f in enumerate(self):
+    for i, f in enumerate(self.layers):
       if not callable(f):
         raise TypeError(f'Sequence[{i}] is not callable: {f}')
       if i > 0:
-        if isinstance(output, tp.Tuple):
+        if isinstance(output, tuple):
           args = output
           kwargs = {}
         elif isinstance(output, dict):
@@ -154,8 +155,7 @@ class Sequential(List):
 class ModuleDefApply(tp.Protocol, tp.Generic[M]):
   def __call__(
     self, state: State, *states: State
-  ) -> ApplyCaller[tuple[State, GraphDef[M]]]:
-    ...
+  ) -> ApplyCaller[tuple[State, GraphDef[M]]]: ...
 
 
 class TrainState(tp.Generic[M], struct.PyTreeNode):
@@ -186,8 +186,7 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
 
   if tp.TYPE_CHECKING:
 
-    def __getattr__(self, key: str) -> tp.Any:
-      ...
+    def __getattr__(self, key: str) -> tp.Any: ...
 
   def apply(
     self, state: tp.Union[State, str], *states: tp.Union[State, str]
