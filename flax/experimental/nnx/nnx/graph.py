@@ -1072,11 +1072,11 @@ def _iter_nodes(
   if id(node) in visited:
     return
   visited.add(id(node))
-  yield path_parts, node
   node_impl = get_node_impl(node)
   node_dict = node_impl.node_dict(node)
   for key, value in node_dict.items():
     yield from _iter_nodes(value, visited, (*path_parts, key))
+  yield path_parts, node
 
 
 def compose_mapping(
