@@ -510,6 +510,27 @@ class TestModulePytree:
     assert m.node.value == 2
     assert m.graphdef == 1
 
+  def test_static(self):
+    class C(nnx.Module, experimental_pytree=True):
+      def __init__(self, x):
+        self.x = x
+
+    n = 0
+
+    @jax.jit
+    def f(x):
+      nonlocal n
+      n += 1
+
+    f(C(1))
+    assert n == 1
+    f(C(1))
+    assert n == 1
+    f(C(2))
+    assert n == 2
+    f(C(2))
+    assert n == 2
+
 
 class TestModuleDataclass:
   def test_basic(self):
