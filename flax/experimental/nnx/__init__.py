@@ -72,6 +72,7 @@ from .nnx.nn.attention import dot_product_attention as dot_product_attention
 from .nnx.nn.attention import make_attention_mask as make_attention_mask
 from .nnx.nn.attention import make_causal_mask as make_causal_mask
 from .nnx.nn.linear import Conv as Conv
+from .nnx.nn.linear import ConvTranspose as ConvTranspose
 from .nnx.nn.linear import Embed as Embed
 from .nnx.nn.linear import Linear as Linear
 from .nnx.nn.linear import LinearGeneral as LinearGeneral
