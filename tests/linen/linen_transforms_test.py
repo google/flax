@@ -1905,6 +1905,54 @@ class TransformTest(parameterized.TestCase):
     y = Parent().apply({}, x)
 
   @parameterized.named_parameters(('class', True), ('method', False))
+  def test_jit_stateful_submodules(self, jit_class: bool):
+    n = 0
+
+    class Foo(nn.Module):
+      key: int
+
+      @nn.compact
+      def __call__(self, x):
+        nonlocal n
+        n += 1
+        count = self.variable('counts', 'count', lambda: 0)
+        if not self.is_initializing():
+          count.value += 1
+        return x
+
+    if jit_class:
+      Foo = nn.jit(Foo)
+    else:  # jit method
+      Foo.__call__ = nn.jit(Foo.__call__)
+
+    class Parent(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        for _ in range(3):
+          m = Foo(0)
+          x = m(x)
+        return x
+
+    m = Parent()
+    x = jnp.array(1.0)
+    counts = m.init({}, x)['counts']
+    self.assertEqual(n, 1)
+
+    y, updates = m.apply({'counts': counts}, x, mutable=['counts'])
+    counts = updates['counts']
+    self.assertEqual(n, 2)
+
+    for count in jax.tree.leaves(counts):
+      self.assertEqual(count, 1)
+
+    y, updates = m.apply({'counts': counts}, x, mutable=['counts'])
+    counts = updates['counts']
+    self.assertEqual(n, 2)
+
+    for count in jax.tree.leaves(counts):
+      self.assertEqual(count, 2)
+
+  @parameterized.named_parameters(('class', True), ('method', False))
   def test_jit_reuse_nested_submodules(self, jit_class: bool):
     test = self
     n = 0
