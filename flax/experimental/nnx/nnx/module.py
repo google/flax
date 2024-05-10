@@ -44,10 +44,10 @@ StateMapping = tp.Mapping[Path, tp.Any]
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
+
 @tp.runtime_checkable
 class _HasSetup(tp.Protocol):
-  def setup(self) -> None:
-    ...
+  def setup(self) -> None: ...
 
 
 class ModuleMeta(ObjectMeta):
@@ -138,7 +138,7 @@ class Module(Object, metaclass=ModuleMeta):
     """
 
     def _init_context(accessor: DelayedAccessor, *args, **kwargs):
-      for _, value in graph.iter_nodes(self):
+      for _, value in graph.iter_graph(self):
         if isinstance(value, Object):
           value._object__state._initializing = True
 
@@ -146,7 +146,7 @@ class Module(Object, metaclass=ModuleMeta):
       try:
         out = method(*args, **kwargs)
       finally:
-        for _, value in graph.iter_nodes(self):
+        for _, value in graph.iter_graph(self):
           if isinstance(value, Object):
             value._object__state._initializing = False
 
@@ -190,7 +190,7 @@ class Module(Object, metaclass=ModuleMeta):
       ('linear',) Linear
       () Block
     """
-    for path, value in graph.iter_nodes(self):
+    for path, value in graph.iter_graph(self):
       if isinstance(value, Module):
         yield path, value
 
@@ -376,5 +376,3 @@ def first_from(*args: tp.Optional[A], error_msg: str) -> A:
     if arg is not None:
       return arg
   raise ValueError(error_msg)
-
-
