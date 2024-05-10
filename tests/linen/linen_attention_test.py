@@ -71,6 +71,31 @@ class AttentionTest(parameterized.TestCase):
     y, _ = sa_module.init_with_output(rng, q)
     self.assertEqual(y.shape, q.shape)
 
+  def test_mha_out_initializers(self):
+    rng = random.key(0)
+    q = jnp.ones((4, 2, 3, 5))
+    sa_module = nn.MultiHeadDotProductAttention(
+      num_heads=8,
+      qkv_features=16,
+      kernel_init=initializers.ones,
+      out_kernel_init=initializers.zeros,
+      bias_init=initializers.zeros,
+      out_bias_init=initializers.ones,
+      deterministic=False,
+    )
+    variables = sa_module.init(rng, q)
+    params = variables['params']
+    # test kernels
+    np.testing.assert_allclose(params['query']['kernel'], 1.0)
+    np.testing.assert_allclose(params['key']['kernel'], 1.0)
+    np.testing.assert_allclose(params['value']['kernel'], 1.0)
+    np.testing.assert_allclose(params['out']['kernel'], 0.0)
+    # test biases
+    np.testing.assert_allclose(params['query']['bias'], 0.0)
+    np.testing.assert_allclose(params['key']['bias'], 0.0)
+    np.testing.assert_allclose(params['value']['bias'], 0.0)
+    np.testing.assert_allclose(params['out']['bias'], 1.0)
+
   def test_multihead_self_attention_w_dropout(self):
     rng = random.key(0)
     x = jnp.ones((4, 2, 3, 5))

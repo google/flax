@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Attention core modules for Flax."""
+from __future__ import annotations
 
 import functools
 import warnings
@@ -306,7 +307,11 @@ class MultiHeadDotProductAttention(Module):
     precision: Numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: Initializer for the kernel of the Dense layers.
+    out_kernel_init: Optional Initializer for the kernel of the output Dense layer,
+      if None, ``kernel_init`` will be used.
     bias_init: Initializer for the bias of the Dense layers.
+    out_bias_init: Optional Initializer for the bias of the output Dense layer,
+      if None, ``bias_init`` will be used.
     use_bias: Whether pointwise QKVO dense transforms use bias.
     attention_fn: dot_product_attention or compatible function. Accepts query,
       key, value, and returns output of shape ``[bs, dim1, dim2, ..., dimN,,
@@ -325,7 +330,9 @@ class MultiHeadDotProductAttention(Module):
   deterministic: Optional[bool] = None
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
+  out_kernel_init: Initializer | None = None
   bias_init: Initializer = initializers.zeros_init()
+  out_bias_init: Initializer | None = None
   use_bias: bool = True
   attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False
@@ -598,8 +605,8 @@ class MultiHeadDotProductAttention(Module):
     out = DenseGeneral(
       features=features,
       axis=(-2, -1),
-      kernel_init=self.kernel_init,
-      bias_init=self.bias_init,
+      kernel_init=self.out_kernel_init or self.kernel_init,
+      bias_init=self.out_bias_init or self.bias_init,
       use_bias=self.use_bias,
       dtype=self.dtype,
       param_dtype=self.param_dtype,

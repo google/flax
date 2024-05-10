@@ -281,7 +281,11 @@ class MultiHeadAttention(Module):
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
     kernel_init: initializer for the kernel of the Dense layers.
+    out_kernel_init: optional initializer for the kernel of the output Dense layer,
+      if None, the kernel_init is used.
     bias_init: initializer for the bias of the Dense layers.
+    out_bias_init: optional initializer for the bias of the output Dense layer,
+      if None, the bias_init is used.
     use_bias: bool: whether pointwise QKVO dense transforms use bias.
     attention_fn: dot_product_attention or compatible function. Accepts query,
       key, value, and returns output of shape `[bs, dim1, dim2, ..., dimN,,
@@ -304,7 +308,9 @@ class MultiHeadAttention(Module):
     deterministic: bool | None = None,
     precision: PrecisionLike = None,
     kernel_init: Initializer = default_kernel_init,
+    out_kernel_init: Initializer | None = None,
     bias_init: Initializer = initializers.zeros_init(),
+    out_bias_init: Initializer | None = None,
     use_bias: bool = True,
     attention_fn: Callable[..., Array] = dot_product_attention,
     decode: bool | None = None,
@@ -331,7 +337,9 @@ class MultiHeadAttention(Module):
     self.deterministic = deterministic
     self.precision = precision
     self.kernel_init = kernel_init
+    self.out_kernel_init = out_kernel_init
     self.bias_init = bias_init
+    self.out_bias_init = out_bias_init
     self.use_bias = use_bias
     self.attention_fn = attention_fn
     self.decode = decode
@@ -393,8 +401,8 @@ class MultiHeadAttention(Module):
       in_features=(self.num_heads, self.head_dim),
       out_features=self.out_features,
       axis=(-2, -1),
-      kernel_init=self.kernel_init,
-      bias_init=self.bias_init,
+      kernel_init=self.out_kernel_init or self.kernel_init,
+      bias_init=self.out_bias_init or self.bias_init,
       use_bias=self.use_bias,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
