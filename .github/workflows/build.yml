@@ -86,7 +86,7 @@ jobs:
         test-type: [doctest, pytest, pytype, mypy]
         exclude:
           - test-type: pytype
-            python-version: '3.11'
+            python-version: '3.9'
           - test-type: pytype
             python-version: '3.10'
           - test-type: mypy
@@ -101,12 +101,13 @@ jobs:
     - name: Get week and year
       id: date_key
       run: echo "DATE=$(date +%j)" >> $GITHUB_OUTPUT
-    - name: Cached virtual environment
-      id: venv_cache
-      uses: actions/cache@v3
-      with:
-        path: venv
-        key: pip-${{ steps.setup_python.outputs.python-version }}-${{ steps.date_key.outputs.DATE }}-${{ hashFiles('**/requirements.txt', 'pyproject.toml') }}
+    # TODO(cgarciae): caching is breaking the install step, disabling for now.
+    # - name: Cached virtual environment
+    #   id: venv_cache
+    #   uses: actions/cache@v3
+    #   with:
+    #     path: venv
+    #     key: pip-${{ steps.setup_python.outputs.python-version }}-${{ steps.date_key.outputs.DATE }}-${{ hashFiles('**/requirements.txt', 'pyproject.toml') }}
     - name: Install Dependencies for cache
       if: steps.venv_cache.outputs.cache-hit != 'true'
       run: |

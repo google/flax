@@ -169,7 +169,7 @@ class LinearGeneral(Module):
     self.in_features = _canonicalize_tuple(in_features)
     self.out_features = _canonicalize_tuple(out_features)
     self.axis = _canonicalize_tuple(axis)
-    self.batch_axis = FrozenDict(batch_axis)
+    self.batch_axis = FrozenDict[Axis, Size](batch_axis)
     self.use_bias = use_bias
     self.dtype = dtype
     self.param_dtype = param_dtype
@@ -270,7 +270,7 @@ class LinearGeneral(Module):
     contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs, kernel, bias, dtype=self.dtype
+        (inputs, kernel, bias), dtype=self.dtype
     )
 
     if self.dot_general_cls is not None:
@@ -354,7 +354,7 @@ class Linear(Module):
     bias = self.bias.value
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs, kernel, bias, dtype=self.dtype
+        (inputs, kernel, bias), dtype=self.dtype
     )
     y = self.dot_general(
       inputs,
@@ -420,6 +420,7 @@ class Einsum(Module):
     kernel_key = rngs.params()
     self.kernel = nnx.Param(kernel_init(kernel_key, kernel_shape, param_dtype))
 
+    self.bias: nnx.Param | None
     if bias_shape is not None:
       bias_key = rngs.params()
       self.bias = nnx.Param(bias_init(bias_key, bias_shape, param_dtype))
@@ -461,10 +462,12 @@ class Einsum(Module):
     self._einsum_str_check(einsum_str)
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs,
-      self.kernel.value,
-      self.bias.value if self.bias is not None else self.bias,
-      dtype=self.dtype,
+        (
+            inputs,
+            self.kernel.value,
+            self.bias.value if self.bias is not None else self.bias,
+        ),
+        dtype=self.dtype,
     )
 
     y = jnp.einsum(einsum_str, inputs, kernel, precision=self.precision)
@@ -702,7 +705,7 @@ class Conv(Module):
     bias = self.bias.value
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs, kernel, bias, dtype=self.dtype
+        (inputs, kernel, bias), dtype=self.dtype
     )
 
     y = self.conv_general_dilated(
@@ -790,6 +793,7 @@ class ConvTranspose(Module):
       self.kernel_init(rngs.params(), kernel_shape, self.param_dtype)
     )
 
+    self.bias: nnx.Param | None
     if self.use_bias:
       self.bias = nnx.Param(
         self.bias_init(rngs.params(), (self.out_features,), self.param_dtype)
@@ -864,7 +868,7 @@ class ConvTranspose(Module):
     bias = self.bias.value if self.bias is not None else None
 
     inputs, kernel, bias = dtypes.promote_dtype(
-      inputs, kernel, bias, dtype=self.dtype
+        (inputs, kernel, bias), dtype=self.dtype
     )
 
     y = lax.conv_transpose(
@@ -992,7 +996,7 @@ class Embed(Module):
     # Use take because fancy indexing numpy arrays with JAX indices does not
     # work correctly.
     (embedding,) = dtypes.promote_dtype(
-      self.embedding.value, dtype=self.dtype, inexact=False
+        (self.embedding.value,), dtype=self.dtype, inexact=False
     )
     if self.num_embeddings == 1:
       return jnp.where(
@@ -1017,6 +1021,6 @@ class Embed(Module):
       in NLP models.
     """
     query, embedding = dtypes.promote_dtype(
-      query, self.embedding.value, dtype=self.dtype
+        (query, self.embedding.value), dtype=self.dtype
     )
     return jnp.dot(query, embedding.T)

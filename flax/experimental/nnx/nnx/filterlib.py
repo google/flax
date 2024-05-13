@@ -43,7 +43,10 @@ def to_predicate(filter: Filter) -> Predicate:
   elif isinstance(filter, type):
     return OfType(filter)
   elif isinstance(filter, bool):
-    return Everything() if filter else Nothing()
+    if filter:
+      return Everything()
+    else:
+      return Nothing()
   elif filter is Ellipsis:
     return Everything()
   elif filter is None:

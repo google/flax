@@ -112,9 +112,10 @@ module = [
     "yaml",
 ]
 ignore_missing_imports = true
-# exclude nnx
+disable_error_code = "annotation-unchecked"
+# exclude nnx examples
 [[tool.mypy.overrides]]
-module = "flax.experimental.nnx.*"
+module = "flax.experimental.nnx.examples.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]

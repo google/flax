@@ -22,7 +22,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.experimental import mesh_utils
-from flax.experimental.nnx.examples.lm1b.configs import default
+from configs import default
 from models import TransformerConfig, TransformerLM
 
 from flax.experimental import nnx

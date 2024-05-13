@@ -25,17 +25,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# pytype: skip-file
+from __future__ import annotations
 
 import dataclasses
 import functools
-import typing as tp
 from functools import partial
+import typing as tp
 from typing import Any
 
-import jax.tree_util as jtu
-
-from flax.experimental.nnx.nnx import reprlib, tracers
 from flax.experimental import nnx
+from flax.experimental.nnx.nnx import reprlib, tracers
+import jax.tree_util as jtu
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -69,7 +70,8 @@ jtu.register_pytree_node(
   lambda _0, _1: EMPTY,
 )
 
-EMPTY = Empty()
+EMPTY: Empty = Empty()
+
 
 class _Missing:
   pass
@@ -385,13 +387,12 @@ class Variable(tp.Generic[A], reprlib.Representable):
     ) -> V:
       raise NotImplementedError
 
-
   # operator overloads
   def __jax_array__(self):
     return self.value
 
   def __getitem__(self, key) -> tp.Any:
-    return self.value.__getitem__(key)
+    return self.value.__getitem__(key)  # type: ignore
 
   def __add__(self, other) -> A:
     return self.value.__add__(other)  # type: ignore
@@ -570,11 +571,12 @@ class Intermediate(Variable[A]):
 
 
 class VariableState(tp.Generic[A], reprlib.Representable):
+
   def __init__(
-    self,
-    type: tp.Type[Variable[A]],
-    value: A,
-    **metadata,
+      self,
+      type: type[Variable[tp.Any]],
+      value: A,
+      **metadata,
   ):
     self.type = type
     self.value = value
