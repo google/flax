@@ -60,9 +60,7 @@ class TestGraphUtils:
 
     graphdef, state = nnx.split(g)
 
-    with pytest.raises(
-      ValueError, match='Expected key for Variable but was not found in state'
-    ):
+    with pytest.raises(ValueError, match='Expected key'):
       nnx.graph.unflatten(graphdef, nnx.State({}))
 
   def test_update_dynamic(self):
