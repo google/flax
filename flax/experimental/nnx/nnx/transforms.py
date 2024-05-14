@@ -1023,7 +1023,7 @@ def scan_apply(
 
   # infer length
   lengths: set[int] = set(
-    x.shape[axis]  # type: ignore
+    x.shape[0]  # type: ignore
     for x, axis in zip(flat_scan, flatdef.flat_axes)
     if axis is not None
   )
