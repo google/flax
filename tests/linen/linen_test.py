@@ -1248,8 +1248,12 @@ class Fp8Test(absltest.TestCase):
   def test_fp8_dot_general_injection(self):
     # Used to cast the inputs to be representable in FP8, so that the difference
     # of the results from the original gemm and fp8 gemm is small.
+    def quantize_dequantize(x, q_dtype, scale, compute_dtype):
+      qx = fp8_ops.quantize(x, q_dtype, scale, compute_dtype)
+      return fp8_ops.dequantize(qx, x.dtype, scale)
+
     cast_to_representable = functools.partial(
-      fp8_ops.quantize_dequantize,
+      quantize_dequantize,
       scale=jnp.ones((1,)),
       compute_dtype=jnp.float32,
     )

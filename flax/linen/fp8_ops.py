@@ -106,11 +106,6 @@ def dequantize(x, dq_dtype, scale):
   return x.astype(dq_dtype) * jnp.broadcast_to(scale.astype(dq_dtype), x.shape)
 
 
-def quantize_dequantize(x, q_dtype, scale, compute_dtype):
-  qx = quantize(x, q_dtype, scale, compute_dtype)
-  return dequantize(qx, x.dtype, scale)
-
-
 def compute_scale(amax, scale, fp8_max, margin=0):
   # The algorithm for computing the new scale is sourced from
   #   https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/jax.html#transformer_engine.jax.update_fp8_metas
@@ -130,7 +125,8 @@ def compute_amax_history(x, amax_history):
   new_history = jnp.roll(amax_history, shift=-1, axis=0).at[0].set(amax_update)
   return new_history
 
-def q_and_return(x, q_dtype, scale, amax_history, compute_dtype):
+
+def _compute_new_meta(x, q_dtype, scale, amax_history, compute_dtype):
   is_fm32 = scale.dtype == fm32 and amax_history.dtype == fm32
   # convert fm32->f32 so we can do math
   if is_fm32:
@@ -141,15 +137,14 @@ def q_and_return(x, q_dtype, scale, amax_history, compute_dtype):
   amax_from_history = jnp.max(amax_history, axis=0)
   new_scale = compute_scale(amax_from_history, scale, dtype_max)
 
-  qx = quantize(x, q_dtype, new_scale, compute_dtype)
-
   new_history = compute_amax_history(x, amax_history)
 
   # convert f32->fm32 so the autodiff system accumulates fp8 meta correctly
   if is_fm32:
     new_history = lax.convert_element_type(new_history, fm32)
     new_scale = lax.convert_element_type(new_scale, fm32)
-  return qx, new_scale, new_history
+  return new_scale, new_history
+
 
 @partial(custom_vjp, nondiff_argnums=(0,))
 def out_q(compute_dtype, out, scale, amax_history):
@@ -162,13 +157,37 @@ def out_q_fwd(compute_dtype, out, scale, amax_history):
 
 def out_q_bwd(compute_dtype, res, g):
   scale, amax_history = res
-  q_g, new_scale, new_history = q_and_return(
-    g, jnp.float8_e5m2, scale, amax_history, compute_dtype #elfie investigate
+
+  new_scale, new_history = _compute_new_meta(
+    g, jnp.float8_e5m2, scale, amax_history, compute_dtype
   )
+  q_g = quantize(g, jnp.float8_e5m2, scale, compute_dtype)
   return q_g, new_scale, new_history
 
 
 out_q.defvjp(out_q_fwd, out_q_bwd)
+
+
+@partial(custom_vjp, nondiff_argnums=(0,))
+def update_fp8_meta(compute_dtype, inp, scale, amax_history):
+  return inp
+
+
+def update_fp8_meta_fwd(compute_dtype, inp, scale, amax_history):
+  new_scale, new_history = _compute_new_meta(
+    inp, jnp.float8_e4m3fn, scale, amax_history, compute_dtype
+  )
+  return inp, (new_scale, new_history)
+
+
+def update_fp8_meta_bwd(compute_dtype, res, g):
+  new_scale, new_history = res
+  q_g = g
+  return q_g, new_scale, new_history
+
+
+update_fp8_meta.defvjp(update_fp8_meta_fwd, update_fp8_meta_bwd)
+
 
 @partial(custom_jvp, nondiff_argnums=(2, 3, 4, 5, 6, 7))
 def dot_general_with_precision(
@@ -181,24 +200,24 @@ def dot_general_with_precision(
     precision=None,
     preferred_element_type=None,
 ):
-    if precision != None or preferred_element_type != None:
-        warnings.warn(
-            "The function dot_general_with_precision will set the "
-            "precision/preferred_element_type and disregard any provided "
-            "values."
-        )
-
-    lhs = quantize(lhs, jnp.float8_e4m3fn, lhs_scale, preferred_element_type)
-    rhs = quantize(rhs, jnp.float8_e4m3fn, rhs_scale, preferred_element_type)
-    out = lax.dot_general(
-        lhs,
-        rhs,
-        dimension_numbers,
-        precision=lax.Precision.DEFAULT,
-        preferred_element_type=preferred_element_type,
+  if precision != None or preferred_element_type != None:
+    warnings.warn(
+      'The function dot_general_with_precision will set the '
+      'precision/preferred_element_type and disregard any provided '
+      'values.'
     )
-    out = dequantize(out, preferred_element_type, lhs_scale * rhs_scale)
-    return out
+
+  lhs = quantize(lhs, jnp.float8_e4m3fn, lhs_scale, preferred_element_type)
+  rhs = quantize(rhs, jnp.float8_e4m3fn, rhs_scale, preferred_element_type)
+  out = lax.dot_general(
+      lhs,
+      rhs,
+      dimension_numbers,
+      precision=lax.Precision.DEFAULT,
+      preferred_element_type=preferred_element_type,
+  )
+  out = dequantize(out, preferred_element_type, lhs_scale * rhs_scale)
+  return out
 
 
 @dot_general_with_precision.defjvp
@@ -226,6 +245,8 @@ def dot_general_with_precision_jvp(
     )
     out = dequantize(out, preferred_element_type, lhs_scale * rhs_scale)
 
+    # Dequantization applied to the gradient of input of dot in jvp mode
+    # will be transformed into the epilogue of dot in the generated backward graph.
     lhs_dot = dequantize(lhs_dot, preferred_element_type, rhs_scale * out_grad_scale)
     rhs_dot = dequantize(rhs_dot, preferred_element_type, lhs_scale * out_grad_scale)
 
@@ -294,14 +315,20 @@ class Fp8DotGeneralOp(module.Module):
     # namely, the computation data type.
     comp_dtype = k.dtype
     x = jnp.asarray(x, comp_dtype)
+    
+    x = update_fp8_meta(
+      comp_dtype, x, self.input_scale.value, self.input_amax_history.value
+    )
+    k = update_fp8_meta(
+      comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
+    )
 
-    y_q = dot_general_with_precision(x, k, dimension_numbers,
+    y = dot_general_with_precision(x, k, dimension_numbers,
                                      self.input_scale.value,
                                      self.kernel_scale.value,
                                      self.output_grad_scale.value,
                                      preferred_element_type=x.dtype)
 
-    y = out_q(comp_dtype, y_q, self.output_grad_scale.value, 
+    y = out_q(comp_dtype, y, self.output_grad_scale.value, 
               self.output_grad_amax_history.value)
-
     return y  # type: ignore
