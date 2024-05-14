@@ -15,20 +15,20 @@
 """Jax transform lifting."""
 
 import collections
-import functools
-from typing import (
-    Any,
-    TypeVar,
-)
 from collections.abc import Callable, Iterable, Mapping, Sequence
+import contextlib
+import dataclasses
+import functools
+import threading
+from typing import Any, Generic, TypeVar
 import warnings
 
 from flax import traceback_util
 from flax.typing import (
-  In,
-  Out,
-  InOutAxis,
-  InOutScanAxis,
+    In,
+    InOutAxis,
+    InOutScanAxis,
+    Out,
 )
 import jax
 from jax import random
@@ -50,6 +50,26 @@ from .scope import (
 )
 
 traceback_util.register_exclusion(__file__)
+
+A = TypeVar('A')
+
+
+@dataclasses.dataclass
+class TransformContext(Generic[A], threading.local):
+  """Context for a transform."""
+
+  stack: list[A] = dataclasses.field(default_factory=list)
+
+  @contextlib.contextmanager
+  def push(self, a: A):
+    self.stack.append(a)
+    try:
+      yield
+    finally:
+      self.stack.pop()
+
+  def get(self) -> A:
+    return self.stack[-1]
 
 
 def tree_map_rngs(fn, tree):
@@ -1416,12 +1436,12 @@ def checkpoint(
   This function is aliased to ``lift.remat`` just like ``jax.remat``.
 
   Args:
-    fn: scope function for which intermediate computations should be
-    re-computed when computing gradients.
+    fn: scope function for which intermediate computations should be re-computed
+      when computing gradients.
     variables: The variable collections that are lifted. By default all
       collections are lifted.
-    rngs: The PRNG sequences that are lifted. By default all PRNG sequences
-      are lifted.
+    rngs: The PRNG sequences that are lifted. By default all PRNG sequences are
+      lifted.
     concrete: Optional, boolean indicating whether ``fun`` may involve
       value-dependent Python control flow (default ``False``). Support for such
       control flow is optional, and disabled by default, because in some
@@ -1440,29 +1460,48 @@ def checkpoint(
       arguments as static can avoid ConcretizationTypeErrors when tracing, but
       at the cost of more retracing overheads.
     policy: Experimental checkpoint policy, see ``jax.checkpoint``.
+
   Returns:
     A wrapped version of ``fn``. When computing gradients intermediate
     computations will be re-computed when computing gradients.
   """
+  # add 2 to each static_argnums because we add two initial arguments to rematted
+  static_argnums_ = (0,) + tuple(i + 3 for i in static_argnums)
 
-  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args, **kwargs):
-    # add 2 to each static_argnums because we add two initial arguments to rematted
-    static_argnums_ = jax.tree_util.tree_map(lambda x: x + 2, static_argnums)
+  scope_fns: list[Callable] = []
+  repack_fns: list[Callable] = []
 
-    @functools.partial(
+  @functools.partial(
       jax.remat,
       concrete=concrete,
       static_argnums=static_argnums_,
       prevent_cse=prevent_cse,
       policy=policy,
-    )
-    @functools.wraps(fn)
-    def rematted(variable_groups, rng_groups, *args, **kwargs):
-      scope = scope_fn(variable_groups, rng_groups)
-      y = fn(scope, *args, **kwargs)
-      return y, repack_fn(scope)
+  )
+  @functools.wraps(fn)
+  def rematted(hash_key, variable_groups, rng_groups, *args, **kwargs):
+    scope_fn = scope_fns[-1]
+    repack_fn = repack_fns[-1]
+    scope = scope_fn(variable_groups, rng_groups)
+    y = fn(scope, hash_key, *args, **kwargs)
+    return y, repack_fn(scope)
 
-    return rematted(variable_groups, rng_groups, *args, **kwargs)
+  def inner(
+      scope_fn,
+      repack_fn,
+      variable_groups,
+      rng_groups,
+      hash_key,
+      *args,
+      **kwargs,
+  ):
+    repack_fns.append(repack_fn)
+    scope_fns.append(scope_fn)
+    try:
+      return rematted(hash_key, variable_groups, rng_groups, *args, **kwargs)
+    finally:
+      scope_fns.pop()
+      repack_fns.pop()
 
   return pack(
     inner,
@@ -1554,8 +1593,9 @@ def jit(
   # Close over scope_fn & repack_fn to avoid recompilation
   # this is impure but we use the fingerprint arg to differentiate between cases
   # where scope_fn or repack_fn actually produce non-identical results.
-  scope_fn = None  # type: Callable | None
-  repack_fn = None  # type: Callable | None
+  # scope_fns: list[Callable] = []
+  # repack_fns: list[Callable] = []
+  jit_context = TransformContext[tuple[Callable, Callable]]()
 
   @functools.partial(
       jax.jit,
@@ -1567,33 +1607,28 @@ def jit(
   )
   @functools.wraps(fn)
   def jitted(fingerprint, variable_groups, rng_groups, *args, **kwargs):
-    nonlocal scope_fn, repack_fn
+    scope_fn, repack_fn = jit_context.get()
     hash_key = fingerprint[1]
     # fingerprint is only used to differentiate the cache signature
-    del fingerprint
+    # del fingerprint
     scope = scope_fn(variable_groups, rng_groups)  # pylint: disable=not-callable
     y = fn(scope, hash_key, *args, **kwargs)
     return y, repack_fn(scope)  # pylint: disable=not-callable
 
   def inner(
-      scope_fun,
-      repack_fun,
+      scope_fn,
+      repack_fn,
       variable_groups,
       rng_groups,
       module_hash_key,
       *args,
       **kwargs,
   ):
-    nonlocal scope_fn, repack_fn
-    try:
-      scope_fn = scope_fun
-      repack_fn = repack_fun
+    with jit_context.push((scope_fn, repack_fn)):
       scopes = jax.tree_util.tree_leaves(scope_fn(variable_groups, rng_groups))
       mutable = tuple(_hashable_filter(scope.mutable) for scope in scopes)
       fingerprint = (mutable, module_hash_key)
       return jitted(fingerprint, variable_groups, rng_groups, *args, **kwargs)
-    finally:
-      scope_fn, repack_fn = None, None
 
   return pack(
       inner, (variables,), (variables,), (rngs,), name='jit', enable_kwargs=True

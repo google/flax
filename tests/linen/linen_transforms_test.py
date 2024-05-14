@@ -864,6 +864,45 @@ class TransformTest(parameterized.TestCase):
     self.assertEqual(setup_cntr, 128)
     self.assertEqual(call_cntr, 64)
 
+  def test_checkpoint_caching(self):
+    n = 0
+
+    class Layer(nn.Module):
+      dout: int
+
+      @nn.compact
+      def __call__(self, x):
+        W = self.param('W', nn.initializers.ones, (x.shape[-1], self.dout))
+        return jnp.dot(x, W)
+
+    class Block(nn.Module):
+      dim: int
+      n_layers: int
+
+      @partial(nn.checkpoint, policy=jax.checkpoint_policies.checkpoint_dots)
+      @nn.compact
+      def __call__(self, x):
+        nonlocal n
+        n += 1
+        for _ in range(self.n_layers - 1):
+          x = Layer(self.dim)(x)
+          x = jnp.sin(x)
+        return Layer(self.dim)(x)
+
+    module = Block(4, 1)
+    x = jnp.ones((1, 4))
+    params = module.init(jax.random.PRNGKey(0), x)['params']
+    self.assertEqual(n, 1)
+
+    def predict(params, x):
+      return module.apply({'params': params}, x)
+
+    module.apply({'params': params}, x)
+    self.assertEqual(n, 2)
+
+    module.apply({'params': params}, x)
+    self.assertEqual(n, 2)
+
   def test_multimethod_setup_calls(self):
     cntr = 0
 
