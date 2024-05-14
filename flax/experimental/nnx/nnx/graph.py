@@ -1027,7 +1027,7 @@ def state(
   elif len(filters) == 1:
     states = state.filter(filters[0])
   else:
-    states = state.filter(filters[0], filters[1], *filters[1:])
+    states = state.filter(filters[0], filters[1], *filters[2:])
 
   return states
 
