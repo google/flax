@@ -44,8 +44,8 @@ vNext
 - Add SimpleCell. by @carlosgmartin in https://github.com/google/flax/pull/3697
 - fix Module.module_paths docstring by @cgarciae in https://github.com/google/flax/pull/3709
 - Guarantee the latest JAX version on CI by @cgarciae in https://github.com/google/flax/pull/3705
-- Replace deprecated API `jax.tree_map` by @copybara-service in https://github.com/google/flax/pull/3715
-- Use `jax.tree_util.tree_map` instead of deprecated `jax.tree_map`. by @copybara-service in https://github.com/google/flax/pull/3714
+- Replace deprecated API `jax.tree.map` by @copybara-service in https://github.com/google/flax/pull/3715
+- Use `jax.tree_util.tree_map` instead of deprecated `jax.tree.map`. by @copybara-service in https://github.com/google/flax/pull/3714
 - [nnx] simplify readme by @cgarciae in https://github.com/google/flax/pull/3707
 - [nnx] add demo.ipynb by @cgarciae in https://github.com/google/flax/pull/3680
 - Fix Tabulate's compute_flops by @cgarciae in https://github.com/google/flax/pull/3721
@@ -340,7 +340,7 @@ Breaking changes:
 New features:
 - Add lifted conditional `nn.cond`.
 - Improved error messages: parameters not found, loading checkpoints.
-- Replace `jax.tree_multimap` (deprecated) with `jax.tree_map`.
+- Replace `jax.tree_multimap` (deprecated) with `jax.tree.map`.
 - Add the "Module Lifecycle" design note.
 - Add support for JAX dynamic stack-based named_call
 

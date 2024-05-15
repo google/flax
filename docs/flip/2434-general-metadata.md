@@ -123,12 +123,12 @@ This should make the API future proof and modular.
 
 The ``add_axis`` and ``remove_axis`` method return an instance of their own type instead of mutating in-place.
 Typically, an implementation would be a ``flax.struct.PyTreeNode`` because the box should still be a valid JAX value and must therefore be handled by the PyTree API.
-Calling ``jax.tree_map`` on a boxed value will simply map over the value in the box.
-The lifted transforms that need to handle metadata will call ``jax.tree_map(..., is_leaf=lambda x: isinstance(x, AxisMetadata))`` to find the AxisMetadata instances within a PyTree.
+Calling ``jax.tree.map`` on a boxed value will simply map over the value in the box.
+The lifted transforms that need to handle metadata will call ``jax.tree.map(..., is_leaf=lambda x: isinstance(x, AxisMetadata))`` to find the AxisMetadata instances within a PyTree.
 
 Advantages of the boxing approach:
 1. Boxing can be used outside of Flax and metadata is automatically "inherited". For example, the optimizer state will
-   have the same partitioning spec as the parameters, because the state is initialized using a ``jax.tree_map`` over the boxed parameters.
+   have the same partitioning spec as the parameters, because the state is initialized using a ``jax.tree.map`` over the boxed parameters.
 2. Boxes are composable.
 3. Boxing avoids string manipulation and generally avoids having to handle additional auxiliary collections like "param_axes" in the current
    partitioning API.
@@ -184,7 +184,7 @@ Initializing a model that creates partitioned weights would result in the follow
 
 ```python
 variables = partitioned_dense.init(rng, jnp.ones((4,)))
-jax.tree_map(np.shape, variables)  # => {"params": {"kernel": Partitioned(value=(4, 8), names=(None, "data")), bias: (8,)}}
+jax.tree.map(np.shape, variables)  # => {"params": {"kernel": Partitioned(value=(4, 8), names=(None, "data")), bias: (8,)}}
 ```
 
 The variable tree with metadata can be used to integrate with other libraries and APIs.
@@ -199,7 +199,7 @@ def to_sharding_spec(x):
     return PartitionSpec()
 
 # Result: {"params": {"kernel": PartitionSpec(None, "data"), bias: PartitionSpec()}}
-variables_pspec = jax.tree_map(to_sharding_spec, variables, is_leaf=lambda x: isinstance(x, Partitioned))
+variables_pspec = jax.tree.map(to_sharding_spec, variables, is_leaf=lambda x: isinstance(x, Partitioned))
 ```
 
 ### Unbox syntax
