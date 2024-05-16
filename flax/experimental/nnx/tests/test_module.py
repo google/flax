@@ -33,7 +33,7 @@ class TestModule:
 
     foo = Foo()
 
-    assert hasattr(foo, '_graph_node__state')
+    assert hasattr(foo, '_object__state')
 
   def test_trace_level(self):
     m = nnx.Dict(a=nnx.Param(1))

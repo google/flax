@@ -72,7 +72,7 @@ class Dict(Module, tp.Mapping[str, A]):
     super().__setattr__(key, value)
 
   def __iter__(self) -> tp.Iterator[str]:
-    return (k for k in vars(self) if k != '_graph_node__state')
+    return (k for k in vars(self) if k != '_object__state')
 
   def __len__(self) -> int:
     return len(vars(self))
@@ -108,7 +108,7 @@ class List(Module, tp.Generic[A]):
     nodes: list[tuple[Key, tp.Any]] = sorted(
       (int(key), value)
       for key, value in vars(self).items()
-      if key not in ('_graph_node__state', '_length')
+      if key not in ('_object__state', '_length')
     )
     nodes.append(('_length', self._length))
     return nodes, type(self)

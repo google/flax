@@ -34,13 +34,13 @@ from flax.experimental.nnx.nnx.nn.linear import (
 )
 from flax.experimental.nnx.nnx.nn.normalization import LayerNorm
 from flax.typing import (
-  Array,
   Dtype,
   Shape,
   Initializer,
   PrecisionLike,
   DotGeneralT,
 )
+Array = jax.Array
 
 
 def dot_product_attention_weights(
@@ -415,6 +415,10 @@ class MultiHeadAttention(Module):
     )
     self.rngs = rngs if dropout_rate > 0.0 else None
 
+    self.cached_key: nnx.Cache[Array] | None = None
+    self.cached_value: nnx.Cache[Array] | None = None
+    self.cache_index: nnx.Cache[Array] | None = None
+
   def __call__(
     self,
     inputs_q: Array,
@@ -497,6 +501,14 @@ class MultiHeadAttention(Module):
     )
 
     if decode:
+      if (
+        self.cached_key is None
+        or self.cached_value is None
+        or self.cache_index is None
+      ):
+        raise ValueError(
+          'Autoregressive cache not initialized, call ``init_cache`` first.'
+        )
       (
         *batch_dims,
         max_length,
@@ -667,7 +679,9 @@ def make_causal_mask(
   )
 
 
-def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32) -> Array:
+def combine_masks(
+  *masks: Optional[Array], dtype: Dtype = jnp.float32
+) -> Array | None:
   """Combine attention masks.
 
   Args:
