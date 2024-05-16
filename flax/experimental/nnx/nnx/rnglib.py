@@ -37,6 +37,7 @@ from flax.experimental.nnx.nnx import graph
 from flax.experimental.nnx.nnx.state import State
 from flax.experimental.nnx.nnx.variables import Variable
 from flax.experimental.nnx.nnx import filterlib
+from flax.experimental.nnx.nnx.filterlib import All
 from flax.experimental.nnx.nnx.object import Object
 
 Counts = list[int]
@@ -56,7 +57,7 @@ class RngState(Variable[jax.Array]):
 
 
 class RngCount(RngState):
-  pass
+  tag: str
 
 
 class RngKey(RngState):
@@ -78,7 +79,7 @@ class RngStream(Object):
     count: jax.Array,
   ):
     self.key = RngKey(key, tag=tag)
-    self.count = RngCount(count)
+    self.count = RngCount(count, tag=tag)
     self.key_backups: list[RngKeyBackup] = []
 
   def __post_init__(self):
@@ -91,20 +92,6 @@ class RngStream(Object):
     )
     key = jax.random.fold_in(self.key.value, self.count.value)
     self.count.value += 1
-    return key
-
-  def fork(self, pattern: SplitPattern) -> jax.Array:
-    if pattern is None:
-      # broadcast key
-      key = self()
-    else:
-      num_splits: int | tuple[int, ...]
-      if isinstance(pattern, int):
-        num_splits = pattern
-      else:
-        num_splits = tuple(x if x is not None else 1 for x in pattern)
-      key = jax.random.split(self.key.value, num_splits)
-      self.count.value += 1
     return key
 
 
@@ -168,12 +155,18 @@ class Rngs(Object, tp.Mapping[str, tp.Callable[[], jax.Array]]):
   def __contains__(self, name: tp.Any) -> bool:
     return name in vars(self)
 
+class ForkStates(tp.NamedTuple):
+  split_keys: State
+  split_counts: State
+  broadcast_keys: State
+  broadcast_counts: State
+
 
 def fork(
   state: State,
   split_filter: filterlib.Filter,
   split_pattern: SplitPattern,
-) -> tuple[State, State]:
+) -> ForkStates:
   if split_pattern is None:
     raise RuntimeError('Split pattern cannot be None, this is a bug.')
 
@@ -183,10 +176,12 @@ def fork(
   else:
     num_splits = tuple(x if x is not None else 1 for x in split_pattern)
 
-  not_keys, split_state, broadcast_state = state.split(
-    NotKey, split_filter, ...
+  split_keys, split_counts, broadcast_keys, broadcast_counts = state.split(
+    All(split_filter, RngKey),
+    All(split_filter, RngCount),
+    [RngKey, RngKeyBackup],  # Any
+    RngCount,
   )
-  broadcast_state = State.merge(not_keys, broadcast_state)
 
   def split_key(key: tp.Any) -> jax.Array:
     if not isinstance(key, jax.Array):
@@ -194,9 +189,10 @@ def fork(
 
     return jax.random.split(key, num_splits)
 
-  split_state = jax.tree.map(split_key, split_state)
+  split_keys = jax.tree.map(split_key, split_keys)
 
-  return split_state, broadcast_state
+  return ForkStates(split_keys, split_counts, broadcast_keys, broadcast_counts)
+
 
 def backup_keys(node: tp.Any, /):
   streams: list[RngStream] = []

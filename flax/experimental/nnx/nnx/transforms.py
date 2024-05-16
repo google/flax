@@ -33,6 +33,7 @@ import dataclasses
 import functools
 import typing as tp
 
+from flax import struct
 from flax.core.frozen_dict import FrozenDict
 from flax.experimental.nnx.nnx import (
   filterlib,
@@ -114,11 +115,18 @@ class LiftedModule(tp.Generic[M], Module):  # type: ignore[ignored-abstractmetho
 
 UNSPECIFIED = object()
 
+def _default_constrain_state(state: State) -> State:
+  state_spec = spmd.get_partition_spec(state)
+  state = jax.lax.with_sharding_constraint(state, state_spec)
+  return state
+
 
 @dataclasses.dataclass(frozen=True)
 class JitStaticInputs:
   graphdef: GraphDef[tuple[tp.Any, ...]]
   ctx: graph.UpdateContext
+  constrain_state: tp.Callable[[State], State] | None
+  f: tp.Callable[..., tp.Any]
 
 
 jax.tree_util.register_static(JitStaticInputs)
@@ -133,267 +141,35 @@ class JitStaticOutputs:
 jax.tree_util.register_static(JitStaticOutputs)
 
 
-def _default_constrain_object_state(state: State) -> State:
-  state_spec = spmd.get_partition_spec(state)
-  state = jax.lax.with_sharding_constraint(state, state_spec)
-  return state
+def _jitted_fn(
+  *args: tp.Any,
+  _nnx_jit_static: JitStaticInputs,
+  _nnx_jit_state: State,
+  **kwargs: tp.Any,
+) -> tuple[tp.Any, State, GraphDef[tuple[tp.Any, ...]]]:
+  ctx = _nnx_jit_static.ctx
+  graphdef = _nnx_jit_static.graphdef
+  constrain_state = _nnx_jit_static.constrain_state
+  f = _nnx_jit_static.f
+  state: State = _nnx_jit_state
 
+  if constrain_state is not None:
+    state = constrain_state(state)
 
-@dataclasses.dataclass
-class JITOptions:
-  in_shardings: tp.Any
-  out_shardings: tp.Any
-  static_argnums: tuple[int, ...]
-  static_argnames: tuple[str, ...]
-  donate_argnums: tuple[int, ...]
-  donate_argnames: tuple[str, ...]
-  keep_unused: bool
-  device: tp.Optional[jax.Device]
-  backend: tp.Optional[str]
-  inline: bool
-  abstracted_axes: tp.Optional[tp.Any]
-  # nnx specific
-  donate_state: bool
-  constrain_state: tp.Callable[[State], State] | None
+  input_graph_nodes = ctx.merge(graphdef, state)
 
-  @classmethod
-  def from_jit_kwargs(
-    cls,
-    in_shardings: tp.Any,
-    out_shardings: tp.Any,
-    static_argnums: int | tp.Sequence[int] | None,
-    static_argnames: str | tp.Iterable[str] | None,
-    donate_argnums: int | tp.Sequence[int] | None,
-    donate_argnames: str | tp.Iterable[str] | None,
-    keep_unused: bool,
-    device: tp.Optional[jax.Device],
-    backend: tp.Optional[str],
-    inline: bool,
-    abstracted_axes: tp.Optional[tp.Any],
-    donate_state: bool,
-    constrain_state: bool | tp.Callable[[State], State],
-  ):
-    _static_argnums = _normalize_sequence(static_argnums)
-    _static_argnames = _normalize_sequence(static_argnames)
-    _donate_argnums = _normalize_sequence(donate_argnums)
-    _donate_argnames = _normalize_sequence(donate_argnames)
+  (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
 
-    if donate_state:
-      _donate_argnames = (*_donate_argnames, '_nnx_jit_state')
+  out = f(*args, **kwargs)
 
-    if callable(constrain_state):
-      _constrain_object_state = constrain_state
-    elif constrain_state:
-      _constrain_object_state = _default_constrain_object_state
-    else:
-      _constrain_object_state = None
+  out, output_graph_nodes = graph.extract_graph_nodes(out)
 
-    return cls(
-      in_shardings=in_shardings,
-      out_shardings=out_shardings,
-      static_argnums=_static_argnums,
-      static_argnames=_static_argnames,
-      donate_argnums=_donate_argnums,
-      donate_argnames=_donate_argnames,
-      keep_unused=keep_unused,
-      device=device,
-      backend=backend,
-      inline=inline,
-      abstracted_axes=abstracted_axes,
-      donate_state=donate_state,
-      constrain_state=_constrain_object_state,
-    )
+  graphdef, state = ctx.split((input_graph_nodes, output_graph_nodes))
 
-  def get_jit_kwargs(self) -> dict[str, tp.Any]:
-    kwargs = vars(self).copy()
-    del kwargs['donate_state']
-    del kwargs['constrain_state']
-    if kwargs['in_shardings'] is UNSPECIFIED:
-      kwargs.pop('in_shardings')
-    if kwargs['out_shardings'] is UNSPECIFIED:
-      kwargs.pop('out_shardings')
-    return kwargs
+  if constrain_state is not None:
+    state = constrain_state(state)
 
-
-class JittedFn(tp.Protocol):
-  def __call__(
-    self,
-    *args: tp.Any,
-    _nnx_jit_static: JitStaticInputs,
-    _nnx_jit_state: State,
-    **kwargs: tp.Any,
-  ) -> tuple[
-    tp.Any, State, GraphDef[tuple[tuple[tp.Any, ...], tuple[tp.Any, ...]]]
-  ]:
-    ...
-
-
-def get_jitted_fn(f, options: JITOptions) -> JittedFn:
-  jit_kwargs = options.get_jit_kwargs()
-
-  @functools.partial(jax.jit, **jit_kwargs)
-  def jitted_fn(
-    *args: tp.Any,
-    _nnx_jit_static: JitStaticInputs,
-    _nnx_jit_state: State,
-    **kwargs: tp.Any,
-  ) -> tuple[tp.Any, State, GraphDef[tuple[tp.Any, ...]]]:
-    ctx = _nnx_jit_static.ctx
-    graphdef = _nnx_jit_static.graphdef
-    state: State = _nnx_jit_state
-
-    if options.constrain_state is not None:
-      state = options.constrain_state(state)
-
-    input_graph_nodes = ctx.merge(graphdef, state)
-
-    (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
-
-    out = f(*args, **kwargs)
-
-    out, output_graph_nodes = graph.extract_graph_nodes(out)
-
-    graphdef, state = ctx.split((input_graph_nodes, output_graph_nodes))
-
-    if options.constrain_state is not None:
-      state = options.constrain_state(state)
-
-    return out, state, graphdef
-
-  return jitted_fn
-
-
-def jit_apply(
-  options: JITOptions,
-  jitted_fn: JittedFn,
-  args: tuple[tp.Any, ...],
-  kwargs: dict[str, tp.Any],
-) -> tp.Any:
-  ctx = graph.UpdateContext()
-  (args, kwargs), input_graph_nodes = graph.extract_graph_nodes((args, kwargs))
-  graphdef, state = ctx.split(input_graph_nodes)
-
-  out, output_state, output_graphdef = jitted_fn(
-    *args,
-    _nnx_jit_static=JitStaticInputs(graphdef, ctx),
-    _nnx_jit_state=state,
-    **kwargs,
-  )
-  input_graph_nodes, output_graph_nodes = ctx.update(
-    output_graphdef, output_state
-  )
-  out = graph.insert_graph_nodes(out, output_graph_nodes)
-  return out
-
-
-class Jit(tp.Generic[M], LiftedModule[M]):
-
-  @staticmethod
-  def constructor(
-      module_constructor: tp.Callable[..., MA],
-      *,
-      in_shardings: tp.Any = UNSPECIFIED,
-      out_shardings: tp.Any = UNSPECIFIED,
-      static_argnums: int | tp.Sequence[int] | None = None,
-      static_argnames: str | tp.Iterable[str] | None = None,
-      donate_argnums: int | tp.Sequence[int] | None = None,
-      donate_argnames: str | tp.Iterable[str] | None = None,
-      keep_unused: bool = False,
-      device: tp.Optional[jax.Device] = None,
-      backend: tp.Optional[str] = None,
-      inline: bool = False,
-      abstracted_axes: tp.Optional[tp.Any] = None,
-      # nnx specific
-      donate_state: bool = False,
-      constrain_state: bool | tp.Callable[[State], State] = False,
-  ) -> tp.Callable[..., 'Jit[MA]']:
-    def _create_jit(*args, **kwargs):
-      return Jit(
-          module_constructor=module_constructor,
-          in_shardings=in_shardings,
-          out_shardings=out_shardings,
-          static_argnums=static_argnums,
-          static_argnames=static_argnames,
-          donate_argnums=donate_argnums,
-          donate_argnames=donate_argnames,
-          keep_unused=keep_unused,
-          device=device,
-          backend=backend,
-          inline=inline,
-          abstracted_axes=abstracted_axes,
-          # nnx specific
-          donate_state=donate_state,
-          constrain_state=constrain_state,
-          # submodule args
-          module_init_args=args,
-          module_init_kwargs=kwargs,
-      )
-
-    return _create_jit
-
-  def __init__(
-    self,
-    module_constructor: tp.Callable[..., M],
-    *,
-    in_shardings: tp.Any = UNSPECIFIED,
-    out_shardings: tp.Any = UNSPECIFIED,
-    static_argnums: int | tp.Sequence[int] | None = None,
-    static_argnames: str | tp.Iterable[str] | None = None,
-    donate_argnums: int | tp.Sequence[int] | None = None,
-    donate_argnames: str | tp.Iterable[str] | None = None,
-    keep_unused: bool = False,
-    device: tp.Optional[jax.Device] = None,
-    backend: tp.Optional[str] = None,
-    inline: bool = False,
-    abstracted_axes: tp.Optional[tp.Any] = None,
-    # nnx specific
-    donate_state: bool = False,
-    constrain_state: bool | tp.Callable[[State], State] = False,
-    # submodule args
-    module_init_args: tuple[tp.Any, ...],
-    module_init_kwargs: dict[str, tp.Any],
-  ):
-    self.options = JITOptions.from_jit_kwargs(
-      in_shardings=in_shardings,
-      out_shardings=out_shardings,
-      static_argnums=static_argnums,
-      static_argnames=static_argnames,
-      donate_argnums=donate_argnums,
-      donate_argnames=donate_argnames,
-      keep_unused=keep_unused,
-      device=device,
-      backend=backend,
-      inline=inline,
-      abstracted_axes=abstracted_axes,
-      donate_state=donate_state,
-      constrain_state=constrain_state,
-    )
-    self.accessor: tp.Optional[DelayedAccessor] = None
-
-    def jit_call_module(module, *args, **kwargs):
-      assert self.accessor is not None
-      method = self.accessor(module)
-      return method(*args, **kwargs)
-
-    self.jitted_fn: JittedFn = get_jitted_fn(jit_call_module, self.options)
-    self.module_constructor = module_constructor
-    self.jit_module = self.module_constructor(
-      *module_init_args, **module_init_kwargs
-    )
-
-  @property
-  def _submodule(self) -> M:
-    return self.jit_module
-
-  def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> tp.Any:
-    self.accessor = accessor
-    try:
-      out = jit_apply(
-        self.options, self.jitted_fn, (self.jit_module, *args), kwargs
-      )
-    finally:
-      self.accessor = None
-    return out
+  return out, state, graphdef
 
 
 def jit(
@@ -541,31 +317,169 @@ def jit(
   Returns:
     A wrapped version of ``fun``, set up for just-in-time compilation.
   """
-  options = JITOptions.from_jit_kwargs(
-    in_shardings=in_shardings,
-    out_shardings=out_shardings,
-    static_argnums=static_argnums,
-    static_argnames=static_argnames,
-    donate_argnums=donate_argnums,
-    donate_argnames=donate_argnames,
+
+  _static_argnums = _normalize_sequence(static_argnums)
+  _static_argnames = _normalize_sequence(static_argnames)
+  _donate_argnums = _normalize_sequence(donate_argnums)
+  _donate_argnames = _normalize_sequence(donate_argnames)
+
+  if donate_state:
+    _donate_argnames = (*_donate_argnames, '_nnx_jit_state')
+
+  if callable(constrain_state):
+    _constrain_state = constrain_state
+  elif constrain_state:
+    _constrain_state = _default_constrain_state
+  else:
+    _constrain_state = None
+
+  jit_kwargs = {}
+  if in_shardings is not UNSPECIFIED:
+    jit_kwargs['in_shardings'] = in_shardings
+  if out_shardings is not UNSPECIFIED:
+    jit_kwargs['out_shardings'] = out_shardings
+
+  jitted_fn = jax.jit(
+    _jitted_fn,
+    static_argnums=_static_argnums,
+    static_argnames=_static_argnames,
+    donate_argnums=_donate_argnums,
+    donate_argnames=_donate_argnames,
     keep_unused=keep_unused,
     device=device,
     backend=backend,
     inline=inline,
     abstracted_axes=abstracted_axes,
-    donate_state=donate_state,
-    constrain_state=constrain_state,
+    **jit_kwargs,
   )
-  jitted_fn = get_jitted_fn(fun, options)
 
   @functools.wraps(fun)
-  def jit_apply_wrapper(*args, **kwargs):
-    return jit_apply(options, jitted_fn, args, kwargs)
+  def jit_wrapper(*args, **kwargs):
+    ctx = graph.UpdateContext()
+    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+      (args, kwargs)
+    )
+    graphdef, state = ctx.split(input_graph_nodes)
+    out, output_state, output_graphdef = jitted_fn(
+      *args,
+      _nnx_jit_static=JitStaticInputs(graphdef, ctx, _constrain_state, fun),
+      _nnx_jit_state=state,
+      **kwargs,
+    )
+    input_graph_nodes, output_graph_nodes = ctx.update(
+      output_graphdef, output_state
+    )
+    out = graph.insert_graph_nodes(out, output_graph_nodes)
+    return out
 
-  wrapper = jit_apply_wrapper
-  wrapper.inner = jitted_fn
+  jit_wrapper.inner = jitted_fn  # type: ignore
 
-  return wrapper  # type: ignore
+  return jit_wrapper  # type: ignore
+
+
+class Jit(tp.Generic[M], LiftedModule[M]):
+  @staticmethod
+  def constructor(
+    module_constructor: tp.Callable[..., MA],
+    *,
+    in_shardings: tp.Any = UNSPECIFIED,
+    out_shardings: tp.Any = UNSPECIFIED,
+    static_argnums: int | tp.Sequence[int] | None = None,
+    static_argnames: str | tp.Iterable[str] | None = None,
+    donate_argnums: int | tp.Sequence[int] | None = None,
+    donate_argnames: str | tp.Iterable[str] | None = None,
+    keep_unused: bool = False,
+    device: tp.Optional[jax.Device] = None,
+    backend: tp.Optional[str] = None,
+    inline: bool = False,
+    abstracted_axes: tp.Optional[tp.Any] = None,
+    # nnx specific
+    donate_state: bool = False,
+    constrain_state: bool | tp.Callable[[State], State] = False,
+  ) -> tp.Callable[..., 'Jit[MA]']:
+    def _create_jit(*args, **kwargs):
+      return Jit(
+        module_constructor=module_constructor,
+        in_shardings=in_shardings,
+        out_shardings=out_shardings,
+        static_argnums=static_argnums,
+        static_argnames=static_argnames,
+        donate_argnums=donate_argnums,
+        donate_argnames=donate_argnames,
+        keep_unused=keep_unused,
+        device=device,
+        backend=backend,
+        inline=inline,
+        abstracted_axes=abstracted_axes,
+        # nnx specific
+        donate_state=donate_state,
+        constrain_state=constrain_state,
+        # submodule args
+        module_init_args=args,
+        module_init_kwargs=kwargs,
+      )
+
+    return _create_jit
+
+  def __init__(
+    self,
+    module_constructor: tp.Callable[..., M],
+    *,
+    in_shardings: tp.Any = UNSPECIFIED,
+    out_shardings: tp.Any = UNSPECIFIED,
+    static_argnums: int | tp.Sequence[int] | None = None,
+    static_argnames: str | tp.Iterable[str] | None = None,
+    donate_argnums: int | tp.Sequence[int] | None = None,
+    donate_argnames: str | tp.Iterable[str] | None = None,
+    keep_unused: bool = False,
+    device: tp.Optional[jax.Device] = None,
+    backend: tp.Optional[str] = None,
+    inline: bool = False,
+    abstracted_axes: tp.Optional[tp.Any] = None,
+    # nnx specific
+    donate_state: bool = False,
+    constrain_state: bool | tp.Callable[[State], State] = False,
+    # submodule args
+    module_init_args: tuple[tp.Any, ...],
+    module_init_kwargs: dict[str, tp.Any],
+  ):
+    @functools.partial(
+      jit,
+      in_shardings=in_shardings,
+      out_shardings=out_shardings,
+      static_argnums=static_argnums,
+      static_argnames=static_argnames,
+      donate_argnums=donate_argnums,
+      donate_argnames=donate_argnames,
+      keep_unused=keep_unused,
+      device=device,
+      backend=backend,
+      inline=inline,
+      abstracted_axes=abstracted_axes,
+      donate_state=donate_state,
+      constrain_state=constrain_state,
+    )
+    def jit_call_module(
+      module, *args, _nnx_jit_accessor: DelayedAccessor, **kwargs
+    ):
+      method = _nnx_jit_accessor(module)
+      return method(*args, **kwargs)
+
+    self.jitted_fn = jit_call_module
+    self.module_constructor = module_constructor
+    self.jit_module = self.module_constructor(
+      *module_init_args, **module_init_kwargs
+    )
+
+  @property
+  def _submodule(self) -> M:
+    return self.jit_module
+
+  def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> tp.Any:
+    out = self.jitted_fn(
+      self.jit_module, *args, _nnx_jit_accessor=accessor, **kwargs
+    )
+    return out
 
 
 # -------------------------------
@@ -573,156 +487,116 @@ def jit(
 # -------------------------------
 
 
-@dataclasses.dataclass
-class GradOptions:
-  argnums: tuple[int, ...]
+def grad_fn(*args):
+  f: tp.Callable[..., tp.Any]
+  ctx: graph.UpdateContext
+  graphdef: GraphDef[tuple[dict[int, tp.Any], tuple[tp.Any, ...]]]
+  non_diff_state: State
   has_aux: bool
-  holomorphic: bool
-  allow_int: bool
-  reduce_axes: tp.Sequence[AxisName]
-  return_value: bool
-  wrt: filterlib.Filter
+  diff_args: list[int]
+
+  *_args, f, ctx, graphdef, non_diff_state, has_aux, diff_args = args
+
+  # rebuild diff_state from substates in args
+  diff_state = State({})
+  for i in diff_args:
+    diff_state[i] = _args[i]
+  diff_state = State({0: diff_state.raw_mapping})
+
+  diff_graph_nodes, input_nodes = ctx.merge(
+    graphdef, diff_state, non_diff_state
+  )
+
+  # add nodes to the args
+  for i, arg in diff_graph_nodes.items():
+    _args[i] = arg
+
+  out = f(*_args)
+
+  out, out_nodes = graph.extract_graph_nodes(out)
+
+  graphdef_out, state_out = ctx.split((input_nodes, out_nodes))
+
+  if has_aux:
+    loss, aux = out
+    out = (loss, (ctx, graphdef_out, state_out, aux))
+  else:
+    out = (out, (ctx, graphdef_out, state_out))
+
+  return out
 
 
-class Grad(tp.Generic[M], LiftedModule[M]):
-
-  @staticmethod
-  def constructor(
-      module_constructor: tp.Callable[..., MA],
-      has_aux: bool = False,
-      holomorphic: bool = False,
-      allow_int: bool = False,
-      reduce_axes: tp.Sequence[AxisName] = (),
-      return_value: bool = False,
-      *,
-      wrt: filterlib.Filter = variables.Param,
-  ) -> tp.Callable[..., 'Grad[MA]']:
-    def _create_grad(*args, **kwargs):
-      return Grad(
-          module_constructor=module_constructor,
-          wrt=wrt,
-          has_aux=has_aux,
-          holomorphic=holomorphic,
-          allow_int=allow_int,
-          reduce_axes=reduce_axes,
-          return_value=return_value,
-          # submodule args
-          module_init_args=args,
-          module_init_kwargs=kwargs,
-      )
-
-    return _create_grad
-
-  def __init__(
-    self,
-    module_constructor: tp.Callable[..., M],
-    argnums: int | tp.Sequence[int] = 0,
-    has_aux: bool = False,
-    holomorphic: bool = False,
-    allow_int: bool = False,
-    reduce_axes: tp.Sequence[AxisName] = (),
-    return_value: bool = False,
-    *,
-    wrt: filterlib.Filter = variables.Param,
-    # submodule args
-    module_init_args: tuple[tp.Any, ...],
-    module_init_kwargs: dict[str, tp.Any],
-  ):
+def _grad_general(
+  f: tp.Callable[..., tp.Any],
+  argnums: int | tp.Sequence[int],
+  has_aux: bool,
+  holomorphic: bool,
+  allow_int: bool,
+  reduce_axes: tp.Sequence[AxisName],
+  wrt: filterlib.Filter,
+  return_value: bool,
+) -> tp.Callable[..., tp.Any]:
+  def grad_wrapper(*args):
+    ctx: graph.UpdateContext = graph.UpdateContext()
     _argnums = _normalize_sequence(argnums)
-    self.options = GradOptions(
+    _, input_nodes = graph.extract_graph_nodes(args)
+
+    _args = list(args)
+    diff_graph_nodes: dict[int, tp.Any] = {
+      i: arg
+      for i, arg in enumerate(args)
+      if i in _argnums and graph.is_node(arg)
+    }
+
+    def only_diff(path: tuple, value: tp.Any) -> bool:
+      # diff_graph_nodes is the first element in the tuple
+      return path[0] == 0
+
+    graphdef, diff_state, non_diff_state = ctx.split(
+      (diff_graph_nodes, input_nodes), filterlib.All(wrt, only_diff), ...
+    )  # type: ignore[misc]
+
+    # extract diff_state substates into the args
+    diff_args: list[int] = []
+    if 0 in diff_state:
+      for i, diff_substate in diff_state[0].items():  # type: ignore
+        assert isinstance(i, int)
+        _args[i] = diff_substate
+        diff_args.append(i)
+    transform = jax.value_and_grad if return_value else jax.grad
+
+    _argnums = _argnums[0] if len(_argnums) == 1 else _argnums
+
+    out = transform(
+      grad_fn,
       argnums=_argnums,
-      has_aux=has_aux,
+      has_aux=True,
       holomorphic=holomorphic,
       allow_int=allow_int,
       reduce_axes=reduce_axes,
-      return_value=return_value,
-      wrt=wrt,
-    )
-    self.module_constructor = module_constructor
-    self.grad_module = self.module_constructor(
-      *module_init_args, **module_init_kwargs
-    )
+    )(*_args, f, ctx, graphdef, non_diff_state, has_aux, diff_args)
 
-  @property
-  def _submodule(self) -> M:
-    return self.grad_module
-
-  def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> tp.Any:
-    def grad_call_apply(module, *args, **kwargs):
-      method = accessor(module)
-      return method(*args, **kwargs)
-
-    return grad_apply(self.options, grad_call_apply, (self.grad_module, *args))
-
-
-def grad_apply(options: GradOptions, f, args: tuple[tp.Any, ...]):
-  _, input_nodes = graph.extract_graph_nodes(args)
-
-  _args = list(args)
-  diff_graph_nodes: dict[int, tp.Any] = {
-    i: arg
-    for i, arg in enumerate(args)
-    if i in options.argnums and graph.is_node(arg)
-  }
-
-  _, diff_state, _ = graph.split(diff_graph_nodes, options.wrt, ...)  # type: ignore[misc]
-  for i in diff_graph_nodes:
-    _args[i] = diff_state[i]
-
-  transform = jax.value_and_grad if options.return_value else jax.grad
-  out_nodes = None
-
-  argnums = options.argnums[0] if len(options.argnums) == 1 else options.argnums
-
-  @functools.partial(
-    transform,
-    argnums=argnums,
-    has_aux=True,
-    holomorphic=options.holomorphic,
-    allow_int=options.allow_int,
-    reduce_axes=options.reduce_axes,
-  )
-  def grad_fn(*args):
-    nonlocal out_nodes
-
-    _args = list(args)
-    for i, graph_node in diff_graph_nodes.items():
-      diff_state: State = _args[i]
-      graph.update(graph_node, diff_state)
-      _args[i] = graph_node
-
-    out = f(*_args)
-    out, out_nodes = graph.extract_graph_nodes(out)
-
-    _, updates, _ = graph.flatten((input_nodes, out_nodes))
-
-    if options.has_aux:
-      loss, aux = out
-      out = (loss, (updates, aux))
+    updates: State
+    if return_value:
+      if has_aux:
+        (loss, (ctx, graphdef_out, state_out, aux)), grads = out
+        out = (loss, aux), grads
+      else:
+        (loss, (ctx, graphdef_out, state_out)), grads = out
+        out = loss, grads
     else:
-      out = (out, updates)
+      if has_aux:
+        grads, (ctx, graphdef_out, state_out, aux) = out
+        out = grads, aux
+      else:
+        out, (ctx, graphdef_out, state_out) = out
 
+    input_nodes, out_nodes = ctx.update(graphdef_out, state_out)
+
+    out = graph.insert_graph_nodes(out, out_nodes)
     return out
 
-  out = grad_fn(*_args)
-
-  updates: State
-  if options.return_value:
-    if options.has_aux:
-      (loss, (updates, aux)), grads = out
-      out = (loss, aux), grads
-    else:
-      (loss, updates), grads = out
-      out = loss, grads
-  else:
-    if options.has_aux:
-      grads, (updates, aux) = out
-      out = grads, aux
-    else:
-      out, updates = out
-
-  graph.update((input_nodes, out_nodes), updates)
-  return out
+  return grad_wrapper
 
 
 def grad(
@@ -797,25 +671,16 @@ def grad(
 
   """
 
-  if f.__name__ == '__init__':
-    raise ValueError('Cannot use `grad` with `__init__`')
-
-  _argnums = _normalize_sequence(argnums)
-  options = GradOptions(
-    argnums=_argnums,
-    wrt=wrt,
-    has_aux=has_aux,
-    holomorphic=holomorphic,
-    allow_int=allow_int,
-    reduce_axes=reduce_axes,
+  return _grad_general(
+    f,
+    argnums,
+    has_aux,
+    holomorphic,
+    allow_int,
+    reduce_axes,
+    wrt,
     return_value=False,
   )
-
-  @functools.wraps(f)
-  def grad_wrapper(*args):
-    return grad_apply(options, f, args)
-
-  return grad_wrapper  # type: ignore
 
 
 def value_and_grad(
@@ -828,376 +693,92 @@ def value_and_grad(
   *,
   wrt: filterlib.Filter = variables.Param,
 ) -> tp.Callable[..., tp.Any]:
-  if f.__name__ == '__init__':
-    raise ValueError('Cannot use `value_and_grad` with `__init__`')
-
-  _argnums = _normalize_sequence(argnums)
-  options = GradOptions(
-    argnums=_argnums,
-    has_aux=has_aux,
-    holomorphic=holomorphic,
-    allow_int=allow_int,
-    reduce_axes=reduce_axes,
+  return _grad_general(
+    f,
+    argnums,
+    has_aux,
+    holomorphic,
+    allow_int,
+    reduce_axes,
+    wrt,
     return_value=True,
-    wrt=wrt,
   )
 
-  @functools.wraps(f)
-  def value_and_grad_wrapper(*args):
-    return grad_apply(options, f, args)
 
-  return value_and_grad_wrapper  # type: ignore
-
-
-# -------------------------------
-# scan
-# -------------------------------
-
-
-@dataclasses.dataclass
-class ScanOptions:
-  length: int | None
-  reverse: bool
-  unroll: int | bool
-  _split_transpose: bool
-  # extended api
-  in_axes: tp.Any
-  in_axes_kwargs: tp.Any
-  out_axes: tp.Any
-  carry_argnum: int
-  # nnx specific
-  state_axes: tp.Mapping[filterlib.Filter, int]
-  split_rngs: filterlib.Filter
-  transform_metadata: tp.Mapping[str, tp.Any]
-  scan_output: bool
-
-
-class Scan(tp.Generic[M], LiftedModule[M]):
-
+class Grad(tp.Generic[M], LiftedModule[M]):
   @staticmethod
   def constructor(
-      module_constructor: tp.Callable[..., MA],
-      *,
-      length: int | None = None,
-      reverse: bool = False,
-      unroll: int | bool = 1,
-      _split_transpose: bool = False,
-      # extended api
-      in_axes: int | None | tp.Sequence[tp.Any] = 0,
-      in_axes_kwargs: tp.Any = 0,
-      out_axes: tp.Any = 0,
-      carry_argnum: int = 1,
-      # nnx specific
-      state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
-      split_rngs: filterlib.Filter = ...,
-      transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-      scan_output: bool = True,
-  ) -> tp.Callable[..., 'Scan[MA]']:
-    def _create_scan(*args, **kwargs):
-      return Scan(
-          module_constructor=module_constructor,
-          module_init_args=args,
-          module_init_kwargs=kwargs,
-          # base api
-          length=length,
-          reverse=reverse,
-          unroll=unroll,
-          _split_transpose=_split_transpose,
-          # extended api
-          in_axes=in_axes,
-          in_axes_kwargs=in_axes_kwargs,
-          out_axes=out_axes,
-          carry_argnum=carry_argnum,
-          # nnx specific
-          state_axes=state_axes,
-          split_rngs=split_rngs,
-          transform_metadata=transform_metadata,
-          scan_output=scan_output,
+    module_constructor: tp.Callable[..., MA],
+    has_aux: bool = False,
+    holomorphic: bool = False,
+    allow_int: bool = False,
+    reduce_axes: tp.Sequence[AxisName] = (),
+    return_value: bool = False,
+    *,
+    wrt: filterlib.Filter = variables.Param,
+  ) -> tp.Callable[..., 'Grad[MA]']:
+    def _create_grad(*args, **kwargs):
+      return Grad(
+        module_constructor=module_constructor,
+        wrt=wrt,
+        has_aux=has_aux,
+        holomorphic=holomorphic,
+        allow_int=allow_int,
+        reduce_axes=reduce_axes,
+        return_value=return_value,
+        # submodule args
+        module_init_args=args,
+        module_init_kwargs=kwargs,
       )
 
-    return _create_scan
+    return _create_grad
 
   def __init__(
     self,
     module_constructor: tp.Callable[..., M],
+    argnums: int | tp.Sequence[int] = 0,
+    has_aux: bool = False,
+    holomorphic: bool = False,
+    allow_int: bool = False,
+    reduce_axes: tp.Sequence[AxisName] = (),
     *,
-    length: int | None = None,
-    reverse: bool = False,
-    unroll: int | bool = 1,
-    _split_transpose: bool = False,
-    # extended api
-    in_axes: int | None | tp.Sequence[tp.Any] = 0,
-    in_axes_kwargs: tp.Any = 0,
-    out_axes: tp.Any = 0,
-    carry_argnum: int = 1,
-    # nnx specific
-    state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
-    split_rngs: filterlib.Filter = ...,
-    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-    scan_output: bool = True,
+    wrt: filterlib.Filter = variables.Param,
     # submodule args
     module_init_args: tuple[tp.Any, ...],
     module_init_kwargs: dict[str, tp.Any],
   ):
     self.module_constructor = module_constructor
-    self.options = ScanOptions(
-      length=length,
-      reverse=reverse,
-      unroll=unroll,
-      _split_transpose=_split_transpose,
-      # extended api
-      in_axes=in_axes,
-      in_axes_kwargs=in_axes_kwargs,
-      out_axes=out_axes,
-      carry_argnum=carry_argnum,
-      # nnx specific
-      state_axes=state_axes,
-      split_rngs=split_rngs,
-      transform_metadata=transform_metadata,
-      scan_output=scan_output,
+    self.grad_module = self.module_constructor(
+      *module_init_args, **module_init_kwargs
     )
-    # use Vmap to handle initialisation
-    vmapped_module = Vmap.constructor(
-        module_constructor,
-        in_axes=in_axes,
-        out_axes=None,
-        axis_name=None,
-        axis_size=length,
-        spmd_axis_name=None,
-        state_axes=state_axes,
-        split_rngs=split_rngs,
-        in_axes_kwargs=in_axes_kwargs,
-        transform_metadata=transform_metadata,
-    )(*module_init_args, **module_init_kwargs)
 
-    self.scan_module = vmapped_module.vmap_module
+    @functools.partial(
+      grad,
+      argnums=argnums,
+      has_aux=has_aux,
+      holomorphic=holomorphic,
+      allow_int=allow_int,
+      reduce_axes=reduce_axes,
+      wrt=wrt,
+    )
+    def grad_call_apply(module, *args):
+      *args, accessor = args
+      method = accessor(module)
+      return method(*args)
+
+    self.grad_apply = grad_call_apply
 
   @property
   def _submodule(self) -> M:
-    return self.scan_module
+    return self.grad_module
 
-  def _call(
-    self, accessor: DelayedAccessor, *args, **kwargs
-  ) -> tuple[tp.Any, tp.Any]:
-    def scan_call_apply(module, *args, **kwargs):
-      method = accessor(module)
-      return method(*args, **kwargs)
-
-    return scan_apply(
-      self.options,
-      scan_call_apply,
-      (self._submodule, *args),
-      kwargs,
-    )
+  def _call(self, accessor: DelayedAccessor, *args) -> tp.Any:
+    return self.grad_apply(self.grad_module, *args, accessor)
 
 
-def scan_apply(
-  options: ScanOptions,
-  f: tp.Callable[..., tuple[C, B] | C],
-  args: tuple[tp.Any, ...],
-  kwargs: dict[str, tp.Any],
-) -> tuple[C, B] | C:
-  # extract nodes
-  (args, kwargs), input_graph_nodes = graph.extract_graph_nodes((args, kwargs))
-  input_rng_streams = rnglib.backup_keys(input_graph_nodes)
-
-  # extract carry arg
-  carry_arg, args = _extract_carry_arg(args, options.carry_argnum)
-
-  ctx = graph.UpdateContext()
-  # split module state
-  filters = (*options.state_axes.keys(), ...)
-  graphdef, rng_state, *scan_states, carry_state = ctx.split(  # type: ignore[misc]
-      input_graph_nodes, rnglib.RngState, *filters
-  )
-
-  # transpose axes arg
-  flatdef, flat_scan, flat_carry = _transpose_and_split(
-    (args, kwargs, scan_states),
-    (
-      options.in_axes,
-      options.in_axes_kwargs,
-      list(options.state_axes.values()),
-    ),
-  )
-
-  # infer length
-  lengths: set[int] = set(
-    x.shape[0]  # type: ignore
-    for x, axis in zip(flat_scan, flatdef.flat_axes)
-    if axis is not None
-  )
-
-  if len(lengths) > 1:
-    raise ValueError(
-      'Inconsistent lengths between state_axes states and '
-      f'arguments: {lengths}'
-    )
-  elif len(lengths) == 0:
-    if options.length is None:
-      raise ValueError(
-        'Cannot infer length from state_axes states or axes_arg, '
-        'please specify `length`'
-      )
-    length = options.length
-  else:
-    length = lengths.pop()
-    if options.length is not None and options.length != length:
-      raise ValueError(
-        f'Specified length {options.length} is not the same as the inferred '
-        f'length {length}'
-      )
-
-  # split rng state
-  split_keys, carry_keys = rnglib.fork(
-    rng_state,
-    options.split_rngs,
-    length,
-  )
-
-  def scan_fn(
-    carry: tuple[
-      State,  # carry_keys
-      State,  # carry_state
-      tp.Any,  # carry_arg
-    ],
-    scan: tuple[
-      State,  # split_keys
-      list[jax.Array | None],  # flat_scan
-    ],
-  ):
-    carry_keys, carry_state, carry_arg = carry
-    split_keys, flat_scan = scan
-
-    # merge args and kwargs
-    args, kwargs, scan_states = _unflatten_splits(
-      flatdef, flat_scan, flat_carry
-    )
-    # remove metadata axis name from Variable.sharding
-    if spmd.PARTITION_NAME in options.transform_metadata:
-      scan_states = [
-        spmd.remove_axis(state, index, options.transform_metadata)
-        for state, index in zip(scan_states, options.state_axes.values())
-      ]
-
-    # insert carry arg
-    args = _insert_carry_arg(args, options.carry_argnum, carry_arg)
-
-    # merge module state
-    input_graph_nodes = ctx.merge(
-      graphdef, *scan_states, carry_state, split_keys, carry_keys
-    )
-    (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
-
-    out = f(*args, **kwargs)
-
-    if options.scan_output:
-      if not isinstance(out, tuple) or len(out) != 2:
-        raise ValueError(
-          'Expected a tuple of length 2 as the output of the scan function, '
-          f'got {out}'
-        )
-      out = tp.cast(tuple[C, B], out)  # type: ignore[invalid-annotation]
-      carry_arg_out, scan_args_out = out
-    else:
-      out = tp.cast(C, out)  # type: ignore[invalid-annotation]
-      carry_arg_out = out
-      scan_args_out = None
-
-    (
-      (carry_arg_out, scan_args_out),
-      output_graph_nodes,
-    ) = graph.extract_graph_nodes((carry_arg_out, scan_args_out))
-
-    # split module state
-    (
-        graphdef_out,
-        rng_state_out,
-        *scan_states_out,
-        carry_state_out,
-    ) = ctx.split(  # type: ignore[misc]
-        (input_graph_nodes, output_graph_nodes),
-        rnglib.RngState,
-        *filters,
-    )
-
-    not_keys_out, split_keys_out, carry_keys_out = rng_state_out.split(
-      rnglib.NotKey, options.split_rngs, ...
-    )
-    carry_keys_out = State.merge(not_keys_out, carry_keys_out)
-
-    if 1 in carry_state_out:
-      raise ValueError(
-        f'Cannot add new carry state during scan, got {carry_state_out[1]}'
-      )
-    if 0 in carry_state_out:
-      carry_state_out = carry_state_out[0]
-      assert isinstance(carry_state_out, State)
-    if 1 in carry_keys_out:
-      raise ValueError(
-        f'Cannot add new carry keys during scan, got {carry_keys_out[1]}'
-      )
-    if 0 in carry_keys_out:
-      carry_keys_out = carry_keys_out[0]
-      assert isinstance(carry_keys_out, State)
-
-    # add metadata axis name to Variable.sharding
-    if spmd.PARTITION_NAME in options.transform_metadata:
-      scan_states_out = [
-        spmd.add_axis(state, index, options.transform_metadata)
-        for state, index in zip(scan_states_out, options.state_axes.values())
-      ]
-
-    carry_out = (carry_keys_out, carry_state_out, carry_arg_out)
-    scan_out = (graphdef_out, scan_args_out, scan_states_out, split_keys_out)
-
-    return carry_out, scan_out
-
-  carry = (carry_keys, carry_state, carry_arg)
-  scan = (split_keys, flat_scan)
-
-  carry_out, scan_out = jax.lax.scan(
-    scan_fn,
-    carry,
-    scan,
-    length=length,
-    reverse=options.reverse,
-    unroll=options.unroll,
-    _split_transpose=options._split_transpose,
-  )
-  carry_keys_out, carry_state_out, carry_arg_out = carry_out
-  graphdef_out, scan_args_out, scan_states_out, split_keys_out = scan_out
-
-  scan_args_out, scan_states_out = _transpose_tree(
-    (scan_args_out, scan_states_out),
-    (options.out_axes, list(options.state_axes.values())),
-    axis_is_source=False,
-  )
-
-  if carry_state_out:
-    carry_state_out = State({0: carry_state_out._mapping})
-  if carry_keys_out:
-    carry_keys_out = State({0: carry_keys_out._mapping})
-  _, output_graph_nodes = ctx.update(
-    graphdef_out,
-    *scan_states_out,
-    carry_state_out,
-    carry_keys_out,
-    split_keys_out,
-  )
-
-  carry_arg_out, scan_args_out = graph.insert_graph_nodes(
-    (carry_arg_out, scan_args_out), output_graph_nodes
-  )
-
-  rnglib.restore_keys(input_rng_streams)
-
-  if options.scan_output:
-    scan_args_out = tp.cast(B, scan_args_out)
-    return carry_arg_out, scan_args_out
-  else:
-    return carry_arg_out
-
+# -------------------------------
+# scan
+# -------------------------------
 
 @dataclasses.dataclass(frozen=True)
 class FlatDef(tp.Generic[A]):
@@ -1209,15 +790,15 @@ class FlatDef(tp.Generic[A]):
 jax.tree_util.register_static(FlatDef)
 
 
-def _transpose_tree(tree: A, axes, /, *, axis_is_source: bool) -> A:
+def _transpose_tree(tree: A, axes, /, *, move_front: bool) -> A:
   flatdef, flat_transposes, _ = _transpose_and_split(
-    tree, axes, allow_none=False, axis_is_source=axis_is_source
+    tree, axes, allow_none=False, move_front=move_front
   )
   return flatdef.treedef.unflatten(flat_transposes)
 
 
 def _transpose_and_split(
-  tree: A, axes, /, *, allow_none: bool = True, axis_is_source: bool = True
+  tree: A, axes, /, *, allow_none: bool = True, move_front: bool = True
 ) -> tuple[
   FlatDef[A],
   list[jax.Array | None],
@@ -1252,7 +833,14 @@ def _transpose_and_split(
         axis = len(node.shape) + axis
         flat_axes[i] = axis
 
-      if axis_is_source:
+      if node.shape == ():
+        raise ValueError(f'Cannot map over a scalar array, got {node}')
+      elif axis >= len(node.shape):
+        raise ValueError(
+          f'Axis {axis} out of bounds for array with shape {node.shape}'
+        )
+
+      if move_front:
         node = jnp.moveaxis(node, axis, 0)
       else:
         node = jnp.moveaxis(node, 0, axis)
@@ -1324,6 +912,140 @@ def _insert_carry_arg(
   return args
 
 
+@struct.dataclass
+class ScanBroadcasts(tp.Generic[C, B]):
+  flatdef: FlatDef[
+    tuple[tuple[tp.Any, ...], dict[str, tp.Any], list[State]]
+  ] = struct.field(pytree_node=False)
+  flat_carry: list[tp.Any] = struct.field(pytree_node=True)
+  ctx: graph.UpdateContext = struct.field(pytree_node=False)
+  graphdef: GraphDef[tuple[tp.Any, ...]] = struct.field(pytree_node=False)
+  filters: tuple[filterlib.Filter, ...] = struct.field(pytree_node=False)
+  f: tp.Callable[..., tuple[C, B] | C] = struct.field(pytree_node=False)
+  # options
+  carry_argnum: int = struct.field(pytree_node=False)
+  state_axes: tp.Mapping[filterlib.Filter, int] = struct.field(
+    pytree_node=False
+  )
+  split_rngs: filterlib.Filter = struct.field(pytree_node=False)
+  transform_metadata: tp.Mapping[str, tp.Any] = struct.field(pytree_node=False)
+  scan_output: bool = struct.field(pytree_node=False)
+
+
+def scan_fn(
+  carry: tuple[
+    State,  # split_rng_state
+    State,  # broadcast_rng_state
+    State,  # carry_state
+    tp.Any,  # carry_arg
+    ScanBroadcasts[C, B],  # broadcasts
+  ],
+  scan: tuple[
+    list[jax.Array | None],  # flat_scan
+  ],
+):
+  split_rng_state, broadcast_rng_state, carry_state, carry_arg, broadcasts = (
+    carry
+  )
+  (flat_scan,) = scan
+  flatdef = broadcasts.flatdef
+  flat_carry, ctx = broadcasts.flat_carry, broadcasts.ctx
+  graphdef, filters = broadcasts.graphdef, broadcasts.filters
+  f = broadcasts.f
+
+  # merge args and kwargs
+  args, kwargs, scan_states = _unflatten_splits(flatdef, flat_scan, flat_carry)
+  # remove metadata axis name from Variable.sharding
+  if spmd.PARTITION_NAME in broadcasts.transform_metadata:
+    scan_states = [
+      spmd.remove_axis(state, index, broadcasts.transform_metadata)
+      for state, index in zip(scan_states, broadcasts.state_axes.values())
+    ]
+
+  # insert carry arg
+  args = _insert_carry_arg(args, broadcasts.carry_argnum, carry_arg)
+
+  # merge module state
+  input_graph_nodes = ctx.merge(
+    graphdef, *scan_states, carry_state, split_rng_state, broadcast_rng_state
+  )
+  (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
+
+  out = f(*args, **kwargs)
+
+  if broadcasts.scan_output:
+    if not isinstance(out, tuple) or len(out) != 2:
+      raise ValueError(
+        'Expected a tuple of length 2 as the output of the scan function, '
+        f'got {out}'
+      )
+    out = tp.cast(tuple[C, B], out)  # type: ignore[invalid-annotation]
+    carry_arg_out, scan_args_out = out
+  else:
+    out = tp.cast(C, out)  # type: ignore[invalid-annotation]
+    carry_arg_out = out
+    scan_args_out = None
+
+  (
+    (carry_arg_out, scan_args_out),
+    output_graph_nodes,
+  ) = graph.extract_graph_nodes((carry_arg_out, scan_args_out))
+
+  # split module state
+  (
+    graphdef_out,
+    rng_state_out,
+    *scan_states_out,
+    carry_state_out,
+  ) = ctx.split(  # type: ignore[misc]
+    (input_graph_nodes, output_graph_nodes),
+    rnglib.RngState,
+    *filters,
+  )
+
+  split_rng_state_out, broadcast_rng_state_out = rng_state_out.split(
+    broadcasts.split_rngs, ...
+  )
+
+  def _extract_carry_state(state: State, /):
+    if 1 in state:
+      raise ValueError(
+        f'Cannot add new carry state during scan, got {state[1]}'
+      )
+    if 0 in state:
+      _state = state[0]
+      assert isinstance(_state, State)
+      state = _state
+
+    return state
+
+  carry_state_out = _extract_carry_state(carry_state_out)
+  split_rng_state_out = _extract_carry_state(split_rng_state_out)
+  broadcast_rng_state_out = _extract_carry_state(broadcast_rng_state_out)
+
+  # override  broadcast_rng_state_out to keep the same state
+  # for the next iteration
+  broadcast_rng_state_out = broadcast_rng_state
+
+  # add metadata axis name to Variable.sharding
+  if spmd.PARTITION_NAME in broadcasts.transform_metadata:
+    scan_states_out = [
+      spmd.add_axis(state, index, broadcasts.transform_metadata)
+      for state, index in zip(scan_states_out, broadcasts.state_axes.values())
+    ]
+
+  carry_out = (
+    split_rng_state_out,
+    broadcast_rng_state_out,
+    carry_state_out,
+    carry_arg_out,
+    broadcasts,
+  )
+  scan_out = (graphdef_out, scan_args_out, scan_states_out)
+
+  return carry_out, scan_out
+
+
 def scan(
   f: F,
   *,
@@ -1342,26 +1064,252 @@ def scan(
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   scan_output: bool = True,
 ) -> F:
-  options = ScanOptions(
-    length=length,
-    reverse=reverse,
-    unroll=unroll,
-    _split_transpose=_split_transpose,
-    in_axes=in_axes,
-    in_axes_kwargs=in_axes_kwargs,
-    out_axes=out_axes,
-    carry_argnum=carry_argnum,
-    state_axes=state_axes,
-    split_rngs=split_rngs,
-    transform_metadata=transform_metadata,
-    scan_output=scan_output,
-  )
-
   @functools.wraps(f)
-  def scan_apply_wrapper(*args, **kwargs) -> tp.Any:
-    return scan_apply(options, f, args, kwargs)
+  def scan_apply_wrapper(*args, **kwargs):
+    # extract nodes
+    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+      (args, kwargs)
+    )
+    input_rng_streams = rnglib.backup_keys(input_graph_nodes)
+
+    # extract carry arg
+    carry_arg, args = _extract_carry_arg(args, carry_argnum)
+
+    ctx = graph.UpdateContext()
+    # split module state
+    filters = (*state_axes.keys(), ...)
+    graphdef, rng_state, *scan_states, carry_state = ctx.split(  # type: ignore[misc]
+      input_graph_nodes, rnglib.RngState, *filters
+    )
+
+    # transpose axes arg
+    flatdef, flat_scan, flat_carry = _transpose_and_split(
+      (args, kwargs, scan_states),
+      (in_axes, in_axes_kwargs, list(state_axes.values())),
+    )
+
+    # infer length
+    lengths: set[int] = set(
+      x.shape[0]  # type: ignore
+      for x, axis in zip(flat_scan, flatdef.flat_axes)
+      if axis is not None
+    )
+
+    if len(lengths) > 1:
+      raise ValueError(
+        'Inconsistent lengths between state_axes states and '
+        f'arguments: {lengths}'
+      )
+    elif len(lengths) == 0:
+      if length is None:
+        raise ValueError(
+          'Cannot infer length from state_axes states or axes_arg, '
+          'please specify `length`'
+        )
+      infered_length = length
+    else:
+      infered_length = lengths.pop()
+      if length is not None and length != infered_length:
+        raise ValueError(
+          f'Specified length {length} is not the same as the inferred '
+          f'length {infered_length}'
+        )
+
+    # split rng state
+    split_rng_state, broadcast_rng_state = rng_state.split(split_rngs, ...)
+
+    broadcasts = ScanBroadcasts(
+      flatdef,
+      flat_carry,
+      ctx,
+      graphdef,
+      filters,
+      f,
+      # options
+      carry_argnum,
+      state_axes,
+      split_rngs,
+      transform_metadata,
+      scan_output,
+    )
+    carry = (
+      split_rng_state,
+      broadcast_rng_state,
+      carry_state,
+      carry_arg,
+      broadcasts,
+    )
+    scan = (flat_scan,)
+
+    carry_out, scan_out = jax.lax.scan(
+      scan_fn,
+      carry,
+      scan,
+      length=infered_length,
+      reverse=reverse,
+      unroll=unroll,
+      _split_transpose=_split_transpose,
+    )
+    (
+      split_rng_state_out,
+      broadcast_rng_state_out,
+      carry_state_out,
+      carry_arg_out,
+      broadcasts,
+    ) = carry_out
+    graphdef_out, scan_args_out, scan_states_out = scan_out
+
+    scan_args_out, scan_states_out = _transpose_tree(
+      (scan_args_out, scan_states_out),
+      (out_axes, list(state_axes.values())),
+      move_front=False,
+    )
+
+    if carry_state_out:
+      carry_state_out = State({0: carry_state_out._mapping})
+    if split_rng_state_out:
+      split_rng_state_out = State({0: split_rng_state_out._mapping})
+    if broadcast_rng_state_out:
+      broadcast_rng_state_out = State({0: broadcast_rng_state_out._mapping})
+
+    _, output_graph_nodes = ctx.update(
+      graphdef_out,
+      *scan_states_out,
+      carry_state_out,
+      split_rng_state_out,
+      broadcast_rng_state_out,
+    )
+
+    carry_arg_out, scan_args_out = graph.insert_graph_nodes(
+      (carry_arg_out, scan_args_out), output_graph_nodes
+    )
+
+    rnglib.restore_keys(input_rng_streams)
+
+    if scan_output:
+      scan_args_out = tp.cast(B, scan_args_out)
+      return carry_arg_out, scan_args_out
+    else:
+      return carry_arg_out
 
   return scan_apply_wrapper  # type: ignore
+
+
+class Scan(tp.Generic[M], LiftedModule[M]):
+  @staticmethod
+  def constructor(
+    module_constructor: tp.Callable[..., MA],
+    *,
+    length: int | None = None,
+    reverse: bool = False,
+    unroll: int | bool = 1,
+    _split_transpose: bool = False,
+    # extended api
+    in_axes: int | None | tp.Sequence[tp.Any] = 0,
+    in_axes_kwargs: tp.Any = 0,
+    out_axes: tp.Any = 0,
+    carry_argnum: int = 1,
+    # nnx specific
+    state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+    split_rngs: filterlib.Filter = ...,
+    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+    scan_output: bool = True,
+  ) -> tp.Callable[..., 'Scan[MA]']:
+    def _create_scan(*args, **kwargs):
+      return Scan(
+        module_constructor=module_constructor,
+        module_init_args=args,
+        module_init_kwargs=kwargs,
+        # base api
+        length=length,
+        reverse=reverse,
+        unroll=unroll,
+        _split_transpose=_split_transpose,
+        # extended api
+        in_axes=in_axes,
+        in_axes_kwargs=in_axes_kwargs,
+        out_axes=out_axes,
+        carry_argnum=carry_argnum,
+        # nnx specific
+        state_axes=state_axes,
+        split_rngs=split_rngs,
+        transform_metadata=transform_metadata,
+        scan_output=scan_output,
+      )
+
+    return _create_scan
+
+  def __init__(
+    self,
+    module_constructor: tp.Callable[..., M],
+    *,
+    length: int | None = None,
+    reverse: bool = False,
+    unroll: int | bool = 1,
+    _split_transpose: bool = False,
+    # extended api
+    in_axes: int | None | tp.Sequence[tp.Any] = 0,
+    in_axes_kwargs: tp.Any = 0,
+    out_axes: tp.Any = 0,
+    carry_argnum: int = 1,
+    # nnx specific
+    state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+    split_rngs: filterlib.Filter = ...,
+    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+    scan_output: bool = True,
+    # submodule args
+    module_init_args: tuple[tp.Any, ...],
+    module_init_kwargs: dict[str, tp.Any],
+  ):
+    self.module_constructor = module_constructor
+    # use Vmap to handle initialisation
+    vmapped_module = Vmap.constructor(
+      module_constructor,
+      in_axes=in_axes,
+      out_axes=None,
+      axis_name=None,
+      axis_size=length,
+      spmd_axis_name=None,
+      state_axes=state_axes,
+      split_rngs=split_rngs,
+      in_axes_kwargs=in_axes_kwargs,
+      transform_metadata=transform_metadata,
+    )(*module_init_args, **module_init_kwargs)
+    self.scan_module = vmapped_module.vmap_module
+
+    @functools.partial(
+      scan,
+      length=length,
+      reverse=reverse,
+      unroll=unroll,
+      _split_transpose=_split_transpose,
+      in_axes=in_axes,
+      in_axes_kwargs=in_axes_kwargs,
+      out_axes=out_axes,
+      carry_argnum=carry_argnum,
+      state_axes=state_axes,
+      split_rngs=split_rngs,
+      transform_metadata=transform_metadata,
+      scan_output=scan_output,
+    )
+    def scan_call_apply(
+      module, *args, _nnx_scan_accessor: DelayedAccessor, **kwargs
+    ):
+      method = _nnx_scan_accessor(module)
+      return method(*args, **kwargs)
+
+    self.scan_fn = scan_call_apply
+
+  @property
+  def _submodule(self) -> M:
+    return self.scan_module
+
+  def _call(
+    self, accessor: DelayedAccessor, *args, **kwargs
+  ) -> tuple[tp.Any, tp.Any]:
+    return self.scan_fn(
+      self._submodule, *args, _nnx_scan_accessor=accessor, **kwargs
+    )
 
 
 # -------------------------------
@@ -1674,7 +1622,7 @@ def vmap_apply(
         f' inferred length {axis_size}'
       )
 
-  split_keys, broadcast_keys = rnglib.fork(
+  split_keys, split_counts, broadcast_keys, broadcast_counts = rnglib.fork(
     rng_state,
     options.split_rngs,
     axis_size,
@@ -1718,7 +1666,13 @@ def vmap_apply(
 
     # merge module state
     input_graph_nodes = ctx.merge(
-      graphdef, *vectorized_states, broadcast_state, split_keys, broadcast_keys
+      graphdef,
+      *vectorized_states,
+      broadcast_state,
+      split_keys,
+      split_counts,
+      broadcast_keys,
+      broadcast_counts,
     )
 
     (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
@@ -1849,4 +1803,71 @@ def eval_shape(
 
   output_nodes = graph.merge(graphdef_out, state_out)
   out = graph.insert_graph_nodes(out, output_nodes)
+  return out
+
+# -------------------------------
+# cond
+# -------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class CondStaticInputs(tp.Generic[A]):
+  true_fun: tp.Callable[..., A]
+  false_fun: tp.Callable[..., A]
+
+jax.tree_util.register_static(CondStaticInputs)
+
+
+def _cond_fun(
+  is_true: bool,
+  ctx: graph.UpdateContext,
+  static_inputs: CondStaticInputs[A],
+  graphdef: GraphDef[tuple[tp.Any, ...]],
+  state: State,
+):
+  fn = static_inputs.true_fun if is_true else static_inputs.false_fun
+  operands = ctx.merge(graphdef, state)
+  out = fn(*operands)
+  graphdef_out, state_out = ctx.split((operands, out))
+  return graphdef_out, state_out, ctx
+
+
+def _cond_true_fun(
+  ctx: graph.UpdateContext,
+  static_inputs: CondStaticInputs[A],
+  graphdef: GraphDef[tuple[tp.Any, ...]],
+  state: State,
+):
+  return _cond_fun(True, ctx, static_inputs, graphdef, state)
+
+
+def _cond_false_fun(
+  ctx: graph.UpdateContext,
+  static_inputs: CondStaticInputs[A],
+  graphdef: GraphDef[tuple[tp.Any, ...]],
+  state: State,
+):
+  return _cond_fun(False, ctx, static_inputs, graphdef, state)
+
+
+def cond(
+  pred,
+  true_fun: tp.Callable[..., A],
+  false_fun: tp.Callable[..., A],
+  *operands,
+  **kwargs,
+) -> A:
+  ctx: graph.UpdateContext = graph.UpdateContext()
+  graphdef, state = ctx.split(operands)
+  graphdef_out, state_out, ctx = jax.lax.cond(
+    pred,
+    _cond_true_fun,
+    _cond_false_fun,
+    ctx,
+    CondStaticInputs(true_fun=true_fun, false_fun=false_fun),
+    graphdef,
+    state,
+    **kwargs,
+  )
+  _operands_out, out = ctx.update(graphdef_out, state_out)
   return out

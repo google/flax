@@ -137,7 +137,7 @@ class GraphNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
   set_key: tp.Callable[[Node, Key, Leaf], None]
   pop_key: tp.Callable[[Node, Key], Leaf]
   create_empty: tp.Callable[[AuxData], Node]
-  clear: tp.Callable[[Node, AuxData], None]
+  clear: tp.Callable[[Node], None]
 
   def init(self, node: Node, items: tuple[tuple[Key, Leaf], ...]):
     for key, value in items:
@@ -163,7 +163,7 @@ def register_graph_node_type(
   set_key: tp.Callable[[Node, Key, Leaf], None],
   pop_key: tp.Callable[[Node, Key], Leaf],
   create_empty: tp.Callable[[AuxData], Node],
-  clear: tp.Callable[[Node, AuxData], None],
+  clear: tp.Callable[[Node], None],
 ):
   _node_impl_for_type[type] = GraphNodeImpl(
     type=type,
@@ -589,7 +589,7 @@ def _graph_unflatten(
           f'Expected a node of type {nodedef.type} for index '
           f'{nodedef.index}, but got a node of type {type(node)}.'
         )
-      node_impl.clear(node, nodedef.metadata)
+      node_impl.clear(node)
     else:
       node = node_impl.create_empty(nodedef.metadata)
     index_to_ref[nodedef.index] = node
@@ -878,6 +878,10 @@ class UpdateContext:
     if self.refmap is None:
       self.refmap = refmap
 
+    if graphdef.index_mapping is not None:
+      # clear idxmap to remove any references to tracers
+      self.idxmap = None
+
     return graphdef, states[0], *states[1:]
 
   def merge(
@@ -911,7 +915,13 @@ class UpdateContext:
     index_to_ref = compose_mapping_reversed(
       self.refmap, new_graphdef.index_mapping
     )
-    return unflatten(new_graphdef, state, idxmap=index_to_ref)[0]
+    out = unflatten(new_graphdef, state, idxmap=index_to_ref)[0]
+
+    # clear references
+    self.refmap = None
+    self.idxmap = None
+
+    return out
 
 
 jax.tree_util.register_static(UpdateContext)

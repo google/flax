@@ -86,6 +86,7 @@ from .nnx.rnglib import RngStream as RngStream
 from .nnx.rnglib import RngState as RngState
 from .nnx.rnglib import RngKey as RngKey
 from .nnx.rnglib import RngCount as RngCount
+from .nnx.rnglib import ForkStates as ForkStates
 from .nnx.rnglib import fork as fork
 from .nnx.spmd import PARTITION_NAME as PARTITION_NAME
 from .nnx.spmd import get_partition_spec as get_partition_spec
@@ -109,6 +110,7 @@ from .nnx.transforms import scan as scan
 from .nnx.transforms import value_and_grad as value_and_grad
 from .nnx.transforms import vmap as vmap
 from .nnx.transforms import eval_shape as eval_shape
+from .nnx.transforms import cond as cond
 from .nnx.variables import EMPTY as EMPTY
 from .nnx.variables import A as A
 from .nnx.variables import BatchStat as BatchStat

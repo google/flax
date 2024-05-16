@@ -191,7 +191,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     vars(node).update(_object__state=ObjectState())
     return node
 
-  def _graph_node_clear(self, cls: tp.Type[G]):
+  def _graph_node_clear(self):
     module_state = self._object__state
     module_vars = vars(self)
     module_vars.clear()
