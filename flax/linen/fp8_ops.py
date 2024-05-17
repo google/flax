@@ -170,19 +170,20 @@ out_q.defvjp(out_q_fwd, out_q_bwd)
 
 @partial(custom_vjp, nondiff_argnums=(0,))
 def update_fp8_meta(compute_dtype, inp, scale, amax_history):
-  return inp
-
-
-def update_fp8_meta_fwd(compute_dtype, inp, scale, amax_history):
   new_scale, new_history = _compute_new_meta(
     inp, jnp.float8_e4m3fn, scale, amax_history, compute_dtype
   )
-  return inp, (new_scale, new_history)
+  return inp, new_scale, new_history
+
+
+def update_fp8_meta_fwd(compute_dtype, inp, scale, amax_history):
+  out, new_scale, new_history = update_fp8_meta(compute_dtype, inp, scale, amax_history)
+
+  return (out, new_scale, new_history), ()
 
 
 def update_fp8_meta_bwd(compute_dtype, res, g):
-  new_scale, new_history = res
-  q_g = g
+  q_g, new_scale, new_history = g
   return q_g, new_scale, new_history
 
 
@@ -316,17 +317,21 @@ class Fp8DotGeneralOp(module.Module):
     comp_dtype = k.dtype
     x = jnp.asarray(x, comp_dtype)
     
-    x = update_fp8_meta(
+    x, new_input_scale, _ = update_fp8_meta(
       comp_dtype, x, self.input_scale.value, self.input_amax_history.value
     )
-    k = update_fp8_meta(
+    k, new_kernel_scale, _ = update_fp8_meta(
       comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
     )
 
+    e5m2_max = get_fp8_max(jnp.float8_e5m2, jnp.float32)
+    amax_from_history = jnp.max(self.output_grad_amax_history.value, axis=0)
+    new_output_grad_scale = compute_scale(amax_from_history, self.output_grad_scale.value, e5m2_max)
+
     y = dot_general_with_precision(x, k, dimension_numbers,
-                                     self.input_scale.value,
-                                     self.kernel_scale.value,
-                                     self.output_grad_scale.value,
+                                     new_input_scale,
+                                     new_kernel_scale,
+                                     new_output_grad_scale,
                                      preferred_element_type=x.dtype)
 
     y = out_q(comp_dtype, y, self.output_grad_scale.value, 
