@@ -1061,24 +1061,52 @@ def clone(node: Node) -> Node:
   return merge(graphdef, state)
 
 
-def iter_nodes(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
+def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
+  """Iterates over all nested nodes and leaves of a graph node, including the current node.
+
+  ``iter_graph`` creates a generator that yields path and value pairs, where
+  the path is a tuple of strings or integers representing the path to the value from the
+  root. Repeated nodes are visited only once. Leaves include static values.
+
+  Example::
+    >>> from flax.experimental import nnx
+    >>> import jax.numpy as jnp
+    ...
+    >>> class Linear(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.din, self.dout = din, dout
+    ...     self.w = nnx.Param(jax.random.uniform(rngs.next(), (din, dout)))
+    ...     self.b = nnx.Param(jnp.zeros((dout,)))
+    ...
+    >>> module = Linear(3, 4, rngs=nnx.Rngs(0))
+    >>> graph = [module, module]
+    ...
+    >>> for path, module in nnx.iter_graph(graph):
+    ...   print(path, type(module).__name__)
+    ...
+    (0, 'b') Param
+    (0, 'din') int
+    (0, 'dout') int
+    (0, 'w') Param
+    (0,) Linear
+    () list
+  """
   visited: set[int] = set()
   path_parts: PathParts = ()
-  yield from _iter_nodes(node, visited, path_parts)
+  yield from _iter_graph(node, visited, path_parts)
 
 
-def _iter_nodes(
+def _iter_graph(
   node: tp.Any, visited: set[int], path_parts: PathParts
 ) -> tp.Iterator[tuple[PathParts, tp.Any]]:
-  if not is_node(node):
-    return
-  if id(node) in visited:
-    return
-  visited.add(id(node))
-  node_impl = get_node_impl(node)
-  node_dict = node_impl.node_dict(node)
-  for key, value in node_dict.items():
-    yield from _iter_nodes(value, visited, (*path_parts, key))
+  if is_node(node):
+    if id(node) in visited:
+      return
+    visited.add(id(node))
+    node_dict = get_node_impl(node).node_dict(node)
+    for key, value in node_dict.items():
+      yield from _iter_graph(value, visited, (*path_parts, key))
+
   yield path_parts, node
 
 

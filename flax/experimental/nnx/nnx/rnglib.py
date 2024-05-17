@@ -200,7 +200,7 @@ def fork(
 
 def backup_keys(node: tp.Any, /):
   streams: list[RngStream] = []
-  for _, stream in graph.iter_nodes(node):
+  for _, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
       stream.key_backups.append(RngKeyBackup(stream.key.value))
       streams.append(stream)
