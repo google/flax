@@ -70,11 +70,14 @@ class ObjectMeta(ABCMeta):
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
       return _graph_node_meta_call(cls, *args, **kwargs)
 
+  def _object_meta_construct(cls, self, *args, **kwargs):
+    self.__init__(*args, **kwargs)
+
 
 def _graph_node_meta_call(cls: tp.Type[G], *args, **kwargs) -> G:
   node = cls.__new__(cls, *args, **kwargs)
   vars(node)['_object__state'] = ObjectState()
-  node.__init__(*args, **kwargs)  # type: ignore[misc]
+  cls._object_meta_construct(node, *args, **kwargs)
 
   return node
 

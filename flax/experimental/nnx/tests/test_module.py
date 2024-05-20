@@ -471,31 +471,6 @@ class TestModule:
       raise_if_not_found=False,
     )
 
-  def test_init(self):
-    class Linear(nnx.Module):
-      def __init__(self, dout, rngs: nnx.Rngs):
-        self.dout = dout
-        self.rngs = rngs
-
-      def __call__(self, x):
-        if self.is_initializing():
-          din = x.shape[-1]
-          if not hasattr(self, 'w'):
-            key = self.rngs.params()
-            self.w = nnx.Param(jax.random.uniform(key, (din, self.dout)))
-          if not hasattr(self, 'b'):
-            self.b = nnx.Param(jnp.zeros((self.dout,)))
-        return x @ self.w + self.b[None]
-
-    linear = Linear(3, nnx.Rngs(0))
-    x = jnp.ones((5, 2))
-    y = linear.init(x)
-    assert linear.w.value.shape == (2, 3)
-    assert linear.b.value.shape == (3,)
-    assert y.shape == (5, 3)
-    assert not linear.is_initializing()
-
-
 class TestModulePytree:
   def test_tree_map(self):
     class Foo(nnx.Module, experimental_pytree=True):
@@ -572,23 +547,6 @@ class TestModuleDataclass:
       rngs: nnx.Rngs
 
       def __post_init__(self):
-        self.bar = nnx.Linear(self.din, self.dout, rngs=self.rngs)
-
-      def __call__(self, x):
-        return self.bar(x)
-
-    m = DFoo(1, 1, rngs=nnx.Rngs(0))
-
-    assert hasattr(m, 'bar')
-
-  def test_setup_is_called(self):
-    @dataclasses.dataclass
-    class DFoo(nnx.Module):
-      din: int
-      dout: int
-      rngs: nnx.Rngs
-
-      def setup(self):
         self.bar = nnx.Linear(self.din, self.dout, rngs=self.rngs)
 
       def __call__(self, x):

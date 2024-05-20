@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import typing as tp
 from functools import partial
 
@@ -27,10 +26,6 @@ from flax.experimental.nnx.nnx import (
 from flax.experimental.nnx.nnx import variables as variableslib
 from flax.experimental.nnx.nnx.graph import GraphDef
 from flax.experimental.nnx.nnx.object import Object, ObjectMeta
-from flax.experimental.nnx.nnx.proxy_caller import (
-  CallableProxy,
-  DelayedAccessor,
-)
 from flax.experimental.nnx.nnx.state import State, StateLeaf
 from flax.typing import Path, PathParts
 
@@ -39,34 +34,17 @@ B = tp.TypeVar('B')
 M = tp.TypeVar('M', bound='Module')
 S = tp.TypeVar('S', bound=tp.Union[State, tuple[State, ...]])
 V = tp.TypeVar('V', bound=variableslib.Variable[tp.Any])
+F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
 StateMapping = tp.Mapping[Path, tp.Any]
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
 
-@tp.runtime_checkable
-class _HasSetup(tp.Protocol):
-  def setup(self) -> None: ...
-
-
 class ModuleMeta(ObjectMeta):
-  if not tp.TYPE_CHECKING:
-
-    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
-      return _module_meta_call(cls, *args, **kwargs)
-
-
-def _module_meta_call(cls: tp.Type[M], *args, **kwargs) -> M:
-  module: M = ObjectMeta.__call__(cls, *args, **kwargs)
-
-  if dataclasses.is_dataclass(module):
-    if isinstance(module, _HasSetup):
-      module.setup()
-
-  assert isinstance(module, Module)
-
-  return module
+  # we keep a trivial derived class just in case we need to
+  # add more functionality in the future
+  pass
 
 
 class Module(Object, metaclass=ModuleMeta):
@@ -95,73 +73,6 @@ class Module(Object, metaclass=ModuleMeta):
     else:
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
-
-  @property
-  def init(self: M) -> M:
-    """Calls a method in initialization mode.
-
-    When a method is called using ``init``, the ``is_initializing`` method
-    will return ``True``. This is useful to implement Modules that support
-    lazy initialization.
-
-    Example::
-
-      >>> from flax.experimental import nnx
-      >>> import jax
-      >>> import jax.numpy as jnp
-      ...
-      >>> class Linear(nnx.Module):
-      ...   def __init__(self, dout, rngs: nnx.Rngs):
-      ...     self.dout = dout
-      ...     self.rngs = rngs
-      ...
-      ...   def __call__(self, x):
-      ...     if self.is_initializing():
-      ...       din = x.shape[-1]
-      ...       if not hasattr(self, 'w'):
-      ...         key = self.rngs.params()
-      ...         self.w = nnx.Param(jax.random.uniform(key, (din, self.dout)))
-      ...       if not hasattr(self, 'b'):
-      ...         self.b = nnx.Param(jnp.zeros((self.dout,)))
-      ...
-      ...     return x @ self.w + self.b
-      ...
-      >>> linear = Linear(3, nnx.Rngs(0))
-      >>> x = jnp.ones((5, 2))
-      >>> y = linear.init(x)
-      >>> linear.w.value.shape
-      (2, 3)
-      >>> linear.b.value.shape
-      (3,)
-      >>> y.shape
-      (5, 3)
-    """
-
-    def _init_context(accessor: DelayedAccessor, *args, **kwargs):
-      for _, value in graph.iter_graph(self):
-        if isinstance(value, Object):
-          value._object__state._initializing = True
-
-      method = accessor(self)
-      try:
-        out = method(*args, **kwargs)
-      finally:
-        for _, value in graph.iter_graph(self):
-          if isinstance(value, Object):
-            value._object__state._initializing = False
-
-      return out
-
-    return CallableProxy(_init_context)  # type: ignore
-
-  def is_initializing(self) -> bool:
-    """Returns whether the Module is initializing.
-
-    ``is_initializing`` returns ``True`` if the Module is currently being run
-    under ``init``.
-    """
-
-    return self._object__state._initializing
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
     """Iterates over all nested Modules of the current Module, including the current Module.
