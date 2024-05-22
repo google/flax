@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from absl.testing.absltest import TestCase
+from absl.testing import absltest
 
 from flax.experimental import nnx
 
 
-class StateTest(TestCase):
+class StateTest(absltest.TestCase):
   def test_create_state(self):
     state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
 
@@ -50,6 +50,18 @@ class StateTest(TestCase):
     assert issubclass(state.b.c.type, nnx.Param)
     assert state.b.c.value == 4
 
+  def test_add_nested_attr(self):
+    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
+    state.b.d = nnx.Param.state(5)
+
+    assert state['b']['d'].value == 5
+
+  def test_delete_nested_attr(self):
+    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
+    del state['b']['c']
+
+    assert 'c' not in state['b']
+
   def test_integer_access(self):
     class Foo(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
@@ -62,3 +74,7 @@ class StateTest(TestCase):
     assert state.layers[0].kernel.value.shape == (1, 2)
     assert module.layers[1].kernel.value.shape == (2, 3)
     assert state.layers[1].kernel.value.shape == (2, 3)
+
+
+if __name__ == '__main__':
+  absltest.main()

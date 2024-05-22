@@ -70,11 +70,23 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       tp.Iterator[tuple[Key, tp.Mapping | StateLeaf]],
     ],
     /,
+    *,
+    _copy: bool = True,
   ):
-    if tp.TYPE_CHECKING:
-      self._mapping = dict(mapping)
+    if _copy:
+      _mapping = dict(mapping)
     else:
-      super().__setattr__('_mapping', dict(mapping))
+      if not isinstance(mapping, dict):
+        raise ValueError(
+          'Expected a dictionary when `_copy=False`, '
+          f'got {type(mapping)} instead.'
+        )
+      _mapping = mapping
+
+    if tp.TYPE_CHECKING:
+      self._mapping = _mapping
+    else:
+      super().__setattr__('_mapping', _mapping)
 
   @property
   def raw_mapping(self) -> tp.Mapping[Key, tp.Mapping[Key, tp.Any] | StateLeaf]:
@@ -86,7 +98,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def __getitem__(self, key: Key) -> State | StateLeaf:
     value = self._mapping[key]
     if isinstance(value, tp.Mapping):
-      return State(value)
+      return State(value, _copy=False)
     return value
 
   def __getattr__(self, key: Key) -> State | StateLeaf:
