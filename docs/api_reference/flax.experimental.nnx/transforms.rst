@@ -19,3 +19,5 @@ transforms
 .. autofunction:: scan
 .. autofunction:: value_and_grad
 .. autofunction:: vmap
+.. autofunction:: eval_shape
+.. autofunction:: cond

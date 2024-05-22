@@ -124,7 +124,6 @@ def _default_constrain_state(state: State) -> State:
 @dataclasses.dataclass(frozen=True)
 class JitStaticInputs:
   graphdef: GraphDef[tuple[tp.Any, ...]]
-  ctx: graph.UpdateContext
   constrain_state: tp.Callable[[State], State] | None
   f: tp.Callable[..., tp.Any]
 
@@ -147,7 +146,7 @@ def _jitted_fn(
   _nnx_jit_state: State,
   **kwargs: tp.Any,
 ) -> tuple[tp.Any, State, GraphDef[tuple[tp.Any, ...]]]:
-  ctx = _nnx_jit_static.ctx
+  ctx = graph.current_update_context('jit')
   graphdef = _nnx_jit_static.graphdef
   constrain_state = _nnx_jit_static.constrain_state
   f = _nnx_jit_static.f
@@ -354,19 +353,20 @@ def jit(
   )
 
   @functools.wraps(fun)
+  @graph.update_context('jit')
   def jit_wrapper(*args, **kwargs):
-    ctx = graph.UpdateContext()
+    ctx = graph.current_update_context('jit')
     (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
       (args, kwargs)
     )
     graphdef, state = ctx.split(input_graph_nodes)
     out, output_state, output_graphdef = jitted_fn(
       *args,
-      _nnx_jit_static=JitStaticInputs(graphdef, ctx, _constrain_state, fun),
+      _nnx_jit_static=JitStaticInputs(graphdef, _constrain_state, fun),
       _nnx_jit_state=state,
       **kwargs,
     )
-    input_graph_nodes, output_graph_nodes = ctx.update(
+    input_graph_nodes, output_graph_nodes = ctx.merge(
       output_graphdef, output_state
     )
     out = graph.insert_graph_nodes(out, output_graph_nodes)
@@ -489,13 +489,12 @@ class Jit(tp.Generic[M], LiftedModule[M]):
 
 def grad_fn(*args):
   f: tp.Callable[..., tp.Any]
-  ctx: graph.UpdateContext
   graphdef: GraphDef[tuple[dict[int, tp.Any], tuple[tp.Any, ...]]]
   non_diff_state: State
   has_aux: bool
   diff_args: list[int]
-
-  *_args, f, ctx, graphdef, non_diff_state, has_aux, diff_args = args
+  ctx = graph.current_update_context('grad')
+  *_args, f, graphdef, non_diff_state, has_aux, diff_args = args
 
   # rebuild diff_state from substates in args
   diff_state = State({})
@@ -519,9 +518,9 @@ def grad_fn(*args):
 
   if has_aux:
     loss, aux = out
-    out = (loss, (ctx, graphdef_out, state_out, aux))
+    out = (loss, (graphdef_out, state_out, aux))
   else:
-    out = (out, (ctx, graphdef_out, state_out))
+    out = (out, (graphdef_out, state_out))
 
   return out
 
@@ -536,8 +535,9 @@ def _grad_general(
   wrt: filterlib.Filter,
   return_value: bool,
 ) -> tp.Callable[..., tp.Any]:
+  @graph.update_context('grad')
   def grad_wrapper(*args):
-    ctx: graph.UpdateContext = graph.UpdateContext()
+    ctx: graph.UpdateContext = graph.current_update_context('grad')
     _argnums = _normalize_sequence(argnums)
     _, input_nodes = graph.extract_graph_nodes(args)
 
@@ -574,24 +574,23 @@ def _grad_general(
       holomorphic=holomorphic,
       allow_int=allow_int,
       reduce_axes=reduce_axes,
-    )(*_args, f, ctx, graphdef, non_diff_state, has_aux, diff_args)
+    )(*_args, f, graphdef, non_diff_state, has_aux, diff_args)
 
-    updates: State
     if return_value:
       if has_aux:
-        (loss, (ctx, graphdef_out, state_out, aux)), grads = out
+        (loss, (graphdef_out, state_out, aux)), grads = out
         out = (loss, aux), grads
       else:
-        (loss, (ctx, graphdef_out, state_out)), grads = out
+        (loss, (graphdef_out, state_out)), grads = out
         out = loss, grads
     else:
       if has_aux:
-        grads, (ctx, graphdef_out, state_out, aux) = out
+        grads, (graphdef_out, state_out, aux) = out
         out = grads, aux
       else:
-        out, (ctx, graphdef_out, state_out) = out
+        out, (graphdef_out, state_out) = out
 
-    input_nodes, out_nodes = ctx.update(graphdef_out, state_out)
+    input_nodes, out_nodes = ctx.merge(graphdef_out, state_out)
 
     out = graph.insert_graph_nodes(out, out_nodes)
     return out
@@ -918,7 +917,6 @@ class ScanBroadcasts(tp.Generic[C, B]):
     tuple[tuple[tp.Any, ...], dict[str, tp.Any], list[State]]
   ] = struct.field(pytree_node=False)
   flat_carry: list[tp.Any] = struct.field(pytree_node=True)
-  ctx: graph.UpdateContext = struct.field(pytree_node=False)
   graphdef: GraphDef[tuple[tp.Any, ...]] = struct.field(pytree_node=False)
   filters: tuple[filterlib.Filter, ...] = struct.field(pytree_node=False)
   f: tp.Callable[..., tuple[C, B] | C] = struct.field(pytree_node=False)
@@ -949,9 +947,10 @@ def scan_fn(
   )
   (flat_scan,) = scan
   flatdef = broadcasts.flatdef
-  flat_carry, ctx = broadcasts.flat_carry, broadcasts.ctx
+  flat_carry = broadcasts.flat_carry
   graphdef, filters = broadcasts.graphdef, broadcasts.filters
   f = broadcasts.f
+  ctx = graph.current_update_context('scan')
 
   # merge args and kwargs
   args, kwargs, scan_states = _unflatten_splits(flatdef, flat_scan, flat_carry)
@@ -1065,6 +1064,7 @@ def scan(
   scan_output: bool = True,
 ) -> F:
   @functools.wraps(f)
+  @graph.update_context('scan')
   def scan_apply_wrapper(*args, **kwargs):
     # extract nodes
     (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
@@ -1075,7 +1075,7 @@ def scan(
     # extract carry arg
     carry_arg, args = _extract_carry_arg(args, carry_argnum)
 
-    ctx = graph.UpdateContext()
+    ctx = graph.current_update_context('scan')
     # split module state
     filters = (*state_axes.keys(), ...)
     graphdef, rng_state, *scan_states, carry_state = ctx.split(  # type: ignore[misc]
@@ -1121,7 +1121,6 @@ def scan(
     broadcasts = ScanBroadcasts(
       flatdef,
       flat_carry,
-      ctx,
       graphdef,
       filters,
       f,
@@ -1172,7 +1171,7 @@ def scan(
     if broadcast_rng_state_out:
       broadcast_rng_state_out = State({0: broadcast_rng_state_out._mapping})
 
-    _, output_graph_nodes = ctx.update(
+    _, output_graph_nodes = ctx.merge(
       graphdef_out,
       *scan_states_out,
       carry_state_out,
@@ -1390,13 +1389,13 @@ class Remat(tp.Generic[M], LiftedModule[M]):
       (self.remat_module, *args),
     )
 
-
+@graph.update_context('remat')
 def remat_apply(
   options: RematOptions,
   f: tp.Callable[..., tp.Any],
   args: tuple[tp.Any, ...],
 ):
-  ctx = graph.UpdateContext()
+  ctx = graph.current_update_context('remat')
   args, input_nodes = graph.extract_graph_nodes(args)
   graphdef, state = ctx.split(input_nodes)
 
@@ -1416,7 +1415,7 @@ def remat_apply(
     policy=options.policy,
   )(state, *args)
 
-  _, output_nodes = ctx.update(new_graphdef, new_state)
+  _, output_nodes = ctx.merge(new_graphdef, new_state)
   out = graph.insert_graph_nodes(out, output_nodes)
 
   return out
@@ -1564,7 +1563,7 @@ class Vmap(tp.Generic[M], LiftedModule[M]):
       kwargs,
     )
 
-
+@graph.update_context('vmap')
 def vmap_apply(
   options: VmapOptions,
   f: tp.Callable[..., A],
@@ -1574,7 +1573,7 @@ def vmap_apply(
   (args, kwargs), input_graph_nodes = graph.extract_graph_nodes((args, kwargs))
   input_rng_streams = rnglib.backup_keys(input_graph_nodes)
 
-  ctx = graph.UpdateContext()
+  ctx = graph.current_update_context('vmap')
   # split module state
   filters = (*options.state_axes.keys(), ...)
   graphdef, rng_state, *vectorized_states, broadcast_state = ctx.split(  # type: ignore[misc]
@@ -1726,7 +1725,7 @@ def vmap_apply(
     out,
   ) = vmap_fn(split_keys, vectorized_states, args, kwargs)
 
-  _, output_graph_nodes = ctx.update(
+  _, output_graph_nodes = ctx.merge(
     graphdef_out,
     *vectorized_states,
     broadcast_state,
@@ -1820,36 +1819,35 @@ jax.tree_util.register_static(CondStaticInputs)
 
 def _cond_fun(
   is_true: bool,
-  ctx: graph.UpdateContext,
   static_inputs: CondStaticInputs[A],
   graphdef: GraphDef[tuple[tp.Any, ...]],
   state: State,
 ):
+  ctx = graph.current_update_context('cond')
   fn = static_inputs.true_fun if is_true else static_inputs.false_fun
   operands = ctx.merge(graphdef, state)
   out = fn(*operands)
   graphdef_out, state_out = ctx.split((operands, out))
-  return graphdef_out, state_out, ctx
+  return graphdef_out, state_out
 
 
 def _cond_true_fun(
-  ctx: graph.UpdateContext,
   static_inputs: CondStaticInputs[A],
   graphdef: GraphDef[tuple[tp.Any, ...]],
   state: State,
 ):
-  return _cond_fun(True, ctx, static_inputs, graphdef, state)
+  return _cond_fun(True, static_inputs, graphdef, state)
 
 
 def _cond_false_fun(
-  ctx: graph.UpdateContext,
   static_inputs: CondStaticInputs[A],
   graphdef: GraphDef[tuple[tp.Any, ...]],
   state: State,
 ):
-  return _cond_fun(False, ctx, static_inputs, graphdef, state)
+  return _cond_fun(False, static_inputs, graphdef, state)
 
 
+@graph.update_context('cond')
 def cond(
   pred,
   true_fun: tp.Callable[..., A],
@@ -1857,17 +1855,16 @@ def cond(
   *operands,
   **kwargs,
 ) -> A:
-  ctx: graph.UpdateContext = graph.UpdateContext()
+  ctx: graph.UpdateContext = graph.current_update_context('cond')
   graphdef, state = ctx.split(operands)
-  graphdef_out, state_out, ctx = jax.lax.cond(
+  graphdef_out, state_out = jax.lax.cond(
     pred,
     _cond_true_fun,
     _cond_false_fun,
-    ctx,
     CondStaticInputs(true_fun=true_fun, false_fun=false_fun),
     graphdef,
     state,
     **kwargs,
   )
-  _operands_out, out = ctx.update(graphdef_out, state_out)
+  _operands_out, out = ctx.merge(graphdef_out, state_out)
   return out

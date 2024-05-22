@@ -35,6 +35,8 @@ from .nnx.module import M as M
 from .nnx.module import Module as Module
 from .nnx.graph import merge as merge
 from .nnx.graph import UpdateContext as UpdateContext
+from .nnx.graph import update_context as update_context
+from .nnx.graph import current_update_context as current_update_context
 from .nnx.graph import split as split
 from .nnx.graph import update as update
 from .nnx.graph import clone as clone
