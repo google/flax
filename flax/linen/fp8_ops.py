@@ -141,7 +141,6 @@ def _compute_new_meta(x, q_dtype, scale, amax_history, compute_dtype):
     scale = lax.convert_element_type(scale, jnp.float32)
 
   new_scale = compute_scale(q_dtype, scale, amax_history)
-
   new_history = compute_amax_history(x, amax_history)
 
   # convert f32->fm32 so the autodiff system accumulates fp8 meta correctly
@@ -151,7 +150,7 @@ def _compute_new_meta(x, q_dtype, scale, amax_history, compute_dtype):
 
   return new_scale, new_history
 
-@partial(custom_vjp, nondiff_argnums=(8, 9, 10))
+@partial(custom_vjp, nondiff_argnums=(8, 9, 10, 11))
 def _q_dot_dq(
     lhs,
     rhs,
@@ -163,24 +162,25 @@ def _q_dot_dq(
     out_grad_amax_history,
     compute_dtype,
     dimension_numbers,
+    precision=None,
     preferred_element_type=None,
 ):
-    out, _ = _q_dot_dq_fwd(
-        lhs,
-        rhs,
-        lhs_scale,
-        rhs_scale,
-        out_grad_scale,
-        lhs_amax_history,
-        rhs_amax_history,
-        out_grad_amax_history,
-        compute_dtype,
-        dimension_numbers,
-        preferred_element_type,
-    )
+  out, _ = _q_dot_dq_fwd(
+      lhs,
+      rhs,
+      lhs_scale,
+      rhs_scale,
+      out_grad_scale,
+      lhs_amax_history,
+      rhs_amax_history,
+      out_grad_amax_history,
+      compute_dtype,
+      dimension_numbers,
+      precision,
+      preferred_element_type,
+  )
 
-    return out
-
+  return out
 
 def _q_dot_dq_fwd(
     lhs,
@@ -193,164 +193,174 @@ def _q_dot_dq_fwd(
     out_grad_amax_history,
     compute_dtype,
     dimension_numbers,
+    precision,
     preferred_element_type,
 ):
+  if precision != None or preferred_element_type != None:
+      warnings.warn(
+          "The function dot_general_with_precision will set the "
+          "precision/preferred_element_type and disregard any provided "
+          "values."
+      )
+  new_lhs_scale, new_lhs_amax_history = _compute_new_meta(
+      lhs, jnp.float8_e4m3fn, lhs_scale, lhs_amax_history, compute_dtype
+  )
+  new_rhs_scale, new_rhs_amax_history = _compute_new_meta(
+      rhs, jnp.float8_e4m3fn, rhs_scale, rhs_amax_history, compute_dtype
+  )
 
-    new_lhs_scale, new_lhs_amax_history = _compute_new_meta(
-        lhs, jnp.float8_e4m3fn, lhs_scale, lhs_amax_history, compute_dtype
-    )
-    new_rhs_scale, new_rhs_amax_history = _compute_new_meta(
-        rhs, jnp.float8_e4m3fn, rhs_scale, rhs_amax_history, compute_dtype
-    )
+  q_lhs = quantize(lhs, jnp.float8_e4m3fn, new_lhs_scale, preferred_element_type)
+  q_rhs = quantize(rhs, jnp.float8_e4m3fn, new_rhs_scale, preferred_element_type)
 
-    q_lhs = quantize(lhs, jnp.float8_e4m3fn, new_lhs_scale, preferred_element_type)
-    q_rhs = quantize(rhs, jnp.float8_e4m3fn, new_rhs_scale, preferred_element_type)
+  out = lax.dot_general(
+      q_lhs,
+      q_rhs,
+      dimension_numbers,
+      preferred_element_type=preferred_element_type,
+      precision=lax.Precision.DEFAULT,
+  )
 
-    out = lax.dot_general(
-        q_lhs,
-        q_rhs,
-        dimension_numbers,
-        preferred_element_type=preferred_element_type,
-        precision=lax.Precision.DEFAULT,
-    )
+  out = dequantize(out, preferred_element_type, new_lhs_scale * new_rhs_scale)
 
-    out = dequantize(out, preferred_element_type, new_lhs_scale * new_rhs_scale)
-
-    res = (
-        lhs,
-        rhs,
-        q_lhs,
-        q_rhs,
-        new_lhs_scale,
-        new_rhs_scale,
-        out_grad_scale,
-        new_lhs_amax_history,
-        new_rhs_amax_history,
-        out_grad_amax_history,
-    )
-    return out, res
+  res = (
+      lhs,
+      rhs,
+      q_lhs,
+      q_rhs,
+      new_lhs_scale,
+      new_rhs_scale,
+      out_grad_scale,
+      new_lhs_amax_history,
+      new_rhs_amax_history,
+      out_grad_amax_history,
+  )
+  return out, res
 
 
-def _q_dot_dq_bwd(compute_dtype, dimension_numbers, preferred_element_type, res, g):
+def _q_dot_dq_bwd(
+    compute_dtype,
+    dimension_numbers,
+    precision,
+    preferred_element_type,
+    res,
+    g
+):
+  (
+      lhs,
+      rhs,
+      q_lhs,
+      q_rhs,
+      new_lhs_scale,
+      new_rhs_scale,
+      out_grad_scale,
+      new_lhs_amax_history,
+      new_rhs_amax_history,
+      out_grad_amax_history,
+  ) = res
 
-    (
-        lhs,
-        rhs,
-        q_lhs,
-        q_rhs,
-        new_lhs_scale,
-        new_rhs_scale,
-        out_grad_scale,
-        new_lhs_amax_history,
-        new_rhs_amax_history,
-        out_grad_amax_history,
-    ) = res
+  new_out_grad_scale, new_out_grad_amax_history = _compute_new_meta(
+      g, jnp.float8_e5m2, out_grad_scale, out_grad_amax_history, compute_dtype
+  )
 
-    new_out_grad_scale, new_out_grad_amax_history = _compute_new_meta(
-        g, jnp.float8_e5m2, out_grad_scale, out_grad_amax_history, compute_dtype
-    )
+  q_g = quantize(g, jnp.float8_e5m2, new_out_grad_scale, preferred_element_type)
 
-    q_g = quantize(g, jnp.float8_e5m2, new_out_grad_scale, preferred_element_type)
+  grad_lhs = _dot_general_transpose_lhs(
+      q_g,
+      lhs,
+      q_rhs,
+      dimension_numbers=dimension_numbers,
+      precision=lax.Precision.HIGHEST,
+      preferred_element_type=preferred_element_type,
+  )
+  grad_lhs = dequantize(
+      grad_lhs, preferred_element_type, new_rhs_scale * new_out_grad_scale
+  )
 
-    grad_lhs = _dot_general_transpose_lhs(
-        q_g,
-        lhs,
-        q_rhs,
-        dimension_numbers=dimension_numbers,
-        precision=lax.Precision.HIGHEST,
-        preferred_element_type=preferred_element_type,
-    )
-    grad_lhs = dequantize(
-        grad_lhs, preferred_element_type, new_rhs_scale * new_out_grad_scale
-    )
+  grad_rhs = _dot_general_transpose_rhs(
+      q_g,
+      q_lhs,
+      rhs,
+      dimension_numbers=dimension_numbers,
+      precision=lax.Precision.HIGHEST,
+      preferred_element_type=preferred_element_type,
+  )
 
-    grad_rhs = _dot_general_transpose_rhs(
-        q_g,
-        q_lhs,
-        rhs,
-        dimension_numbers=dimension_numbers,
-        precision=lax.Precision.HIGHEST,
-        preferred_element_type=preferred_element_type,
-    )
+  grad_rhs = dequantize(
+      grad_rhs, preferred_element_type, new_lhs_scale * new_out_grad_scale
+  )
 
-    grad_rhs = dequantize(
-        grad_rhs, preferred_element_type, new_lhs_scale * new_out_grad_scale
-    )
-
-    return (
-        grad_lhs,
-        grad_rhs,
-        new_lhs_scale,
-        new_rhs_scale,
-        new_out_grad_scale,
-        new_lhs_amax_history,
-        new_rhs_amax_history,
-        new_out_grad_amax_history,
-    )
-
+  return (
+      grad_lhs,
+      grad_rhs,
+      new_lhs_scale,
+      new_rhs_scale,
+      new_out_grad_scale,
+      new_lhs_amax_history,
+      new_rhs_amax_history,
+      new_out_grad_amax_history,
+  )
 
 _q_dot_dq.defvjp(_q_dot_dq_fwd, _q_dot_dq_bwd)
 
 
 class Fp8DotGeneralOp(module.Module):
-    amax_history_length: int = 1024
+  amax_history_length: int = 1024
 
-    def setup(self) -> None:
-        scale_args = (
-            initializers.ones_init(),
-            random.PRNGKey(0),
-            (1,),
-            jnp.float32,
-        )
-        amax_history_args = (
-            initializers.zeros_init(),
-            random.PRNGKey(0),
-            (self.amax_history_length,),
-            jnp.float32,
-        )
+  def setup(self) -> None:
+    scale_args = (
+        initializers.ones_init(),
+        random.PRNGKey(0),
+        (1,),
+        jnp.float32,
+    )
+    amax_history_args = (
+        initializers.zeros_init(),
+        random.PRNGKey(0),
+        (self.amax_history_length,),
+        jnp.float32,
+    )
 
-        self.input_amax_history = self.variable(
-            OVERWRITE_WITH_GRADIENT, "input_amax_history", *amax_history_args
-        )
-        self.kernel_amax_history = self.variable(
-            OVERWRITE_WITH_GRADIENT, "kernel_amax_history", *amax_history_args
-        )
-        self.output_grad_amax_history = self.variable(
-            OVERWRITE_WITH_GRADIENT, "output_grad_amax_history", *amax_history_args
-        )
+    self.input_amax_history = self.variable(
+        OVERWRITE_WITH_GRADIENT, "input_amax_history", *amax_history_args
+    )
+    self.kernel_amax_history = self.variable(
+        OVERWRITE_WITH_GRADIENT, "kernel_amax_history", *amax_history_args
+    )
+    self.output_grad_amax_history = self.variable(
+        OVERWRITE_WITH_GRADIENT, "output_grad_amax_history", *amax_history_args
+    )
 
-        self.input_scale = self.variable(
-            OVERWRITE_WITH_GRADIENT, "input_scale", *scale_args
-        )
-        self.kernel_scale = self.variable(
-            OVERWRITE_WITH_GRADIENT, "kernel_scale", *scale_args
-        )
-        self.output_grad_scale = self.variable(
-            OVERWRITE_WITH_GRADIENT, "output_grad_scale", *scale_args
-        )
+    self.input_scale = self.variable(
+        OVERWRITE_WITH_GRADIENT, "input_scale", *scale_args
+    )
+    self.kernel_scale = self.variable(
+        OVERWRITE_WITH_GRADIENT, "kernel_scale", *scale_args
+    )
+    self.output_grad_scale = self.variable(
+        OVERWRITE_WITH_GRADIENT, "output_grad_scale", *scale_args
+    )
 
-    def __call__(self, *args, **kwargs):
-        assert len(args) == 3
-        x = args[0]
-        k = args[1]
-        dimension_numbers = args[2]
+  def __call__(self, *args, **kwargs):
+    assert len(args) == 3
+    x = args[0]
+    k = args[1]
+    dimension_numbers = args[2]
 
-        # Use the `k.dtype` since it aligns with the `dtype` of its layers,
-        # namely, the computation data type.
-        comp_dtype = k.dtype
-        x = jnp.asarray(x, comp_dtype)
-        y = _q_dot_dq(
-            x,
-            k,
-            self.input_scale.value,
-            self.kernel_scale.value,
-            self.output_grad_scale.value,
-            self.input_amax_history.value,
-            self.kernel_amax_history.value,
-            self.output_grad_amax_history.value,
-            comp_dtype,
-            dimension_numbers,
-            preferred_element_type=x.dtype,
-        )
+    # Use the `k.dtype` since it aligns with the `dtype` of its layers,
+    # namely, the computation data type.
+    comp_dtype = k.dtype
+    x = jnp.asarray(x, comp_dtype)
+    y = _q_dot_dq(
+        x,
+        k,
+        self.input_scale.value,
+        self.kernel_scale.value,
+        self.output_grad_scale.value,
+        self.input_amax_history.value,
+        self.kernel_amax_history.value,
+        self.output_grad_amax_history.value,
+        comp_dtype,
+        dimension_numbers
+    )
 
-        return y  # type: ignore
+    return y  # type: ignore
