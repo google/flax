@@ -126,8 +126,8 @@ class TestRngs:
 
     rngs = nnx.Rngs(params=0, dropout=1)
     m = Foo(rngs)
-    _, params, dropout_keys, param_keys, rng_counts = nnx.split(
-      m, nnx.Param, 'dropout', 'params', nnx.RngCount
+    _, params, rng_counts, dropout_keys, param_keys = nnx.split(
+      m, nnx.Param, nnx.RngCount, 'dropout', 'params'
     )
 
     assert m.rngs.params.count.value == 2
@@ -176,48 +176,63 @@ class TestRngs:
   def test_state_fork_split(self):
     rngs = nnx.Rngs(params=0, dropout=1)
     graphdef, state = nnx.split(rngs, nnx.RngState)
-    split, broadcast = nnx.fork(state, ..., 4)
+    split_keys, split_counts, broadcast_keys, broadcast_counts = nnx.fork(
+      state, ..., 4
+    )
 
-    assert len(jax.tree.leaves(split)) == 2
-    assert len(jax.tree.leaves(broadcast)) == 2
-    assert split.params.key.value.shape == (4,)
-    assert split.dropout.key.value.shape == (4,)
-    assert broadcast.params.count.value == 0
-    assert broadcast.dropout.count.value == 0
+    assert len(jax.tree.leaves(split_keys)) == 2
+    assert len(jax.tree.leaves(split_counts)) == 2
+    assert len(jax.tree.leaves(broadcast_keys)) == 0
+    assert len(jax.tree.leaves(broadcast_counts)) == 0
+    assert split_keys.params.key.value.shape == (4,)
+    assert split_keys.dropout.key.value.shape == (4,)
+    assert split_counts.params.count.value == 0
+    assert split_counts.dropout.count.value == 0
 
   def test_state_fork_split_and_broadcast(self):
     rngs = nnx.Rngs(params=0, dropout=1)
     graphdef, state = nnx.split(rngs, nnx.RngState)
-    split, broadcast = nnx.fork(state, 'params', 4)
+    split_keys, split_counts, broadcast_keys, broadcast_counts = nnx.fork(
+      state, 'params', 4
+    )
 
-    assert len(jax.tree.leaves(split)) == 1
-    assert len(jax.tree.leaves(broadcast)) == 3
-    assert split.params.key.value.shape == (4,)
-    assert broadcast.dropout.key.value.shape == ()
-    assert broadcast.params.count.value == 0
-    assert broadcast.dropout.count.value == 0
-
+    assert len(jax.tree.leaves(split_keys)) == 1
+    assert len(jax.tree.leaves(split_counts)) == 1
+    assert len(jax.tree.leaves(broadcast_keys)) == 1
+    assert len(jax.tree.leaves(broadcast_counts)) == 1
+    assert split_keys.params.key.value.shape == (4,)
+    assert broadcast_keys.dropout.key.value.shape == ()
+    assert split_counts.params.count.value == 0
+    assert broadcast_counts.dropout.count.value == 0
 
   def test_state_fork_multidimensional_split(self):
     rngs = nnx.Rngs(params=0, dropout=1)
     graphdef, state = nnx.split(rngs, nnx.RngState)
-    split, broadcast = nnx.fork(state, ..., (4, None, 3))
+    split_keys, split_counts, broadcast_keys, broadcast_counts = nnx.fork(
+      state, ..., (4, None, 3)
+    )
 
-    assert len(jax.tree.leaves(split)) == 2
-    assert len(jax.tree.leaves(broadcast)) == 2
-    assert split.params.key.value.shape == (4, 1, 3)
-    assert split.dropout.key.value.shape == (4, 1, 3)
-    assert broadcast.params.count.value == 0
-    assert broadcast.dropout.count.value == 0
+    assert len(jax.tree.leaves(split_keys)) == 2
+    assert len(jax.tree.leaves(split_counts)) == 2
+    assert len(jax.tree.leaves(broadcast_keys)) == 0
+    assert len(jax.tree.leaves(broadcast_counts)) == 0
+    assert split_keys.params.key.value.shape == (4, 1, 3)
+    assert split_keys.dropout.key.value.shape == (4, 1, 3)
+    assert split_counts.params.count.value == 0
+    assert split_counts.dropout.count.value == 0
 
   def test_state_fork_multidimensional_split_mixed(self):
     rngs = nnx.Rngs(params=0, dropout=1)
     graphdef, state = nnx.split(rngs, nnx.RngState)
-    split, broadcast = nnx.fork(state, 'params', (4, None, 3))
+    split_keys, split_counts, broadcast_keys, broadcast_counts = nnx.fork(
+      state, 'params', (4, None, 3)
+    )
 
-    assert len(jax.tree.leaves(split)) == 1
-    assert len(jax.tree.leaves(broadcast)) == 3
-    assert split.params.key.value.shape == (4, 1, 3)
-    assert broadcast.dropout.key.value.shape == ()
-    assert broadcast.params.count.value == 0
-    assert broadcast.dropout.count.value == 0
+    assert len(jax.tree.leaves(split_keys)) == 1
+    assert len(jax.tree.leaves(split_counts)) == 1
+    assert len(jax.tree.leaves(broadcast_keys)) == 1
+    assert len(jax.tree.leaves(broadcast_counts)) == 1
+    assert split_keys.params.key.value.shape == (4, 1, 3)
+    assert broadcast_keys.dropout.key.value.shape == ()
+    assert split_counts.params.count.value == 0
+    assert broadcast_counts.dropout.count.value == 0

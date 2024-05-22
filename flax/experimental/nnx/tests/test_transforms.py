@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 import typing as tp
 from functools import partial
 
@@ -886,6 +887,72 @@ class TestScan:
     ):
       mlp()
 
+  def test_cache_tracing_simple(self):
+    n = 0
+    x = jnp.arange(5)
+    count = jnp.array(0)
+
+    @nnx.scan
+    def f(count, x):
+      nonlocal n
+      n += 1
+      return count + 1, x**2
+
+    count, y = f(count, x)
+    assert n == 1
+    assert count == 5
+    np.testing.assert_allclose(y, x**2)
+
+    count, y = f(count, x)
+    assert n == 1
+    assert count == 10
+
+  def test_cache_tracing_object(self):
+    n = 0
+    x = jnp.arange(5)
+    count = jnp.array(0)
+
+    @dataclasses.dataclass
+    class Foo(nnx.Object):
+      @partial(nnx.vmap, axis_size=5)
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.x = nnx.Param(jax.random.normal(rngs(), shape=(3,)))
+
+    foo = Foo(rngs=nnx.Rngs(0))
+    assert foo.x.value.shape == (5, 3)
+
+    @nnx.scan
+    def f(count, x, foo):
+      nonlocal n
+      n += 1
+      assert foo.x.value.shape == (3,)
+      return count + 1, x**2
+
+    count, y = f(count, x, foo)
+    assert n == 1
+    assert count == 5
+    np.testing.assert_allclose(y, x**2)
+
+    count, y = f(count, x, foo)
+    assert n == 1
+    assert count == 10
+
+  def test_scan_broadcast_keys(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+
+    @partial(nnx.scan, split_rngs='params', length=3)
+    def f(_, rngs: nnx.Rngs):
+      param_key = rngs.params()
+      dropout_key = rngs.dropout()
+      return (), (param_key, dropout_key)
+
+    _, (param_keys, dropout_keys) = f((), rngs)
+
+    assert jnp.not_equal(param_keys[0], param_keys[1])
+    assert jnp.not_equal(param_keys[1], param_keys[2])
+    assert jnp.equal(dropout_keys[0], dropout_keys[1])
+    assert jnp.equal(dropout_keys[1], dropout_keys[2])
+
 
 class TestRemat:
   def test_basic_remat(self):
@@ -1153,3 +1220,44 @@ class TestVmap:
     module = MLP(graphdef='hello', rngs=nnx.Rngs(0))
 
     assert module.vmap_module.graphdef == 'hello'
+
+class TestCond:
+  def test_basic(self):
+    class TimeStep(tp.NamedTuple):
+      step: jax.Array
+      reward: jax.Array
+
+      @staticmethod
+      def zero():
+        return TimeStep(step=jnp.array(0), reward=jnp.array(0.0))
+
+    @dataclasses.dataclass
+    class Foo(nnx.Object):
+      timestep: TimeStep
+
+      def update(self):
+        def reward_2(self: Foo):
+          self.timestep = TimeStep(
+            step=self.timestep.step + 1, reward=jnp.array(2.0)
+          )
+
+        def reward_0(self: Foo):
+          self.timestep = TimeStep(
+            step=self.timestep.step + 1, reward=jnp.array(0.0)
+          )
+
+        nnx.cond(self.timestep.step % 2 == 0, reward_2, reward_0, self)
+
+    foo = Foo(timestep=TimeStep.zero())
+    foo.update()
+    assert foo.timestep.step == 1
+    assert foo.timestep.reward == 2.0
+    foo.update()
+    assert foo.timestep.step == 2
+    assert foo.timestep.reward == 0.0
+    foo.update()
+    assert foo.timestep.step == 3
+    assert foo.timestep.reward == 2.0
+    foo.update()
+    assert foo.timestep.step == 4
+    assert foo.timestep.reward == 0.0

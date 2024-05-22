@@ -30,6 +30,8 @@ from __future__ import annotations
 import dataclasses
 import typing as tp
 
+import jax
+
 
 A = tp.TypeVar('A', covariant=True)  # type: ignore[not-supported-yet]
 
@@ -37,19 +39,35 @@ A = tp.TypeVar('A', covariant=True)  # type: ignore[not-supported-yet]
 def _identity(x):
   return x
 
+@dataclasses.dataclass(frozen=True)
+class GetItem:
+  key: tp.Any
 
-@dataclasses.dataclass
+
+@dataclasses.dataclass(frozen=True)
+class GetAttr:
+  name: str
+
+
+@dataclasses.dataclass(frozen=True)
 class DelayedAccessor:
-  accessor: tp.Callable[[tp.Any], tp.Any] = _identity
+  actions: tuple[GetItem | GetAttr, ...] = ()
 
   def __call__(self, x):
-    return self.accessor(x)
+    for action in self.actions:
+      if isinstance(action, GetItem):
+        x = x[action.key]
+      elif isinstance(action, GetAttr):
+        x = getattr(x, action.name)
+    return x
 
   def __getattr__(self, name):
-    return DelayedAccessor(lambda x: getattr(x, name))
+    return DelayedAccessor(self.actions + (GetAttr(name),))
 
   def __getitem__(self, key):
-    return DelayedAccessor(lambda x: x[key])
+    return DelayedAccessor(self.actions + (GetItem(key),))
+
+jax.tree_util.register_static(DelayedAccessor)
 
 
 class _AccessorCall(tp.Protocol):
