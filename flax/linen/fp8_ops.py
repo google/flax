@@ -147,6 +147,7 @@ def _compute_new_meta(x, q_dtype, scale, amax_history, compute_dtype):
   # convert f32->fm32 so the autodiff system accumulates fp8 meta correctly
   if is_fm32:
     new_history = lax.convert_element_type(new_history, fm32)
+    new_scale = lax.convert_element_type(new_scale, fm32)
 
   return new_scale, new_history
 
