@@ -71,10 +71,12 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     ],
     /,
   ):
+    if not isinstance(mapping, tp.Mapping):
+      mapping = dict(mapping)
     if tp.TYPE_CHECKING:
-      self._mapping = dict(mapping)
+      self._mapping = mapping
     else:
-      super().__setattr__('_mapping', dict(mapping))
+      super().__setattr__('_mapping', mapping)
 
   @property
   def raw_mapping(self) -> tp.Mapping[Key, tp.Mapping[Key, tp.Any] | StateLeaf]:
@@ -95,6 +97,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     return self[key]
 
   def __setitem__(self, key: Key, value: State | StateLeaf) -> None:
+    assert isinstance(self._mapping, dict)
     if isinstance(value, State):
       self._mapping[key] = value._mapping
     else:
@@ -103,6 +106,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   __setattr__ = __setitem__
 
   def __delitem__(self, key: Key) -> None:
+    assert isinstance(self._mapping, dict)
     del self._mapping[key]
 
   def __iter__(self) -> tp.Iterator[Key]:
