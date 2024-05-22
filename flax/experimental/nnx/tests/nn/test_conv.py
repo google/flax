@@ -38,7 +38,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
     param_dtype=[jnp.float16],
     precision=[Precision.HIGHEST],
   )
-  def test_nnx_linen_equivalence(
+  def test_nnx_linen_conv_equivalence(
     self,
     strides: tp.Union[None, int, tp.Sequence[int]],
     padding: PaddingLike,
@@ -98,6 +98,70 @@ class TestConvLinenConsistency(parameterized.TestCase):
     variables = model.init(key, x)
     model_nnx.kernel.value = variables['params']['kernel']
     if use_bias:
+      model_nnx.bias.value = variables['params']['bias']
+
+    out_nnx = model_nnx(x)
+    out = model.apply(variables, x)
+    assert_array_equal(out, out_nnx)
+
+  @parameterized.product(
+    strides=[None, (2, 3)],
+    padding=['VALID', (4, 2)],
+    kernel_dilation=[(2, 3)],
+    use_bias=[True, False],
+    dtype=[jnp.float32],
+    param_dtype=[jnp.float16],
+    precision=[Precision.HIGHEST],
+  )
+  def test_nnx_linen_convtranspose_equivalence(
+    self,
+    strides: tp.Union[None, tp.Sequence[int]],
+    padding: PaddingLike,
+    kernel_dilation: tp.Union[None, tp.Sequence[int]],
+    use_bias: bool,
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+    precision: PrecisionLike,
+  ):
+    key = jax.random.key(42)
+    rngs = nnx.Rngs(42)
+    IN_FEATURES = 3
+    OUT_FEATURES = 6
+    INPUT_SHAPE = (24, 9, IN_FEATURES)
+    kernel_size = (7, 4)
+
+    x = jax.numpy.ones(INPUT_SHAPE)
+    model_nnx = nnx.eval_shape(
+      lambda rngs: nnx.ConvTranspose(
+        IN_FEATURES,
+        OUT_FEATURES,
+        kernel_size,
+        strides,
+        padding=padding,
+        kernel_dilation=kernel_dilation,
+        use_bias=use_bias,
+        dtype=dtype,
+        param_dtype=param_dtype,
+        precision=precision,
+        rngs=rngs,
+      ),
+      rngs,
+    )
+    model = linen.ConvTranspose(
+      OUT_FEATURES,
+      kernel_size=kernel_size,
+      strides=strides,
+      padding=padding,
+      kernel_dilation=kernel_dilation,
+      use_bias=use_bias,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+    )
+    variables = model.init(key, x)
+    model_nnx.kernel.value = variables['params']['kernel']
+    if use_bias:
+      assert model_nnx.bias is not None
       model_nnx.bias.value = variables['params']['bias']
 
     out_nnx = model_nnx(x)
