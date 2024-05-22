@@ -77,6 +77,9 @@ from .nnx.nn.linear import Embed as Embed
 from .nnx.nn.linear import Linear as Linear
 from .nnx.nn.linear import LinearGeneral as LinearGeneral
 from .nnx.nn.linear import Einsum as Einsum
+from .nnx.nn.lora import LoRA as LoRA
+from .nnx.nn.lora import LoRALinear as LoRALinear
+from .nnx.nn.lora import LoRAParam as LoRAParam
 from .nnx.nn.normalization import BatchNorm as BatchNorm
 from .nnx.nn.normalization import LayerNorm as LayerNorm
 from .nnx.nn.normalization import RMSNorm as RMSNorm
