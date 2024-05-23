@@ -212,7 +212,7 @@ def get_node_impl_for_type(x: type[Node]) -> NodeImpl[Node, tp.Any, tp.Any]:
 
 class _HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
   def __init__(self, mapping: tp.Mapping[HA, HB] | tp.Iterable[tuple[HA, HB]]):
-    self._mapping = dict(mapping)
+    self._mapping: dict = dict(mapping)
 
   def __contains__(self, key: object) -> bool:
     return key in self._mapping
@@ -265,7 +265,7 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       attributes=attributes,
       subgraphs=_HashableMapping(subgraphs),
       static_fields=_HashableMapping(static_fields),
-      leaves=_HashableMapping(leaves),
+      leaves=_HashableMapping(leaves),  # pytype: disable=wrong-arg-types
       metadata=metadata,
     )
 
@@ -324,14 +324,14 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
     return merge(self, State({}))
 
 
-def _graphdef_flatten(graphdef: GraphDef[Node]):
+def _graphdef_flatten(graphdef: GraphDef):
   # refmap is opaque, we don't propagate it
   static = (graphdef.nodedef, graphdef.index_mapping)
   return (), static
 
 
 def _graphdef_unflatten(
-  static: tuple[NodeDef[Node], dict[Index, Index] | None], _nodes: tuple[()]
+  static: tuple[NodeDef, dict[Index, Index] | None], _nodes: tuple[()]
 ):
   nodedef, index_mapping = static
   return GraphDef(nodedef, index_mapping)
@@ -472,7 +472,7 @@ def _graph_unflatten(
 
   node_impl = get_node_impl_for_type(nodedef.type)
 
-  def _get_children():
+  def _get_children(nodedef: NodeDef[Node]):
     children: dict[Key, NodeLeaf | Node] = {}
 
     # NOTE: we could allw adding new StateLeafs here
@@ -487,7 +487,7 @@ def _graph_unflatten(
         # TODO(cgarcia): maybe we shouldn't support unflattening with missing keys?
         # if key is not present create an empty types
         if key in nodedef.static_fields:
-          children[key] = nodedef.static_fields[key]
+          children[key] = nodedef.static_fields[key]  # pytype: disable=container-type-mismatch
         elif key in nodedef.subgraphs:
           # if the key is a subgraph we create an empty node
           subgraphdef = nodedef.subgraphs[key]
@@ -593,12 +593,12 @@ def _graph_unflatten(
     else:
       node = node_impl.create_empty(nodedef.metadata)
     index_to_ref[nodedef.index] = node
-    children = _get_children()
+    children = _get_children(nodedef)
     node_impl.init(node, tuple(children.items()))
   else:
     # if the node type does not support the creation of an empty object it means
     # that it cannot reference itself, so we can create its children first
-    children = _get_children()
+    children = _get_children(nodedef)
     node = node_impl.unflatten(tuple(children.items()), nodedef.metadata)
 
   return node
@@ -856,11 +856,11 @@ class UpdateContext:
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]: ...
+  ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]: ...  # pytype: disable=not-supported-yet
 
   def split(
     self, node: A, *filters: filterlib.Filter
-  ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:
+  ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:  # pytype: disable=not-supported-yet
     if self.refmap is not None and self.idxmap is None:
       raise ValueError(
         "'merge' was not called in-between the first and second call to 'split'"
@@ -899,7 +899,7 @@ class UpdateContext:
 
   def update(
     self,
-    new_graphdef: GraphDef[A],
+    new_graphdef: GraphDef,
     state: State,
     /,
     *states: State,
@@ -1017,7 +1017,7 @@ def state(
   else:
     states = state.filter(filters[0], filters[1], *filters[2:])
 
-  return states
+  return states  # pytype: disable=bad-return-type
 
 
 def graphdef(node: tp.Any, /) -> GraphDef[tp.Any]:
@@ -1063,7 +1063,7 @@ def pop(node, *filters: filterlib.Filter) -> tp.Union[State, tuple[State, ...]]:
   if len(states) == 1:
     return states[0]
   else:
-    return states
+    return states  # pytype: disable=bad-return-type
 
 
 def clone(node: Node) -> Node:
