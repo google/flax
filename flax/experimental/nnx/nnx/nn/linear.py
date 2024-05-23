@@ -297,7 +297,8 @@ class Linear(Module):
   """A linear transformation applied over the last dimension of the input.
 
   Attributes:
-    features: the number of output features.
+    in_features: the number of input features.
+    out_features: the number of output features.
     use_bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
