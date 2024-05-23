@@ -1361,6 +1361,26 @@ class LinearTest(parameterized.TestCase):
     test_pad([1, (2, 3)], 2, [(1, 1), (2, 3)])
     test_pad([None, (1, 2)], 2)
 
+  @parameterized.named_parameters(
+      ('same_param_dtype', jnp.bfloat16, jnp.bfloat16, jnp.bfloat16),
+      (
+          'different_param_dtype',
+          nn.linear.DenseParamsDtype(
+              kernel_dtype=jnp.bfloat16, bias_dtype=jnp.float32
+          ),
+          jnp.bfloat16,
+          jnp.float32,
+      ),
+  )
+  def test_kernel_bias_param_dtypes(
+      self, param_dtype, expected_kernel_dtype, expected_bias_dtype
+  ):
+    dense = nn.Dense(features=1, param_dtype=param_dtype)
+    x = jnp.ones((1, 1))
+    _, variables = dense.init_with_output(random.key(0), x)
+    self.assertEqual(variables['params']['kernel'].dtype, expected_kernel_dtype)
+    self.assertEqual(variables['params']['bias'].dtype, expected_bias_dtype)
+
 
 if __name__ == '__main__':
   absltest.main()

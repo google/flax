@@ -26,6 +26,7 @@ from jax import lax, random
 from flax.linen import initializers
 from flax.linen.dtypes import promote_dtype
 from flax.linen.linear import (
+  DenseParamsDtype,
   DenseGeneral,
   default_kernel_init,
 )
@@ -298,6 +299,8 @@ class MultiHeadDotProductAttention(Module):
       should be divisible by the number of heads.
     dtype: The dtype of the computation (default: infer from inputs and params)
     param_dtype: The dtype passed to parameter initializers (default: float32)
+    dense_params_dtype: The dtype passed to parameter initializers for the dense
+      layers. When None, it will be set to param_dtype.
     qkv_features: Dimension of the key, query, and value.
     out_features: Dimension of the last projection
     broadcast_dropout: Use a broadcasted dropout along batch dims.
@@ -323,6 +326,7 @@ class MultiHeadDotProductAttention(Module):
   num_heads: int
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
+  dense_params_dtype: Optional[DenseParamsDtype] = None
   qkv_features: Optional[int] = None
   out_features: Optional[int] = None
   broadcast_dropout: bool = True
@@ -469,11 +473,12 @@ class MultiHeadDotProductAttention(Module):
     )
     head_dim = qkv_features // self.num_heads
 
+    dense_params_dtype = self.dense_params_dtype or self.param_dtype
     dense = functools.partial(
       DenseGeneral,
       axis=-1,
       dtype=self.dtype,
-      param_dtype=self.param_dtype,
+      param_dtype=dense_params_dtype,
       features=(self.num_heads, head_dim),
       kernel_init=self.kernel_init,
       bias_init=self.bias_init,
@@ -609,7 +614,7 @@ class MultiHeadDotProductAttention(Module):
       bias_init=self.out_bias_init or self.bias_init,
       use_bias=self.use_bias,
       dtype=self.dtype,
-      param_dtype=self.param_dtype,
+      param_dtype=dense_params_dtype,
       precision=self.precision,
       dot_general=self.out_dot_general,
       dot_general_cls=self.out_dot_general_cls,
