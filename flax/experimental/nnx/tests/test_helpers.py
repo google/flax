@@ -16,6 +16,9 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from numpy.testing import assert_array_equal
+
+from flax import linen
 from flax.experimental import nnx
 
 class TrainState(nnx.TrainState):
@@ -67,3 +70,27 @@ class TestHelpers:
     grads = jax.tree_util.tree_map(jnp.ones_like, state.params)
     # test apply_gradients
     state = state.apply_gradients(grads)
+
+  def test_nnx_linen_sequential_equivalence(self):
+    key1, key2 = jax.random.split(jax.random.key(0), 2)
+    rngs = nnx.Rngs(0)
+    x = jax.random.uniform(key1, (3, 1, 5))
+
+    model_nnx = nnx.Sequential(nnx.Linear(5, 4, rngs=rngs), nnx.Linear(4, 2, rngs=rngs))
+    model = linen.Sequential([linen.Dense(4), linen.Dense(2)])
+
+    variables = model.init(key2, x)
+    for layer_index in range(2):
+      for param in ('kernel', 'bias'):
+        variables['params'][f'layers_{layer_index}'][param] = getattr(model_nnx.layers[layer_index], param).value
+    out_nnx = model_nnx(x)
+    out = model.apply(variables, x)
+    assert_array_equal(out, out_nnx)
+
+    variables = model.init(key2, x)
+    for layer_index in range(2):
+      for param in ('kernel', 'bias'):
+        getattr(model_nnx.layers[layer_index], param).value = variables['params'][f'layers_{layer_index}'][param]
+    out_nnx = model_nnx(x)
+    out = model.apply(variables, x)
+    assert_array_equal(out, out_nnx)
