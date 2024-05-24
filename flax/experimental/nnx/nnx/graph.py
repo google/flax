@@ -14,8 +14,11 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 import dataclasses
 import enum
+import functools
+import threading
 import typing as tp
 from copy import deepcopy
 
@@ -44,6 +47,7 @@ from flax.typing import Key, PathParts
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
 C = tp.TypeVar('C')
+F = tp.TypeVar('F', bound=tp.Callable)
 
 HA = tp.TypeVar('HA', bound=tp.Hashable)
 HB = tp.TypeVar('HB', bound=tp.Hashable)
@@ -64,6 +68,15 @@ Updates = tp.Union[
 ]
 
 NodeLeaf = tp.Union[Variable[tp.Any], np.ndarray, jax.Array]
+
+@dataclasses.dataclass
+class GraphContext(threading.local):
+  update_context_stacks: defaultdict[str, list[UpdateContext]] = (
+    dataclasses.field(default_factory=lambda: defaultdict(list))
+  )
+
+
+GRAPH_CONTEXT = GraphContext()
 
 
 def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
@@ -818,20 +831,18 @@ def _graph_update_static(
 
       node_impl.set_key(node, name, value_updates)
 
+# --------------------------------------------------------
+# UpdateContext
+# --------------------------------------------------------
+
 
 @dataclasses.dataclass
 class UpdateContext:
-  refmap: RefMap[tp.Any, Index] | None = None
-  idxmap: dict[Index, tp.Any] | None = None
+  """A context manager for handling complex state updates."""
 
-  # define context manager to clean up refmap and idxmap
-  # on exit
-  def __enter__(self):
-    return self
-
-  def __exit__(self, *args, **kwargs):
-    self.refmap = None
-    self.idxmap = None
+  tag: str
+  refmap: RefMap[tp.Any, Index] | None
+  idxmap: dict[Index, tp.Any] | None
 
   # define hash and eq to make this an opaque object
   def __hash__(self):
@@ -861,6 +872,69 @@ class UpdateContext:
   def split(
     self, node: A, *filters: filterlib.Filter
   ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:
+    """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
+    a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef
+    contains all the static information needed to reconstruct a ``Module`` graph, it is analogous
+    to JAX’s ``PyTreeDef``. :func:`split` is used in conjunction with :func:`merge` to switch
+    seamlessly between stateful and stateless representations of the graph.
+
+    Example usage::
+
+      >>> from flax.experimental import nnx
+      >>> import jax, jax.numpy as jnp
+      ...
+      >>> class Foo(nnx.Module):
+      ...   def __init__(self, rngs):
+      ...     self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+      ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+      ...
+      >>> node = Foo(nnx.Rngs(0))
+      >>> graphdef, params, batch_stats = nnx.split(node, nnx.Param, nnx.BatchStat)
+      ...
+      >>> jax.tree.map(jnp.shape, params)
+      State({
+        'batch_norm': {
+          'bias': VariableState(
+            type=Param,
+            value=(2,)
+          ),
+          'scale': VariableState(
+            type=Param,
+            value=(2,)
+          )
+        },
+        'linear': {
+          'bias': VariableState(
+            type=Param,
+            value=(3,)
+          ),
+          'kernel': VariableState(
+            type=Param,
+            value=(2, 3)
+          )
+        }
+      })
+      >>> jax.tree.map(jnp.shape, batch_stats)
+      State({
+        'batch_norm': {
+          'mean': VariableState(
+            type=BatchStat,
+            value=(2,)
+          ),
+          'var': VariableState(
+            type=BatchStat,
+            value=(2,)
+          )
+        }
+      })
+
+    Arguments:
+      node: graph node to split.
+      filters: some optional filters to group the state into mutually exclusive substates.
+    Returns:
+      ``GraphDef`` and one or more ``States`` equal to the number of filters passed. If no
+      filters are passed, a single ``State`` is returned.
+    """
     if self.refmap is not None and self.idxmap is None:
       raise ValueError(
         "'merge' was not called in-between the first and second call to 'split'"
@@ -890,41 +964,163 @@ class UpdateContext:
     state: State,
     *states: State,
   ) -> A:
-    # TODO: add docstring of example usage
-    if states:
-      state = State.merge(state, *states)
-
-    node, self.idxmap = unflatten(graphdef, state)
-    return node
-
-  def update(
-    self,
-    new_graphdef: GraphDef[A],
-    state: State,
-    /,
-    *states: State,
-  ):
+    """merge"""
     if self.refmap is None:
       raise ValueError('Cannot update a graphdef without refmap.')
-    if new_graphdef.index_mapping is None:
-      raise ValueError('Cannot update a graphdef without index_mapping.')
 
     if states:
       state = State.merge(state, *states)
 
-    index_to_ref = compose_mapping_reversed(
-      self.refmap, new_graphdef.index_mapping
-    )
-    out = unflatten(new_graphdef, state, idxmap=index_to_ref)[0]
+    if graphdef.index_mapping is None:
+      node, self.idxmap = unflatten(graphdef, state)
+    else:
+      index_to_ref = compose_mapping_reversed(
+        self.refmap, graphdef.index_mapping
+      )
+      node, _idxmap = unflatten(graphdef, state, idxmap=index_to_ref)
+      # clear references
+      self.refmap = None
+      self.idxmap = None
 
-    # clear references
-    self.refmap = None
-    self.idxmap = None
-
-    return out
+    return node
 
 
 jax.tree_util.register_static(UpdateContext)
+
+@dataclasses.dataclass
+class UpdateContextManager:
+  tag: str
+  ctx: UpdateContext | None
+
+  def __enter__(self):
+    self.ctx = UpdateContext(self.tag, None, None)
+    GRAPH_CONTEXT.update_context_stacks[self.tag].append(self.ctx)
+    return self.ctx
+
+  def __exit__(self, *args):
+    if self.ctx is None:
+      raise RuntimeError('ctx should not be None, this is a bug.')
+
+    GRAPH_CONTEXT.update_context_stacks[self.tag].pop()
+    self.ctx.refmap = None
+    self.ctx.idxmap = None
+    self.ctx = None
+
+  def __call__(self, f: F) -> F:
+    @functools.wraps(f)
+    def update_context_manager_wrapper(*args, **kwargs):
+      with self:
+        return f(*args, **kwargs)
+
+    return update_context_manager_wrapper  # type: ignore
+
+
+def update_context(tag: str):
+  """Creates an :class:`UpdateContext` context manager which can be used to handle
+  more complex state updates beyond what ``nnx.update`` can handle, including
+  updates to static properties and graph structure.
+
+  UpdateContext exposes a ``split`` and ``merge`` API with the same
+  signature as ``nnx.split`` / ``nnx.merge`` but performs some bookkeeping
+  to have the necessary information in order to perfectly update the input
+  objects based on the changes made inside the transform. The UpdateContext
+  must call split and merge a total of 4 times, the first
+  and last calls happen outside the transform and the second and third calls
+  happen inside the transform as shown in the diagram below::
+
+
+                          idxmap
+    (2) merge ─────────────────────────────► split (3)
+          ▲                                    │
+          │               inside               │
+          │. . . . . . . . . . . . . . . . . . │ index_mapping
+          │               outside              │
+          │                                    ▼
+    (1) split──────────────────────────────► merge (4)
+                          refmap
+
+
+  The first call to split ``(1)`` creates a ``refmap`` which keeps track of the
+  outer references, and the first call to merge ``(2)`` creates an ``idxmap`` which
+  keeps track of the inner references. The second call to split ``(3)`` combines
+  the refmap and idxmap to produce the ``index_mapping`` which indicates
+  how the outer references map to the inner references. Finally, the last call to
+  merge ``(4)`` uses the index_mapping and the refmap to reconstruct the
+  output of the transform while reusing/updating the inner references. To avoid
+  memory leaks, the idxmap is cleared after ``(3)`` and the refmap is
+  cleared after ``(4)``, and both are cleared after the context manager exits.
+
+  Here is a simple example showing the use of ``update_context``::
+
+    >>> from flax.experimental import nnx
+    ...
+    >>> m1 = nnx.Dict({})
+    >>> with nnx.update_context('example') as ctx:
+    ...   graphdef, state = ctx.split(m1)
+    ...   @jax.jit
+    ...   def f(graphdef, state):
+    ...     m2 = ctx.merge(graphdef, state)
+    ...     m2.a = 1
+    ...     m2.ref = m2  # create a reference cycle
+    ...     return ctx.split(m2)
+    ...   graphdef_out, state_out = f(graphdef, state)
+    ...   m3 = ctx.merge(graphdef_out, state_out)
+    ...
+    >>> assert m1 is m3
+    >>> assert m1.a == 1
+    >>> assert m1.ref is m1
+
+  Note that ``update_context`` takes in a ``tag`` argument which is used
+  primarily as a safety mechanism reduce the risk of accidentally using the
+  wrong UpdateContext when using :func:`current_update_context` to access the
+  current active context. current_update_context can be used as a way of
+  accessing the current active context without having to pass it as a capture::
+
+    >>> from flax.experimental import nnx
+    ...
+    >>> m1 = nnx.Dict({})
+    >>> @jax.jit
+    ... def f(graphdef, state):
+    ...   ctx = nnx.current_update_context('example')
+    ...   m2 = ctx.merge(graphdef, state)
+    ...   m2.a = 1     # insert static attribute
+    ...   m2.ref = m2  # create a reference cycle
+    ...   return ctx.split(m2)
+    ...
+    >>> @nnx.update_context('example')
+    ... def g(m1):
+    ...   ctx = nnx.current_update_context('example')
+    ...   graphdef, state = ctx.split(m1)
+    ...   graphdef_out, state_out = f(graphdef, state)
+    ...   return ctx.merge(graphdef_out, state_out)
+    ...
+    >>> m3 = g(m1)
+    >>> assert m1 is m3
+    >>> assert m1.a == 1
+    >>> assert m1.ref is m1
+
+  As shown in the code above, ``update_context`` can also be used as a
+  decorator that creates/activates an UpdateContext context for the
+  duration of the function. The context can be accessed using
+  :func:`current_update_context`.
+
+  Args:
+    tag: A string tag to identify the context.
+  """
+  return UpdateContextManager(tag, None)
+
+
+def current_update_context(tag: str) -> UpdateContext:
+  """Returns the current active :class:`UpdateContext` for the given tag."""
+  stack = GRAPH_CONTEXT.update_context_stacks[tag]
+  if not stack:
+    raise ValueError(f'No update context found for tag {tag!r}.')
+  return stack[-1]
+
+
+# --------------------------------------------------------
+# Functional API
+# --------------------------------------------------------
 
 
 @tp.overload
@@ -952,6 +1148,74 @@ def split(
 def split(
   node: A, *filters: filterlib.Filter
 ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]:
+  """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
+  a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef
+  contains all the static information needed to reconstruct a ``Module`` graph, it is analogous
+  to JAX’s ``PyTreeDef``. :func:`split` is used in conjunction with :func:`merge` to switch
+  seamlessly between stateful and stateless representations of the graph.
+
+  Example usage::
+
+    >>> from flax.experimental import nnx
+    >>> import jax, jax.numpy as jnp
+    ...
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...
+    >>> node = Foo(nnx.Rngs(0))
+    >>> graphdef, params, batch_stats = nnx.split(node, nnx.Param, nnx.BatchStat)
+    ...
+    >>> jax.tree.map(jnp.shape, params)
+    State({
+      'batch_norm': {
+        'bias': VariableState(
+          type=Param,
+          value=(2,)
+        ),
+        'scale': VariableState(
+          type=Param,
+          value=(2,)
+        )
+      },
+      'linear': {
+        'bias': VariableState(
+          type=Param,
+          value=(3,)
+        ),
+        'kernel': VariableState(
+          type=Param,
+          value=(2, 3)
+        )
+      }
+    })
+    >>> jax.tree.map(jnp.shape, batch_stats)
+    State({
+      'batch_norm': {
+        'mean': VariableState(
+          type=BatchStat,
+          value=(2,)
+        ),
+        'var': VariableState(
+          type=BatchStat,
+          value=(2,)
+        )
+      }
+    })
+
+  :func:`split` and :func:`merge` are primarily used to interact directly with JAX
+  transformations, see
+  `Functional API <https://flax.readthedocs.io/en/latest/nnx/nnx_basics.html#the-functional-api>`__
+  for more information.
+
+  Arguments:
+    node: graph node to split.
+    filters: some optional filters to group the state into mutually exclusive substates.
+  Returns:
+    ``GraphDef`` and one or more ``States`` equal to the number of filters passed. If no
+    filters are passed, a single ``State`` is returned.
+  """
   graphdef, state, _ = flatten(node)
 
   states: State | tuple[State, ...]
@@ -971,6 +1235,39 @@ def merge(
   /,
   *states: State,
 ) -> A:
+  """The inverse of :func:`split`.
+
+  ``merge`` takes a :class:`GraphDef` and one or more :class:`State`s and creates
+  a new node with the same structure as the original node.
+
+  Example usage::
+
+    >>> from flax.experimental import nnx
+    >>> import jax, jax.numpy as jnp
+    ...
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...
+    >>> node = Foo(nnx.Rngs(0))
+    >>> graphdef, params, batch_stats = nnx.split(node, nnx.Param, nnx.BatchStat)
+    ...
+    >>> new_node = nnx.merge(graphdef, params, batch_stats)
+    >>> assert isinstance(new_node, Foo)
+    >>> assert isinstance(new_node.batch_norm, nnx.BatchNorm)
+    >>> assert isinstance(new_node.linear, nnx.Linear)
+
+  :func:`split` and :func:`merge` are primarily used to interact directly with JAX
+  transformations, see
+  `Functional API <https://flax.readthedocs.io/en/latest/nnx/nnx_basics.html#the-functional-api>`__
+  for more information.
+
+  Args:
+    graphdef: A :class:`GraphDef` object.
+    state: A :class:`State` object.
+    states: Additional :class:`State` objects.
+  """
   if states:
     state = State.merge(state, *states)
 
@@ -1091,8 +1388,8 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
     >>> module = Linear(3, 4, rngs=nnx.Rngs(0))
     >>> graph = [module, module]
     ...
-    >>> for path, module in nnx.iter_graph(graph):
-    ...   print(path, type(module).__name__)
+    >>> for path, value in nnx.iter_graph(graph):
+    ...   print(path, type(value).__name__)
     ...
     (0, 'b') Param
     (0, 'din') int

@@ -298,14 +298,15 @@ class TestModule:
         self.b = self.a
 
     m1 = Foo()
-    with nnx.UpdateContext() as ctx:
+    with nnx.update_context('test') as ctx:
       graphdef, state = ctx.split(m1)
       m2 = ctx.merge(graphdef, state)
       m2.a.add_field()
       new_graphdef, state = ctx.split(m2)
 
-      ctx.update(new_graphdef, state)
+      m3 = ctx.merge(new_graphdef, state)
 
+    assert m3 is m1
     assert m1.a.x == 1
     assert m1.a.y == 2
     assert m1.b.x == 1
@@ -324,14 +325,15 @@ class TestModule:
         self.b = Bar()
 
     m1 = Foo()
-    ctx = nnx.UpdateContext()
-    graphdef, state = ctx.split(m1)
-    m2 = ctx.merge(graphdef, state)
-    m2.add_module()
-    new_graphdef, state = ctx.split(m2)
+    with nnx.update_context('test') as ctx:
+      graphdef, state = ctx.split(m1)
+      m2 = ctx.merge(graphdef, state)
+      m2.add_module()
+      new_graphdef, state = ctx.split(m2)
 
-    ctx.update(new_graphdef, state)
+      m3 = ctx.merge(new_graphdef, state)
 
+    assert m3 is m1
     assert m1.a.x == 1
     assert m1.b.x == 1
 
@@ -346,13 +348,14 @@ class TestModule:
         self.b = self.a
 
     m1 = Foo()
-    ctx = nnx.UpdateContext()
-    graphdef, state = ctx.split(m1)
-    m2 = ctx.merge(graphdef, state)
-    m2.a.x = 2
-    new_graphdef, state = ctx.split(m2)
-    ctx.update(new_graphdef, state)
+    with nnx.update_context('test') as ctx:
+      graphdef, state = ctx.split(m1)
+      m2 = ctx.merge(graphdef, state)
+      m2.a.x = 2
+      new_graphdef, state = ctx.split(m2)
+      m3 = ctx.merge(new_graphdef, state)
 
+    assert m3 is m1
     assert m1.a.x == 2
     assert m1.b.x == 2
 
@@ -370,13 +373,14 @@ class TestModule:
         self.c = self.a
 
     m1 = Foo()
-    ctx = nnx.UpdateContext()
-    graphdef, state = ctx.split(m1)
-    m2 = ctx.merge(graphdef, state)
-    m2.add_submodule()
-    new_graphdef, state = ctx.split(m2)
-    ctx.update(new_graphdef, state)
+    with nnx.update_context('test') as ctx:
+      graphdef, state = ctx.split(m1)
+      m2 = ctx.merge(graphdef, state)
+      m2.add_submodule()
+      new_graphdef, state = ctx.split(m2)
+      m3 = ctx.merge(new_graphdef, state)
 
+    assert m3 is m1
     assert hasattr(m1, 'c')
 
   def test_create_abstract(self):
