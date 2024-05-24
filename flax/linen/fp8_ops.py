@@ -150,39 +150,7 @@ def _compute_new_meta(x, q_dtype, scale, amax_history, compute_dtype):
 
   return new_scale, new_history
 
-@partial(custom_vjp, nondiff_argnums=(8, 9, 10, 11))
-def _q_dot_dq(
-    lhs,
-    rhs,
-    lhs_scale,
-    rhs_scale,
-    out_grad_scale,
-    lhs_amax_history,
-    rhs_amax_history,
-    out_grad_amax_history,
-    compute_dtype,
-    dimension_numbers,
-    precision=None,
-    preferred_element_type=None,
-):
-  out, _ = _q_dot_dq_fwd(
-      lhs,
-      rhs,
-      lhs_scale,
-      rhs_scale,
-      out_grad_scale,
-      lhs_amax_history,
-      rhs_amax_history,
-      out_grad_amax_history,
-      compute_dtype,
-      dimension_numbers,
-      precision,
-      preferred_element_type,
-  )
-
-  return out
-
-def _q_dot_dq_fwd(
+def _q_dot_dq_impl(
     lhs,
     rhs,
     lhs_scale,
@@ -195,6 +163,7 @@ def _q_dot_dq_fwd(
     dimension_numbers,
     precision,
     preferred_element_type,
+    is_training=False
 ):
   if precision != None or preferred_element_type != None:
       warnings.warn(
@@ -221,20 +190,84 @@ def _q_dot_dq_fwd(
   )
 
   out = dequantize(out, preferred_element_type, new_lhs_scale * new_rhs_scale)
+  if is_training:
+    res = (
+        lhs,
+        rhs,
+        q_lhs,
+        q_rhs,
+        new_lhs_scale,
+        new_rhs_scale,
+        out_grad_scale,
+        new_lhs_amax_history,
+        new_rhs_amax_history,
+        out_grad_amax_history,
+    )
+    return out, res
+  else:
+    return out
 
-  res = (
+
+@partial(custom_vjp, nondiff_argnums=(8, 9, 10, 11))
+def _q_dot_dq(
+    lhs,
+    rhs,
+    lhs_scale,
+    rhs_scale,
+    out_grad_scale,
+    lhs_amax_history,
+    rhs_amax_history,
+    out_grad_amax_history,
+    compute_dtype,
+    dimension_numbers,
+    precision=None,
+    preferred_element_type=None
+):
+  return _q_dot_dq_impl(
       lhs,
       rhs,
-      q_lhs,
-      q_rhs,
-      new_lhs_scale,
-      new_rhs_scale,
+      lhs_scale,
+      rhs_scale,
       out_grad_scale,
-      new_lhs_amax_history,
-      new_rhs_amax_history,
+      lhs_amax_history,
+      rhs_amax_history,
       out_grad_amax_history,
+      compute_dtype,
+      dimension_numbers,
+      precision,
+      preferred_element_type
   )
-  return out, res
+
+
+def _q_dot_dq_fwd(
+    lhs,
+    rhs,
+    lhs_scale,
+    rhs_scale,
+    out_grad_scale,
+    lhs_amax_history,
+    rhs_amax_history,
+    out_grad_amax_history,
+    compute_dtype,
+    dimension_numbers,
+    precision,
+    preferred_element_type,
+):
+    return _q_dot_dq_impl(
+        lhs,
+        rhs,
+        lhs_scale,
+        rhs_scale,
+        out_grad_scale,
+        lhs_amax_history,
+        rhs_amax_history,
+        out_grad_amax_history,
+        compute_dtype,
+        dimension_numbers,
+        precision,
+        preferred_element_type,
+        is_training=True
+    )
 
 
 def _q_dot_dq_bwd(
@@ -360,7 +393,8 @@ class Fp8DotGeneralOp(module.Module):
         self.kernel_amax_history.value,
         self.output_grad_amax_history.value,
         comp_dtype,
-        dimension_numbers
+        dimension_numbers,
+        preferred_element_type=x.dtype
     )
 
     return y  # type: ignore
