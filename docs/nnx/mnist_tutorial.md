@@ -21,14 +21,14 @@ built upon [JAX](https://github.com/google/jax) and currently offered as an expe
 
 +++
 
-## 1. Install NNX
+## 1. Setup
 
-Since NNX is under active development, we recommend using the latest version from the Flax GitHub repository:
+NNX is installed as part of the Flax library. If you haven't already installed Flax, you can do so using the following command:
 
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-# !pip install git+https://github.com/google/flax.git
+# !pip install flax
 ```
 
 ## 2. Load the MNIST Dataset
