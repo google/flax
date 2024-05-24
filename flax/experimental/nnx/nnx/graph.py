@@ -1040,7 +1040,7 @@ def update_context(tag: str):
                           refmap
 
 
-  The first call to split ``(1)`` create a ``refmap`` which keeps track of the
+  The first call to split ``(1)`` creates a ``refmap`` which keeps track of the
   outer references, and the first call to merge ``(2)`` creates an ``idxmap`` which
   keeps track of the inner references. The second call to split ``(3)`` combines
   the refmap and idxmap to produce the ``index_mapping`` which indicates
