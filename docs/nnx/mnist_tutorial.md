@@ -28,7 +28,7 @@ NNX is installed as part of the Flax library. If you haven't already installed F
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-# !pip install flax
+# !pip install -U flax penzai
 ```
 
 ## 2. Load the MNIST Dataset
