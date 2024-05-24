@@ -110,6 +110,16 @@ html_static_path = ['_static']
 
 html_extra_path = ['robots.txt']
 
+# href with no underline and white bold text color
+announcement = """
+<a
+  href="https://flax.readthedocs.io/en/latest/nnx/index.html"
+  style="text-decoration: none; color: white;"
+>
+  📣 Check out the new <b>NNX</b> API!
+</a>
+"""
+
 html_theme_options = {
   'repository_url': 'https://github.com/google/flax',
   'use_repository_button': True,  # add a 'link to repository' button
@@ -122,6 +132,7 @@ html_theme_options = {
   },
   'prev_next_buttons_location': None,
   'show_navbar_depth': 1,
+  'announcement': announcement,
 }
 
 # -- Options for myst ----------------------------------------------
@@ -135,7 +146,7 @@ myst_enable_extensions = ['dollarmath']
 nb_execution_excludepatterns = [
   'quick_start.ipynb',  # <-- times out
   'transfer_learning.ipynb',  # <-- transformers requires flax<=0.7.0
-  'flax/experimental/nnx',  # exclude nnx
+  'flax/nnx',  # exclude nnx
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False
@@ -151,7 +162,7 @@ always_document_param_types = True
 doctest_global_setup = """
 import jax
 import jax.numpy as jnp
-from flax.experimental import nnx
+from flax import nnx
 
 import logging as slog
 from absl import logging as alog
