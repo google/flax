@@ -8,7 +8,7 @@ API Reference
    flax.core.frozen_dict
    flax.cursor
    flax.errors
-   flax.experimental.nnx/index
+   flax.nnx/index
    flax.jax_utils
    flax.linen/index
    flax.serialization

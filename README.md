@@ -12,6 +12,8 @@
 | [**What does Flax look like?**](#what-does-flax-look-like)
 | [**Documentation**](https://flax.readthedocs.io/)
 
+**📣 NEW**: Check out the [**NNX**](https://flax.readthedocs.io/en/latest/nnx/index.html) API!
+
 This README is a very short intro. **To learn everything you need to know about Flax, refer to our [full documentation](https://flax.readthedocs.io/).**
 
 Flax was originally started by engineers and researchers within the Brain Team in Google Research (in close collaboration with the JAX team), and is now developed jointly with the open source community.

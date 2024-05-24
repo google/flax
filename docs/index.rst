@@ -28,7 +28,7 @@ both in the open source community
 (like `Hugging Face <https://huggingface.co/flax-community>`__)
 and at Google
 (like
-`PaLM <https://ai.googleblog.com/2022/04/pathways-language-model-palm-scaling-to.html>`__,
+`Gemini <https://deepmind.google/technologies/gemini>`__,
 `Imagen <https://imagen.research.google>`__,
 `Scenic <https://github.com/google-research/scenic/>`__,
 and `Big Vision <https://github.com/google-research/big_vision>`__).
@@ -309,6 +309,8 @@ Notable examples in Flax include:
 
 
 
+.. role:: bold
+  :class: bold
 
 .. toctree::
    :hidden:
@@ -325,4 +327,4 @@ Notable examples in Flax include:
    contributing
    experimental
    api_reference/index
-   experimental/index
+   NNX <nnx/index>

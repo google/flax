@@ -115,7 +115,7 @@ ignore_missing_imports = true
 disable_error_code = "annotation-unchecked"
 # exclude nnx examples
 [[tool.mypy.overrides]]
-module = "flax.experimental.nnx.examples.*"
+module = "flax.nnx.examples.*"
 ignore_errors = true
 
 [tool.pytest.ini_options]
