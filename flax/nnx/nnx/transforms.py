@@ -162,7 +162,7 @@ def jit_fn(
 
   out = f(*args, **kwargs)
 
-  out, output_graph_nodes = graph.extract_graph_nodes(out)
+  out, output_graph_nodes, _ = graph.extract_graph_nodes(out)
 
   graphdef, state = ctx.split((input_graph_nodes, output_graph_nodes))
 
@@ -357,7 +357,7 @@ def jit(
   @graph.update_context('jit')
   def jit_wrapper(*args, **kwargs):
     ctx = graph.current_update_context('jit')
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+    (args, kwargs), input_graph_nodes, _ = graph.extract_graph_nodes(
       (args, kwargs)
     )
     graphdef, state = ctx.split(input_graph_nodes)
@@ -513,7 +513,7 @@ def grad_fn(*args):
 
   out = f(*_args)
 
-  out, out_nodes = graph.extract_graph_nodes(out)
+  out, out_nodes, _ = graph.extract_graph_nodes(out)
 
   graphdef_out, state_out = ctx.split((input_nodes, out_nodes))
 
@@ -540,7 +540,7 @@ def _grad_general(
   def grad_wrapper(*args):
     ctx: graph.UpdateContext = graph.current_update_context('grad')
     _argnums = _normalize_sequence(argnums)
-    _, input_nodes = graph.extract_graph_nodes(args)
+    _, input_nodes, _ = graph.extract_graph_nodes(args)
 
     _args = list(args)
     diff_graph_nodes: dict[int, tp.Any] = {
@@ -987,10 +987,9 @@ def scan_fn(
     carry_arg_out = out
     scan_args_out = None
 
-  (
-    (carry_arg_out, scan_args_out),
-    output_graph_nodes,
-  ) = graph.extract_graph_nodes((carry_arg_out, scan_args_out))
+  ((carry_arg_out, scan_args_out), output_graph_nodes, _) = (
+    graph.extract_graph_nodes((carry_arg_out, scan_args_out))
+  )
 
   # split module state
   (
@@ -1069,7 +1068,7 @@ def scan(
   @graph.update_context('scan')
   def scan_apply_wrapper(*args, **kwargs):
     # extract nodes
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+    (args, kwargs), input_graph_nodes, _ = graph.extract_graph_nodes(
       (args, kwargs)
     )
     input_rng_streams = rnglib.backup_keys(input_graph_nodes)
@@ -1395,7 +1394,7 @@ def remat_apply(
   args: tuple[tp.Any, ...],
 ):
   ctx = graph.current_update_context('remat')
-  args, input_nodes = graph.extract_graph_nodes(args)
+  args, input_nodes, _ = graph.extract_graph_nodes(args)
   graphdef, state = ctx.split(input_nodes)
 
   def _remat_fn(state: State, *args):
@@ -1403,7 +1402,7 @@ def remat_apply(
     args = graph.insert_graph_nodes(args, input_nodes)
     out = f(*args)
 
-    out, output_nodes = graph.extract_graph_nodes(out)
+    out, output_nodes, _ = graph.extract_graph_nodes(out)
     new_graphdef, new_state = ctx.split((input_nodes, output_nodes))
     return (new_graphdef, new_state), out
 
@@ -1486,7 +1485,7 @@ def vmap_fn(
 
   out = f(*args, **kwargs)
 
-  out, output_graph_nodes = graph.extract_graph_nodes(out)
+  out, output_graph_nodes, _ = graph.extract_graph_nodes(out)
 
   # split module state
   (
@@ -1575,7 +1574,7 @@ def vmap(
   def vmap_wrapper(*args, **kwargs):
     ctx = graph.current_update_context('vmap')
 
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+    (args, kwargs), input_graph_nodes, _ = graph.extract_graph_nodes(
       (args, kwargs)
     )
     input_rng_streams = rnglib.backup_keys(input_graph_nodes)
@@ -1783,7 +1782,7 @@ def eval_shape(
   *args: tp.Any,
   **kwargs: tp.Any,
 ) -> A:
-  (args, kwargs), input_nodes = graph.extract_graph_nodes((args, kwargs))
+  (args, kwargs), input_nodes, _ = graph.extract_graph_nodes((args, kwargs))
   graphdef, state = graph.split(input_nodes)
 
   @functools.wraps(f)
@@ -1791,7 +1790,7 @@ def eval_shape(
     input_nodes = graph.merge(graphdef, state)
     args, kwargs = graph.insert_graph_nodes((args, kwargs), input_nodes)
     out = f(*args, **kwargs)
-    out, output_nodes = graph.extract_graph_nodes(out)
+    out, output_nodes, _ = graph.extract_graph_nodes(out)
     graphdef_out, state_out = graph.split(output_nodes)
     return graphdef_out, state_out, out
 

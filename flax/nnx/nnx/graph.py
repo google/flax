@@ -23,6 +23,7 @@ import typing as tp
 from copy import deepcopy
 
 import jax
+from jax._src.tree_util import broadcast_prefix
 import numpy as np
 import typing_extensions as tpe
 
@@ -1465,23 +1466,34 @@ class GraphNodeIndex:
 jax.tree_util.register_static(GraphNodeIndex)
 
 
-def extract_graph_nodes(pytree: A, /) -> tuple[A, tuple[tp.Any, ...]]:
+def extract_graph_nodes(
+  pytree: A, /, prefix=None
+) -> tuple[A, list[tp.Any], list[tp.Any]]:
   """Extracts all graph nodes from a pytree."""
-  nodes = RefMap[tp.Any, Index]()
 
-  def _maybe_extract(x):
+  seen_nodes = dict[int, tuple[int, tp.Any]]()
+  node_prefixes = []
+  nodes = []
+  prefixes = broadcast_prefix(prefix, pytree, is_leaf=lambda x: x is None)
+  leaves, treedef = jax.tree.flatten(pytree)
+
+  for i, (x, p) in enumerate(zip(leaves, prefixes)):
     if is_graph_node(x):
-      if x not in nodes:
-        index = nodes[x] = len(nodes)
+      if id(x) not in seen_nodes:
+        index = len(seen_nodes)
+        seen_nodes[id(x)] = (index, x)
+        nodes.append(x)
+        node_prefixes.append(p)
       else:
-        index = nodes[x]
-      return GraphNodeIndex(index)
-    return x
+        index, _ = seen_nodes[id(x)]
 
-  return jax.tree_util.tree_map(_maybe_extract, pytree), tuple(nodes)
+      leaves[i] = GraphNodeIndex(index)
+
+  pytree_out = treedef.unflatten(leaves)
+  return pytree_out, nodes, node_prefixes
 
 
-def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
+def insert_graph_nodes(pytree: A, nodes: tp.Sequence[tp.Any], /) -> A:
   """Inserts graph nodes into a pytree."""
 
   def _maybe_insert(x):
