@@ -141,11 +141,11 @@ class JitStaticOutputs:
 jax.tree_util.register_static(JitStaticOutputs)
 
 
-def jit_fn(
-  *args,
+def _jitted_fn(
+  *args: tp.Any,
   _nnx_jit_static: JitStaticInputs,
   _nnx_jit_state: State,
-  **kwargs,
+  **kwargs: tp.Any,
 ) -> tuple[tp.Any, State, GraphDef[tuple[tp.Any, ...]]]:
   ctx = graph.current_update_context('jit')
   graphdef = _nnx_jit_static.graphdef
@@ -340,7 +340,7 @@ def jit(
     jit_kwargs['out_shardings'] = out_shardings
 
   jitted_fn = jax.jit(
-    jit_fn,
+    _jitted_fn,
     static_argnums=_static_argnums,
     static_argnames=_static_argnames,
     donate_argnums=_donate_argnums,
@@ -1293,11 +1293,13 @@ class Scan(tp.Generic[M], LiftedModule[M]):
       transform_metadata=transform_metadata,
       scan_output=scan_output,
     )
-    def scan_call(module, *args, _nnx_scan_accessor: DelayedAccessor, **kwargs):
+    def scan_call_apply(
+      module, *args, _nnx_scan_accessor: DelayedAccessor, **kwargs
+    ):
       method = _nnx_scan_accessor(module)
       return method(*args, **kwargs)
 
-    self.scan_call = scan_call
+    self.scan_fn = scan_call_apply
 
   @property
   def _submodule(self) -> M:
@@ -1306,7 +1308,7 @@ class Scan(tp.Generic[M], LiftedModule[M]):
   def _call(
     self, accessor: DelayedAccessor, *args, **kwargs
   ) -> tuple[tp.Any, tp.Any]:
-    return self.scan_call(
+    return self.scan_fn(
       self._submodule, *args, _nnx_scan_accessor=accessor, **kwargs
     )
 
@@ -1388,6 +1390,7 @@ class Remat(tp.Generic[M], LiftedModule[M]):
       (self.remat_module, *args),
     )
 
+
 @graph.update_context('remat')
 def remat_apply(
   options: RematOptions,
@@ -1445,231 +1448,18 @@ def remat(
 # -------------------------------
 
 
-
-
-def vmap_fn(
-  args: tuple[tp.Any, ...],
-  kwargs: dict[str, tp.Any],
-  graphdef: GraphDef[tuple[tp.Any, ...]],
-  split_keys: State,
-  split_counts: State,
-  broadcast_keys: State,
-  broadcast_counts: State,
-  vectorized_states: list[State],
-  broadcast_state: State,
-  transform_metadata: tp.Mapping[str, tp.Any],
-  state_axes: tp.Mapping[filterlib.Filter, int],
-  f: tp.Callable[..., tp.Any],
-  filters: tp.Tuple[filterlib.Filter, ...],
-  split_rngs: filterlib.Filter,
-):
-  ctx = graph.current_update_context('vmap')
-  # remove metadata axis name from Variable.sharding
-  if spmd.PARTITION_NAME in transform_metadata:
-    vectorized_states = [
-      spmd.remove_axis(state, index, transform_metadata)
-      for state, index in zip(vectorized_states, state_axes.values())
-    ]
-
-  # merge module state
-  input_graph_nodes = ctx.merge(
-    graphdef,
-    *vectorized_states,
-    broadcast_state,
-    split_keys,
-    split_counts,
-    broadcast_keys,
-    broadcast_counts,
-  )
-
-  (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
-
-  out = f(*args, **kwargs)
-
-  out, output_graph_nodes = graph.extract_graph_nodes(out)
-
-  # split module state
-  (
-    graphdef_out,
-    rng_state_out,
-    *vectorized_states_out,
-    broadcast_state_out,
-  ) = ctx.split(  # type: ignore[misc]
-    (input_graph_nodes, output_graph_nodes),
-    rnglib.RngState,
-    *filters,
-  )
-
-  not_keys_out, split_keys_out, broadcast_keys_out = rng_state_out.split(
-    rnglib.NotKey, split_rngs, ...
-  )
-
-  broadcast_state_out = State.merge(
-    broadcast_state_out, broadcast_keys_out, not_keys_out
-  )
-
-  # add metadata axis name to Variable.sharding
-  if spmd.PARTITION_NAME in transform_metadata:
-    vectorized_states_out = [
-      spmd.add_axis(state, index, transform_metadata)
-      for state, index in zip(vectorized_states_out, state_axes.values())
-    ]
-
-  return (
-    graphdef_out,
-    broadcast_state_out,
-    vectorized_states_out,
-    split_keys_out,
-    out,
-  )
-
-
-def vmap(
-  f: F,
-  *,
-  in_axes: int | None | tp.Sequence[tp.Any] = 0,
-  out_axes: tp.Any = 0,
-  axis_name: AxisName | None = None,
-  axis_size: int | None = None,
-  spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
+@dataclasses.dataclass
+class VmapOptions:
+  in_axes: int | None | tp.Sequence[tp.Any]
+  out_axes: tp.Any
+  axis_name: AxisName | None
+  axis_size: int | None
+  spmd_axis_name: AxisName | tuple[AxisName, ...] | None
   # nnx specific
-  in_axes_kwargs: tp.Any = 0,
-  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
-  split_rngs: filterlib.Filter = ...,
-  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-) -> F:
-  vectorized_states_axes = list(state_axes.values())
-
-  vmapped_fn = jax.vmap(
-    vmap_fn,
-    in_axes=(
-      in_axes,  # args_axes
-      in_axes_kwargs,  # kwargs_axes
-      None,  # graphdef_axes
-      0,  # split_keys_axes
-      None,  # split_counts_axes
-      None,  # broadcast_keys_axes
-      None,  # broadcast_counts_axes
-      vectorized_states_axes,  # vectorized_states_axes
-      None,  # broadcast_state_axes
-      None,  # transform_metadata_axes
-      None,  # states_axes_axes
-      None,  # f_axes
-      None,  # filters_axes
-      None,  # split_rngs_axes
-    ),
-    out_axes=(
-      None,  # graphdef_out_axes
-      None,  # broadcast_state_axes
-      vectorized_states_axes,
-      0,  # keys_axes_out
-      out_axes,  # out_axes
-    ),
-    axis_name=axis_name,
-    axis_size=axis_size,
-    spmd_axis_name=spmd_axis_name,
-  )
-
-  @functools.wraps(f)
-  @graph.update_context('vmap')
-  def vmap_wrapper(*args, **kwargs):
-    ctx = graph.current_update_context('vmap')
-
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
-      (args, kwargs)
-    )
-    input_rng_streams = rnglib.backup_keys(input_graph_nodes)
-
-    # split module state
-    filters = (*state_axes.keys(), ...)
-    graphdef, rng_state, *vectorized_states, broadcast_state = ctx.split(  # type: ignore[misc]
-      input_graph_nodes, rnglib.RngState, *filters
-    )
-
-    # infer length
-    axis_sizes: tp.Set[int] = set()
-    args_sizes = jax.tree_util.tree_map(
-      lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
-      if axis is not None
-      else None,
-      in_axes,
-      args,
-      is_leaf=lambda x: x is None,
-    )
-    kwargs_sizes = jax.tree_util.tree_map(
-      lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
-      if axis is not None
-      else None,
-      in_axes_kwargs,
-      kwargs,
-      is_leaf=lambda x: x is None,
-    )
-    axis_sizes.update(jax.tree_util.tree_leaves(args_sizes))
-    axis_sizes.update(jax.tree_util.tree_leaves(kwargs_sizes))
-
-    if len(axis_sizes) > 1:
-      raise ValueError(
-        'Inconsistent lengths between state_axes states and '
-        f'arguments: {axis_sizes}'
-      )
-    elif len(axis_sizes) == 0:
-      if axis_size is None:
-        raise ValueError(
-          'Cannot infer length from state_axes states or axes_arg, '
-          'please specify `length`'
-        )
-      _axis_size = axis_size
-    else:
-      _axis_size = axis_sizes.pop()
-      if axis_size is not None and axis_size != _axis_size:
-        raise ValueError(
-          f'Specified axis_size {axis_size} is not the same as the'
-          f' inferred length {_axis_size}'
-        )
-
-    split_keys, split_counts, broadcast_keys, broadcast_counts = rnglib.fork(
-      rng_state,
-      split_rngs,
-      _axis_size,
-    )
-
-    (
-      graphdef_out,
-      broadcast_state,
-      vectorized_states,
-      split_keys_out,
-      out,
-    ) = vmapped_fn(
-      args,
-      kwargs,
-      graphdef,
-      split_keys,
-      split_counts,
-      broadcast_keys,
-      broadcast_counts,
-      vectorized_states,
-      broadcast_state,
-      transform_metadata,
-      state_axes,
-      f,
-      filters,
-      split_rngs,
-    )
-
-    _, output_graph_nodes = ctx.merge(
-      graphdef_out,
-      *vectorized_states,
-      broadcast_state,
-      split_keys_out,
-    )
-
-    out = graph.insert_graph_nodes(out, output_graph_nodes)
-
-    rnglib.restore_keys(input_rng_streams)
-
-    return out
-
-  return vmap_wrapper  # type: ignore
+  state_axes: tp.Mapping[filterlib.Filter, int]
+  split_rngs: filterlib.Filter
+  in_axes_kwargs: tp.Any
+  transform_metadata: tp.Mapping[str, tp.Any]
 
 
 class Vmap(tp.Generic[M], LiftedModule[M]):
@@ -1727,50 +1517,263 @@ class Vmap(tp.Generic[M], LiftedModule[M]):
     module_init_kwargs: dict[str, tp.Any],
   ):
     self.module_constructor = module_constructor
-
-    @functools.partial(
-      vmap,
-      in_axes=None,
-      out_axes=None,
-      axis_name=axis_name,
-      axis_size=axis_size,
-      spmd_axis_name=spmd_axis_name,
-      in_axes_kwargs=None,
-      state_axes=state_axes,
-      split_rngs=split_rngs,
-      transform_metadata=transform_metadata,
-    )
-    def vmap_init(*args, **kwargs):
-      return module_constructor(*args, **kwargs)
-
-    self.vmap_module = vmap_init(*module_init_args, **module_init_kwargs)
-
-    @functools.partial(
-      vmap,
+    self.options = VmapOptions(
       in_axes=in_axes,
       out_axes=out_axes,
       axis_name=axis_name,
       axis_size=axis_size,
       spmd_axis_name=spmd_axis_name,
+      # nnx specific
       in_axes_kwargs=in_axes_kwargs,
       state_axes=state_axes,
       split_rngs=split_rngs,
       transform_metadata=transform_metadata,
     )
-    def vmap_call(module, *args, _nnx_vmap_accessor: DelayedAccessor, **kwargs):
-      method = _nnx_vmap_accessor(module)
-      return method(*args, **kwargs)
 
-    self.vmap_call = vmap_call
+    (
+      (module_init_args, module_init_kwargs),
+      init_nodes,
+    ) = graph.extract_graph_nodes((module_init_args, module_init_kwargs))
+
+    def vmap_init(init_nodes):
+      (args, kwargs) = graph.insert_graph_nodes(
+        (module_init_args, module_init_kwargs), init_nodes
+      )
+      return module_constructor(*args, **kwargs)
+
+    init_options = dataclasses.replace(
+      self.options,
+      in_axes=None,
+      out_axes=None,
+    )
+    self.vmap_module = vmap_apply(init_options, vmap_init, (init_nodes,), {})
 
   @property
   def _submodule(self) -> M:
     return self.vmap_module
 
   def _call(self, accessor: DelayedAccessor, *args, **kwargs):
-    return self.vmap_call(
-      self._submodule, *args, _nnx_vmap_accessor=accessor, **kwargs
+    def vmap_apply_call(module, *args, **kwargs):
+      method = accessor(module)
+      return method(*args, **kwargs)
+
+    return vmap_apply(
+      self.options,
+      vmap_apply_call,
+      (self._submodule, *args),
+      kwargs,
     )
+
+
+@graph.update_context('vmap')
+def vmap_apply(
+  options: VmapOptions,
+  f: tp.Callable[..., A],
+  args: tuple[tp.Any, ...],
+  kwargs: dict[str, tp.Any],
+) -> A:
+  (args, kwargs), input_graph_nodes = graph.extract_graph_nodes((args, kwargs))
+  input_rng_streams = rnglib.backup_keys(input_graph_nodes)
+
+  ctx = graph.current_update_context('vmap')
+  # split module state
+  filters = (*options.state_axes.keys(), ...)
+  graphdef, rng_state, *vectorized_states, broadcast_state = ctx.split(  # type: ignore[misc]
+    input_graph_nodes, rnglib.RngState, *filters
+  )
+
+  # infer length
+  axis_sizes: tp.Set[int] = set()
+  args_sizes = jax.tree_util.tree_map(
+    lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
+    if axis is not None
+    else None,
+    options.in_axes,
+    args,
+    is_leaf=lambda x: x is None,
+  )
+  kwargs_sizes = jax.tree_util.tree_map(
+    lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
+    if axis is not None
+    else None,
+    options.in_axes_kwargs,
+    kwargs,
+    is_leaf=lambda x: x is None,
+  )
+  axis_sizes.update(jax.tree_util.tree_leaves(args_sizes))
+  axis_sizes.update(jax.tree_util.tree_leaves(kwargs_sizes))
+
+  if len(axis_sizes) > 1:
+    raise ValueError(
+      'Inconsistent lengths between state_axes states and '
+      f'arguments: {axis_sizes}'
+    )
+  elif len(axis_sizes) == 0:
+    if options.axis_size is None:
+      raise ValueError(
+        'Cannot infer length from state_axes states or axes_arg, '
+        'please specify `length`'
+      )
+    axis_size = options.axis_size
+  else:
+    axis_size = axis_sizes.pop()
+    if options.axis_size is not None and options.axis_size != axis_size:
+      raise ValueError(
+        f'Specified axis_size {options.axis_size} is not the same as the'
+        f' inferred length {axis_size}'
+      )
+
+  split_keys, split_counts, broadcast_keys, broadcast_counts = rnglib.fork(
+    rng_state,
+    options.split_rngs,
+    axis_size,
+  )
+
+  keys_axes = 0
+  states_axes = list(options.state_axes.values())
+  args_axes = options.in_axes
+  kwargs_axes = options.in_axes_kwargs
+  out_axes = options.out_axes
+  broadcast_state_axes = None
+  graphdef_out_axes = None
+  keys_axes_out = 0
+
+  @functools.partial(
+    jax.vmap,
+    in_axes=(keys_axes, states_axes, args_axes, kwargs_axes),
+    out_axes=(
+      graphdef_out_axes,
+      broadcast_state_axes,
+      states_axes,
+      keys_axes_out,
+      out_axes,
+    ),
+    axis_name=options.axis_name,
+    axis_size=axis_size,
+    spmd_axis_name=options.spmd_axis_name,
+  )
+  def vmap_fn(
+    split_keys: State,
+    vectorized_states: list[State],
+    args: tuple[tp.Any, ...],
+    kwargs: dict[str, tp.Any],
+  ):
+    # remove metadata axis name from Variable.sharding
+    if spmd.PARTITION_NAME in options.transform_metadata:
+      vectorized_states = [
+        spmd.remove_axis(state, index, options.transform_metadata)
+        for state, index in zip(vectorized_states, options.state_axes.values())
+      ]
+
+    # merge module state
+    input_graph_nodes = ctx.merge(
+      graphdef,
+      *vectorized_states,
+      broadcast_state,
+      split_keys,
+      split_counts,
+      broadcast_keys,
+      broadcast_counts,
+    )
+
+    (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
+
+    out = f(*args, **kwargs)
+
+    out, output_graph_nodes = graph.extract_graph_nodes(out)
+
+    # split module state
+    (
+      graphdef_out,
+      rng_state_out,
+      *vectorized_states_out,
+      broadcast_state_out,
+    ) = ctx.split(  # type: ignore[misc]
+      (input_graph_nodes, output_graph_nodes),
+      rnglib.RngState,
+      *filters,
+    )
+
+    not_keys_out, split_keys_out, broadcast_keys_out = rng_state_out.split(
+      rnglib.NotKey, options.split_rngs, ...
+    )
+
+    broadcast_state_out = State.merge(
+      broadcast_state_out, broadcast_keys_out, not_keys_out
+    )
+
+    # add metadata axis name to Variable.sharding
+    if spmd.PARTITION_NAME in options.transform_metadata:
+      vectorized_states_out = [
+        spmd.add_axis(state, index, options.transform_metadata)
+        for state, index in zip(
+          vectorized_states_out, options.state_axes.values()
+        )
+      ]
+
+    return (
+      graphdef_out,
+      broadcast_state_out,
+      vectorized_states_out,
+      split_keys_out,
+      out,
+    )
+
+  (
+    graphdef_out,
+    broadcast_state,
+    vectorized_states,
+    split_keys_out,
+    out,
+  ) = vmap_fn(split_keys, vectorized_states, args, kwargs)
+
+  _, output_graph_nodes = ctx.merge(
+    graphdef_out,
+    *vectorized_states,
+    broadcast_state,
+    split_keys_out,
+  )
+
+  out = graph.insert_graph_nodes(out, output_graph_nodes)
+
+  rnglib.restore_keys(input_rng_streams)
+
+  return out
+
+
+def vmap(
+  f: F,
+  *,
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  out_axes: tp.Any = 0,
+  axis_name: AxisName | None = None,
+  axis_size: int | None = None,
+  spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
+  # nnx specific
+  in_axes_kwargs: tp.Any = 0,
+  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> F:
+  options = VmapOptions(
+    state_axes=state_axes,
+    split_rngs=split_rngs,
+    in_axes=in_axes,
+    in_axes_kwargs=in_axes_kwargs,
+    out_axes=out_axes,
+    axis_size=axis_size,
+    axis_name=axis_name,
+    spmd_axis_name=spmd_axis_name,
+    transform_metadata=transform_metadata,
+  )
+
+  @functools.wraps(f)
+  def vmap_apply_wrapper(*args, **kwargs) -> tp.Any:
+    return vmap_apply(options, f, args, kwargs)
+
+  wrapper = vmap_apply_wrapper
+
+  return wrapper  # type: ignore
 
 
 # -------------------------------
