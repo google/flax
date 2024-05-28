@@ -1563,6 +1563,16 @@ class Vmap(tp.Generic[M], LiftedModule[M]):
       kwargs,
     )
 
+
+def _get_axis_sizes(pytree, axes):
+  axes = broadcast_prefix(axes, pytree, is_leaf=lambda x: x is None)
+  leaves = jax.tree_util.tree_leaves(pytree)
+  axis_sizes = {
+    leaf.shape[axis] for axis, leaf in zip(axes, leaves) if axis is not None
+  }
+  return axis_sizes
+
+
 @graph.update_context('vmap')
 def vmap_apply(
   options: VmapOptions,
@@ -1582,24 +1592,10 @@ def vmap_apply(
 
   # infer length
   axis_sizes: tp.Set[int] = set()
-  args_sizes = jax.tree_util.tree_map(
-    lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
-    if axis is not None
-    else None,
-    options.in_axes,
-    args,
-    is_leaf=lambda x: x is None,
-  )
-  kwargs_sizes = jax.tree_util.tree_map(
-    lambda axis, node: jax.tree_util.tree_map(lambda x: x.shape[axis], node)
-    if axis is not None
-    else None,
-    options.in_axes_kwargs,
-    kwargs,
-    is_leaf=lambda x: x is None,
-  )
-  axis_sizes.update(jax.tree_util.tree_leaves(args_sizes))
-  axis_sizes.update(jax.tree_util.tree_leaves(kwargs_sizes))
+  axis_sizes.update(_get_axis_sizes(args, options.in_axes))
+  axis_sizes.update(_get_axis_sizes(kwargs, options.in_axes_kwargs))
+  for state, state_axis in zip(vectorized_states, options.state_axes.values()):
+    axis_sizes.update(_get_axis_sizes(state, state_axis))
 
   if len(axis_sizes) > 1:
     raise ValueError(
