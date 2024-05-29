@@ -61,6 +61,14 @@ class NestedStateRepr(reprlib.Representable):
         continue
       yield r
 
+  def __penzai_repr__(self, path, subtree_renderer):
+    children = {}
+    for k, v in self.state.items():
+      if isinstance(v, State):
+        v = NestedStateRepr(v)
+      children[k] = v
+    # Render as the dictionary itself at the same path.
+    return subtree_renderer(children, path=path)
 
 class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def __init__(
@@ -130,6 +138,21 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       if isinstance(v, State):
         v = NestedStateRepr(v)
       yield reprlib.Attr(repr(k), v)
+
+  def __penzai_repr__(self, path, subtree_renderer):
+    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
+
+    children = {}
+    for k, v in self.items():
+      if isinstance(v, State):
+        v = NestedStateRepr(v)
+      children[k] = v
+    return pz_repr_lib.render_dictionary_wrapper(
+        object_type=type(self),
+        wrapped_dict=children,
+        path=path,
+        subtree_renderer=subtree_renderer,
+    )
 
   def flat_state(self) -> FlatState:
     return traverse_util.flatten_dict(self._mapping)  # type: ignore

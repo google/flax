@@ -58,5 +58,14 @@ class TraceState(reprlib.Representable):
     yield reprlib.Object(f'{type(self).__name__}')
     yield reprlib.Attr('jax_trace', self._jax_trace)
 
+  def __penzai_repr__(self, path, subtree_renderer):
+    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
+    return pz_repr_lib.render_object_constructor(
+        object_type=type(self),
+        attributes={'jax_trace': self._jax_trace},
+        path=path,
+        subtree_renderer=subtree_renderer,
+    )
+
   def __eq__(self, other):
     return isinstance(other, TraceState) and self._jax_trace is other._jax_trace

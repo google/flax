@@ -62,7 +62,7 @@ testing = [
     "nbstripout",
     "black[jupyter]==23.7.0",
     # "pyink==23.5.0", # disabling pyink fow now
-    "penzai; python_version>='3.10'",
+    "penzai>=0.1.2; python_version>='3.10'",
 ]
 
 [project.urls]

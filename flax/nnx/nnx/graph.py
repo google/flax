@@ -293,8 +293,25 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
     yield reprlib.Attr(
       'static_fields', reprlib.PrettyMapping(self.static_fields)
     )
-    yield reprlib.Attr('variables', reprlib.PrettyMapping(self.leaves))
+    yield reprlib.Attr('leaves', reprlib.PrettyMapping(self.leaves))
     yield reprlib.Attr('metadata', self.metadata)
+
+  def __penzai_repr__(self, path, subtree_renderer):
+    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
+    return pz_repr_lib.render_object_constructor(
+        object_type=type(self),
+        attributes={
+            'type': self.type,
+            'index': self.index,
+            'attributes': self.attributes,
+            'subgraphs': dict(self.subgraphs),
+            'static_fields': dict(self.static_fields),
+            'leaves': dict(self.leaves),
+            'metadata': self.metadata,
+        },
+        path=path,
+        subtree_renderer=subtree_renderer,
+    )
 
 
 @dataclasses.dataclass(frozen=True, repr=False)
@@ -307,6 +324,18 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
 
     yield reprlib.Attr('nodedef', self.nodedef)
     yield reprlib.Attr('index_mapping', self.index_mapping)
+
+  def __penzai_repr__(self, path, subtree_renderer):
+    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
+    return pz_repr_lib.render_object_constructor(
+        object_type=type(self),
+        attributes={
+            'nodedef': self.nodedef,
+            'index_mapping': self.index_mapping,
+        },
+        path=path,
+        subtree_renderer=subtree_renderer,
+    )
 
   def __deepcopy__(self, memo=None):
     nodedef = deepcopy(self.nodedef, memo)
