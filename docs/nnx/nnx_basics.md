@@ -21,6 +21,12 @@ Despite its simplified implementation, NNX supports the same powerful design pat
 that have allowed Linen to scale effectively to large codebases.
 
 ```{code-cell} ipython3
+:tags: [skip-execution]
+
+! pip install -U flax penzai
+```
+
+```{code-cell} ipython3
 from flax import nnx
 import jax
 import jax.numpy as jnp

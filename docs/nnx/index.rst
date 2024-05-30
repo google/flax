@@ -64,7 +64,7 @@ Features
          .. div:: sd-font-normal
 
             NNX makes it very easy integrate objects with regular JAX code
-            via the `Functional API <nnx_basics#the-functional-api>`__.
+            via the `Functional API <nnx_basics.html#the-functional-api>`__.
 
 Basic usage
 ^^^^^^^^^^^^
