@@ -112,12 +112,6 @@ def quantize_dequantize(x, q_dtype, scale, compute_dtype):
   return dequantize(qx, x.dtype, scale)
 
 
-def compute_amax_history(x, amax_history):
-  amax_update = jnp.max(jnp.abs(x)).astype(amax_history.dtype)
-  new_history = jnp.roll(amax_history, shift=-1, axis=0).at[0].set(amax_update)
-  return new_history
-
-
 def compute_scale(amax, scale, fp8_max, margin=0):
   # The algorithm for computing the new scale is sourced from
   #   https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/jax.html#transformer_engine.jax.update_fp8_metas
@@ -130,6 +124,12 @@ def compute_scale(amax, scale, fp8_max, margin=0):
   sf = jnp.where(jnp.isfinite(amax), sf, scale)
 
   return 1.0 / sf
+
+
+def compute_amax_history(x, amax_history):
+  amax_update = jnp.max(jnp.abs(x)).astype(amax_history.dtype)
+  new_history = jnp.roll(amax_history, shift=-1, axis=0).at[0].set(amax_update)
+  return new_history
 
 
 def quantize_and_update(
@@ -440,6 +440,19 @@ def dot_general_with_precision_jvp(
   return out, grad_out
 
 
+def _parse_dot_inputs(*args, **kwargs):
+  assert len(args) == 3
+  x = args[0]
+  k = args[1]
+  dimension_numbers = args[2]
+
+  # Use the `k.dtype` since it aligns with the `dtype` of its layers,
+  # namely, the computation data type.
+  comp_dtype = k.dtype
+  x = jnp.asarray(x, comp_dtype)
+  return x, k, dimension_numbers, comp_dtype
+
+
 class Fp8DotGeneralBase(module.Module):
   amax_history_length: int = 1024
 
@@ -477,23 +490,11 @@ class Fp8DotGeneralBase(module.Module):
       OVERWRITE_WITH_GRADIENT, "output_grad_scale", *scale_args
     )
 
-  def get_inputs(self, *args, **kwargs):
-    assert len(args) == 3
-    x = args[0]
-    k = args[1]
-    dimension_numbers = args[2]
-
-    # Use the `k.dtype` since it aligns with the `dtype` of its layers,
-    # namely, the computation data type.
-    comp_dtype = k.dtype
-    x = jnp.asarray(x, comp_dtype)
-    return x, k, dimension_numbers, comp_dtype
-
 
 class Fp8DotGeneralOp(Fp8DotGeneralBase):
 
   def __call__(self, *args, **kwargs):
-    x, k, dimension_numbers, comp_dtype = self.get_inputs(
+    x, k, dimension_numbers, comp_dtype = _parse_dot_inputs(
       *args, **kwargs
     )
     x_qdq = in_qdq(
@@ -517,7 +518,7 @@ class Fp8DotGeneralOp(Fp8DotGeneralBase):
 class Fp8DirectDotGeneralOp(Fp8DotGeneralBase):
 
   def __call__(self, *args, **kwargs):
-    x, k, dimension_numbers, comp_dtype = self.get_inputs(
+    x, k, dimension_numbers, comp_dtype = _parse_dot_inputs(
       *args, **kwargs
     )
 

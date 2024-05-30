@@ -1263,14 +1263,16 @@ class Fp8Test(parameterized.TestCase):
     dy = cast_to_representable(
       random.uniform(random_key, (16, 64)), jnp.float8_e5m2
     )
+    quant_cls = (
+      nn.Fp8DirectDotGeneralOp
+      if use_direct_quant else nn.Fp8DotGeneralOp
+    )
 
     def run(fp8_injection, expected_shapes):
       p = nn.DenseGeneral(features=64, name='dense')
+
       if fp8_injection:
-        p.dot_general_cls = (
-          nn.Fp8DirectDotGeneralOp
-          if use_direct_quant else nn.Fp8DotGeneralOp
-        )
+        p.dot_general_cls = quant_cls
 
       init_fn = jax.jit(p.init_with_output)
       y, initial_vars = init_fn(init_key, x)
@@ -1289,13 +1291,10 @@ class Fp8Test(parameterized.TestCase):
     expected_shapes_original = {
       'params': {'kernel': (32, 64), 'bias': (64,)},
     }
-    op_key = (
-      'Fp8DirectDotGeneralOp_0' if use_direct_quant else 'Fp8DotGeneralOp_0'
-    )
     expected_shapes_new = {
       'params': {'kernel': (32, 64), 'bias': (64,)},
       fp8_ops.OVERWRITE_WITH_GRADIENT: {
-        op_key: {
+        f'{quant_cls.__name__}_0': {
           'input_amax_history': (1024,),
           'kernel_amax_history': (1024,),
           'output_grad_amax_history': (1024,),
