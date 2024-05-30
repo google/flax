@@ -471,23 +471,23 @@ class Fp8DotGeneralBase(module.Module):
     )
 
     self.input_amax_history = self.variable(
-      OVERWRITE_WITH_GRADIENT, "input_amax_history", *amax_history_args
+      OVERWRITE_WITH_GRADIENT, 'input_amax_history', *amax_history_args
     )
     self.kernel_amax_history = self.variable(
-      OVERWRITE_WITH_GRADIENT, "kernel_amax_history", *amax_history_args
+      OVERWRITE_WITH_GRADIENT, 'kernel_amax_history', *amax_history_args
     )
     self.output_grad_amax_history = self.variable(
-      OVERWRITE_WITH_GRADIENT, "output_grad_amax_history", *amax_history_args
+      OVERWRITE_WITH_GRADIENT, 'output_grad_amax_history', *amax_history_args
     )
 
     self.input_scale = self.variable(
-      OVERWRITE_WITH_GRADIENT, "input_scale", *scale_args
+      OVERWRITE_WITH_GRADIENT, 'input_scale', *scale_args
     )
     self.kernel_scale = self.variable(
-      OVERWRITE_WITH_GRADIENT, "kernel_scale", *scale_args
+      OVERWRITE_WITH_GRADIENT, 'kernel_scale', *scale_args
     )
     self.output_grad_scale = self.variable(
-      OVERWRITE_WITH_GRADIENT, "output_grad_scale", *scale_args
+      OVERWRITE_WITH_GRADIENT, 'output_grad_scale', *scale_args
     )
 
 
