@@ -1289,10 +1289,14 @@ class Fp8Test(parameterized.TestCase):
     expected_shapes_original = {
       'params': {'kernel': (32, 64), 'bias': (64,)},
     }
-    expected_shapes_fake = {
+    op_key = (
+        'Fp8DirectDotGeneralOp_0' if use_direct_quant
+        else 'Fp8DotGeneralOp_0'
+    )
+    expected_shapes_new = {
       'params': {'kernel': (32, 64), 'bias': (64,)},
       fp8_ops.OVERWRITE_WITH_GRADIENT: {
-        'Fp8DotGeneralOp_0': {
+          op_key: {
           'input_amax_history': (1024,),
           'kernel_amax_history': (1024,),
           'output_grad_amax_history': (1024,),
@@ -1302,22 +1306,6 @@ class Fp8Test(parameterized.TestCase):
         }
       },
     }
-    expected_shapes_direct = {
-      fp8_ops.OVERWRITE_WITH_GRADIENT: {
-        'Fp8DirectDotGeneralOp_0': {
-          'input_amax_history': (1024,),
-          'input_scale': (1,),
-          'kernel_amax_history': (1024,),
-          'kernel_scale': (1,),
-          'output_grad_amax_history': (1024,),
-          'output_grad_scale': (1,),
-        }
-      },
-      'params': {'bias': (64,), 'kernel': (32, 64)},
-    }
-    expected_shapes_new = (
-        expected_shapes_direct if use_direct_quant else expected_shapes_fake
-    )
     output1a, output1b = run(False, expected_shapes_original)
     output2a, output2b = run(True, expected_shapes_new)
     dw1, dw2 = output1b[0]['params']['kernel'], output2b[0]['params']['kernel']

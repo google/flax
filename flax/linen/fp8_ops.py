@@ -440,20 +440,7 @@ def dot_general_with_precision_jvp(
   return out, grad_out
 
 
-def _get_dot_general_inputs(*args, **kwargs):
-  assert len(args) == 3
-  x = args[0]
-  k = args[1]
-  dimension_numbers = args[2]
-
-  # Use the `k.dtype` since it aligns with the `dtype` of its layers,
-  # namely, the computation data type.
-  comp_dtype = k.dtype
-  x = jnp.asarray(x, comp_dtype)
-  return x, k, dimension_numbers, comp_dtype
-
-
-class Fp8DotGeneralOp(module.Module):
+class Fp8DotGeneralBase(module.Module):
   amax_history_length: int = 1024
 
   def setup(self) -> None:
@@ -490,8 +477,23 @@ class Fp8DotGeneralOp(module.Module):
         OVERWRITE_WITH_GRADIENT, "output_grad_scale", *scale_args
     )
 
+  def get_inputs(self, *args, **kwargs):
+    assert len(args) == 3
+    x = args[0]
+    k = args[1]
+    dimension_numbers = args[2]
+
+    # Use the `k.dtype` since it aligns with the `dtype` of its layers,
+    # namely, the computation data type.
+    comp_dtype = k.dtype
+    x = jnp.asarray(x, comp_dtype)
+    return x, k, dimension_numbers, comp_dtype
+
+
+class Fp8DotGeneralOp(Fp8DotGeneralBase):
+
   def __call__(self, *args, **kwargs):
-    x, k, dimension_numbers, comp_dtype = _get_dot_general_inputs(
+    x, k, dimension_numbers, comp_dtype = self.get_inputs(
         *args, **kwargs
     )
     x_qdq = in_qdq(
@@ -512,10 +514,10 @@ class Fp8DotGeneralOp(module.Module):
     return y  # type: ignore
 
 
-class Fp8DirectDotGeneralOp(Fp8DotGeneralOp):
+class Fp8DirectDotGeneralOp(Fp8DotGeneralBase):
 
   def __call__(self, *args, **kwargs):
-    x, k, dimension_numbers, comp_dtype = _get_dot_general_inputs(
+    x, k, dimension_numbers, comp_dtype = self.get_inputs(
         *args, **kwargs
     )
 
