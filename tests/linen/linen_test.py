@@ -1394,7 +1394,7 @@ class Fp8Test(parameterized.TestCase):
     if not use_jit and not fp8_ops.CAN_USE_EARRAY:
       self.skipTest("TODO: requires newer jax that has earray")
     f32 = jnp.dtype('float32')
-    fm32 = fp8_ops.fm32
+    fm32 = fp8_ops.fp32_max_grad
 
     # Create a scan loop with reused ah_f32 and sf_f32. So, the autograd will
     # accumulate the grads of them. We expect the max op (rather than add op)
