@@ -1244,16 +1244,14 @@ class IdsTest(absltest.TestCase):
     self.assertNotEqual(hash(id1), hash(id1dc))
 
 
-class Fp8Test(absltest.TestCase):
-  def test_fp8_dot_general_injection(self):
+class Fp8Test(parameterized.TestCase):
+
+  @parameterized.parameters([True, False])
+  def test_fp8_dot_general_injection(self, use_direct_quant):
     # Used to cast the inputs to be representable in FP8, so that the difference
     # of the results from the original gemm and fp8 gemm is small.
-    def quantize_dequantize(x, q_dtype, scale, compute_dtype):
-      qx = fp8_ops.quantize(x, q_dtype, scale, compute_dtype)
-      return fp8_ops.dequantize(qx, x.dtype, scale)
-
     cast_to_representable = functools.partial(
-      quantize_dequantize,
+      fp8_ops.quantize_dequantize,
       scale=jnp.ones((1,)),
       compute_dtype=jnp.float32,
     )
@@ -1269,7 +1267,10 @@ class Fp8Test(absltest.TestCase):
     def run(fp8_injection, expected_shapes):
       p = nn.DenseGeneral(features=64, name='dense')
       if fp8_injection:
-        p.dot_general_cls = nn.Fp8DotGeneralOp
+        p.dot_general_cls = (
+            nn.Fp8DirectDotGeneralOp
+            if use_direct_quant else nn.Fp8DotGeneralOp
+        )
 
       init_fn = jax.jit(p.init_with_output)
       y, initial_vars = init_fn(init_key, x)
@@ -1288,7 +1289,7 @@ class Fp8Test(absltest.TestCase):
     expected_shapes_original = {
       'params': {'kernel': (32, 64), 'bias': (64,)},
     }
-    expected_shapes_new = {
+    expected_shapes_fake = {
       'params': {'kernel': (32, 64), 'bias': (64,)},
       fp8_ops.OVERWRITE_WITH_GRADIENT: {
         'Fp8DotGeneralOp_0': {
@@ -1301,7 +1302,22 @@ class Fp8Test(absltest.TestCase):
         }
       },
     }
-
+    expected_shapes_direct = {
+      fp8_ops.OVERWRITE_WITH_GRADIENT: {
+        'Fp8DirectDotGeneralOp_0': {
+          'input_amax_history': (1024,),
+          'input_scale': (1,),
+          'kernel_amax_history': (1024,),
+          'kernel_scale': (1,),
+          'output_grad_amax_history': (1024,),
+          'output_grad_scale': (1,),
+        }
+      },
+      'params': {'bias': (64,), 'kernel': (32, 64)},
+    }
+    expected_shapes_new = (
+        expected_shapes_direct if use_direct_quant else expected_shapes_fake
+    )
     output1a, output1b = run(False, expected_shapes_original)
     output2a, output2b = run(True, expected_shapes_new)
     dw1, dw2 = output1b[0]['params']['kernel'], output2b[0]['params']['kernel']
