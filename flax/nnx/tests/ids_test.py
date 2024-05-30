@@ -14,6 +14,7 @@
 
 import copy
 
+from absl.testing import absltest
 from flax.nnx.nnx import ids
 
 
@@ -28,3 +29,7 @@ class TestIds:
     id1dc = copy.deepcopy(id1)
     assert hash(id1) != hash(id1c)
     assert hash(id1) != hash(id1dc)
+
+
+if __name__ == '__main__':
+  absltest.main()

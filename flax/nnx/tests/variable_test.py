@@ -17,12 +17,13 @@ import typing as tp
 import jax
 import jax.numpy as jnp
 
+from absl.testing import absltest
 from flax import nnx
 
 A = tp.TypeVar('A')
 
 
-class TestVariableState:
+class TestVariableState(absltest.TestCase):
   def test_pytree(self):
     r1 = nnx.VariableState(nnx.Param, 1)
     assert r1.value == 1
@@ -62,3 +63,7 @@ class TestVariableState:
     x = jax.numpy.ones((3,))
     y = linear(x)
     assert y.shape == (4,)
+
+
+if __name__ == '__main__':
+  absltest.main()

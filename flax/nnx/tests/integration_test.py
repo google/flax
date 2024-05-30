@@ -14,6 +14,7 @@
 
 import typing as tp
 
+from absl.testing import absltest
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -23,7 +24,7 @@ from flax import nnx
 A = tp.TypeVar('A')
 
 
-class TestIntegration:
+class TestIntegration(absltest.TestCase):
   def test_shared_modules(self):
     class Block(nnx.Module):
       def __init__(self, linear: nnx.Linear, *, rngs):
@@ -257,3 +258,7 @@ class TestIntegration:
     intermediates, state = state.split(nnx.Intermediate, ...)
 
     assert 'y' in intermediates
+
+
+if __name__ == '__main__':
+  absltest.main()

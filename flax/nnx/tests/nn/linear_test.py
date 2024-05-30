@@ -16,9 +16,10 @@ import typing as tp
 
 import jax
 import jax.numpy as jnp
+from absl.testing import absltest
 from absl.testing import parameterized
 from jax.lax import Precision
-from numpy.testing import assert_array_equal
+import numpy as np
 
 from flax import linen
 from flax import nnx
@@ -91,7 +92,7 @@ class TestLinenConsistency(parameterized.TestCase):
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
 
   @parameterized.product(
     einsum_str=['defab,bcef->adefc', 'd...ab,bc...->ad...c'],
@@ -139,7 +140,7 @@ class TestLinenConsistency(parameterized.TestCase):
       variables['params']['bias'] = model_nnx.bias.value
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
 
     variables = model.init(key, x)
     model_nnx.kernel.value = variables['params']['kernel']
@@ -148,4 +149,8 @@ class TestLinenConsistency(parameterized.TestCase):
       model_nnx.bias.value = variables['params']['bias']
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
+
+
+if __name__ == '__main__':
+  absltest.main()

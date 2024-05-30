@@ -16,8 +16,9 @@ import typing as tp
 
 import jax
 import jax.numpy as jnp
+from absl.testing import absltest
 from absl.testing import parameterized
-from numpy.testing import assert_array_equal
+import numpy as np
 
 from flax import linen
 from flax import nnx
@@ -29,14 +30,14 @@ class TestLinenConsistency(parameterized.TestCase):
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
     use_fast_variance=[True, False],
-    mask=[None, jnp.array([True, False, True, False, True])],
+    mask=[None, np.array([True, False, True, False, True])],
   )
   def test_nnx_linen_batchnorm_equivalence(
     self,
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     use_fast_variance: bool,
-    mask: tp.Optional[jax.Array],
+    mask: tp.Optional[np.ndarray],
   ):
     class NNXModel(nnx.Module):
       def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
@@ -99,20 +100,20 @@ class TestLinenConsistency(parameterized.TestCase):
     nnx_model.linear.bias.value = variables['params']['linear']['bias']
 
     nnx_out = nnx_model(x, mask=mask)
-    assert_array_equal(linen_out, nnx_out)
+    np.testing.assert_array_equal(linen_out, nnx_out)
 
   @parameterized.product(
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
     use_fast_variance=[True, False],
-    mask=[None, jnp.array([True, False, True, False, True])],
+    mask=[None, np.array([True, False, True, False, True])],
   )
   def test_nnx_linen_layernorm_equivalence(
     self,
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     use_fast_variance: bool,
-    mask: tp.Optional[jax.Array],
+    mask: tp.Optional[np.ndarray],
   ):
     class NNXModel(nnx.Module):
       def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
@@ -171,20 +172,20 @@ class TestLinenConsistency(parameterized.TestCase):
     nnx_model.linear.bias.value = variables['params']['linear']['bias']
 
     nnx_out = nnx_model(x, mask=mask)
-    assert_array_equal(linen_out, nnx_out)
+    np.testing.assert_array_equal(linen_out, nnx_out)
 
   @parameterized.product(
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
     use_fast_variance=[True, False],
-    mask=[None, jnp.array([True, False, True, False, True])],
+    mask=[None, np.array([True, False, True, False, True])],
   )
   def test_nnx_linen_rmsnorm_equivalence(
     self,
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     use_fast_variance: bool,
-    mask: tp.Optional[jax.Array],
+    mask: tp.Optional[np.ndarray],
   ):
     class NNXModel(nnx.Module):
       def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
@@ -243,4 +244,8 @@ class TestLinenConsistency(parameterized.TestCase):
     nnx_model.linear.bias.value = variables['params']['linear']['bias']
 
     nnx_out = nnx_model(x, mask=mask)
-    assert_array_equal(linen_out, nnx_out)
+    np.testing.assert_array_equal(linen_out, nnx_out)
+
+
+if __name__ == '__main__':
+  absltest.main()

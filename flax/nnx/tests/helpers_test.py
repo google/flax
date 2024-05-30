@@ -16,7 +16,8 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from numpy.testing import assert_array_equal
+from absl.testing import absltest
+import numpy as np
 
 from flax import linen
 from flax import nnx
@@ -90,7 +91,7 @@ class TestHelpers:
         ).value
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
 
     variables = model.init(key2, x)
     for layer_index in range(2):
@@ -100,4 +101,9 @@ class TestHelpers:
         ][f'layers_{layer_index}'][param]
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
+
+
+if __name__ == '__main__':
+  absltest.main()
+

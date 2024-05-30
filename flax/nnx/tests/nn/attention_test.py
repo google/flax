@@ -19,13 +19,14 @@ from flax import linen
 from flax import nnx
 from flax.typing import Dtype, PrecisionLike
 
-from numpy.testing import assert_array_equal
+import numpy as np
 
 import typing as tp
 from absl.testing import parameterized
+from absl.testing import absltest
 
 
-class TestMultiHeadAttention:
+class TestMultiHeadAttention(absltest.TestCase):
   def test_basic(self):
     module = nnx.MultiHeadAttention(
       num_heads=2,
@@ -167,4 +168,8 @@ class TestLinenConsistency(parameterized.TestCase):
 
     out_nnx = model_nnx(x)
     out, cache = model.apply(variables, x, mutable=['cache'])
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
+
+
+if __name__ == '__main__':
+  absltest.main()

@@ -16,10 +16,11 @@ from collections.abc import Sequence
 import typing as tp
 
 import jax
+from absl.testing import absltest
 from absl.testing import parameterized
 from jax import numpy as jnp
 from jax.lax import Precision
-from numpy.testing import assert_array_equal
+import numpy as np
 
 from flax import linen
 from flax import nnx
@@ -102,7 +103,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
 
   @parameterized.product(
     strides=[None, (2, 3)],
@@ -166,4 +167,8 @@ class TestConvLinenConsistency(parameterized.TestCase):
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
+
+
+if __name__ == '__main__':
+  absltest.main()

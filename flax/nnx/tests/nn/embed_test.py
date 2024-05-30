@@ -15,9 +15,10 @@
 import typing as tp
 
 import jax
+from absl.testing import absltest
 from absl.testing import parameterized
 from jax import numpy as jnp
-from numpy.testing import assert_array_equal
+import numpy as np
 
 from flax import linen
 from flax import nnx
@@ -62,11 +63,15 @@ class TestLinenConsistency(parameterized.TestCase):
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
-    assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(out, out_nnx)
 
     x = jax.numpy.ones((10,), dtype=input_dtype) * 10
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
     assert isinstance(out, jax.Array)
-    assert_array_equal(out, out_nnx)
-    assert_array_equal(jax.numpy.isnan(out).all(), jax.numpy.array([True]))
+    np.testing.assert_array_equal(out, out_nnx)
+    np.testing.assert_array_equal(jax.numpy.isnan(out).all(), jax.numpy.array([True]))
+
+
+if __name__ == '__main__':
+  absltest.main()

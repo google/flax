@@ -17,6 +17,7 @@ import jax.numpy as jnp
 
 from flax import nnx
 
+from absl.testing import absltest
 from absl.testing import parameterized
 
 
@@ -64,3 +65,7 @@ class TestMetrics(parameterized.TestCase):
     values = metrics.compute()
     self.assertTrue(jnp.isnan(values['accuracy']))
     self.assertTrue(jnp.isnan(values['loss']))
+
+
+if __name__ == '__main__':
+  absltest.main()

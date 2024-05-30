@@ -14,6 +14,7 @@
 
 import dataclasses
 
+from absl.testing import absltest
 import jax
 import jax.numpy as jnp
 
@@ -21,7 +22,7 @@ from flax import nnx
 from flax.nnx import compat
 
 
-class TestCompatModule:
+class TestCompatModule(absltest.TestCase):
   def test_compact_basic(self):
     class Linear(compat.Module):
       dout: int
@@ -132,3 +133,6 @@ class TestCompatModule:
 
     assert hasattr(bar, 'foo')
     assert isinstance(bar.foo, Foo)
+
+if __name__ == '__main__':
+  absltest.main()

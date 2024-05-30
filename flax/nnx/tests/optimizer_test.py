@@ -19,6 +19,7 @@ import optax
 
 from flax import nnx
 
+from absl.testing import absltest
 from absl.testing import parameterized
 
 
@@ -118,3 +119,7 @@ class TestOptimizer(parameterized.TestCase):
     initial_loss = state.metrics.compute()
     state.update(grads=grads, values=loss_fn(state.model))
     self.assertTrue(state.metrics.compute() < initial_loss)
+
+
+if __name__ == '__main__':
+  absltest.main()

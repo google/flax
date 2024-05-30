@@ -14,9 +14,10 @@
 
 
 from flax import nnx
+from absl.testing import absltest
 
 
-class TestContainers:
+class TestContainers(absltest.TestCase):
   def test_unbox(self):
     x = nnx.Param(
       1,
@@ -58,3 +59,7 @@ class TestContainers:
 
     assert module.x.value == 12
     assert vars(module)['x'].raw_value == 12
+
+
+if __name__ == '__main__':
+  absltest.main()

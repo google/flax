@@ -12,19 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from absl.testing import absltest
 import jax
 import jax.numpy as jnp
 import optax
-from jax._src import test_util as jtu
 from jax.experimental import mesh_utils
 from jax.sharding import Mesh, PartitionSpec
 
 from flax import nnx
 
 
-class TestSPMD:
-  @jtu.skip_on_devices('cpu', 'gpu')
+class TestSPMD(absltest.TestCase):
   def test_init(self):
+    if jax.device_count() < 4:
+      self.skipTest('At least 4 devices required')
     class Foo(nnx.Module):
       def __init__(self):
         self.w = nnx.Param(
@@ -98,3 +99,8 @@ class TestSPMD:
     assert state_spec.params['w'].value == PartitionSpec('row', 'col')
     assert state_spec.opt_state[0].mu['w'].value == PartitionSpec('row', 'col')
     assert state_spec.opt_state[0].nu['w'].value == PartitionSpec('row', 'col')
+
+
+if __name__ == '__main__':
+  absltest.main()
+
