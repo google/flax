@@ -24,7 +24,7 @@ Features
 
          .. div:: sd-font-normal
 
-            NNX supports the use or regular Python object, providing an intuitive
+            NNX supports the use of regular Python objects, providing an intuitive
             and predictable development experience.
 
    .. grid-item::
@@ -37,8 +37,8 @@ Features
 
          .. div:: sd-font-normal
 
-            NNX relies on Python's object model, this results in simplicity for
-            the user which increases development speed.
+            NNX relies on Python's object model, which results in simplicity for
+            the user and increases development speed.
 
    .. grid-item::
       :columns: 12 12 12 6
@@ -50,7 +50,7 @@ Features
 
          .. div:: sd-font-normal
 
-            NNX integrates of user feedback and hands-on experience with Linen
+            NNX integrates user feedback and hands-on experience with Linen
             into a new simplified API.
 
    .. grid-item::
@@ -63,7 +63,7 @@ Features
 
          .. div:: sd-font-normal
 
-            NNX makes it very easy integrate objects with regular JAX code
+            NNX makes it very easy to integrate objects with regular JAX code
             via the `Functional API <nnx_basics.html#the-functional-api>`__.
 
 Basic usage
