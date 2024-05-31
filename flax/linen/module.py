@@ -1552,6 +1552,32 @@ class Module(ModuleBase):
 
   @property
   def path(self):
+    """Get the path of this Module. Top-level root modules have an empty path ``()``.
+    Note that this method can only be used on bound modules that have a valid scope.
+
+    Example usage::
+
+      >>> import flax.linen as nn
+      >>> import jax, jax.numpy as jnp
+
+      >>> class SubModel(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     print(f'SubModel path: {self.path}')
+      ...     return x
+
+      >>> class Model(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     print(f'Model path: {self.path}')
+      ...     return SubModel()(x)
+
+      >>> model = Model()
+      >>> variables = model.init(jax.random.key(0), jnp.ones((1, 2)))
+      Model path: ()
+      SubModel path: ('SubModel_0',)
+    """
+
     if self.scope is None:
       raise ValueError("Can't access module paths on unbound modules.")
 
@@ -2580,23 +2606,8 @@ class Module(ModuleBase):
       >>> model = Foo()
       >>> variables = model.init(jax.random.key(0), x)
       >>> y, state = model.apply(variables, x, mutable=['intermediates'])
-      >>> print(state['intermediates'])
-      {'h': (Array([[-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
-             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ]],      dtype=float32),)}
+      >>> jax.tree.map(jnp.shape, state['intermediates'])
+      {'h': ((16, 4),)}
 
     By default the values are stored in a tuple and each stored value
     is appended at the end. This way all intermediates can be tracked when

@@ -31,13 +31,13 @@
 
 # pylint: disable=g-multiple-import,useless-import-alias
 # re-export commonly used modules and functions
-from ..core import (
+from flax.core import (
     DenyList as DenyList,
     FrozenDict as FrozenDict,
     broadcast as broadcast,
     meta as meta,
 )
-from ..core.meta import (
+from flax.core.meta import (
     PARTITION_NAME as PARTITION_NAME,
     Partitioned as Partitioned,
     get_partition_spec as get_partition_spec,

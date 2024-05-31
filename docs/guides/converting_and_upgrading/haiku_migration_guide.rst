@@ -5,7 +5,7 @@ Migrating from Haiku to Flax
 This guide will walk through the process of migrating Haiku models to Flax,
 and highlight the differences between the two libraries.
 
-.. testsetup::
+.. testsetup:: Haiku, Flax
 
   import jax
   import jax.numpy as jnp
@@ -25,8 +25,7 @@ whereas in Haiku ``name`` must be explicitly defined in the constructor
 signature and passed to the superclass constructor.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   import haiku as hk
@@ -89,8 +88,7 @@ that calls your Module, ``transform`` will return an object with ``init``
 and ``apply`` methods. In Flax, you simply instantiate your Module.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   def forward(x, training: bool):
@@ -112,8 +110,7 @@ that Flax returns a mapping from collection names to nested array dictionaries,
 structure directly.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   sample_x = jax.numpy.ones((1, 784))
@@ -184,8 +181,7 @@ both cases we must provide a ``key`` to ``apply`` in order to generate
 the random dropout masks.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   def train_step(key, params, inputs, labels):
@@ -218,7 +214,7 @@ the random dropout masks.
 
     return params
 
-.. testcode::
+.. testcode:: Haiku, Flax
   :hide:
 
   train_step(random.key(0), params, sample_x, jnp.ones((1,), dtype=jnp.int32))
@@ -236,8 +232,7 @@ Now let's see how mutable state is handled in both libraries. We will take
 the same model as before, but now we will replace Dropout with BatchNorm.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   class Block(hk.Module):
@@ -278,8 +273,7 @@ which changes the signature for ``init`` and ``apply`` to accept and return
 state. As before, in Flax you construct the Module directly.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   def forward(x, training: bool):
@@ -304,8 +298,7 @@ of a Haiku model with an ``hk.BatchNorm`` layer. In Flax, we can set
 ``training=False`` as usual.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   sample_x = jax.numpy.ones((1, 784))
@@ -340,8 +333,7 @@ input dictionary, and get the ``updates`` variables dictionary as the second
 return value.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   def train_step(params, state, inputs, labels):
@@ -375,7 +367,7 @@ return value.
 
     return params, batch_stats
 
-.. testcode::
+.. testcode:: Flax
   :hide:
 
   train_step(params, batch_stats, sample_x, jnp.ones((1,), dtype=jnp.int32))
@@ -406,8 +398,7 @@ In Flax, we will define an ``encoder`` and a ``decoder`` Module ahead of time
 in ``setup``, and use them in the ``encode`` and ``decode`` respectively.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   class AutoEncoder(hk.Module):
@@ -459,8 +450,7 @@ function passed to ``multi_transform`` defines how to initialize the module and 
 different apply methods to generate.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   def forward():
@@ -485,8 +475,7 @@ To initialize the parameters of our model, ``init`` can be used to trigger the
 method. This will create all the necessary parameters for the model.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   params = model.init(
@@ -543,8 +532,7 @@ This generates the following parameter structure.
 Finally, let's explore how we can employ the ``apply`` function to invoke the ``encode`` method:
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   encode, decode = model.apply
@@ -593,8 +581,7 @@ method will be a function that takes the carry and input, and returns the new
 carry and output. In this case, the carry and the output are the same.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   class RNNCell(hk.Module):
@@ -640,8 +627,7 @@ to create an instance of the lifted ``RNNCell`` and use it to create the ``carry
 the run the ``__call__`` method which will ``scan`` over the sequence.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   class RNN(hk.Module):
@@ -680,8 +666,7 @@ according to the transform's semantics.
 Finally, let's quickly view how the ``RNN`` Module would be used in both Haiku and Flax.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   def forward(x):
@@ -740,8 +725,7 @@ we are telling ``nn.scan`` create different parameters for each step and slice t
 
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   class Block(hk.Module):
@@ -762,7 +746,7 @@ we are telling ``nn.scan`` create different parameters for each step and slice t
         self.num_layers = num_layers
 
     def __call__(self, x, training: bool):
-     @hk.experimental.layer_stack(self.num_layers)
+      @hk.experimental.layer_stack(self.num_layers)
       def stack_block(x):
         return Block(self.features)(x, training)
 
@@ -803,8 +787,7 @@ Initializing each model is the same as in previous examples. In this case,
 we will be specifying that we want to use ``5`` layers each with ``64`` features.
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   def forward(x, training: bool):
@@ -876,8 +859,7 @@ In Haiku, it is possible to write the entire model as a single function by using
 The Flax team recommends a more Module-centric approach that uses `__call__` to define the forward function. The corresponding accessor will be `nn.module.param` and `nn.module.variable` (go to `Handling State <#handling-state>`__ for an explanaion on collections).
 
 .. codediff::
-  :title_left: Haiku
-  :title_right: Flax
+  :title: Haiku, Flax
   :sync:
 
   def forward(x):

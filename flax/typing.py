@@ -25,6 +25,7 @@ from typing import (
   Tuple,
   TypeVar,
   Union,
+  runtime_checkable,
 )
 
 import jax
@@ -42,7 +43,7 @@ Dtype = Union[jax.typing.DTypeLike, Any]
 Shape = Sequence[int]
 K = TypeVar('K')
 
-
+@runtime_checkable
 class Key(Hashable, Protocol):
   def __lt__(self: K, value: K, /) -> bool:
     ...
@@ -119,7 +120,9 @@ Axes = Union[int, Sequence[int]]
 
 LogicalNames = Tuple[Union[str, None], ...]
 
-LogicalRules = Sequence[Tuple[str, Union[str, Tuple[str], None]]]
+# Maps each logical axis  to physical mesh, can be either None (replicated),
+# one physical axis or a tuple of physical axes.
+LogicalRules = Sequence[Tuple[str, Union[str, Tuple[str, ...], None]]]
 ArrayPytree = Any  # pylint: disable=invalid-name
 LogicalPartitionSpec = Any  # pylint: disable=invalid-name
 LogicalPartitionSpecPytree = Any  # pylint: disable=invalid-name

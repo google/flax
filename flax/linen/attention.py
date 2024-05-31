@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Attention core modules for Flax."""
+from __future__ import annotations
 
 import functools
 import warnings
@@ -42,17 +43,19 @@ from flax.typing import (
 
 
 def dot_product_attention_weights(
-  query: Array,
-  key: Array,
-  bias: Optional[Array] = None,
-  mask: Optional[Array] = None,
-  broadcast_dropout: bool = True,
-  dropout_rng: Optional[PRNGKey] = None,
-  dropout_rate: float = 0.0,
-  deterministic: bool = False,
-  dtype: Optional[Dtype] = None,
-  precision: PrecisionLike = None,
-  module: Optional[Module] = None,
+    query: Array,
+    key: Array,
+    bias: Optional[Array] = None,
+    mask: Optional[Array] = None,
+    broadcast_dropout: bool = True,
+    dropout_rng: Optional[PRNGKey] = None,
+    dropout_rate: float = 0.0,
+    deterministic: bool = False,
+    dtype: Optional[Dtype] = None,
+    precision: PrecisionLike = None,
+    module: Optional[Module] = None,
+    force_fp32_for_softmax: bool = False,
+    einsum_dot_general: Callable[..., Array] = jax.lax.dot_general,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -61,8 +64,8 @@ def dot_product_attention_weights(
   you can directly call this function and call einsum yourself.
 
   Args:
-    query: queries for calculating attention with shape of ``[batch..., q_length,
-      num_heads, qk_depth_per_head]``.
+    query: queries for calculating attention with shape of ``[batch...,
+      q_length, num_heads, qk_depth_per_head]``.
     key: keys for calculating attention with shape of ``[batch..., kv_length,
       num_heads, qk_depth_per_head]``.
     bias: bias for the attention weights. This should be broadcastable to the
@@ -80,9 +83,13 @@ def dot_product_attention_weights(
     precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     module: the Module that will sow the attention weights into the
-      'intermediates' collection. Remember to mark 'intermediates' as mutable via
-      ``mutable=['intermediates']`` in order to have that collection returned.
-      If ``module`` is None, the attention weights will not be sowed.
+      'intermediates' collection. Remember to mark 'intermediates' as mutable
+      via ``mutable=['intermediates']`` in order to have that collection
+      returned. If ``module`` is None, the attention weights will not be sowed.
+    force_fp32_for_softmax: bool, whether to force the softmax to be computed in
+      fp32. This is useful for mixed-precision training where higher precision
+      is desired for numerical stability.
+    einsum_dot_general: the dot_general to use in einsum.
 
   Returns:
     Output of shape ``[batch..., num_heads, q_length, kv_length]``.
@@ -100,7 +107,11 @@ def dot_product_attention_weights(
   query = query / jnp.sqrt(depth).astype(dtype)
   # attn weight shape is (batch..., num_heads, q_length, kv_length)
   attn_weights = jnp.einsum(
-    '...qhd,...khd->...hqk', query, key, precision=precision
+      '...qhd,...khd->...hqk',
+      query,
+      key,
+      precision=precision,
+      _dot_general=einsum_dot_general,
   )
 
   # apply attention bias: masking, dropout, proximity bias, etc.
@@ -112,7 +123,10 @@ def dot_product_attention_weights(
     attn_weights = jnp.where(mask, attn_weights, big_neg)
 
   # normalize the attention weights
-  attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
+  if force_fp32_for_softmax and dtype != jnp.float32:
+    attn_weights = jax.nn.softmax(attn_weights.astype(jnp.float32))
+  else:
+    attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
 
   if module:
     module.sow('intermediates', 'attention_weights', attn_weights)
@@ -133,18 +147,20 @@ def dot_product_attention_weights(
 
 
 def dot_product_attention(
-  query: Array,
-  key: Array,
-  value: Array,
-  bias: Optional[Array] = None,
-  mask: Optional[Array] = None,
-  broadcast_dropout: bool = True,
-  dropout_rng: Optional[PRNGKey] = None,
-  dropout_rate: float = 0.0,
-  deterministic: bool = False,
-  dtype: Optional[Dtype] = None,
-  precision: PrecisionLike = None,
-  module: Optional[Module] = None,
+    query: Array,
+    key: Array,
+    value: Array,
+    bias: Optional[Array] = None,
+    mask: Optional[Array] = None,
+    broadcast_dropout: bool = True,
+    dropout_rng: Optional[PRNGKey] = None,
+    dropout_rate: float = 0.0,
+    deterministic: bool = False,
+    dtype: Optional[Dtype] = None,
+    precision: PrecisionLike = None,
+    module: Optional[Module] = None,
+    force_fp32_for_softmax: bool = False,
+    einsum_dot_general: Callable[..., Array] = jax.lax.dot_general,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -156,8 +172,8 @@ def dot_product_attention(
     ``query``, ``key``, ``value`` needn't have any batch dimensions.
 
   Args:
-    query: queries for calculating attention with shape of ``[batch..., q_length,
-      num_heads, qk_depth_per_head]``.
+    query: queries for calculating attention with shape of ``[batch...,
+      q_length, num_heads, qk_depth_per_head]``.
     key: keys for calculating attention with shape of ``[batch..., kv_length,
       num_heads, qk_depth_per_head]``.
     value: values to be used in attention with shape of ``[batch..., kv_length,
@@ -177,9 +193,13 @@ def dot_product_attention(
     precision: numerical precision of the computation see ``jax.lax.Precision`
       for details.
     module: the Module that will sow the attention weights into the
-      'intermediates' collection. Remember to mark 'intermediates' as mutable via
-      ``mutable=['intermediates']`` in order to have that collection returned.
-      If ``module`` is None, the attention weights will not be sowed.
+      'intermediates' collection. Remember to mark 'intermediates' as mutable
+      via ``mutable=['intermediates']`` in order to have that collection
+      returned. If ``module`` is None, the attention weights will not be sowed.
+    force_fp32_for_softmax: bool, whether to force the softmax to be computed in
+      fp32. This is useful for mixed-precision training where higher precision
+      is desired for numerical stability.
+    einsum_dot_general: the dot_general to use in einsum.
 
   Returns:
     Output of shape ``[batch..., q_length, num_heads, v_depth_per_head]``.
@@ -197,22 +217,28 @@ def dot_product_attention(
 
   # compute attention weights
   attn_weights = dot_product_attention_weights(
-    query,
-    key,
-    bias,
-    mask,
-    broadcast_dropout,
-    dropout_rng,
-    dropout_rate,
-    deterministic,
-    dtype,
-    precision,
-    module,
+      query,
+      key,
+      bias,
+      mask,
+      broadcast_dropout,
+      dropout_rng,
+      dropout_rate,
+      deterministic,
+      dtype,
+      precision,
+      module,
+      force_fp32_for_softmax,
+      einsum_dot_general=einsum_dot_general,
   )
 
   # return weighted sum over values for each query position
   return jnp.einsum(
-    '...hqk,...khd->...qhd', attn_weights, value, precision=precision
+      '...hqk,...khd->...qhd',
+      attn_weights,
+      value,
+      precision=precision,
+      _dot_general=einsum_dot_general,
   )
 
 
@@ -281,7 +307,11 @@ class MultiHeadDotProductAttention(Module):
     precision: Numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: Initializer for the kernel of the Dense layers.
+    out_kernel_init: Optional Initializer for the kernel of the output Dense layer,
+      if None, ``kernel_init`` will be used.
     bias_init: Initializer for the bias of the Dense layers.
+    out_bias_init: Optional Initializer for the bias of the output Dense layer,
+      if None, ``bias_init`` will be used.
     use_bias: Whether pointwise QKVO dense transforms use bias.
     attention_fn: dot_product_attention or compatible function. Accepts query,
       key, value, and returns output of shape ``[bs, dim1, dim2, ..., dimN,,
@@ -300,11 +330,14 @@ class MultiHeadDotProductAttention(Module):
   deterministic: Optional[bool] = None
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
+  out_kernel_init: Initializer | None = None
   bias_init: Initializer = initializers.zeros_init()
+  out_bias_init: Initializer | None = None
   use_bias: bool = True
   attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False
   normalize_qk: bool = False
+  force_fp32_for_softmax: bool = False
   # Deprecated, will be removed.
   qkv_dot_general: Optional[DotGeneralT] = None
   out_dot_general: Optional[DotGeneralT] = None
@@ -572,8 +605,8 @@ class MultiHeadDotProductAttention(Module):
     out = DenseGeneral(
       features=features,
       axis=(-2, -1),
-      kernel_init=self.kernel_init,
-      bias_init=self.bias_init,
+      kernel_init=self.out_kernel_init or self.kernel_init,
+      bias_init=self.out_bias_init or self.bias_init,
       use_bias=self.use_bias,
       dtype=self.dtype,
       param_dtype=self.param_dtype,

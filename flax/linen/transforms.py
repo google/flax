@@ -497,6 +497,7 @@ def _fingerprint_recursive(
       # if we have already seen the module we just use the index
       # as its static component
       fingerprint = seen_modules[obj._id]
+      return type(obj), fingerprint
     else:
       # if its a new module we add it to the cache and give it
       # a new index

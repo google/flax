@@ -107,9 +107,9 @@ def _mesh_assignment_free(new_assignment, existing_assignments):
 
 
 def _logical_to_mesh_axes(
-  array_dim_names: Optional[Sequence[Optional[str]]],
-  rules: Optional[LogicalRules] = None,
-) -> Optional[List[Union[_UnassignedAxis, None, str, Tuple[str]]]]:
+    array_dim_names: Optional[Sequence[Optional[str]]],
+    rules: Optional[LogicalRules] = None,
+) -> Optional[List[Union[_UnassignedAxis, None, str, Tuple[str, ...]]]]:
   """Same as logical_to_mesh_axes, but doesn't fill in _unassigned_axis."""
   if array_dim_names is None:
     return None
@@ -126,8 +126,11 @@ def _logical_to_mesh_axes(
   if not isinstance(rules, (tuple, list)):
     raise ValueError('Unknown axis rule specification type.')
   # We assign mesh axes using a priority based ruleset over logical axis names.
-  result: List[Union[_UnassignedAxis, None, str, Tuple[str]]]
-  result = [_unassigned_axis] * len(array_dim_names)
+  result: List[Union[_UnassignedAxis, None, str, Tuple[str, ...]]]
+  result = [
+      (_unassigned_axis if isinstance(name, str) else name)
+      for name in array_dim_names
+  ]
   for rule_model_name, rule_mesh_names in rules:
     if rule_model_name in array_dim_names:
       pos = array_dim_names.index(rule_model_name)
@@ -264,9 +267,17 @@ def _with_sharding_constraint_one_fallback(
   )
 
 
+def _is_axis_spec(x):
+  return (
+      isinstance(x, str)
+      or x is jax.sharding.PartitionSpec.UNCONSTRAINED
+      or x is None
+  )
+
+
 def _is_logical_spec(x):
   return x is None or (
-    isinstance(x, tuple) and all(isinstance(e, str) or e is None for e in x)
+      isinstance(x, tuple) and all(_is_axis_spec(e) for e in x)
   )
 
 

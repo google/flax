@@ -24,13 +24,12 @@ can be defined in two ways:
 Here is a short example of a module defined in both ways, with exactly
 the same functionality.
 
-.. testsetup::
+.. testsetup:: Using ``setup``, Using ``nn.compact``
 
   import flax.linen as nn
 
 .. codediff::
-  :title_left: Using ``setup``
-  :title_right: Using ``nn.compact``
+  :title: Using ``setup``, Using ``nn.compact``
 
   class MLP(nn.Module):
     def setup(self):

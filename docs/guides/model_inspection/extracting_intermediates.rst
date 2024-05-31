@@ -4,7 +4,7 @@ Extracting intermediate values
 This guide will show you how to extract intermediate values from a module.
 Let's start with this simple CNN that uses :code:`nn.compact`.
 
-.. testsetup::
+.. testsetup:: default, sow
 
   import flax
   import flax.linen as nn
@@ -50,8 +50,8 @@ The CNN can be augmented with calls to ``sow`` to store intermediates as followi
 
 
 .. codediff::
-  :title_left: Default CNN
-  :title_right: CNN using sow API
+  :title: Default CNN, CNN using sow API
+  :groups: default, sow
 
   class CNN(nn.Module):
     @nn.compact
@@ -101,7 +101,7 @@ Note that, by default ``sow`` appends values every time it is called:
 * To override the default append behavior, specify ``init_fn`` and ``reduce_fn``
   - see :meth:`Module.sow() <flax.linen.Module.sow>`.
 
-.. testcode::
+.. testcode:: sow
 
   class SowCNN2(nn.Module):
     @nn.compact
@@ -229,8 +229,8 @@ Note that ``capture_intermediates`` will only apply to layers. You can use ``sel
 non-layer intermediates, but the filter function won't be applied to it.
 
 .. codediff::
-  :title_left: Capturing all layer intermediates
-  :title_right: Using filter function and ``self.sow()``
+  :title: Capturing all layer intermediates, Using filter function and ``self.sow()``
+  :groups: default, sow
 
   class Model(nn.Module):
     @nn.compact
@@ -285,7 +285,7 @@ To separate the intermediates extracted from ``self.sow`` from the intermediates
 we can either define a separate collection like ``self.sow('sow_intermediates', 'c', c)``, or manually filter out
 the intermediates after calling ``.apply()``. For example:
 
-.. testcode::
+.. testcode:: sow
 
   flattened_dict = flax.traverse_util.flatten_dict(feats['intermediates'], sep='/')
   flattened_dict['c']

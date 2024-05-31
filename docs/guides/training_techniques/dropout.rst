@@ -11,7 +11,7 @@ and visible units in a network.
 Throughout the guide, you will be able to compare code examples with and without
 Flax ``Dropout``.
 
-.. testsetup::
+.. testsetup:: No Dropout, With Dropout
 
   import flax.linen as nn
   import jax.numpy as jnp
@@ -37,8 +37,7 @@ Begin by splitting the PRNG key using
 into three keys, including one for Flax Linen ``Dropout``.
 
 .. codediff::
-  :title_left: No Dropout
-  :title_right: With Dropout
+  :title: No Dropout, With Dropout
   :sync:
 
   root_key = jax.random.key(seed=0)
@@ -98,8 +97,7 @@ check out the
 In short, :meth:`flax.linen.Module.make_rng` *guarantees full reproducibility*.
 
 .. codediff::
-  :title_left: No Dropout
-  :title_right: With Dropout
+  :title: No Dropout, With Dropout
   :sync:
 
   class MyModel(nn.Module):
@@ -137,8 +135,7 @@ and with ``Dropout`` is that the ``training`` (or ``train``) argument must be
 provided if you need dropout enabled.
 
 .. codediff::
-  :title_left: No Dropout
-  :title_right: With Dropout
+  :title: No Dropout, With Dropout
   :sync:
 
   my_model = MyModel(num_neurons=3)
@@ -163,8 +160,7 @@ When using :meth:`flax.linen.apply()` to run your model:
   to seed the ``'dropout'`` stream when you call :meth:`flax.linen.apply()`.
 
 .. codediff::
-  :title_left: No Dropout
-  :title_right: With Dropout
+  :title: No Dropout, With Dropout
   :sync:
 
   # No need to pass the `training` and `rngs` flags.
@@ -196,8 +192,7 @@ the training step function. Refer to the
 * Then, pass the ``key`` value—in this case, the ``dropout_key``—to the :meth:`train_state.TrainState.create` method.
 
 .. codediff::
-  :title_left: No Dropout
-  :title_right: With Dropout
+  :title: No Dropout, With Dropout
   :sync:
 
   from flax.training import train_state
@@ -236,12 +231,11 @@ the training step function. Refer to the
   as an extra parameter.
 
 .. codediff::
-  :title_left: No Dropout
-  :title_right: With Dropout
+  :title: No Dropout, With Dropout
   :sync:
 
   @jax.jit
-  def train_step(state: TrainState, batch):
+  def train_step(state: train_state.TrainState, batch):
 
     def loss_fn(params):
       logits = state.apply_fn(

@@ -10,7 +10,7 @@ towards :py:mod:`flax.optim` users to help them update their code to Optax.
 See also Optax's quick start documentation:
 https://optax.readthedocs.io/en/latest/getting_started.html
 
-.. testsetup::
+.. testsetup:: default, flax.optim, optax
 
   import flax
   import jax
@@ -42,8 +42,8 @@ optimizer state, parameters, and other associated data in a single dataclass
 (not used in code below).
 
 .. codediff::
-  :title_left: flax.optim
-  :title_right: optax
+  :title: flax.optim, optax
+  :skip_test: flax.optim
   :sync:
 
   @jax.jit
@@ -91,8 +91,8 @@ generic building blocks.
 .. _optax.chain(): https://optax.readthedocs.io/en/latest/api/combining_optimizers.html#optax.chain
 
 .. codediff::
-  :title_left: Pre-defined alias
-  :title_right: Combining transformations
+  :title: Pre-defined alias, Combining transformations
+  :groups: default, default
 
   # Note that the aliases follow the convention to use positive
   # values for the learning rate by default.
@@ -126,8 +126,8 @@ weight decay can be added as another "gradient transformation"
 .. _optax.add_decayed_weights(): https://optax.readthedocs.io/en/latest/api/transformations.html#optax.add_decayed_weights
 
 .. codediff::
-  :title_left: flax.optim
-  :title_right: optax
+  :title: flax.optim, optax
+  :skip_test: flax.optim
   :sync:
 
   optimizer_def = flax.optim.Adam(
@@ -158,8 +158,8 @@ becomes just another gradient transformation |optax.clip_by_global_norm()|_.
 .. _optax.clip_by_global_norm(): https://optax.readthedocs.io/en/latest/api/transformations.html#optax.clip_by_global_norm
 
 .. codediff::
-  :title_left: flax.optim
-  :title_right: optax
+  :title: flax.optim, optax
+  :skip_test: flax.optim
   :sync:
 
   def train_step(optimizer, batch):
@@ -202,8 +202,8 @@ learning rate schedule as a parameter for ``learning_rate``.
 .. _optax.inject_hyperparams(): https://optax.readthedocs.io/en/latest/api/optimizer_schedules.html#optax.inject_hyperparams
 
 .. codediff::
-  :title_left: flax.optim
-  :title_right: optax
+  :title: flax.optim, optax
+  :skip_test: flax.optim
   :sync:
 
   def train_step(step, optimizer, batch):
@@ -244,8 +244,8 @@ that is not readily available outside the outer mask).
 .. _optax.multi_transform(): https://optax.readthedocs.io/en/latest/api/combining_optimizers.html#optax.multi_transform
 
 .. codediff::
-  :title_left: flax.optim
-  :title_right: optax
+  :title: flax.optim, optax
+  :skip_test: flax.optim
   :sync:
 
   kernels = flax.traverse_util.ModelParamTraversal(lambda p, _: 'kernel' in p)
