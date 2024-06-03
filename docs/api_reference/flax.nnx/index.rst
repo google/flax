@@ -11,6 +11,7 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/nnx/i
   nn/index
   rnglib
   spmd
+  state
   training/index
   transforms
   variables

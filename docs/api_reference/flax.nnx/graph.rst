@@ -14,6 +14,9 @@ graph
 .. autofunction:: iter_graph
 .. autofunction:: clone
 
+.. autoclass:: GraphDef
+  :members:
+
 .. autoclass:: UpdateContext
   :members:
 
