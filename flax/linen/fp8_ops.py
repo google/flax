@@ -41,7 +41,7 @@ class Fp8MetaTyRules:
   def physical_element_aval(dtype) -> core.ShapedArray:
     return core.ShapedArray((), dtype.float_dtype)
 
-  if jax.__version_info__ < (0, 4, 28):
+  if jax.__version_info__ < (0, 4, 29):
     @staticmethod
     def replicate_trailing_dims(ctx, val, aval):
       del ctx, aval
