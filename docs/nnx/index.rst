@@ -153,6 +153,13 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
+      .. card:: :material-regular:`transform;2em` Haiku and Linen vs NNX
+         :class-card: sd-text-black sd-bg-light
+         :link: haiku_linen_vs_nnx.html
+
+   .. grid-item::
+      :columns: 6 6 6 4
+
       .. card:: :material-regular:`menu_book;2em` API reference
          :class-card: sd-text-black sd-bg-light
          :link: ../api_reference/flax.nnx/index.html
@@ -164,6 +171,7 @@ Learn more
    :hidden:
    :maxdepth: 1
 
+   haiku_linen_vs_nnx
    nnx_basics
    mnist_tutorial
    transforms
