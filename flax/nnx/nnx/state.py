@@ -27,27 +27,21 @@
 # limitations under the License.
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import MutableMapping
 import typing as tp
-import typing_extensions as tpe
 
 import jax
 import jax.tree_util as jtu
-import numpy as np
 
 from flax.nnx.nnx import traversals
 from flax.nnx.nnx import filterlib, reprlib
-from flax.nnx.nnx.variables import VariableState
-from flax.typing import Key, PathParts
+from flax.typing import PathParts
 
 A = tp.TypeVar('A')
+K = tp.TypeVar('K', bound=tp.Hashable)
+V = tp.TypeVar('V')
 
-StateLeaf = tp.Union[VariableState[tp.Any], np.ndarray, jax.Array]
-FlatState = Mapping[PathParts, StateLeaf]
-
-
-def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
-  return isinstance(x, (VariableState, np.ndarray, jax.Array))
+FlatState = dict[PathParts, V]
 
 
 class NestedStateRepr(reprlib.Representable):
@@ -71,12 +65,13 @@ class NestedStateRepr(reprlib.Representable):
     # Render as the dictionary itself at the same path.
     return subtree_renderer(children, path=path)
 
-class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
+
+class State(MutableMapping[K, V], reprlib.Representable):
   def __init__(
     self,
     mapping: tp.Union[
-      Mapping[Key, Mapping | StateLeaf],
-      tp.Iterator[tuple[Key, Mapping | StateLeaf]],
+      tp.Mapping[K, tp.Mapping | V],
+      tp.Iterator[tuple[K, tp.Mapping | V]],
     ],
     /,
     *,
@@ -98,35 +93,35 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       super().__setattr__('_mapping', _mapping)
 
   @property
-  def raw_mapping(self) -> tp.Mapping[Key, tp.Mapping[Key, tp.Any] | StateLeaf]:
+  def raw_mapping(self) -> tp.Mapping[K, tp.Mapping[K, tp.Any] | V]:
     return self._mapping  # type: ignore
 
   def __contains__(self, key) -> bool:
     return key in self._mapping
 
-  def __getitem__(self, key: Key) -> State | StateLeaf:
+  def __getitem__(self, key: K) -> State | V:  # type: ignore
     value = self._mapping[key]
     if isinstance(value, tp.Mapping):
       return State(value, _copy=False)
     return value
 
-  def __getattr__(self, key: Key) -> State | StateLeaf:
+  def __getattr__(self, key: K) -> State | V:  # type: ignore[misc]
     if '_mapping' not in vars(self) or key not in self._mapping:
       raise AttributeError(f"No attribute '{key}' in State")
     return self[key]
 
-  def __setitem__(self, key: Key, value: State | StateLeaf) -> None:
+  def __setitem__(self, key: K, value: State | V) -> None:
     if isinstance(value, State):
       self._mapping[key] = value._mapping
     else:
       self._mapping[key] = value
 
-  __setattr__ = __setitem__
+  __setattr__ = __setitem__  # type: ignore
 
-  def __delitem__(self, key: Key) -> None:
+  def __delitem__(self, key: K) -> None:
     del self._mapping[key]
 
-  def __iter__(self) -> tp.Iterator[Key]:
+  def __iter__(self) -> tp.Iterator[K]:
     return iter(self._mapping)
 
   def __len__(self) -> int:
@@ -149,24 +144,22 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
         v = NestedStateRepr(v)
       children[k] = v
     return pz_repr_lib.render_dictionary_wrapper(
-        object_type=type(self),
-        wrapped_dict=children,
-        path=path,
-        subtree_renderer=subtree_renderer,
+      object_type=type(self),
+      wrapped_dict=children,
+      path=path,
+      subtree_renderer=subtree_renderer,
     )
 
-  def flat_state(self) -> FlatState:
-    return traversals.flatten_mapping(self._mapping)  # type: ignore
+  def flat_state(self) -> FlatState[V]:
+    return traversals.flatten_mapping(self._mapping)
 
   @classmethod
-  def from_flat_path(
-    cls, flat_state: tp.Mapping[PathParts, StateLeaf], /
-  ) -> State:
+  def from_flat_path(cls, flat_state: tp.Mapping[PathParts, V], /) -> State:
     nested_state = traversals.unflatten_mapping(flat_state)
     return cls(nested_state)
 
   @tp.overload
-  def split(self, first: filterlib.Filter, /) -> 'State': ...
+  def split(self, first: filterlib.Filter, /) -> State[K, V]: ...
 
   @tp.overload
   def split(
@@ -175,11 +168,11 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tuple['State', ...]: ...
+  ) -> tuple[State[K, V], ...]: ...
 
   def split(
     self, first: filterlib.Filter, /, *filters: filterlib.Filter
-  ) -> tp.Union['State', tuple['State', ...]]:
+  ) -> tp.Union[State[K, V], tuple[State[K, V], ...]]:
     filters = (first, *filters)
     *states_, rest = _split_state(self, *filters)
 
@@ -201,7 +194,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     self,
     first: filterlib.Filter,
     /,
-  ) -> 'State': ...
+  ) -> State[K, V]: ...
 
   @tp.overload
   def filter(
@@ -210,14 +203,14 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tuple['State', ...]: ...
+  ) -> tuple[State[K, V], ...]: ...
 
   def filter(
     self,
     first: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tp.Union['State', tuple['State', ...]]:
+  ) -> tp.Union[State[K, V], tuple[State[K, V], ...]]:
     *states_, _rest = _split_state(self, first, *filters)
 
     assert len(states_) == len(filters) + 1
@@ -231,25 +224,25 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     return states  # type: ignore[bad-return-type]
 
   @staticmethod
-  def merge(state: 'State', /, *states: 'State') -> 'State':
+  def merge(state: State[K, V], /, *states: State[K, V]) -> State[K, V]:
     states = (state, *states)
 
     if len(states) == 1:
       return states[0]
 
-    new_state: FlatState = {}
+    new_state: FlatState[V] = {}
 
     for state in states:
       new_state.update(state.flat_state())  # type: ignore[attribute-error] # pytype is wrong here
 
     return State.from_flat_path(new_state)
 
-  def __or__(self, other: 'State') -> 'State':
+  def __or__(self, other: State[K, V]) -> State[K, V]:
     if not other:
       return self
     return State.merge(self, other)
 
-  def __sub__(self, other: 'State') -> 'State':
+  def __sub__(self, other: State[K, V]) -> State[K, V]:
     if not other:
       return self
 
@@ -267,8 +260,8 @@ def _state_flatten_with_keys(x: State):
 
 
 def _state_unflatten(
-  static: tuple[Key, ...],
-  leaves: tuple[StateLeaf, ...] | tuple[dict[Key, StateLeaf]],
+  static: tuple[K, ...],
+  leaves: tuple[V, ...] | tuple[dict[K, V]],
 ):
   return State(zip(static, leaves))
 
@@ -281,9 +274,9 @@ jax.tree_util.register_pytree_with_keys(
 
 
 def _split_state(
-  state: State,
+  state: State[K, V],
   *filters: filterlib.Filter,
-) -> tuple[State, ...]:
+) -> tuple[State[K, V], ...]:
   for i, filter_ in enumerate(filters):
     if filter_ in (..., True) and i != len(filters) - 1:
       remaining_filters = filters[i + 1 :]
@@ -298,7 +291,7 @@ def _split_state(
 
   # we have n + 1 states, where n is the number of predicates
   # the last state is for values that don't match any predicate
-  flat_states: tuple[FlatState, ...] = tuple(
+  flat_states: tuple[FlatState[V], ...] = tuple(
     {} for _ in range(len(predicates) + 1)
   )
 
