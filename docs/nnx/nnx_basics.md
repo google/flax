@@ -42,7 +42,7 @@ initialization (no shape inference).
 As shown next, dynamic state is usually stored in `nnx.Param`s, and static state 
 (all types not handled by NNX) such as integers or strings  are stored directly. 
 Attributes of type `jax.Array` and `numpy.ndarray` are also treated as dynamic 
-state,although storing them inside `nnx.Variable`s such as `Param` is preferred.
+state, although storing them inside `nnx.Variable`s such as `Param` is preferred.
 Also, the `nnx.Rngs` object by can be used to get new unique keys based on a root 
 key passed to the constructor.
 
