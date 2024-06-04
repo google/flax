@@ -1261,3 +1261,23 @@ class TestCond:
     foo.update()
     assert foo.timestep.step == 4
     assert foo.timestep.reward == 0.0
+
+  def test_vmap_cond(self):
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.param = nnx.Param(jnp.arange(5))
+        self.batch_stat = nnx.BatchStat(jnp.array(0.0))
+
+    foo = Foo(rngs=nnx.Rngs(0))
+
+    @partial(nnx.vmap, state_axes={nnx.Param: 0})
+    def f(foo: Foo):
+      do_nothing = lambda foo: foo
+
+      foo = nnx.cond(True, do_nothing, do_nothing, foo)
+
+      return foo
+
+    foo = f(foo)
+
+    print(foo)
