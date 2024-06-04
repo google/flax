@@ -48,7 +48,35 @@ class ModuleMeta(ObjectMeta):
 
 
 class Module(Object, metaclass=ModuleMeta):
-  """"""
+  """Base class for all neural network modules.
+
+  Layers and models should subclass this class.
+
+  ``Module``'s can contain submodules, and in this way can be nested in a tree
+  structure. Submodules can be assigned as regular attributes inside the
+  ``__init__`` method.
+
+  You can define arbitrary "forward pass" methods on your ``Module`` subclass.
+  While no methods are special-cased, ``__call__`` is a popular choice since
+  you can call the ``Module`` directly::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     x = self.linear1(x)
+    ...     x = nnx.relu(x)
+    ...     x = self.linear2(x)
+    ...     return x
+
+    >>> x = jnp.ones((1, 2))
+    >>> model = Model(rngs=nnx.Rngs(0))
+    >>> y = model(x)
+  """
 
   def sow(
     self,
@@ -58,6 +86,86 @@ class Module(Object, metaclass=ModuleMeta):
     reduce_fn: tp.Callable[[B, A], B] = tuple_reduce,
     init_fn: tp.Callable[[], B] = tuple_init,  # type: ignore
   ) -> None:
+    """``sow()`` can be used to collect intermediate values without
+    the overhead of explicitly passing a container through each Module call.
+    ``sow()`` stores a value in a new ``Module`` attribute, denoted by ``name``.
+    The value will be wrapped by a :class:`Variable` of type ``variable_type``,
+    which can be useful to filter for in :func:`split`, :func:`state` and
+    :func:`pop`.
+
+    By default the values are stored in a tuple and each stored value
+    is appended at the end. This way all intermediates can be tracked when
+    the same module is called multiple times.
+
+    Example usage::
+
+      >>> from flax import nnx
+      >>> import jax.numpy as jnp
+
+      >>> class Model(nnx.Module):
+      ...   def __init__(self, rngs):
+      ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+      ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+      ...   def __call__(self, x, add=0):
+      ...     x = self.linear1(x)
+      ...     self.sow(nnx.Intermediate, 'i', x+add)
+      ...     x = self.linear2(x)
+      ...     return x
+
+      >>> x = jnp.ones((1, 2))
+      >>> model = Model(rngs=nnx.Rngs(0))
+      >>> assert not hasattr(model, 'i')
+
+      >>> y = model(x)
+      >>> assert hasattr(model, 'i')
+      >>> assert len(model.i.value) == 1 # tuple of length 1
+      >>> assert model.i.value[0].shape == (1, 3)
+
+      >>> y = model(x, add=1)
+      >>> assert len(model.i.value) == 2 # tuple of length 2
+      >>> assert (model.i.value[0] + 1 == model.i.value[1]).all()
+
+    Alternatively, a custom init/reduce function can be passed::
+
+      >>> class Model(nnx.Module):
+      ...   def __init__(self, rngs):
+      ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+      ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+      ...   def __call__(self, x):
+      ...     x = self.linear1(x)
+      ...     self.sow(nnx.Intermediate, 'sum', x,
+      ...              init_fn=lambda: 0,
+      ...              reduce_fn=lambda prev, curr: prev+curr)
+      ...     self.sow(nnx.Intermediate, 'product', x,
+      ...              init_fn=lambda: 1,
+      ...              reduce_fn=lambda prev, curr: prev*curr)
+      ...     x = self.linear2(x)
+      ...     return x
+
+      >>> x = jnp.ones((1, 2))
+      >>> model = Model(rngs=nnx.Rngs(0))
+
+      >>> y = model(x)
+      >>> assert (model.sum.value == model.product.value).all()
+      >>> intermediate = model.sum.value
+
+      >>> y = model(x)
+      >>> assert (model.sum.value == intermediate*2).all()
+      >>> assert (model.product.value == intermediate**2).all()
+
+    Args:
+      variable_type: The :class:`Variable` type for the stored value.
+        Typically :class:`Intermediate` is used to indicate an
+        intermediate value.
+      name: A string denoting the ``Module`` attribute name, where
+        the sowed value is stored.
+      value: The value to be stored.
+      reduce_fn: The function used to combine the existing value with the new
+        value. The default is to append the value to a tuple.
+      init_fn: For the first value stored, ``reduce_fn`` will be passed the result
+        of ``init_fn`` together with the value to be stored. The default is an
+        empty tuple.
+    """
     if hasattr(self, name):
       variable = getattr(self, name)
       if not isinstance(variable, variableslib.Variable):
