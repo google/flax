@@ -26,7 +26,6 @@ import jax.numpy as jnp
 from absl.testing import absltest
 from jax import random
 
-from flax import traverse_util
 from flax import nnx
 from configs import default
 from models import TransformerConfig, TransformerLM
@@ -81,7 +80,7 @@ class ModelTest(absltest.TestCase):
   ):
     rules = dataclasses.asdict(config.axis_rules)
     flat_params_nnx = params_nnx.flat_state()
-    flat_params_linen = traverse_util.flatten_dict(params_linen, sep='/')
+    flat_params_linen = nnx.traversals.flatten_mapping(params_linen, sep='/')
 
     def apply_rules(names: tuple[str, ...]):
       return tuple(rules[name] for name in names)
@@ -165,7 +164,7 @@ class ModelTest(absltest.TestCase):
     cache_linen: dict[str, Any],
   ):
     flat_cache_nnx = cache_nnx.flat_state()
-    flat_cache_linen = traverse_util.flatten_dict(cache_linen, sep='/')
+    flat_cache_linen = nnx.traversals.flatten_mapping(cache_linen, sep='/')
 
     def copy_var(nnx_name: str, linen_name: str):
       nnx_path = tuple(nnx_name.split('/'))

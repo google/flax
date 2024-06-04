@@ -27,6 +27,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+from collections.abc import Mapping
 import typing as tp
 import typing_extensions as tpe
 
@@ -34,7 +35,7 @@ import jax
 import jax.tree_util as jtu
 import numpy as np
 
-from flax import traverse_util
+from flax.nnx.nnx import traversals
 from flax.nnx.nnx import filterlib, reprlib
 from flax.nnx.nnx.variables import VariableState
 from flax.typing import Key, PathParts
@@ -42,7 +43,7 @@ from flax.typing import Key, PathParts
 A = tp.TypeVar('A')
 
 StateLeaf = tp.Union[VariableState[tp.Any], np.ndarray, jax.Array]
-FlatState = dict[PathParts, StateLeaf]
+FlatState = Mapping[PathParts, StateLeaf]
 
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
@@ -74,8 +75,8 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def __init__(
     self,
     mapping: tp.Union[
-      tp.Mapping[Key, tp.Mapping | StateLeaf],
-      tp.Iterator[tuple[Key, tp.Mapping | StateLeaf]],
+      Mapping[Key, Mapping | StateLeaf],
+      tp.Iterator[tuple[Key, Mapping | StateLeaf]],
     ],
     /,
     *,
@@ -155,13 +156,13 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
     )
 
   def flat_state(self) -> FlatState:
-    return traverse_util.flatten_dict(self._mapping)  # type: ignore
+    return traversals.flatten_mapping(self._mapping)  # type: ignore
 
   @classmethod
   def from_flat_path(
     cls, flat_state: tp.Mapping[PathParts, StateLeaf], /
   ) -> State:
-    nested_state = traverse_util.unflatten_dict(flat_state)
+    nested_state = traversals.unflatten_mapping(flat_state)
     return cls(nested_state)
 
   @tp.overload
