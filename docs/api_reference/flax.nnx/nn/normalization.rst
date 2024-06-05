@@ -4,9 +4,14 @@ Normalization
 .. automodule:: flax.nnx
 .. currentmodule:: flax.nnx
 
-.. autoclass:: BatchNorm
-   :members:
-.. autoclass:: LayerNorm
-   :members:
-.. autoclass:: RMSNorm
-   :members:
+.. flax_module::
+  :module: flax.nnx
+  :class: BatchNorm
+
+.. flax_module::
+  :module: flax.nnx
+  :class: LayerNorm
+
+.. flax_module::
+  :module: flax.nnx
+  :class: RMSNorm
