@@ -219,7 +219,7 @@ def jit(
       if the sharding cannot be inferred.
 
       The valid resource assignment specifications are:
-        - :py:class:`XLACompatibleSharding`, which will decide how the value
+        - :py:class:`Sharding`, which will decide how the value
             will be partitioned. With this, using a mesh context manager is not
             required.
         - :py:obj:`None`, will give JAX the freedom to choose whatever sharding
