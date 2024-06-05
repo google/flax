@@ -134,7 +134,7 @@ class LinearGeneral(Module):
     (16, 4, 5)
 
   Attributes:
-    in_features: int or tuple with number of output features.
+    in_features: int or tuple with number of input features.
     out_features: int or tuple with number of output features.
     axis: int or tuple with axes to apply the transformation on. For instance,
       (-2, -1) will apply the transformation to the last two axes.
@@ -527,6 +527,42 @@ class Einsum(Module):
 
 class Conv(Module):
   """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+
+    >>> rngs = nnx.Rngs(0)
+    >>> x = jnp.ones((1, 8, 3))
+
+    >>> # valid padding
+    >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3,),
+    ...                  padding='VALID', rngs=rngs)
+    >>> layer.kernel.value.shape
+    (3, 3, 4)
+    >>> layer.bias.value.shape
+    (4,)
+    >>> out = layer(x)
+    >>> out.shape
+    (1, 6, 4)
+
+    >>> # circular padding with stride 2
+    >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3, 3),
+    ...                  strides=2, padding='CIRCULAR', rngs=rngs)
+    >>> layer.kernel.value.shape
+    (3, 3, 3, 4)
+    >>> layer.bias.value.shape
+    (4,)
+    >>> out = layer(x)
+    >>> out.shape
+    (1, 4, 4)
+
+    >>> # apply lower triangle mask
+    >>> mask_fn = lambda x: x * jnp.tril(jnp.ones((3, 3, 4)))
+    >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3,),
+    ...                  mask_fn=mask_fn, padding='VALID', rngs=rngs)
+    >>> out = layer(x)
 
   Attributes:
     features: number of convolution filters.

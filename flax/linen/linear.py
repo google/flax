@@ -511,11 +511,10 @@ class _Conv(Module):
     """Applies a (potentially unshared) convolution to the inputs.
 
     Args:
-      inputs: input data with dimensions (*batch_dims, spatial_dims...,
-        features). This is the channels-last convention, i.e. NHWC for a 2d
-        convolution and NDHWC for a 3D convolution. Note: this is different from
-        the input convention used by ``lax.conv_general_dilated``, which puts the
-        spatial dimensions last.
+      inputs: input data with dimensions `(*batch_dims, spatial_dims..., features)`.
+        This is the channels-last convention, i.e. NHWC for a 2d convolution and
+        NDHWC for a 3D convolution. Note: this is different from the input convention
+        used by ``lax.conv_general_dilated``, which puts the spatial dimensions last.
         Note: If the input has more than 1 batch dimension, all batch dimensions
         are flattened into a single dimension for the convolution and restored
         before returning.  In some cases directly vmap'ing the layer may yield
