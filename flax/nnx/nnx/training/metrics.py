@@ -27,12 +27,13 @@
 # limitations under the License.
 from __future__ import annotations
 
-import jax, jax.numpy as jnp
+import typing as tp
+
+from flax import struct
+from flax.nnx.nnx import filterlib, graph
 from flax.nnx.nnx.object import Object
 from flax.nnx.nnx.variables import Variable
-from flax.nnx.nnx import filterlib, graph
-
-import typing as tp
+import jax, jax.numpy as jnp
 
 # TODO: add tests and docstrings
 
@@ -44,6 +45,7 @@ class MetricState(Variable):
 
 
 class Metric(Object):
+
   def __init__(self):
     raise NotImplementedError('Must override `__init__()` method.')
 
@@ -61,6 +63,7 @@ class Metric(Object):
 
 
 class Average(Metric):
+
   def __init__(self, argname: str = 'values'):
     self.argname = argname
     self.total = MetricState(jnp.array(0, dtype=jnp.float32))
@@ -75,7 +78,7 @@ class Average(Metric):
       raise TypeError(f"Expected keyword argument '{self.argname}'")
     values: tp.Union[int, float, jax.Array] = kwargs[self.argname]
     self.total.value += (
-      values if isinstance(values, (int, float)) else values.sum()
+        values if isinstance(values, (int, float)) else values.sum()
     )
     self.count.value += 1 if isinstance(values, (int, float)) else values.size
 
@@ -83,12 +86,61 @@ class Average(Metric):
     return self.total.value / self.count.value
 
 
+@struct.dataclass
+class Statistics:
+  mean: jnp.float32
+  standard_error_of_mean: jnp.float32
+  standard_deviation: jnp.float32
+
+
+class Welford(Metric):
+  """Uses Welford's algorithm to compute the mean and variance of a stream of data."""
+
+  def __init__(self, argname: str = 'values'):
+    self.argname = argname
+    self.count = MetricState(jnp.array(0, dtype=jnp.int32))
+    self.mean = MetricState(jnp.array(0, dtype=jnp.float32))
+    self.m2 = MetricState(jnp.array(0, dtype=jnp.float32))
+
+  def reset(self):
+    self.count.value = jnp.array(0, dtype=jnp.uint32)
+    self.mean.value = jnp.array(0, dtype=jnp.float32)
+    self.m2.value = jnp.array(0, dtype=jnp.float32)
+
+  def update(self, **kwargs):
+    if self.argname not in kwargs:
+      raise TypeError(f"Expected keyword argument '{self.argname}'")
+    values: tp.Union[int, float, jax.Array] = kwargs[self.argname]
+    count = 1 if isinstance(values, (int, float)) else values.size
+    original_count = self.count.value
+    self.count.value += count
+    delta = (
+        values if isinstance(values, (int, float)) else values.mean()
+    ) - self.mean.value
+    self.mean.value += delta * count / self.count.value
+    m2 = 0.0 if isinstance(values, (int, float)) else values.var() * count
+    self.m2.value += (
+        m2 + delta * delta * count * original_count / self.count
+    )
+
+  def compute(self):
+    variance = self.m2 / self.count
+    standard_deviation = variance**0.5
+    sem = standard_deviation / (self.count**0.5)
+    return Statistics(
+        mean=self.mean,
+        standard_error_of_mean=sem,
+        standard_deviation=standard_deviation,
+    )
+
+
 class Accuracy(Average):
+
   def update(self, *, logits: jax.Array, labels: jax.Array, **_):  # type: ignore[override]
     if logits.ndim != labels.ndim + 1 or labels.dtype != jnp.int32:
       raise ValueError(
-        f'Expected labels.dtype==jnp.int32 and logits.ndim={logits.ndim}=='
-        f'labels.ndim+1={labels.ndim + 1}'
+          f'Expected labels.dtype==jnp.int32 and logits.ndim={logits.ndim}=='
+          f'labels.ndim+1={labels.ndim + 1}'
       )
     super().update(values=(logits.argmax(axis=-1) == labels))
 
@@ -144,6 +196,6 @@ class MultiMetric(Metric):
 
   def compute(self):
     return {
-      f'{metric_name}': getattr(self, metric_name).compute()
-      for metric_name in self._metric_names
+        f'{metric_name}': getattr(self, metric_name).compute()
+        for metric_name in self._metric_names
     }
