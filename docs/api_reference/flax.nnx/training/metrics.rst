@@ -4,12 +4,19 @@ Metrics
 .. automodule:: flax.nnx.metrics
 .. currentmodule:: flax.nnx.metrics
 
+
 .. autoclass:: Metric
-   :members:
+   :members: __init__, reset, update, compute
+
 .. autoclass:: Average
-   :members:
+   :members: __init__, reset, update, compute
+
 .. autoclass:: Accuracy
-   :members:
+   :members: update
+
+.. autoclass:: Welford
+   :members: __init__, reset, update, compute
+
 .. autoclass:: MultiMetric
-   :members:
+   :members: __init__, reset, update, compute
 
