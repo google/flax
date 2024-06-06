@@ -43,10 +43,10 @@ class Dropout(Module):
   """Create a dropout layer.
 
   To use dropout, call the :func:`train` method (or pass in
-  `deterministic=False` in the constructor or during call time).
+  ``deterministic=False`` in the constructor or during call time).
 
   To disable dropout, call the :func:`eval` method (or pass in
-  `deterministic=True` in the constructor or during call time).
+  ``deterministic=True`` in the constructor or during call time).
 
   Example usage::
 
@@ -76,7 +76,7 @@ class Dropout(Module):
   Attributes:
     rate: the dropout probability.  (_not_ the keep rate!)
     broadcast_dims: dimensions that will share the same dropout mask
-    deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+    deterministic: if false the inputs are scaled by ``1 / (1 - rate)`` and
       masked, whereas if true, no mask is applied and the inputs are returned
       as is.
     rng_collection: the rng collection name to use when requesting an rng key.
@@ -100,7 +100,7 @@ class Dropout(Module):
 
     Args:
       inputs: the inputs that should be randomly masked.
-      deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+      deterministic: if false the inputs are scaled by ``1 / (1 - rate)`` and
         masked, whereas if true, no mask is applied and the inputs are returned
         as is. The ``deterministic`` flag passed into the call method will take
         precedence over the ``deterministic`` flag passed into the constructor.
