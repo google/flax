@@ -128,7 +128,7 @@ class Welford(Metric):
     standard_deviation = variance**0.5
     sem = standard_deviation / (self.count**0.5)
     return Statistics(
-        mean=self.mean,
+        mean=self.mean.value,
         standard_error_of_mean=sem,
         standard_deviation=standard_deviation,
     )
