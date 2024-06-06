@@ -27,6 +27,7 @@ from .nnx import traversals as traversals
 from .nnx.filterlib import All as All
 from .nnx.filterlib import Not as Not
 from .nnx.graph import GraphDef as GraphDef
+from .nnx.graph import GraphState as GraphState
 from .nnx.object import Object as Object
 from .nnx.helpers import Dict as Dict
 from .nnx.helpers import List as List
