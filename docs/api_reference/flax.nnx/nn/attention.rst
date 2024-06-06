@@ -4,8 +4,9 @@ Attention
 .. automodule:: flax.nnx
 .. currentmodule:: flax.nnx
 
-.. autoclass:: MultiHeadAttention
-   :members:
+.. flax_module::
+  :module: flax.nnx
+  :class: MultiHeadAttention
 
 .. autofunction:: combine_masks
 .. autofunction:: dot_product_attention

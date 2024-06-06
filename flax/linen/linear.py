@@ -330,9 +330,9 @@ class Einsum(Module):
       inputs: The nd-array to be transformed.
       einsum_str: a string to denote the einsum equation. The equation must
         have exactly two operands, the lhs being the input passed in, and
-        the rhs being the learnable kernel. Exactly one of ``einsum_str``
-        in the constructor argument and call argument must be not None,
-        while the other must be None.
+        the rhs being the learnable kernel. The ``einsum_str`` passed into
+        the call method will take precedence over the ``einsum_str`` passed
+        into the constructor.
 
     Returns:
       The transformed input.
@@ -511,11 +511,10 @@ class _Conv(Module):
     """Applies a (potentially unshared) convolution to the inputs.
 
     Args:
-      inputs: input data with dimensions (*batch_dims, spatial_dims...,
-        features). This is the channels-last convention, i.e. NHWC for a 2d
-        convolution and NDHWC for a 3D convolution. Note: this is different from
-        the input convention used by ``lax.conv_general_dilated``, which puts the
-        spatial dimensions last.
+      inputs: input data with dimensions `(*batch_dims, spatial_dims..., features)`.
+        This is the channels-last convention, i.e. NHWC for a 2d convolution and
+        NDHWC for a 3D convolution. Note: this is different from the input convention
+        used by ``lax.conv_general_dilated``, which puts the spatial dimensions last.
         Note: If the input has more than 1 batch dimension, all batch dimensions
         are flattened into a single dimension for the convolution and restored
         before returning.  In some cases directly vmap'ing the layer may yield

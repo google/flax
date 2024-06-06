@@ -134,11 +134,11 @@ class LinearGeneral(Module):
     (16, 4, 5)
 
   Attributes:
-    in_features: int or tuple with number of output features.
+    in_features: int or tuple with number of input features.
     out_features: int or tuple with number of output features.
     axis: int or tuple with axes to apply the transformation on. For instance,
       (-2, -1) will apply the transformation to the last two axes.
-    batch_dims: tuple with batch axes.
+    batch_axis: mapping of batch axis indices to axis size.
     use_bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
@@ -146,6 +146,7 @@ class LinearGeneral(Module):
     bias_init: initializer function for the bias.
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
+    rngs: rng key.
   """
 
   def __init__(
@@ -296,6 +297,24 @@ class LinearGeneral(Module):
 class Linear(Module):
   """A linear transformation applied over the last dimension of the input.
 
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+
+    >>> layer = nnx.Linear(in_features=3, out_features=4, rngs=nnx.Rngs(0))
+    >>> jax.tree.map(jnp.shape, nnx.state(layer))
+    State({
+      'bias': VariableState(
+        type=Param,
+        value=(4,)
+      ),
+      'kernel': VariableState(
+        type=Param,
+        value=(3, 4)
+      )
+    })
+
   Attributes:
     in_features: the number of input features.
     out_features: the number of output features.
@@ -306,6 +325,8 @@ class Linear(Module):
       for details.
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
+    dot_general: dot product function.
+    rngs: rng key.
   """
 
   def __init__(
@@ -527,6 +548,42 @@ class Einsum(Module):
 
 class Conv(Module):
   """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+
+    >>> rngs = nnx.Rngs(0)
+    >>> x = jnp.ones((1, 8, 3))
+
+    >>> # valid padding
+    >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3,),
+    ...                  padding='VALID', rngs=rngs)
+    >>> layer.kernel.value.shape
+    (3, 3, 4)
+    >>> layer.bias.value.shape
+    (4,)
+    >>> out = layer(x)
+    >>> out.shape
+    (1, 6, 4)
+
+    >>> # circular padding with stride 2
+    >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3, 3),
+    ...                  strides=2, padding='CIRCULAR', rngs=rngs)
+    >>> layer.kernel.value.shape
+    (3, 3, 3, 4)
+    >>> layer.bias.value.shape
+    (4,)
+    >>> out = layer(x)
+    >>> out.shape
+    (1, 4, 4)
+
+    >>> # apply lower triangle mask
+    >>> mask_fn = lambda x: x * jnp.tril(jnp.ones((3, 3, 4)))
+    >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3,),
+    ...                  mask_fn=mask_fn, padding='VALID', rngs=rngs)
+    >>> out = layer(x)
 
   Attributes:
     features: number of convolution filters.
@@ -944,6 +1001,34 @@ default_embed_init = initializers.variance_scaling(
 
 class Embed(Module):
   """Embedding Module.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+
+    >>> layer = nnx.Embed(num_embeddings=5, features=3, rngs=nnx.Rngs(0))
+    >>> nnx.state(layer)
+    State({
+      'embedding': VariableState(
+        type=Param,
+        value=Array([[-0.90411377, -0.3648777 , -1.1083648 ],
+               [ 0.01070483,  0.27923733,  1.7487359 ],
+               [ 0.59161806,  0.8660184 ,  1.2838588 ],
+               [-0.748139  , -0.15856352,  0.06061118],
+               [-0.4769059 , -0.6607095 ,  0.46697947]], dtype=float32)
+      )
+    })
+    >>> # get the first three and last three embeddings
+    >>> indices_input = jnp.array([[0, 1, 2], [-1, -2, -3]])
+    >>> layer(indices_input)
+    Array([[[-0.90411377, -0.3648777 , -1.1083648 ],
+            [ 0.01070483,  0.27923733,  1.7487359 ],
+            [ 0.59161806,  0.8660184 ,  1.2838588 ]],
+    <BLANKLINE>
+           [[-0.4769059 , -0.6607095 ,  0.46697947],
+            [-0.748139  , -0.15856352,  0.06061118],
+            [ 0.59161806,  0.8660184 ,  1.2838588 ]]], dtype=float32)
 
   A parameterized function from integers [0, ``num_embeddings``) to
   ``features``-dimensional vectors. This ``Module`` will create an ``embedding``

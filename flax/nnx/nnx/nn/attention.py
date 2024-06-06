@@ -222,59 +222,35 @@ class MultiHeadAttention(Module):
 
   Example usage::
 
-    >>> import flax.linen as nn
+    >>> from flax import nnx
     >>> import jax
 
-    >>> layer = nn.MultiHeadAttention(num_heads=8, qkv_features=16)
-    >>> key1, key2, key3, key4, key5, key6 = jax.random.split(jax.random.key(0), 6)
+    >>> layer = nnx.MultiHeadAttention(num_heads=8, in_features=5, qkv_features=16,
+    ...                                decode=False, rngs=nnx.Rngs(0))
+    >>> key1, key2, key3 = jax.random.split(jax.random.key(0), 3)
     >>> shape = (4, 3, 2, 5)
-    >>> q, k, v = jax.random.uniform(key1, shape), jax.random.uniform(key2, shape), jax.random.uniform(key3, shape)
-    >>> variables = layer.init(jax.random.key(0), q)
+    >>> q, k, v = (
+    ...   jax.random.uniform(key1, shape),
+    ...   jax.random.uniform(key2, shape),
+    ...   jax.random.uniform(key3, shape),
+    ... )
 
     >>> # different inputs for inputs_q, inputs_k and inputs_v
-    >>> out = layer.apply(variables, q, k, v)
-    >>> # equivalent to layer.apply(variables, inputs_q=q, inputs_k=k, inputs_v=k)
-    >>> out = layer.apply(variables, q, k)
-    >>> # equivalent to layer.apply(variables, inputs_q=q, inputs_k=q) and layer.apply(variables, inputs_q=q, inputs_k=q, inputs_v=q)
-    >>> out = layer.apply(variables, q)
-
-    >>> attention_kwargs = dict(
-    ...     num_heads=8,
-    ...     qkv_features=16,
-    ...     kernel_init=nn.initializers.ones,
-    ...     bias_init=nn.initializers.zeros,
-    ...     dropout_rate=0.5,
-    ...     deterministic=False,
-    ...     )
-    >>> class Module(nn.Module):
-    ...   attention_kwargs: dict
-    ...
-    ...   @nn.compact
-    ...   def __call__(self, x, dropout_rng=None):
-    ...     out1 = nn.MultiHeadAttention(**self.attention_kwargs)(x, dropout_rng=dropout_rng)
-    ...     out2 = nn.MultiHeadAttention(**self.attention_kwargs)(x, dropout_rng=dropout_rng)
-    ...     return out1, out2
-    >>> module = Module(attention_kwargs)
-    >>> variables = module.init({'params': key1, 'dropout': key2}, q)
-
-    >>> # out1 and out2 are different.
-    >>> out1, out2 = module.apply(variables, q, rngs={'dropout': key3})
-    >>> # out3 and out4 are different.
-    >>> # out1 and out3 are different. out2 and out4 are different.
-    >>> out3, out4 = module.apply(variables, q, rngs={'dropout': key4})
-    >>> # out1 and out2 are the same.
-    >>> out1, out2 = module.apply(variables, q, dropout_rng=key5)
-    >>> # out1 and out2 are the same as out3 and out4.
-    >>> # providing a `dropout_rng` arg will take precedence over the `rngs` arg in `.apply`
-    >>> out3, out4 = module.apply(variables, q, rngs={'dropout': key6}, dropout_rng=key5)
+    >>> out = layer(q, k, v)
+    >>> # equivalent output when inferring v
+    >>> assert (layer(q, k) == layer(q, k, k)).all()
+    >>> # equivalent output when inferring k and v
+    >>> assert (layer(q) == layer(q, q)).all()
+    >>> assert (layer(q) == layer(q, q, q)).all()
 
   Attributes:
     num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
       should be divisible by the number of heads.
-    dtype: the dtype of the computation (default: infer from inputs and params)
-    param_dtype: the dtype passed to parameter initializers (default: float32)
+    in_features: int or tuple with number of input features.
     qkv_features: dimension of the key, query, and value.
     out_features: dimension of the last projection
+    dtype: the dtype of the computation (default: infer from inputs and params)
+    param_dtype: the dtype passed to parameter initializers (default: float32)
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rate: dropout rate
     deterministic: if false, the attention weight is masked randomly using
@@ -293,6 +269,7 @@ class MultiHeadAttention(Module):
       num_heads, value_channels]``
     decode: whether to prepare and use an autoregressive cache.
     normalize_qk: should QK normalization be applied (arxiv.org/abs/2302.05442).
+    rngs: rng key.
   """
 
   def __init__(
@@ -451,12 +428,16 @@ class MultiHeadAttention(Module):
         key/value_length]`. Attention weights are masked out if their
         corresponding mask value is `False`.
       deterministic: if false, the attention weight is masked randomly using
-        dropout, whereas if true, the attention weights are deterministic.
-      rngs: container for random number generators to generate the dropout
-        mask when `deterministic` is False. The `rngs` container should have a
-        `dropout` key.
+        dropout, whereas if true, the attention weights are deterministic. The
+        ``deterministic`` flag passed into the call method will take precedence
+        over the ``deterministic`` flag passed into the constructor.
+      rngs: rng key. The rng key passed into the call method will take
+        precedence over the rng key passed into the constructor.
       sow_weights: if ``True``, the attention weights are sowed into the
         'intermediates' collection.
+      decode: whether to prepare and use an autoregressive cache. The ``decode``
+        flag passed into the call method will take precedence over the ``decode``
+        flag passed into the constructor.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.

@@ -55,7 +55,7 @@ class LoRA(Module):
 
   Example usage::
 
-    >>> from flax.experimental import nnx
+    >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
     >>> layer = nnx.LoRA(3, 2, 4, rngs=nnx.Rngs(0))
     >>> layer.lora_a.value.shape
@@ -130,7 +130,7 @@ class LoRALinear(Linear):
 
   Example usage::
 
-    >>> from flax.experimental import nnx
+    >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
     >>> linear = nnx.Linear(3, 4, rngs=nnx.Rngs(0))
     >>> lora_linear = nnx.LoRALinear(3, 4, lora_rank=2, rngs=nnx.Rngs(0))
