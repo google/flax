@@ -799,7 +799,8 @@ def vmap(
 
     # split rngs
     axis_sizes = jax.tree_util.tree_map(
-      find_axis_size, (variable_in_axes, in_axes), (variable_groups, args)
+      find_axis_size, (variable_in_axes, in_axes), (variable_groups, args),
+      is_leaf=lambda x: x is None
     )
     axis_sizes = set(jax.tree_util.tree_leaves(axis_sizes))
     if axis_size is None and len(axis_sizes) == 1:
