@@ -30,11 +30,12 @@ from flax.typing import PaddingLike, Dtype, PrecisionLike
 class TestConvLinenConsistency(parameterized.TestCase):
   @parameterized.product(
     strides=[None, (2, 3)],
-    padding=['VALID', (4, 2)],
+    padding=['VALID', 'CIRCULAR', (4, 2)],
     input_dilation=[(2, 3)],
     kernel_dilation=[(2, 3)],
     feature_group_count=[3],
     use_bias=[True, False],
+    use_mask=[False, True],
     dtype=[jnp.float32],
     param_dtype=[jnp.float16],
     precision=[Precision.HIGHEST],
@@ -47,6 +48,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
     kernel_dilation: tp.Union[None, int, tp.Sequence[int]],
     feature_group_count: int,
     use_bias: bool,
+    use_mask: bool,
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     precision: PrecisionLike,
@@ -57,6 +59,10 @@ class TestConvLinenConsistency(parameterized.TestCase):
     OUT_FEATURES = 6
     INPUT_SHAPE = (24, 9, IN_FEATURES)
     kernel_size = (7, 4)
+    if use_mask:
+      mask = jnp.tril(jnp.ones((7, 4, 1, 6)))
+    else:
+      mask = None
 
     # Cannot use string padding specification for transpose conv
     if isinstance(input_dilation, Sequence) or (
@@ -65,23 +71,21 @@ class TestConvLinenConsistency(parameterized.TestCase):
       padding = (4, 2)
 
     x = jax.numpy.ones(INPUT_SHAPE)
-    model_nnx = nnx.eval_shape(
-      lambda rngs: nnx.Conv(
-        IN_FEATURES,
-        OUT_FEATURES,
-        kernel_size,
-        strides,
-        padding=padding,
-        input_dilation=input_dilation,
-        kernel_dilation=kernel_dilation,
-        feature_group_count=feature_group_count,
-        use_bias=use_bias,
-        dtype=dtype,
-        param_dtype=param_dtype,
-        precision=precision,
-        rngs=rngs,
-      ),
-      rngs,
+    model_nnx = nnx.Conv(
+      IN_FEATURES,
+      OUT_FEATURES,
+      kernel_size,
+      strides,
+      padding=padding,
+      input_dilation=input_dilation,
+      kernel_dilation=kernel_dilation,
+      feature_group_count=feature_group_count,
+      use_bias=use_bias,
+      mask=mask,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+      rngs=rngs,
     )
     model = linen.Conv(
       OUT_FEATURES,
@@ -92,6 +96,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
       kernel_dilation=kernel_dilation,
       feature_group_count=feature_group_count,
       use_bias=use_bias,
+      mask=mask,
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,
@@ -107,9 +112,10 @@ class TestConvLinenConsistency(parameterized.TestCase):
 
   @parameterized.product(
     strides=[None, (2, 3)],
-    padding=['VALID', (4, 2)],
+    padding=['VALID', 'CIRCULAR', (4, 2)],
     kernel_dilation=[(2, 3)],
     use_bias=[True, False],
+    use_mask=[False, True],
     dtype=[jnp.float32],
     param_dtype=[jnp.float16],
     precision=[Precision.HIGHEST],
@@ -120,6 +126,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
     padding: PaddingLike,
     kernel_dilation: tp.Union[None, tp.Sequence[int]],
     use_bias: bool,
+    use_mask: bool,
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     precision: PrecisionLike,
@@ -130,23 +137,25 @@ class TestConvLinenConsistency(parameterized.TestCase):
     OUT_FEATURES = 6
     INPUT_SHAPE = (24, 9, IN_FEATURES)
     kernel_size = (7, 4)
+    if use_mask:
+      mask = jnp.tril(jnp.ones((7, 4, 3, 6)))
+    else:
+      mask = None
 
     x = jax.numpy.ones(INPUT_SHAPE)
-    model_nnx = nnx.eval_shape(
-      lambda rngs: nnx.ConvTranspose(
-        IN_FEATURES,
-        OUT_FEATURES,
-        kernel_size,
-        strides,
-        padding=padding,
-        kernel_dilation=kernel_dilation,
-        use_bias=use_bias,
-        dtype=dtype,
-        param_dtype=param_dtype,
-        precision=precision,
-        rngs=rngs,
-      ),
-      rngs,
+    model_nnx = nnx.ConvTranspose(
+      IN_FEATURES,
+      OUT_FEATURES,
+      kernel_size,
+      strides,
+      padding=padding,
+      kernel_dilation=kernel_dilation,
+      use_bias=use_bias,
+      mask=mask,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+      rngs=rngs,
     )
     model = linen.ConvTranspose(
       OUT_FEATURES,
@@ -155,6 +164,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
       padding=padding,
       kernel_dilation=kernel_dilation,
       use_bias=use_bias,
+      mask=mask,
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,

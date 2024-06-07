@@ -59,13 +59,13 @@ def _compute_stats(
 
   This implementation takes care of a few important details:
   - Computes in float32 precision for stability in half precision training.
-  - If `use_fast_variance` is `True`, mean and variance are computed using
+  - If ``use_fast_variance`` is ``True``, mean and variance are computed using
     Var = E[|x|^2] - |E[x]|^2, instead of Var = E[|x - E[x]|^2]), in a single
     XLA fusion.
   - Clips negative variances to zero which can happen due to
     roundoff errors. This avoids downstream NaNs.
   - Supports averaging across a parallel axis and subgroups of a parallel axis
-    with a single `lax.pmean` call to avoid latency.
+    with a single ``lax.pmean`` call to avoid latency.
 
   Arguments:
     x: Input array.
@@ -82,7 +82,7 @@ def _compute_stats(
       variance without subtracting the mean.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
-    mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+    mask: Binary array of shape broadcastable to ``inputs`` tensor, indicating
       the positions for which the mean and variance should be computed.
 
   Returns:
@@ -187,11 +187,11 @@ class BatchNorm(Module):
   """BatchNorm Module.
 
   To calculate the batch norm on the input and update the batch statistics,
-  call the :func:`train` method (or pass in `use_running_average=False` in
+  call the :func:`train` method (or pass in ``use_running_average=False`` in
   the constructor or during call time).
 
   To use the stored batch statistics' running average, call the :func:`eval`
-  method (or pass in `use_running_average=True` in the constructor or
+  method (or pass in ``use_running_average=True`` in the constructor or
   during call time).
 
   Example usage::
@@ -255,11 +255,11 @@ class BatchNorm(Module):
     bias_init: initializer for bias, by default, zero.
     scale_init: initializer for scale, by default, one.
     axis_name: the axis name used to combine batch statistics from multiple
-      devices. See `jax.pmap` for a description of axis names (default: None).
+      devices. See ``jax.pmap`` for a description of axis names (default: None).
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
-      example, `[[0, 1], [2, 3]]` would independently batch-normalize over
-      the examples on the first two and last two devices. See `jax.lax.psum`
+      example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over
+      the examples on the first two and last two devices. See ``jax.lax.psum``
       for more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
@@ -423,13 +423,13 @@ class LayerNorm(Module):
     reduction_axes: Axes for computing normalization statistics.
     feature_axes: Feature axes for learned bias and scaling.
     axis_name: the axis name used to combine batch statistics from multiple
-        devices. See `jax.pmap` for a description of axis names (default: None).
+        devices. See ``jax.pmap`` for a description of axis names (default: None).
         This is only needed if the model is subdivided across devices, i.e. the
         array being normalized is sharded across devices within a pmap.
     axis_index_groups: groups of axis indices within that named axis
         representing subsets of devices to reduce over (default: None). For
-        example, `[[0, 1], [2, 3]]` would independently batch-normalize over
-        the examples on the first two and last two devices. See `jax.lax.psum`
+        example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over
+        the examples on the first two and last two devices. See ``jax.lax.psum``
         for more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
         calculation for the variance.
@@ -553,13 +553,13 @@ class RMSNorm(Module):
     reduction_axes: Axes for computing normalization statistics.
     feature_axes: Feature axes for learned bias and scaling.
     axis_name: the axis name used to combine batch statistics from multiple
-        devices. See `jax.pmap` for a description of axis names (default: None).
+        devices. See ``jax.pmap`` for a description of axis names (default: None).
         This is only needed if the model is subdivided across devices, i.e. the
         array being normalized is sharded across devices within a pmap.
     axis_index_groups: groups of axis indices within that named axis
         representing subsets of devices to reduce over (default: None). For
-        example, `[[0, 1], [2, 3]]` would independently batch-normalize over
-        the examples on the first two and last two devices. See `jax.lax.psum`
+        example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over
+        the examples on the first two and last two devices. See ``jax.lax.psum``
         for more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
         calculation for the variance.

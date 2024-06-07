@@ -440,7 +440,7 @@ def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
 
 
 class _Conv(Module):
-  """Convolution Module wrapping ``lax.conv_general_dilated[_local]``.
+  """Convolution Module wrapping ``lax.conv_general_dilated``.
 
   Attributes:
     features: number of convolution filters.
@@ -511,7 +511,7 @@ class _Conv(Module):
     """Applies a (potentially unshared) convolution to the inputs.
 
     Args:
-      inputs: input data with dimensions `(*batch_dims, spatial_dims..., features)`.
+      inputs: input data with dimensions ``(*batch_dims, spatial_dims..., features)``.
         This is the channels-last convention, i.e. NHWC for a 2d convolution and
         NDHWC for a 3D convolution. Note: this is different from the input convention
         used by ``lax.conv_general_dilated``, which puts the spatial dimensions last.
@@ -829,7 +829,7 @@ class ConvLocal(_Conv):
 
 
 class ConvTranspose(Module):
-  """Convolution Module wrapping lax.conv_transpose.
+  """Convolution Module wrapping ``lax.conv_transpose``.
 
   Example usage::
 
@@ -882,7 +882,7 @@ class ConvTranspose(Module):
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
-    transpose_kernel: if True flips spatial axes and swaps the input/output
+    transpose_kernel: if ``True`` flips spatial axes and swaps the input/output
       channel axes of the kernel.
   """
 
@@ -907,11 +907,10 @@ class ConvTranspose(Module):
     Behaviour mirrors of ``jax.lax.conv_transpose``.
 
     Args:
-      inputs: input data with dimensions (*batch_dims, spatial_dims...,
-        features). This is the channels-last convention, i.e. NHWC for a 2d
-        convolution and NDHWC for a 3D convolution. Note: this is different from
-        the input convention used by ``lax.conv_general_dilated``, which puts the
-        spatial dimensions last.
+      inputs: input data with dimensions ``(*batch_dims, spatial_dims..., features).``
+        This is the channels-last convention, i.e. NHWC for a 2d convolution and NDHWC
+        for a 3D convolution. Note: this is different from the input convention used by
+        ``lax.conv_general_dilated``, which puts the spatial dimensions last.
         Note: If the input has more than 1 batch dimension, all batch dimensions
         are flattened into a single dimension for the convolution and restored
         before returning.  In some cases directly vmap'ing the layer may yield

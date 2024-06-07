@@ -144,7 +144,7 @@ class LinearGeneral(Module):
     param_dtype: the dtype passed to parameter initializers (default: float32).
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     rngs: rng key.
   """
@@ -321,7 +321,7 @@ class Linear(Module):
     use_bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
@@ -547,7 +547,7 @@ class Einsum(Module):
 
 
 class Conv(Module):
-  """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
+  """Convolution Module wrapping ``lax.conv_general_dilated``.
 
   Example usage::
 
@@ -580,31 +580,32 @@ class Conv(Module):
     (1, 4, 4)
 
     >>> # apply lower triangle mask
-    >>> mask_fn = lambda x: x * jnp.tril(jnp.ones((3, 3, 4)))
+    >>> mask = jnp.tril(jnp.ones((3, 3, 4)))
     >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3,),
-    ...                  mask_fn=mask_fn, padding='VALID', rngs=rngs)
+    ...                  mask=mask, padding='VALID', rngs=rngs)
     >>> out = layer(x)
 
   Attributes:
-    features: number of convolution filters.
+    in_features: int or tuple with number of input features.
+    out_features: int or tuple with number of output features.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer, which will be interpreted
       as a tuple of the single integer. For all other cases, it must be a
       sequence of integers.
-    strides: an integer or a sequence of `n` integers, representing the
+    strides: an integer or a sequence of ``n`` integers, representing the
       inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, the string
-      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
-      high)` integer pairs that give the padding to apply before and after each
+    padding: either the string ``'SAME'``, the string ``'VALID'``, the string
+      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n``
+      ``(low, high)`` integer pairs that give the padding to apply before and after each
       spatial dimension. A single int is interpeted as applying the same padding
       in all dims and passign a single int in a sequence causes the same padding
-      to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
+      to be used on both sides. ``'CAUSAL'`` padding for a 1D convolution will
       left-pad the convolution axis, resulting in same-sized output.
-    input_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs`
-      (default: 1). Convolution with input dilation `d` is equivalent to
-      transposed convolution with stride `d`.
-    kernel_dilation: an integer or a sequence of `n` integers, giving the
+    input_dilation: an integer or a sequence of ``n`` integers, giving the
+      dilation factor to apply in each spatial dimension of ``inputs``
+      (default: 1). Convolution with input dilation ``d`` is equivalent to
+      transposed convolution with stride ``d``.
+    kernel_dilation: an integer or a sequence of ``n`` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel (default: 1). Convolution with kernel dilation
       is also known as 'atrous convolution'.
@@ -615,10 +616,11 @@ class Conv(Module):
           be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
+    precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
+    rngs: rng key.
   """
 
   def __init__(
@@ -633,7 +635,7 @@ class Conv(Module):
     kernel_dilation: tp.Union[None, int, tp.Sequence[int]] = 1,
     feature_group_count: int = 1,
     use_bias: bool = True,
-    mask_fn: tp.Optional[tp.Callable[[Array], Array]] = None,
+    mask: tp.Optional[Array] = None,
     dtype: tp.Optional[Dtype] = None,
     param_dtype: Dtype = jnp.float32,
     precision: PrecisionLike = None,
@@ -652,6 +654,7 @@ class Conv(Module):
       out_features,
     )
     kernel_key = rngs.params()
+    self.kernel_shape = kernel_shape
     self.kernel = nnx.Param(kernel_init(kernel_key, kernel_shape, param_dtype))
 
     if use_bias:
@@ -670,7 +673,7 @@ class Conv(Module):
     self.kernel_dilation = kernel_dilation
     self.feature_group_count = feature_group_count
     self.use_bias = use_bias
-    self.mask_fn = mask_fn
+    self.mask = mask
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
@@ -682,11 +685,10 @@ class Conv(Module):
     """Applies a (potentially unshared) convolution to the inputs.
 
     Args:
-      inputs: input data with dimensions (*batch_dims, spatial_dims...,
-        features). This is the channels-last convention, i.e. NHWC for a 2d
-        convolution and NDHWC for a 3D convolution. Note: this is different from
-        the input convention used by `lax.conv_general_dilated`, which puts the
-        spatial dimensions last.
+      inputs: input data with dimensions ``(*batch_dims, spatial_dims..., features)``.
+        This is the channels-last convention, i.e. NHWC for a 2d convolution and
+        NDHWC for a 3D convolution. Note: this is different from the input convention
+        used by ``lax.conv_general_dilated``, which puts the spatial dimensions last.
         Note: If the input has more than 1 batch dimension, all batch dimensions
         are flattened into a single dimension for the convolution and restored
         before returning.  In some cases directly vmap'ing the layer may yield
@@ -755,10 +757,16 @@ class Conv(Module):
     # One shared convolutional kernel for all pixels in the output.
     assert self.in_features % self.feature_group_count == 0
 
+    if self.mask is not None and self.mask.shape != self.kernel_shape:
+      raise ValueError(
+        'Mask needs to have the same shape as weights. '
+        f'Shapes are: {self.mask.shape}, {self.kernel_shape}'
+      )
+
     kernel = self.kernel.value
 
-    if self.mask_fn is not None:
-      kernel = self.mask_fn(kernel)
+    if self.mask is not None:
+      kernel *= self.mask
 
     bias = self.bias.value
 
@@ -789,19 +797,78 @@ class Conv(Module):
 
 
 class ConvTranspose(Module):
-  # features: int
-  # kernel_size: Union[int, Sequence[int]]
-  # strides: Optional[Sequence[int]] = None
-  # padding: PaddingLike = 'SAME'
-  # kernel_dilation: Optional[Sequence[int]] = None
-  # use_bias: bool = True
-  # mask: Optional[Array] = None
-  # dtype: Optional[Dtype] = None
-  # param_dtype: Dtype = jnp.float32
-  # precision: PrecisionLike = None
-  # kernel_init: Initializer = default_kernel_init
-  # bias_init: Initializer = initializers.zeros_init()
-  # transpose_kernel: bool = False
+  """Convolution Module wrapping ``lax.conv_transpose``.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+
+    >>> rngs = nnx.Rngs(0)
+    >>> x = jnp.ones((1, 8, 3))
+
+    >>> # valid padding
+    >>> layer = nnx.ConvTranspose(in_features=3, out_features=4, kernel_size=(3,),
+    ...                           padding='VALID', rngs=rngs)
+    >>> layer.kernel.value.shape
+    (3, 3, 4)
+    >>> layer.bias.value.shape
+    (4,)
+    >>> out = layer(x)
+    >>> out.shape
+    (1, 10, 4)
+
+    >>> # circular padding with stride 2
+    >>> layer = nnx.ConvTranspose(in_features=3, out_features=4, kernel_size=(6, 6),
+    ...                           strides=(2, 2), padding='CIRCULAR',
+    ...                           transpose_kernel=True, rngs=rngs)
+    >>> layer.kernel.value.shape
+    (6, 6, 4, 3)
+    >>> layer.bias.value.shape
+    (4,)
+    >>> out = layer(jnp.ones((1, 15, 15, 3)))
+    >>> out.shape
+    (1, 30, 30, 4)
+
+    >>> # apply lower triangle mask
+    >>> mask = jnp.tril(jnp.ones((3, 3, 4)))
+    >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3,),
+    ...                  mask=mask, padding='VALID', rngs=rngs)
+    >>> out = layer(x)
+
+  Attributes:
+    in_features: int or tuple with number of input features.
+    out_features: int or tuple with number of output features.
+    kernel_size: shape of the convolutional kernel. For 1D convolution,
+      the kernel size can be passed as an integer, which will be interpreted
+      as a tuple of the single integer. For all other cases, it must be a
+      sequence of integers.
+    strides: an integer or a sequence of ``n`` integers, representing the
+      inter-window strides (default: 1).
+    padding: either the string ``'SAME'``, the string ``'VALID'``, the string
+      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n``
+      ``(low, high)`` integer pairs that give the padding to apply before and after each
+      spatial dimension. A single int is interpeted as applying the same padding
+      in all dims and passign a single int in a sequence causes the same padding
+      to be used on both sides. ``'CAUSAL'`` padding for a 1D convolution will
+      left-pad the convolution axis, resulting in same-sized output.
+    kernel_dilation: an integer or a sequence of ``n`` integers, giving the
+      dilation factor to apply in each spatial dimension of the convolution
+      kernel (default: 1). Convolution with kernel dilation
+      is also known as 'atrous convolution'.
+    use_bias: whether to add a bias to the output (default: True).
+    mask: Optional mask for the weights during masked convolution. The mask must
+          be the same shape as the convolution weight matrix.
+    dtype: the dtype of the computation (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    precision: numerical precision of the computation see ``jax.lax.Precision``
+      for details.
+    kernel_init: initializer for the convolutional kernel.
+    bias_init: initializer for the bias.
+    transpose_kernel: if ``True`` flips spatial axes and swaps the input/output
+      channel axes of the kernel.
+    rngs: rng key.
+  """
 
   def __init__(
     self,
@@ -866,11 +933,10 @@ class ConvTranspose(Module):
     Behaviour mirrors of ``jax.lax.conv_transpose``.
 
     Args:
-      inputs: input data with dimensions (*batch_dims, spatial_dims...,
-        features). This is the channels-last convention, i.e. NHWC for a 2d
-        convolution and NDHWC for a 3D convolution. Note: this is different from
-        the input convention used by ``lax.conv_general_dilated``, which puts the
-        spatial dimensions last.
+      inputs: input data with dimensions ``(*batch_dims, spatial_dims..., features).
+        This is the channels-last convention, i.e. NHWC for a 2d convolution and NDHWC
+        for a 3D convolution. Note: this is different from the input convention used by
+        ``lax.conv_general_dilated``, which puts the spatial dimensions last.
         Note: If the input has more than 1 batch dimension, all batch dimensions
         are flattened into a single dimension for the convolution and restored
         before returning.  In some cases directly vmap'ing the layer may yield
@@ -1045,6 +1111,7 @@ class Embed(Module):
     dtype: the dtype of the embedding vectors (default: same as embedding).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     embedding_init: embedding initializer.
+    rngs: rng key.
   """
 
   def __init__(
@@ -1076,7 +1143,7 @@ class Embed(Module):
 
     Returns:
       Output which is embedded input data.  The output shape follows the input,
-      with an additional `features` dimension appended.
+      with an additional ``features`` dimension appended.
     """
     if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
@@ -1098,11 +1165,11 @@ class Embed(Module):
     """Attend over the embedding using a query array.
 
     Args:
-      query: array with last dimension equal the feature depth `features` of the
+      query: array with last dimension equal the feature depth ``features`` of the
         embedding.
 
     Returns:
-      An array with final dim `num_embeddings` corresponding to the batched
+      An array with final dim ``num_embeddings`` corresponding to the batched
       inner-product of the array of query vectors against each embedding.
       Commonly used for weight-sharing between embeddings and logit transform
       in NLP models.

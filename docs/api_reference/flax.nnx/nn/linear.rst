@@ -12,6 +12,10 @@ NNX linear layer classes.
 
 .. flax_module::
   :module: flax.nnx
+  :class: ConvTranspose
+
+.. flax_module::
+  :module: flax.nnx
   :class: Embed
 
 .. flax_module::
