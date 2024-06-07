@@ -171,7 +171,7 @@ Learn more
    :hidden:
    :maxdepth: 1
 
-   haiku_linen_vs_nnx
    nnx_basics
    mnist_tutorial
    transforms
+   haiku_linen_vs_nnx
