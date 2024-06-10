@@ -13,17 +13,16 @@
 # limitations under the License.
 
 import dataclasses
-import typing as tp
 from functools import partial
-from absl.testing import parameterized
+import typing as tp
 
+from absl.testing import parameterized
+from flax import nnx
 import jax
+from jax.experimental import mesh_utils
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from jax.experimental import mesh_utils
-
-from flax import nnx
 
 
 class TestJIT:
@@ -346,7 +345,6 @@ class TestJIT:
     m.kernel.value.sharding
 
 
-
 class TestGrad(parameterized.TestCase):
   def test_grad(self):
     p1 = nnx.Param(10.0)
@@ -454,8 +452,14 @@ class TestGrad(parameterized.TestCase):
     assert grads.bias.value.shape == (3,)
 
   @parameterized.parameters(
-    {'loss_fn': lambda m1, m2, x, y: jnp.mean((m2(m1(x)) - y) ** 2), 'argnums': (0, 1)},
-    {'loss_fn': lambda x, m1, y, m2: jnp.mean((m2(m1(x)) - y) ** 2), 'argnums': (1, 3)}
+    {
+      'loss_fn': lambda m1, m2, x, y: jnp.mean((m2(m1(x)) - y) ** 2),
+      'argnums': (0, 1),
+    },
+    {
+      'loss_fn': lambda x, m1, y, m2: jnp.mean((m2(m1(x)) - y) ** 2),
+      'argnums': (1, 3),
+    },
   )
   def test_multiple_graph_nodes(self, loss_fn, argnums):
     rngs = nnx.Rngs(0)
@@ -1208,6 +1212,159 @@ class TestVmap:
     module = MLP(graphdef='hello', rngs=nnx.Rngs(0))
 
     assert module.vmap_module.graphdef == 'hello'
+
+
+class TestPmap:
+
+  def test_basic_single(self):
+    class Block(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 10, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+
+      def __call__(self, x: jax.Array) -> jax.Array:
+        x = self.linear(x)
+        x = nnx.elu(x)
+        x = self.dropout(x)
+        return x
+
+    def create_block(rngs: nnx.Rngs):
+      return Block(rngs)
+
+    vectorized_create_block = nnx.pmap(
+      create_block, state_axes={nnx.Param: 0}, axis_size=1
+    )
+
+    rngs = nnx.Rngs(0)
+    initial_key = rngs.default.key.value
+    module = vectorized_create_block(rngs)
+
+    assert rngs.default.count.value == 2
+    assert rngs.default.key.value == initial_key
+    assert module.linear.kernel.value.shape == (1, 3, 10)
+    assert module.linear.bias.value.shape == (1, 10)
+
+    x = jnp.ones((1, 1, 3))
+
+    def forward_block(module, x):
+      return module(x)
+
+    vectorized_forward_block = nnx.vmap(
+      forward_block, state_axes={nnx.Param: 0}, axis_size=1
+    )
+
+    y = vectorized_forward_block(module, x)
+
+    assert y.shape == (1, 1, 10)
+    assert rngs.default.count.value == 3
+    assert rngs.default.key.value == initial_key
+
+    y2 = vectorized_forward_block(module, x)
+
+    assert not jnp.allclose(y, y2)
+
+  def test_basic_demo_single(self):
+    class Block(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+
+      def __call__(self, x: jax.Array) -> jax.Array:
+        return self.dropout(nnx.relu(self.linear(x)))
+
+    @partial(nnx.pmap, axis_size=1)
+    def create_block(rngs: nnx.Rngs):
+      return Block(rngs)
+
+    @partial(nnx.pmap, axis_size=1)
+    def forward_block(module: Block, x):
+      return module(x)
+
+    rngs = nnx.Rngs(0)
+    module = create_block(rngs)
+
+    assert rngs.default.count.value == 2
+    assert module.linear.kernel.value.shape == (1, 3, 3)
+    assert module.linear.bias.value.shape == (1, 3)
+
+    x = jnp.ones((1, 10, 3))
+
+    y = forward_block(module, x)
+
+    assert y.shape == (1, 10, 3)
+    assert rngs.default.count.value == 3
+
+    y2 = forward_block(module, x)
+
+    # dropout is working!
+    assert not jnp.allclose(y, y2)
+
+  def test_replicate_single(self):
+    din = 3
+    dout = 10
+
+    class Block(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+
+      def __call__(self, x: jax.Array) -> jax.Array:
+        return self.dropout(nnx.relu(self.linear(x)))
+
+    def create_block(rngs: nnx.Rngs):
+      return Block(rngs)
+
+    @partial(
+      nnx.pmap,
+      state_axes={},  # replicate all state
+      split_rngs=True,  # different rngs for each replica
+    )
+    def forward_block(module: Block, x):
+      return module(x)
+
+    rngs = nnx.Rngs(0)
+    initial_key = rngs.default.key.value
+    module = create_block(rngs)
+
+    assert rngs.default.count.value == 2
+    assert module.linear.kernel.value.shape == (din, dout)
+    assert module.linear.bias.value.shape == (dout,)
+
+    x = jnp.ones((1, 5, din))
+
+    y = forward_block(module, x)
+
+    assert y.shape == (1, 5, dout)
+    assert rngs.default.count.value == 3
+
+    y2 = forward_block(module, x)
+
+    # dropout is working!
+    assert not jnp.allclose(y, y2)
+
+    assert rngs.default.key.value == initial_key
+
+  def test_combinator_single(self):
+    class Block(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+
+      def __call__(self, x: jax.Array) -> jax.Array:
+        x = self.linear(x)
+        x = nnx.gelu(x)
+        return x
+
+    MLP = nnx.Pmap.constructor(Block, state_axes={nnx.Param: 0}, axis_size=1)
+
+    module = MLP(rngs=nnx.Rngs(0))
+
+    assert module.pmap_module.linear.kernel.value.shape == (1, 3, 3)
+    assert module.pmap_module.linear.bias.value.shape == (1, 3)
+
+    x = jnp.ones((1, 5, 3))
+    y = module(x)
+
+    assert y.shape == (1, 5, 3)
 
 
 class TestCond:
