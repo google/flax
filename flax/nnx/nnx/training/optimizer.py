@@ -113,42 +113,93 @@ class Optimizer(Object):
     self,
     model: nnx.Module,
     tx: optax.GradientTransformation,
+    wrt: filterlib.Filter = nnx.Param,
   ):
     """
     Instantiate the class and wrap the :class:`Module` and Optax gradient
-    transformation. Set the step count to 0.
+    transformation. Instantiate the optimizer state to keep track of
+    :class:`Variable` types specified in ``wrt``. Set the step count to 0.
 
     Args:
       model: An NNX Module.
       tx: An Optax gradient transformation.
+      wrt: optional argument to filter for which :class:`Variable`'s to keep
+        track of in the optimizer state. These should be the :class:`Variable`'s
+        that you plan on updating; i.e. this argument value should match the
+        ``wrt``  argument passed to the ``nnx.grad`` call that will generate the
+        gradients that will be passed into the ``grads`` argument of the
+        :func:`update` method.
     """
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.model = model
     self.tx = tx
-    self.opt_state = tx.init(nnx.state(model, nnx.Param))
+    self.opt_state = tx.init(nnx.state(model, wrt))
+    self.wrt = wrt
 
   def split(self, *filters: filterlib.Filter):
     return graph.split(self, *filters)
 
   def update(self, grads):
     """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
+    The ``grads`` must be derived from ``nnx.grad(..., wrt=self.wrt)``, where the
+    gradients are with respect to the same :class:`Variable` types as defined in
+    ``self.wrt`` during instantiation of this ``Optimizer``. For example::
+
+      >>> from flax import nnx
+      >>> import jax, jax.numpy as jnp
+      >>> import optax
+
+      >>> class CustomVariable(nnx.Variable):
+      ...   pass
+
+      >>> class Model(nnx.Module):
+      ...   def __init__(self, rngs):
+      ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+      ...     self.custom_variable = CustomVariable(jnp.ones((1, 3)))
+      ...   def __call__(self, x):
+      ...     return self.linear(x) + self.custom_variable
+      >>> model = Model(rngs=nnx.Rngs(0))
+      >>> jax.tree.map(jnp.shape, nnx.state(model))
+      State({
+        'custom_variable': VariableState(
+          type=CustomVariable,
+          value=(1, 3)
+        ),
+        'linear': {
+          'bias': VariableState(
+            type=Param,
+            value=(3,)
+          ),
+          'kernel': VariableState(
+            type=Param,
+            value=(2, 3)
+          )
+        }
+      })
+
+      >>> # update:
+      >>> # - only Linear layer parameters
+      >>> # - only CustomVariable parameters
+      >>> # - both Linear layer and CustomVariable parameters
+      >>> loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
+      >>> for variable in (nnx.Param, CustomVariable, (nnx.Param, CustomVariable)):
+      ...   # make sure `wrt` arguments match for `nnx.Optimizer` and `nnx.grad`
+      ...   state = nnx.Optimizer(model, optax.adam(1e-3), wrt=variable)
+      ...   grads = nnx.grad(loss_fn, wrt=variable)(
+      ...     state.model, jnp.ones((1, 2)), jnp.ones((1, 3))
+      ...   )
+      ...   state.update(grads=grads)
 
     Note that internally this function calls ``.tx.update()`` followed by a call
     to ``optax.apply_updates()`` to update ``params`` and ``opt_state``.
 
     Args:
-      grads: Gradients that have the same pytree structure as ``.params``.
-      **kwargs: Additional dataclass attributes that should be ``.replace()``-ed.
-
-    Returns:
-      An updated instance of ``self`` with ``step`` incremented by one, ``params``
-      and ``opt_state`` updated by applying ``grads``, and additional attributes
-      replaced as specified by ``kwargs``.
+      grads: the gradients derived from ``nnx.grad``.
     """
-    params = nnx.state(self.model, nnx.Param)
+    state = nnx.state(self.model, self.wrt)
 
-    updates, new_opt_state = self.tx.update(grads, self.opt_state, params)
-    new_params = optax.apply_updates(params, updates)
+    updates, new_opt_state = self.tx.update(grads, self.opt_state, state)
+    new_params = optax.apply_updates(state, updates)
     assert isinstance(new_params, nnx.State)
 
     self.step.value += 1
