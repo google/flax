@@ -5,4 +5,4 @@ Optimizer
 .. currentmodule:: flax.nnx.optimizer
 
 .. autoclass:: Optimizer
-   :members:
+   :members: __init__, update

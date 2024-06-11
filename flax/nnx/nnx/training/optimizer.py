@@ -102,9 +102,11 @@ class Optimizer(Object):
   For more exotic usecases (e.g. multiple optimizers) it's probably best to
   fork the class and modify it.
 
-  Args:
-    model: An NNX Module.
+  Attributes:
+    step: An ``OptState`` :class:`Variable` that tracks the step count.
+    model: The wrapped :class:`Module`.
     tx: An Optax gradient transformation.
+    opt_state: The Optax optimizer state.
   """
 
   def __init__(
@@ -112,6 +114,14 @@ class Optimizer(Object):
     model: nnx.Module,
     tx: optax.GradientTransformation,
   ):
+    """
+    Instantiate the class and wrap the :class:`Module` and Optax gradient
+    transformation. Set the step count to 0.
+
+    Args:
+      model: An NNX Module.
+      tx: An Optax gradient transformation.
+    """
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.model = model
     self.tx = tx
