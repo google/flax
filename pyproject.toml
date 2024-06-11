@@ -57,7 +57,7 @@ testing = [
     "sentencepiece",  # WMT/LM1B examples
     "tensorflow_text>=2.11.0",  # WMT/LM1B examples
     "tensorflow_datasets",
-    "tensorflow",
+    "tensorflow>=2.12.0", # to fix Numpy np.bool8 deprecation error
     "torch",
     "nbstripout",
     "black[jupyter]==23.7.0",
