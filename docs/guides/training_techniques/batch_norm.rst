@@ -221,7 +221,7 @@ In addition, update your ``train_step`` function to reflect these changes:
         {'params': params},
         x=batch['image'])
       loss = optax.softmax_cross_entropy_with_integer_labels(
-        logits=logits, labels=batch['label'])
+        logits=logits, labels=batch['label']).mean()
       return loss, logits
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (loss, logits), grads = grad_fn(state.params)
@@ -241,7 +241,7 @@ In addition, update your ``train_step`` function to reflect these changes:
         {'params': params, 'batch_stats': state.batch_stats},  #!
         x=batch['image'], train=True, mutable=['batch_stats']) #!
       loss = optax.softmax_cross_entropy_with_integer_labels(
-        logits=logits, labels=batch['label'])
+        logits=logits, labels=batch['label']).mean()
       return loss, (logits, updates) #!
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (loss, (logits, updates)), grads = grad_fn(state.params) #!
@@ -269,7 +269,7 @@ and the ``train`` argument is set to ``False``:
       {'params': params},
       x=batch['image'])
     loss = optax.softmax_cross_entropy_with_integer_labels(
-      logits=logits, labels=batch['label'])
+      logits=logits, labels=batch['label']).mean()
     metrics = {
       'loss': loss,
         'accuracy': jnp.mean(jnp.argmax(logits, -1) == batch['label']),
@@ -278,12 +278,12 @@ and the ``train`` argument is set to ``False``:
   ---
   @jax.jit
   def eval_step(state: TrainState, batch):
-    """Train for a single step."""
+    """Evaluate for a single step."""
     logits = state.apply_fn(
-      {'params': params, 'batch_stats': state.batch_stats}, #!
+      {'params': state.params, 'batch_stats': state.batch_stats}, #!
       x=batch['image'], train=False) #!
     loss = optax.softmax_cross_entropy_with_integer_labels(
-      logits=logits, labels=batch['label'])
+      logits=logits, labels=batch['label']).mean()
     metrics = {
       'loss': loss,
         'accuracy': jnp.mean(jnp.argmax(logits, -1) == batch['label']),
