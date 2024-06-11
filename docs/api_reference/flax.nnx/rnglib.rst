@@ -5,6 +5,6 @@ rnglib
 .. currentmodule:: flax.nnx
 
 .. autoclass:: Rngs
-   :members:
+   :members: __init__
 .. autoclass:: RngStream
    :members:
