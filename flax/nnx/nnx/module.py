@@ -28,7 +28,7 @@ from flax.nnx.nnx.graph import GraphDef
 from flax.nnx.nnx.object import Object, ObjectMeta
 from flax.nnx.nnx.graph import GraphState, StateLeaf
 from flax.nnx.nnx.state import State
-from flax.typing import Path, PathParts
+from flax.typing import Key, Path, PathParts
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -184,7 +184,8 @@ class Module(Object, metaclass=ModuleMeta):
       setattr(self, name, variable_type(reduced_value))
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
-    """Iterates over all nested Modules of the current Module, including the current Module.
+    """Recursively iterates over all nested :class:`Module`'s of the current Module, including
+    the current Module.
 
     ``iter_modules`` creates a generator that yields the path and the Module instance, where
     the path is a tuple of strings or integers representing the path to the Module from the
@@ -194,12 +195,17 @@ class Module(Object, metaclass=ModuleMeta):
 
       >>> from flax import nnx
       ...
+      >>> class SubModule(nnx.Module):
+      ...   def __init__(self, din, dout, rngs):
+      ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
+      ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
+      ...
       >>> class Block(nnx.Module):
       ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
       ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...     self.submodule = SubModule(din, dout, rngs=rngs)
       ...     self.dropout = nnx.Dropout(0.5)
       ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
-      ...
       ...
       >>> model = Block(2, 5, rngs=nnx.Rngs(0))
       >>> for path, module in model.iter_modules():
@@ -208,11 +214,53 @@ class Module(Object, metaclass=ModuleMeta):
       ('batch_norm',) BatchNorm
       ('dropout',) Dropout
       ('linear',) Linear
+      ('submodule', 'linear1') Linear
+      ('submodule', 'linear2') Linear
+      ('submodule',) SubModule
       () Block
     """
     for path, value in graph.iter_graph(self):
       if isinstance(value, Module):
         yield path, value
+
+  def iter_children(self) -> tp.Iterator[tuple[Key, Module]]:
+    """Iterates over all children :class:`Module`'s of the current Module. This
+    method is similar to :func:`iter_modules`, except it only iterates over the
+    immediate children, and does not recurse further down.
+
+    ``iter_children`` creates a generator that yields the key and the Module instance,
+    where the key is a string representing the attribute name of the Module to access
+    the corresponding child Module.
+
+    Example::
+
+      >>> from flax import nnx
+      ...
+      >>> class SubModule(nnx.Module):
+      ...   def __init__(self, din, dout, rngs):
+      ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
+      ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
+      ...
+      >>> class Block(nnx.Module):
+      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+      ...     self.submodule = SubModule(din, dout, rngs=rngs)
+      ...     self.dropout = nnx.Dropout(0.5)
+      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+      ...
+      >>> model = Block(2, 5, rngs=nnx.Rngs(0))
+      >>> for path, module in model.iter_children():
+      ...  print(path, type(module).__name__)
+      ...
+      batch_norm BatchNorm
+      dropout Dropout
+      linear Linear
+      submodule SubModule
+    """
+    node_dict = graph.get_node_impl(self).node_dict(self)
+    for key, value in node_dict.items():
+      if isinstance(value, Module):
+        yield key, value
 
   def set_attributes(
     self,
