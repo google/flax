@@ -35,6 +35,7 @@ import jax
 import jax.core
 import jax.stages
 from jax._src.tree_util import broadcast_prefix
+import jax.numpy as jnp
 
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
@@ -64,10 +65,18 @@ StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
 Leaves = tp.List[Leaf]
 Index = int
+AxesValue = tp.Union[int, None]
+SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
+
 
 # -------------------------------
 # vmap
 # -------------------------------
+class _VmapForkStates(tp.NamedTuple):
+  split_keys: State
+  split_counts: State
+  broadcast_keys: State
+  broadcast_counts: State
 
 
 def _get_axis_sizes(pytree, axes):
@@ -77,6 +86,76 @@ def _get_axis_sizes(pytree, axes):
     leaf.shape[axis] for axis, leaf in zip(axes, leaves) if axis is not None
   }
   return axis_sizes
+
+
+def _fork_vmap_keys(
+  state: State,
+  split_filter: filterlib.Filter,
+  num_splits: int,
+) -> _VmapForkStates:
+  split_keys, split_counts, broadcast_keys, broadcast_counts = state.split(
+    filterlib.All(split_filter, rnglib.RngKey),
+    filterlib.All(split_filter, rnglib.RngCount),
+    rnglib.RngKey,
+    rnglib.RngCount,
+  )
+
+  def split_key(key: tp.Any, count: tp.Any) -> jax.Array:
+    if not isinstance(key, jax.Array):
+      raise TypeError(f'key must be a jax.Array, got {type(key)}')
+    if not isinstance(count, jax.Array):
+      raise TypeError(f'count must be a jax.Array, got {type(count)}')
+
+    key = jax.random.fold_in(key, count)
+    return jax.random.split(key, num_splits)
+
+  split_keys_leaves, split_keys_treedef = jax.tree.flatten(split_keys)
+  split_counts_leaves, split_counts_treedef = jax.tree.flatten(split_counts)
+
+  if len(split_keys_leaves) != len(split_counts_leaves):
+    raise ValueError(
+      'split_keys and split_counts must have the same number of leaves',
+      f'got {len(split_keys_leaves)} and {len(split_counts_leaves)}',
+    )
+
+  split_keys_leaves = [
+    split_key(key, count)
+    for key, count in zip(split_keys_leaves, split_counts_leaves)
+  ]
+  split_counts_leaves = [
+    jnp.full((num_splits,), 0, dtype=jnp.uint32) for _ in split_counts_leaves
+  ]
+  split_keys = jax.tree.unflatten(split_keys_treedef, split_keys_leaves)
+  split_counts = jax.tree.unflatten(split_counts_treedef, split_counts_leaves)
+
+  return _VmapForkStates(
+    split_keys, split_counts, broadcast_keys, broadcast_counts
+  )
+
+
+def _backup_vmap_keys(node: tp.Any, /):
+  backups: list[
+    tuple[graph.PathParts, rnglib.RngStream, jax.Array, jax.Array]
+  ] = []
+  for path, stream in graph.iter_graph(node):
+    if isinstance(stream, rnglib.RngStream):
+      backups.append((path, stream, stream.key.value, stream.count.value))
+  return backups
+
+
+def _restore_vmap_keys(
+  backups: list[tuple[graph.PathParts, rnglib.RngStream, jax.Array, jax.Array]],
+  split_rngs: filterlib.Filter,
+  /,
+):
+  predicate_fn = filterlib.to_predicate(split_rngs)
+  for path, stream, key, count in backups:
+    stream.key.value = key
+    count_path = (*path, 'count')
+    if predicate_fn(count_path, stream.count.to_state()):
+      # restore count only if it was split
+      # add 1 to reflect the split
+      stream.count.value = count + 1
 
 
 def vmap_fn(
@@ -132,13 +211,9 @@ def vmap_fn(
     *filters,
   )
 
-  not_keys_out, split_keys_out, broadcast_keys_out = rng_state_out.split(
-    rnglib.NotKey, split_rngs, ...
-  )
+  split_keys_out, broadcast_keys_out = rng_state_out.split(split_rngs, ...)
 
-  broadcast_state_out = State.merge(
-    broadcast_state_out, broadcast_keys_out, not_keys_out
-  )
+  broadcast_state_out = State.merge(broadcast_state_out, broadcast_keys_out)
 
   # add metadata axis name to Variable.sharding
   if spmd.PARTITION_NAME in transform_metadata:
@@ -154,7 +229,6 @@ def vmap_fn(
     split_keys_out,
     out,
   )
-
 
 def vmap(
   f: F,
@@ -179,7 +253,7 @@ def vmap(
       in_axes_kwargs,  # kwargs_axes
       None,  # graphdef_axes
       0,  # split_keys_axes
-      None,  # split_counts_axes
+      0,  # split_counts_axes
       None,  # broadcast_keys_axes
       None,  # broadcast_counts_axes
       vectorized_states_axes,  # vectorized_states_axes
@@ -210,7 +284,7 @@ def vmap(
     (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
       (args, kwargs)
     )
-    input_rng_streams = rnglib.backup_keys(input_graph_nodes)
+    input_rng_streams = _backup_vmap_keys(input_graph_nodes)
 
     # split module state
     filters = (*state_axes.keys(), ...)
@@ -245,10 +319,12 @@ def vmap(
           f' inferred length {_axis_size}'
         )
 
-    split_keys, split_counts, broadcast_keys, broadcast_counts = rnglib.fork(
-      rng_state,
-      split_rngs,
-      _axis_size,
+    split_keys, split_counts, broadcast_keys, broadcast_counts = (
+      _fork_vmap_keys(
+        rng_state,
+        split_rngs,
+        _axis_size,
+      )
     )
 
     (
@@ -283,7 +359,7 @@ def vmap(
 
     out = graph.insert_graph_nodes(out, output_graph_nodes)
 
-    rnglib.restore_keys(input_rng_streams)
+    _restore_vmap_keys(input_rng_streams, split_rngs)
 
     return out
 

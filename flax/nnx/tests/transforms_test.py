@@ -1055,7 +1055,7 @@ class TestVmap:
     initial_key = rngs.default.key.value
     module = vectorized_create_block(rngs)
 
-    assert rngs.default.count.value == 2
+    assert rngs.default.count.value == 1
     assert rngs.default.key.value == initial_key
     assert not jnp.allclose(
       module.linear.kernel.value[0],
@@ -1076,7 +1076,7 @@ class TestVmap:
     y = vectorized_forward_block(module, x)
 
     assert y.shape == (5, 1, 3)
-    assert rngs.default.count.value == 3
+    assert rngs.default.count.value == 2
     assert rngs.default.key.value == initial_key
 
     y2 = vectorized_forward_block(module, x)
@@ -1103,7 +1103,7 @@ class TestVmap:
     rngs = nnx.Rngs(0)
     module = create_block(rngs)
 
-    assert rngs.default.count.value == 2
+    assert rngs.default.count.value == 1
     assert module.linear.kernel.value.shape == (5, 3, 3)
     assert module.linear.bias.value.shape == (5, 3)
     assert not jnp.allclose(
@@ -1116,7 +1116,7 @@ class TestVmap:
     y = forward_block(module, x)
 
     assert y.shape == (5, 1, 3)
-    assert rngs.default.count.value == 3
+    assert rngs.default.count.value == 2
 
     y2 = forward_block(module, x)
 

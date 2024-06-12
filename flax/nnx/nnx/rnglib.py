@@ -64,10 +64,6 @@ class RngKey(RngState):
   tag: str
 
 
-class RngKeyBackup(RngState):
-  pass
-
-
 NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
 
 
@@ -81,7 +77,6 @@ class RngStream(Object):
   ):
     self.key = RngKey(key, tag=tag)
     self.count = RngCount(count, tag=tag)
-    self.key_backups: list[RngKeyBackup] = []
 
   def __post_init__(self):
     if not isinstance(self.key, jax.Array):
@@ -268,7 +263,7 @@ def fork(
   split_keys, split_counts, broadcast_keys, broadcast_counts = state.split(
     All(split_filter, RngKey),
     All(split_filter, RngCount),
-    [RngKey, RngKeyBackup],  # Any
+    RngKey,
     RngCount,
   )
 
@@ -284,17 +279,13 @@ def fork(
 
 
 def backup_keys(node: tp.Any, /):
-  streams: list[RngStream] = []
+  backups: list[tuple[RngStream, jax.Array]] = []
   for _, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
-      stream.key_backups.append(RngKeyBackup(stream.key.value))
-      streams.append(stream)
-  return streams
+      backups.append((stream, stream.key.value))
+  return backups
 
 
-def restore_keys(streams: list[RngStream], /):
-  for stream in streams:
-    if not stream.key_backups:
-      raise RuntimeError('No key backups found.')
-    backup = stream.key_backups.pop()
-    stream.key.value = backup.value
+def restore_keys(backups: list[tuple[RngStream, jax.Array]], /):
+  for stream, key in backups:
+    stream.key.value = key

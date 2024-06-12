@@ -72,10 +72,8 @@ class OfType:
   type: type
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return (
-      isinstance(x, self.type)
-      or isinstance(x, _HasType)
-      and issubclass(x.type, self.type)
+    return isinstance(x, self.type) or (
+      isinstance(x, _HasType) and issubclass(x.type, self.type)
     )
 
 
