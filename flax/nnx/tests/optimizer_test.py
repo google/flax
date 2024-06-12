@@ -120,6 +120,51 @@ class TestOptimizer(parameterized.TestCase):
     state.update(grads=grads, values=loss_fn(state.model))
     self.assertTrue(state.metrics.compute() < initial_loss)
 
+  @parameterized.parameters(
+    {'variable': nnx.Param},
+    {'variable': nnx.LoRAParam},
+    {'variable': (nnx.Param, nnx.LoRAParam)},
+  )
+  def test_wrt_update(self, variable):
+    in_features = 4
+    out_features = 10
+    model = nnx.LoRA(
+      in_features=in_features,
+      lora_rank=2,
+      out_features=out_features,
+      base_module=Model(
+        in_features=in_features, out_features=out_features, rngs=nnx.Rngs(0)
+      ),
+      rngs=nnx.Rngs(1),
+    )
+    state = nnx.Optimizer(model, optax.adam(1e-3), wrt=variable)
+    prev_variables, prev_other_variables = nnx.state(model, variable, ...)
+
+    x = jnp.ones((1, 4))
+    y = jnp.ones((1, 10))
+    loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
+
+    grads = nnx.grad(loss_fn, wrt=variable)(state.model, x, y)
+    initial_loss = loss_fn(model, x, y)
+    state.update(grads=grads)
+    self.assertTrue(loss_fn(model, x, y) < initial_loss)
+
+    # make sure only the Variable's filtered in `wrt` are changed, and the others are unchanged
+    variables, other_variables = nnx.state(model, variable, ...)
+    self.assertTrue(
+      jax.tree.all(
+        jax.tree.map(lambda x, y: (x != y).all(), prev_variables, variables)
+      )
+    )
+    if other_variables:
+      self.assertTrue(
+        jax.tree.all(
+          jax.tree.map(
+            lambda x, y: (x == y).all(), prev_other_variables, other_variables
+          )
+        )
+      )
+
 
 if __name__ == '__main__':
   absltest.main()

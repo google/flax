@@ -103,6 +103,9 @@ from .nnx.spmd import with_partitioning as with_partitioning
 from .nnx.spmd import with_sharding_constraint as with_sharding_constraint
 from .nnx.state import State as State
 from .nnx.training import metrics as metrics
+from .nnx.variables import (
+  Param as Param,
+)  # this needs to be imported before optimizer to prevent circular import
 from .nnx.training import optimizer as optimizer
 from .nnx.training.metrics import Metric as Metric
 from .nnx.training.metrics import MultiMetric as MultiMetric
@@ -127,7 +130,6 @@ from .nnx.variables import BatchStat as BatchStat
 from .nnx.variables import Cache as Cache
 from .nnx.variables import Empty as Empty
 from .nnx.variables import Intermediate as Intermediate
-from .nnx.variables import Param as Param
 from .nnx.variables import Variable as Variable
 from .nnx.variables import VariableState as VariableState
 from .nnx.variables import VariableMetadata as VariableMetadata
