@@ -6,6 +6,7 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/nnx/i
 .. toctree::
   :maxdepth: 3
 
+  compat
   graph
   module
   nn/index
