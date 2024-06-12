@@ -92,6 +92,70 @@ class VariableMetadata(tp.Generic[A]):
 
 
 class Variable(tp.Generic[A], reprlib.Representable):
+  """The base class for all ``Variable`` types. Create custom ``Variable``
+  types by subclassing this class. Numerous NNX graph functions can filter
+  for specific ``Variable`` types, for example, :func:`split`, :func:`state`,
+  :func:`pop`, and :func:`State.filter`.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+
+    >>> class CustomVariable(nnx.Variable):
+    ...   pass
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.custom_variable = CustomVariable(jnp.ones((1, 3)))
+    ...   def __call__(self, x):
+    ...     return self.linear(x) + self.custom_variable
+    >>> model = Model(rngs=nnx.Rngs(0))
+
+    >>> linear_variables = nnx.state(model, nnx.Param)
+    >>> jax.tree.map(jnp.shape, linear_variables)
+    State({
+      'linear': {
+        'bias': VariableState(
+          type=Param,
+          value=(3,)
+        ),
+        'kernel': VariableState(
+          type=Param,
+          value=(2, 3)
+        )
+      }
+    })
+
+    >>> custom_variable = nnx.state(model, CustomVariable)
+    >>> jax.tree.map(jnp.shape, custom_variable)
+    State({
+      'custom_variable': VariableState(
+        type=CustomVariable,
+        value=(1, 3)
+      )
+    })
+
+    >>> variables = nnx.state(model)
+    >>> jax.tree.map(jnp.shape, variables)
+    State({
+      'custom_variable': VariableState(
+        type=CustomVariable,
+        value=(1, 3)
+      ),
+      'linear': {
+        'bias': VariableState(
+          type=Param,
+          value=(3,)
+        ),
+        'kernel': VariableState(
+          type=Param,
+          value=(2, 3)
+        )
+      }
+    })
+  """
   raw_value: A
   set_value_hooks: tuple[SetValueHook[A], ...]
   get_value_hooks: tuple[GetValueHook[A], ...]
@@ -569,18 +633,126 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
 
 class Param(Variable[A]):
+  """The canonical learnable parameter. All learnable parameters
+  in NNX layer modules will have the ``Param`` :class:`Variable`
+  type::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+
+    >>> layer = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> jax.tree.map(jnp.shape, nnx.state(layer))
+    State({
+      'bias': VariableState(
+        type=Param,
+        value=(3,)
+      ),
+      'kernel': VariableState(
+        type=Param,
+        value=(2, 3)
+      )
+    })
+    """
   pass
 
 
 class BatchStat(Variable[A]):
+  """The mean and variance batch statistics stored in
+  the :class:`BatchNorm` layer. Note, these are not the
+  learnable scale and bias parameters, but rather the
+  running average statistics that are typically used
+  during post-training inference::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+
+    >>> layer = nnx.BatchNorm(3, rngs=nnx.Rngs(0))
+    >>> jax.tree.map(jnp.shape, nnx.state(layer))
+    State({
+      'bias': VariableState(
+        type=Param,
+        value=(3,)
+      ),
+      'mean': VariableState(
+        type=BatchStat,
+        value=(3,)
+      ),
+      'scale': VariableState(
+        type=Param,
+        value=(3,)
+      ),
+      'var': VariableState(
+        type=BatchStat,
+        value=(3,)
+      )
+    })
+  """
   pass
 
 
 class Cache(Variable[A]):
+  """Autoregressive cache in :class:`MultiHeadAttention`::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+
+    >>> layer = nnx.MultiHeadAttention(
+    ...   num_heads=2,
+    ...   in_features=3,
+    ...   qkv_features=6,
+    ...   out_features=6,
+    ...   decode=True,
+    ...   rngs=nnx.Rngs(0),
+    ... )
+
+    >>> layer.init_cache((1, 3))
+    >>> jax.tree.map(jnp.shape, nnx.state(layer, nnx.Cache))
+    State({
+      'cache_index': VariableState(
+        type=Cache,
+        value=()
+      ),
+      'cached_key': VariableState(
+        type=Cache,
+        value=(1, 2, 3)
+      ),
+      'cached_value': VariableState(
+        type=Cache,
+        value=(1, 2, 3)
+      )
+    })
+  """
   pass
 
 
 class Intermediate(Variable[A]):
+  """:class:`Variable` type that is typically used for
+  :func:`Module.sow`::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     x = self.linear1(x)
+    ...     self.sow(nnx.Intermediate, 'i', x)
+    ...     x = self.linear2(x)
+    ...     return x
+    >>> model = Model(rngs=nnx.Rngs(0))
+
+    >>> x = jnp.ones((1, 2))
+    >>> y = model(x)
+    >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Intermediate))
+    State({
+      'i': VariableState(
+        type=Intermediate,
+        value=((1, 3),)
+      )
+    })
+  """
   pass
 
 
