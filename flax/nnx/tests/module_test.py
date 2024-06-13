@@ -616,18 +616,44 @@ class TestModuleDef:
           {'a': nnx.Linear(1, 1, rngs=rngs)},
           {'b': nnx.Conv(1, 1, 1, rngs=rngs)},
         ]
+        self.linear = nnx.Linear(1, 1, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
 
     module = Foo(rngs=nnx.Rngs(0))
 
     modules = list(module.iter_modules())
 
-    assert len(modules) == 3
-    assert modules[0][0] == ('submodules', 0, 'a')
-    assert isinstance(modules[0][1], nnx.Linear)
-    assert modules[1][0] == ('submodules', 1, 'b')
-    assert isinstance(modules[1][1], nnx.Conv)
-    assert modules[2][0] == ()
-    assert isinstance(modules[2][1], Foo)
+    assert len(modules) == 5
+    assert modules[0][0] == ('dropout',)
+    assert isinstance(modules[0][1], nnx.Dropout)
+    assert modules[1][0] == ('linear',)
+    assert isinstance(modules[1][1], nnx.Linear)
+    assert modules[2][0] == ('submodules', 0, 'a')
+    assert isinstance(modules[2][1], nnx.Linear)
+    assert modules[3][0] == ('submodules', 1, 'b')
+    assert isinstance(modules[3][1], nnx.Conv)
+    assert modules[4][0] == ()
+    assert isinstance(modules[4][1], Foo)
+
+  def test_children_modules_iterator(self):
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.submodules = [
+          {'a': nnx.Linear(1, 1, rngs=rngs)},
+          {'b': nnx.Conv(1, 1, 1, rngs=rngs)},
+        ]
+        self.linear = nnx.Linear(1, 1, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+
+    module = Foo(rngs=nnx.Rngs(0))
+
+    modules = list(module.iter_children())
+
+    assert len(modules) == 2
+    assert modules[0][0] == 'dropout'
+    assert isinstance(modules[0][1], nnx.Dropout)
+    assert modules[1][0] == 'linear'
+    assert isinstance(modules[1][1], nnx.Linear)
 
   def test_array_in_module(self):
     class Foo(nnx.Module):
