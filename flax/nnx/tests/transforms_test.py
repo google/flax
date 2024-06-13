@@ -1213,6 +1213,49 @@ class TestVmap:
 
     assert module.vmap_module.graphdef == 'hello'
 
+  def test_state_axes_any(self):
+    @partial(nnx.vmap, state_axes={nnx.Any(nnx.Param): 0}, axis_size=5)
+    def create_block(rngs: nnx.Rngs):
+      return nnx.Linear(3, 3, rngs=rngs)
+
+    module = create_block(nnx.Rngs(0))
+
+    assert module.kernel.value.shape == (5, 3, 3)
+
+  def test_vmap_cond(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.rngs = rngs
+        self.param = nnx.Param(jnp.ones((3,)))
+        self.batch_stat = nnx.BatchStat(jnp.zeros(()))
+
+    @partial(
+      nnx.vmap,
+      state_axes={nnx.Param: 0},
+      split_rngs='params',
+      in_axes=(None, 0, None),
+    )
+    def f(foo: Foo, inc_param, inc_batch_stat):
+      def _inc_param(foo):
+        key = foo.rngs.params()
+        foo.param.value += jax.random.uniform(key, ())
+
+      def _inc_batch_stat(foo):
+        key = foo.rngs.batch_stat()
+        foo.batch_stat.value += jax.random.uniform(key, ())
+
+      no_op = lambda foo: None
+
+      nnx.cond(inc_param, _inc_param, no_op, foo)
+      # nnx.cond(inc_batch_stat, _inc_batch_stat, no_op, foo)
+
+    foo = Foo(rngs=nnx.Rngs(params=0, batch_stat=1))
+
+    inc_param = jnp.array([True, True, False])
+    inc_batch_stat = jnp.array(True)
+
+    f(foo, inc_param, inc_batch_stat)
+
 
 class TestPmap:
 
