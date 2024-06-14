@@ -16,6 +16,7 @@ import dataclasses
 from functools import partial
 import typing as tp
 
+from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
 import jax
@@ -25,7 +26,7 @@ import numpy as np
 import pytest
 
 
-class TestJIT:
+class TestJIT(absltest.TestCase):
   def test_jit(self):
     m = nnx.Dict(a=nnx.Param(1))
 
@@ -483,7 +484,7 @@ class TestGrad(parameterized.TestCase):
     assert grads_m2.bias.value.shape == (3,)
 
 
-class TestScan:
+class TestScan(absltest.TestCase):
   def test_basic(self):
     class Block(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
@@ -946,7 +947,7 @@ class TestScan:
     assert jnp.equal(dropout_keys[1], dropout_keys[2])
 
 
-class TestRemat:
+class TestRemat(absltest.TestCase):
   def test_basic_remat(self):
     RematLinear = nnx.Remat.constructor(nnx.Linear)
 
@@ -1031,7 +1032,7 @@ class TestRemat:
     assert y.shape == (1, 3)
 
 
-class TestVmap:
+class TestVmap(absltest.TestCase):
   def test_basic(self):
     class Block(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
@@ -1213,8 +1214,23 @@ class TestVmap:
 
     assert module.vmap_module.graphdef == 'hello'
 
+  def test_state_axes(self):
 
-class TestPmap:
+    class Foo(nnx.Module):
+
+      def __init__(self):
+        self.param = nnx.Param(jnp.arange(5))
+
+    foo = Foo()
+
+    @partial(nnx.vmap, state_axes={...: 0})
+    def f(foo: Foo):
+      assert foo.param.value.shape == ()
+
+    f(foo)
+
+
+class TestPmap(absltest.TestCase):
 
   def test_basic_single(self):
     class Block(nnx.Module):
@@ -1367,7 +1383,7 @@ class TestPmap:
     assert y.shape == (1, 5, 3)
 
 
-class TestCond:
+class TestCond(absltest.TestCase):
   def test_basic(self):
     class TimeStep(tp.NamedTuple):
       step: jax.Array
@@ -1407,3 +1423,7 @@ class TestCond:
     foo.update()
     assert foo.timestep.step == 4
     assert foo.timestep.reward == 0.0
+
+
+if __name__ == '__main__':
+  absltest.main()

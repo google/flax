@@ -13,11 +13,10 @@
 # limitations under the License.
 
 """Tests for flax.experimental.nnx.traversal."""
-import jax
 from absl.testing import absltest
-
 from flax.core import freeze
-from flax.experimental.nnx import traversals
+from flax.nnx import traversals
+import jax
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

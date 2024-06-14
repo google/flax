@@ -159,22 +159,23 @@ def _restore_vmap_keys(
 
 
 def vmap_fn(
-  args: tuple[tp.Any, ...],
-  kwargs: dict[str, tp.Any],
-  graphdef: GraphDef[tuple[tp.Any, ...]],
-  split_keys: State,
-  split_counts: State,
-  broadcast_keys: State,
-  broadcast_counts: State,
-  vectorized_states: list[State],
-  broadcast_state: State,
-  transform_metadata: tp.Mapping[str, tp.Any],
-  state_axes: tp.Mapping[filterlib.Filter, int],
-  f: tp.Callable[..., tp.Any],
-  filters: tp.Tuple[filterlib.Filter, ...],
-  split_rngs: filterlib.Filter,
+    args: tuple[tp.Any, ...],
+    kwargs: dict[str, tp.Any],
+    graphdef: GraphDef[tuple[tp.Any, ...]],
+    split_keys: State,
+    split_counts: State,
+    broadcast_keys: State,
+    broadcast_counts: State,
+    vectorized_states: list[State],
+    broadcast_state: State,
+    transform_metadata: tp.Mapping[str, tp.Any],
+    state_axes_: list[tuple[filterlib.Filter, int]],
+    f: tp.Callable[..., tp.Any],
+    filters: tp.Tuple[filterlib.Filter, ...],
+    split_rngs: filterlib.Filter,
 ):
   ctx = graph.current_update_context('vmap')
+  state_axes = dict(state_axes_)
   # remove metadata axis name from Variable.sharding
   if spmd.PARTITION_NAME in transform_metadata:
     vectorized_states = [
@@ -230,6 +231,7 @@ def vmap_fn(
     out,
   )
 
+
 def vmap(
   f: F,
   *,
@@ -247,33 +249,33 @@ def vmap(
   vectorized_states_axes = list(state_axes.values())
 
   vmapped_fn = jax.vmap(
-    vmap_fn,
-    in_axes=(
-      in_axes,  # args_axes
-      in_axes_kwargs,  # kwargs_axes
-      None,  # graphdef_axes
-      0,  # split_keys_axes
-      0,  # split_counts_axes
-      None,  # broadcast_keys_axes
-      None,  # broadcast_counts_axes
-      vectorized_states_axes,  # vectorized_states_axes
-      None,  # broadcast_state_axes
-      None,  # transform_metadata_axes
-      None,  # states_axes_axes
-      None,  # f_axes
-      None,  # filters_axes
-      None,  # split_rngs_axes
-    ),
-    out_axes=(
-      None,  # graphdef_out_axes
-      None,  # broadcast_state_axes
-      vectorized_states_axes,
-      0,  # keys_axes_out
-      out_axes,  # out_axes
-    ),
-    axis_name=axis_name,
-    axis_size=axis_size,
-    spmd_axis_name=spmd_axis_name,
+      vmap_fn,
+      in_axes=(
+          in_axes,  # args
+          in_axes_kwargs,  # kwargs
+          None,  # graphdef
+          0,  # split_keys
+          0,  # split_counts
+          None,  # broadcast_keys
+          None,  # broadcast_counts
+          vectorized_states_axes,  # vectorized_states
+          None,  # broadcast_state
+          None,  # transform_metadata
+          None,  # states_axes
+          None,  # f
+          None,  # vectorized_states_filters
+          None,  # split_rngs
+      ),
+      out_axes=(
+          None,  # graphdef_out
+          None,  # broadcast_state
+          vectorized_states_axes,
+          0,  # keys_out
+          out_axes,  # out_axes
+      ),
+      axis_name=axis_name,
+      axis_size=axis_size,
+      spmd_axis_name=spmd_axis_name,
   )
 
   @functools.wraps(f)
@@ -328,26 +330,26 @@ def vmap(
     )
 
     (
-      graphdef_out,
-      broadcast_state,
-      vectorized_states,
-      split_keys_out,
-      out,
+        graphdef_out,
+        broadcast_state,
+        vectorized_states,
+        split_keys_out,
+        out,
     ) = vmapped_fn(
-      args,
-      kwargs,
-      graphdef,
-      split_keys,
-      split_counts,
-      broadcast_keys,
-      broadcast_counts,
-      vectorized_states,
-      broadcast_state,
-      transform_metadata,
-      state_axes,
-      f,
-      filters,
-      split_rngs,
+        args,
+        kwargs,
+        graphdef,
+        split_keys,
+        split_counts,
+        broadcast_keys,
+        broadcast_counts,
+        vectorized_states,
+        broadcast_state,
+        transform_metadata,
+        list(state_axes.items()),
+        f,
+        filters,
+        split_rngs,
     )
 
     _, output_graph_nodes = ctx.merge(
