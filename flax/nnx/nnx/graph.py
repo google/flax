@@ -375,6 +375,8 @@ jax.tree_util.register_pytree_node(
   _graphdef_unflatten,
 )
 
+GraphDefState = tuple[GraphDef[A], GraphState]
+
 
 def flatten(
   x: Node,
@@ -1521,6 +1523,96 @@ def clone(node: Node) -> Node:
   """
   graphdef, state = split(node)
   return merge(graphdef, state)
+
+
+def call(
+  graphdef_state: tuple[GraphDef[A], GraphState], /
+) -> ApplyCaller[tuple[GraphDef[A], GraphState]]:
+  """Calls a method underlying graph node defined by a (GraphDef, State) pair.
+
+  ``call`` takes a ``(GraphDef, State)`` pair and creates a proxy object that can be
+  used to call methods on the underlying graph node. When a method is called, the
+  output is returned along with a new (GraphDef, State) pair that represents the
+  updated state of the graph node. ``call`` is equivalent to :func:`merge` > ``method``
+  > :func:`split`` but is more convenient to use in pure JAX functions.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax
+    >>> import jax.numpy as jnp
+    ...
+    >>> class StatefulLinear(nnx.Module):
+    ...   def __init__(self, din, dout, rngs):
+    ...     self.w = nnx.Param(jax.random.uniform(rngs(), (din, dout)))
+    ...     self.b = nnx.Param(jnp.zeros((dout,)))
+    ...     self.count = nnx.Variable(jnp.array(0, dtype=jnp.uint32))
+    ...
+    ...   def increment(self):
+    ...     self.count += 1
+    ...
+    ...   def __call__(self, x):
+    ...     self.increment()
+    ...     return x @ self.w + self.b
+    ...
+    >>> linear = StatefulLinear(3, 2, nnx.Rngs(0))
+    >>> linear_state = nnx.split(linear)
+    ...
+    >>> @jax.jit
+    ... def forward(x, linear_state):
+    ...   y, linear_state = nnx.call(linear_state)(x)
+    ...   return y, linear_state
+    ...
+    >>> x = jnp.ones((1, 3))
+    >>> y, linear_state = forward(x, linear_state)
+    >>> y, linear_state = forward(x, linear_state)
+    ...
+    >>> linear = nnx.merge(*linear_state)
+    >>> linear.count.value
+    Array(2, dtype=uint32)
+
+  The proxy object returned by ``call`` supports indexing and attribute access
+  to access nested methods. In the example below, the ``increment`` method indexing
+  is used to call the ``increment`` method of the ``StatefulLinear`` module
+  at the ``b`` key of a ``nodes`` dictionary.
+
+    >>> class StatefulLinear(nnx.Module):
+    ...   def __init__(self, din, dout, rngs):
+    ...     self.w = nnx.Param(jax.random.uniform(rngs(), (din, dout)))
+    ...     self.b = nnx.Param(jnp.zeros((dout,)))
+    ...     self.count = nnx.Variable(jnp.array(0, dtype=jnp.uint32))
+    ...
+    ...   def increment(self):
+    ...     self.count += 1
+    ...
+    ...   def __call__(self, x):
+    ...     self.increment()
+    ...     return x @ self.w + self.b
+    ...
+    >>> rngs = nnx.Rngs(0)
+    >>> nodes = dict(
+    ...   a=StatefulLinear(3, 2, rngs),
+    ...   b=StatefulLinear(2, 1, rngs),
+    ... )
+    ...
+    >>> node_state = nnx.split(nodes)
+    >>> # use attribute access
+    >>> _, node_state = nnx.call(node_state)['b'].increment()
+    ...
+    >>> nodes = nnx.merge(*node_state)
+    >>> nodes['a'].count.value
+    Array(0, dtype=uint32)
+    >>> nodes['b'].count.value
+    Array(1, dtype=uint32)
+  """
+
+  def pure_caller(accessor: DelayedAccessor, *args, **kwargs):
+    node = merge(*graphdef_state)
+    method = accessor(node)
+    out = method(*args, **kwargs)
+    return out, split(node)
+
+  return CallableProxy(pure_caller)  # type: ignore
 
 
 def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:

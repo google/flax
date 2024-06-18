@@ -14,14 +14,30 @@
 
 from functools import partial
 from threading import Thread
+
 import jax
+import jax.numpy as jnp
 import pytest
+from absl.testing import absltest
 
-from flax import nnx
-from flax import struct
+from flax import nnx, struct
 
 
-class TestGraphUtils:
+class StatefulLinear(nnx.Module):
+  def __init__(self, din, dout, rngs):
+    self.w = nnx.Param(jax.random.uniform(rngs(), (din, dout)))
+    self.b = nnx.Param(jnp.zeros((dout,)))
+    self.count = nnx.Variable(jnp.array(0, dtype=jnp.uint32))
+
+  def increment(self):
+    self.count.value += 1
+
+  def __call__(self, x):
+    self.count.value += 1
+    return x @ self.w + self.b[None]
+
+
+class TestGraphUtils(absltest.TestCase):
   def test_flatten(self):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
@@ -398,6 +414,61 @@ class TestGraphUtils:
     m2, _ = nnx.graph.unflatten(graphdef, state, idxmap=idx_in_ref_out)
     assert m2 is m
     assert m2.ref is m2
+
+  def test_call_jit_update(self):
+    class Counter(nnx.Module):
+      def __init__(self):
+        self.count = jnp.zeros(())
+
+      def inc(self):
+        self.count += 1
+        return 1
+
+    graph_state = nnx.split(Counter())
+
+    @jax.jit
+    def update(graph_state: nnx.GraphDefState[Counter]):
+      out, graph_state = nnx.call(graph_state).inc()
+      self.assertEqual(out, 1)
+      return graph_state
+
+    graph_state = update(graph_state)
+    graph_state = update(graph_state)
+
+    counter = nnx.merge(*graph_state)
+
+    self.assertEqual(counter.count, 2)
+
+  def test_stateful_linear(self):
+    linear = StatefulLinear(3, 2, nnx.Rngs(0))
+    linear_state = nnx.split(linear)
+
+    @jax.jit
+    def forward(x, pure_linear: nnx.GraphDefState[StatefulLinear]):
+      y, pure_linear = nnx.call(pure_linear)(x)
+      return y, pure_linear
+
+    x = jnp.ones((1, 3))
+    y, linear_state = forward(x, linear_state)
+    y, linear_state = forward(x, linear_state)
+
+    self.assertEqual(linear.count.value, 0)
+    new_linear = nnx.merge(*linear_state)
+    self.assertEqual(new_linear.count.value, 2)
+
+  def test_getitem(self):
+    rngs = nnx.Rngs(0)
+    nodes = dict(
+      a=StatefulLinear(3, 2, rngs),
+      b=StatefulLinear(2, 1, rngs),
+    )
+    node_state = nnx.split(nodes)
+    _, node_state = nnx.call(node_state)['b'].increment()
+
+    nodes = nnx.merge(*node_state)
+
+    self.assertEqual(nodes['a'].count.value, 0)
+    self.assertEqual(nodes['b'].count.value, 1)
 
 
 class SimpleModule(nnx.Module):
