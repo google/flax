@@ -56,9 +56,10 @@ class FlaxError(Exception):
     )
     module_name = self.__class__.__module__
     class_name = self.__class__.__name__
-    error_msg = f'{message} ({error_page}#{module_name}.{class_name})'
-    super().__init__(error_msg)
-  
+    if error_page not in message: # do not add a FlaxError link on unpickling
+      message = f'{message} ({error_page}#{module_name}.{class_name})'
+    super().__init__(message)
+
   def __reduce__(self):
    return (FlaxError, (str(self),))
 
