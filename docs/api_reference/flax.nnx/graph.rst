@@ -11,6 +11,8 @@ graph
 .. autofunction:: pop
 .. autofunction:: state
 .. autofunction:: graphdef
+.. autofunction:: iter_nodes
+.. autofunction:: iter_child_nodes
 .. autofunction:: iter_graph
 .. autofunction:: clone
 

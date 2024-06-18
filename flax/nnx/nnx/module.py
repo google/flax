@@ -26,9 +26,9 @@ from flax.nnx.nnx import (
 from flax.nnx.nnx import variables as variableslib
 from flax.nnx.nnx.graph import GraphDef
 from flax.nnx.nnx.object import Object, ObjectMeta
-from flax.nnx.nnx.graph import GraphState, StateLeaf
+from flax.nnx.nnx.graph import GraphState, StateLeaf, iter_nodes
 from flax.nnx.nnx.state import State
-from flax.typing import Key, Path, PathParts
+from flax.typing import Path
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -183,85 +183,6 @@ class Module(Object, metaclass=ModuleMeta):
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
 
-  def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
-    """Recursively iterates over all nested :class:`Module`'s of the current Module, including
-    the current Module.
-
-    ``iter_modules`` creates a generator that yields the path and the Module instance, where
-    the path is a tuple of strings or integers representing the path to the Module from the
-    root Module.
-
-    Example::
-
-      >>> from flax import nnx
-      ...
-      >>> class SubModule(nnx.Module):
-      ...   def __init__(self, din, dout, rngs):
-      ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
-      ...
-      >>> class Block(nnx.Module):
-      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
-      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.submodule = SubModule(din, dout, rngs=rngs)
-      ...     self.dropout = nnx.Dropout(0.5)
-      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
-      ...
-      >>> model = Block(2, 5, rngs=nnx.Rngs(0))
-      >>> for path, module in model.iter_modules():
-      ...   print(path, type(module).__name__)
-      ...
-      ('batch_norm',) BatchNorm
-      ('dropout',) Dropout
-      ('linear',) Linear
-      ('submodule', 'linear1') Linear
-      ('submodule', 'linear2') Linear
-      ('submodule',) SubModule
-      () Block
-    """
-    for path, value in graph.iter_graph(self):
-      if isinstance(value, Module):
-        yield path, value
-
-  def iter_children(self) -> tp.Iterator[tuple[Key, Module]]:
-    """Iterates over all children :class:`Module`'s of the current Module. This
-    method is similar to :func:`iter_modules`, except it only iterates over the
-    immediate children, and does not recurse further down.
-
-    ``iter_children`` creates a generator that yields the key and the Module instance,
-    where the key is a string representing the attribute name of the Module to access
-    the corresponding child Module.
-
-    Example::
-
-      >>> from flax import nnx
-      ...
-      >>> class SubModule(nnx.Module):
-      ...   def __init__(self, din, dout, rngs):
-      ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
-      ...
-      >>> class Block(nnx.Module):
-      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
-      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.submodule = SubModule(din, dout, rngs=rngs)
-      ...     self.dropout = nnx.Dropout(0.5)
-      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
-      ...
-      >>> model = Block(2, 5, rngs=nnx.Rngs(0))
-      >>> for path, module in model.iter_children():
-      ...  print(path, type(module).__name__)
-      ...
-      batch_norm BatchNorm
-      dropout Dropout
-      linear Linear
-      submodule SubModule
-    """
-    node_dict = graph.get_node_impl(self).node_dict(self)
-    for key, value in node_dict.items():
-      if isinstance(value, Module):
-        yield key, value
-
   def set_attributes(
     self,
     *filters: filterlib.Filter,
@@ -306,15 +227,16 @@ class Module(Object, metaclass=ModuleMeta):
     if not filters:
       filters = (True,)
     predicates = tuple(map(filterlib.to_predicate, filters))
-    for path, module in self.iter_modules():
-      for predicate in predicates:
-        if predicate(path, module):
-          for name, value in attributes.items():
-            if hasattr(module, name):
-              if name in remaining_attributes:
-                remaining_attributes.remove(name)
-              setattr(module, name, value)
-          break
+    for path, module in iter_nodes(self):
+      if isinstance(module, Module):
+        for predicate in predicates:
+          if predicate(path, module):
+            for name, value in attributes.items():
+              if hasattr(module, name):
+                if name in remaining_attributes:
+                  remaining_attributes.remove(name)
+                setattr(module, name, value)
+            break
 
     if remaining_attributes and raise_if_not_found:
       raise ValueError(
@@ -406,18 +328,20 @@ class Module(Object, metaclass=ModuleMeta):
   def __penzai_repr__(self, path, subtree_renderer):
     from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
     from penzai.treescope import formatting_util  # type: ignore[import-not-found,import-untyped]
+
     children = {}
     for name, value in vars(self).items():
       if name.startswith('_'):
         continue
       children[name] = value
     return pz_repr_lib.render_object_constructor(
-        object_type=type(self),
-        attributes=children,
-        path=path,
-        subtree_renderer=subtree_renderer,
-        color=formatting_util.color_from_string(type(self).__qualname__)
+      object_type=type(self),
+      attributes=children,
+      path=path,
+      subtree_renderer=subtree_renderer,
+      color=formatting_util.color_from_string(type(self).__qualname__),
     )
+
 
 # -------------------------
 # Pytree Definition

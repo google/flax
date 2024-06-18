@@ -146,7 +146,9 @@ filterwarnings = [
     "ignore:.*pkg_resources is deprecated as an API.*:DeprecationWarning",
     # DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('google')`.
     "ignore:.*Deprecated call to.*pkg_resources.declare_namespace.*:DeprecationWarning",
-    # jax.xla_computation is deprecated but TF still uses it.
+    # DeprecationWarning: jax.tree_map is deprecated: use jax.tree.map (jax v0.4.25 or newer) or jax.tree_util.tree_map (any JAX version).
+    "ignore:.*jax.tree_map is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: jax.xla_computation is deprecated. Please use the AOT APIs.
     "ignore:.*jax.xla_computation is deprecated.*:DeprecationWarning",
 ]
 
