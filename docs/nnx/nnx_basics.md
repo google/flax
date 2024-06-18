@@ -30,6 +30,10 @@ that have allowed Linen to scale effectively to large codebases.
 from flax import nnx
 import jax
 import jax.numpy as jnp
+from penzai import pz
+
+pz.enable_interactive_context()
+pz.ts.active_autovisualizer.set_interactive(pz.ts.ArrayAutovisualizer())
 ```
 
 ## The Module System
@@ -74,7 +78,7 @@ model = Linear(2, 5, rngs=nnx.Rngs(params=0))
 y = model(x=jnp.ones((1, 2)))
 
 print(y)
-nnx.display(model)
+pz.show(model)
 ```
 
 The above visualization by `nnx.display` is generated using the awesome [Penzai](https://penzai.readthedocs.io/en/stable/index.html#) library.
