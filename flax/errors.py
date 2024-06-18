@@ -60,7 +60,7 @@ class FlaxError(Exception):
     super().__init__(error_msg)
   
   def __reduce__(self):
-   return (FlaxError, str(self))
+   return (FlaxError, (str(self),))
 
 
 #################################################
