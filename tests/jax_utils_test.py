@@ -16,10 +16,10 @@
 
 from functools import partial
 
+from absl.testing import absltest
 import chex
 import jax
 import numpy as np
-import tensorflow as tf
 from absl.testing import parameterized
 
 from flax import jax_utils
@@ -31,7 +31,7 @@ def setUpModule():
   chex.set_n_cpu_devices(NDEV)
 
 
-class PadShardUnpadTest(chex.TestCase, tf.test.TestCase):
+class PadShardUnpadTest(chex.TestCase):
   BATCH_SIZES = [NDEV, NDEV + 1, NDEV - 1, 5 * NDEV, 5 * NDEV + 1, 5 * NDEV - 1]
   DTYPES = [np.float32, np.uint8, jax.numpy.bfloat16, np.int32]
 
@@ -105,4 +105,4 @@ class PadShardUnpadTest(chex.TestCase, tf.test.TestCase):
 
 
 if __name__ == '__main__':
-  tf.test.main()
+  absltest.main()
