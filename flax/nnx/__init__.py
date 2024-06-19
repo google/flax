@@ -25,6 +25,7 @@ from .nnx import helpers as helpers
 from .nnx import compat as compat
 from .nnx import traversals as traversals
 from .nnx.filterlib import All as All
+from .nnx.filterlib import PathContains as PathContains
 from .nnx.filterlib import Not as Not
 from .nnx.graph import GraphDef as GraphDef
 from .nnx.graph import GraphState as GraphState

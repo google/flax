@@ -14,7 +14,7 @@
 
 import builtins
 import dataclasses
-from flax.typing import PathParts
+from flax.typing import Key, PathParts
 import typing as tp
 
 if tp.TYPE_CHECKING:
@@ -65,6 +65,13 @@ class WithTag:
 
   def __call__(self, path: PathParts, x: tp.Any):
     return isinstance(x, _HasTag) and x.tag == self.tag
+
+@dataclasses.dataclass
+class PathContains:
+  key: Key
+
+  def __call__(self, path: PathParts, x: tp.Any):
+    return self.key in path
 
 
 @dataclasses.dataclass
