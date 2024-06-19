@@ -19,7 +19,7 @@ from flax.errors import FlaxError, ScopeVariableNotFoundError
 import pickle
 
 class ErrorrsTest(absltest.TestCase):
-  def test_exception_can_be_picked(self):
+  def test_exception_can_be_pickled(self):
     # tests the new __reduce__ method fixes bug reported in issue #4000
     ex = ScopeVariableNotFoundError('varname', 'collection', 'scope')
     pickled_ex = pickle.dumps(ex)
