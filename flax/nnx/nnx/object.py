@@ -160,7 +160,10 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
             return value.replace(
               raw_value=jax.tree.map(to_shape_dtype, value.raw_value)
             )
-          elif isinstance(value, (np.ndarray, jax.Array)):
+          elif (
+            isinstance(value, (np.ndarray, jax.Array))
+            and np.prod(value.shape) > 1
+          ):
             return Array(value.shape, value.dtype)
           return value
 

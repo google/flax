@@ -288,19 +288,19 @@ class MultiMetric(Metric):
       accuracy=Accuracy(
         argname='values',
         total=MetricState(
-          value=Array(shape=(), dtype=float32)
+          value=Array(0., dtype=float32)
         ),
         count=MetricState(
-          value=Array(shape=(), dtype=int32)
+          value=Array(0, dtype=int32)
         )
       ),
       loss=Average(
         argname='values',
         total=MetricState(
-          value=Array(shape=(), dtype=float32)
+          value=Array(0., dtype=float32)
         ),
         count=MetricState(
-          value=Array(shape=(), dtype=int32)
+          value=Array(0, dtype=int32)
         )
       )
     )
@@ -309,10 +309,10 @@ class MultiMetric(Metric):
     Accuracy(
       argname='values',
       total=MetricState(
-        value=Array(shape=(), dtype=float32)
+        value=Array(0., dtype=float32)
       ),
       count=MetricState(
-        value=Array(shape=(), dtype=int32)
+        value=Array(0, dtype=int32)
       )
     )
 
@@ -320,10 +320,10 @@ class MultiMetric(Metric):
     Average(
       argname='values',
       total=MetricState(
-        value=Array(shape=(), dtype=float32)
+        value=Array(0., dtype=float32)
       ),
       count=MetricState(
-        value=Array(shape=(), dtype=int32)
+        value=Array(0, dtype=int32)
       )
     )
 
