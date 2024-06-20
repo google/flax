@@ -17,7 +17,7 @@ dependencies = [
     "jax>=0.4.19",
     "msgpack",
     "optax",
-    "orbax-checkpoint==0.5.15",  # remove this when they release > 0.5.17
+    "orbax-checkpoint",
     "tensorstore",
     "rich>=11.1",
     "typing_extensions>=4.2",
