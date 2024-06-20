@@ -242,7 +242,7 @@ def vmap(
   spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
   # nnx specific
   in_axes_kwargs: tp.Any = 0,
-  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+  state_axes: tp.Mapping[filterlib.Filter, int | None] = FrozenDict({...: 0}),
   split_rngs: filterlib.Filter = ...,
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
 ) -> F:

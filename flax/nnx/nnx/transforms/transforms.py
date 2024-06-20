@@ -490,13 +490,13 @@ def grad_fn(*args):
   has_aux: bool
   diff_args: list[int]
   ctx = graph.current_update_context('grad')
-  *_args, f, graphdef, non_diff_state, has_aux, diff_args = args
+  *args, f, graphdef, non_diff_state, has_aux, diff_args = args
 
   # rebuild diff_state from substates in args
   diff_state = State({})
   for i in diff_args:
-    diff_state[i] = _args[i]
-  diff_state = State({0: diff_state.raw_mapping})
+    diff_state[i] = args[i]
+  diff_state: graph.GraphState = State({0: diff_state.raw_mapping})
 
   diff_graph_nodes, input_nodes = ctx.merge(
     graphdef, diff_state, non_diff_state
@@ -504,9 +504,12 @@ def grad_fn(*args):
 
   # add nodes to the args
   for i, arg in diff_graph_nodes.items():
-    _args[i] = arg
+    args[i] = arg
 
-  out = f(*_args)
+  # add other nodes to the args
+  args = graph.insert_graph_nodes(args, input_nodes)
+
+  out = f(*args)
 
   out, out_nodes = graph.extract_graph_nodes(out)
 
@@ -535,14 +538,13 @@ def _grad_general(
   def grad_wrapper(*args):
     ctx: graph.UpdateContext = graph.current_update_context('grad')
     _argnums = _normalize_sequence(argnums)
-    _, input_nodes = graph.extract_graph_nodes(args)
-
-    _args = list(args)
     diff_graph_nodes: dict[int, tp.Any] = {
       i: arg
       for i, arg in enumerate(args)
       if i in _argnums and graph.is_node(arg)
     }
+    args, input_nodes = graph.extract_graph_nodes(args)
+    args = list(args)
 
     def only_diff(path: tuple, value: tp.Any) -> bool:
       # diff_graph_nodes is the first element in the tuple
@@ -557,7 +559,7 @@ def _grad_general(
     if 0 in diff_state:
       for i, diff_substate in diff_state[0].items():  # type: ignore
         assert isinstance(i, int)
-        _args[i] = diff_substate
+        args[i] = diff_substate
         diff_args.append(i)
     transform = jax.value_and_grad if return_value else jax.grad
 
@@ -570,7 +572,7 @@ def _grad_general(
       holomorphic=holomorphic,
       allow_int=allow_int,
       reduce_axes=reduce_axes,
-    )(*_args, f, graphdef, non_diff_state, has_aux, diff_args)
+    )(*args, f, graphdef, non_diff_state, has_aux, diff_args)
 
     if return_value:
       if has_aux:
