@@ -28,6 +28,8 @@
 # ============================================================================
 """Helper functions."""
 
+from __future__ import annotations
+
 from typing import Callable, Optional, Tuple, TypeVar
 import flax
 from flax import nnx

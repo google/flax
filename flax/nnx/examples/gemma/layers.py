@@ -28,6 +28,8 @@
 # ============================================================================
 """Base layers."""
 
+from __future__ import annotations
+
 from typing import Any, Sequence, TypeAlias
 
 from flax import nnx
