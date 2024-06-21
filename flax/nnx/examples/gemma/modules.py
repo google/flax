@@ -35,8 +35,8 @@ from typing import Any, Sequence, TypeAlias
 
 from flax import nnx
 import flax.linen as nn
-from flax.nnx.examples.gemma import layers
-from flax.nnx.examples.gemma import positional_embeddings
+import layers
+import positional_embeddings
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, ArrayLike  # pylint: disable=g-importing-member,g-multiple-import

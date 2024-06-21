@@ -28,13 +28,15 @@
 # ============================================================================
 """Tests for helpers."""
 
+from __future__ import annotations
+
 from typing import Tuple
 
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
 import flax.linen as nn
-from flax.nnx.examples.gemma import helpers
+import helpers
 import jax
 import jax.numpy as jnp
 import numpy as np

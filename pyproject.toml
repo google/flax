@@ -45,6 +45,7 @@ testing = [
     "einops",
     "gymnasium[atari, accept-rom-license]",
     "jaxlib",
+    "jaxtyping",
     "jraph>=0.0.6dev0",
     "ml-collections",
     "mypy",

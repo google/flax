@@ -30,7 +30,7 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from flax.nnx.examples.gemma import positional_embeddings
+import positional_embeddings
 import jax.numpy as jnp
 import numpy as np
 
