@@ -14,6 +14,7 @@
 
 """Linear modules."""
 
+import dataclasses
 from typing import (
   Any,
   Iterable,
@@ -66,6 +67,31 @@ def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
     return (x,)
 
 
+@dataclasses.dataclass(frozen=True)
+class DenseParamsDtype:
+  """data type for kernel and bias parameters."""
+
+  kernel_dtype: Dtype
+  bias_dtype: Dtype
+
+
+def get_kernel_bias_param_dtype(
+    param_dtype: Dtype | DenseParamsDtype,
+) -> DenseParamsDtype:
+  """Returns kernel and bias dtypes from the given param_dtype.
+
+  Args:
+    param_dtype: dtype to use for kernel and bias parameters.
+
+  Returns:
+    A DenseParamDTypes object with kernel and bias dtypes.
+  """
+  if isinstance(param_dtype, DenseParamsDtype):
+    return param_dtype
+  # use the same dtype for kernel and bias otherwise.
+  return DenseParamsDtype(kernel_dtype=param_dtype, bias_dtype=param_dtype)
+
+
 class DenseGeneral(Module):
   """A linear transformation with flexible axes.
 
@@ -106,7 +132,7 @@ class DenseGeneral(Module):
   batch_dims: Sequence[int] = ()
   use_bias: bool = True
   dtype: Optional[Dtype] = None
-  param_dtype: Dtype = jnp.float32
+  param_dtype: Dtype | DenseParamsDtype = jnp.float32
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   precision: PrecisionLike = None
@@ -161,8 +187,12 @@ class DenseGeneral(Module):
       if ax not in axis
     )
     kernel_shape = tuple(inputs.shape[ax] for ax in axis) + features
+    kernel_bias_dtype = get_kernel_bias_param_dtype(self.param_dtype)
     kernel = self.param(
-      'kernel', kernel_init_wrap, batch_shape + kernel_shape, self.param_dtype
+        'kernel',
+        kernel_init_wrap,
+        batch_shape + kernel_shape,
+        kernel_bias_dtype.kernel_dtype,
     )
 
     batch_ind = tuple(range(n_batch_dims))
@@ -179,9 +209,11 @@ class DenseGeneral(Module):
         if isinstance(bias, meta.AxisMetadata):
           return meta.replace_boxed(bias, jnp.reshape(bias.unbox(), shape))
         return jnp.reshape(bias, shape)
-
       bias = self.param(
-        'bias', bias_init_wrap, batch_shape + features, self.param_dtype
+          'bias',
+          bias_init_wrap,
+          batch_shape + features,
+          kernel_bias_dtype.bias_dtype,
       )
     else:
       bias = None
@@ -235,7 +267,7 @@ class Dense(Module):
   features: int
   use_bias: bool = True
   dtype: Optional[Dtype] = None
-  param_dtype: Dtype = jnp.float32
+  param_dtype: Dtype | DenseParamsDtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
@@ -253,15 +285,16 @@ class Dense(Module):
     Returns:
       The transformed input.
     """
+    param_dtypes = get_kernel_bias_param_dtype(self.param_dtype)
     kernel = self.param(
-      'kernel',
-      self.kernel_init,
-      (jnp.shape(inputs)[-1], self.features),
-      self.param_dtype,
+        'kernel',
+        self.kernel_init,
+        (jnp.shape(inputs)[-1], self.features),
+        param_dtypes.kernel_dtype,
     )
     if self.use_bias:
       bias = self.param(
-        'bias', self.bias_init, (self.features,), self.param_dtype
+          'bias', self.bias_init, (self.features,), param_dtypes.bias_dtype
       )
     else:
       bias = None
