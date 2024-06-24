@@ -30,7 +30,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Tuple, TypeVar
+from typing import Callable, Optional, Tuple, TypeVar, Union
 import flax
 from flax import nnx
 from flax.typing import VariableDict  # pylint: disable=g-importing-member,g-multiple-import
@@ -38,7 +38,7 @@ from flax.typing import VariableDict  # pylint: disable=g-importing-member,g-mul
 M = TypeVar('M', bound='nnx.Module')
 
 
-def _flatten_path(path: Tuple[str | int, ...]) -> str:
+def _flatten_path(path: Tuple[Union[str, int], ...]) -> str:
   def f(item) -> str:
     if isinstance(item, str):
       return f'{item}'
@@ -54,7 +54,7 @@ def module_from_linen_variables(
     module_factory: Callable[[], M],
     variables: VariableDict,
     map_key_fn: Optional[
-        Callable[[Tuple[str, ...]], Tuple[str | int, ...]]
+        Callable[[Tuple[str, ...]], Tuple[Union[str, int], ...]]
     ] = None,
 ) -> M:
   """Returns an `nnx.Module` initialized with the `variables` of a linen module.
@@ -70,7 +70,7 @@ def module_from_linen_variables(
   """
   if map_key_fn is None:
 
-    def map_key_fn(path: Tuple[str, ...]) -> Tuple[str | int, ...]:
+    def map_key_fn(path: Tuple[str, ...]) -> Tuple[Union[str, int], ...]:
       return path[1:] if 'params' in variables else path
 
   mdl: M = nnx.eval_shape(module_factory)

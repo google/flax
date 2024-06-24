@@ -30,7 +30,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence, TypeAlias
+from typing import Any, Sequence, Union
 
 from flax import nnx
 import flax.linen as nn
@@ -38,7 +38,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, ArrayLike  # pylint: disable=g-importing-member,g-multiple-import
 
 
-Shape: TypeAlias = Sequence[int | Any]
+Shape = Sequence[Union[int, Any]]
 
 
 class Einsum(nnx.Module):
