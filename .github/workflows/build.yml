@@ -84,6 +84,7 @@ jobs:
       matrix:
         python-version: ['3.9', '3.10', '3.11']
         test-type: [doctest, pytest, pytype, mypy]
+        jax-version: [newest]
         exclude:
           - test-type: pytype
             python-version: '3.9'
@@ -91,6 +92,10 @@ jobs:
             python-version: '3.10'
           - test-type: mypy
             python-version: '3.11'
+        include:
+          - python-version: '3.9'
+            test-type: pytest
+            jax-version: '0.4.27'  # keep in sync with jax pin in pyproject.toml
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -119,7 +124,13 @@ jobs:
     - name: Install Flax
       run: |
         venv/bin/python3 -m pip install -e .[all,testing]
-        venv/bin/python3 -m pip install -U jax jaxlib # Ensure we have the latest JAX
+    - name: Install JAX
+      run: |
+        if [[ "${{ matrix.jax-version }}" == "newest" ]]; then
+          venv/bin/python3 -m pip install -U jax jaxlib
+        else
+          venv/bin/python3 -m pip install "jax==${{ matrix.jax-version }}" "jaxlib==${{ matrix.jax-version }}"
+        fi
     - name: Cached mypy cache
       id: mypy_cache
       uses: actions/cache@v3
