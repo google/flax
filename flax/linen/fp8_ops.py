@@ -17,6 +17,9 @@ import numpy as np
 import warnings
 from functools import partial
 
+from typing import Any
+DType = Any
+
 import jax
 from jax import custom_jvp, custom_vjp, lax, random
 from jax import numpy as jnp
@@ -269,8 +272,9 @@ def dot_general_with_precision_jvp(
 
 
 class Fp8DotGeneralOp(module.Module):
-  fp8_genre: str = 'OCP'
   amax_history_length: int = 1024
+  e4m3_dtype: DType = jnp.float8_e4m3fn
+  e5m2_dtype: DType = jnp.float8_e5m2
 
   def setup(self) -> None:
     scale_args = (
@@ -317,18 +321,16 @@ class Fp8DotGeneralOp(module.Module):
     comp_dtype = k.dtype
     x = jnp.asarray(x, comp_dtype)
 
-    e4m3_dtype, e5m2_dtype = get_fp8_dtypes(self.fp8_genre)
-
     x_qdq = in_qdq(
-      comp_dtype, e4m3_dtype, x, self.input_scale.value, self.input_amax_history.value
+      comp_dtype, self.e4m3_dtype, x, self.input_scale.value, self.input_amax_history.value
     )
     k_qdq = in_qdq(
-      comp_dtype, e4m3_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
+      comp_dtype, self.e4m3_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
     )
     y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers)  # type: ignore
     y = out_qdq(
       comp_dtype,
-      e5m2_dtype,
+      self.e5m2_dtype,
       y_qdq,
       self.output_grad_scale.value,
       self.output_grad_amax_history.value,
@@ -336,8 +338,6 @@ class Fp8DotGeneralOp(module.Module):
 
     return y  # type: ignore
 
-class OCPFp8DotGeneralOp(Fp8DotGeneralOp):
-  fp8_genre: str = 'OCP'
-
 class NANOOFp8DotGeneralOp(Fp8DotGeneralOp):
-  fp8_genre: str = 'NANOO'
+  e4m3_dtype: DType = jnp.float8_e4m3fnuz
+  e5m2_dtype: DType = jnp.float8_e5m2fnuz

@@ -1271,7 +1271,7 @@ class Fp8Test(parameterized.TestCase):
       p = nn.DenseGeneral(features=64, name='dense')
       if fp8_injection:
         if fp8_genre == 'OCP':
-          p.dot_general_cls = nn.OCPFp8DotGeneralOp
+          p.dot_general_cls = nn.Fp8DotGeneralOp
         else:
           p.dot_general_cls = nn.NANOOFp8DotGeneralOp
 
@@ -1293,7 +1293,7 @@ class Fp8Test(parameterized.TestCase):
       'params': {'kernel': (32, 64), 'bias': (64,)},
     }
     if fp8_genre == 'OCP':
-      fp8_op_name = 'OCPFp8DotGeneralOp_0'
+      fp8_op_name = 'Fp8DotGeneralOp_0'
     else:
       fp8_op_name = 'NANOOFp8DotGeneralOp_0'
     expected_shapes_new = {
@@ -1326,8 +1326,8 @@ class Fp8Test(parameterized.TestCase):
     key, init_key, random_key = random.split(random.PRNGKey(seed=123), 3)
     x = random.uniform(random_key, (16, 16), dtype=jnp.float32)
     if fp8_genre == 'OCP':
-      fp8_dot_op = nn.OCPFp8DotGeneralOp
-      fp8_op_name = 'OCPFp8DotGeneralOp_0'
+      fp8_dot_op = nn.Fp8DotGeneralOp
+      fp8_op_name = 'Fp8DotGeneralOp_0'
     else:
       fp8_dot_op = nn.NANOOFp8DotGeneralOp
       fp8_op_name = 'NANOOFp8DotGeneralOp_0'
