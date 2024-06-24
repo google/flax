@@ -320,7 +320,7 @@ class MultiHeadDotProductAttention(Module):
     normalize_qk: Should QK normalization be applied (arxiv.org/abs/2302.05442).
   """
 
-  num_heads: int
+  num_heads: int = 1
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   qkv_features: Optional[int] = None
