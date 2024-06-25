@@ -16,14 +16,15 @@
 
 from functools import partial
 import operator
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Dict, Sequence
 import unittest
 
 from absl.testing import absltest, parameterized
 from flax import errors
 from flax import linen as nn
 from flax import serialization
-from flax.core import copy, freeze
+from flax import struct
+from flax.core import copy, freeze, AxisMetadata
 from flax.linen.transforms import _HashableProxy
 import jax
 from jax import random
@@ -2532,6 +2533,48 @@ class TransformTest(parameterized.TestCase):
     self.assertTrue(tree_allclose(comparison_fn(x, y), z))
     self.assertTrue(tree_allclose(jax.grad(comparison_fn, 0)(x, y), x_grad))
     self.assertTrue(tree_allclose(jax.grad(comparison_fn, 1)(x, y), y_grad))
+
+  def test_vmap_add_remove_axis_transforms(self):
+    class BoxedData(struct.PyTreeNode, AxisMetadata):
+      value: Any
+      def unbox(self):
+        return self.value
+      def replace_boxed(self, val):
+        return self.replace(value=val)
+      def add_axis(self, index: int, params: Dict[Any, Any]):
+        value = jnp.mean(self.value, axis=index)
+        return self.replace(value=value)
+      def remove_axis(self, index: int, params: Dict[Any, Any]):
+        value_shape = list(self.value.shape)
+        value_shape.insert(index, params['axis_size'])
+        value = jnp.broadcast_to(self.value, value_shape)
+        return self.replace(value=value)
+
+    class Top(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        VFoo = nn.vmap(
+            Foo, in_axes=0, out_axes=0, variable_axes={'params':0, 'aux': 0},
+            metadata_params={'axis_size': x.shape[0]},
+        )
+        vfoo = VFoo(name="vfoo")
+        y = vfoo(x)
+        y = vfoo(x)
+        assert vfoo.variables['aux']['v'].value.shape == ()
+        return y
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        if self.has_variable('aux', 'v'):
+          assert self.variables['aux']['v'].value.shape == ()
+        boxed_v = self.variable('aux', 'v', lambda: BoxedData(jnp.ones(())))
+        assert self.variables['aux']['v'].value.shape == ()
+        return x
+
+    vs = Top().init(random.key(0), jnp.ones((2,5)))
+    y = Top().apply(vs, jnp.ones((2, 5)))
+    assert vs['aux']['vfoo']['v'].value.shape == ()
 
 
 if __name__ == '__main__':

@@ -790,6 +790,18 @@ def vmap(
   rng_axes = tuple(0 if rng_split else None for rng_split in rng_splits)
 
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
+    # optional user-defined variable transform on the way in
+    new_variable_groups = []
+    for var_group, axis in zip(variable_groups, variable_in_axes):
+      if axis is not None:
+        new_variable_groups.append(
+            meta.remove_axis(var_group, axis, metadata_params)
+        )
+      else:
+        new_variable_groups.append(var_group)
+    variable_groups = tuple(new_variable_groups)
+
+    # split rngs
     def find_axis_size(axis, x):
       if axis is not None:
         leaves = jax.tree_util.tree_leaves(x)
@@ -797,10 +809,9 @@ def vmap(
           return leaves[0].shape[axis]
       return ()
 
-    # split rngs
     axis_sizes = jax.tree_util.tree_map(
-      find_axis_size, (variable_in_axes, in_axes), (variable_groups, args),
-      is_leaf=lambda x: x is None
+        find_axis_size, (variable_in_axes, in_axes), (variable_groups, args),
+        is_leaf=lambda x: x is None
     )
     axis_sizes = set(jax.tree_util.tree_leaves(axis_sizes))
     if axis_size is None and len(axis_sizes) == 1:
@@ -823,16 +834,6 @@ def vmap(
         for rng_group, split in zip(rng_groups, rng_splits)
     )
 
-    new_variable_groups = []
-    for var_group, axis in zip(variable_groups, variable_in_axes):
-      if axis is not None:
-        new_variable_groups.append(
-            meta.remove_axis(var_group, axis, metadata_params)
-        )
-      else:
-        new_variable_groups.append(var_group)
-    variable_groups = tuple(new_variable_groups)
-
     @functools.partial(
         jax.vmap,
         in_axes=(variable_in_axes, rng_axes, in_axes),
@@ -847,6 +848,7 @@ def vmap(
       y = fn(scope, *args)
       return y, repack_fn(scope)
 
+    # optional user-defined variable transform on the way out
     y, vars_out = mapped(variable_groups, rng_groups, args)
     new_vars_out = []
     for var_group, axis in zip(vars_out, variable_out_axes):
