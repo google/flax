@@ -38,6 +38,10 @@ class _HasType(tp.Protocol):
 
 
 def to_predicate(filter: Filter) -> Predicate:
+  """Converts a Filter to a predicate function.
+  See `Using Filters <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+  """
+
   if isinstance(filter, str):
     return WithTag(filter)
   elif isinstance(filter, type):
@@ -59,22 +63,29 @@ def to_predicate(filter: Filter) -> Predicate:
     raise TypeError(f'Invalid collection filter: {filter:!r}. ')
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class WithTag:
   tag: str
 
   def __call__(self, path: PathParts, x: tp.Any):
     return isinstance(x, _HasTag) and x.tag == self.tag
 
-@dataclasses.dataclass
+  def __repr__(self):
+    return f'WithTag({self.tag!r})'
+
+
+@dataclasses.dataclass(frozen=True)
 class PathContains:
   key: Key
 
   def __call__(self, path: PathParts, x: tp.Any):
     return self.key in path
 
+  def __repr__(self):
+    return f'PathContains({self.key!r})'
 
-@dataclasses.dataclass
+
+@dataclasses.dataclass(frozen=True)
 class OfType:
   type: type
 
@@ -82,6 +93,9 @@ class OfType:
     return isinstance(x, self.type) or (
       isinstance(x, _HasType) and issubclass(x.type, self.type)
     )
+
+  def __repr__(self):
+    return f'OfType({self.type!r})'
 
 
 class Any:
@@ -93,6 +107,15 @@ class Any:
   def __call__(self, path: PathParts, x: tp.Any):
     return any(predicate(path, x) for predicate in self.predicates)
 
+  def __repr__(self):
+    return f'Any({", ".join(map(repr, self.predicates))})'
+
+  def __eq__(self, other):
+    return isinstance(other, Any) and self.predicates == other.predicates
+
+  def __hash__(self):
+    return hash(self.predicates)
+
 
 class All:
   def __init__(self, *filters: Filter):
@@ -103,6 +126,15 @@ class All:
   def __call__(self, path: PathParts, x: tp.Any):
     return all(predicate(path, x) for predicate in self.predicates)
 
+  def __repr__(self):
+    return f'All({", ".join(map(repr, self.predicates))})'
+
+  def __eq__(self, other):
+    return isinstance(other, All) and self.predicates == other.predicates
+
+  def __hash__(self):
+    return hash(self.predicates)
+
 
 class Not:
   def __init__(self, collection_filter: Filter, /):
@@ -111,12 +143,39 @@ class Not:
   def __call__(self, path: PathParts, x: tp.Any):
     return not self.predicate(path, x)
 
+  def __repr__(self):
+    return f'Not({self.predicate!r})'
+
+  def __eq__(self, other):
+    return isinstance(other, Not) and self.predicate == other.predicate
+
+  def __hash__(self):
+    return hash(self.predicate)
+
 
 class Everything:
   def __call__(self, path: PathParts, x: tp.Any):
     return True
 
+  def __repr__(self):
+    return 'Everything()'
+
+  def __eq__(self, other):
+    return isinstance(other, Everything)
+
+  def __hash__(self):
+    return hash(Everything)
+
 
 class Nothing:
   def __call__(self, path: PathParts, x: tp.Any):
     return False
+
+  def __repr__(self):
+    return 'Nothing()'
+
+  def __eq__(self, other):
+    return isinstance(other, Nothing)
+
+  def __hash__(self):
+    return hash(Nothing)

@@ -24,9 +24,15 @@ from .nnx import errors as errors
 from .nnx import helpers as helpers
 from .nnx import compat as compat
 from .nnx import traversals as traversals
-from .nnx.filterlib import All as All
+from .nnx import filterlib as filterlib
+from .nnx.filterlib import WithTag as WithTag
 from .nnx.filterlib import PathContains as PathContains
+from .nnx.filterlib import OfType as OfType
+from .nnx.filterlib import Any as Any
+from .nnx.filterlib import All as All
 from .nnx.filterlib import Not as Not
+from .nnx.filterlib import Everything as Everything
+from .nnx.filterlib import Nothing as Nothing
 from .nnx.graph import GraphDef as GraphDef
 from .nnx.graph import GraphState as GraphState
 from .nnx.object import Object as Object

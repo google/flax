@@ -17,4 +17,5 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/nnx/i
   variables
   helpers
   visualization
+  filterlib
 
