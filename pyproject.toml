@@ -14,7 +14,7 @@ dependencies = [
     "numpy>=1.22",
     "numpy>=1.23.2; python_version>='3.11'",
     "numpy>=1.26.0; python_version>='3.12'",
-    "jax>=0.4.19",
+    "jax>=0.4.27",  # keep in sync with jax-version in .github/workflows/build.yml
     "msgpack",
     "optax",
     "orbax-checkpoint",
