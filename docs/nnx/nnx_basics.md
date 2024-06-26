@@ -23,7 +23,7 @@ that have allowed Linen to scale effectively to large codebases.
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-! pip install -U flax penzai
+# ! pip install -U flax penzai
 ```
 
 ```{code-cell} ipython3
@@ -377,4 +377,55 @@ As expected the `merge` and `update` methods naturally consume multiple States:
 model = nnx.merge(graphdef, params, counts)
 # update with multiple States
 nnx.update(model, params, counts)
+```
+
+## Using Modules as Pytrees
+
+Even though `nnx.split` and `nnx.merge` can be used to interact with any JAX
+API, they are not always the most convenient way to do so as they introduce
+some syntactic overhead. `Module`s and other `Object`-derived types can be
+registered as PyTrees via the `unsafe_pytree` class argument for convenience.
+This allows you to pass Modules directly to JAX functions without having to 
+split them first.
+
+```{code-cell} ipython3
+class Block(nnx.Module, unsafe_pytree=True): # <== 👀 unsafe_pytree
+  def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
+    self.linear = Linear(din, dout, rngs=rngs)
+    self.dropout = nnx.Dropout(rate=0.1, rngs=rngs)
+
+  def __call__(self, x: jax.Array):
+    return nnx.gelu(self.dropout(self.linear(x)))
+  
+model = Block(3, 5, rngs=nnx.Rngs(0))
+
+@jax.jit  # regular jax.jit!
+def forward(model: Block, x: jax.Array):
+  y = model(x)
+  return y, model  # manually propagate state updates
+
+y, model = forward(model, jnp.ones((1, 3)))
+```
+
+**WARNING**: The reason the features is called `unsafe` is because NNX's 
+reference semantics are broken by JAX's referential transparency, this 
+is specially problematic when there is shared state between NNX graph nodes 
+as reference identity is lost. Use `unsafe_pytree` only when there's only 
+a single top-level object or when top-level object have no shared state
+between them.
+
+```{code-cell} ipython3
+class Foo(nnx.Module, unsafe_pytree=True):
+  def __init__(self, shared):
+    self.shared = shared
+
+shared = nnx.Linear(3, 5, rngs=nnx.Rngs(0))
+ma, mb = Foo(shared), Foo(shared)
+
+print(f'Before: {ma.shared is mb.shared = }')
+
+# flatten + unflatten
+ma, mb = jax.tree.map(lambda x: x, (ma, mb))
+
+print(f'After:  {ma.shared is mb.shared = }')
 ```

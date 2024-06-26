@@ -477,7 +477,7 @@ class TestModule:
 
 class TestModulePytree:
   def test_tree_map(self):
-    class Foo(nnx.Module, experimental_pytree=True):
+    class Foo(nnx.Module, unsafe_pytree=True):
       def __init__(self):
         self.node = nnx.Param(1)
         self.graphdef = 1
@@ -490,7 +490,7 @@ class TestModulePytree:
     assert m.graphdef == 1
 
   def test_static(self):
-    class C(nnx.Module, experimental_pytree=True):
+    class C(nnx.Module, unsafe_pytree=True):
       def __init__(self, x):
         self.x = x
 
