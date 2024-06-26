@@ -14,7 +14,6 @@
 
 """Tests for flax.linen.attention."""
 
-import functools
 from absl.testing import absltest, parameterized
 from flax import errors, jax_utils
 from flax import linen as nn
@@ -565,9 +564,7 @@ class AttentionTest(parameterized.TestCase):
         qkv_features=4,
         kernel_init=initializers.lecun_normal(),
         bias_init=initializers.uniform(),
-        attention_fn=functools.partial(
-            nn.dot_product_attention, force_fp32_for_softmax=force_fp32
-        ),
+        force_fp32_for_softmax=force_fp32,
         deterministic=False,
         dtype=jnp.bfloat16,
     )

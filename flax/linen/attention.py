@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import functools
+import inspect
 import warnings
 from typing import Any, Callable, Optional, Union, overload
 
@@ -574,33 +575,28 @@ class MultiHeadDotProductAttention(Module):
       m_deterministic = True
 
     # apply attention
+    attn_args = (query, key, value)
+    # This kwargs list match the default nn.dot_product_attention.
+    # For custom `attention_fn`s, invalid kwargs will be filtered.
+    attn_kwargs = dict(
+      mask=mask,
+      dropout_rng=dropout_rng,
+      dropout_rate=self.dropout_rate,
+      broadcast_dropout=self.broadcast_dropout,
+      deterministic=m_deterministic,
+      dtype=self.dtype,
+      precision=self.precision,
+      force_fp32_for_softmax=self.force_fp32_for_softmax,
+    )
+    attn_kwargs = {
+        k: v
+        for k, v in attn_kwargs.items()
+        if k in inspect.signature(self.attention_fn).parameters
+    }
     if sow_weights:
-      x = self.attention_fn(
-        query,
-        key,
-        value,
-        mask=mask,
-        dropout_rng=dropout_rng,
-        dropout_rate=self.dropout_rate,
-        broadcast_dropout=self.broadcast_dropout,
-        deterministic=m_deterministic,
-        dtype=self.dtype,
-        precision=self.precision,
-        module=self,
-      )  # pytype: disable=wrong-keyword-args
+      x = self.attention_fn(*attn_args, **attn_kwargs, module=self)
     else:
-      x = self.attention_fn(
-        query,
-        key,
-        value,
-        mask=mask,
-        dropout_rng=dropout_rng,
-        dropout_rate=self.dropout_rate,
-        broadcast_dropout=self.broadcast_dropout,
-        deterministic=m_deterministic,
-        dtype=self.dtype,
-        precision=self.precision,
-      )
+      x = self.attention_fn(*attn_args, **attn_kwargs)
     # back to the original inputs dimensions
     out = DenseGeneral(
       features=features,
