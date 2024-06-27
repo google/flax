@@ -54,17 +54,17 @@ class ScopeTest(absltest.TestCase):
       self.assertEqual(scope.union_filters(a, b), ans)
       self.assertEqual(scope.union_filters(b, a), ans)
 
-    union_check(['a', 'b'], ['b', 'c'], set(['a', 'b', 'c']))
+    union_check(['a', 'b'], ['b', 'c'], {'a', 'b', 'c'})
     union_check(True, False, True)
     union_check(False, False, set())
     union_check(True, True, True)
     union_check(
       scope.DenyList(['a', 'b']),
       scope.DenyList(['b', 'c']),
-      scope.DenyList(set(['b'])),
+      scope.DenyList({'b'}),
     )
     union_check(
-      scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a']))
+      scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList({'a'})
     )
 
   def test_intersect_filter(self):
@@ -72,33 +72,33 @@ class ScopeTest(absltest.TestCase):
       self.assertEqual(scope.intersect_filters(a, b), ans)
       self.assertEqual(scope.intersect_filters(b, a), ans)
 
-    intersect_check(['a', 'b'], ['b', 'c'], set(['b']))
+    intersect_check(['a', 'b'], ['b', 'c'], {'b'})
     intersect_check(True, False, False)
     intersect_check(False, False, set())
     intersect_check(True, True, True)
     intersect_check(
       scope.DenyList(['a', 'b']),
       scope.DenyList(['b', 'c']),
-      scope.DenyList(set(['a', 'b', 'c'])),
+      scope.DenyList({'a', 'b', 'c'}),
     )
-    intersect_check(scope.DenyList(['a', 'b']), ['b', 'c'], set(['c']))
+    intersect_check(scope.DenyList(['a', 'b']), ['b', 'c'], {'c'})
 
   def test_subtract_filter(self):
     def subtract_check(a, b, ans):
       self.assertEqual(scope.subtract_filters(a, b), ans)
 
-    subtract_check(['a', 'b'], ['b', 'c'], set(['a']))
+    subtract_check(['a', 'b'], ['b', 'c'], {'a'})
     subtract_check(True, False, scope.DenyList(False))
     subtract_check(False, False, set())
     subtract_check(True, True, False)
     subtract_check(True, 'a', scope.DenyList('a'))
     subtract_check(
-      scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), set(['c'])
+      scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), {'c'}
     )
     subtract_check(
       scope.DenyList(['a', 'b']),
       ['b', 'c'],
-      scope.DenyList(set(['a', 'b', 'c'])),
+      scope.DenyList({'a', 'b', 'c'}),
     )
 
   def test_group_collections(self):

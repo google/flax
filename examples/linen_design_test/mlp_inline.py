@@ -15,7 +15,7 @@
 import jax
 from jax import numpy as jnp
 from flax import linen as nn
-from typing import Iterable
+from collections.abc import Iterable
 from flax.linen import Module, compact
 from dense import Dense
 

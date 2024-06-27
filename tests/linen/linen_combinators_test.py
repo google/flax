@@ -14,7 +14,8 @@
 
 """Tests for flax.linen.combinators."""
 
-from typing import Any, Optional, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 import jax
 import numpy as np
@@ -30,8 +31,8 @@ jax.config.parse_flags_with_absl()
 
 class MLP(nn.Module):
   layer_sizes: Sequence[int]
-  activation: Optional[Any] = None
-  activation_final: Optional[Any] = None
+  activation: Any | None = None
+  activation_final: Any | None = None
 
   @nn.compact
   def __call__(self, inputs):

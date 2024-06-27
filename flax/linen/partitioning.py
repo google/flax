@@ -30,7 +30,8 @@ logical axis metadata to the underlying Lifted transformations.
 
 import functools
 import re
-from typing import (Any, Callable, Mapping, Optional, Tuple)
+from typing import (Any, Optional, Tuple)
+from collections.abc import Callable, Mapping
 
 import flax
 from flax import linen as nn
@@ -125,7 +126,7 @@ def param_with_axes(
     name: str,
     init_fn,
     *init_args,
-    axes: Optional[Tuple[str, ...]] = None,
+    axes: tuple[str, ...] | None = None,
     module: Optional['nn.Module'] = None,
     **init_kwargs,
 ):
@@ -187,7 +188,7 @@ class PartitionedVariable(flax.core.scope.Variable):
       scope,
       collection: str,
       name: str,
-      axes: Optional[Tuple[str, ...]] = None,
+      axes: tuple[str, ...] | None = None,
       fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
   ):
     """Initializes a partitioned variable.
@@ -227,7 +228,7 @@ def _core_variable_with_axes(
     name: str,
     init_fn: Callable[..., Any],
     *init_args,
-    axes: Optional[Tuple[str, ...]] = None,
+    axes: tuple[str, ...] | None = None,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
     **init_kwargs,
 ):
@@ -248,7 +249,7 @@ def variable_with_axes(
     name: str,
     init_fn,
     *init_args,
-    axes: Optional[Tuple[str, ...]] = None,
+    axes: tuple[str, ...] | None = None,
     module: Optional['nn.Module'] = None,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
     **init_kwargs,
@@ -424,12 +425,12 @@ def scan_with_axes(
     split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
     in_axes=0,
     out_axes=0,
-    length: Optional[int] = None,
+    length: int | None = None,
     reverse: bool = False,
     unroll: int = 1,
     axis_name: str = 'layers',
-    axes_collections: Tuple[str, ...] = ('params',),
-    data_transform: Optional[Callable[..., Any]] = None,
+    axes_collections: tuple[str, ...] = ('params',),
+    data_transform: Callable[..., Any] | None = None,
     methods=None,
 ) -> 'flax.linen.transforms.Target':
   """Wrapped version of nn.scan that handles logical axis metadata."""
@@ -478,10 +479,10 @@ def vmap_with_axes(
     split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
     in_axes=0,
     out_axes=0,
-    axis_size: Optional[int] = None,
-    axis_name: Optional[str] = None,
+    axis_size: int | None = None,
+    axis_name: str | None = None,
     partitioning_axis_names: Mapping[Any, str] = {},
-    spmd_axis_name: Optional[str] = None,
+    spmd_axis_name: str | None = None,
     methods=None,
 ) -> 'flax.linen.transforms.Target':
   """Wrapped version of nn.vmap that handles logical axis metadata."""

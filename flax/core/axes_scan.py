@@ -14,7 +14,8 @@
 
 """Wrapper around jax.lax.scan with in_axes/out_axes API."""
 import functools
-from typing import Any, Callable, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -37,7 +38,7 @@ def scan(
   fn: Callable[..., Any],
   in_axes: Any,
   out_axes: Any,
-  length: Optional[int] = None,
+  length: int | None = None,
   reverse: bool = False,
   unroll: int = 1,
   _split_transpose: bool = False

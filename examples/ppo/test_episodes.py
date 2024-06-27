@@ -15,7 +15,8 @@
 """Test policy by playing a full Atari game."""
 
 import itertools
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import flax
 import numpy as np

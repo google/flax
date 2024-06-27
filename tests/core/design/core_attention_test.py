@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from functools import partial
-from typing import Callable, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 import jax
 from absl.testing import absltest
@@ -47,7 +47,7 @@ def _dot_product_attention(
   query: Array,
   key: Array,
   value: Array,
-  bias: Optional[Array] = None,
+  bias: Array | None = None,
   attn_fn: Callable = softmax_attn,
   dtype=jnp.float32,
 ):
@@ -73,9 +73,9 @@ def dot_product_attention(
   scope: Scope,
   inputs_q: Array,
   inputs_kv: Array,
-  bias: Optional[Array] = None,
-  qkv_features: Optional[int] = None,
-  out_features: Optional[int] = None,
+  bias: Array | None = None,
+  qkv_features: int | None = None,
+  out_features: int | None = None,
   attn_fn: Callable = softmax_attn,
   dtype=jnp.float32,
 ):
@@ -100,9 +100,9 @@ def multi_head_dot_product_attention(
   scope: Scope,
   inputs_q: Array,
   inputs_kv: Array,
-  bias: Optional[Array] = None,
-  qkv_features: Optional[int] = None,
-  out_features: Optional[int] = None,
+  bias: Array | None = None,
+  qkv_features: int | None = None,
+  out_features: int | None = None,
   attn_fn: Callable = softmax_attn,
   batch_axes: Sequence[int] = (0,),
   num_heads: int = 1,

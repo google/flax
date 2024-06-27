@@ -14,7 +14,7 @@
 
 """Definition of the GNN model."""
 
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 from flax import linen as nn
 import jax.numpy as jnp

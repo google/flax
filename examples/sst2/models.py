@@ -15,7 +15,8 @@
 """A text classification model."""
 
 import functools
-from typing import Any, Callable, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 from flax import linen as nn
 import jax
@@ -88,10 +89,10 @@ class WordDropout(nn.Module):
 
   dropout_rate: float
   unk_idx: int
-  deterministic: Optional[bool] = None
+  deterministic: bool | None = None
 
   @nn.compact
-  def __call__(self, inputs: Array, deterministic: Optional[bool] = None):
+  def __call__(self, inputs: Array, deterministic: bool | None = None):
     deterministic = nn.module.merge_param(
         'deterministic', self.deterministic, deterministic
     )
@@ -121,8 +122,8 @@ class Embedder(nn.Module):
   frozen: bool = False
   dropout_rate: float = 0.0
   word_dropout_rate: float = 0.0
-  unk_idx: Optional[int] = None
-  deterministic: Optional[bool] = None
+  unk_idx: int | None = None
+  deterministic: bool | None = None
   dtype: jnp.dtype = jnp.float32
 
   def setup(self):
@@ -138,7 +139,7 @@ class Embedder(nn.Module):
     )
 
   def __call__(
-      self, inputs: Array, deterministic: Optional[bool] = None
+      self, inputs: Array, deterministic: bool | None = None
   ) -> Array:
     """Embeds the input sequences and applies word dropout and dropout.
 
@@ -232,14 +233,14 @@ class MLP(nn.Module):
   activation: Callable[..., Any] = nn.tanh
   dropout_rate: float = 0.0
   output_bias: bool = False
-  deterministic: Optional[bool] = None
+  deterministic: bool | None = None
 
   def setup(self):
     self.intermediate_layer = nn.Dense(self.hidden_size)
     self.output_layer = nn.Dense(self.output_size, use_bias=self.output_bias)
     self.dropout_layer = nn.Dropout(rate=self.dropout_rate)
 
-  def __call__(self, inputs: Array, deterministic: Optional[bool] = None):
+  def __call__(self, inputs: Array, deterministic: bool | None = None):
     """Applies the MLP to the last dimension of the inputs.
 
     Args:
@@ -319,7 +320,7 @@ class AttentionClassifier(nn.Module):
   hidden_size: int
   output_size: int
   dropout_rate: float = 0.0
-  deterministic: Optional[bool] = None
+  deterministic: bool | None = None
 
   def setup(self):
     self.dropout_layer = nn.Dropout(rate=self.dropout_rate)
@@ -337,7 +338,7 @@ class AttentionClassifier(nn.Module):
       self,
       encoded_inputs: Array,
       lengths: Array,
-      deterministic: Optional[bool] = None,
+      deterministic: bool | None = None,
   ) -> Array:
     """Applies model to the encoded inputs.
 
@@ -383,7 +384,7 @@ class TextClassifier(nn.Module):
   dropout_rate: float
   word_dropout_rate: float
   unk_idx: int = 1
-  deterministic: Optional[bool] = None
+  deterministic: bool | None = None
 
   def setup(self):
     self.embedder = Embedder(
@@ -401,7 +402,7 @@ class TextClassifier(nn.Module):
     )
 
   def embed_token_ids(
-      self, token_ids: Array, deterministic: Optional[bool] = None
+      self, token_ids: Array, deterministic: bool | None = None
   ) -> Array:
     deterministic = nn.module.merge_param(
         'deterministic', self.deterministic, deterministic
@@ -412,7 +413,7 @@ class TextClassifier(nn.Module):
       self,
       embedded_inputs: Array,
       lengths: Array,
-      deterministic: Optional[bool] = None,
+      deterministic: bool | None = None,
   ) -> Array:
     deterministic = nn.module.merge_param(
         'deterministic', self.deterministic, deterministic
@@ -424,7 +425,7 @@ class TextClassifier(nn.Module):
       self,
       token_ids: Array,
       lengths: Array,
-      deterministic: Optional[bool] = None,
+      deterministic: bool | None = None,
   ) -> Array:
     """Embeds the token IDs, encodes them, and classifies with attention."""
     embedded_inputs = self.embed_token_ids(

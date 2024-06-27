@@ -26,20 +26,13 @@ import weakref
 from types import MappingProxyType
 from typing import (
   Any,
-  Callable,
-  Dict,
-  Iterable,
-  Iterator,
-  List,
   Literal,
-  Mapping,
   Optional,
-  Tuple,
-  Type,
   TypeVar,
   Union,
   overload,
 )
+from collections.abc import Callable, Iterable, Iterator, Mapping
 
 import jax
 import jax.numpy as jnp
@@ -154,20 +147,20 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
 @dataclasses.dataclass
 class _CallInfo:
   index: int
-  path: Tuple[str, ...]
+  path: tuple[str, ...]
   module: 'Module'
-  rngs: Optional[Dict[str, Union[core.scope.PRNGKey, core.scope.LazyRng]]]
+  rngs: dict[str, core.scope.PRNGKey | core.scope.LazyRng] | None
   mutable: bool
   method: str
-  args: Tuple[Any, ...]
-  kwargs: Dict[str, Any]
+  args: tuple[Any, ...]
+  kwargs: dict[str, Any]
   outputs: Any
 
 
 @dataclasses.dataclass
 class _CallInfoContext(threading.local):
   index: int
-  calls: List[_CallInfo]
+  calls: list[_CallInfo]
 
   def get_call_index(self) -> int:
     index = self.index
@@ -318,8 +311,8 @@ class ThreadLocalStack(threading.local):
     return f'{self.__class__.__name__}({self._storage})'
 
 
-Args = Tuple[Any]
-Kwargs = Dict[str, Any]
+Args = tuple[Any]
+Kwargs = dict[str, Any]
 NextGetter = Callable[..., Any]
 Interceptor = Callable[[NextGetter, Args, Kwargs, InterceptorContext], Any]
 _global_interceptor_stack = ThreadLocalStack()
@@ -432,7 +425,7 @@ def _sorted_items(x):
 
 def _get_suffix_value_pairs(
   tree_or_leaf: Any,
-) -> List[Tuple[str, Type['Module']]]:
+) -> list[tuple[str, type['Module']]]:
   """Helper for naming pytrees of submodules."""
   dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
   if not isinstance(dict_or_leaf, dict) or not dict_or_leaf:
@@ -630,7 +623,7 @@ def compact_name_scope(fun: _CallableT) -> _CallableT:
 
 def _get_local_method_names(
   cls: Any, exclude: Iterable[str] = ()
-) -> Tuple[str, ...]:
+) -> tuple[str, ...]:
   """Gets method names of a class, excluding class and static methods.
 
   Args:
@@ -653,7 +646,7 @@ def _get_local_method_names(
 
 def _get_local_descriptor_names(
   cls: Any, exclude: Iterable[str] = ()
-) -> Tuple[str, ...]:
+) -> tuple[str, ...]:
   """Gets descriptor names of a class.
 
   Args:
@@ -799,8 +792,8 @@ class _ModuleInternalState:
   in_setup: bool = False
   setup_called: SetupState = SetupState.NEW
   is_initialized: bool = False
-  autoname_cursor: Dict[str, int] = dataclasses.field(default_factory=dict)
-  children: Dict[str, Union[str, 'Module']] = dataclasses.field(
+  autoname_cursor: dict[str, int] = dataclasses.field(default_factory=dict)
+  children: dict[str, Union[str, 'Module']] = dataclasses.field(
     default_factory=dict
   )
 
@@ -955,7 +948,7 @@ def create_descriptor_wrapper(descriptor: Descriptor):
 # -----------------------------------------------------------------------------
 
 
-def module_field(*, kw_only: bool = False, default: Optional[Any] = ...) -> Any:
+def module_field(*, kw_only: bool = False, default: Any | None = ...) -> Any:
   ...
 
 
@@ -976,10 +969,10 @@ def module_field(*, kw_only: bool = False, default: Optional[Any] = ...) -> Any:
 @tpe.dataclass_transform(field_specifiers=(module_field,))  # type: ignore[literal-required]
 class ModuleBase:
   if typing.TYPE_CHECKING:
-    scope: Optional[Scope]
+    scope: Scope | None
     _state: _ModuleInternalState
     _parent_ref: Union['Module', weakref.ReferenceType['Module'], None]
-    __dataclass_fields__: Dict[str, dataclasses.Field]
+    __dataclass_fields__: dict[str, dataclasses.Field]
 
 
 class Module(ModuleBase):
@@ -1019,7 +1012,7 @@ class Module(ModuleBase):
   """
 
   if typing.TYPE_CHECKING:
-    name: Optional[str] = module_field(kw_only=True, default=None)
+    name: str | None = module_field(kw_only=True, default=None)
     parent: Union['Module', _Sentinel, None] = module_field(
       kw_only=True, default=None
     )
@@ -1049,7 +1042,7 @@ class Module(ModuleBase):
     cls._wrap_module_attributes()
     # Set empty class defaults.
     cls._state = _uninitialized_module_internal_state  # type: ignore[attr-defined]
-    cls.scope: Optional[Scope] = None  # type: ignore
+    cls.scope: Scope | None = None  # type: ignore
     # Handles weak referencing of parent Modules to prevent reference cycles.
     cls._parent_ref = None  # type: ignore[attr-defined]
     cls.parent = ParentDescriptor()  # type: ignore[assignment]
@@ -1325,7 +1318,7 @@ class Module(ModuleBase):
         )
       raise AttributeError(msg)
 
-  def __dir__(self) -> List[str]:
+  def __dir__(self) -> list[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
     return object.__dir__(self)  # type: ignore
@@ -1355,7 +1348,7 @@ class Module(ModuleBase):
       # When initializing an unnamed Module inside setup()
       # initialization is deferred until attachment by __setattr__
       # i.e. self.mymodule = MyModule(...)
-      self.name: Optional[str]
+      self.name: str | None
       if (
         self.parent._state.in_setup and self.name is None
       ):  # pytype: disable=attribute-error
@@ -1535,7 +1528,7 @@ class Module(ModuleBase):
     self,
     name: str,
     reuse_scopes: bool = False,
-    collection: Optional[str] = None,
+    collection: str | None = None,
   ) -> bool:
     assert self.scope is not None
     if reuse_scopes:
@@ -1586,8 +1579,8 @@ class Module(ModuleBase):
   def clone(
     self: M,
     *,
-    parent: Optional[Union[Scope, 'Module', _Sentinel]] = None,
-    _deep_clone: Union[bool, weakref.WeakValueDictionary] = False,
+    parent: Union[Scope, 'Module', _Sentinel] | None = None,
+    _deep_clone: bool | weakref.WeakValueDictionary = False,
     _reset_names: bool = False,
     **updates,
   ) -> M:
@@ -1662,8 +1655,8 @@ class Module(ModuleBase):
   def copy(
     self: M,
     *,
-    parent: Optional[Union[Scope, 'Module', _Sentinel]] = _unspecified_parent,
-    name: Optional[str] = None,
+    parent: Union[Scope, 'Module', _Sentinel] | None = _unspecified_parent,
+    name: str | None = None,
     **updates,
   ) -> M:
     """Creates a copy of this Module, with optionally updated arguments.
@@ -1687,7 +1680,7 @@ class Module(ModuleBase):
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
   ) -> Variable[T]:
     ...
@@ -1697,7 +1690,7 @@ class Module(ModuleBase):
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
     unbox: Literal[True],
     **init_kwargs,
@@ -1709,7 +1702,7 @@ class Module(ModuleBase):
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
     unbox: Literal[False],
     **init_kwargs,
@@ -1721,22 +1714,22 @@ class Module(ModuleBase):
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
     unbox: bool = True,
     **init_kwargs,
-  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
+  ) -> Variable[T] | Variable[meta.AxisMetadata[T]]:
     ...
 
   def variable(
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
     unbox: bool = True,
     **init_kwargs,
-  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
+  ) -> Variable[T] | Variable[meta.AxisMetadata[T]]:
     """Declares and returns a variable in this Module.
 
     See :mod:`flax.core.variables` for more information. See also :meth:`param`
@@ -1828,7 +1821,7 @@ class Module(ModuleBase):
     *init_args,
     unbox: bool,
     **init_kwargs,
-  ) -> Union[T, meta.AxisMetadata[T]]:
+  ) -> T | meta.AxisMetadata[T]:
     ...
 
   def param(
@@ -1838,7 +1831,7 @@ class Module(ModuleBase):
     *init_args,
     unbox: bool = True,
     **init_kwargs,
-  ) -> Union[T, meta.AxisMetadata[T]]:
+  ) -> T | meta.AxisMetadata[T]:
     """Declares and returns a parameter in this Module.
 
     Parameters are read-only variables in the collection named "params". See
@@ -1991,7 +1984,7 @@ class Module(ModuleBase):
     self: M,
     variables: VariableDict,
     *args,
-    rngs: Optional[RNGSequences] = None,
+    rngs: RNGSequences | None = None,
     mutable: CollectionFilter = False,
   ) -> M:
     """Creates an interactive Module instance by binding variables and RNGs.
@@ -2048,7 +2041,7 @@ class Module(ModuleBase):
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
     return self.clone(parent=scope, _deep_clone=True)
 
-  def unbind(self: M) -> Tuple[M, VariableDict]:
+  def unbind(self: M) -> tuple[M, VariableDict]:
     """Returns an unbound copy of a Module and its variables.
 
     ``unbind`` helps create a stateless version of a bound Module.
@@ -2101,12 +2094,12 @@ class Module(ModuleBase):
     self,
     variables: VariableDict,
     *args,
-    rngs: Optional[Union[PRNGKey, RNGSequences]] = None,
-    method: Union[Callable[..., Any], str, None] = None,
+    rngs: PRNGKey | RNGSequences | None = None,
+    method: Callable[..., Any] | str | None = None,
     mutable: CollectionFilter = False,
-    capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
+    capture_intermediates: bool | Callable[['Module', str], bool] = False,
     **kwargs,
-  ) -> Union[Any, Tuple[Any, Union[FrozenVariableDict, Dict[str, Any]]]]:
+  ) -> Any | tuple[Any, FrozenVariableDict | dict[str, Any]]:
     """Applies a module method to variables and returns output and modified variables.
 
     Note that ``method`` should be set if one would like to call ``apply`` on a
@@ -2259,13 +2252,13 @@ class Module(ModuleBase):
   @traceback_util.api_boundary
   def init_with_output(
     self,
-    rngs: Union[PRNGKey, RNGSequences],
+    rngs: PRNGKey | RNGSequences,
     *args,
-    method: Union[Callable[..., Any], str, None] = None,
+    method: Callable[..., Any] | str | None = None,
     mutable: CollectionFilter = DenyList('intermediates'),
-    capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
+    capture_intermediates: bool | Callable[['Module', str], bool] = False,
     **kwargs,
-  ) -> Tuple[Any, Union[FrozenVariableDict, Dict[str, Any]]]:
+  ) -> tuple[Any, FrozenVariableDict | dict[str, Any]]:
     """Initializes a module method with variables and returns output and modified variables.
 
     Args:
@@ -2323,13 +2316,13 @@ class Module(ModuleBase):
   @traceback_util.api_boundary
   def init(
     self,
-    rngs: Union[PRNGKey, RNGSequences],
+    rngs: PRNGKey | RNGSequences,
     *args,
-    method: Union[Callable[..., Any], str, None] = None,
+    method: Callable[..., Any] | str | None = None,
     mutable: CollectionFilter = DenyList('intermediates'),
-    capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
+    capture_intermediates: bool | Callable[['Module', str], bool] = False,
     **kwargs,
-  ) -> Union[FrozenVariableDict, Dict[str, Any]]:
+  ) -> FrozenVariableDict | dict[str, Any]:
     """Initializes a module method with variables and returns modified variables.
 
     ``init`` takes as first argument either a single ``PRNGKey``, or a
@@ -2474,9 +2467,9 @@ class Module(ModuleBase):
   @traceback_util.api_boundary
   def lazy_init(
     self,
-    rngs: Union[PRNGKey, RNGSequences],
+    rngs: PRNGKey | RNGSequences,
     *args,
-    method: Optional[Callable[..., Any]] = None,
+    method: Callable[..., Any] | None = None,
     mutable: CollectionFilter = DenyList('intermediates'),
     **kwargs,
   ) -> FrozenVariableDict:
@@ -2529,7 +2522,7 @@ class Module(ModuleBase):
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.variables()
 
-  def get_variable(self, col: str, name: str, default: Optional[T] = None) -> T:
+  def get_variable(self, col: str, name: str, default: T | None = None) -> T:
     """Retrieves the value of a Variable.
 
     Args:
@@ -2732,12 +2725,12 @@ class Module(ModuleBase):
 
   def tabulate(
     self,
-    rngs: Union[PRNGKey, RNGSequences],
+    rngs: PRNGKey | RNGSequences,
     *args,
-    depth: Optional[int] = None,
+    depth: int | None = None,
     show_repeated: bool = False,
     mutable: CollectionFilter = DenyList('intermediates'),
-    console_kwargs: Optional[Mapping[str, Any]] = None,
+    console_kwargs: Mapping[str, Any] | None = None,
     table_kwargs: Mapping[str, Any] = MappingProxyType({}),
     column_kwargs: Mapping[str, Any] = MappingProxyType({}),
     compute_flops: bool = False,
@@ -2862,7 +2855,7 @@ class Module(ModuleBase):
 
   def module_paths(
     self,
-    rngs: Union[PRNGKey, RNGSequences],
+    rngs: PRNGKey | RNGSequences,
     *args,
     show_repeated: bool = False,
     mutable: CollectionFilter = DenyList('intermediates'),
@@ -2923,10 +2916,10 @@ class Module(ModuleBase):
     return {'/'.join(row.path): row.module_copy for row in table}
 
 
-_ParentType = Union[Type[Module], Scope, Type[_Sentinel], None]
+_ParentType = Union[type[Module], Scope, type[_Sentinel], None]
 
 
-def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
+def merge_param(name: str, a: T | None, b: T | None) -> T:
   """Merges construction- and call-time argument.
 
   This is a utility for supporting a pattern where a Module hyperparameter
@@ -2975,7 +2968,7 @@ def apply(
   fn: Callable[..., Any],
   module: Module,
   mutable: CollectionFilter = False,
-  capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False,
+  capture_intermediates: bool | Callable[[Module, str], bool] = False,
 ) -> Callable[..., Any]:
   """Creates an apply function to call ``fn`` with a bound module.
 
@@ -3045,8 +3038,8 @@ def init_with_output(
   fn: Callable[..., Any],
   module: Module,
   mutable: CollectionFilter = DenyList('intermediates'),
-  capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False,
-) -> Callable[..., Tuple[Any, Union[FrozenVariableDict, Dict[str, Any]]]]:
+  capture_intermediates: bool | Callable[[Module, str], bool] = False,
+) -> Callable[..., tuple[Any, FrozenVariableDict | dict[str, Any]]]:
   """Creates an init function to call ``fn`` with a bound module that also returns the function outputs.
 
   Unlike ``Module.init_with_output`` this function returns a new function with
@@ -3116,8 +3109,8 @@ def init(
   fn: Callable[..., Any],
   module: Module,
   mutable: CollectionFilter = DenyList('intermediates'),
-  capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False,
-) -> Callable[..., Union[FrozenVariableDict, Dict[str, Any]]]:
+  capture_intermediates: bool | Callable[[Module, str], bool] = False,
+) -> Callable[..., FrozenVariableDict | dict[str, Any]]:
   """Creates an init function to call ``fn`` with a bound module.
 
   Unlike ``Module.init`` this function returns a new function with the signature

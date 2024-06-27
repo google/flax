@@ -20,7 +20,8 @@
 # pytype: disable=wrong-keyword-args
 # pytype: disable=attribute-error
 
-from typing import Callable, Any, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 from flax import linen as nn
 from flax import struct
@@ -50,7 +51,7 @@ class TransformerConfig:
   decode: bool = False
   kernel_init: Callable = nn.initializers.xavier_uniform()
   bias_init: Callable = nn.initializers.normal(stddev=1e-6)
-  posemb_init: Optional[Callable] = None
+  posemb_init: Callable | None = None
 
 
 def shift_right(x, axis=1):
@@ -163,7 +164,7 @@ class MlpBlock(nn.Module):
   """
 
   config: TransformerConfig
-  out_dim: Optional[int] = None
+  out_dim: int | None = None
 
   @nn.compact
   def __call__(self, inputs):

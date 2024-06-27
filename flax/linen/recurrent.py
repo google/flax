@@ -21,15 +21,9 @@ see: https://flax.readthedocs.io/en/latest/developer_notes/lift.html.
 from functools import partial  # pylint: disable=g-importing-member
 from typing import (
   Any,
-  Callable,
-  Dict,
-  Mapping,
-  Optional,
-  Sequence,
-  Tuple,
   TypeVar,
-  Union,
 )
+from collections.abc import Callable, Mapping, Sequence
 
 import jax
 import numpy as np
@@ -65,7 +59,7 @@ class RNNCellBase(Module):
 
   @nowrap
   def initialize_carry(
-    self, rng: PRNGKey, input_shape: Tuple[int, ...]
+    self, rng: PRNGKey, input_shape: tuple[int, ...]
   ) -> Carry:
     """Initialize the RNN cell carry.
 
@@ -133,7 +127,7 @@ class LSTMCell(RNNCellBase):
   kernel_init: Initializer = default_kernel_init
   recurrent_kernel_init: Initializer = initializers.orthogonal()
   bias_init: Initializer = initializers.zeros_init()
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   carry_init: Initializer = initializers.zeros_init()
 
@@ -180,8 +174,8 @@ class LSTMCell(RNNCellBase):
 
   @nowrap
   def initialize_carry(
-    self, rng: PRNGKey, input_shape: Tuple[int, ...]
-  ) -> Tuple[Array, Array]:
+    self, rng: PRNGKey, input_shape: tuple[int, ...]
+  ) -> tuple[Array, Array]:
     """Initialize the RNN cell carry.
 
     Args:
@@ -213,7 +207,7 @@ class DenseParams(Module):
   bias_init: Initializer = initializers.zeros_init()
 
   @compact
-  def __call__(self, inputs: Array) -> Tuple[Array, Optional[Array]]:
+  def __call__(self, inputs: Array) -> tuple[Array, Array | None]:
     k = self.param(
       'kernel',
       self.kernel_init,
@@ -280,14 +274,14 @@ class OptimizedLSTMCell(RNNCellBase):
   kernel_init: Initializer = default_kernel_init
   recurrent_kernel_init: Initializer = initializers.orthogonal()
   bias_init: Initializer = initializers.zeros_init()
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   carry_init: Initializer = initializers.zeros_init()
 
   @compact
   def __call__(
-    self, carry: Tuple[Array, Array], inputs: Array
-  ) -> Tuple[Tuple[Array, Array], Array]:
+    self, carry: tuple[Array, Array], inputs: Array
+  ) -> tuple[tuple[Array, Array], Array]:
     r"""An optimized long short-term memory (LSTM) cell.
 
     Args:
@@ -304,9 +298,9 @@ class OptimizedLSTMCell(RNNCellBase):
 
     def _concat_dense(
       inputs: Array,
-      params: Mapping[str, Tuple[Array, Optional[Array]]],
+      params: Mapping[str, tuple[Array, Array | None]],
       use_bias: bool = True,
-    ) -> Dict[str, Array]:
+    ) -> dict[str, Array]:
       # Concatenates the individual kernels and biases, given in params, into a
       # single kernel and single bias for efficiency before applying them using
       # dot_general.
@@ -369,8 +363,8 @@ class OptimizedLSTMCell(RNNCellBase):
 
   @nowrap
   def initialize_carry(
-    self, rng: PRNGKey, input_shape: Tuple[int, ...]
-  ) -> Tuple[Array, Array]:
+    self, rng: PRNGKey, input_shape: tuple[int, ...]
+  ) -> tuple[Array, Array]:
     """Initialize the RNN cell carry.
 
     Args:
@@ -443,7 +437,7 @@ class SimpleCell(RNNCellBase):
   kernel_init: Initializer = default_kernel_init
   recurrent_kernel_init: Initializer = initializers.orthogonal()
   bias_init: Initializer = initializers.zeros_init()
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   carry_init: Initializer = initializers.zeros_init()
   residual: bool = False
@@ -487,7 +481,7 @@ class SimpleCell(RNNCellBase):
     return new_carry, new_carry
 
   @nowrap
-  def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
+  def initialize_carry(self, rng: PRNGKey, input_shape: tuple[int, ...]):
     """Initialize the RNN cell carry.
 
     Args:
@@ -553,7 +547,7 @@ class GRUCell(RNNCellBase):
   kernel_init: Initializer = default_kernel_init
   recurrent_kernel_init: Initializer = initializers.orthogonal()
   bias_init: Initializer = initializers.zeros_init()
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   carry_init: Initializer = initializers.zeros_init()
 
@@ -601,7 +595,7 @@ class GRUCell(RNNCellBase):
     return new_h, new_h
 
   @nowrap
-  def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
+  def initialize_carry(self, rng: PRNGKey, input_shape: tuple[int, ...]):
     """Initialize the RNN cell carry.
 
     Args:
@@ -683,7 +677,7 @@ class MGUCell(RNNCellBase):
   recurrent_kernel_init: Initializer = initializers.orthogonal()
   forget_bias_init: Initializer = initializers.ones_init()
   activation_bias_init: Initializer = initializers.zeros_init()
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   carry_init: Initializer = initializers.zeros_init()
   reset_gate: bool = True
@@ -736,7 +730,7 @@ class MGUCell(RNNCellBase):
     return new_h, new_h
 
   @nowrap
-  def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
+  def initialize_carry(self, rng: PRNGKey, input_shape: tuple[int, ...]):
     """Initialize the RNN cell carry.
 
     Args:
@@ -809,10 +803,10 @@ class ConvLSTMCell(RNNCellBase):
 
   features: int
   kernel_size: Sequence[int]
-  strides: Optional[Sequence[int]] = None
-  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  strides: Sequence[int] | None = None
+  padding: str | Sequence[tuple[int, int]] = 'SAME'
   use_bias: bool = True
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   carry_init: Initializer = initializers.zeros_init()
 
@@ -861,7 +855,7 @@ class ConvLSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @nowrap
-  def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
+  def initialize_carry(self, rng: PRNGKey, input_shape: tuple[int, ...]):
     """Initialize the RNN cell carry.
 
     Args:
@@ -1023,14 +1017,14 @@ class RNN(Module):
     self,
     inputs: jax.Array,
     *,
-    initial_carry: Optional[Carry] = None,
-    init_key: Optional[PRNGKey] = None,
-    seq_lengths: Optional[Array] = None,
-    return_carry: Optional[bool] = None,
-    time_major: Optional[bool] = None,
-    reverse: Optional[bool] = None,
-    keep_order: Optional[bool] = None,
-  ) -> Union[Output, Tuple[Carry, Output]]:
+    initial_carry: Carry | None = None,
+    init_key: PRNGKey | None = None,
+    seq_lengths: Array | None = None,
+    return_carry: bool | None = None,
+    time_major: bool | None = None,
+    reverse: bool | None = None,
+    keep_order: bool | None = None,
+  ) -> Output | tuple[Carry, Output]:
     """
     Applies the RNN to the inputs.
 
@@ -1116,7 +1110,7 @@ class RNN(Module):
 
     def scan_fn(
       cell: RNNCellBase, carry: Carry, x: Array
-    ) -> Union[Tuple[Carry, Array], Tuple[Carry, Tuple[Carry, Array]]]:
+    ) -> tuple[Carry, Array] | tuple[Carry, tuple[Carry, Array]]:
       carry, y = cell(carry, x)
       # When we have a segmentation mask we return the carry as an output
       # so that we can select the last carry for each sequence later.
@@ -1185,7 +1179,7 @@ def _expand_dims_like(x, target):
 
 def flip_sequences(
   inputs: Array,
-  seq_lengths: Optional[Array],
+  seq_lengths: Array | None,
   num_batch_dims: int,
   time_major: bool,
 ) -> Array:
@@ -1254,14 +1248,14 @@ class RNNBase(Protocol):
     self,
     inputs: jax.Array,
     *,
-    initial_carry: Optional[Carry] = None,
-    init_key: Optional[PRNGKey] = None,
-    seq_lengths: Optional[Array] = None,
-    return_carry: Optional[bool] = None,
-    time_major: Optional[bool] = None,
-    reverse: Optional[bool] = None,
-    keep_order: Optional[bool] = None,
-  ) -> Union[Output, Tuple[Carry, Output]]:
+    initial_carry: Carry | None = None,
+    init_key: PRNGKey | None = None,
+    seq_lengths: Array | None = None,
+    return_carry: bool | None = None,
+    time_major: bool | None = None,
+    reverse: bool | None = None,
+    keep_order: bool | None = None,
+  ) -> Output | tuple[Carry, Output]:
     ...
 
 
@@ -1289,14 +1283,14 @@ class Bidirectional(Module):
     self,
     inputs: jax.Array,
     *,
-    initial_carry: Optional[Carry] = None,
-    init_key: Optional[PRNGKey] = None,
-    seq_lengths: Optional[Array] = None,
-    return_carry: Optional[bool] = None,
-    time_major: Optional[bool] = None,
-    reverse: Optional[bool] = None,
-    keep_order: Optional[bool] = None,
-  ) -> Union[Output, Tuple[Carry, Output]]:
+    initial_carry: Carry | None = None,
+    init_key: PRNGKey | None = None,
+    seq_lengths: Array | None = None,
+    return_carry: bool | None = None,
+    time_major: bool | None = None,
+    reverse: bool | None = None,
+    keep_order: bool | None = None,
+  ) -> Output | tuple[Carry, Output]:
     if time_major is None:
       time_major = self.time_major
     if return_carry is None:
@@ -1313,10 +1307,8 @@ class Bidirectional(Module):
     # for the backward pass and does not intend for them to share parameters.
     if self.forward_rnn is self.backward_rnn:
       logging.warning(
-        (
           'forward_rnn and backward_rnn is the same object, so '
           'they will share parameters.'
-        )
       )
 
     # Encode in the forward direction.

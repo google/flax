@@ -17,7 +17,7 @@
 import dataclasses
 import inspect
 import warnings
-from typing import Any, Optional
+from typing import Any
 
 import jax
 import numpy as np
@@ -42,7 +42,7 @@ def save_args_from_target(target: Any) -> Any:
 
 
 def maybe_construct_transformations(
-  target: Any, transforms: Optional[Any]
+  target: Any, transforms: Any | None
 ) -> Any:
   if transforms is not None:
     return transforms
@@ -54,7 +54,7 @@ def maybe_construct_transformations(
   return flat_transforms
 
 
-def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
+def restore_args_from_target(target: Any, mesh: Mesh | None = None) -> Any:
   """Creates Orbax `restore_args` given a target Pytree.
 
   Args:

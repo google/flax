@@ -43,7 +43,7 @@ def average_with_mask(arr: jnp.ndarray, mask: jnp.ndarray):
   return jnp.sum(arr) / jnp.sum(mask)
 
 
-def get_dummy_raw_datasets(dataset_length) -> Dict[str, tf.data.Dataset]:
+def get_dummy_raw_datasets(dataset_length) -> dict[str, tf.data.Dataset]:
   """Returns dummy datasets, mocking tfds.DatasetBuilder.as_dataset()."""
 
   # The dummy graph.
@@ -79,8 +79,8 @@ def get_dummy_raw_datasets(dataset_length) -> Dict[str, tf.data.Dataset]:
 
 
 def get_dummy_datasets(
-    dataset_length: int, batch_size: Optional[int] = None
-) -> Dict[str, tf.data.Dataset]:
+    dataset_length: int, batch_size: int | None = None
+) -> dict[str, tf.data.Dataset]:
   """Returns dummy datasets, mocking input_pipeline.get_datasets()."""
 
   datasets = get_dummy_raw_datasets(dataset_length)

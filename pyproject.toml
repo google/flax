@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flax"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 description = "Flax: A neural network library for JAX designed for flexibility"
 keywords = []
 authors = [

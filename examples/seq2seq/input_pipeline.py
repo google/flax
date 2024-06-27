@@ -15,7 +15,8 @@
 """Input pipeline for seq2seq addition example."""
 
 import random
-from typing import Any, Dict, Generator, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
+from collections.abc import Generator
 
 import jax.numpy as jnp
 import numpy as np
@@ -63,11 +64,11 @@ class CharacterTable:
     return self._max_len_query_digit + 3
 
   @property
-  def encoder_input_shape(self) -> Tuple[int, int, int]:
+  def encoder_input_shape(self) -> tuple[int, int, int]:
     return (1, self.max_input_len, self.vocab_size)
 
   @property
-  def decoder_input_shape(self) -> Tuple[int, int, int]:
+  def decoder_input_shape(self) -> tuple[int, int, int]:
     return (1, self.max_output_len, self.vocab_size)
 
   def encode(self, inputs: str) -> np.ndarray:
@@ -91,7 +92,7 @@ class CharacterTable:
     return vecs
 
   def encode_onehot(
-      self, batch_inputs: Array, max_len: Optional[int] = None
+      self, batch_inputs: Array, max_len: int | None = None
   ) -> np.ndarray:
     """One-hot encodes a string input."""
 
@@ -115,7 +116,7 @@ class CharacterTable:
 
   def generate_examples(
       self, num_examples: int
-  ) -> Generator[Tuple[str, str], None, None]:
+  ) -> Generator[tuple[str, str], None, None]:
     """Yields `num_examples` examples."""
     for _ in range(num_examples):
       max_digit = pow(10, self._max_len_query_digit) - 1
@@ -126,7 +127,7 @@ class CharacterTable:
       outputs = '=' + str(key[0] + key[1])
       yield (inputs, outputs)
 
-  def get_batch(self, batch_size: int) -> Dict[str, np.ndarray]:
+  def get_batch(self, batch_size: int) -> dict[str, np.ndarray]:
     """Returns a batch of example of size @batch_size."""
     inputs, outputs = zip(*self.generate_examples(batch_size))
     return {

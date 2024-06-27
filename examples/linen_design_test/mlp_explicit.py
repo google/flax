@@ -24,7 +24,7 @@ from jax import numpy as jnp
 # Add `in_features` to the built-in Dense layer that normally works
 # via shape inference.
 class DenseExplicit(Dense):
-  in_features: Optional[int] = None
+  in_features: int | None = None
 
   def setup(self):
     # We feed a fake batch through the module, which initialized parameters.

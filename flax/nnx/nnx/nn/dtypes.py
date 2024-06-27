@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import typing as tp
-from typing import Optional
 from flax.typing import Dtype
 from jax import numpy as jnp
 
@@ -21,7 +20,7 @@ T = tp.TypeVar('T', bound=tuple)
 
 
 def canonicalize_dtype(
-  *args, dtype: Optional[Dtype] = None, inexact: bool = True
+  *args, dtype: Dtype | None = None, inexact: bool = True
 ) -> Dtype:
   """Canonicalize an optional dtype to the definitive dtype.
 

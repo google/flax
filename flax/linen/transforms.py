@@ -42,17 +42,10 @@ import functools
 import inspect
 from typing import (
   Any,
-  Callable,
-  Dict,
-  Iterable,
-  Mapping,
-  Optional,
-  Sequence,
-  Tuple,
-  Type,
   TypeVar,
   Union,
 )
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 from flax import core
 from flax import errors, struct, traceback_util
@@ -109,8 +102,8 @@ class VariablePlaceholder:
 class InstancePlaceholder:
   """Marks module instances in a JAX-compatible way when lifting arguments."""
 
-  cls: Type[Any] = struct.field(pytree_node=False)
-  attrs: Dict[Any, Any] = struct.field(pytree_node=False)
+  cls: type[Any] = struct.field(pytree_node=False)
+  attrs: dict[Any, Any] = struct.field(pytree_node=False)
   id: int = struct.field(pytree_node=False)
 
 
@@ -739,7 +732,7 @@ def module_class_lift_transform_jit(module_class, methods=None, **trafo_kwargs):
 # Utility to wrap a class or to use as decorator in def of class method.
 # -----------------------------------------------------------------------------
 
-TransformTarget = Union[Type[Module], Callable[..., Any]]
+TransformTarget = Union[type[Module], Callable[..., Any]]
 Target = TypeVar('Target', bound=TransformTarget)
 
 
@@ -772,7 +765,7 @@ def lift_transform(
 
 def lift_direct_transform(
   transform: Callable[..., Any],
-  targets: Tuple[Callable[..., Any], ...],
+  targets: tuple[Callable[..., Any], ...],
   mdl: Module,
   *args,
   multi_scope=True,
@@ -803,9 +796,9 @@ def vmap(
   split_rngs: Mapping[PRNGSequenceFilter, bool] = FrozenDict(),
   in_axes=0,
   out_axes=0,
-  axis_size: Optional[int] = None,
-  axis_name: Optional[str] = None,
-  spmd_axis_name: Optional[str] = None,
+  axis_size: int | None = None,
+  axis_name: str | None = None,
+  spmd_axis_name: str | None = None,
   metadata_params: Mapping[Any, Any] = {},
   methods=None,
 ) -> Target:
@@ -894,11 +887,11 @@ def jit(
   target: Target,
   variables: CollectionFilter = True,
   rngs: PRNGSequenceFilter = True,
-  static_argnums: Union[int, Iterable[int]] = (),
-  static_argnames: Union[str, Iterable[str]] = (),
-  donate_argnums: Union[int, Iterable[int]] = (),
+  static_argnums: int | Iterable[int] = (),
+  static_argnames: str | Iterable[str] = (),
+  donate_argnums: int | Iterable[int] = (),
   device=None,
-  backend: Union[str, None] = None,
+  backend: str | None = None,
   methods=None,
 ) -> Target:
   """Lifted version of ``jax.jit``.
@@ -980,8 +973,8 @@ def checkpoint(
   rngs: PRNGSequenceFilter = True,
   concrete: bool = False,
   prevent_cse: bool = True,
-  static_argnums: Union[int, Tuple[int, ...]] = (),
-  policy: Optional[Callable[..., bool]] = None,
+  static_argnums: int | tuple[int, ...] = (),
+  policy: Callable[..., bool] | None = None,
   methods=None,
 ) -> Target:
   """Lifted version of ``jax.checkpoint``.
@@ -1066,8 +1059,8 @@ remat = checkpoint
 
 def remat_scan(
   target: Target,
-  lengths: Optional[Sequence[int]] = (),
-  policy: Optional[Callable[..., bool]] = None,
+  lengths: Sequence[int] | None = (),
+  policy: Callable[..., bool] | None = None,
   variable_broadcast: CollectionFilter = False,
   variable_carry: CollectionFilter = False,
   variable_axes: Mapping[CollectionFilter, InOutScanAxis] = FrozenDict(
@@ -1138,10 +1131,10 @@ def scan(
   split_rngs: Mapping[PRNGSequenceFilter, bool] = FrozenDict(),
   in_axes=0,
   out_axes=0,
-  length: Optional[int] = None,
+  length: int | None = None,
   reverse: bool = False,
   unroll: int = 1,
-  data_transform: Optional[Callable[..., Any]] = None,
+  data_transform: Callable[..., Any] | None = None,
   metadata_params: Mapping[Any, Any] = {},
   methods=None,
   _split_transpose: bool = False,
@@ -1659,7 +1652,7 @@ def jvp(
   variable_tangents,
   variables: CollectionFilter = True,
   rngs: PRNGSequenceFilter = True,
-) -> Union[Tuple[Any, Callable[..., Any]], Tuple[Any, Callable[..., Any], Any]]:
+) -> tuple[Any, Callable[..., Any]] | tuple[Any, Callable[..., Any], Any]:
   """A lifted version of ``jax.jvp``.
 
   See ``jax.jvp`` for the unlifted Jacobian-vector product (forward gradient).
@@ -2110,7 +2103,7 @@ def named_call(class_fn, force=True):
 def add_metadata_axis(
   target: Target,
   variable_axes: Mapping[CollectionFilter, InOutAxis] = FrozenDict(),
-  metadata_params: Dict[Any, Any] = {},
+  metadata_params: dict[Any, Any] = {},
 ) -> Target:
   """A helper to manipulate boxed axis metadata.
 

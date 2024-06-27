@@ -14,7 +14,7 @@
 
 """Stochastic modules."""
 
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import jax.numpy as jnp
 from jax import lax, random
@@ -62,15 +62,15 @@ class Dropout(Module):
 
   rate: float
   broadcast_dims: Sequence[int] = ()
-  deterministic: Optional[bool] = None
+  deterministic: bool | None = None
   rng_collection: str = 'dropout'
 
   @compact
   def __call__(
     self,
     inputs,
-    deterministic: Optional[bool] = None,
-    rng: Optional[PRNGKey] = None,
+    deterministic: bool | None = None,
+    rng: PRNGKey | None = None,
   ):
     """Applies a random dropout mask to the input.
 

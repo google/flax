@@ -392,7 +392,7 @@ class Jit(tp.Generic[M], LiftedModule[M]):
     # nnx specific
     donate_state: bool = False,
     constrain_state: bool | tp.Callable[[State], State] = False,
-  ) -> tp.Callable[..., 'Jit[MA]']:
+  ) -> tp.Callable[..., Jit[MA]]:
     def _create_jit(*args, **kwargs):
       return Jit(
         module_constructor=module_constructor,
@@ -714,7 +714,7 @@ class Grad(tp.Generic[M], LiftedModule[M]):
     return_value: bool = False,
     *,
     wrt: filterlib.Filter = variables.Param,
-  ) -> tp.Callable[..., 'Grad[MA]']:
+  ) -> tp.Callable[..., Grad[MA]]:
     def _create_grad(*args, **kwargs):
       return Grad(
         module_constructor=module_constructor,
@@ -802,7 +802,7 @@ class Remat(tp.Generic[M], LiftedModule[M]):
     prevent_cse: bool = True,
     static_argnums: int | tuple[int, ...] = (),
     policy: tp.Callable[..., bool] | None = None,
-  ) -> tp.Callable[..., 'Remat[MA]']:
+  ) -> tp.Callable[..., Remat[MA]]:
     def create_remat(*args, **kwargs):
       return Remat(
         module_constructor=module_constructor,

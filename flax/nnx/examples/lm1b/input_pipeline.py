@@ -15,7 +15,6 @@
 """Input pipeline for a LM1B dataset."""
 
 import os
-from typing import Dict, List, Optional, Union
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -24,7 +23,7 @@ from clu import deterministic_data
 from configs import default
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-Features = Dict[str, tf.Tensor]
+Features = dict[str, tf.Tensor]
 
 
 class NormalizeFeatureNamesOp:
@@ -67,8 +66,8 @@ def get_raw_dataset(
 
 def pack_dataset(
   dataset: tf.data.Dataset,
-  key2length: Union[int, Dict[str, int]],
-  keys: Optional[List[str]] = None,
+  key2length: int | dict[str, int],
+  keys: list[str] | None = None,
 ) -> tf.data.Dataset:
   """Creates a 'packed' version of a dataset on-the-fly.
 
@@ -149,7 +148,7 @@ def pack_dataset(
 
 
 def _pack_with_tf_ops(
-  dataset: tf.data.Dataset, keys: List[str], key2length: Dict[str, int]
+  dataset: tf.data.Dataset, keys: list[str], key2length: dict[str, int]
 ) -> tf.data.Dataset:
   """Helper-function for packing a dataset which has already been batched.
 
@@ -275,7 +274,7 @@ def _pack_with_tf_ops(
 def preprocess_data(
   dataset,
   shuffle: bool,
-  num_epochs: Optional[int] = 1,
+  num_epochs: int | None = 1,
   pack_examples: bool = True,
   shuffle_buffer_size: int = 1024,
   max_length: int = 512,
@@ -321,7 +320,7 @@ def get_datasets(
   config: default.Config,
   *,
   n_devices: int,
-  vocab_path: Optional[str] = None,
+  vocab_path: str | None = None,
 ):
   """Load and return dataset of batched examples for use during training."""
   if vocab_path is None:

@@ -23,7 +23,8 @@ to keep track of how variables should be partitioned with ``jax.pjit``.
 
 import abc
 import functools
-from typing import Any, Callable, Dict, Generic, Optional, TypeVar
+from typing import Any, Generic, TypeVar
+from collections.abc import Callable
 
 from flax import errors, struct
 from flax.typing import LogicalNames
@@ -85,7 +86,7 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
 
   @abc.abstractmethod
   def add_axis(
-      self: TAxisMetadata, index: int, params: Dict[Any, Any]
+      self: TAxisMetadata, index: int, params: dict[Any, Any]
   ) -> TAxisMetadata:
     """Adds a new axis to the axis metadata.
 
@@ -107,7 +108,7 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
 
   @abc.abstractmethod
   def remove_axis(
-      self: TAxisMetadata, index: int, params: Dict[Any, Any]
+      self: TAxisMetadata, index: int, params: dict[Any, Any]
   ) -> TAxisMetadata:
     """Removes an axis from the axis metadata.
 
@@ -145,12 +146,12 @@ def map_axis_meta(fn: Callable[[AxisMetadata[Any]], Any], tree: Any) -> Any:
   return jax.tree_util.tree_map(wrapper, tree, is_leaf=is_axis_metadata)
 
 
-def add_axis(tree: Any, index: int, params: Dict[Any, Any]) -> Any:
+def add_axis(tree: Any, index: int, params: dict[Any, Any]) -> Any:
   """Add an axis to each AxisMetadata node in a PyTree."""
   return map_axis_meta(lambda x: x.add_axis(index, params), tree)
 
 
-def remove_axis(tree: Any, index: int, params: Dict[Any, Any]) -> Any:
+def remove_axis(tree: Any, index: int, params: dict[Any, Any]) -> Any:
   """Remove an axis from each AxisMetadata node in a PyTree."""
   return map_axis_meta(lambda x: x.remove_axis(index, params), tree)
 
@@ -241,7 +242,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
 
   value: Any
   names: LogicalNames = struct.field(pytree_node=False)
-  mesh: Optional[jax.sharding.Mesh] = struct.field(
+  mesh: jax.sharding.Mesh | None = struct.field(
       default=None, pytree_node=False
   )
 
@@ -259,12 +260,12 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
   def replace_boxed(self, val: B) -> 'Partitioned[B]':
     return self.replace(value=val)  # type: ignore
 
-  def _get_partition_name(self, params: Dict[Any, Any]) -> str:
+  def _get_partition_name(self, params: dict[Any, Any]) -> str:
     if PARTITION_NAME not in params:
       raise errors.PartitioningUnspecifiedError(self)
     return params[PARTITION_NAME]
 
-  def add_axis(self, index: int, params: Dict[Any, Any]) -> 'Partitioned[A]':
+  def add_axis(self, index: int, params: dict[Any, Any]) -> 'Partitioned[A]':
     axis_name = self._get_partition_name(params)
     names = list(self.names)
     while len(names) < index:
@@ -272,7 +273,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
     names.insert(index, axis_name)  # type: ignore
     return self.replace(names=tuple(names))
 
-  def remove_axis(self, index: int, params: Dict[Any, Any]) -> 'Partitioned[A]':
+  def remove_axis(self, index: int, params: dict[Any, Any]) -> 'Partitioned[A]':
     axis_name = self._get_partition_name(params)
     names = list(self.names)
     assert names.pop(index) == axis_name
@@ -290,7 +291,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
 def with_partitioning(
     fn: Callable[..., Any],
     names: LogicalNames,
-    mesh: Optional[jax.sharding.Mesh] = None,
+    mesh: jax.sharding.Mesh | None = None,
 ) -> Callable[..., Partitioned[Any]]:
   """Wraps a function's return value with Partitioned.
 

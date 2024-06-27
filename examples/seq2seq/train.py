@@ -82,7 +82,7 @@ def get_model(ctable: CTable, *, teacher_force: bool = False) -> models.Seq2seq:
 
 def get_initial_params(
     model: models.Seq2seq, rng: PRNGKey, ctable: CTable
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
   """Returns the initial parameters of a seq2seq model."""
   rng1, rng2 = jax.random.split(rng)
   variables = model.init(
@@ -115,7 +115,7 @@ def cross_entropy_loss(
 
 def compute_metrics(
     logits: Array, labels: Array, eos_id: int
-) -> Dict[str, jax.Array]:
+) -> dict[str, jax.Array]:
   """Computes metrics and returns them."""
   lengths = get_sequence_lengths(labels, eos_id)
   loss = cross_entropy_loss(logits, labels, lengths)
@@ -136,7 +136,7 @@ def compute_metrics(
 @jax.jit
 def train_step(
     state: train_state.TrainState, batch: Array, lstm_rng: PRNGKey, eos_id: int
-) -> Tuple[train_state.TrainState, Dict[str, jax.Array]]:
+) -> tuple[train_state.TrainState, dict[str, jax.Array]]:
   """Trains one step."""
   labels = batch['answer'][:, 1:]
   lstm_key = jax.random.fold_in(lstm_rng, state.step)
@@ -171,7 +171,7 @@ def log_decode(question: str, inferred: str, golden: str):
 
 @functools.partial(jax.jit, static_argnums=3)
 def decode(
-    params: Dict[str, Any], inputs: Array, decode_rng: PRNGKey, ctable: CTable
+    params: dict[str, Any], inputs: Array, decode_rng: PRNGKey, ctable: CTable
 ) -> Array:
   """Decodes inputs."""
   init_decoder_input = ctable.one_hot(ctable.encode('=')[0:1])
@@ -187,7 +187,7 @@ def decode(
 
 def decode_batch(
     state: train_state.TrainState,
-    batch: Dict[str, Array],
+    batch: dict[str, Array],
     decode_rng: PRNGKey,
     ctable: CTable,
 ):

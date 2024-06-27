@@ -16,7 +16,8 @@
 
 import collections
 from types import MappingProxyType
-from typing import Any, Dict, Hashable, Mapping, Tuple, TypeVar, Union
+from typing import Any, TypeVar
+from collections.abc import Hashable, Mapping
 
 import jax
 
@@ -129,7 +130,7 @@ class FrozenDict(Mapping[K, V]):
     for key in self._dict:
       yield (key, self[key])
 
-  def pop(self, key: K) -> Tuple['FrozenDict[K, V]', V]:
+  def pop(self, key: K) -> tuple['FrozenDict[K, V]', V]:
     """Create a new FrozenDict where one entry is removed.
 
     Example::
@@ -149,7 +150,7 @@ class FrozenDict(Mapping[K, V]):
     new_self = type(self)(new_dict)
     return new_self, value
 
-  def unfreeze(self) -> Dict[K, V]:
+  def unfreeze(self) -> dict[K, V]:
     """Unfreeze this FrozenDict.
 
     Returns:
@@ -157,7 +158,7 @@ class FrozenDict(Mapping[K, V]):
     """
     return unfreeze(self)
 
-  def tree_flatten_with_keys(self) -> Tuple[Tuple[Any, ...], Hashable]:
+  def tree_flatten_with_keys(self) -> tuple[tuple[Any, ...], Hashable]:
     """Flattens this FrozenDict.
 
     Returns:
@@ -201,7 +202,7 @@ def freeze(xs: Mapping[Any, Any]) -> FrozenDict[Any, Any]:
   return FrozenDict(xs)
 
 
-def unfreeze(x: Union[FrozenDict, Dict[str, Any]]) -> Dict[Any, Any]:
+def unfreeze(x: FrozenDict | dict[str, Any]) -> dict[Any, Any]:
   """Unfreeze a FrozenDict.
 
   Makes a mutable copy of a ``FrozenDict`` mutable by transforming
@@ -228,9 +229,9 @@ def unfreeze(x: Union[FrozenDict, Dict[str, Any]]) -> Dict[Any, Any]:
 
 
 def copy(
-  x: Union[FrozenDict, Dict[str, Any]],
-  add_or_replace: Union[FrozenDict[str, Any], Dict[str, Any]] = FrozenDict({}),
-) -> Union[FrozenDict, Dict[str, Any]]:
+  x: FrozenDict | dict[str, Any],
+  add_or_replace: FrozenDict[str, Any] | dict[str, Any] = FrozenDict({}),
+) -> FrozenDict | dict[str, Any]:
   """Create a new dict with additional and/or replaced entries. This is a utility
   function that can act on either a FrozenDict or regular dict and mimics the
   behavior of ``FrozenDict.copy``.
@@ -260,8 +261,8 @@ def copy(
 
 
 def pop(
-  x: Union[FrozenDict, Dict[str, Any]], key: str
-) -> Tuple[Union[FrozenDict, Dict[str, Any]], Any]:
+  x: FrozenDict | dict[str, Any], key: str
+) -> tuple[FrozenDict | dict[str, Any], Any]:
   """Create a new dict where one entry is removed. This is a utility
   function that can act on either a FrozenDict or regular dict and
   mimics the behavior of ``FrozenDict.pop``.

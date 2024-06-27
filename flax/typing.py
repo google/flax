@@ -14,19 +14,14 @@
 
 from typing import (
   Any,
-  Callable,
-  Dict,
   Generic,
-  Hashable,
-  Mapping,
   Optional,
   Protocol,
-  Sequence,
-  Tuple,
   TypeVar,
   Union,
   runtime_checkable,
 )
+from collections.abc import Callable, Hashable, Mapping, Sequence
 
 import jax
 from flax.core import FrozenDict
@@ -38,7 +33,7 @@ import dataclasses
 
 Array = Union[jax.Array, Any]
 PRNGKey = jax.Array
-RNGSequences = Dict[str, PRNGKey]
+RNGSequences = dict[str, PRNGKey]
 Dtype = Union[jax.typing.DTypeLike, Any]
 Shape = Sequence[int]
 K = TypeVar('K')
@@ -50,7 +45,7 @@ class Key(Hashable, Protocol):
 
 
 Path = str
-PathParts = Tuple[Key, ...]
+PathParts = tuple[Key, ...]
 
 Leaf = Any
 
@@ -61,14 +56,14 @@ PrecisionLike = Union[
   None,
   str,
   jax.lax.Precision,
-  Tuple[str, str],
-  Tuple[jax.lax.Precision, jax.lax.Precision],
+  tuple[str, str],
+  tuple[jax.lax.Precision, jax.lax.Precision],
 ]
 DotGeneralT = Callable[..., Array]
 ConvGeneralDilatedT = Callable[..., Array]
 
-PaddingLike = Union[str, int, Sequence[Union[int, Tuple[int, int]]]]
-LaxPadding = Union[str, Sequence[Tuple[int, int]]]
+PaddingLike = Union[str, int, Sequence[Union[int, tuple[int, int]]]]
+LaxPadding = Union[str, Sequence[tuple[int, int]]]
 
 
 # Initializers
@@ -79,14 +74,14 @@ Initializer = Union[jax.nn.initializers.Initializer, Callable[..., Any]]
 # Collections
 
 Collection = Mapping[str, Any]
-MutableCollection = Dict[str, Any]
+MutableCollection = dict[str, Any]
 
 
 # Dicts
 
 VariableDict = Mapping[str, Collection]
 FrozenVariableDict = FrozenDict[str, Collection]
-MutableVariableDict = Dict[str, MutableCollection]
+MutableVariableDict = dict[str, MutableCollection]
 
 PRNGFoldable = Union[int, str]
 
@@ -118,14 +113,14 @@ Axes = Union[int, Sequence[int]]
 
 # SPMD
 
-LogicalNames = Tuple[Union[str, None], ...]
+LogicalNames = tuple[Union[str, None], ...]
 
 # Maps each logical axis  to physical mesh, can be either None (replicated),
 # one physical axis or a tuple of physical axes.
-LogicalRules = Sequence[Tuple[str, Union[str, Tuple[str, ...], None]]]
+LogicalRules = Sequence[tuple[str, Union[str, tuple[str, ...], None]]]
 ArrayPytree = Any  # pylint: disable=invalid-name
 LogicalPartitionSpec = Any  # pylint: disable=invalid-name
 LogicalPartitionSpecPytree = Any  # pylint: disable=invalid-name
 PartitionSpecPytree = Any  # pylint: disable=invalid-name
 
-Sharding = Tuple[Optional[str], ...]
+Sharding = tuple[Optional[str], ...]

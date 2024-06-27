@@ -28,7 +28,7 @@
 # ============================================================================
 """Minimal test for sampler."""
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from absl.testing import absltest
 from flax import nnx

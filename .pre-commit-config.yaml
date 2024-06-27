@@ -44,3 +44,8 @@ repos:
     # Disable Ruff formatter for now
     # # Run the Ruff formatter.
     # - id: ruff-format
+- repo: https://github.com/asottile/pyupgrade
+  rev: v3.16.0
+  hooks:
+    - id: pyupgrade
+      args: [--py310-plus]

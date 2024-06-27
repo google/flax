@@ -22,21 +22,15 @@ import hashlib
 import typing
 from typing import (
   Any,
-  Callable,
-  Dict,
   Generic,
-  Iterable,
   Literal,
-  Mapping,
   Optional,
-  Sequence,
-  Set,
-  Tuple,
   TypeVar,
   Union,
   cast,
   overload,
 )
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 import jax
 import numpy as np
@@ -95,7 +89,7 @@ class LazyRng(struct.PyTreeNode):
   """Wrapper around JAX PRNGKey that lazily maintains a tuple of static data to be folded into the rng."""
 
   rng: PRNGKey
-  suffix: Tuple[PRNGFoldable, ...] = struct.field(pytree_node=False)
+  suffix: tuple[PRNGFoldable, ...] = struct.field(pytree_node=False)
 
   def as_jax_rng(self) -> PRNGKey:
     return _fold_in_static(self.rng, self.suffix)
@@ -214,7 +208,7 @@ def in_filter(filter_like: Filter, col: str) -> bool:
   raise errors.InvalidFilterError(filter_like)
 
 
-def filter_to_set(x: Filter) -> Set[str]:
+def filter_to_set(x: Filter) -> set[str]:
   """Converts a Filter into a set of collections, fails on the infinite set.
 
   Args:
@@ -227,7 +221,7 @@ def filter_to_set(x: Filter) -> Set[str]:
   if x is False:
     return set()
   if isinstance(x, str):
-    return set([x])
+    return {x}
   if isinstance(x, typing.Collection):
     return set(x)
   raise errors.InvalidFilterError(x)
@@ -419,18 +413,18 @@ class Scope:
   for a number of examples using ``Scopes``.
   """
 
-  reservations: Dict[str, Set[Optional[str]]]
+  reservations: dict[str, set[str | None]]
 
   def __init__(
     self,
     variables: MutableVariableDict,
-    rngs: Optional[Union[RNGSequences, Dict[str, LazyRng]]] = None,
-    name: Optional[str] = None,
+    rngs: RNGSequences | dict[str, LazyRng] | None = None,
+    name: str | None = None,
     mutable: CollectionFilter = False,
     parent: Optional['Scope'] = None,
     path: Iterable[str] = (),
     debug_path: Iterable[str] = (),
-    flags: Optional[Mapping] = None,
+    flags: Mapping | None = None,
   ):
     """Initializes a Scope.
 
@@ -511,7 +505,7 @@ class Scope:
     """Invalidates the Scope."""
     self._invalid = True
 
-  def mutable_variables(self) -> Union[VariableDict, Dict[str, Any]]:
+  def mutable_variables(self) -> VariableDict | dict[str, Any]:
     """Returns an immutable copy of the mutable variables belonging to this Scope."""
     self._populate_collections()
     xs = {
@@ -521,7 +515,7 @@ class Scope:
       return freeze(xs)
     return xs
 
-  def variables(self) -> Union[VariableDict, Dict[str, Any]]:
+  def variables(self) -> VariableDict | dict[str, Any]:
     """Returns an immutable copy of the variables belonging to this Scope."""
     self._populate_collections()
     if config.flax_return_frozendict:
@@ -556,7 +550,7 @@ class Scope:
       scope.rng_counters = self.rng_counters
     return scope
 
-  def name_reserved(self, name: str, col: Optional[str] = None) -> bool:
+  def name_reserved(self, name: str, col: str | None = None) -> bool:
     """Checks whether a name for a child Scope or Variable is taken.
 
     Args:
@@ -574,7 +568,7 @@ class Scope:
         return True
     return False
 
-  def reserve(self, name: str, col: Optional[str] = None):
+  def reserve(self, name: str, col: str | None = None):
     """Reserves a name for a child Scope or Variable.
 
     Throws an error if the name exists already.
@@ -608,7 +602,7 @@ class Scope:
       i += 1
 
   def push(
-    self, name: Optional[str] = None, prefix: str = '', reuse=False
+    self, name: str | None = None, prefix: str = '', reuse=False
   ) -> 'Scope':
     """Creates a child Scope.
 
@@ -650,8 +644,8 @@ class Scope:
   def child(
     self,
     fn: Callable[..., Any],
-    name: Optional[str] = None,
-    prefix: Optional[str] = None,
+    name: str | None = None,
+    prefix: str | None = None,
     named_call: bool = True,
     **partial_kwargs,
   ) -> Callable[..., Any]:
@@ -818,7 +812,7 @@ class Scope:
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
   ) -> Variable[T]:
     ...
@@ -828,7 +822,7 @@ class Scope:
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
     unbox: Literal[True],
     **init_kwargs,
@@ -840,7 +834,7 @@ class Scope:
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
     unbox: Literal[False],
     **init_kwargs,
@@ -852,22 +846,22 @@ class Scope:
     self,
     col: str,
     name: str,
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
     unbox: bool = True,
     **init_kwargs,
-  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
+  ) -> Variable[T] | Variable[meta.AxisMetadata[T]]:
     ...
 
   def variable(
     self,
     col: str,
     name: str,  # pylint: disable=keyword-arg-before-vararg
-    init_fn: Optional[Callable[..., T]] = None,
+    init_fn: Callable[..., T] | None = None,
     *init_args,
     unbox: bool = True,
     **init_kwargs,
-  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
+  ) -> Variable[T] | Variable[meta.AxisMetadata[T]]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
     Args:
@@ -934,7 +928,7 @@ class Scope:
     *init_args,
     unbox: bool,
     **init_kwargs,
-  ) -> Union[T, meta.AxisMetadata[T]]:
+  ) -> T | meta.AxisMetadata[T]:
     ...
 
   def param(
@@ -944,7 +938,7 @@ class Scope:
     *init_args,
     unbox: bool = True,
     **init_kwargs,
-  ) -> Union[T, meta.AxisMetadata[T]]:
+  ) -> T | meta.AxisMetadata[T]:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
 
     If the parameter exists already, the existing value is simply returned.
@@ -1019,9 +1013,9 @@ def _unfreeze_variables(variables, mutable):
 
 def bind(
   variables: VariableDict,
-  rngs: Optional[RNGSequences] = None,
+  rngs: RNGSequences | None = None,
   mutable: CollectionFilter = False,
-  flags: Optional[Mapping] = None,
+  flags: Mapping | None = None,
 ):
   """Binds variables and rngs to a new ``Scope``.
 
@@ -1057,7 +1051,7 @@ def bind(
 def apply(
   fn: Callable[..., Any],
   mutable: CollectionFilter = False,
-  flags: Optional[Mapping] = None,
+  flags: Mapping | None = None,
 ) -> Callable[..., Any]:
   """Functionalize a `Scope` function.
 
@@ -1074,9 +1068,9 @@ def apply(
   def wrapper(
     variables: VariableDict,
     *args,
-    rngs: Optional[Union[PRNGKey, RNGSequences]] = None,
+    rngs: PRNGKey | RNGSequences | None = None,
     **kwargs,
-  ) -> Union[Any, Tuple[Any, Union[VariableDict, Dict[str, Any]]]]:
+  ) -> Any | tuple[Any, VariableDict | dict[str, Any]]:
     if rngs is not None:
       if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
         raise ValueError(
@@ -1110,7 +1104,7 @@ def apply(
 def init(
   fn: Callable[..., Any],
   mutable: CollectionFilter = True,
-  flags: Optional[Mapping] = None,
+  flags: Mapping | None = None,
 ) -> Callable[..., Any]:
   """Functionalize a `Scope` function for initialization.
 
@@ -1124,7 +1118,7 @@ def init(
   """
 
   @functools.wraps(fn)
-  def wrapper(rngs, *args, **kwargs) -> Tuple[Any, VariableDict]:
+  def wrapper(rngs, *args, **kwargs) -> tuple[Any, VariableDict]:
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
       raise ValueError(
         'First argument passed to an init function should be a '
@@ -1144,7 +1138,7 @@ def init(
 def lazy_init(
   fn: Callable[..., Any],
   mutable: CollectionFilter = True,
-  flags: Optional[Mapping] = None,
+  flags: Mapping | None = None,
 ) -> Callable[..., Any]:
   """Functionalizes a `Scope` function for lazy initialization.
 
@@ -1227,7 +1221,7 @@ def _is_valid_rng(rng: Array):
   return True
 
 
-def _is_valid_rngs(rngs: Union[PRNGKey, RNGSequences]):
+def _is_valid_rngs(rngs: PRNGKey | RNGSequences):
   if not isinstance(rngs, (FrozenDict, dict)):
     return False
   for key, val in rngs.items():

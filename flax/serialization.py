@@ -20,13 +20,13 @@ state dict of numpy arrays for easy serialization.
 import enum
 import threading
 from contextlib import contextmanager
-from typing import Any, Dict, List
+from typing import Any
 
 import jax
 import msgpack
 import numpy as np
 
-_STATE_DICT_REGISTRY: Dict[Any, Any] = {}
+_STATE_DICT_REGISTRY: dict[Any, Any] = {}
 
 
 class _ErrorContext(threading.local):
@@ -64,7 +64,7 @@ def _is_namedtuple(x):
   return isinstance(x, tuple) and hasattr(x, '_fields')
 
 
-def from_state_dict(target, state: Dict[str, Any], name: str = '.'):
+def from_state_dict(target, state: dict[str, Any], name: str = '.'):
   """Restores the state of the given target using a state dict.
 
   This function takes the current target as an argument. This
@@ -93,7 +93,7 @@ def from_state_dict(target, state: Dict[str, Any], name: str = '.'):
     return ty_from_state_dict(target, state)
 
 
-def to_state_dict(target) -> Dict[str, Any]:
+def to_state_dict(target) -> dict[str, Any]:
   """Returns a dictionary with the state of the given target."""
   if _is_namedtuple(target):
     ty = _NamedTuple
@@ -137,11 +137,11 @@ def register_serialization_state(
   _STATE_DICT_REGISTRY[ty] = (ty_to_state_dict, ty_from_state_dict)
 
 
-def _list_state_dict(xs: List[Any]) -> Dict[str, Any]:
+def _list_state_dict(xs: list[Any]) -> dict[str, Any]:
   return {str(i): to_state_dict(x) for i, x in enumerate(xs)}
 
 
-def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
+def _restore_list(xs, state_dict: dict[str, Any]) -> list[Any]:
   if len(state_dict) != len(xs):
     raise ValueError(
       'The size of the list and the state dict do not match,'
@@ -155,8 +155,8 @@ def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
   return ys
 
 
-def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
-  str_keys = set(str(k) for k in xs.keys())
+def _dict_state_dict(xs: dict[str, Any]) -> dict[str, Any]:
+  str_keys = {str(k) for k in xs.keys()}
   if len(str_keys) != len(xs):
     raise ValueError(
       'Dict keys do not have a unique string representation: '
@@ -165,7 +165,7 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
   return {str(key): to_state_dict(value) for key, value in xs.items()}
 
 
-def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
+def _restore_dict(xs, states: dict[str, Any]) -> dict[str, Any]:
   diff = set(map(str, xs.keys())).difference(states.keys())
   if diff:
     raise ValueError(
@@ -180,11 +180,11 @@ def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
   }
 
 
-def _namedtuple_state_dict(nt) -> Dict[str, Any]:
+def _namedtuple_state_dict(nt) -> dict[str, Any]:
   return {key: to_state_dict(getattr(nt, key)) for key in nt._fields}
 
 
-def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
+def _restore_namedtuple(xs, state_dict: dict[str, Any]):
   """Rebuild namedtuple from serialized dict."""
   if set(state_dict.keys()) == {'name', 'fields', 'values'}:
     # TODO(jheek): remove backward compatible named tuple restoration early 2022
@@ -341,7 +341,7 @@ _tuple_to_dict = lambda tpl: {str(x): y for x, y in enumerate(tpl)}
 _dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
 
 
-def _chunk(arr) -> Dict[str, Any]:
+def _chunk(arr) -> dict[str, Any]:
   """Convert array to a canonical dictionary of chunked arrays."""
   chunksize = max(1, int(MAX_CHUNK_SIZE / arr.dtype.itemsize))
   data = {'__msgpack_chunked_array__': True, 'shape': _tuple_to_dict(arr.shape)}
@@ -353,7 +353,7 @@ def _chunk(arr) -> Dict[str, Any]:
   return data
 
 
-def _unchunk(data: Dict[str, Any]):
+def _unchunk(data: dict[str, Any]):
   """Convert canonical dictionary of chunked arrays back into array."""
   assert '__msgpack_chunked_array__' in data
   shape = _dict_to_tuple(data['shape'])

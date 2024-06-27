@@ -35,9 +35,9 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
 @dataclasses.dataclass
 class CompactContext:
-  module: 'Module'
+  module: Module
   type_counter: defaultdict[type, int] = dataclasses.field(
-    default_factory=lambda: defaultdict(lambda: 0)
+    default_factory=lambda: defaultdict(int)
   )
 
 

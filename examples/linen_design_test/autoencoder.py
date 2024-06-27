@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, Tuple
+from typing import Tuple
+from collections.abc import Iterable
 
 import jax
 from jax import numpy as jnp, random
@@ -37,7 +38,7 @@ class MLP(Module):
 class AutoEncoder(Module):
   encoder_widths: Iterable
   decoder_widths: Iterable
-  input_shape: Tuple = None
+  input_shape: tuple = None
 
   def setup(self):
     # Submodules attached in `setup` get names via attribute assignment

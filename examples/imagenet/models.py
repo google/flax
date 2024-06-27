@@ -18,7 +18,8 @@
 # pytype: disable=wrong-arg-count
 
 from functools import partial
-from typing import Any, Callable, Sequence, Tuple
+from typing import Any, Tuple
+from collections.abc import Callable, Sequence
 
 from flax import linen as nn
 import jax.numpy as jnp
@@ -33,7 +34,7 @@ class ResNetBlock(nn.Module):
   conv: ModuleDef
   norm: ModuleDef
   act: Callable
-  strides: Tuple[int, int] = (1, 1)
+  strides: tuple[int, int] = (1, 1)
 
   @nn.compact
   def __call__(
@@ -63,7 +64,7 @@ class BottleneckResNetBlock(nn.Module):
   conv: ModuleDef
   norm: ModuleDef
   act: Callable
-  strides: Tuple[int, int] = (1, 1)
+  strides: tuple[int, int] = (1, 1)
 
   @nn.compact
   def __call__(self, x):

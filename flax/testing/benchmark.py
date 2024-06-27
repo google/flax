@@ -29,7 +29,6 @@ import itertools
 import json
 import os
 import tempfile
-from typing import Dict
 
 from absl import flags, logging
 from absl.testing import absltest
@@ -186,7 +185,7 @@ class Benchmark(absltest.TestCase):
     self._update_reported_name()
     self._reported_wall_time = wall_time
 
-  def report_metrics(self, metrics: Dict[str, float]):
+  def report_metrics(self, metrics: dict[str, float]):
     """Report metrics for the benchmark."""
     self._update_reported_name()
     self._reported_metrics.update(metrics)
@@ -195,7 +194,7 @@ class Benchmark(absltest.TestCase):
     """Report a single metric for the benchmark."""
     self.report_metrics({name: value})
 
-  def report_extras(self, extras: Dict[str, str]):
+  def report_extras(self, extras: dict[str, str]):
     """Report extras for the benchmark."""
     self._update_reported_name()
     self._reported_extras.update(extras)
@@ -232,7 +231,7 @@ class Benchmark(absltest.TestCase):
 
     # Prefix the name with the class name.
     class_name = type(calling_class).__name__
-    name = '{}.{}'.format(class_name, name)
+    name = f'{class_name}.{name}'
     return name
 
   def _update_reported_name(self):

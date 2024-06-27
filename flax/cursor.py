@@ -16,16 +16,12 @@ import dataclasses
 import enum
 from typing import (
   Any,
-  Callable,
-  Dict,
-  Generator,
   Generic,
-  Mapping,
-  Optional,
   Protocol,
   TypeVar,
   runtime_checkable,
 )
+from collections.abc import Callable, Generator, Mapping
 
 from flax.core import FrozenDict
 from flax.errors import CursorFindError, TraverseTreeError
@@ -123,10 +119,10 @@ def _traverse_tree(path, obj, *, update_fn=None, cond_fn=None):
 
 class Cursor(Generic[A]):
   _obj: A
-  _parent_key: Optional[ParentKey[A]]
-  _changes: Dict[Any, 'Cursor[A]']
+  _parent_key: ParentKey[A] | None
+  _changes: dict[Any, 'Cursor[A]']
 
-  def __init__(self, obj: A, parent_key: Optional[ParentKey[A]]):
+  def __init__(self, obj: A, parent_key: ParentKey[A] | None):
     # NOTE: we use `vars` here to avoid calling `__setattr__`
     # vars(self) = self.__dict__
     vars(self)['_obj'] = obj

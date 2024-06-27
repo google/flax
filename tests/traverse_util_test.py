@@ -31,7 +31,7 @@ from flax.core import freeze
 jax.config.parse_flags_with_absl()
 
 
-class Foo(object):
+class Foo:
   def __init__(self, foo, bar=None):
     self.foo = foo
     self.bar = bar
@@ -268,7 +268,7 @@ class ModelParamTraversalTest(absltest.TestCase):
     for model, expected_model in configs:
       self.assertEqual(values, [1, 3])
       self.assertEqual(
-        set(names), set(['/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias'])
+        set(names), {'/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias'}
       )
       new_model = traversal.update(lambda x: x + x, model)
       self.assertEqual(new_model, expected_model)

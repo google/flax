@@ -50,7 +50,7 @@ AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisName, AxisIndex], None]
 RemoveAxisHook = tp.Callable[[V, AxisName, AxisIndex], None]
 
-VariableTypeCache: dict[str, tp.Type['Variable[tp.Any]']] = {}
+VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
 
 
 class Empty:
@@ -86,8 +86,8 @@ class VariableMetadata(tp.Generic[A]):
   set_value_hooks: tuple[SetValueHook[A], ...] = ()
   get_value_hooks: tuple[GetValueHook[A], ...] = ()
   create_value_hooks: tuple[CreateValueHook[A], ...] = ()
-  add_axis_hooks: tuple[AddAxisHook['Variable[A]'], ...] = ()
-  remove_axis_hooks: tuple[RemoveAxisHook['Variable[A]'], ...] = ()
+  add_axis_hooks: tuple[AddAxisHook[Variable[A]], ...] = ()
+  remove_axis_hooks: tuple[RemoveAxisHook[Variable[A]], ...] = ()
   metadata: tp.Mapping[str, tp.Any] = dataclasses.field(default_factory=dict)
 
 
@@ -160,8 +160,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
   set_value_hooks: tuple[SetValueHook[A], ...]
   get_value_hooks: tuple[GetValueHook[A], ...]
   create_value_hooks: tuple[CreateValueHook[A], ...]
-  add_axis_hooks: tuple[AddAxisHook['Variable[A]'], ...]
-  remove_axis_hooks: tuple[RemoveAxisHook['Variable[A]'], ...]
+  add_axis_hooks: tuple[AddAxisHook[Variable[A]], ...]
+  remove_axis_hooks: tuple[RemoveAxisHook[Variable[A]], ...]
   _trace_state: tracers.TraceState
 
   def __init__(
@@ -177,11 +177,11 @@ class Variable(tp.Generic[A], reprlib.Representable):
       CreateValueHook[A], tp.Sequence[CreateValueHook[A]]
     ] = (),
     add_axis_hooks: tp.Union[
-      AddAxisHook['Variable[A]'], tp.Sequence[AddAxisHook['Variable[A]']]
+      AddAxisHook[Variable[A]], tp.Sequence[AddAxisHook[Variable[A]]]
     ] = (),
     remove_axis_hooks: tp.Union[
-      RemoveAxisHook['Variable[A]'],
-      tp.Sequence[RemoveAxisHook['Variable[A]']],
+      RemoveAxisHook[Variable[A]],
+      tp.Sequence[RemoveAxisHook[Variable[A]]],
     ] = (),
     **metadata: tp.Any,
   ):
@@ -304,10 +304,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
     object.__setattr__(self, name, value)
 
   @classmethod
-  def state(cls, value: A, **metadata) -> 'VariableState[A]':
+  def state(cls, value: A, **metadata) -> VariableState[A]:
     return cls(value, **metadata).to_state()
 
-  def copy_from(self, other: 'Variable[A]') -> None:
+  def copy_from(self, other: Variable[A]) -> None:
     if type(self) is not type(other):
       raise ValueError(
         f'Cannot copy from incompatible container, '
@@ -322,7 +322,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars_dict.clear()
     vars_dict.update(other_vars, _trace_state=trace_state)
 
-  def copy_from_state(self, variable_state: 'VariableState[A]'):
+  def copy_from_state(self, variable_state: VariableState[A]):
     trace_state = self._trace_state
     variable_vars = vars(self)
     variable_vars.clear()
@@ -368,12 +368,12 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return type(self) is type(other) and vars(other) == vars(self)
 
   @tp.overload
-  def replace(self, value: B, **kwargs) -> 'Variable[B]': ...
+  def replace(self, value: B, **kwargs) -> Variable[B]: ...
 
   @tp.overload
-  def replace(self, **kwargs) -> 'Variable[A]': ...
+  def replace(self, **kwargs) -> Variable[A]: ...
 
-  def replace(self, value: tp.Any = MISSING, **kwargs) -> 'Variable[tp.Any]':
+  def replace(self, value: tp.Any = MISSING, **kwargs) -> Variable[tp.Any]:
     if value is not MISSING:
       kwargs['raw_value'] = value
 
@@ -407,14 +407,14 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars(obj).update(attributes)
     return obj
 
-  def copy(self: 'Variable[A]') -> 'Variable[A]':
+  def copy(self: Variable[A]) -> Variable[A]:
     obj = object.__new__(type(self))
     attributes = vars(self).copy()
     attributes['_trace_state'] = tracers.TraceState()
     vars(obj).update(attributes)
     return obj
 
-  def to_state(self: 'Variable[A]') -> 'VariableState[A]':
+  def to_state(self: Variable[A]) -> VariableState[A]:
     metadata = vars(self).copy()
     del metadata['raw_value']
     del metadata['_trace_state']
@@ -794,7 +794,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
         subtree_renderer=subtree_renderer,
     )
 
-  def replace(self, value: B) -> 'VariableState[B]':
+  def replace(self, value: B) -> VariableState[B]:
     return VariableState(self.type, value, **self.get_metadata())
 
   def to_variable(self) -> Variable[A]:
@@ -863,11 +863,11 @@ def with_metadata(
     CreateValueHook[A], tp.Sequence[CreateValueHook[A]]
   ] = (),
   add_axis_hooks: tp.Union[
-    AddAxisHook['Variable[A]'], tp.Sequence[AddAxisHook['Variable[A]']]
+    AddAxisHook[Variable[A]], tp.Sequence[AddAxisHook[Variable[A]]]
   ] = (),
   remove_axis_hooks: tp.Union[
-    RemoveAxisHook['Variable[A]'],
-    tp.Sequence[RemoveAxisHook['Variable[A]']],
+    RemoveAxisHook[Variable[A]],
+    tp.Sequence[RemoveAxisHook[Variable[A]]],
   ] = (),
   **metadata: tp.Any,
 ) -> F:

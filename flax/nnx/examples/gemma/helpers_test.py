@@ -30,7 +30,6 @@
 
 from __future__ import annotations
 
-from typing import Tuple
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -127,7 +126,7 @@ class ModuleFromLinenVariablesTest(parameterized.TestCase):
         for in_f, out_f, b in zip(in_features, out_features, use_bias)
     ])
 
-    def _map_key_fn(key: Tuple[str, ...]) -> Tuple[str | int, ...]:
+    def _map_key_fn(key: tuple[str, ...]) -> tuple[str | int, ...]:
       new_key = []
       for k in key[1:]:
         if k.startswith('layers_'):

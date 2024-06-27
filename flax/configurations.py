@@ -140,7 +140,7 @@ def static_bool_env(varname: str, default: bool) -> bool:
     return False
   else:
     raise ValueError(
-      'invalid truth value {!r} for environment {!r}'.format(val, varname)
+      f'invalid truth value {val!r} for environment {varname!r}'
     )
 
 

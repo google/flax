@@ -18,17 +18,9 @@ import collections
 import functools
 from typing import (
     Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
     TypeVar,
-    Union,
 )
+from collections.abc import Callable, Iterable, Mapping, Sequence
 import warnings
 
 from flax import traceback_util
@@ -162,7 +154,7 @@ def _partial_pack(
     inner_rng_counters.append(rng_counters)
   rng_groups_xs_t = _transpose(rng_groups_xs)
 
-  inner_scopes: List[Scope] = []
+  inner_scopes: list[Scope] = []
 
   def scope_fn(
       variable_groups_xs_t,
@@ -439,7 +431,7 @@ def vjp(
   vjp_variables: CollectionFilter = 'params',
   variables: CollectionFilter = True,
   rngs: PRNGSequenceFilter = True,
-) -> Union[Tuple[Any, Callable[..., Any]], Tuple[Any, Callable[..., Any], Any]]:
+) -> tuple[Any, Callable[..., Any]] | tuple[Any, Callable[..., Any], Any]:
   """A lifted version of ``jax.vjp``.
 
   See ``jax.vjp`` for the unlifted vector-Jacobian product (backward gradient).
@@ -538,7 +530,7 @@ def value_and_grad(
   reduce_axes=(),
   variables: CollectionFilter = True,
   rngs: PRNGSequenceFilter = True,
-) -> Union[Tuple[Any, Callable[..., Any]], Tuple[Any, Callable[..., Any], Any]]:
+) -> tuple[Any, Callable[..., Any]] | tuple[Any, Callable[..., Any], Any]:
   """A limited lifted version of ``jax.value_and_grad``.
 
   See ``jax.value_and_grad`` for the unlifted reverse mode gradient.
@@ -631,7 +623,7 @@ def jvp(
   variable_tangents,
   variables: CollectionFilter = True,
   rngs: PRNGSequenceFilter = True,
-) -> Tuple[Any, Any]:
+) -> tuple[Any, Any]:
   """A lifted version of ``jax.jvp``.
 
   See ``jax.jvp`` for the unlifted Jacobian-vector product (forward gradient).
@@ -720,10 +712,10 @@ def vmap(
   split_rngs: Mapping[PRNGSequenceFilter, bool],
   in_axes=0,
   out_axes=0,
-  axis_size: Optional[int] = None,
-  axis_name: Optional[str] = None,
-  spmd_axis_name: Optional[str] = None,
-  metadata_params: Dict[Any, Any] = {},
+  axis_size: int | None = None,
+  axis_name: str | None = None,
+  spmd_axis_name: str | None = None,
+  metadata_params: dict[Any, Any] = {},
 ) -> Callable[..., Any]:
   """A lifted version of ``jax.vmap``.
 
@@ -872,12 +864,12 @@ def scan(
   split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
   in_axes=0,
   out_axes=0,
-  length: Optional[int] = None,
+  length: int | None = None,
   reverse: bool = False,
   unroll: int = 1,
   _split_transpose: bool = False,
-  data_transform: Optional[Callable[..., Any]] = None,
-  metadata_params: Dict[Any, Any] = {},
+  data_transform: Callable[..., Any] | None = None,
+  metadata_params: dict[Any, Any] = {},
 ) -> Callable[..., Any]:
   """A lifted version of ``jax.lax.scan``.
 
@@ -1416,8 +1408,8 @@ def checkpoint(
   rngs: PRNGSequenceFilter = True,
   concrete: bool = False,
   prevent_cse: bool = True,
-  static_argnums: Union[int, Tuple[int, ...]] = (),
-  policy: Optional[Callable[..., bool]] = None,
+  static_argnums: int | tuple[int, ...] = (),
+  policy: Callable[..., bool] | None = None,
 ) -> Callable[..., Any]:
   """Lifted version of ``jax.checkpoint``.
 
@@ -1502,11 +1494,11 @@ def jit(
     fn: Callable[..., Any],
     variables: CollectionFilter = True,
     rngs: PRNGSequenceFilter = True,
-    static_argnums: Union[int, Iterable[int]] = (),
-    static_argnames: Union[str, Iterable[str]] = (),
-    donate_argnums: Union[int, Iterable[int]] = (),
+    static_argnums: int | Iterable[int] = (),
+    static_argnames: str | Iterable[str] = (),
+    donate_argnums: int | Iterable[int] = (),
     device=None,
-    backend: Union[str, None] = None,
+    backend: str | None = None,
 ) -> Callable[..., Any]:
   """Lifted version of ``jax.jit``.
 
@@ -1562,8 +1554,8 @@ def jit(
   # Close over scope_fn & repack_fn to avoid recompilation
   # this is impure but we use the fingerprint arg to differentiate between cases
   # where scope_fn or repack_fn actually produce non-identical results.
-  scope_fn = None  # type: Optional[Callable]
-  repack_fn = None  # type: Optional[Callable]
+  scope_fn = None  # type: Callable | None
+  repack_fn = None  # type: Callable | None
 
   @functools.partial(
       jax.jit,
@@ -1611,7 +1603,7 @@ def jit(
 def remat_scan(
   body_fn: Callable[..., Any],
   lengths: Sequence[int],
-  policy: Optional[Callable[..., bool]] = None,
+  policy: Callable[..., bool] | None = None,
   variable_broadcast: CollectionFilter = False,
   variable_carry: CollectionFilter = False,
   variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {True: 0},

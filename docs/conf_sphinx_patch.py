@@ -23,7 +23,7 @@
 #
 # We should consider sending a PR to sphinx so we can get rid of this.
 # Original source: https://github.com/sphinx-doc/sphinx/blob/0aedcc9a916daa92d477226da67d33ce1831822e/sphinx/ext/autosummary/generate.py#L211-L351
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any
 
 import sphinx.ext.autodoc
 import sphinx.ext.autosummary.generate as ag
@@ -38,7 +38,7 @@ def generate_autosummary_content(
   imported_members: bool,
   app: Any,
   recursive: bool,
-  context: Dict,
+  context: dict,
   modname: str = None,
   qualname: str = None,
 ) -> str:
@@ -61,13 +61,13 @@ def generate_autosummary_content(
       )
       return False
 
-  def get_class_members(obj: Any) -> Dict[str, Any]:
+  def get_class_members(obj: Any) -> dict[str, Any]:
     members = sphinx.ext.autodoc.get_class_members(
       obj, [qualname], ag.safe_getattr
     )
     return {name: member.object for name, member in members.items()}
 
-  def get_module_members(obj: Any) -> Dict[str, Any]:
+  def get_module_members(obj: Any) -> dict[str, Any]:
     members = {}
     for name in ag.members_of(obj, app.config):
       try:
@@ -76,7 +76,7 @@ def generate_autosummary_content(
         continue
     return members
 
-  def get_all_members(obj: Any) -> Dict[str, Any]:
+  def get_all_members(obj: Any) -> dict[str, Any]:
     if doc.objtype == 'module':
       return get_module_members(obj)
     elif doc.objtype == 'class':
@@ -85,12 +85,12 @@ def generate_autosummary_content(
 
   def get_members(
     obj: Any,
-    types: Set[str],
-    include_public: List[str] = [],
+    types: set[str],
+    include_public: list[str] = [],
     imported: bool = True,
-  ) -> Tuple[List[str], List[str]]:
-    items: List[str] = []
-    public: List[str] = []
+  ) -> tuple[list[str], list[str]]:
+    items: list[str] = []
+    public: list[str] = []
 
     all_members = get_all_members(obj)
     for name, value in all_members.items():
@@ -112,7 +112,7 @@ def generate_autosummary_content(
               public.append(name)
     return public, items
 
-  def get_module_attrs(members: Any) -> Tuple[List[str], List[str]]:
+  def get_module_attrs(members: Any) -> tuple[list[str], list[str]]:
     """Find module attributes with docstrings."""
     attrs, public = [], []
     try:
@@ -127,8 +127,8 @@ def generate_autosummary_content(
       pass  # give up if ModuleAnalyzer fails to parse code
     return public, attrs
 
-  def get_modules(obj: Any) -> Tuple[List[str], List[str]]:
-    items: List[str] = []
+  def get_modules(obj: Any) -> tuple[list[str], list[str]]:
+    items: list[str] = []
     for _, modname, _ispkg in ag.pkgutil.iter_modules(obj.__path__):
       fullname = name + '.' + modname
       try:
@@ -142,7 +142,7 @@ def generate_autosummary_content(
     public = [x for x in items if not x.split('.')[-1].startswith('_')]
     return public, items
 
-  ns: Dict[str, Any] = {}
+  ns: dict[str, Any] = {}
   ns.update(context)
 
   if doc.objtype == 'module':

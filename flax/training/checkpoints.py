@@ -28,15 +28,8 @@ import warnings
 from concurrent.futures import thread
 from typing import (
   Any,
-  Callable,
-  Dict,
-  Iterable,
-  List,
-  Optional,
-  Tuple,
-  Type,
-  Union,
 )
+from collections.abc import Callable, Iterable
 
 import jax
 import orbax.checkpoint as ocp
@@ -100,12 +93,12 @@ def _is_multiprocess_array(value: Any) -> bool:
 
 
 def _checkpoint_path(
-  ckpt_dir: str, step: Union[int, float, str], prefix: str = 'checkpoint_'
+  ckpt_dir: str, step: int | float | str, prefix: str = 'checkpoint_'
 ) -> str:
   return os.path.join(ckpt_dir, f'{prefix}{step}')
 
 
-def _checkpoint_path_step(path: str) -> Optional[float]:
+def _checkpoint_path_step(path: str) -> float | None:
   """Returns the step number of a checkpoint path."""
   for s in SIGNED_FLOAT_RE.split(path)[::-1]:
     if SIGNED_FLOAT_RE.match(s):
@@ -168,8 +161,8 @@ class AsyncManager:
 
 
 def _split_mp_arrays(
-  target: Dict[str, Any]
-) -> Tuple[Dict[str, Any], List[Tuple[MultiprocessArrayType, str]]]:
+  target: dict[str, Any]
+) -> tuple[dict[str, Any], list[tuple[MultiprocessArrayType, str]]]:
   """Split out the multiprocess arrays from the target pytree to save."""
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(target, (core.FrozenDict, dict)):
@@ -189,7 +182,7 @@ def _split_mp_arrays(
 
 
 def _make_mpa_dirs(
-  mpa_targets: List[Tuple[MultiprocessArrayType, str]], tmp_path: str
+  mpa_targets: list[tuple[MultiprocessArrayType, str]], tmp_path: str
 ):
   # Temporary array path is not used in GCS.
   if tmp_path.startswith('gs://'):
@@ -207,15 +200,15 @@ def _make_mpa_dirs(
 
 def _save_mpas(
   gda_manager,
-  mpa_targets: List[Tuple[MultiprocessArrayType, str]],
+  mpa_targets: list[tuple[MultiprocessArrayType, str]],
   tmp_path: str,
   final_path: str,
   base_path: str,
   keep: int,
   overwrite: bool,
-  keep_every_n_steps: Optional[int],
+  keep_every_n_steps: int | None,
   ckpt_start_time: float,
-  async_manager: Optional[AsyncManager] = None,
+  async_manager: AsyncManager | None = None,
 ):
   """Save the multiprocess arrays given the paths."""
   mpa_list, mpa_subpaths = zip(*mpa_targets)
@@ -255,10 +248,10 @@ def _save_mpas(
 
 def _restore_mpas(
   state_dict,
-  target: Optional[Any],
+  target: Any | None,
   ckpt_path: str,
-  step: Optional[Union[int, float]],
-  gda_manager: Optional[GlobalAsyncCheckpointManager],
+  step: int | float | None,
+  gda_manager: GlobalAsyncCheckpointManager | None,
   allow_partial: bool = False,
 ):
   """Restore the multiprocess arrays given the target structure and type."""
@@ -270,9 +263,9 @@ def _restore_mpas(
       raise errors.MPARestoreTargetRequiredError(ckpt_path, step)
 
   def _safe_deserialize(
-    target_mpas: List[Tuple[Tuple[Any, ...], MultiprocessArrayType, str]],
+    target_mpas: list[tuple[tuple[Any, ...], MultiprocessArrayType, str]],
     gda_manager: Any,
-  ) -> List[MultiprocessArrayType]:
+  ) -> list[MultiprocessArrayType]:
     gda_manager.wait_until_finished()
 
     # Check if reading from GCS and the array dir is potentially corrupted.
@@ -347,7 +340,7 @@ def _restore_mpas(
   return state_dict
 
 
-def natural_sort(file_list: Iterable[str], signed: bool = True) -> List[str]:
+def natural_sort(file_list: Iterable[str], signed: bool = True) -> list[str]:
   """Natural sort for filenames with numerical substrings.
 
   Args:
@@ -388,12 +381,12 @@ def _remove_invalid_ckpts(
   base_path: str,
   keep: int,
   overwrite: bool,
-  keep_every_n_steps: Optional[int],
+  keep_every_n_steps: int | None,
   has_mpa: bool,
 ) -> None:
   """Clean up the checkpoint space according to `overwrite`, `keep`, and `keep_every_n_steps` parameters."""
   dir_path, prefix = os.path.split(base_path)
-  checkpoint_files: List[Any] = [
+  checkpoint_files: list[Any] = [
     pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)
   ]
   checkpoint_files = [
@@ -450,11 +443,11 @@ def _save_commit(
   base_path: str,
   keep: int,
   overwrite: bool,
-  keep_every_n_steps: Optional[int],
+  keep_every_n_steps: int | None,
   ckpt_start_time: float,
   has_mpa: bool,
   write_commit_success: bool,
-  async_manager: Optional[AsyncManager] = None,
+  async_manager: AsyncManager | None = None,
 ) -> None:
   """Commit changes after saving checkpoints to disk.
 
@@ -510,7 +503,7 @@ def _check_overwrite_error(
 ):
   """Throw error if a ckpt file of this step or higher already exists."""
   dir_path, prefix = os.path.split(base_path)
-  checkpoint_files: List[Any] = [
+  checkpoint_files: list[Any] = [
     pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)
   ]
   checkpoint_files = [
@@ -534,12 +527,12 @@ def _check_overwrite_error(
 def _save_main_ckpt_file(
   target: bytes,
   has_mpa: bool,
-  paths: Tuple[str, str],
+  paths: tuple[str, str],
   base_path: str,
   step: int,
   keep: int,
   overwrite: bool,
-  keep_every_n_steps: Optional[int],
+  keep_every_n_steps: int | None,
   ckpt_start_time: float,
 ):
   """Save the main checkpoint file via file system."""
@@ -565,10 +558,10 @@ def _save_main_ckpt_file(
 
 
 def _get_checkpoint_paths(
-  ckpt_dir: Union[str, os.PathLike],
-  step: Union[int, float],
+  ckpt_dir: str | os.PathLike,
+  step: int | float,
   prefix: str = 'checkpoint_',
-) -> Tuple[str, str, str]:
+) -> tuple[str, str, str]:
   """Generate the checkpoint paths used in this save operation."""
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   logging.info('Saving checkpoint at step: %s', step)
@@ -581,15 +574,15 @@ def _get_checkpoint_paths(
 
 
 def save_checkpoint(
-  ckpt_dir: Union[str, os.PathLike],
+  ckpt_dir: str | os.PathLike,
   target: PyTree,
-  step: Union[int, float],
+  step: int | float,
   prefix: str = 'checkpoint_',
   keep: int = 1,
   overwrite: bool = False,
-  keep_every_n_steps: Optional[int] = None,
-  async_manager: Optional[AsyncManager] = None,
-  orbax_checkpointer: Optional[ocp.Checkpointer] = None,
+  keep_every_n_steps: int | None = None,
+  async_manager: AsyncManager | None = None,
+  orbax_checkpointer: ocp.Checkpointer | None = None,
 ) -> str:
   """Save a checkpoint of the model. Suitable for single-host.
 
@@ -750,16 +743,16 @@ def save_checkpoint(
 
 
 def save_checkpoint_multiprocess(
-  ckpt_dir: Union[str, os.PathLike],
+  ckpt_dir: str | os.PathLike,
   target: PyTree,
-  step: Union[int, float],
+  step: int | float,
   prefix: str = 'checkpoint_',
   keep: int = 1,
   overwrite: bool = False,
-  keep_every_n_steps: Optional[int] = None,
-  async_manager: Optional[AsyncManager] = None,
-  gda_manager: Optional[GlobalAsyncCheckpointManager] = None,
-  orbax_checkpointer: Optional[ocp.Checkpointer] = None,
+  keep_every_n_steps: int | None = None,
+  async_manager: AsyncManager | None = None,
+  gda_manager: GlobalAsyncCheckpointManager | None = None,
+  orbax_checkpointer: ocp.Checkpointer | None = None,
 ) -> str:
   """Save a checkpoint of the model in multi-process environment.
 
@@ -927,8 +920,8 @@ def save_checkpoint_multiprocess(
 
 
 def _all_checkpoints(
-  ckpt_dir: Union[str, os.PathLike], prefix: str = 'checkpoint_'
-) -> List[str]:
+  ckpt_dir: str | os.PathLike, prefix: str = 'checkpoint_'
+) -> list[str]:
   """Retrieve all checkpoint paths in directory.
 
   Args:
@@ -939,7 +932,7 @@ def _all_checkpoints(
     Sorted list of checkpoint paths or empty list if no checkpoints were found.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
-  checkpoint_files: List[Any] = [
+  checkpoint_files: list[Any] = [
     pathlib.PurePath(c) for c in _allowempty_listdir(ckpt_dir)
   ]
   checkpoint_files = [
@@ -958,8 +951,8 @@ def _all_checkpoints(
 
 
 def latest_checkpoint(
-  ckpt_dir: Union[str, os.PathLike], prefix: str = 'checkpoint_'
-) -> Optional[str]:
+  ckpt_dir: str | os.PathLike, prefix: str = 'checkpoint_'
+) -> str | None:
   """Retrieve the path of the latest checkpoint in a directory.
 
   Args:
@@ -977,10 +970,10 @@ def latest_checkpoint(
 
 
 def available_steps(
-  ckpt_dir: Union[str, os.PathLike],
+  ckpt_dir: str | os.PathLike,
   prefix: str = 'checkpoint_',
-  step_type: Type = int,
-) -> List[Union[int, float]]:
+  step_type: type = int,
+) -> list[int | float]:
   """Return step numbers of available checkpoints in a directory.
 
 
@@ -1004,15 +997,15 @@ def available_steps(
 
 
 def restore_checkpoint(
-  ckpt_dir: Union[str, os.PathLike],
-  target: Optional[Any],
-  step: Optional[Union[int, float]] = None,
+  ckpt_dir: str | os.PathLike,
+  target: Any | None,
+  step: int | float | None = None,
   prefix: str = 'checkpoint_',
   parallel: bool = True,
-  gda_manager: Optional[GlobalAsyncCheckpointManager] = None,
+  gda_manager: GlobalAsyncCheckpointManager | None = None,
   allow_partial_mpa_restoration: bool = False,
-  orbax_checkpointer: Optional[ocp.Checkpointer] = None,
-  orbax_transforms: Optional[Dict] = None,
+  orbax_checkpointer: ocp.Checkpointer | None = None,
+  orbax_transforms: dict | None = None,
 ) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
 
@@ -1241,7 +1234,7 @@ def convert_pre_linen(params: PyTree) -> PyTree:
   if not isinstance(params, (dict, core.FrozenDict)):
     return params
   params_renamed = {}
-  counts: Dict[Any, Any] = {}
+  counts: dict[Any, Any] = {}
   names = natural_sort(params.keys())
   for name in names:
     value = params[name]
