@@ -713,6 +713,29 @@ class NormalizationTest(parameterized.TestCase):
       _ = model_cls.init(random.PRNGKey(0), x, train=False)
 
   @parameterized.parameters(
+    {'use_scale': True}, {'use_scale': False}
+  )
+  def test_spectral_norm_scale(self, use_scale):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, train):
+        x = nn.SpectralNorm(
+          nn.Dense(8, use_bias=False), use_scale=use_scale
+        )(x, update_stats=train)
+        return x
+    
+    x = jnp.ones((1, 8))
+    model_cls = Foo()
+    variables = model_cls.init(random.PRNGKey(0), x, train=False)
+    params = variables['params']
+
+    if use_scale:
+      self.assertIn('Dense_0/kernel/scale', params['SpectralNorm_0'])
+      self.assertEqual(jnp.shape(params['SpectralNorm_0']['Dense_0/kernel/scale']), ())
+    else:
+      self.assertNotIn('SpectralNorm_0', params)
+
+  @parameterized.parameters(
     {'feature_axes': -1, 'reduction_axes': 0, 'variable_filter': {'kernel'}},
     {'feature_axes': 0, 'reduction_axes': 1, 'variable_filter': {'kernel'}},
     {

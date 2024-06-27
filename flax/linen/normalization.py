@@ -1011,6 +1011,9 @@ class SpectralNorm(Module):
     epsilon: A small float added to l2-normalization to avoid dividing by zero.
     dtype: the dtype of the result (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
+    use_scale: If True, creates a learnable variable ``scale`` that is
+      multiplied to the ``layer_instance`` variables after spectral norm.
+    scale_init: Initialization function for the scaling function.
     error_on_non_matrix: Spectral normalization is only defined on matrices. By
       default, this module will return scalars unchanged and flatten
       higher-order tensors in their leading dimensions. Setting this flag to
@@ -1025,6 +1028,8 @@ class SpectralNorm(Module):
   epsilon: float = 1e-12
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
+  use_scale: bool = False
+  scale_init: Initializer = initializers.ones
   error_on_non_matrix: bool = False
   collection_name: str = 'batch_stats'
 
@@ -1094,12 +1099,13 @@ class SpectralNorm(Module):
       else:
         value = jnp.reshape(value, (-1, value.shape[-1]))
 
-    u_var_name = (
+    str_path = (
       self.layer_instance.name
       + '/'
       + '/'.join((dict_key.key for dict_key in path[1:]))
-      + '/u'
     )
+
+    u_var_name = str_path + '/u'
     u_var = self.variable(
       self.collection_name,
       u_var_name,
@@ -1111,12 +1117,7 @@ class SpectralNorm(Module):
       self.param_dtype,
     )
     u0 = u_var.value
-    sigma_var_name = (
-      self.layer_instance.name
-      + '/'
-      + '/'.join((dict_key.key for dict_key in path[1:]))
-      + '/sigma'
-    )
+    sigma_var_name = str_path + '/sigma'
     sigma_var = self.variable(
       self.collection_name, sigma_var_name, jnp.ones, (), self.param_dtype
     )
@@ -1140,7 +1141,18 @@ class SpectralNorm(Module):
       u_var.value = u0
       sigma_var.value = sigma
 
-    dtype = dtypes.canonicalize_dtype(vs, u0, v0, sigma, dtype=self.dtype)
+    args = [vs, u0, v0, sigma]
+    if self.use_scale:
+      scale = self.param(
+        str_path + '/scale',
+        self.scale_init,
+        (),
+        self.param_dtype,
+      )
+      value_bar *= scale
+      args.append(scale)
+
+    dtype = dtypes.canonicalize_dtype(*args, dtype=self.dtype)
     return jnp.asarray(value_bar, dtype)
 
 
