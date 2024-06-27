@@ -31,8 +31,13 @@
 from absl.testing import absltest
 from absl.testing import parameterized
 import positional_embeddings
+import jax
 import jax.numpy as jnp
 import numpy as np
+
+# positional_embeddings.py uses implicit rank broadcast and needs this config to
+# be 'allow', while the rest of Flax can use jax_numpy_rank_promotion=raise.
+jax.config.update('jax_numpy_rank_promotion', 'allow')
 
 
 class PositionalEmbeddingsTest(parameterized.TestCase):

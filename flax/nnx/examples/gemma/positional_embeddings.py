@@ -33,10 +33,6 @@ import jax.numpy as jnp
 
 _MAX_WAVELENGTH = 10_000
 
-# This code uses implicit rank broadcast and needs this config to be 'allow',
-# while the rest of Flax can use jax_numpy_rank_promotion=raise.
-jax.config.update('jax_numpy_rank_promotion', 'allow')
-
 
 def add_positional_embedding(
     input_embedding: jax.Array,
