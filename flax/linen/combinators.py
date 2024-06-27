@@ -14,7 +14,11 @@
 
 """Combinators of modules, such as a Sequential."""
 
-from typing import Any, Callable, Dict, Sequence
+from typing import Any, Callable, Dict, Sequence, Tuple
+
+from jax import Array
+import jax.tree_util as jtu
+import jax.numpy as jnp
 
 from flax.linen.module import Module, compact
 
@@ -111,3 +115,24 @@ class Sequential(Module):
       else:
         outputs = layer(outputs)
     return outputs
+
+
+class Split(Module):
+    n_heads: int
+
+    def __call__(self, x: Array) -> Tuple[Array, ...]:
+        return (x,) * self.n_heads
+
+
+class Merge(Module):
+    aggregate: Callable[[Array], Array]
+
+    def __call__(self, *arrays: Tuple[Array, ...]) -> Array:
+        return self.aggregate(jnp.asarray(arrays))
+
+
+class Parallel(Module):
+    functions: Tuple[Module, ...]
+
+    def __call__(self, *inputs: Tuple[Array, ...]) -> Tuple[Array, ...]:
+        return jtu.tree_map(lambda f, x: f(x), self.functions, inputs)
