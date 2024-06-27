@@ -30,7 +30,8 @@ import dataclasses
 import enum
 import functools
 import threading
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
+from typing import Any
+from collections.abc import Callable, Sequence
 
 import jax
 from jax import lax
@@ -107,9 +108,9 @@ def _mesh_assignment_free(new_assignment, existing_assignments):
 
 
 def _logical_to_mesh_axes(
-    array_dim_names: Optional[Sequence[Optional[str]]],
-    rules: Optional[LogicalRules] = None,
-) -> Optional[List[Union[_UnassignedAxis, None, str, Tuple[str, ...]]]]:
+    array_dim_names: Sequence[str | None] | None,
+    rules: LogicalRules | None = None,
+) -> list[_UnassignedAxis | None | str | tuple[str, ...]] | None:
   """Same as logical_to_mesh_axes, but doesn't fill in _unassigned_axis."""
   if array_dim_names is None:
     return None
@@ -126,7 +127,7 @@ def _logical_to_mesh_axes(
   if not isinstance(rules, (tuple, list)):
     raise ValueError('Unknown axis rule specification type.')
   # We assign mesh axes using a priority based ruleset over logical axis names.
-  result: List[Union[_UnassignedAxis, None, str, Tuple[str, ...]]]
+  result: list[_UnassignedAxis | None | str | tuple[str, ...]]
   result = [
       (_unassigned_axis if isinstance(name, str) else name)
       for name in array_dim_names
@@ -143,9 +144,9 @@ def _logical_to_mesh_axes(
 
 
 def logical_to_mesh_axes(
-  array_dim_names: Optional[Sequence[Optional[str]]],
-  rules: Optional[LogicalRules] = None,
-) -> Optional[jax.sharding.PartitionSpec]:
+  array_dim_names: Sequence[str | None] | None,
+  rules: LogicalRules | None = None,
+) -> jax.sharding.PartitionSpec | None:
   """Compute layout for an array.
 
   The rules are in order of precedence, and consist of pairs:
@@ -189,7 +190,7 @@ def logical_to_mesh_axes(
   return jax.sharding.PartitionSpec(*result)
 
 
-def logical_to_mesh(tree: Any, rules: Optional[LogicalRules] = None) -> Any:
+def logical_to_mesh(tree: Any, rules: LogicalRules | None = None) -> Any:
   """Applies logical_to_mesh_axes to pytrees of logical PartitionSpecs."""
   return jax.tree_util.tree_map(
       lambda x: logical_to_mesh_axes(x, rules),
@@ -201,7 +202,7 @@ def logical_to_mesh(tree: Any, rules: Optional[LogicalRules] = None) -> Any:
 def logical_to_mesh_sharding(
   tree: Any,
   mesh: jax.sharding.Mesh,
-  rules: Optional[LogicalRules] = None,
+  rules: LogicalRules | None = None,
 ) -> Any:
   """Convert pytrees of logical PartitionSpecs to shardings."""
   return jax.tree_util.tree_map(
@@ -227,8 +228,8 @@ class RulesFallback(enum.Enum):
 
 def _with_sharding_constraint(
   x: Array,
-  axis_resources: Optional[jax.sharding.PartitionSpec],
-  mesh: Optional[jax.sharding.Mesh] = None,
+  axis_resources: jax.sharding.PartitionSpec | None,
+  mesh: jax.sharding.Mesh | None = None,
 ):
   """Wrapper for lax.with_sharding_constraint, no-op on cpu or outside jit."""
   if jax.devices()[0].platform == 'cpu' or (
@@ -246,8 +247,8 @@ def _with_sharding_constraint_one_fallback(
   axis_resources: LogicalPartitionSpec,
   x: Array,
   fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
-  rules: Optional[LogicalRules] = None,
-  mesh: Optional[jax.sharding.Mesh] = None,
+  rules: LogicalRules | None = None,
+  mesh: jax.sharding.Mesh | None = None,
 ):
   """Either imposes a sharding constraint or applies fallback."""
   mesh_axes = _logical_to_mesh_axes(axis_resources, rules)
@@ -284,8 +285,8 @@ def _is_logical_spec(x):
 def with_logical_constraint(
   x: ArrayPytree,
   logical_axis_resources: LogicalPartitionSpecPytree,
-  rules: Optional[LogicalRules] = None,
-  mesh: Optional[jax.sharding.Mesh] = None,
+  rules: LogicalRules | None = None,
+  mesh: jax.sharding.Mesh | None = None,
   fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
 ):
   """Version of jit's with_sharding_constraint that uses logical axis names."""
@@ -313,7 +314,7 @@ def with_logical_constraint(
 
 
 class LogicallyPartitioned(meta.Partitioned):
-  rules: Optional[LogicalRules] = struct.field(default=None, pytree_node=False)
+  rules: LogicalRules | None = struct.field(default=None, pytree_node=False)
 
   def unbox(self, apply_constraint=True) -> Any:
     """Returns the wrapped value with the partitioning constraint applied."""
@@ -331,8 +332,8 @@ class LogicallyPartitioned(meta.Partitioned):
 def with_logical_partitioning(
   fn: Callable[..., Any],
   names: LogicalNames,
-  mesh: Optional[jax.sharding.Mesh] = None,
-  rules: Optional[LogicalRules] = None,
+  mesh: jax.sharding.Mesh | None = None,
+  rules: LogicalRules | None = None,
 ) -> Callable[..., LogicallyPartitioned]:
   """Wraps a function's return value with LogicallyPartitioned.
 

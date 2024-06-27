@@ -18,7 +18,8 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
-from typing import Any, Callable, Optional, Union, overload
+from typing import Any, overload
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -46,15 +47,15 @@ from flax.typing import (
 def dot_product_attention_weights(
     query: Array,
     key: Array,
-    bias: Optional[Array] = None,
-    mask: Optional[Array] = None,
+    bias: Array | None = None,
+    mask: Array | None = None,
     broadcast_dropout: bool = True,
-    dropout_rng: Optional[PRNGKey] = None,
+    dropout_rng: PRNGKey | None = None,
     dropout_rate: float = 0.0,
     deterministic: bool = False,
-    dtype: Optional[Dtype] = None,
+    dtype: Dtype | None = None,
     precision: PrecisionLike = None,
-    module: Optional[Module] = None,
+    module: Module | None = None,
     force_fp32_for_softmax: bool = False,
     einsum_dot_general: Callable[..., Array] = jax.lax.dot_general,
 ):
@@ -151,15 +152,15 @@ def dot_product_attention(
     query: Array,
     key: Array,
     value: Array,
-    bias: Optional[Array] = None,
-    mask: Optional[Array] = None,
+    bias: Array | None = None,
+    mask: Array | None = None,
     broadcast_dropout: bool = True,
-    dropout_rng: Optional[PRNGKey] = None,
+    dropout_rng: PRNGKey | None = None,
     dropout_rate: float = 0.0,
     deterministic: bool = False,
-    dtype: Optional[Dtype] = None,
+    dtype: Dtype | None = None,
     precision: PrecisionLike = None,
-    module: Optional[Module] = None,
+    module: Module | None = None,
     force_fp32_for_softmax: bool = False,
     einsum_dot_general: Callable[..., Array] = jax.lax.dot_general,
 ):
@@ -322,13 +323,13 @@ class MultiHeadDotProductAttention(Module):
   """
 
   num_heads: int
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
-  qkv_features: Optional[int] = None
-  out_features: Optional[int] = None
+  qkv_features: int | None = None
+  out_features: int | None = None
   broadcast_dropout: bool = True
   dropout_rate: float = 0.0
-  deterministic: Optional[bool] = None
+  deterministic: bool | None = None
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   out_kernel_init: Initializer | None = None
@@ -340,8 +341,8 @@ class MultiHeadDotProductAttention(Module):
   normalize_qk: bool = False
   force_fp32_for_softmax: bool = False
   # Deprecated, will be removed.
-  qkv_dot_general: Optional[DotGeneralT] = None
-  out_dot_general: Optional[DotGeneralT] = None
+  qkv_dot_general: DotGeneralT | None = None
+  out_dot_general: DotGeneralT | None = None
   qkv_dot_general_cls: Any = None
   out_dot_general_cls: Any = None
 
@@ -349,12 +350,12 @@ class MultiHeadDotProductAttention(Module):
   def __call__(
     self,
     inputs_q: Array,
-    inputs_k: Optional[Array] = None,
-    inputs_v: Optional[Array] = None,
+    inputs_k: Array | None = None,
+    inputs_v: Array | None = None,
     *,
-    mask: Optional[Array] = None,
-    deterministic: Optional[bool] = None,
-    dropout_rng: Optional[PRNGKey] = None,
+    mask: Array | None = None,
+    deterministic: bool | None = None,
+    dropout_rng: PRNGKey | None = None,
     sow_weights: bool = False,
   ):
     ...
@@ -364,10 +365,10 @@ class MultiHeadDotProductAttention(Module):
     self,
     inputs_q: Array,
     *,
-    inputs_kv: Optional[Array] = None,
-    mask: Optional[Array] = None,
-    deterministic: Optional[bool] = None,
-    dropout_rng: Optional[PRNGKey] = None,
+    inputs_kv: Array | None = None,
+    mask: Array | None = None,
+    deterministic: bool | None = None,
+    dropout_rng: PRNGKey | None = None,
     sow_weights: bool = False,
   ):
     ...
@@ -376,13 +377,13 @@ class MultiHeadDotProductAttention(Module):
   def __call__(
     self,
     inputs_q: Array,
-    inputs_k: Optional[Array] = None,
-    inputs_v: Optional[Array] = None,
+    inputs_k: Array | None = None,
+    inputs_v: Array | None = None,
     *,
-    inputs_kv: Optional[Array] = None,
-    mask: Optional[Array] = None,
-    deterministic: Optional[bool] = None,
-    dropout_rng: Optional[PRNGKey] = None,
+    inputs_kv: Array | None = None,
+    mask: Array | None = None,
+    deterministic: bool | None = None,
+    dropout_rng: PRNGKey | None = None,
     sow_weights: bool = False,
   ):
     """Applies multi-head dot product attention on the input data.
@@ -539,7 +540,7 @@ class MultiHeadDotProductAttention(Module):
         # update key, value caches with our new 1d spatial slices
         cur_index = cache_index.value
         zero = jnp.array(0, dtype=lax.dtype(cur_index.dtype))
-        indices: tuple[Union[int, jax.Array], ...] = (zero,) * len(
+        indices: tuple[int | jax.Array, ...] = (zero,) * len(
           batch_dims
         ) + (
           cur_index,
@@ -712,9 +713,9 @@ class SelfAttention(MultiHeadDotProductAttention):
   def __call__(  # type: ignore
     self,
     inputs_q: Array,
-    mask: Optional[Array] = None,
-    deterministic: Optional[bool] = None,
-    dropout_rng: Optional[PRNGKey] = None,
+    mask: Array | None = None,
+    deterministic: bool | None = None,
+    dropout_rng: PRNGKey | None = None,
     sow_weights: bool = False,
   ):
     """Applies multi-head dot product self-attention on the input data.
@@ -813,8 +814,8 @@ def make_causal_mask(
 
 
 def combine_masks(
-  *masks: Optional[Array], dtype: Dtype = jnp.float32
-) -> Optional[Array]:
+  *masks: Array | None, dtype: Dtype = jnp.float32
+) -> Array | None:
   """Combine attention masks.
 
   Args:

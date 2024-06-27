@@ -30,7 +30,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence, Union
+from typing import Any, Union
+from collections.abc import Sequence
 
 from flax import nnx
 import flax.linen as nn

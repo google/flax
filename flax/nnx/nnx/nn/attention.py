@@ -17,7 +17,8 @@
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable, Optional
+from typing import Any
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -47,15 +48,15 @@ Array = jax.Array
 def dot_product_attention_weights(
   query: Array,
   key: Array,
-  bias: Optional[Array] = None,
-  mask: Optional[Array] = None,
+  bias: Array | None = None,
+  mask: Array | None = None,
   broadcast_dropout: bool = True,
-  dropout_rng: Optional[Array] = None,
+  dropout_rng: Array | None = None,
   dropout_rate: float = 0.0,
   deterministic: bool = False,
-  dtype: Optional[Dtype] = None,
+  dtype: Dtype | None = None,
   precision: PrecisionLike = None,
-  module: Optional[Module] = None,
+  module: Module | None = None,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -138,15 +139,15 @@ def dot_product_attention(
   query: Array,
   key: Array,
   value: Array,
-  bias: Optional[Array] = None,
-  mask: Optional[Array] = None,
+  bias: Array | None = None,
+  mask: Array | None = None,
   broadcast_dropout: bool = True,
-  dropout_rng: Optional[Array] = None,
+  dropout_rng: Array | None = None,
   dropout_rate: float = 0.0,
   deterministic: bool = False,
-  dtype: Optional[Dtype] = None,
+  dtype: Dtype | None = None,
   precision: PrecisionLike = None,
-  module: Optional[Module] = None,
+  module: Module | None = None,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -662,7 +663,7 @@ def make_causal_mask(
 
 
 def combine_masks(
-  *masks: Optional[Array], dtype: Dtype = jnp.float32
+  *masks: Array | None, dtype: Dtype = jnp.float32
 ) -> Array | None:
   """Combine attention masks.
 

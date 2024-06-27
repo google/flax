@@ -15,7 +15,7 @@
 import json
 import os
 from datetime import datetime
-from typing import Callable, List
+from collections.abc import Callable
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -279,7 +279,7 @@ def _rolling_window(
   last_month = _start_of_month(df.iloc[-1]['created_at'])
   last_month = _shift_n_months(last_month, 1)
 
-  rows: List[pd.Series] = []
+  rows: list[pd.Series] = []
   while end < last_month:
     row = f(df[(df['created_at'] >= start) & (df['created_at'] < end)])
     row['period_start'] = start

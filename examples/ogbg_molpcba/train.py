@@ -15,7 +15,8 @@
 """Library file for executing training and evaluation on ogbg-molpcba."""
 
 import os
-from typing import Any, Dict, Iterable, Tuple, Optional
+from typing import Any, Dict, Tuple, Optional
+from collections.abc import Iterable
 
 from absl import logging
 from clu import checkpoint
@@ -111,7 +112,7 @@ def predictions_match_labels(
   return (preds == labels).astype(jnp.float32)
 
 
-def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
+def add_prefix_to_keys(result: dict[str, Any], prefix: str) -> dict[str, Any]:
   """Adds a prefix to the keys of a dict, returning a new dict."""
   return {f'{prefix}_{key}': val for key, val in result.items()}
 
@@ -172,7 +173,7 @@ def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
 def get_predicted_logits(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
-    rngs: Optional[Dict[str, jnp.ndarray]],
+    rngs: dict[str, jnp.ndarray] | None,
 ) -> jnp.ndarray:
   """Get predicted logits from the network for input graphs."""
   pred_graphs = state.apply_fn(state.params, graphs, rngs=rngs)
@@ -202,8 +203,8 @@ def get_valid_mask(
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
-    rngs: Dict[str, jnp.ndarray],
-) -> Tuple[train_state.TrainState, metrics.Collection]:
+    rngs: dict[str, jnp.ndarray],
+) -> tuple[train_state.TrainState, metrics.Collection]:
   """Performs one update step over the current batch of graphs."""
 
   def loss_fn(params, graphs):
@@ -264,9 +265,9 @@ def evaluate_step(
 
 def evaluate_model(
     state: train_state.TrainState,
-    datasets: Dict[str, tf.data.Dataset],
+    datasets: dict[str, tf.data.Dataset],
     splits: Iterable[str],
-) -> Dict[str, metrics.Collection]:
+) -> dict[str, metrics.Collection]:
   """Evaluates the model on metrics over the specified splits."""
 
   # Loop over each split independently.

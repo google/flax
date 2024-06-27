@@ -15,7 +15,8 @@
 """A vocabulary that represents the tokens in a dataset and maps them to indices."""
 
 import collections
-from typing import Iterable, Optional, Sequence
+from typing import Optional
+from collections.abc import Iterable, Sequence
 
 from absl import logging
 
@@ -25,8 +26,8 @@ class Vocabulary:
 
   def __init__(
       self,
-      vocab_path: Optional[str] = None,
-      tokenized_sequences: Optional[Iterable[Sequence[bytes]]] = None,
+      vocab_path: str | None = None,
+      tokenized_sequences: Iterable[Sequence[bytes]] | None = None,
       min_freq: int = 1,
       pad_token: bytes = b'<pad>',
       unk_token: bytes = b'<unk>',

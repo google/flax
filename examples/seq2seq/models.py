@@ -25,7 +25,7 @@ import jax.numpy as jnp
 
 Array = jax.Array
 PRNGKey = jax.Array
-LSTMCarry = Tuple[Array, Array]
+LSTMCarry = tuple[Array, Array]
 
 
 class DecoderLSTMCell(nn.RNNCellBase):
@@ -42,8 +42,8 @@ class DecoderLSTMCell(nn.RNNCellBase):
 
   @nn.compact
   def __call__(
-      self, carry: Tuple[LSTMCarry, Array], x: Array
-  ) -> Tuple[Tuple[LSTMCarry, Array], Tuple[Array, Array]]:
+      self, carry: tuple[LSTMCarry, Array], x: Array
+  ) -> tuple[tuple[LSTMCarry, Array], tuple[Array, Array]]:
     """Applies the DecoderLSTM model."""
     lstm_state, last_prediction = carry
     if not self.teacher_force:
@@ -87,7 +87,7 @@ class Seq2seq(nn.Module):
   @nn.compact
   def __call__(
       self, encoder_inputs: Array, decoder_inputs: Array
-  ) -> Tuple[Array, Array]:
+  ) -> tuple[Array, Array]:
     """Applies the seq2seq model.
 
     Args:

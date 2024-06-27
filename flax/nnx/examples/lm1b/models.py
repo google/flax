@@ -25,7 +25,7 @@ Reusing decoder only model from examples/wmt.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Optional
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -57,7 +57,7 @@ class TransformerConfig:
   attention_dropout_rate: float = 0.1
   kernel_init: nnx.Initializer = nnx.initializers.xavier_uniform()
   bias_init: nnx.Initializer = nnx.initializers.normal(stddev=1e-6)
-  posemb_init: Optional[nnx.Initializer] = None
+  posemb_init: nnx.Initializer | None = None
   axis_rules: default.MeshRules = dataclasses.field(
     default_factory=default.MeshRules
   )

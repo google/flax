@@ -375,11 +375,11 @@ def scan(
     )
 
     # infer length
-    lengths: set[int] = set(
+    lengths: set[int] = {
       x.shape[0]  # type: ignore
       for x, axis in zip(flat_scan, flatdef.flat_axes)
       if axis is not None
-    )
+    }
 
     if len(lengths) > 1:
       raise ValueError(
@@ -499,7 +499,7 @@ class Scan(tp.Generic[M], LiftedModule[M]):
     split_rngs: filterlib.Filter = ...,
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     scan_output: bool = True,
-  ) -> tp.Callable[..., 'Scan[MA]']:
+  ) -> tp.Callable[..., Scan[MA]]:
     def _create_scan(*args, **kwargs):
       return Scan(
         module_constructor=module_constructor,

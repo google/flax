@@ -21,17 +21,8 @@ from abc import ABC, abstractmethod
 from types import MappingProxyType
 from typing import (
   Any,
-  Callable,
-  Dict,
-  Iterable,
-  List,
-  Mapping,
-  Optional,
-  Sequence,
-  Set,
-  Tuple,
-  Union,
 )
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -68,7 +59,7 @@ class _ValueRepresentation(ABC):
 
 @dataclasses.dataclass
 class _ArrayRepresentation(_ValueRepresentation):
-  shape: Tuple[int, ...]
+  shape: tuple[int, ...]
   dtype: Any
 
   @classmethod
@@ -130,13 +121,13 @@ class Row:
     vjp_flops: FLOPs cost of calling the VJP of the module method.
   """
 
-  path: Tuple[str, ...]
+  path: tuple[str, ...]
   module_copy: module_lib.Module
   method: str
   inputs: Any
   outputs: Any
-  module_variables: Dict[str, Dict[str, Any]]
-  counted_variables: Dict[str, Dict[str, Any]]
+  module_variables: dict[str, dict[str, Any]]
+  counted_variables: dict[str, dict[str, Any]]
   flops: int
   vjp_flops: int
 
@@ -148,7 +139,7 @@ class Row:
 
   def size_and_bytes(
     self, collections: Iterable[str]
-  ) -> Dict[str, Tuple[int, int]]:
+  ) -> dict[str, tuple[int, int]]:
     return {
       col: (
         _size_and_bytes(self.counted_variables[col])
@@ -159,7 +150,7 @@ class Row:
     }
 
 
-class Table(List[Row]):
+class Table(list[Row]):
   """A list of Row objects.
 
   Table inherits from `List[Row]` so it has all the methods of a list, however
@@ -182,11 +173,11 @@ class Table(List[Row]):
 
 def tabulate(
   module: module_lib.Module,
-  rngs: Union[PRNGKey, RNGSequences],
-  depth: Optional[int] = None,
+  rngs: PRNGKey | RNGSequences,
+  depth: int | None = None,
   show_repeated: bool = False,
   mutable: CollectionFilter = DenyList('intermediates'),
-  console_kwargs: Optional[Mapping[str, Any]] = None,
+  console_kwargs: Mapping[str, Any] | None = None,
   table_kwargs: Mapping[str, Any] = MappingProxyType({}),
   column_kwargs: Mapping[str, Any] = MappingProxyType({}),
   compute_flops: bool = False,
@@ -433,7 +424,7 @@ def _get_call_flops(
 
 def _get_module_table(
   module: module_lib.Module,
-  depth: Optional[int],
+  depth: int | None,
   show_repeated: bool,
   compute_flops: bool,
   compute_vjp_flops: bool,
@@ -451,10 +442,10 @@ def _get_module_table(
       calls = module_lib._context.call_info_stack[-1].calls
       calls.sort(key=lambda c: c.index)
 
-    collections: Set[str] = set(variables.keys())
+    collections: set[str] = set(variables.keys())
     rows = []
-    all_paths: Set[Tuple[str, ...]] = set(call.path for call in calls)
-    visited_paths: Set[Tuple[str, ...]] = set()
+    all_paths: set[tuple[str, ...]] = {call.path for call in calls}
+    visited_paths: set[tuple[str, ...]] = set()
 
     for c in calls:
       call_depth = len(c.path)
@@ -497,10 +488,10 @@ def _get_module_table(
 
 
 def _get_module_variables(
-  path: Tuple[str, ...],
+  path: tuple[str, ...],
   variables: FrozenVariableDict,
-  all_paths: Set[Tuple[str, ...]],
-) -> Tuple[MutableVariableDict, Any]:
+  all_paths: set[tuple[str, ...]],
+) -> tuple[MutableVariableDict, Any]:
   """A function that takes a path and variables structure and returns a
 
   (module_variables, submodule_variables) tuple for that path.
@@ -510,9 +501,9 @@ def _get_module_variables(
   """
   module_variables = _get_path_variables(path, variables)
   submodule_variables: Any = {collection: {} for collection in module_variables}
-  all_keys = set(
+  all_keys = {
     key for collection in module_variables.values() for key in collection
-  )
+  }
 
   for key in all_keys:
     submodule_path = path + (key,)
@@ -527,7 +518,7 @@ def _get_module_variables(
 
 
 def _get_path_variables(
-  path: Tuple[str, ...], variables: FrozenVariableDict
+  path: tuple[str, ...], variables: FrozenVariableDict
 ) -> MutableVariableDict:
   """A function that takes a path and a variables structure and returns the
   variable structure at that path.
@@ -566,10 +557,10 @@ def _process_inputs(args, kwargs) -> Any:
 
 def _render_table(
   table: Table,
-  console_extras: Optional[Mapping[str, Any]],
+  console_extras: Mapping[str, Any] | None,
   table_kwargs: Mapping[str, Any],
   column_kwargs: Mapping[str, Any],
-  non_params_cols: List[str],
+  non_params_cols: list[str],
 ) -> str:
   """A function that renders a Table to a string representation using rich."""
   console_kwargs = {'force_terminal': True, 'force_jupyter': False}
@@ -675,7 +666,7 @@ def _size_and_bytes_repr(size: int, num_bytes: int) -> str:
   return f'{size:,} [dim]({bytes_repr})[/dim]'
 
 
-def _size_and_bytes(pytree: Any) -> Tuple[int, int]:
+def _size_and_bytes(pytree: Any) -> tuple[int, int]:
   leaves = jax.tree_util.tree_leaves(pytree)
   size = sum(x.size for x in leaves if hasattr(x, 'size'))
   num_bytes = sum(

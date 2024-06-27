@@ -16,7 +16,8 @@
 
 import functools
 from collections.abc import Iterable  # pylint: disable=g-importing-member
-from typing import Any, Callable, Union
+from typing import Any
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -272,7 +273,7 @@ def multi_head_dot_product_attention(
   value = scope.child(dense, 'value')(inputs_kv)
 
   if cache:
-    cache_entry: Union[Callable[[Any], CacheEntry], CacheEntry]
+    cache_entry: Callable[[Any], CacheEntry] | CacheEntry
     if not scope.has_variable('cache', 'entry'):
       ndim, tail_shape = (key.ndim, key.shape[-2:])
 

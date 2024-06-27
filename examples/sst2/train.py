@@ -13,7 +13,8 @@
 # limitations under the License.
 
 """Trains an SST2 text classifier."""
-from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
+from collections.abc import Callable, Iterable, Sequence
 
 from absl import logging
 from flax import struct
@@ -31,7 +32,7 @@ import models
 
 
 Array = jnp.ndarray
-Example = Dict[str, Array]
+Example = dict[str, Array]
 TrainState = train_state.TrainState
 
 
@@ -40,7 +41,7 @@ class Metrics(struct.PyTreeNode):
 
   loss: float
   accuracy: float
-  count: Optional[int] = None
+  count: int | None = None
 
 
 @jax.vmap
@@ -102,9 +103,9 @@ def model_from_config(config: ml_collections.ConfigDict):
 
 def train_step(
     state: TrainState,
-    batch: Dict[str, Array],
-    rngs: Dict[str, Any],
-) -> Tuple[TrainState, Metrics]:
+    batch: dict[str, Array],
+    rngs: dict[str, Any],
+) -> tuple[TrainState, Metrics]:
   """Train for a single step."""
   # Make sure to get a new RNG at every step.
   step = state.step
@@ -138,7 +139,7 @@ def train_step(
 
 
 def eval_step(
-    state: TrainState, batch: Dict[str, Array], rngs: Dict[str, Any]
+    state: TrainState, batch: dict[str, Array], rngs: dict[str, Any]
 ) -> Metrics:
   """Evaluate for a single step. Model should be in deterministic mode."""
   variables = {'params': state.params}
@@ -165,7 +166,7 @@ def normalize_batch_metrics(batch_metrics: Sequence[Metrics]) -> Metrics:
   )
 
 
-def batch_to_numpy(batch: Dict[str, tf.Tensor]) -> Dict[str, Array]:
+def batch_to_numpy(batch: dict[str, tf.Tensor]) -> dict[str, Array]:
   """Converts a batch with TF tensors to a batch of NumPy arrays."""
   # _numpy() reuses memory, does not make a copy.
   # pylint: disable=protected-access
@@ -175,9 +176,9 @@ def batch_to_numpy(batch: Dict[str, tf.Tensor]) -> Dict[str, Array]:
 def evaluate_model(
     eval_step_fn: Callable[..., Any],
     state: TrainState,
-    batches: Union[Iterable[Example], tf.data.Dataset],
+    batches: Iterable[Example] | tf.data.Dataset,
     epoch: int,
-    rngs: Optional[Dict[str, Any]] = None,
+    rngs: dict[str, Any] | None = None,
 ) -> Metrics:
   """Evaluate a model on a dataset."""
   batch_metrics = []
@@ -201,12 +202,12 @@ def evaluate_model(
 
 
 def train_epoch(
-    train_step_fn: Callable[..., Tuple[TrainState, Metrics]],
+    train_step_fn: Callable[..., tuple[TrainState, Metrics]],
     state: TrainState,
     train_batches: tf.data.Dataset,
     epoch: int,
-    rngs: Optional[Dict[str, Any]] = None,
-) -> Tuple[TrainState, Metrics]:
+    rngs: dict[str, Any] | None = None,
+) -> tuple[TrainState, Metrics]:
   """Train for a single epoch."""
   batch_metrics = []
   for batch in train_batches:

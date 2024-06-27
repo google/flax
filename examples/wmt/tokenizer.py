@@ -18,7 +18,8 @@ import dataclasses
 import os
 import tempfile
 import time
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Tuple
+from collections.abc import Iterable
 
 from absl import logging
 import jax
@@ -27,14 +28,14 @@ import tensorflow_text as tftxt
 
 from sentencepiece import SentencePieceTrainer
 
-Features = Dict[str, tf.Tensor]
+Features = dict[str, tf.Tensor]
 
 
 def _dump_chars_to_textfile(
     dataset: tf.data.Dataset,
     maxchars: int = int(1e7),
     data_keys=('inputs', 'targets'),
-) -> Tuple[str, int]:
+) -> tuple[str, int]:
   """Write part of a TFDS sentence dataset to lines in a text file.
 
   Args:
@@ -139,7 +140,7 @@ def load_or_train_tokenizer(
     vocab_path: str,
     vocab_size: int,
     max_corpus_chars: int,
-    data_keys: Tuple[str, str] = ('inputs', 'targets'),
+    data_keys: tuple[str, str] = ('inputs', 'targets'),
 ):
   """Loads the tokenizer at `vocab_path` or trains a one from `dataset`."""
   try:

@@ -14,7 +14,8 @@
 
 """Experimental layers with named axes for the partitioning API."""
 import dataclasses
-from typing import Any, Callable, Iterable, Optional, Tuple, Sequence
+from typing import Any
+from collections.abc import Callable, Iterable, Sequence
 
 import jax.numpy as jnp
 from jax import lax
@@ -66,9 +67,9 @@ class Dense(nn.Module):
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
-  kernel_axes: Tuple[str, ...] = ()
+  kernel_axes: tuple[str, ...] = ()
   # Deprecated. Will be removed.
-  dot_general: Optional[DotGeneralT] = None
+  dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
 
   @nn.compact
@@ -135,10 +136,10 @@ class Embed(nn.Module):
 
   num_embeddings: int
   features: int
-  cast_input_dtype: Optional[Dtype] = None
+  cast_input_dtype: Dtype | None = None
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  attend_dtype: Optional[Dtype] = None
+  attend_dtype: Dtype | None = None
   embedding_init: Initializer = default_embed_init
   one_hot: bool = False
   embedding: Array = dataclasses.field(init=False)
@@ -196,7 +197,7 @@ def _canonicalize_axes(rank: int, axes: Axes) -> Sequence[int]:
   """Returns a tuple of deduplicated, sorted, and positive axes."""
   if not isinstance(axes, Iterable):
     axes = (axes,)
-  return tuple(set([rank + axis if axis < 0 else axis for axis in axes]))
+  return tuple({rank + axis if axis < 0 else axis for axis in axes})
 
 
 def _abs_sq(x):

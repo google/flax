@@ -14,7 +14,8 @@
 
 import functools
 from pprint import pprint
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Optional
+from collections.abc import Callable, Sequence
 from flax.core.frozen_dict import unfreeze
 from flax.linen import initializers
 from flax.linen import Module, compact, vmap
@@ -112,8 +113,8 @@ class RawDotProductAttention(Module):
 
 
 class DotProductAttention(Module):
-  qkv_features: Optional[int] = None
-  out_features: Optional[int] = None
+  qkv_features: int | None = None
+  out_features: int | None = None
   attn_module: Callable = SoftmaxAttn
 
   @compact
@@ -154,8 +155,8 @@ def concise_vmap(module, in_axes, out_axes, axis_size=None, **var_specs):
 
 
 class MultiHeadDotProductAttention(Module):
-  qkv_features: Optional[int] = None
-  out_features: Optional[int] = None
+  qkv_features: int | None = None
+  out_features: int | None = None
   attn_module: Callable = SoftmaxAttn
   batch_axes: Sequence[int] = (0,)
   num_heads: int = 1

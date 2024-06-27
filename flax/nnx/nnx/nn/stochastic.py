@@ -28,7 +28,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Sequence
+from collections.abc import Sequence
 
 import jax
 import jax.numpy as jnp

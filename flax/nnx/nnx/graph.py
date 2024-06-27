@@ -157,7 +157,7 @@ NodeImpl = tp.Union[
 ]
 
 
-_node_impl_for_type: dict[type, 'NodeImpl[tp.Any, tp.Any, tp.Any]'] = {}
+_node_impl_for_type: dict[type, NodeImpl[tp.Any, tp.Any, tp.Any]] = {}
 
 
 def register_graph_node_type(
@@ -246,7 +246,7 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
   type: tp.Type[Node]
   index: int
   attributes: tuple[Key, ...]
-  subgraphs: _HashableMapping[Key, tp.Union['NodeDef[tp.Any]', Index]]
+  subgraphs: _HashableMapping[Key, tp.Union[NodeDef[tp.Any], Index]]
   static_fields: _HashableMapping[Key, tp.Any]
   leaves: _HashableMapping[Key, Index | None]
   metadata: tp.Any
@@ -257,7 +257,7 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
     type: tp.Type[Node],
     index: int,
     attributes: tuple[Key, ...],
-    subgraphs: tp.Iterable[tuple[Key, tp.Union['NodeDef[tp.Any]', Index]]],
+    subgraphs: tp.Iterable[tuple[Key, tp.Union[NodeDef[tp.Any], Index]]],
     static_fields: tp.Iterable[tuple[Key, tp.Any]],
     leaves: tp.Iterable[tuple[Key, Index | None]],
     metadata: tp.Any,
@@ -343,7 +343,7 @@ class GraphDef(tp.Generic[Node], reprlib.Representable):
 
   def apply(
     self, state: GraphState, *states: GraphState
-  ) -> ApplyCaller[tuple['GraphDef[Node]', GraphState]]:
+  ) -> ApplyCaller[tuple[GraphDef[Node], GraphState]]:
     accessor = DelayedAccessor()
 
     def _apply(

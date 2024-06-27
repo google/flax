@@ -26,7 +26,6 @@ Use directive as follows:
 In order to highlight a line of code, append "#!" to it.
 """
 
-from typing import List, Optional, Tuple
 
 import sphinx
 from docutils import nodes
@@ -40,10 +39,10 @@ MISSING = object()
 class CodeDiffParser:
   def parse(
     self,
-    lines: List[str],
+    lines: list[str],
     title: str,
-    groups: Optional[List[str]] = None,
-    skip_test: Optional[str] = None,
+    groups: list[str] | None = None,
+    skip_test: str | None = None,
     code_sep: str = '---',
     sync: object = MISSING,
   ):
@@ -104,7 +103,7 @@ class CodeDiffParser:
     sync = sync is not MISSING
     # skip legacy code snippets in upgrade guides
     if skip_test is not None:
-      skip_tests = set([index.strip() for index in skip_test.split(',')])
+      skip_tests = {index.strip() for index in skip_test.split(',')}
     else:
       skip_tests = set()
 
@@ -154,7 +153,7 @@ class CodeDiffParser:
     # Indent code and add empty line so the code is picked up by the directive.
     return directive + [''] + list(map(lambda x: '  ' + x, code))
 
-  def _tabs(self, *contents: Tuple[str, List[str]], sync):
+  def _tabs(self, *contents: tuple[str, list[str]], sync):
     output = ['.. tab-set::'] + ['  ']
 
     for title, content in contents:

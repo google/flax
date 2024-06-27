@@ -14,7 +14,8 @@
 
 """Combinators of modules, such as a Sequential."""
 
-from typing import Any, Callable, Dict, Sequence
+from typing import Any
+from collections.abc import Callable, Sequence
 
 from flax.linen.module import Module, compact
 
@@ -106,7 +107,7 @@ class Sequential(Module):
     for layer in self.layers[1:]:
       if isinstance(outputs, tuple):
         outputs = layer(*outputs)
-      elif isinstance(outputs, Dict):
+      elif isinstance(outputs, dict):
         outputs = layer(**outputs)
       else:
         outputs = layer(outputs)

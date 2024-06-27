@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import jax
 from absl.testing import absltest
@@ -45,7 +45,7 @@ class Dense:
 @struct.dataclass
 class ExplicitDense:
   kernel: Array
-  bias: Optional[Array]
+  bias: Array | None
 
   # a fully explicit "scope free" version
   @staticmethod

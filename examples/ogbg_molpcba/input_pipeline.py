@@ -31,7 +31,7 @@ class GraphsTupleSize(NamedTuple):
   n_graph: int
 
 
-def get_raw_datasets() -> Dict[str, tf.data.Dataset]:
+def get_raw_datasets() -> dict[str, tf.data.Dataset]:
   """Returns datasets as tf.data.Dataset, organized by split."""
   ds_builder = tfds.builder('ogbg_molpcba')
   ds_builder.download_and_prepare()
@@ -45,7 +45,7 @@ def get_datasets(
     add_virtual_node: bool = True,
     add_undirected_edges: bool = True,
     add_self_loops: bool = True,
-) -> Dict[str, tf.data.Dataset]:
+) -> dict[str, tf.data.Dataset]:
   """Returns datasets of batched GraphsTuples, organized by split."""
   if batch_size <= 1:
     raise ValueError('Batch size must be > 1 to account for padding graphs.')
@@ -109,7 +109,7 @@ def get_datasets(
 
 
 def convert_to_graphs_tuple(
-    graph: Dict[str, tf.Tensor],
+    graph: dict[str, tf.Tensor],
     add_virtual_node: bool,
     add_undirected_edges: bool,
     add_self_loops: bool,

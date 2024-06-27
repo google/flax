@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Callable
+from collections.abc import Callable
 
 import jax
 from absl.testing import absltest

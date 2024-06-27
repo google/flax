@@ -16,7 +16,8 @@
 
 import dataclasses
 import functools
-from typing import Any, Iterable, Optional, Tuple
+from typing import Any
+from collections.abc import Iterable
 
 import jax
 import jax.numpy as jnp
@@ -41,11 +42,11 @@ merge_param = module.merge_param
 map_variables = transforms.map_variables
 
 
-def _canonicalize_axes(rank: int, axes: Axes) -> Tuple[int, ...]:
+def _canonicalize_axes(rank: int, axes: Axes) -> tuple[int, ...]:
   """Returns a tuple of deduplicated, sorted, and positive axes."""
   if not isinstance(axes, Iterable):
     axes = (axes,)
-  return tuple(set([rank + axis if axis < 0 else axis for axis in axes]))
+  return tuple({rank + axis if axis < 0 else axis for axis in axes})
 
 
 def _abs_sq(x):
@@ -59,12 +60,12 @@ def _abs_sq(x):
 def _compute_stats(
     x: Array,
     axes: Axes,
-    dtype: Optional[Dtype],
-    axis_name: Optional[str] = None,
+    dtype: Dtype | None,
+    axis_name: str | None = None,
     axis_index_groups: Any = None,
     use_mean: bool = True,
     use_fast_variance: bool = True,
-    mask: Optional[Array] = None,
+    mask: Array | None = None,
     force_float32_reductions=True,
 ):
   """Computes mean and variance statistics.
@@ -152,7 +153,7 @@ def _normalize(
   var: Array,
   reduction_axes: Axes,
   feature_axes: Axes,
-  dtype: Optional[Dtype],
+  dtype: Dtype | None,
   param_dtype: Dtype,
   epsilon: float,
   use_bias: bool,
@@ -291,17 +292,17 @@ class BatchNorm(Module):
       calculation for the variance.
   """
 
-  use_running_average: Optional[bool] = None
+  use_running_average: bool | None = None
   axis: int = -1
   momentum: float = 0.99
   epsilon: float = 1e-5
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Initializer = initializers.zeros
   scale_init: Initializer = initializers.ones
-  axis_name: Optional[str] = None
+  axis_name: str | None = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
@@ -310,9 +311,9 @@ class BatchNorm(Module):
   def __call__(
       self,
       x,
-      use_running_average: Optional[bool] = None,
+      use_running_average: bool | None = None,
       *,
-      mask: Optional[jax.Array] = None,
+      mask: jax.Array | None = None,
   ):
     """Normalizes the input using batch statistics.
 
@@ -451,7 +452,7 @@ class LayerNorm(Module):
   """
 
   epsilon: float = 1e-6
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
@@ -459,13 +460,13 @@ class LayerNorm(Module):
   scale_init: Initializer = initializers.ones
   reduction_axes: Axes = -1
   feature_axes: Axes = -1
-  axis_name: Optional[str] = None
+  axis_name: str | None = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
 
   @compact
-  def __call__(self, x, *, mask: Optional[jax.Array] = None):
+  def __call__(self, x, *, mask: jax.Array | None = None):
     """Applies layer normalization on the input.
 
     Args:
@@ -552,19 +553,19 @@ class RMSNorm(Module):
   """
 
   epsilon: float = 1e-6
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   use_scale: bool = True
   scale_init: Initializer = initializers.ones
   reduction_axes: Axes = -1
   feature_axes: Axes = -1
-  axis_name: Optional[str] = None
+  axis_name: str | None = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
 
   @compact
-  def __call__(self, x, *, mask: Optional[jax.Array] = None):
+  def __call__(self, x, *, mask: jax.Array | None = None):
     """Applies RMS layer normalization on the input.
 
     Args:
@@ -673,23 +674,23 @@ class GroupNorm(Module):
       calculation for the variance.
   """
 
-  num_groups: Optional[int] = 32
-  group_size: Optional[int] = None
+  num_groups: int | None = 32
+  group_size: int | None = None
   epsilon: float = 1e-6
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Initializer = initializers.zeros
   scale_init: Initializer = initializers.ones
-  reduction_axes: Optional[Axes] = None
-  axis_name: Optional[str] = None
+  reduction_axes: Axes | None = None
+  axis_name: str | None = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
 
   @compact
-  def __call__(self, x, *, mask: Optional[jax.Array] = None):
+  def __call__(self, x, *, mask: jax.Array | None = None):
     """Applies group normalization to the input (arxiv.org/abs/1803.08494).
 
     Args:
@@ -849,20 +850,20 @@ class InstanceNorm(Module):
   """
 
   epsilon: float = 1e-6
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Initializer = initializers.zeros
   scale_init: Initializer = initializers.ones
   feature_axes: Axes = -1
-  axis_name: Optional[str] = None
+  axis_name: str | None = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
 
   @compact
-  def __call__(self, x, *, mask: Optional[jax.Array] = None):
+  def __call__(self, x, *, mask: jax.Array | None = None):
     """Applies instance normalization on the input.
 
     Args:
@@ -1023,7 +1024,7 @@ class SpectralNorm(Module):
   layer_instance: Module
   n_steps: int = 1
   epsilon: float = 1e-12
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   error_on_non_matrix: bool = False
   collection_name: str = 'batch_stats'
@@ -1097,7 +1098,7 @@ class SpectralNorm(Module):
     u_var_name = (
       self.layer_instance.name
       + '/'
-      + '/'.join((dict_key.key for dict_key in path[1:]))
+      + '/'.join(dict_key.key for dict_key in path[1:])
       + '/u'
     )
     u_var = self.variable(
@@ -1114,7 +1115,7 @@ class SpectralNorm(Module):
     sigma_var_name = (
       self.layer_instance.name
       + '/'
-      + '/'.join((dict_key.key for dict_key in path[1:]))
+      + '/'.join(dict_key.key for dict_key in path[1:])
       + '/sigma'
     )
     sigma_var = self.variable(
@@ -1262,12 +1263,12 @@ class WeightNorm(Module):
 
   layer_instance: Module
   epsilon: float = 1e-12
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   use_scale: bool = True
   scale_init: Initializer = initializers.ones
-  feature_axes: Optional[Axes] = -1
-  variable_filter: Optional[Iterable] = dataclasses.field(
+  feature_axes: Axes | None = -1
+  variable_filter: Iterable | None = dataclasses.field(
     default_factory=lambda: {'kernel'}
   )
 
@@ -1313,7 +1314,7 @@ class WeightNorm(Module):
     str_path = (
       self.layer_instance.name
       + '/'
-      + '/'.join((dict_key.key for dict_key in path[1:]))
+      + '/'.join(dict_key.key for dict_key in path[1:])
     )
     if self.variable_filter:
       for variable_name in self.variable_filter:

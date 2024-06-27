@@ -35,7 +35,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 import dataclasses
-from typing import Union
 
 import chex
 from flax import nnx
@@ -100,10 +99,10 @@ class _SamplingState:
   total_sampling_steps: int
 
   # Fixed-size buffer for accumulating the output logits.
-  logits_buffer: Union[jnp.ndarray, None] = None  # [B, L, V]
+  logits_buffer: jnp.ndarray | None = None  # [B, L, V]
 
   # List of tokens that are forbidden to be generated.
-  forbidden_token_ids: Union[Sequence[int], None] = None
+  forbidden_token_ids: Sequence[int] | None = None
 
 
 @dataclasses.dataclass
@@ -211,7 +210,7 @@ class Sampler:
       all_input_ids: list[jax.Array],
       total_sampling_steps: int,
       include_logits: bool = False,
-      forbidden_token_ids: Union[Sequence[int], None] = None,
+      forbidden_token_ids: Sequence[int] | None = None,
   ) -> _SamplingState:
     """Initializes the sampling state given input prompts."""
     batch_size = len(all_input_ids)
@@ -310,7 +309,7 @@ class Sampler:
       total_generation_steps: int,
       echo: bool = False,
       return_logits: bool = True,
-      forbidden_tokens: Union[Sequence[str], None] = None,
+      forbidden_tokens: Sequence[str] | None = None,
   ) -> SamplerOutput:
     """Samples a completion of the input string.
 

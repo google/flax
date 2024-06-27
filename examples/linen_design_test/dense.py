@@ -14,7 +14,7 @@
 
 from jax import lax
 from flax.linen import initializers
-from typing import Callable
+from collections.abc import Callable
 from flax.linen import Module, compact
 
 

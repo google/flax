@@ -26,16 +26,12 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import (
   Any,
-  Callable,
   Generic,
-  Mapping,
   NamedTuple,
-  Optional,
-  Sequence,
-  Tuple,
   TypeVar,
   get_type_hints,
 )
+from collections.abc import Callable, Mapping, Sequence
 from unittest.mock import patch
 
 import jax
@@ -296,7 +292,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class DummyModuleWithoutCompact(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -348,7 +344,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -368,7 +364,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       @compact
       def __call__(self, x):
@@ -386,7 +382,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -405,7 +401,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       def setup(self):
         self.biases = [
@@ -425,7 +421,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       def setup(self):
         self.biases = {
@@ -450,7 +446,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -469,7 +465,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -490,7 +486,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.key(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int, ...]
+      xshape: tuple[int, ...]
 
       def setup(self):
         self.bias = DummyModule()
@@ -2243,7 +2239,7 @@ class ModuleTest(absltest.TestCase):
   def test_kw_only(self):
     def create_kw_layers():
       class BaseLayer(nn.Module, kw_only=True):
-        base_multiplier: Optional[int] = -1
+        base_multiplier: int | None = -1
 
       class ChildLayer(BaseLayer):
         child_multiplier: int  # Don't want to have to set a default argument!

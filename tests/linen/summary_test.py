@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import enum
-from typing import List
 
 import jax
 import jax.numpy as jnp
@@ -46,7 +45,7 @@ def _get_obj_repr_value(x):
 
 class ConvBlock(nn.Module):
   features: int
-  kernel_size: List[int]
+  kernel_size: list[int]
   test_sow: bool
 
   def setup(self) -> None:

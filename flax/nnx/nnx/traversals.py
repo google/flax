@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any, Union, overload
+from typing import Any, overload
 
 from flax import struct
 
@@ -40,7 +40,7 @@ def flatten_mapping(xs: Mapping[Any, Any],
                     /,
                     *,
                     keep_empty_nodes: bool = False,
-                    is_leaf: Union[None, IsLeafCallable] = None,
+                    is_leaf: None | IsLeafCallable = None,
                     sep: None = None
                     ) -> dict[tuple[Any, ...], Any]:
   ...
@@ -50,7 +50,7 @@ def flatten_mapping(xs: Mapping[Any, Any],
                     /,
                     *,
                     keep_empty_nodes: bool = False,
-                    is_leaf: Union[None, IsLeafCallable] = None,
+                    is_leaf: None | IsLeafCallable = None,
                     sep: str,
                     ) -> dict[str, Any]:
   ...
@@ -59,8 +59,8 @@ def flatten_mapping(xs: Mapping[Any, Any],
                     /,
                     *,
                     keep_empty_nodes: bool = False,
-                    is_leaf: Union[None, IsLeafCallable] = None,
-                    sep: Union[None, str] = None
+                    is_leaf: None | IsLeafCallable = None,
+                    sep: None | str = None
                     ) -> dict[Any, Any]:
   """Flatten a nested mapping.
 
@@ -94,7 +94,7 @@ def flatten_mapping(xs: Mapping[Any, Any],
     xs, Mapping
   ), f'expected Mapping; got {type(xs).__qualname__}'
 
-  def _key(path: tuple[Any, ...]) -> Union[tuple[Any, ...], str]:
+  def _key(path: tuple[Any, ...]) -> tuple[Any, ...] | str:
     if sep is None:
       return path
     return sep.join(path)
@@ -140,7 +140,7 @@ def unflatten_mapping(xs: Mapping[str, Any],
 def unflatten_mapping(xs: Any,
                       /,
                       *,
-                      sep: Union[str, None] = None
+                      sep: str | None = None
                       ) -> dict[Any, Any]:
   """Unflatten a mapping.
 

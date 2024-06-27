@@ -16,7 +16,8 @@
 
 from functools import partial
 import operator
-from typing import Any, Callable, Dict, Sequence
+from typing import Any
+from collections.abc import Callable, Sequence
 import unittest
 
 from absl.testing import absltest, parameterized
@@ -2541,10 +2542,10 @@ class TransformTest(parameterized.TestCase):
         return self.value
       def replace_boxed(self, val):
         return self.replace(value=val)
-      def add_axis(self, index: int, params: Dict[Any, Any]):
+      def add_axis(self, index: int, params: dict[Any, Any]):
         value = jnp.mean(self.value, axis=index)
         return self.replace(value=value)
-      def remove_axis(self, index: int, params: Dict[Any, Any]):
+      def remove_axis(self, index: int, params: dict[Any, Any]):
         value_shape = list(self.value.shape)
         value_shape.insert(index, params['axis_size'])
         value = jnp.broadcast_to(self.value, value_shape)

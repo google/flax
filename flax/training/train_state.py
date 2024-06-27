@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Union
+from typing import Any
+from collections.abc import Callable
 
 import optax
 
@@ -71,7 +72,7 @@ class TrainState(struct.PyTreeNode):
     opt_state: The state for ``tx``.
   """
 
-  step: Union[int, jax.Array]
+  step: int | jax.Array
   apply_fn: Callable = struct.field(pytree_node=False)
   params: core.FrozenDict[str, Any] = struct.field(pytree_node=True)
   tx: optax.GradientTransformation = struct.field(pytree_node=False)

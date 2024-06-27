@@ -31,7 +31,8 @@
 from __future__ import annotations
 
 import enum
-from typing import Any, Sequence, Union
+from typing import Any, Union
+from collections.abc import Sequence
 
 from flax import nnx
 import flax.linen as nn
@@ -95,8 +96,8 @@ class Attention(nnx.Module):
       attn_type: AttentionType,
       *,
       rngs: nnx.Rngs,
-      attn_logits_soft_cap: Union[float, None] = None,
-      sliding_window_size: Union[int, None] = None,
+      attn_logits_soft_cap: float | None = None,
+      sliding_window_size: int | None = None,
   ):
     if attn_type == AttentionType.LOCAL_SLIDING and sliding_window_size is None:
       raise ValueError(
@@ -130,9 +131,9 @@ class Attention(nnx.Module):
       self,
       x: Array,
       segment_pos: Array,
-      cache: Union[LayerCache, None],
+      cache: LayerCache | None,
       attn_mask: Array,
-  ) -> tuple[Union[LayerCache, None], Array]:
+  ) -> tuple[LayerCache | None, Array]:
     seq_len = x.shape[1]
 
     if self.use_qkv_einsum:
@@ -291,8 +292,8 @@ class Block(nnx.Module):
       attn_type: AttentionType,
       *,
       rngs: nnx.Rngs,
-      attn_logits_soft_cap: Union[float, None] = None,
-      sliding_window_size: Union[int, None] = None,
+      attn_logits_soft_cap: float | None = None,
+      sliding_window_size: int | None = None,
   ):
     self.pre_attention_norm = layers.RMSNorm(embed_dim, rngs=rngs)
     self.attn = Attention(
@@ -321,9 +322,9 @@ class Block(nnx.Module):
       self,
       x: jax.Array,
       segment_pos: jax.Array,
-      cache: Union[LayerCache, None],
+      cache: LayerCache | None,
       attn_mask: jax.Array,
-  ) -> tuple[Union[LayerCache, None], jax.Array]:
+  ) -> tuple[LayerCache | None, jax.Array]:
     inputs_normalized = self.pre_attention_norm(x)
     cache, attn_output = self.attn(
         inputs_normalized,

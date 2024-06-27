@@ -15,7 +15,8 @@
 """Dynamic loss scaling for mixed precision gradients."""
 
 import functools
-from typing import Any, Callable, NamedTuple, Optional, Sequence, Union
+from typing import Any, NamedTuple
+from collections.abc import Callable, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -83,16 +84,16 @@ class DynamicScale(struct.PyTreeNode):
   growth_interval: int = struct.field(pytree_node=False, default=2000)
   fin_steps: int = 0
   scale: float = 65536.0
-  minimum_scale: Optional[float] = struct.field(
+  minimum_scale: float | None = struct.field(
     pytree_node=False, default=jnp.finfo(jnp.float32).tiny
   )
 
   def value_and_grad(
     self,
     fun: Callable[..., Any],
-    argnums: Union[int, Sequence[int]] = 0,
+    argnums: int | Sequence[int] = 0,
     has_aux: bool = False,
-    axis_name: Optional[str] = None,
+    axis_name: str | None = None,
   ) -> Callable[..., DynamicScaleResult]:
     """Wrapper around `jax.value_and_grad`.
 

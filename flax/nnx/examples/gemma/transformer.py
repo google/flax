@@ -31,7 +31,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Iterable, Tuple, Union
+from collections.abc import Iterable
 
 from flax import nnx
 import helpers
@@ -55,15 +55,15 @@ class TransformerConfig:
   num_heads: int
   head_dim: int
   num_kv_heads: int
-  final_logit_softcap: Union[float, None]
+  final_logit_softcap: float | None
   use_post_attn_norm: bool
   use_post_ffw_norm: bool
   attention_types: Iterable[modules.AttentionType]
-  attn_logits_soft_cap: Union[float, None] = None
-  sliding_window_size: Union[int, None] = None
+  attn_logits_soft_cap: float | None = None
+  sliding_window_size: int | None = None
 
   @classmethod
-  def from_path(cls, path: str) -> 'TransformerConfig':
+  def from_path(cls, path: str) -> TransformerConfig:
     """Creates a TransformerConfig from loaded parameters."""
     metadata = params_lib.load_metadata(path)
     params = params_lib.load_params(path)
@@ -83,7 +83,7 @@ class TransformerConfig:
     raise ValueError('Verify checkpoint path is a Gemma checkpoint')
 
   @classmethod
-  def from_params(cls, params: params_lib.Params) -> 'TransformerConfig':
+  def from_params(cls, params: params_lib.Params) -> TransformerConfig:
     """Creates a TransformerConfig from loaded parameters.
 
     Use for V1 models only.
@@ -186,7 +186,7 @@ class TransformerConfig:
     )
 
 
-def _map_linen_var_names(key: Tuple[str, ...]) -> Tuple[Union[str, int], ...]:
+def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
   new_key = []
   for k in key:
     if k.startswith('layer_'):
@@ -204,7 +204,7 @@ class Transformer(nnx.Module):
   """Gemma transformer."""
 
   @classmethod
-  def from_params(cls, params: params_lib.Params) -> 'Transformer':
+  def from_params(cls, params: params_lib.Params) -> Transformer:
     config = TransformerConfig.from_params(params)
     return helpers.module_from_linen_variables(
         module_factory=lambda: cls(config, rngs=nnx.Rngs(params=0)),
@@ -243,9 +243,9 @@ class Transformer(nnx.Module):
       self,
       last_tokens: Array,  # [B, L]
       positions: Array,  # [B, L]
-      cache: Union[Cache, None],  # (sequence length L')
+      cache: Cache | None,  # (sequence length L')
       attention_mask: Array,  # [B, L, L']
-  ) -> tuple[Array, Union[Cache, None]]:
+  ) -> tuple[Array, Cache | None]:
     """Transformer forward pass.
 
     You can run this forward pass two ways: with or without an attention kv

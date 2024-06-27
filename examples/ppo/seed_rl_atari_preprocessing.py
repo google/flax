@@ -74,7 +74,7 @@ class AtariPreprocessing:
     """
     if frame_skip <= 0:
       raise ValueError(
-          'Frame skip should be strictly positive, got {}'.format(frame_skip)
+          f'Frame skip should be strictly positive, got {frame_skip}'
       )
     if screen_size <= 0:
       raise ValueError(

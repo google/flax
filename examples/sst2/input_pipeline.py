@@ -26,7 +26,7 @@ import vocabulary
 
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-Example = Dict[str, tf.Tensor]
+Example = dict[str, tf.Tensor]
 
 
 def get_bucket_boundaries(bucket_size: int, max_size: int) -> np.ndarray:
@@ -64,7 +64,7 @@ def get_bucketed_batches(
     padded_shapes: Any,
     example_size_fn: Any,
     shuffle: bool = False,
-    shuffle_seed: Optional[int] = None,
+    shuffle_seed: int | None = None,
     drop_remainder: bool = False,
 ) -> tf.data.Dataset:
   """Returns padded batches of shuffled examples bucketed by length.
@@ -230,9 +230,9 @@ class TextDataset:
       batch_size: int,
       drop_remainder: bool = False,
       shuffle: bool = False,
-      shuffle_seed: Optional[int] = None,
-      fixed_pad_length: Optional[int] = None,
-      dataset: Optional[tf.data.Dataset] = None,
+      shuffle_seed: int | None = None,
+      fixed_pad_length: int | None = None,
+      dataset: tf.data.Dataset | None = None,
   ):
     """Returns an iterator with padded batches for the provided dataset."""
     if dataset is None:
@@ -256,8 +256,8 @@ class TextDataset:
       max_input_length: int,
       drop_remainder: bool = False,
       shuffle: bool = False,
-      shuffle_seed: Optional[int] = None,
-      dataset: Optional[tf.data.Dataset] = None,
+      shuffle_seed: int | None = None,
+      dataset: tf.data.Dataset | None = None,
   ):
     """Returns an iterator with bucketed batches for the provided dataset."""
     if dataset is None:

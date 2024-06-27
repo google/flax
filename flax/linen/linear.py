@@ -16,13 +16,8 @@
 
 from typing import (
   Any,
-  Iterable,
-  List,
-  Optional,
-  Sequence,
-  Tuple,
-  Union,
 )
+from collections.abc import Iterable, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -54,12 +49,12 @@ from flax.typing import (
 default_kernel_init = initializers.lecun_normal()
 
 
-def _normalize_axes(axes: Tuple[int, ...], ndim: int) -> Tuple[int, ...]:
+def _normalize_axes(axes: tuple[int, ...], ndim: int) -> tuple[int, ...]:
   # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
   return tuple(sorted(ax if ax >= 0 else ndim + ax for ax in axes))
 
 
-def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
+def _canonicalize_tuple(x: Sequence[int] | int) -> tuple[int, ...]:
   if isinstance(x, Iterable):
     return tuple(x)
   else:
@@ -101,17 +96,17 @@ class DenseGeneral(Module):
       for details.
   """
 
-  features: Union[int, Sequence[int]]
-  axis: Union[int, Sequence[int]] = -1
+  features: int | Sequence[int]
+  axis: int | Sequence[int] = -1
   batch_dims: Sequence[int] = ()
   use_bias: bool = True
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   precision: PrecisionLike = None
   # Deprecated. Will be removed.
-  dot_general: Optional[DotGeneralT] = None
+  dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
 
   @compact
@@ -234,13 +229,13 @@ class Dense(Module):
 
   features: int
   use_bias: bool = True
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   # Deprecated. Will be removed.
-  dot_general: Optional[DotGeneralT] = None
+  dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
 
   @compact
@@ -314,16 +309,16 @@ class Einsum(Module):
   """
 
   shape: Shape
-  einsum_str: Optional[str] = None
+  einsum_str: str | None = None
   use_bias: bool = True
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
 
   @compact
-  def __call__(self, inputs: Array, einsum_str: Optional[str] = None) -> Array:
+  def __call__(self, inputs: Array, einsum_str: str | None = None) -> Array:
     """Applies a linear transformation to the inputs along the last dimension.
 
     Args:
@@ -477,21 +472,21 @@ class _Conv(Module):
   """
 
   features: int
-  kernel_size: Union[int, Sequence[int]]
-  strides: Union[None, int, Sequence[int]] = 1
+  kernel_size: int | Sequence[int]
+  strides: None | int | Sequence[int] = 1
   padding: PaddingLike = 'SAME'
-  input_dilation: Union[None, int, Sequence[int]] = 1
-  kernel_dilation: Union[None, int, Sequence[int]] = 1
+  input_dilation: None | int | Sequence[int] = 1
+  kernel_dilation: None | int | Sequence[int] = 1
   feature_group_count: int = 1
   use_bias: bool = True
-  mask: Optional[Array] = None
-  dtype: Optional[Dtype] = None
+  mask: Array | None = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   # Deprecated. Will be removed.
-  conv_general_dilated: Optional[ConvGeneralDilatedT] = None
+  conv_general_dilated: ConvGeneralDilatedT | None = None
   conv_general_dilated_cls: Any = None
 
   @property
@@ -533,8 +528,8 @@ class _Conv(Module):
       kernel_size = tuple(self.kernel_size)
 
     def maybe_broadcast(
-      x: Optional[Union[int, Sequence[int]]],
-    ) -> Tuple[int, ...]:
+      x: int | Sequence[int] | None,
+    ) -> tuple[int, ...]:
       if x is None:
         # backward compatibility with using None as sentinel for
         # broadcast 1
@@ -563,7 +558,7 @@ class _Conv(Module):
       kernel_size_dilated = [
         (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
-      zero_pad: List[Tuple[int, int]] = [(0, 0)]
+      zero_pad: list[tuple[int, int]] = [(0, 0)]
       pads = (
         zero_pad
         + [((k - 1) // 2, k // 2) for k in kernel_size_dilated]
@@ -887,13 +882,13 @@ class ConvTranspose(Module):
   """
 
   features: int
-  kernel_size: Union[int, Sequence[int]]
-  strides: Optional[Sequence[int]] = None
+  kernel_size: int | Sequence[int]
+  strides: Sequence[int] | None = None
   padding: PaddingLike = 'SAME'
-  kernel_dilation: Optional[Sequence[int]] = None
+  kernel_dilation: Sequence[int] | None = None
   use_bias: bool = True
-  mask: Optional[Array] = None
-  dtype: Optional[Dtype] = None
+  mask: Array | None = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
@@ -921,15 +916,15 @@ class ConvTranspose(Module):
     Returns:
       The convolved data.
     """
-    kernel_size: Tuple[int, ...]
+    kernel_size: tuple[int, ...]
     if isinstance(self.kernel_size, int):
       kernel_size = (self.kernel_size,)
     else:
       kernel_size = tuple(self.kernel_size)
 
     def maybe_broadcast(
-      x: Optional[Union[int, Sequence[int]]],
-    ) -> Tuple[int, ...]:
+      x: int | Sequence[int] | None,
+    ) -> tuple[int, ...]:
       if x is None:
         # backward compatibility with using None as sentinel for
         # broadcast 1
@@ -1098,7 +1093,7 @@ class Embed(Module):
 
   num_embeddings: int
   features: int
-  dtype: Optional[Dtype] = None
+  dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   embedding_init: Initializer = default_embed_init
 

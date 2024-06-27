@@ -15,7 +15,7 @@
 """A vocabulary builder that generates vocab.txt to be used for training."""
 
 import time
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from absl import logging
 import tensorflow as tf
