@@ -197,15 +197,14 @@ For example:
   ---
 
   PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure'
-
-  ckptr = orbax.checkpoint.AsyncCheckpointer(orbax.checkpoint.PyTreeCheckpointHandler())  # A stateless object, can be created on the fly.
-  ckptr.save(PURE_CKPT_DIR, CKPT_PYTREE,
-             save_args=flax.training.orbax_utils.save_args_from_target(CKPT_PYTREE), force=True)
+  
+  import orbax.checkpoint as ocp
+  ckptr = ocp.AsyncCheckpointer(ocp.StandardCheckpointHandler())
+  ckptr.save(PURE_CKPT_DIR, args=ocp.args.StandardSave(pytree))
   # ... Continue with your work...
   # ... Until a time when you want to wait until the save completes:
-  ckptr.wait_until_finished()  # Blocks until the checkpoint saving is completed.
-  ckptr.restore(PURE_CKPT_DIR, item=TARGET_PYTREE,
-                restore_args=flax.training.orbax_utils.restore_args_from_target(TARGET_PYTREE, mesh=None))
+  ckptr.wait_until_finished() # Blocks until the checkpoint saving is completed.
+  ckptr.restore(PURE_CKPT_DIR, args=ocp.args.StandardRestore(target))
 
 
 Saving/loading a single JAX or NumPy Array
