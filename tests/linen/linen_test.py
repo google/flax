@@ -1411,12 +1411,19 @@ class Fp8Test(parameterized.TestCase):
       np.testing.assert_allclose(fp8_vars['kernel_scale'][0], scale_k)
       np.testing.assert_allclose(fp8_vars['output_grad_scale'][0], scale_g)
 
-  @parameterized.parameters([True, False])
-  def test_fp8_meta_dtype(self, use_jit):
+  @parameterized.parameters(
+          {'fp8_genre': 'OCP', 'use_jit': True},
+          {'fp8_genre': 'OCP', 'use_jit': False},
+          {'fp8_genre': 'NANOO', 'use_jit': True},
+          {'fp8_genre': 'NANOO', 'use_jit': False}
+  )
+  def test_fp8_meta_dtype(self, fp8_genre, use_jit):
     if not use_jit and not fp8_ops.CAN_USE_EARRAY:
       self.skipTest("TODO: requires newer jax that has earray")
     f32 = jnp.dtype('float32')
     fm32 = fp8_ops.fm32
+    e4m3_dtype, _ = fp8_ops.get_fp8_dtypes(fp8_genre)
+    e4m3_max = 448 if fp8_genre == 'OCP' else 240
 
     # Create a scan loop with reused ah_f32 and sf_f32. So, the autograd will
     # accumulate the grads of them. We expect the max op (rather than add op)
@@ -1426,7 +1433,7 @@ class Fp8Test(parameterized.TestCase):
       sf_fm32 = jax.lax.convert_element_type(sf_f32, fm32)
       array_x = jnp.array([x], f32)
       def body_fun(carry, _):
-        carry = fp8_ops.in_qdq(f32, carry, sf_fm32, ah_fm32)
+        carry = fp8_ops.in_qdq(f32, e4m3_dtype, carry, sf_fm32, ah_fm32)
         return carry, None
       array_x, _ = jax.lax.scan(body_fun, array_x, None, length=3)
       return array_x[0]
@@ -1443,12 +1450,10 @@ class Fp8Test(parameterized.TestCase):
     # 2nd iteration
     grads, new_ah, new_sf = outer_fn(3., new_ah, new_sf)
     np.testing.assert_allclose(new_ah, [3., 0., 2.])
-    np.testing.assert_allclose(new_sf, [2. / 448])
+    np.testing.assert_allclose(new_sf, [2. / e4m3_max])
     # 3rd iteration
     grads, new_ah, new_sf = outer_fn(4., new_ah, new_sf)
     np.testing.assert_allclose(new_ah, [4., 2., 3.])
-    np.testing.assert_allclose(new_sf, [3. / 448])
+    np.testing.assert_allclose(new_sf, [3. / e4m3_max])
 
 
-if __name__ == '__main__':
-  absltest.main()
