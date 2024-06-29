@@ -1787,7 +1787,7 @@ class Module(ModuleBase):
 
   @overload
   def param(
-    self, name: str, init_fn: Callable[..., T], *init_args,
+      self, name: str, init_fn: Callable[..., T], *init_args, **init_kwargs
   ) -> T:
     ...
 
