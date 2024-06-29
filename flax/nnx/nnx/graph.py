@@ -1522,6 +1522,89 @@ def clone(node: Node) -> Node:
   graphdef, state = split(node)
   return merge(graphdef, state)
 
+def iter_nodes(node: tp.Any) -> tp.Iterator[tuple[PathParts, tp.Any]]:
+  """Recursively iterates over all nested nodes, including the current node.
+
+  ``iter_nodes`` creates a generator that yields the path and the node instance, where
+  the path is a tuple of strings or integers representing the path to the node from the
+  root node.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class SubModule(nnx.Module):
+    ...   def __init__(self, din, dout, rngs):
+    ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.submodule = SubModule(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> model = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> for path, module in nnx.graph.iter_nodes(model):
+    ...   if isinstance(module, nnx.Module):
+    ...     print(path, type(module).__name__)
+    ...
+    ('batch_norm',) BatchNorm
+    ('dropout',) Dropout
+    ('linear',) Linear
+    ('submodule', 'linear1') Linear
+    ('submodule', 'linear2') Linear
+    ('submodule',) SubModule
+    () Block
+
+  Args:
+    node: the node to recursively iterate through.
+  """
+  for path, value in iter_graph(node):
+    yield path, value
+
+def iter_child_nodes(node: tp.Any) -> tp.Iterator[tuple[Key, tp.Any]]:
+  """Iterates over all child nodes of the current node. This method is similar to
+  :func:`iter_nodes`, except it only iterates over the immediate children, and
+  does not recurse further down.
+
+  ``iter_child_nodes`` creates a generator that yields the key and the node instance,
+  where the key is a string representing the attribute name of the node to access
+  the corresponding child node.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class SubModule(nnx.Module):
+    ...   def __init__(self, din, dout, rngs):
+    ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.submodule = SubModule(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> model = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> for path, module in nnx.graph.iter_child_nodes(model):
+    ...   if isinstance(module, nnx.Module):
+    ...     print(path, type(module).__name__)
+    ...
+    batch_norm BatchNorm
+    dropout Dropout
+    linear Linear
+    submodule SubModule
+
+  Args:
+    node: the node to find the child nodes from.
+  """
+  node_dict = get_node_impl(node).node_dict(node)
+  for key, value in node_dict.items():
+    yield key, value
 
 def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
   """Iterates over all nested nodes and leaves of the given graph node, including the current node.
