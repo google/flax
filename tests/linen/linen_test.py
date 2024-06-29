@@ -1243,6 +1243,15 @@ class IdsTest(absltest.TestCase):
     self.assertNotEqual(hash(id1), hash(id1c))
     self.assertNotEqual(hash(id1), hash(id1dc))
 
+def get_fp8_dtypes(fp8_genre):
+    assert fp8_genre in ('OCP', 'NANOO')
+    if fp8_genre == 'OCP':
+      e4m3_dtype = jnp.float8_e4m3fn
+      e5m2_dtype = jnp.float8_e5m2
+    else: # fp8_genre == 'NANOO'
+      e4m3_dtype = jnp.float8_e4m3fnuz
+      e5m2_dtype = jnp.float8_e5m2fnuz
+    return e4m3_dtype, e5m2_dtype
 
 class Fp8Test(parameterized.TestCase):
   @parameterized.parameters(
@@ -1257,7 +1266,7 @@ class Fp8Test(parameterized.TestCase):
       compute_dtype=jnp.float32,
     )
 
-    e4m3_dtype, e5m2_dtype = fp8_ops.get_fp8_dtypes(fp8_genre)
+    e4m3_dtype, e5m2_dtype = get_fp8_dtypes(fp8_genre)
 
     init_key, random_key = random.split(random.PRNGKey(seed=123), 2)
     x = cast_to_representable(
@@ -1361,7 +1370,7 @@ class Fp8Test(parameterized.TestCase):
     scale_x, amax_history_x = jnp.ones(()), jnp.zeros((1024,))
     scale_k, amax_history_k = jnp.ones(()), jnp.zeros((1024,))
     scale_g, amax_history_g = jnp.ones(()), jnp.zeros((1024,))
-    e4m3_dtype, e5m2_dtype = fp8_ops.get_fp8_dtypes(fp8_genre)
+    e4m3_dtype, e5m2_dtype = get_fp8_dtypes(fp8_genre)
     e4m3_max = jnp.finfo(e4m3_dtype).max.astype(jnp.float32)
     e5m2_max = jnp.finfo(e5m2_dtype).max.astype(jnp.float32)
 
@@ -1422,7 +1431,7 @@ class Fp8Test(parameterized.TestCase):
       self.skipTest("TODO: requires newer jax that has earray")
     f32 = jnp.dtype('float32')
     fm32 = fp8_ops.fm32
-    e4m3_dtype, _ = fp8_ops.get_fp8_dtypes(fp8_genre)
+    e4m3_dtype, _ = get_fp8_dtypes(fp8_genre)
     e4m3_max = 448 if fp8_genre == 'OCP' else 240
 
     # Create a scan loop with reused ah_f32 and sf_f32. So, the autograd will
@@ -1456,4 +1465,5 @@ class Fp8Test(parameterized.TestCase):
     np.testing.assert_allclose(new_ah, [4., 2., 3.])
     np.testing.assert_allclose(new_sf, [3. / e4m3_max])
 
-
+if __name__ == '__main__':
+  absltest.main()

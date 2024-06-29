@@ -124,16 +124,6 @@ def get_fp8_max(fp8_dtype, out_dtype):
                        jnp.float8_e4m3fnuz, jnp.float8_e5m2fnuz)
   return jnp.finfo(fp8_dtype).max.astype(out_dtype)
 
-def get_fp8_dtypes(fp8_genre):
-    assert fp8_genre in ('OCP', 'NANOO')
-    if fp8_genre == 'OCP':
-      e4m3_dtype = jnp.float8_e4m3fn
-      e5m2_dtype = jnp.float8_e5m2
-    else: # fp8_genre == 'NANOO'
-      e4m3_dtype = jnp.float8_e4m3fnuz
-      e5m2_dtype = jnp.float8_e5m2fnuz
-    return e4m3_dtype, e5m2_dtype
-
 def quantize(x, q_dtype, scale, compute_dtype):
   # Explicitly cast the max values to the compute dtype to avoid unnecessary
   # casting to FP32 during the subsequent math operations."
