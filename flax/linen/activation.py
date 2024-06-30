@@ -35,6 +35,7 @@ from jax.nn import leaky_relu
 from jax.nn import log_sigmoid
 from jax.nn import log_softmax
 from jax.nn import logsumexp
+from jax.nn import mish
 from jax.nn import one_hot
 from jax.nn import relu
 from jax.nn import relu6
@@ -44,6 +45,8 @@ from jax.nn import silu
 from jax.nn import soft_sign
 from jax.nn import softmax
 from jax.nn import softplus
+from jax.nn import sparse_plus
+from jax.nn import squareplus
 from jax.nn import standardize
 from jax.nn import swish
 import jax.numpy as jnp
