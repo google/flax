@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = ["setuptools", "setuptools-scm[toml]"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -71,13 +71,15 @@ homepage = "https://github.com/google/flax"
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.md"], content-type = "text/markdown"}
-version = {attr = "flax.version.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["flax*"]
 
 [tool.setuptools.package-data]
 flax = ["*py.typed"]
+
+[tool.setuptools_scm]
+write_to = "flax/version.py"  # Will be deprecated in favor of version_file.
 
 [tool.yapf]
 based_on_style = "yapf"
