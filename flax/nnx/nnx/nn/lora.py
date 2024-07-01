@@ -46,8 +46,9 @@ A = tp.TypeVar('A')
 default_kernel_init = initializers.lecun_normal()
 
 
-class LoRAParam(variables.Variable[A]):
+class LoRAParam(variables.Param[A]):
   pass
+
 
 
 class LoRA(Module):
