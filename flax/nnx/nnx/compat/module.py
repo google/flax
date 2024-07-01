@@ -21,6 +21,7 @@ import threading
 import typing as tp
 import typing_extensions as tpe
 
+from flax.nnx.nnx.variables import Param
 from flax.nnx.nnx import graph, rnglib
 import flax.nnx.nnx.module as nnx_module
 from flax.nnx.nnx.proxy_caller import (
@@ -58,7 +59,8 @@ class Scope(Object):
 
 @tp.runtime_checkable
 class _HasSetup(tp.Protocol):
-  def setup(self) -> None: ...
+  def setup(self) -> None:
+    ...
 
 
 class ModuleMeta(nnx_module.ModuleMeta):
@@ -203,6 +205,81 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     super().__init_subclass__(experimental_pytree)
 
     cls = dataclasses.dataclass(repr=False)(cls)
+
+  def param(self, name, init_fn, *init_args, **init_kwargs):
+    """Create an `:class:nnx.Param` that can be accessed by dot-accessing the
+    ``name`` attribute.
+
+    Example usage::
+
+    >>> from flax import nnx
+    >>> from flax.nnx import compat as nnc
+    >>> import jax, jax.numpy as jnp
+
+    >>> class Linear(nnc.Module):
+    ...   def __init__(self, dout, rngs: nnx.Rngs):
+    ...     self.dout = dout
+    ...     self.rngs = rngs
+    ...
+    ...   def __call__(self, x):
+    ...     if self.is_initializing():
+    ...       din = x.shape[-1]
+    ...       if not hasattr(self, 'w'):
+    ...         key = self.rngs.params()
+    ...         self.w = nnx.Param(jax.random.uniform(key, (din, self.dout)))
+    ...       if not hasattr(self, 'b'):
+    ...         self.b = nnx.Param(jnp.zeros((self.dout,)))
+    ...
+    ...     return x @ self.w + self.b
+
+    >>> class Model(nnc.Module):
+    ...   def __init__(self, dout, rngs: nnx.Rngs):
+    ...     self.dout = dout
+    ...     self.rngs = rngs
+    ...
+    ...   def __call__(self, x):
+    ...     w = self.param('w', lambda rng, shape: jax.random.normal(rng, shape), (1, 3))
+    ...     if self.is_initializing():
+    ...       self.linear = Linear(self.dout, rngs=self.rngs)
+    ...     return self.linear.init(x) * w
+
+    >>> x = jnp.ones((5, 2))
+    >>> model = Model(3, rngs=nnx.Rngs(0))
+    >>> nnx.state(model, nnx.Param)
+    State({})
+
+    >>> y = model.init(x) # initialize parameters
+    >>> nnx.state(model, nnx.Param)
+    State({
+      'linear': {
+        'b': VariableState(
+          type=Param,
+          value=Array([0., 0., 0.], dtype=float32)
+        ),
+        'w': VariableState(
+          type=Param,
+          value=Array([[0.57945013, 0.18417609, 0.02684498],
+                 [0.78502953, 0.17928457, 0.15448368]], dtype=float32)
+        )
+      },
+      'w': VariableState(
+        type=Param,
+        value=Array([[ 0.4154572 , -0.28943744,  0.1879725 ]], dtype=float32)
+      )
+    })
+
+    >>> y = model(x) # model can now be called normally after parameters are initialized
+    """
+    if self.is_initializing():
+      assert hasattr(
+        self, 'rngs'
+      ), 'The `param` method implicitly calls `self.rngs.params()`, and so the Module must have an `nnx.Rng` in `self.rngs`.'
+      assert not hasattr(
+        self, name
+      ), f'Tried to create a parameter in the `{name}` attribute, but `{name}` is already used.'
+      value = init_fn(self.rngs.params(), *init_args, **init_kwargs)
+      setattr(self, name, Param(value))
+    return getattr(self, name)
 
 
 def compact(f: F) -> F:
