@@ -2089,14 +2089,15 @@ class TransformTest(parameterized.TestCase):
         rngs={'params': random.key(1), 'loop': random.key(2)},
     )
     self.assertEqual(vars['state']['acc'], x)
-    np.testing.assert_array_equal(
-        vars['state']['rng_params'][0], vars['state']['rng_params'][1]
+    self.assertTrue(
+      jnp.equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
     )
     with jax_debug_key_reuse(False):
-      np.testing.assert_array_compare(
-          operator.__ne__,
+      self.assertFalse(
+        jnp.equal(
           vars['state']['rng_loop'][0],
           vars['state']['rng_loop'][1],
+        )
       )
 
   def test_cond(self):
