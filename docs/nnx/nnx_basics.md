@@ -95,7 +95,7 @@ class Counter(nnx.Module):
     self.count = Count(jnp.array(0))
 
   def __call__(self):
-    self.count.value += 1
+    self.count += 1
 
 counter = Counter()
 print(f'{counter.count.value = }')
@@ -279,13 +279,15 @@ class StatefulLinear(nnx.Module):
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
     self.w = nnx.Param(jax.random.uniform(rngs(), (din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
-    self.count = Count(0)
+    self.count = Count(jnp.array(0, dtype=jnp.uint32))
 
   def __call__(self, x: jax.Array):
-    self.count.value += 1
-    return x @ self.w.value + self.b.value
+    self.count += 1
+    return x @ self.w + self.b
   
 model = StatefulLinear(din=3, dout=5, rngs=nnx.Rngs(0))
+y = model(jnp.ones((1, 3)))
+
 nnx.display(model)
 ```
 
