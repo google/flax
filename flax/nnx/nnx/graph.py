@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 import dataclasses
 import enum
 import functools
@@ -61,8 +60,8 @@ def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
 
 @dataclasses.dataclass
 class GraphContext(threading.local):
-  update_context_stacks: defaultdict[str, list[UpdateContext]] = (
-    dataclasses.field(default_factory=lambda: defaultdict(list))
+  update_context_stacks: dict[str, list[UpdateContext]] = dataclasses.field(
+    default_factory=dict
   )
 
 
@@ -1021,20 +1020,26 @@ class UpdateContextManager:
 
   def __enter__(self):
     ctx = UpdateContext(self.tag, None, None)
-    GRAPH_CONTEXT.update_context_stacks[self.tag].append(ctx)
+    if self.tag not in GRAPH_CONTEXT.update_context_stacks:
+      GRAPH_CONTEXT.update_context_stacks[self.tag] = [ctx]
+    else:
+      GRAPH_CONTEXT.update_context_stacks[self.tag].append(ctx)
     return ctx
 
   def __exit__(self, *args):
-    stack = GRAPH_CONTEXT.update_context_stacks[self.tag]
-    if not stack:
+    if self.tag not in GRAPH_CONTEXT.update_context_stacks:
       raise RuntimeError(
           f'No update context found for tag {self.tag!r}, this is a bug.'
       )
+    stack = GRAPH_CONTEXT.update_context_stacks[self.tag]
 
-    ctx = GRAPH_CONTEXT.update_context_stacks[self.tag].pop()
+    ctx = stack.pop()
     # clear references
     ctx.refmap = None
     ctx.idxmap = None
+
+    if not stack:
+      del GRAPH_CONTEXT.update_context_stacks[self.tag]
 
   def __call__(self, f: F) -> F:
     @functools.wraps(f)
@@ -1142,10 +1147,9 @@ def update_context(tag: str):
 
 def current_update_context(tag: str) -> UpdateContext:
   """Returns the current active :class:`UpdateContext` for the given tag."""
-  stack = GRAPH_CONTEXT.update_context_stacks[tag]
-  if not stack:
+  if tag not in GRAPH_CONTEXT.update_context_stacks:
     raise ValueError(f'No update context found for tag {tag!r}.')
-  return stack[-1]
+  return GRAPH_CONTEXT.update_context_stacks[tag][-1]
 
 
 # --------------------------------------------------------
@@ -1594,50 +1598,6 @@ class Static(tp.Generic[A]):
 
 
 jax.tree_util.register_static(Static)
-
-# ---------------------------------------------------------
-# insert/extract_graph_nodes API
-# ---------------------------------------------------------
-
-
-@dataclasses.dataclass(frozen=True)
-class GraphNodeIndex:
-  """Index of a graph node in a Pytree structure."""
-
-  index: Index
-
-
-jax.tree_util.register_static(GraphNodeIndex)
-
-
-def extract_graph_nodes(pytree: A, /) -> tuple[A, tuple[tp.Any, ...]]:
-  """Extracts all graph nodes from a pytree."""
-  nodes = RefMap[tp.Any, Index]()
-
-  def _maybe_extract(x):
-    if is_graph_node(x):
-      if x not in nodes:
-        index = nodes[x] = len(nodes)
-      else:
-        index = nodes[x]
-      return GraphNodeIndex(index)
-    return x
-
-  return jax.tree_util.tree_map(_maybe_extract, pytree), tuple(nodes)
-
-
-def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
-  """Inserts graph nodes into a pytree."""
-
-  def _maybe_insert(x):
-    if isinstance(x, GraphNodeIndex):
-      return nodes[x.index]
-    return x
-
-  return jax.tree_util.tree_map(
-    _maybe_insert, pytree, is_leaf=lambda x: isinstance(x, GraphNodeIndex)
-  )
-
 
 # ---------------------------------------------------------
 # Pytree

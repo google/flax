@@ -34,7 +34,7 @@ import typing as tp
 
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx.nnx import filterlib, graph, rnglib, spmd
+from flax.nnx.nnx import extract, filterlib, graph, rnglib, spmd
 from flax.nnx.nnx.module import GraphDef, Module
 from flax.nnx.nnx.proxy_caller import DelayedAccessor
 from flax.nnx.nnx.state import State
@@ -59,6 +59,12 @@ StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
 Leaves = tp.List[Leaf]
 Index = int
+
+class Missing:
+  pass
+
+
+MISSING = Missing()
 
 # -------------------------------
 # scan
@@ -254,7 +260,7 @@ def scan_fn(
   input_graph_nodes = ctx.merge(
     graphdef, *scan_states, carry_state, split_rng_state, broadcast_rng_state
   )
-  (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
+  (args, kwargs) = extract.insert_graph_nodes((args, kwargs), input_graph_nodes)
 
   out = f(*args, **kwargs)
 
@@ -271,10 +277,9 @@ def scan_fn(
     carry_arg_out = out
     scan_args_out = None
 
-  (
-    (carry_arg_out, scan_args_out),
-    output_graph_nodes,
-  ) = graph.extract_graph_nodes((carry_arg_out, scan_args_out))
+  ((carry_arg_out, scan_args_out), output_graph_nodes) = (
+    extract.extract_graph_nodes((carry_arg_out, scan_args_out))
+  )
 
   # split module state
   (
@@ -330,7 +335,25 @@ def scan_fn(
 
   return carry_out, scan_out
 
-
+@tp.overload
+def scan(
+  *,
+  length: int | None = None,
+  reverse: bool = False,
+  unroll: int | bool = 1,
+  _split_transpose: bool = False,
+  # extended api
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  in_axes_kwargs: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  carry_argnum: int = 0,
+  # nnx specific
+  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  scan_output: bool = True,
+) -> p.Callable[[F], F]: ...
+@tp.overload
 def scan(
   f: F,
   *,
@@ -348,12 +371,35 @@ def scan(
   split_rngs: filterlib.Filter = ...,
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   scan_output: bool = True,
-) -> F:
+) -> F: ...
+def scan(
+  f: F | Missing = MISSING,
+  *,
+  length: int | None = None,
+  reverse: bool = False,
+  unroll: int | bool = 1,
+  _split_transpose: bool = False,
+  # extended api
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  in_axes_kwargs: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  carry_argnum: int = 0,
+  # nnx specific
+  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  scan_output: bool = True,
+) -> F | tp.Callable[[F], F]:
+  if isinstance(f, Missing):
+    return functools.partial(
+      scan, length=length, reverse=reverse, unroll=unroll
+    )
+
   @functools.wraps(f)
   @graph.update_context('scan')
   def scan_apply_wrapper(*args, **kwargs):
     # extract nodes
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+    (args, kwargs), input_graph_nodes = extract.extract_graph_nodes(
       (args, kwargs)
     )
     input_rng_streams = rnglib.backup_keys(input_graph_nodes)
@@ -465,11 +511,11 @@ def scan(
       broadcast_rng_state_out,
     )
 
-    carry_arg_out, scan_args_out = graph.insert_graph_nodes(
+    carry_arg_out, scan_args_out = extract.insert_graph_nodes(
       (carry_arg_out, scan_args_out), output_graph_nodes
     )
 
-    rnglib.restore_keys(input_rng_streams)
+    rnglib.restore_rngs(input_rng_streams)
 
     if scan_output:
       scan_args_out = tp.cast(B, scan_args_out)

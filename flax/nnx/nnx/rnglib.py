@@ -53,15 +53,13 @@ MISSING = Missing()
 
 
 class RngState(Variable[jax.Array]):
-  pass
-
-
-class RngCount(RngState):
   tag: str
 
 
-class RngKey(RngState):
-  tag: str
+class RngCount(RngState): ...
+
+
+class RngKey(RngState): ...
 
 
 NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
@@ -277,15 +275,49 @@ def fork(
 
   return ForkStates(split_keys, split_counts, broadcast_keys, broadcast_counts)
 
+StreamBackup = (
+  tuple[RngStream, jax.Array, jax.Array] | tuple[RngStream, jax.Array]
+)
+
+
+def split_rngs(
+  node,
+  /,
+  num_splits: int | tuple[int | None, ...],
+  filter: filterlib.Filter = ...,
+):
+  predicate = filterlib.to_predicate(filter)
+  _num_splits: int | tuple[int, ...]
+  if isinstance(num_splits, int):
+    _num_splits = num_splits
+  else:
+    _num_splits = tuple(x if x is not None else 1 for x in num_splits)
+  backups: list[StreamBackup] = []
+  for path, stream in graph.iter_graph(node):
+    if (
+      isinstance(stream, RngStream)
+      and predicate((*path, 'key'), stream.key)
+      and predicate((*path, 'count'), stream.count)
+    ):
+      key = stream()
+      backups.append((stream, stream.key.value, stream.count.value))
+      stream.key.value = jax.random.split(key, _num_splits)
+      stream.count.value = jnp.zeros(stream.key.value.shape, dtype=jnp.uint32)
+
+  return backups
+
 
 def backup_keys(node: tp.Any, /):
-  backups: list[tuple[RngStream, jax.Array]] = []
+  backups: list[StreamBackup] = []
   for _, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
       backups.append((stream, stream.key.value))
   return backups
 
 
-def restore_keys(backups: list[tuple[RngStream, jax.Array]], /):
-  for stream, key in backups:
-    stream.key.value = key
+def restore_rngs(backups: list[StreamBackup], /):
+  for backup in backups:
+    stream = backup[0]
+    stream.key.value = backup[1]  # key
+    if len(backup) == 3:
+      stream.count.value = backup[2]  # count
