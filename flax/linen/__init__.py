@@ -86,7 +86,10 @@ from .attention import (
 )
 from .batch_apply import BatchApply as BatchApply
 from .combinators import Sequential as Sequential
-from .fp8_ops import Fp8DotGeneralOp as Fp8DotGeneralOp
+from .fp8_ops import (
+    Fp8DotGeneralOp as Fp8DotGeneralOp,
+    Fp8DirectDotGeneralOp as Fp8DirectDotGeneralOp,
+)
 from .initializers import (
     ones_init as ones_init,
     ones as ones,
