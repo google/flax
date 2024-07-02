@@ -199,8 +199,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
 
     return self._object__state._initializing
 
-  def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
-    super().__init_subclass__(experimental_pytree)
+  def __init_subclass__(cls, unsafe_pytree: bool = False) -> None:
+    super().__init_subclass__(unsafe_pytree=unsafe_pytree)
 
     cls = dataclasses.dataclass(repr=False)(cls)
 

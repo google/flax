@@ -392,10 +392,10 @@ class Module(Object, metaclass=ModuleMeta):
       raise_if_not_found=False,
     )
 
-  def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
+  def __init_subclass__(cls, unsafe_pytree: bool = False) -> None:
     super().__init_subclass__()
 
-    if experimental_pytree:
+    if unsafe_pytree:
       jtu.register_pytree_with_keys(
         cls,
         partial(_module_flatten, with_keys=True),
