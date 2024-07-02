@@ -17,6 +17,9 @@ import numpy as np
 import warnings
 from functools import partial
 
+from typing import Any
+DType = Any
+
 import jax
 from jax import custom_jvp, custom_vjp, lax, random
 from jax import numpy as jnp
@@ -117,9 +120,9 @@ class fp8_meta_dtype_wrapper(dtypes.ExtendedDType):
 fm32 = fp8_meta_dtype_wrapper(jnp.float32)
 
 def get_fp8_max(fp8_dtype, out_dtype):
-  assert fp8_dtype in (jnp.float8_e4m3fn, jnp.float8_e5m2)
+  assert fp8_dtype in (jnp.float8_e4m3fn, jnp.float8_e5m2,
+                       jnp.float8_e4m3fnuz, jnp.float8_e5m2fnuz)
   return jnp.finfo(fp8_dtype).max.astype(out_dtype)
-
 
 def quantize(x, q_dtype, scale, compute_dtype):
   # Explicitly cast the max values to the compute dtype to avoid unnecessary
@@ -181,22 +184,22 @@ def qdq_and_return(x, q_dtype, scale, amax_history, compute_dtype):
   return qx, new_scale, new_history
 
 
-@partial(custom_vjp, nondiff_argnums=(0,))
-def in_qdq(compute_dtype, inp, scale, amax_history):
+@partial(custom_vjp, nondiff_argnums=(0, 1))
+def in_qdq(compute_dtype, q_dtype, inp, scale, amax_history):
   qin, _, _ = qdq_and_return(
-    inp, jnp.float8_e4m3fn, scale, amax_history, compute_dtype
+    inp, q_dtype, scale, amax_history, compute_dtype
   )
   return qin
 
 
-def in_qdq_fwd(compute_dtype, inp, scale, amax_history):
+def in_qdq_fwd(compute_dtype, q_dtype, inp, scale, amax_history):
   qin, new_scale, new_history = qdq_and_return(
-    inp, jnp.float8_e4m3fn, scale, amax_history, compute_dtype
+    inp, q_dtype, scale, amax_history, compute_dtype
   )
   return qin, (new_scale, new_history)
 
 
-def in_qdq_bwd(compute_dtype, res, g):
+def in_qdq_bwd(compute_dtype, q_dtype, res, g):
   new_scale, new_history = res
   q_g = g
   return q_g, new_scale, new_history
@@ -205,19 +208,19 @@ def in_qdq_bwd(compute_dtype, res, g):
 in_qdq.defvjp(in_qdq_fwd, in_qdq_bwd)
 
 
-@partial(custom_vjp, nondiff_argnums=(0,))
-def out_qdq(compute_dtype, out, scale, amax_history):
+@partial(custom_vjp, nondiff_argnums=(0, 1))
+def out_qdq(compute_dtype, q_dtype, out, scale, amax_history):
   return out
 
 
-def out_qdq_fwd(compute_dtype, out, scale, amax_history):
+def out_qdq_fwd(compute_dtype, q_dtype, out, scale, amax_history):
   return out, (scale, amax_history)
 
 
-def out_qdq_bwd(compute_dtype, res, g):
+def out_qdq_bwd(compute_dtype, q_dtype, res, g):
   scale, amax_history = res
   q_g, new_scale, new_history = qdq_and_return(
-    g, jnp.float8_e5m2, scale, amax_history, compute_dtype
+    g, q_dtype, scale, amax_history, compute_dtype
   )
   return q_g, new_scale, new_history
 
@@ -260,6 +263,8 @@ def dot_general_with_precision_jvp(
 
 class Fp8DotGeneralOp(module.Module):
   amax_history_length: int = 1024
+  e4m3_dtype: DType = jnp.float8_e4m3fn
+  e5m2_dtype: DType = jnp.float8_e5m2
 
   def setup(self) -> None:
     scale_args = (
@@ -307,17 +312,22 @@ class Fp8DotGeneralOp(module.Module):
     x = jnp.asarray(x, comp_dtype)
 
     x_qdq = in_qdq(
-      comp_dtype, x, self.input_scale.value, self.input_amax_history.value
+      comp_dtype, self.e4m3_dtype, x, self.input_scale.value, self.input_amax_history.value
     )
     k_qdq = in_qdq(
-      comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
+      comp_dtype, self.e4m3_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
     )
     y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers)  # type: ignore
     y = out_qdq(
       comp_dtype,
+      self.e5m2_dtype,
       y_qdq,
       self.output_grad_scale.value,
       self.output_grad_amax_history.value,
     )
 
     return y  # type: ignore
+
+class NANOOFp8DotGeneralOp(Fp8DotGeneralOp):
+  e4m3_dtype: DType = jnp.float8_e4m3fnuz
+  e5m2_dtype: DType = jnp.float8_e5m2fnuz
