@@ -372,7 +372,8 @@ def train_and_evaluate(
   train_metrics = []
   hooks = []
   if jax.process_index() == 0 and config.profile:
-    hooks += [periodic_actions.Profile(num_profile_steps=3, logdir=workdir)]
+    hooks += [periodic_actions.Profile(
+        num_profile_steps=3, logdir=workdir, profile_duration_ms=None)]
   train_metrics_last_t = time.time()
   logging.info('Initial compilation, this might take some minutes...')
   for step, batch in zip(range(step_offset, num_steps), train_iter):
