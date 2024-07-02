@@ -465,7 +465,15 @@ class Variable(tp.Generic[A], reprlib.Representable):
     ) -> V:
       raise NotImplementedError
 
-  # operator overloads
+  # overloads
+  @property
+  def shape(self) -> tuple[int, ...]:
+    return self.value.shape  # type: ignore
+
+  @property
+  def dtype(self) -> Any:
+    return self.value.dtype  # type: ignore
+
   def __jax_array__(self):
     return self.value
 
@@ -556,44 +564,109 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def __ror__(self, other) -> A:
     return self.value.__ror__(other)  # type: ignore
 
-  def __iadd__(self, other) -> A:
-    return self.value.__iadd__(other)  # type: ignore
+  def __iadd__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__iadd__'):
+      value.__iadd__(other)
+    else:
+      self.value = value.__add__(other)
+    return self
 
-  def __isub__(self, other) -> A:
-    return self.value.__isub__(other)  # type: ignore
+  def __isub__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__isub__'):
+      value.__isub__(other)
+    else:
+      self.value = value.__sub__(other)
+    return self
 
-  def __imul__(self, other) -> A:
-    return self.value.__imul__(other)  # type: ignore
+  def __imul__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__imul__'):
+      value.__imul__(other)
+    else:
+      self.value = value.__mul__(other)
+    return self
 
-  def __imatmul__(self, other) -> A:
-    return self.value.__imatmul__(other)  # type: ignore
+  def __imatmul__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__imatmul__'):
+      value.__imatmul__(other)
+    else:
+      self.value = value.__matmul__(other)
+    return self
 
-  def __itruediv__(self, other) -> A:
-    return self.value.__itruediv__(other)  # type: ignore
+  def __itruediv__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__itruediv__'):
+      value.__itruediv__(other)
+    else:
+      self.value = value.__truediv__(other)
+    return self
 
-  def __ifloordiv__(self, other) -> A:
-    return self.value.__ifloordiv__(other)  # type: ignore
+  def __ifloordiv__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__ifloordiv__'):
+      value.__ifloordiv__(other)
+    else:
+      self.value = value.__floordiv__(other)
+    return self
 
-  def __imod__(self, other) -> A:
-    return self.value.__imod__(other)  # type: ignore
+  def __imod__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__imod__'):
+      value.__imod__(other)
+    else:
+      self.value = value.__mod__(other)
+    return self
 
-  def __ipow__(self, other) -> A:
-    return self.value.__ipow__(other)  # type: ignore
+  def __ipow__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__ipow__'):
+      value.__ipow__(other)
+    else:
+      self.value = value.__pow__(other)
+    return self
 
-  def __ilshift__(self, other) -> A:
-    return self.value.__ilshift__(other)  # type: ignore
+  def __ilshift__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__ilshift__'):
+      value.__ilshift__(other)
+    else:
+      self.value = value.__lshift__(other)
+    return self
 
-  def __irshift__(self, other) -> A:
-    return self.value.__irshift__(other)  # type: ignore
+  def __irshift__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__irshift__'):
+      value.__irshift__(other)
+    else:
+      self.value = value.__rshift__(other)
+    return self
 
-  def __iand__(self, other) -> A:
-    return self.value.__iand__(other)  # type: ignore
+  def __iand__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__iand__'):
+      value.__iand__(other)
+    else:
+      self.value = value.__and__(other)
+    return self
 
-  def __ixor__(self, other) -> A:
-    return self.value.__ixor__(other)  # type: ignore
+  def __ixor__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__ixor__'):
+      value.__ixor__(other)
+    else:
+      self.value = value.__xor__(other)
+    return self
 
-  def __ior__(self, other) -> A:
-    return self.value.__ior__(other)  # type: ignore
+  def __ior__(self: V, other) -> V:
+    value = self.value
+    if hasattr(value, '__ior__'):
+      value.__ior__(other)
+    else:
+      self.value = value.__or__(other)
+    return self
 
   def __neg__(self) -> A:
     return self.value.__neg__()  # type: ignore
