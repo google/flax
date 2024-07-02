@@ -608,8 +608,10 @@ def decorator_lift_transform_jit(class_fn, **trafo_kwargs):
       return res
 
     core_fns = [
-      functools.partial(core_fn, prewrapped_fn, class_fn)
-      for prewrapped_fn, class_fn in zip(prewrapped_fns, class_fns)
+        functools.wraps(class_fn)(
+            functools.partial(core_fn, prewrapped_fn, class_fn)
+        )
+        for prewrapped_fn, class_fn in zip(prewrapped_fns, class_fns)
     ]
 
     # here we apply the given lifting transform to the scope-ingesting fn
