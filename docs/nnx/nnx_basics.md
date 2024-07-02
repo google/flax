@@ -66,7 +66,7 @@ inner value is a JAX array).
 
 To actually initialize a Module you simply call the constructor, all the parameters 
 of a Module are usually created eagerly. Since Modules hold their own state methods 
-can be called directly without the no need for a separate `apply` method, this is very 
+can be called directly without the need for a separate `apply` method, this is very 
 convenient for debugging as entire structure of the model can be inspected directly.
 
 ```{code-cell} ipython3
