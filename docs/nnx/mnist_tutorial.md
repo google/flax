@@ -28,7 +28,14 @@ Since NNX is under active development, we recommend using the latest version fro
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-# !pip install git+https://github.com/google/flax.git
+# !pip install -U flax penzai
+```
+
+```{code-cell} ipython3
+from penzai import pz
+
+pz.enable_interactive_context()
+pz.ts.active_autovisualizer.set_interactive(pz.ts.ArrayAutovisualizer())
 ```
 
 ## 2. Load the MNIST Dataset
@@ -99,7 +106,7 @@ class CNN(nnx.Module):
     return x
 
 model = CNN(rngs=nnx.Rngs(0))
-nnx.display(model)
+pz.show(model)
 ```
 
 ### Run model
@@ -112,7 +119,7 @@ Let's put our model to the test!  We'll perform a forward pass with arbitrary da
 import jax.numpy as jnp  # JAX NumPy
 
 y = model(jnp.ones((1, 28, 28, 1)))
-nnx.display(y)
+pz.show(y)
 ```
 
 ## 4. Create Optimizer and Metrics
@@ -131,7 +138,7 @@ metrics = nnx.MultiMetric(
   loss=nnx.metrics.Average('loss'),
 )
 
-nnx.display(optimizer)
+pz.show(optimizer)
 ```
 
 ## 5. Training step
