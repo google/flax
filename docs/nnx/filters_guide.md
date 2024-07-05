@@ -85,13 +85,11 @@ Here is a list of all the callable Filters included in NNX and their DSL literal
 
 | Literal | Callable | Description |
 |--------|----------------------|-------------|
-| `...` | `Everything()` | Matches all values |
-| `None` | `Nothing()` | Matches no values |
-| `True` | `Everything()` | Matches all values |
-| `False` | `Nothing()` | Matches no values |
+| `...` or `True` | `Everything()` | Matches all values |
+| `None` or `False` | `Nothing()` | Matches no values |
 | `type` | `OfType(type)` | Matches values that are instances of `type` or have a `type` attribute that is an instance of `type` |
 | | `PathContains(key)` | Matches values that have an associated `path` that contains the given `key` |
-| `'{filter}'` | `WithTag('{filter}')` | Matches values that have string `tag` attribute equal to `'{filter}'`. Used by `RngKey` and `RngCount`. |
+| `'{filter}'` <span style="color:gray">str</span> | `WithTag('{filter}')` | Matches values that have string `tag` attribute equal to `'{filter}'`. Used by `RngKey` and `RngCount`. |
 | `(*filters)` <span style="color:gray">tuple</span> or `[*filters]` <span style="color:gray">list</span> | `Any(*filters)` | Matches values that match any of the inner `filters` |
 | | `All(*filters)` | Matches values that match all of the inner `filters` |
 | | `Not(filter)` | Matches values that do not match the inner `filter` |
