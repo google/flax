@@ -31,7 +31,7 @@ from typing import (
 )
 from collections.abc import Callable, Iterable
 
-from etils import epath
+from etils import epath  # type: ignore[import-untyped]
 import jax
 import orbax.checkpoint as ocp
 from absl import logging
