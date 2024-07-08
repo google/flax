@@ -31,7 +31,6 @@ from typing import (
 )
 from collections.abc import Callable, Iterable
 
-from etils import epath  # type: ignore[import-untyped]
 import jax
 import orbax.checkpoint as ocp
 from absl import logging
@@ -77,7 +76,7 @@ COMMIT_SUCCESS_FILE = 'commit_success.txt'
 
 # Orbax main checkpoint file name.
 ORBAX_CKPT_FILENAME = 'checkpoint'
-ORBAX_METADATA_FILENAME = '_METADATA'
+ORBAX_MANIFEST_OCDBT = 'manifest.ocdbt'
 
 PyTree = Any
 
@@ -124,8 +123,7 @@ def _safe_remove(path: str):
 
 def _is_orbax_checkpoint(path: str) -> bool:
   return io.exists(os.path.join(path, ORBAX_CKPT_FILENAME)) or io.exists(
-      os.path.join(path, ORBAX_METADATA_FILENAME)
-      or ocp.type_handlers.is_ocdbt_checkpoint(epath.Path(path))
+    os.path.join(path, ORBAX_MANIFEST_OCDBT)
   )
 
 
