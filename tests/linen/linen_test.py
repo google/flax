@@ -1430,19 +1430,19 @@ class Fp8Test(parameterized.TestCase):
     if not use_jit and not fp8_ops.CAN_USE_EARRAY:
       self.skipTest("TODO: requires newer jax that has earray")
     f32 = jnp.dtype('float32')
-    fm32 = fp8_ops.fm32
+    fmax32 = fp8_ops.fp32_max_grad
     e4m3_dtype, _ = get_fp8_dtypes(fp8_genre)
     e4m3_max = 448 if fp8_genre == 'OCP' else 240
 
     # Create a scan loop with reused ah_f32 and sf_f32. So, the autograd will
     # accumulate the grads of them. We expect the max op (rather than add op)
-    # for the accumulation by converting them to fm32 dtype.
+    # for the accumulation by converting them to fmax32 dtype.
     def outer(x, ah_f32, sf_f32):
-      ah_fm32 = jax.lax.convert_element_type(ah_f32, fm32)
-      sf_fm32 = jax.lax.convert_element_type(sf_f32, fm32)
+      ah_fmax32 = jax.lax.convert_element_type(ah_f32, fmax32)
+      sf_fmax32 = jax.lax.convert_element_type(sf_f32, fmax32)
       array_x = jnp.array([x], f32)
       def body_fun(carry, _):
-        carry = fp8_ops.in_qdq(f32, e4m3_dtype, carry, sf_fm32, ah_fm32)
+        carry = fp8_ops.in_qdq(f32, e4m3_dtype, carry, sf_fmax32, ah_fmax32)
         return carry, None
       array_x, _ = jax.lax.scan(body_fun, array_x, None, length=3)
       return array_x[0]
