@@ -197,7 +197,7 @@ For example:
   ---
 
   PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure'
-  
+
   import orbax.checkpoint as ocp
   ckptr = ocp.AsyncCheckpointer(ocp.StandardCheckpointHandler())
   ckptr.save(PURE_CKPT_DIR, args=ocp.args.StandardSave(pytree))
