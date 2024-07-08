@@ -200,11 +200,11 @@ For example:
 
   import orbax.checkpoint as ocp
   ckptr = ocp.AsyncCheckpointer(ocp.StandardCheckpointHandler())
-  ckptr.save(PURE_CKPT_DIR, args=ocp.args.StandardSave(pytree))
+  ckptr.save(PURE_CKPT_DIR, args=ocp.args.StandardSave(CKPT_PYTREE))
   # ... Continue with your work...
   # ... Until a time when you want to wait until the save completes:
   ckptr.wait_until_finished() # Blocks until the checkpoint saving is completed.
-  ckptr.restore(PURE_CKPT_DIR, args=ocp.args.StandardRestore(target))
+  ckptr.restore(PURE_CKPT_DIR, args=ocp.args.StandardRestore(TARGET_PYTREE))
 
 
 Saving/loading a single JAX or NumPy Array
