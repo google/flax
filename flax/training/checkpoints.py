@@ -19,21 +19,23 @@ other numerical metric in filename.  Cleans up older / worse-performing
 checkpoint files.
 """
 
+from collections.abc import Callable, Iterable
+from concurrent.futures import thread
 import functools
 import os
 import pathlib
 import re
 import time
-import warnings
-from concurrent.futures import thread
 from typing import (
   Any,
 )
-from collections.abc import Callable, Iterable
+import warnings
 
-import jax
-import orbax.checkpoint as ocp
 from absl import logging
+from etils import epath  # type: ignore[import-untyped]
+from flax import config, core, errors, io, serialization, traverse_util
+from flax.training import orbax_utils
+import jax
 from jax import monitoring, process_index
 from jax import tree_util as jtu
 from jax.experimental.array_serialization.serialization import (
@@ -41,9 +43,7 @@ from jax.experimental.array_serialization.serialization import (
   get_tensorstore_spec,
 )
 from jax.experimental.multihost_utils import sync_global_devices
-
-from flax import config, core, errors, io, serialization, traverse_util
-from flax.training import orbax_utils
+import orbax.checkpoint as ocp
 
 _READ_CHECKPOINT_EVENT: str = '/jax/checkpoint/read/durations_sec'
 _WRITE_CHECKPOINT_EVENT: str = '/jax/checkpoint/write/durations_sec'
@@ -76,7 +76,7 @@ COMMIT_SUCCESS_FILE = 'commit_success.txt'
 
 # Orbax main checkpoint file name.
 ORBAX_CKPT_FILENAME = 'checkpoint'
-ORBAX_MANIFEST_OCDBT = 'manifest.ocdbt'
+ORBAX_METADATA_FILENAME = '_METADATA'
 
 PyTree = Any
 
@@ -123,7 +123,8 @@ def _safe_remove(path: str):
 
 def _is_orbax_checkpoint(path: str) -> bool:
   return io.exists(os.path.join(path, ORBAX_CKPT_FILENAME)) or io.exists(
-    os.path.join(path, ORBAX_MANIFEST_OCDBT)
+      os.path.join(path, ORBAX_METADATA_FILENAME)
+      or ocp.type_handlers.is_ocdbt_checkpoint(epath.Path(path))
   )
 
 
