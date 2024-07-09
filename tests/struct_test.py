@@ -15,6 +15,7 @@
 """Tests for flax.struct."""
 
 import dataclasses
+import functools
 from typing import Any
 
 import jax
@@ -47,20 +48,17 @@ class StructTest(parameterized.TestCase):
     with self.assertRaises(dataclasses.FrozenInstanceError):
       p.y = 3
 
-  # Slots param is not supported in Python 3.9
-  # TODO(lew): Uncomment when Flax upgrades to Python 3.10.
-
-  # def test_slots(self):
-  #   slots_dataclass = partial(struct.dataclass, frozen=False, slots=True)
-  #   @slots_dataclass
-  #   class SlotsPoint:
-  #     x: float
-  #     y: float
-  #   p = SlotsPoint(x=1., y=2.)
-  #   p.x = 3.  # can assign to existing fields
-  #   self.assertEqual(p, SlotsPoint(x=3., y=2.))
-  #   with self.assertRaises(AttributeError):
-  #     p.z = 0.  # can't create new fields by accident.
+  def test_slots(self):
+    slots_dataclass = functools.partial(struct.dataclass, frozen=False, slots=True)
+    @slots_dataclass
+    class SlotsPoint:
+      x: float
+      y: float
+    p = SlotsPoint(x=1., y=2.)
+    p.x = 3.  # can assign to existing fields
+    self.assertEqual(p, SlotsPoint(x=3., y=2.))
+    with self.assertRaises(AttributeError):
+      p.z = 0.  # can't create new fields by accident.
 
   def test_pytree_nodes(self):
     p = Point(x=1, y=2, meta={'abc': True})
@@ -92,68 +90,66 @@ class StructTest(parameterized.TestCase):
     class A(struct.PyTreeNode):
       a: int
 
-  # TODO(marcuschiam): Uncomment when Flax upgrades to Python 3.10.
-  # @parameterized.parameters(
-  #     {'mode': 'dataclass'},
-  #     {'mode': 'pytreenode'},
-  # )
-  # def test_kw_only(self, mode):
-  #   if mode == 'dataclass':
-  #     @struct.dataclass
-  #     class A:
-  #       a: int = 1
+  @parameterized.parameters(
+      {'mode': 'dataclass'},
+      {'mode': 'pytreenode'},
+  )
+  def test_kw_only(self, mode):
+    if mode == 'dataclass':
+      @struct.dataclass
+      class A:
+        a: int = 1
 
-  #     @functools.partial(struct.dataclass, kw_only=True)
-  #     class B(A):
-  #       b: int
-  #   elif mode == 'pytreenode':
-  #     class A(struct.PyTreeNode):
-  #       a: int = 1
+      @functools.partial(struct.dataclass, kw_only=True)
+      class B(A):
+        b: int
+    elif mode == 'pytreenode':
+      class A(struct.PyTreeNode):
+        a: int = 1
 
-  #     class B(A, struct.PyTreeNode, kw_only=True):
-  #       b: int
+      class B(A, struct.PyTreeNode, kw_only=True):
+        b: int
 
-  #   obj = B(b=2)
-  #   self.assertEqual(obj.a, 1)
-  #   self.assertEqual(obj.b, 2)
+    obj = B(b=2)
+    self.assertEqual(obj.a, 1)
+    self.assertEqual(obj.b, 2)
 
-  #   with self.assertRaisesRegex(TypeError, "non-default argument 'b' follows default argument"):
-  #     if mode == 'dataclass':
-  #       @struct.dataclass
-  #       class B(A):
-  #         b: int
-  #     elif mode == 'pytreenode':
-  #       class B(A, struct.PyTreeNode):
-  #         b: int
+    with self.assertRaisesRegex(TypeError, "non-default argument 'b' follows default argument"):
+      if mode == 'dataclass':
+        @struct.dataclass
+        class B(A):
+          b: int
+      elif mode == 'pytreenode':
+        class B(A, struct.PyTreeNode):
+          b: int
 
-  # TODO(marcuschiam): Uncomment when Flax upgrades to Python 3.10.
-  # @parameterized.parameters(
-  #     {'mode': 'dataclass'},
-  #     {'mode': 'pytreenode'},
-  # )
-  # def test_mutable(self, mode):
-  #   if mode == 'dataclass':
-  #     @struct.dataclass
-  #     class A:
-  #       a: int = 1
+  @parameterized.parameters(
+      {'mode': 'dataclass'},
+      {'mode': 'pytreenode'},
+  )
+  def test_mutable(self, mode):
+    if mode == 'dataclass':
+      @struct.dataclass
+      class A:
+        a: int = 1
 
-  #     @functools.partial(struct.dataclass, frozen=False)
-  #     class B:
-  #       b: int = 1
-  #   elif mode == 'pytreenode':
-  #     class A(struct.PyTreeNode):
-  #       a: int = 1
+      @functools.partial(struct.dataclass, frozen=False)
+      class B:
+        b: int = 1
+    elif mode == 'pytreenode':
+      class A(struct.PyTreeNode):
+        a: int = 1
 
-  #     class B(struct.PyTreeNode, frozen=False):
-  #       b: int = 1
+      class B(struct.PyTreeNode, frozen=False):
+        b: int = 1
 
-  #   obj = A()
-  #   with self.assertRaisesRegex(dataclasses.FrozenInstanceError, "cannot assign to field 'a'"):
-  #     obj.a = 2
+    obj = A()
+    with self.assertRaisesRegex(dataclasses.FrozenInstanceError, "cannot assign to field 'a'"):
+      obj.a = 2
 
-  #   obj = B()
-  #   obj.b = 2
-  #   self.assertEqual(obj.b, 2)
+    obj = B()
+    obj.b = 2
+    self.assertEqual(obj.b, 2)
 
 
 if __name__ == '__main__':
