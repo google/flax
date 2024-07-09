@@ -184,7 +184,7 @@ You can also use Orbax AsyncCheckpointer with Flax APIs through async manager. A
 For example:
 
 .. codediff::
-  :title: flax.checkpoints(async), orbax.checkpoint(async)
+  :title: flax.checkpoints, orbax.checkpoint
   :skip_test: flax.checkpoints
   :sync:
 
@@ -196,15 +196,18 @@ For example:
   checkpoints.restore_checkpoint(PURE_CKPT_DIR, target=TARGET_PYTREE)
   ---
 
-  PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure'
+  # Create some dummy variables for this example.
+  CKPT_PYTREE_ASYNC = [12, {'bar': np.array((2, 3))}, [1, 4, 10]]
+  TARGET_PYTREE_ASYNC = [0, {'bar': np.array((0))}, [0, 0, 0]]
+  PURE_CKPT_DIR_ASYNC = '/tmp/orbax_upgrade/pure_async'
 
   import orbax.checkpoint as ocp
   ckptr = ocp.AsyncCheckpointer(ocp.StandardCheckpointHandler())
-  ckptr.save(PURE_CKPT_DIR, args=ocp.args.StandardSave(CKPT_PYTREE))
+  ckptr.save(PURE_CKPT_DIR, args=ocp.args.StandardSave(CKPT_PYTREE_ASYNC))
   # ... Continue with your work...
   # ... Until a time when you want to wait until the save completes:
   ckptr.wait_until_finished() # Blocks until the checkpoint saving is completed.
-  ckptr.restore(PURE_CKPT_DIR, args=ocp.args.StandardRestore(TARGET_PYTREE))
+  ckptr.restore(PURE_CKPT_DIR_ASYNC, args=ocp.args.StandardRestore(TARGET_PYTREE_ASYNC))
 
 
 Saving/loading a single JAX or NumPy Array
