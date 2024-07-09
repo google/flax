@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import typing as tp
 
+import numpy as np
+
 from flax import struct
 from flax.nnx.nnx import filterlib, graph
 from flax.nnx.nnx.object import Object
@@ -263,11 +265,15 @@ class Accuracy(Average):
         to the labels.
       labels: the ground truth integer labels.
     """
-    if logits.ndim != labels.ndim + 1 or labels.dtype != jnp.int32:
+    if logits.ndim != labels.ndim + 1:
       raise ValueError(
-          f'Expected labels.dtype==jnp.int32 and logits.ndim={logits.ndim}=='
-          f'labels.ndim+1={labels.ndim + 1}'
+        f'Expected logits.ndim==labels.ndim+1, got {logits.ndim} and {labels.ndim}'
       )
+    elif labels.dtype in (jnp.int64, np.int32, np.int64):
+      labels = jnp.astype(labels, jnp.int32)
+    elif labels.dtype != jnp.int32:
+      raise ValueError(f'Expected labels.dtype==jnp.int32, got {labels.dtype}')
+
     super().update(values=(logits.argmax(axis=-1) == labels))
 
 
