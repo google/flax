@@ -45,8 +45,8 @@ Setup
 
   # Create some dummy variables for this example.
   MAX_STEPS = 5
-  CKPT_PYTREE = [12, {'foo': 'str', 'bar': np.array((2, 3))}, [1, 4, 10]]
-  TARGET_PYTREE = [0, {'foo': '', 'bar': np.array((0))}, [0, 0, 0]]
+  CKPT_PYTREE = [12, {'bar': np.array((2, 3))}, [1, 4, 10]]
+  TARGET_PYTREE = [0, {'bar': np.array((0))}, [0, 0, 0]]
 
 Most common use case: Saving/loading and managing checkpoints
 *************************************************************
@@ -188,26 +188,23 @@ For example:
   :skip_test: flax.checkpoints
   :sync:
 
-  PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure'
+  ASYNC_CKPT_DIR = '/tmp/orbax_upgrade/async'
   flax.config.update('flax_use_orbax_checkpointing', True)
   async_manager = checkpoints.AsyncManager()
 
-  checkpoints.save_checkpoint(PURE_CKPT_DIR, CKPT_PYTREE, step=0, overwrite=True, async_manager=async_manager)
-  checkpoints.restore_checkpoint(PURE_CKPT_DIR, target=TARGET_PYTREE)
+  checkpoints.save_checkpoint(ASYNC_CKPT_DIR, CKPT_PYTREE, step=0, overwrite=True, async_manager=async_manager)
+  checkpoints.restore_checkpoint(ASYNC_CKPT_DIR, target=TARGET_PYTREE)
   ---
 
-  # Create some dummy variables for this example.
-  CKPT_PYTREE_ASYNC = [12, {'bar': np.array((2, 3))}, [1, 4, 10]]
-  TARGET_PYTREE_ASYNC = [0, {'bar': np.array((0))}, [0, 0, 0]]
-  PURE_CKPT_DIR_ASYNC = '/tmp/orbax_upgrade/pure_async'
+  ASYNC_CKPT_DIR = '/tmp/orbax_upgrade/async'
 
   import orbax.checkpoint as ocp
   ckptr = ocp.AsyncCheckpointer(ocp.StandardCheckpointHandler())
-  ckptr.save(PURE_CKPT_DIR, args=ocp.args.StandardSave(CKPT_PYTREE_ASYNC))
+  ckptr.save(ASYNC_CKPT_DIR, args=ocp.args.StandardSave(CKPT_PYTREE))
   # ... Continue with your work...
   # ... Until a time when you want to wait until the save completes:
   ckptr.wait_until_finished() # Blocks until the checkpoint saving is completed.
-  ckptr.restore(PURE_CKPT_DIR_ASYNC, args=ocp.args.StandardRestore(TARGET_PYTREE_ASYNC))
+  ckptr.restore(ASYNC_CKPT_DIR, args=ocp.args.StandardRestore(TARGET_PYTREE))
 
 
 Saving/loading a single JAX or NumPy Array
