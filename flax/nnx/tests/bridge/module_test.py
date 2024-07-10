@@ -19,12 +19,12 @@ import jax
 import jax.numpy as jnp
 
 from flax import nnx
-from flax.nnx import compat
+from flax.nnx import bridge
 
 
 class TestCompatModule(absltest.TestCase):
   def test_compact_basic(self):
-    class Linear(compat.Module):
+    class Linear(bridge.Module):
       dout: int
 
       def setup(self):
@@ -42,10 +42,10 @@ class TestCompatModule(absltest.TestCase):
         return x @ self.w + self.b[None]
 
     @dataclasses.dataclass
-    class Foo(compat.Module):
+    class Foo(bridge.Module):
       dout: int
 
-      @compat.compact
+      @bridge.compact
       def __call__(self, x):
         din = x.shape[-1]
         self.linear = Linear(self.dout)
@@ -56,7 +56,7 @@ class TestCompatModule(absltest.TestCase):
     x = jnp.ones((3, 2))
     rngs = nnx.Rngs(0)
 
-    foo._set_scope(compat.Scope(rngs))
+    foo._set_scope(bridge.Scope(rngs))
     y = foo(x)
     foo._set_scope(None)
 
@@ -67,7 +67,7 @@ class TestCompatModule(absltest.TestCase):
     assert foo.linear.count == 1
     assert rngs.default.count.value == 1
 
-    foo._set_scope(compat.Scope(rngs))
+    foo._set_scope(bridge.Scope(rngs))
     y = foo(x)
     foo._set_scope(None)
 
@@ -78,35 +78,35 @@ class TestCompatModule(absltest.TestCase):
     assert rngs.default.count.value == 1
 
   def test_compact_parent_none(self):
-    class Foo(compat.Module):
+    class Foo(bridge.Module):
       pass
 
-    class Bar(compat.Module):
-      @compat.compact
+    class Bar(bridge.Module):
+      @bridge.compact
       def __call__(self):
         return Foo().scope
 
     rngs = nnx.Rngs(0)
     bar = Bar()
-    bar._set_scope(compat.Scope(rngs))
+    bar._set_scope(bridge.Scope(rngs))
     scope = bar()
     bar._set_scope(None)
     assert bar.scope is None
     assert scope.rngs is rngs
 
-    class Baz(compat.Module):
-      @compat.compact
+    class Baz(bridge.Module):
+      @bridge.compact
       def __call__(self):
         return Foo(parent=None).scope
 
     baz = Baz()
-    baz._set_scope(compat.Scope(rngs))
+    baz._set_scope(bridge.Scope(rngs))
     scope = baz()
     baz._set_scope(None)
     assert scope is None
 
   def test_name(self):
-    class Foo(compat.Module):
+    class Foo(bridge.Module):
       dout: int
 
       def __call__(self, x):
@@ -118,15 +118,15 @@ class TestCompatModule(absltest.TestCase):
           )
         return x @ self.w
 
-    class Bar(compat.Module):
-      @compat.compact
+    class Bar(bridge.Module):
+      @bridge.compact
       def __call__(self, x):
         return Foo(5, name='foo')(x)
 
     bar = Bar()
     x = jnp.ones((1, 2))
     rngs = nnx.Rngs(0)
-    bar._set_scope(compat.Scope(rngs))
+    bar._set_scope(bridge.Scope(rngs))
     y = bar(x)
     bar._set_scope(None)
     assert y.shape == (1, 5)

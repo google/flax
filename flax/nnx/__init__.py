@@ -18,11 +18,12 @@ from flax.linen.pooling import min_pool as min_pool
 from flax.linen.pooling import pool as pool
 from flax.typing import Initializer as Initializer
 
-from .nnx.compat import wrappers as wrappers
+from .nnx.bridge import wrappers as wrappers
 from .nnx import graph as graph
 from .nnx import errors as errors
 from .nnx import helpers as helpers
-from .nnx import compat as compat
+from .nnx import bridge as bridge
+compat = bridge  # Make the old import name still work
 from .nnx import traversals as traversals
 from .nnx import filterlib as filterlib
 from .nnx.filterlib import WithTag as WithTag

@@ -142,11 +142,11 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     Example::
 
       >>> from flax import nnx
-      >>> from flax.nnx import compat as nnc
+      >>> from flax.nnx import bridge as nnb
       >>> import jax
       >>> import jax.numpy as jnp
       ...
-      >>> class Linear(nnc.Module):
+      >>> class Linear(nnb.Module):
       ...   def __init__(self, dout, rngs: nnx.Rngs):
       ...     self.dout = dout
       ...     self.rngs = rngs
@@ -210,7 +210,7 @@ def compact(f: F) -> F:
   def compact_wrapper(self, *args, **kwargs):
     if not isinstance(self, Module):
       raise ValueError(
-        f"Expected 'self' to be a nnx.compat.Module, got {type(self).__name__}"
+        f"Expected 'self' to be a nnx.bridge.Module, got {type(self).__name__}"
       )
 
     MODULE_CONTEXT.parent_stack.append(CompactContext(self))
