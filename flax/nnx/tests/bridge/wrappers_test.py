@@ -16,13 +16,13 @@ import jax
 
 from flax import linen
 from flax import nnx
-from flax.nnx import compat
+from flax.nnx import bridge
 
 
 class TestCompatibility:
   def test_functional(self):
     # Functional API for NNX Modules
-    functional = compat.functional(nnx.Linear)(32, 64)
+    functional = bridge.functional(nnx.Linear)(32, 64)
     state = functional.init(rngs=nnx.Rngs(0))
     x = jax.numpy.ones((1, 32))
     y, updates = functional.apply(state)(x)
@@ -31,5 +31,5 @@ class TestCompatibility:
     ## Wrapper API for Linen Modules
     linen_module = linen.Dense(features=64)
     x = jax.numpy.ones((1, 32))
-    module = compat.LinenWrapper(linen_module, x, rngs=nnx.Rngs(0))  # init
+    module = bridge.LinenWrapper(linen_module, x, rngs=nnx.Rngs(0))  # init
     y = module(x)  # apply
