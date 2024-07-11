@@ -767,7 +767,7 @@ wheels = [
 
 [[package]]
 name = "flax"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "jax" },
@@ -2212,7 +2212,7 @@ wheels = [
 
 [[package]]
 name = "orbax-checkpoint"
-version = "0.6.0"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
@@ -2220,7 +2220,6 @@ dependencies = [
     { name = "etils", version = "1.9.2", source = { registry = "https://pypi.org/simple" }, extra = ["epath", "epy"], marker = "python_full_version >= '3.11'" },
     { name = "humanize" },
     { name = "jax" },
-    { name = "jaxlib" },
     { name = "msgpack" },
     { name = "nest-asyncio" },
     { name = "numpy" },
@@ -2230,9 +2229,9 @@ dependencies = [
     { name = "tensorstore" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/07/4f/f6b372e70fb3785656d31edd9b99a151dc1b4955486e85a1935e9e0273c5/orbax_checkpoint-0.6.0.tar.gz", hash = "sha256:313586128267e0923d6d2095855da5edcd45acee1f9d2e86d1e8330f69acb110", size = 187560 }
+sdist = { url = "https://files.pythonhosted.org/packages/b7/5a/e07d3b2a9dacc6fe882a255080d4af3ac180bc190fd8ce22ab64cf0bfe26/orbax_checkpoint-0.7.0.tar.gz", hash = "sha256:f5a59babbf86fdafacddcfd2fb1c6d45b4fa0685b38a87a4598a5702bb70a657", size = 201557 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/e0/194d62674be60e3bf2cb764f653e8f06db86b02b6c9c9243ea9af0f48bf1/orbax_checkpoint-0.6.0-py3-none-any.whl", hash = "sha256:fce1d61b1a378939f55b03fb4ac9922ad0def0b846822b1f5e70f4a81d24dbc2", size = 253044 },
+    { url = "https://files.pythonhosted.org/packages/3a/63/45b63b51b320d104f21cb7f2a5d0ae2b37558e24296c02d33521a291ad87/orbax_checkpoint-0.7.0-py3-none-any.whl", hash = "sha256:0469030dd70729f7416981712a9ea8a82bd02c65ca82c933675c9e3ed4763f9b", size = 279660 },
 ]
 
 [[package]]
