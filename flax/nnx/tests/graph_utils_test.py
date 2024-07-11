@@ -404,7 +404,7 @@ class SimpleModule(nnx.Module):
   pass
 
 
-class SimplePyTreeModule(nnx.Module, unsafe_pytree=True):
+class SimplePyTreeModule(nnx.Module, experimental_pytree=True):
   pass
 
 

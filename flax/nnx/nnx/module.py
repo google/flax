@@ -392,18 +392,10 @@ class Module(Object, metaclass=ModuleMeta):
       raise_if_not_found=False,
     )
 
-  def __init_subclass__(cls, unsafe_pytree: bool = False) -> None:
-    """
-    Args:
-      unsafe_pytree: If True, the Module subclass will be
-        registered as a pytree node with JAX. This breaks reference
-        semantics and should be used with caution, however it can be
-        useful to use Modules with vanillay JAX transformations. See
-        `Using Modules as PyTrees <https://flax.readthedocs.io/en/latest/nnx/nnx_basics.html#using-modules-as-pytrees>`__.
-    """
+  def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
     super().__init_subclass__()
 
-    if unsafe_pytree:
+    if experimental_pytree:
       jtu.register_pytree_with_keys(
         cls,
         partial(_module_flatten, with_keys=True),
