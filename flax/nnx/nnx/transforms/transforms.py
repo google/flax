@@ -34,6 +34,7 @@ import functools
 import typing as tp
 
 from flax.nnx.nnx import (
+  extract,
   filterlib,
   graph,
   spmd,
@@ -153,11 +154,11 @@ def jit_fn(
 
   input_graph_nodes = ctx.merge(graphdef, state)
 
-  (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
+  (args, kwargs) = extract.insert_graph_nodes((args, kwargs), input_graph_nodes)
 
   out = f(*args, **kwargs)
 
-  out, output_graph_nodes = graph.extract_graph_nodes(out)
+  out, output_graph_nodes = extract.extract_graph_nodes(out)
 
   graphdef, state = ctx.split((input_graph_nodes, output_graph_nodes))
 
@@ -352,7 +353,7 @@ def jit(
   @graph.update_context('jit')
   def jit_wrapper(*args, **kwargs):
     ctx = graph.current_update_context('jit')
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+    (args, kwargs), input_graph_nodes = extract.extract_graph_nodes(
       (args, kwargs)
     )
     graphdef, state = ctx.split(input_graph_nodes)
@@ -365,7 +366,7 @@ def jit(
     input_graph_nodes, output_graph_nodes = ctx.merge(
       output_graphdef, output_state
     )
-    out = graph.insert_graph_nodes(out, output_graph_nodes)
+    out = extract.insert_graph_nodes(out, output_graph_nodes)
     return out
 
   jit_wrapper.inner = jitted_fn  # type: ignore
@@ -507,11 +508,11 @@ def grad_fn(*args):
     args[i] = arg
 
   # add other nodes to the args
-  args = graph.insert_graph_nodes(args, input_nodes)
+  args = extract.insert_graph_nodes(args, input_nodes)
 
   out = f(*args)
 
-  out, out_nodes = graph.extract_graph_nodes(out)
+  out, out_nodes = extract.extract_graph_nodes(out)
 
   graphdef_out, state_out = ctx.split((input_nodes, out_nodes))
 
@@ -543,7 +544,7 @@ def _grad_general(
       for i, arg in enumerate(args)
       if i in _argnums and graph.is_node(arg)
     }
-    args, input_nodes = graph.extract_graph_nodes(args)
+    args, input_nodes = extract.extract_graph_nodes(args)
     args = list(args)
 
     def only_diff(path: tuple, value: tp.Any) -> bool:
@@ -590,7 +591,7 @@ def _grad_general(
 
     input_nodes, out_nodes = ctx.merge(graphdef_out, state_out)
 
-    out = graph.insert_graph_nodes(out, out_nodes)
+    out = extract.insert_graph_nodes(out, out_nodes)
     return out
 
   return grad_wrapper
@@ -859,15 +860,15 @@ def remat_apply(
   args: tuple[tp.Any, ...],
 ):
   ctx = graph.current_update_context('remat')
-  args, input_nodes = graph.extract_graph_nodes(args)
+  args, input_nodes = extract.extract_graph_nodes(args)
   graphdef, state = ctx.split(input_nodes)
 
   def _remat_fn(state: State, *args):
     input_nodes = ctx.merge(graphdef, state)
-    args = graph.insert_graph_nodes(args, input_nodes)
+    args = extract.insert_graph_nodes(args, input_nodes)
     out = f(*args)
 
-    out, output_nodes = graph.extract_graph_nodes(out)
+    out, output_nodes = extract.extract_graph_nodes(out)
     new_graphdef, new_state = ctx.split((input_nodes, output_nodes))
     return (new_graphdef, new_state), out
 
@@ -879,7 +880,7 @@ def remat_apply(
   )(state, *args)
 
   _, output_nodes = ctx.merge(new_graphdef, new_state)
-  out = graph.insert_graph_nodes(out, output_nodes)
+  out = extract.insert_graph_nodes(out, output_nodes)
 
   return out
 
@@ -914,15 +915,15 @@ def eval_shape(
   *args: tp.Any,
   **kwargs: tp.Any,
 ) -> A:
-  (args, kwargs), input_nodes = graph.extract_graph_nodes((args, kwargs))
+  (args, kwargs), input_nodes = extract.extract_graph_nodes((args, kwargs))
   graphdef, state = graph.split(input_nodes)
 
   @functools.wraps(f)
   def _eval_shape_fn(state: State, *args, **kwargs):
     input_nodes = graph.merge(graphdef, state)
-    args, kwargs = graph.insert_graph_nodes((args, kwargs), input_nodes)
+    args, kwargs = extract.insert_graph_nodes((args, kwargs), input_nodes)
     out = f(*args, **kwargs)
-    out, output_nodes = graph.extract_graph_nodes(out)
+    out, output_nodes = extract.extract_graph_nodes(out)
     graphdef_out, state_out = graph.split(output_nodes)
     return graphdef_out, state_out, out
 
@@ -931,7 +932,7 @@ def eval_shape(
   )
 
   output_nodes = graph.merge(graphdef_out, state_out)
-  out = graph.insert_graph_nodes(out, output_nodes)
+  out = extract.insert_graph_nodes(out, output_nodes)
   return out
 
 
