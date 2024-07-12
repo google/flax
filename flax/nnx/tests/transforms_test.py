@@ -1424,6 +1424,122 @@ class TestCond(absltest.TestCase):
     assert foo.timestep.step == 4
     assert foo.timestep.reward == 0.0
 
+  def test_cond_and_vmap(self):
+    class Env(nnx.Module):
+      def __init__(self):
+        self.index = jnp.arange(8)
+        self.step = jnp.zeros((8,), jnp.uint32)
+
+    env = Env()
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.experimental.vmap(in_axes=(0, None), out_axes=None)
+    def f(env: Env, model: nnx.Linear):
+      self.assertEqual(env.index.shape, ())
+
+      def increment(env: Env):
+        env.step += 1
+
+      def no_nothing(env: Env):
+        pass
+
+      is_even = env.index % 2 == 0
+      nnx.cond(is_even, increment, no_nothing, env)
+
+    f(env, model)
+
+    np.testing.assert_array_equal(env.step, [1, 0, 1, 0, 1, 0, 1, 0])
+
+
+class TestSplitMergeInputs(absltest.TestCase):
+  def test_split_inputs(self):
+    class StatefulLinear(nnx.Linear):
+      def __init__(self, din: int, dout: int, rngs: nnx.Rngs):
+        super().__init__(din, dout, rngs=rngs)
+        self.counter = jnp.array(0, jnp.uint32)
+
+      def __call__(self, x):
+        self.counter += 1
+        return super().__call__(x)
+
+    model = StatefulLinear(3, 4, rngs=nnx.Rngs(0))
+
+    @nnx.split_inputs
+    @jax.jit
+    @nnx.merge_inputs
+    def forward(model, x):
+      return model(x)
+
+    x = jnp.ones((2, 3))
+    y = forward(model, x)
+
+    self.assertEqual(model.counter, 1)
+
+  def test_split_inputs_cond(self):
+    class Counter(nnx.Linear):
+      def __init__(self):
+        self.count = jnp.array(0, jnp.uint32)
+
+      def increment(self):
+        self.count += 1
+
+    counter = Counter()
+
+    @nnx.merge_inputs
+    def increment(counter: Counter):
+      counter.increment()
+
+    @nnx.merge_inputs
+    def no_nothing(counter: Counter):
+      pass
+
+    nnx.split_inputs(jax.lax.cond)(True, increment, no_nothing, counter)
+
+    self.assertEqual(counter.count, 1)
+
+    nnx.split_inputs(jax.lax.cond)(False, increment, no_nothing, counter)
+
+    self.assertEqual(counter.count, 1)
+
+  def test_split_inputs_vmap(self):
+    class EnvState(nnx.Variable[nnx.A]):
+      pass
+
+    class Env(nnx.Object):
+      def __init__(self):
+        self.index = EnvState(jnp.arange(8))
+        self.step = EnvState(jnp.zeros((8,), jnp.uint32))
+
+    env = Env()
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    # internally merge_inputs returns (args, out)
+    in_axes = (0, None)
+    out_axes = (in_axes, None)
+
+    @nnx.split_inputs
+    @partial(jax.vmap, in_axes=in_axes, out_axes=out_axes)
+    @nnx.merge_inputs
+    def f(env: Env, model: nnx.Linear):
+      self.assertEqual(env.index.value.shape, ())
+
+      @nnx.merge_inputs
+      def increment(env: Env):
+        env.step.value += 1
+
+      @nnx.merge_inputs
+      def no_nothing(env: Env):
+        pass
+
+      is_even = env.index.value % 2 == 0
+      nnx.split_inputs(jax.lax.cond)(is_even, increment, no_nothing, env)
+
+    f(env, model)
+
+    np.testing.assert_array_equal(
+      env.step.value, np.array([1, 0, 1, 0, 1, 0, 1, 0], np.uint32)
+    )
+
 
 if __name__ == '__main__':
   absltest.main()

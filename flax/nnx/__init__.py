@@ -25,6 +25,8 @@ from .nnx import helpers as helpers
 from .nnx import bridge as bridge
 from .nnx import traversals as traversals
 from .nnx import filterlib as filterlib
+from .nnx import transforms as transforms
+from .nnx import experimental as experimental
 from .nnx.filterlib import WithTag as WithTag
 from .nnx.filterlib import PathContains as PathContains
 from .nnx.filterlib import OfType as OfType
@@ -103,6 +105,8 @@ from .nnx.rnglib import RngKey as RngKey
 from .nnx.rnglib import RngCount as RngCount
 from .nnx.rnglib import ForkStates as ForkStates
 from .nnx.rnglib import fork as fork
+from .nnx.rnglib import split_rngs as split_rngs
+from .nnx.rnglib import restore_rngs as restore_rngs
 from .nnx.spmd import PARTITION_NAME as PARTITION_NAME
 from .nnx.spmd import get_partition_spec as get_partition_spec
 from .nnx.spmd import get_named_sharding as get_named_sharding
@@ -122,8 +126,10 @@ from .nnx.transforms.transforms import Remat as Remat
 from .nnx.transforms.looping import Scan as Scan
 from .nnx.transforms.parallelization import Vmap as Vmap
 from .nnx.transforms.parallelization import Pmap as Pmap
-from .nnx.transforms.transforms import grad as grad
+from .nnx.transforms.general import split_inputs as split_inputs
+from .nnx.transforms.general import merge_inputs as merge_inputs
 from .nnx.transforms.transforms import jit as jit
+from .nnx.transforms.transforms import grad as grad
 from .nnx.transforms.transforms import remat as remat
 from .nnx.transforms.looping import scan as scan
 from .nnx.transforms.transforms import value_and_grad as value_and_grad
@@ -131,6 +137,7 @@ from .nnx.transforms.parallelization import vmap as vmap
 from .nnx.transforms.parallelization import pmap as pmap
 from .nnx.transforms.transforms import eval_shape as eval_shape
 from .nnx.transforms.transforms import cond as cond
+from .nnx.experimental import StateAxes as StateAxes
 from .nnx.variables import EMPTY as EMPTY
 from .nnx.variables import A as A
 from .nnx.variables import BatchStat as BatchStat

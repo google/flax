@@ -69,6 +69,12 @@ Index = int
 AxesValue = tp.Union[int, None]
 SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
 
+class Missing:
+  pass
+
+
+MISSING = Missing()
+
 
 # -------------------------------
 # vmap
@@ -232,7 +238,21 @@ def vmap_fn(
     out,
   )
 
-
+@tp.overload
+def vmap(
+  *,
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  out_axes: tp.Any = 0,
+  axis_name: AxisName | None = None,
+  axis_size: int | None = None,
+  spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
+  # nnx specific
+  in_axes_kwargs: tp.Any = 0,
+  state_axes: tp.Mapping[filterlib.Filter, int | None] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> tp.Callable[[F], F]: ...
+@tp.overload
 def vmap(
   f: F,
   *,
@@ -246,9 +266,36 @@ def vmap(
   state_axes: tp.Mapping[filterlib.Filter, int | None] = FrozenDict({...: 0}),
   split_rngs: filterlib.Filter = ...,
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-) -> F:
-  vectorized_states_axes = list(state_axes.values())
+) -> F: ...
+def vmap(
+  f: F | Missing = MISSING,
+  *,
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  out_axes: tp.Any = 0,
+  axis_name: AxisName | None = None,
+  axis_size: int | None = None,
+  spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
+  # nnx specific
+  in_axes_kwargs: tp.Any = 0,
+  state_axes: tp.Mapping[filterlib.Filter, int | None] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> F | tp.Callable[[F], F]:
+  if isinstance(f, Missing):
+    return functools.partial(
+      vmap,
+      in_axes=in_axes,
+      out_axes=out_axes,
+      axis_name=axis_name,
+      axis_size=axis_size,
+      spmd_axis_name=spmd_axis_name,
+      in_axes_kwargs=in_axes_kwargs,
+      state_axes=state_axes,
+      split_rngs=split_rngs,
+      transform_metadata=transform_metadata,
+    )
 
+  vectorized_states_axes = list(state_axes.values())
   vmapped_fn = jax.vmap(
       vmap_fn,
       in_axes=(
@@ -561,11 +608,10 @@ def pmap_fn(
     out,
   )
 
-
+@tp.overload
 def pmap(
-  f: F,
-  axis_name: AxisName | None = None,
   *,
+  axis_name: AxisName | None = None,
   in_axes: tp.Any = 0,
   out_axes: tp.Any = 0,
   static_broadcasted_argnums: int | tp.Iterable[int] = (),
@@ -579,7 +625,61 @@ def pmap(
   state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
   split_rngs: filterlib.Filter = ...,
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-) -> F:
+) -> tp.Callable[[F], F]: ...
+@tp.overload
+def pmap(
+  f: F,
+  *,
+  axis_name: AxisName | None = None,
+  in_axes: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  static_broadcasted_argnums: int | tp.Iterable[int] = (),
+  devices: tp.Sequence[jax.Device] | None = None,  # noqa: F811
+  backend: str | None = None,
+  axis_size: int | None = None,
+  donate_argnums: int | tp.Iterable[int] = (),
+  global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
+  # nnx specific
+  in_axes_kwargs: tp.Any = 0,
+  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> F: ...
+def pmap(
+  f: F | Missing = MISSING,
+  *,
+  axis_name: AxisName | None = None,
+  in_axes: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  static_broadcasted_argnums: int | tp.Iterable[int] = (),
+  devices: tp.Sequence[jax.Device] | None = None,  # noqa: F811
+  backend: str | None = None,
+  axis_size: int | None = None,
+  donate_argnums: int | tp.Iterable[int] = (),
+  global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
+  # nnx specific
+  in_axes_kwargs: tp.Any = 0,
+  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> F | tp.Callable[[F], F]:
+  if isinstance(f, Missing):
+    return functools.partial(
+      pmap,
+      axis_name=axis_name,
+      in_axes=in_axes,
+      out_axes=out_axes,
+      static_broadcasted_argnums=static_broadcasted_argnums,
+      devices=devices,
+      backend=backend,
+      axis_size=axis_size,
+      donate_argnums=donate_argnums,
+      global_arg_shapes=global_arg_shapes,
+      in_axes_kwargs=in_axes_kwargs,
+      state_axes=state_axes,
+      split_rngs=split_rngs,
+      transform_metadata=transform_metadata,
+    )
   if static_broadcasted_argnums:
     raise NotImplementedError(
       'static_broadcasted_argnums is not yet supported in nnx.pmap'
@@ -704,7 +804,7 @@ def pmap(
 
     out = extract.insert_graph_nodes(out, output_graph_nodes)
 
-    rnglib.restore_keys(input_rng_streams)
+    rnglib.restore_rngs(input_rng_streams)
 
     return out
 
@@ -777,8 +877,7 @@ class Pmap(tp.Generic[M], LiftedModule[M]):
   ):
     self.module_constructor = module_constructor
 
-    @functools.partial(
-      pmap,
+    @pmap(
       axis_name=axis_name,
       in_axes=None,
       out_axes=None,
@@ -798,8 +897,7 @@ class Pmap(tp.Generic[M], LiftedModule[M]):
 
     self.pmap_module = pmap_init(*module_init_args, **module_init_kwargs)
 
-    @functools.partial(
-      pmap,
+    @pmap(
       axis_name=axis_name,
       in_axes=in_axes,
       out_axes=out_axes,

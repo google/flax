@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 import dataclasses
 import enum
 import functools
@@ -61,8 +60,8 @@ def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
 
 @dataclasses.dataclass
 class GraphContext(threading.local):
-  update_context_stacks: defaultdict[str, list[UpdateContext]] = (
-    dataclasses.field(default_factory=lambda: defaultdict(list))
+  update_context_stacks: dict[str, list[UpdateContext]] = dataclasses.field(
+    default_factory=dict
   )
 
 
@@ -962,10 +961,6 @@ class UpdateContext:
       :class:`GraphDef` and one or more :class:`State`'s equal to the number of filters passed. If no
       filters are passed, a single :class:`State` is returned.
     """
-    if self.refmap is not None and self.idxmap is None:
-      raise ValueError(
-        "'merge' was not called in-between the first and second call to 'split'"
-      )
     graphdef, state, refmap = flatten(node, idxmap=self.idxmap)
 
     states: GraphState | tuple[GraphState, ...]
@@ -1021,20 +1016,26 @@ class UpdateContextManager:
 
   def __enter__(self):
     ctx = UpdateContext(self.tag, None, None)
-    GRAPH_CONTEXT.update_context_stacks[self.tag].append(ctx)
+    if self.tag not in GRAPH_CONTEXT.update_context_stacks:
+      GRAPH_CONTEXT.update_context_stacks[self.tag] = [ctx]
+    else:
+      GRAPH_CONTEXT.update_context_stacks[self.tag].append(ctx)
     return ctx
 
   def __exit__(self, *args):
-    stack = GRAPH_CONTEXT.update_context_stacks[self.tag]
-    if not stack:
+    if self.tag not in GRAPH_CONTEXT.update_context_stacks:
       raise RuntimeError(
           f'No update context found for tag {self.tag!r}, this is a bug.'
       )
+    stack = GRAPH_CONTEXT.update_context_stacks[self.tag]
 
-    ctx = GRAPH_CONTEXT.update_context_stacks[self.tag].pop()
+    ctx = stack.pop()
     # clear references
     ctx.refmap = None
     ctx.idxmap = None
+
+    if not stack:
+      del GRAPH_CONTEXT.update_context_stacks[self.tag]
 
   def __call__(self, f: F) -> F:
     @functools.wraps(f)
@@ -1142,10 +1143,9 @@ def update_context(tag: str):
 
 def current_update_context(tag: str) -> UpdateContext:
   """Returns the current active :class:`UpdateContext` for the given tag."""
-  stack = GRAPH_CONTEXT.update_context_stacks[tag]
-  if not stack:
+  if tag not in GRAPH_CONTEXT.update_context_stacks:
     raise ValueError(f'No update context found for tag {tag!r}.')
-  return stack[-1]
+  return GRAPH_CONTEXT.update_context_stacks[tag][-1]
 
 
 # --------------------------------------------------------

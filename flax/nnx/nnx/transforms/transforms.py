@@ -46,6 +46,7 @@ from flax.nnx.nnx.proxy_caller import (
   DelayedAccessor,
 )
 from flax.nnx.nnx.state import State
+from flax.nnx.nnx.transforms import general
 from flax.typing import Leaf
 import jax
 import jax.core
@@ -63,6 +64,12 @@ StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
 Leaves = tp.List[Leaf]
 Index = int
+
+class Missing:
+  pass
+
+
+MISSING = Missing()
 
 
 def _normalize_sequence(
@@ -168,6 +175,25 @@ def jit_fn(
   return out, state, graphdef
 
 
+@tp.overload
+def jit(
+  *,
+  in_shardings: tp.Any = UNSPECIFIED,
+  out_shardings: tp.Any = UNSPECIFIED,
+  static_argnums: int | tp.Sequence[int] | None = None,
+  static_argnames: str | tp.Iterable[str] | None = None,
+  donate_argnums: int | tp.Sequence[int] | None = None,
+  donate_argnames: str | tp.Iterable[str] | None = None,
+  keep_unused: bool = False,
+  device: tp.Optional[jax.Device] = None,
+  backend: tp.Optional[str] = None,
+  inline: bool = False,
+  abstracted_axes: tp.Optional[tp.Any] = None,
+  # nnx specific
+  donate_state: bool = False,
+  constrain_state: bool | tp.Callable[[State], State] = False,
+) -> tp.Callable[[F], F]: ...
+@tp.overload
 def jit(
   fun: F,
   *,
@@ -185,7 +211,25 @@ def jit(
   # nnx specific
   donate_state: bool = False,
   constrain_state: bool | tp.Callable[[State], State] = False,
-) -> F:
+) -> F: ...
+def jit(
+  fun: F | Missing = MISSING,
+  *,
+  in_shardings: tp.Any = UNSPECIFIED,
+  out_shardings: tp.Any = UNSPECIFIED,
+  static_argnums: int | tp.Sequence[int] | None = None,
+  static_argnames: str | tp.Iterable[str] | None = None,
+  donate_argnums: int | tp.Sequence[int] | None = None,
+  donate_argnames: str | tp.Iterable[str] | None = None,
+  keep_unused: bool = False,
+  device: tp.Optional[jax.Device] = None,
+  backend: tp.Optional[str] = None,
+  inline: bool = False,
+  abstracted_axes: tp.Optional[tp.Any] = None,
+  # nnx specific
+  donate_state: bool = False,
+  constrain_state: bool | tp.Callable[[State], State] = False,
+) -> F | tp.Callable[[F], F]:
   """
   Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
   arguments.
@@ -314,6 +358,23 @@ def jit(
     A wrapped version of ``fun``, set up for just-in-time compilation.
   """
 
+  if isinstance(fun, Missing):
+    return functools.partial(
+      jit,
+      in_shardings=in_shardings,
+      out_shardings=out_shardings,
+      static_argnums=static_argnums,
+      static_argnames=static_argnames,
+      donate_argnums=donate_argnums,
+      donate_argnames=donate_argnames,
+      keep_unused=keep_unused,
+      device=device,
+      backend=backend,
+      inline=inline,
+      abstracted_axes=abstracted_axes,
+      donate_state=donate_state,
+      constrain_state=constrain_state,
+    )
   _static_argnums = _normalize_sequence(static_argnums)
   _static_argnames = _normalize_sequence(static_argnames)
   _donate_argnums = _normalize_sequence(donate_argnums)
@@ -884,14 +945,36 @@ def remat_apply(
 
   return out
 
-
+@tp.overload
+def remat(
+  *,
+  prevent_cse: bool = True,
+  static_argnums: int | tuple[int, ...] = (),
+  policy: tp.Callable[..., bool] | None = None,
+) -> tp.Callable[[F], F]: ...
+@tp.overload
 def remat(
   f: F,
   *,
   prevent_cse: bool = True,
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
-) -> F:
+) -> F: ...
+def remat(
+  f: F | Missing = MISSING,
+  *,
+  prevent_cse: bool = True,
+  static_argnums: int | tuple[int, ...] = (),
+  policy: tp.Callable[..., bool] | None = None,
+) -> F | tp.Callable[[F], F]:
+  if isinstance(f, Missing):
+    return functools.partial(
+      remat,
+      prevent_cse=prevent_cse,
+      static_argnums=static_argnums,
+      policy=policy,
+    )
+
   options = RematOptions(
     prevent_cse=prevent_cse,
     static_argnums=static_argnums,
@@ -940,47 +1023,7 @@ def eval_shape(
 # cond
 # -------------------------------
 
-
-@dataclasses.dataclass(frozen=True)
-class CondStaticInputs(tp.Generic[A]):
-  true_fun: tp.Callable[..., A]
-  false_fun: tp.Callable[..., A]
-
-
-jax.tree_util.register_static(CondStaticInputs)
-
-
-def _cond_fun(
-  is_true: bool,
-  static_inputs: CondStaticInputs[A],
-  graphdef: GraphDef[tuple[tp.Any, ...]],
-  state: State,
-):
-  ctx = graph.current_update_context('cond')
-  fn = static_inputs.true_fun if is_true else static_inputs.false_fun
-  operands = ctx.merge(graphdef, state)
-  out = fn(*operands)
-  graphdef_out, state_out = ctx.split((operands, out))
-  return graphdef_out, state_out
-
-
-def _cond_true_fun(
-  static_inputs: CondStaticInputs[A],
-  graphdef: GraphDef[tuple[tp.Any, ...]],
-  state: State,
-):
-  return _cond_fun(True, static_inputs, graphdef, state)
-
-
-def _cond_false_fun(
-  static_inputs: CondStaticInputs[A],
-  graphdef: GraphDef[tuple[tp.Any, ...]],
-  state: State,
-):
-  return _cond_fun(False, static_inputs, graphdef, state)
-
-
-@graph.update_context('cond')
+@general.split_inputs(ctx_tag='cond')
 def cond(
   pred,
   true_fun: tp.Callable[..., A],
@@ -988,16 +1031,10 @@ def cond(
   *operands,
   **kwargs,
 ) -> A:
-  ctx: graph.UpdateContext = graph.current_update_context('cond')
-  graphdef, state = ctx.split(operands)
-  graphdef_out, state_out = jax.lax.cond(
+  return jax.lax.cond(
     pred,
-    _cond_true_fun,
-    _cond_false_fun,
-    CondStaticInputs(true_fun=true_fun, false_fun=false_fun),
-    graphdef,
-    state,
+    general.merge_inputs(true_fun, ctx_tag='cond'),
+    general.merge_inputs(false_fun, ctx_tag='cond'),
+    *operands,
     **kwargs,
   )
-  _operands_out, out = ctx.merge(graphdef_out, state_out)
-  return out

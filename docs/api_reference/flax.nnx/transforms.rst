@@ -4,7 +4,7 @@ transforms
 .. automodule:: flax.nnx
 .. currentmodule:: flax.nnx
 
-.. autoclass:: JIT
+.. autoclass:: Jit
    :members:
 .. autoclass:: Remat
    :members:

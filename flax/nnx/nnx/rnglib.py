@@ -28,11 +28,13 @@
 from __future__ import annotations
 
 import dataclasses
+import functools
 import typing as tp
 
 import jax
 import jax.numpy as jnp
 
+from flax import struct
 from flax.nnx.nnx import graph
 from flax.nnx.nnx.state import State
 from flax.nnx.nnx.variables import Variable
@@ -40,6 +42,7 @@ from flax.nnx.nnx import filterlib
 from flax.nnx.nnx.filterlib import All
 from flax.nnx.nnx.object import Object
 
+F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 Counts = list[int]
 AxesValue = tp.Union[int, None]
 SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
@@ -53,15 +56,13 @@ MISSING = Missing()
 
 
 class RngState(Variable[jax.Array]):
-  pass
-
-
-class RngCount(RngState):
   tag: str
 
 
-class RngKey(RngState):
-  tag: str
+class RngCount(RngState): ...
+
+
+class RngKey(RngState): ...
 
 
 NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
@@ -277,15 +278,174 @@ def fork(
 
   return ForkStates(split_keys, split_counts, broadcast_keys, broadcast_counts)
 
+StreamBackup = (
+  tuple[RngStream, jax.Array, jax.Array] | tuple[RngStream, jax.Array]
+)
+
+class SplitBackups(struct.PyTreeNode, tp.Iterable[StreamBackup]):
+  backups: list[StreamBackup]
+
+  def __iter__(self) -> tp.Iterator[StreamBackup]:
+    return iter(self.backups)
+
+  def __enter__(self):
+    return self
+
+  def __exit__(self, *args):
+    restore_rngs(self)
+
+
+@tp.overload
+def split_rngs(
+  node: tp.Any,
+  /,
+  *,
+  splits: int | tuple[int, ...],
+  only: filterlib.Filter = ...,
+) -> SplitBackups: ...
+@tp.overload
+def split_rngs(
+  *,
+  splits: int | tuple[int, ...],
+  only: filterlib.Filter = ...,
+) -> tp.Callable[[F], F]: ...
+def split_rngs(
+  node: tp.Any = MISSING,
+  /,
+  *,
+  splits: int | tuple[int, ...],
+  only: filterlib.Filter = ...,
+) -> SplitBackups | tp.Callable[[F], F]:
+  """Splits the (nested) Rng states of the given node.
+
+  Args:
+    node: the base node containing the rng states to split.
+    splits: an integer or tuple of integers specifying the
+      shape of the split rng keys.
+    only: a Filter selecting which rng states to split.
+
+  Returns:
+    A SplitBackups iterable if ``node`` is provided, otherwise a
+    decorator that splits the rng states of the inputs to the
+    decorated function.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> _ = nnx.split_rngs(rngs, splits=5)
+    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    ((5,), (5,))
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> _ = nnx.split_rngs(rngs, splits=(2, 5))
+    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    ((2, 5), (2, 5))
+
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
+    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    ((5,), ())
+
+  Once split, random state can be used with transforms like :func:`nnx.vmap`::
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5, rngs=rngs)
+    ...
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
+    ...
+    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
+    ...
+    >>> @nnx.experimental.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    ... def create_model(rngs):
+    ...   return Model(rngs)
+    ...
+    >>> model = create_model(rngs)
+    >>> model.dropout.rngs.params.key.shape
+    (5,)
+
+  ``split_rngs`` returns a SplitBackups object that can be used to restore the
+  original unsplit rng states using :func:`nnx.restore_rngs`, this is useful
+  when you only want to split the rng states temporarily::
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    ...
+    >>> backups = nnx.split_rngs(rngs, splits=5, only='params')
+    >>> model = create_model(rngs)
+    >>> nnx.restore_rngs(backups)
+    ...
+    >>> model.dropout.rngs.params.key.shape
+    ()
+
+  SplitBackups can also be used as a context manager to automatically restore
+  the rng states when exiting the context::
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    ...
+    >>> with nnx.split_rngs(rngs, splits=5, only='params'):
+    ...   model = create_model(rngs)
+    ...
+    >>> model.dropout.rngs.params.key.shape
+    ()
+
+    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
+    ...
+    >>> @nnx.split_rngs(splits=5, only='params')
+    ... @nnx.experimental.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    ... def create_model(rngs):
+    ...   return Model(rngs)
+    ...
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> model = create_model(rngs)
+    >>> model.dropout.rngs.params.key.shape
+    ()
+
+
+  """
+  if isinstance(node, Missing):
+
+    def split_rngs_decorator(f: F) -> F:
+      @functools.wraps(f)
+      def split_rngs_wrapper(*args, **kwargs):
+        with split_rngs((args, kwargs), splits=splits, only=only):
+          return f(*args, **kwargs)
+
+      return tp.cast(F, split_rngs_wrapper)
+
+    return split_rngs_decorator
+
+  predicate = filterlib.to_predicate(only)
+  backups: list[StreamBackup] = []
+  for path, stream in graph.iter_graph(node):
+    if (
+      isinstance(stream, RngStream)
+      and predicate((*path, 'key'), stream.key)
+      and predicate((*path, 'count'), stream.count)
+    ):
+      key = stream()
+      backups.append((stream, stream.key.value, stream.count.value))
+      stream.key.value = jax.random.split(key, splits)
+      stream.count.value = jnp.zeros(stream.key.value.shape, dtype=jnp.uint32)
+
+  return SplitBackups(backups)
+
 
 def backup_keys(node: tp.Any, /):
-  backups: list[tuple[RngStream, jax.Array]] = []
+  backups: list[StreamBackup] = []
   for _, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
       backups.append((stream, stream.key.value))
   return backups
 
 
-def restore_keys(backups: list[tuple[RngStream, jax.Array]], /):
-  for stream, key in backups:
-    stream.key.value = key
+def restore_rngs(backups: tp.Iterable[StreamBackup], /):
+  for backup in backups:
+    stream = backup[0]
+    stream.key.value = backup[1]  # key
+    if len(backup) == 3:
+      stream.count.value = backup[2]  # count
