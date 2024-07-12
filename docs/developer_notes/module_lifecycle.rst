@@ -179,7 +179,7 @@ The order in which you define submodules determines the name of a submodule if n
 
 The above Module will break because either the encoder or decoder path will construct a Module named "Dense_0". This means the two Modules will share parameters which are not intended here. Actually, the two Modules cannot share parameters because they each have a different number of features.
 
-This problem can be solved in various ways:s
+This problem can be solved in various ways:
  - Provide explicit names
  - create the modules in ``setup``
  - or move the constructor out of the control flow.
