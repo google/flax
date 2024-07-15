@@ -40,6 +40,7 @@ import jax.numpy as jnp
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx.nnx import (
+  extract,
   filterlib,
   graph,
   rnglib,
@@ -194,11 +195,11 @@ def vmap_fn(
     broadcast_counts,
   )
 
-  (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
+  (args, kwargs) = extract.insert_graph_nodes((args, kwargs), input_graph_nodes)
 
   out = f(*args, **kwargs)
 
-  out, output_graph_nodes = graph.extract_graph_nodes(out)
+  out, output_graph_nodes = extract.extract_graph_nodes(out)
 
   # split module state
   (
@@ -283,7 +284,7 @@ def vmap(
   def vmap_wrapper(*args, **kwargs):
     ctx = graph.current_update_context('vmap')
 
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+    (args, kwargs), input_graph_nodes = extract.extract_graph_nodes(
       (args, kwargs)
     )
     input_rng_streams = _backup_vmap_keys(input_graph_nodes)
@@ -359,7 +360,7 @@ def vmap(
       split_keys_out,
     )
 
-    out = graph.insert_graph_nodes(out, output_graph_nodes)
+    out = extract.insert_graph_nodes(out, output_graph_nodes)
 
     _restore_vmap_keys(input_rng_streams, split_rngs)
 
@@ -519,11 +520,11 @@ def pmap_fn(
     broadcast_counts,
   )
 
-  (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
+  (args, kwargs) = extract.insert_graph_nodes((args, kwargs), input_graph_nodes)
 
   out = f(*args, **kwargs)
 
-  out, output_graph_nodes = graph.extract_graph_nodes(out)
+  out, output_graph_nodes = extract.extract_graph_nodes(out)
 
   # split module state
   (
@@ -625,7 +626,7 @@ def pmap(
   def pmap_wrapper(*args, **kwargs):
     ctx = graph.current_update_context('pmap')
 
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+    (args, kwargs), input_graph_nodes = extract.extract_graph_nodes(
       (args, kwargs)
     )
     input_rng_streams = rnglib.backup_keys(input_graph_nodes)
@@ -701,7 +702,7 @@ def pmap(
       split_keys_out,
     )
 
-    out = graph.insert_graph_nodes(out, output_graph_nodes)
+    out = extract.insert_graph_nodes(out, output_graph_nodes)
 
     rnglib.restore_keys(input_rng_streams)
 

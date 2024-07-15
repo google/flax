@@ -34,7 +34,7 @@ import typing as tp
 
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx.nnx import filterlib, graph, rnglib, spmd
+from flax.nnx.nnx import extract, filterlib, graph, rnglib, spmd
 from flax.nnx.nnx.module import GraphDef, Module
 from flax.nnx.nnx.proxy_caller import DelayedAccessor
 from flax.nnx.nnx.state import State
@@ -254,7 +254,7 @@ def scan_fn(
   input_graph_nodes = ctx.merge(
     graphdef, *scan_states, carry_state, split_rng_state, broadcast_rng_state
   )
-  (args, kwargs) = graph.insert_graph_nodes((args, kwargs), input_graph_nodes)
+  (args, kwargs) = extract.insert_graph_nodes((args, kwargs), input_graph_nodes)
 
   out = f(*args, **kwargs)
 
@@ -271,10 +271,9 @@ def scan_fn(
     carry_arg_out = out
     scan_args_out = None
 
-  (
-    (carry_arg_out, scan_args_out),
-    output_graph_nodes,
-  ) = graph.extract_graph_nodes((carry_arg_out, scan_args_out))
+  ((carry_arg_out, scan_args_out), output_graph_nodes) = (
+    extract.extract_graph_nodes((carry_arg_out, scan_args_out))
+  )
 
   # split module state
   (
@@ -353,7 +352,7 @@ def scan(
   @graph.update_context('scan')
   def scan_apply_wrapper(*args, **kwargs):
     # extract nodes
-    (args, kwargs), input_graph_nodes = graph.extract_graph_nodes(
+    (args, kwargs), input_graph_nodes = extract.extract_graph_nodes(
       (args, kwargs)
     )
     input_rng_streams = rnglib.backup_keys(input_graph_nodes)
@@ -465,7 +464,7 @@ def scan(
       broadcast_rng_state_out,
     )
 
-    carry_arg_out, scan_args_out = graph.insert_graph_nodes(
+    carry_arg_out, scan_args_out = extract.insert_graph_nodes(
       (carry_arg_out, scan_args_out), output_graph_nodes
     )
 
