@@ -121,13 +121,6 @@ def get_config():
   # Parallelism
   config.mesh_axes = ['data', 'fsdp', 'tensor']
   config.logical_axis_rules = [
-      ['activation_batch', ['data', 'fsdp']],
-      ['activation_length', ['data', 'fsdp']],
-      ['activation_embed', 'tensor'],
-      ['activation_mlp', 'tensor'],
-      ['activation_heads', 'tensor'],
-      ['activation_kv', 'tensor'],
-      ['activation_vocab', 'tensor'],
       ['mlp', 'tensor'],
       ['vocab', 'tensor'],
       ['embed', 'fsdp'],
