@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.experimental.nnx.traversal."""
+"""Tests for flax.nnx.traversal."""
 from absl.testing import absltest
 from flax.core import freeze
 from flax.nnx import traversals

@@ -38,8 +38,7 @@ from flax.nnx.nnx import extract, filterlib, graph, rnglib, spmd
 from flax.nnx.nnx.module import GraphDef, Module
 from flax.nnx.nnx.proxy_caller import DelayedAccessor
 from flax.nnx.nnx.state import State
-from flax.nnx.nnx.transforms.parallelization import Vmap
-from flax.nnx.nnx.transforms.transforms import LiftedModule
+from flax.nnx.nnx.transforms.transforms import LiftedModule, resolve_kwargs
 from flax.typing import Leaf
 import jax
 from jax._src.tree_util import broadcast_prefix
@@ -59,6 +58,485 @@ StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
 Leaves = tp.List[Leaf]
 Index = int
+
+
+class Missing:
+  pass
+
+
+MISSING = Missing()
+
+
+# -------------------------------
+# vmap
+# -------------------------------
+
+class StateAxes:
+  def __init__(
+    self,
+    filter_axes: tp.Mapping[filterlib.Filter, Index | None]
+    | tp.Iterable[tuple[filterlib.Filter, Index | None]],
+    /,
+  ):
+    iterable = tuple(
+      filter_axes.items()
+      if isinstance(filter_axes, tp.Mapping)
+      else filter_axes
+    )
+    self._filters = tuple(filter for filter, _ in iterable)
+    self._axes = tuple(axis for _, axis in iterable)
+
+  @property
+  def filters(self) -> tuple[filterlib.Filter, ...]:
+    return self._filters
+
+  @property
+  def axes(self) -> tuple[Index | None, ...]:
+    return self._axes
+
+  def __repr__(self):
+    return f'StateAxes({dict(zip(self.filters, self.axes))})'
+
+  def __eq__(self, other):
+    return (
+      isinstance(other, StateAxes)
+      and self.filters == other.filters
+      and self.axes == other.axes
+    )
+
+  def __hash__(self):
+    return hash((self.filters, self.axes))
+
+
+AxisFn = tp.Callable[
+  [extract.GraphDefState, int, tp.Mapping], extract.GraphDefState
+]
+
+
+def _vmap_update_variable_axes(tree, transform_metadata, axis_fn: AxisFn):
+  def _update_axes_fn(tree_node):
+    if isinstance(tree_node, extract.TreeNode) and isinstance(
+      tree_node.metatata, StateAxes
+    ):
+      graphdef_states_out: list[extract.GraphDefState] = []
+      for graphdef_state, axis in zip(
+        tree_node.graphdef_states, tree_node.metatata.axes
+      ):
+        if axis is not None:
+          graphdef_state = axis_fn(graphdef_state, axis, transform_metadata)
+        graphdef_states_out.append(graphdef_state)
+      return tree_node.replace(graphdef_states=tuple(graphdef_states_out))
+    return tree_node
+
+  return jax.tree_map(
+    _update_axes_fn, tree, is_leaf=lambda x: isinstance(x, extract.TreeNode)
+  )
+
+
+def _vmap_split_fn(ctx: graph.SplitContext, path, prefix, x):
+  if isinstance(prefix, StateAxes):
+    return extract.TreeNode.from_split(
+      *ctx.split(x, *prefix.filters), metadata=prefix
+    )
+  return extract.TreeNode.from_split(*ctx.split(x))
+
+
+@dataclasses.dataclass(frozen=True)
+class VmapFn:
+  f: tp.Callable[..., tp.Any]
+  transform_metadata: tp.Mapping[str, tp.Any]
+  in_axes: tp.Any
+  out_axes: tp.Any
+
+  def __call__(self, *pure_args: tuple[tp.Any, ...]):
+    if spmd.PARTITION_NAME in self.transform_metadata:
+      pure_args = _vmap_update_variable_axes(
+        pure_args, self.transform_metadata, spmd.remove_axis
+      )
+    args = extract.from_tree(pure_args, ctxtag='vmap')
+
+    out = self.f(*args)
+
+    args_out = extract.clear_non_graph_nodes(args)
+    pure_args_out, pure_out = extract.to_tree(
+      (args_out, out),
+      prefix=(self.in_axes, self.out_axes),
+      split_fn=_vmap_split_fn,
+      ctxtag='vmap',
+    )
+    if spmd.PARTITION_NAME in self.transform_metadata:
+      pure_args_out, pure_out = _vmap_update_variable_axes(
+        (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
+      )
+    return pure_args_out, pure_out
+
+
+@tp.overload
+def vmap(
+  *,
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  out_axes: tp.Any = 0,
+  axis_name: AxisName | None = None,
+  axis_size: int | None = None,
+  spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> tp.Callable[[F], F]: ...
+@tp.overload
+def vmap(
+  f: F,
+  *,
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  out_axes: tp.Any = 0,
+  axis_name: AxisName | None = None,
+  axis_size: int | None = None,
+  spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> F: ...
+def vmap(
+  f: F | Missing = MISSING,
+  *,
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  out_axes: tp.Any = 0,
+  axis_name: AxisName | None = None,
+  axis_size: int | None = None,
+  spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> F | tp.Callable[[F], F]:
+  """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
+
+  Args:
+    f: Function to be mapped over additional axes.
+    in_axes: An integer, None, or sequence of values specifying which input
+      array axes to map over (see `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
+      In addition to integers and None, :class:`StateAxes`  can be used to control how
+      graph nodes like Modules are vectorized by specifying the axes to be
+      applied to substates of the graph node given a `Filter <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+    out_axes: An integer, None, or pytree indicating where the mapped axis should appear
+      in the output (see `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
+    axis_name: Optional, a hashable Python object used to identify the mapped
+      axis so that parallel collectives can be applied.
+    axis_size: Optional, an integer indicating the size of the axis to be
+      mapped. If not provided, the mapped axis size is inferred from arguments.
+
+  Returns:
+    Batched/vectorized version of ``f`` with arguments that correspond to
+    those of ``f``, but with extra array axes at positions indicated by
+    ``in_axes``, and a return value that corresponds to that of ``f``, but
+    with extra array axes at positions indicated by ``out_axes``.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> from jax import random, numpy as jnp
+    ...
+    >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> x = jnp.ones((5, 2))
+    ...
+    >>> @nnx.vmap(in_axes=(None, 0), out_axes=0)
+    ... def forward(model, x):
+    ...   return model(x)
+    ...
+    >>> y = forward(model, x)
+    >>> y.shape
+    (5, 3)
+
+  >>> class LinearEnsemble(nnx.Module):
+  ...   def __init__(self, num, rngs):
+  ...     self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
+  ...
+  >>> model = LinearEnsemble(5, rngs=nnx.Rngs(0))
+  >>> x = jnp.ones((2,))
+  ...
+  >>> @nnx.vmap(in_axes=(0, None), out_axes=0)
+  ... def forward(model, x):
+  ...   return jnp.dot(x, model.w.value)
+  ...
+  >>> y = forward(model, x)
+  >>> y.shape
+  (5, 3)
+
+  To control control how graph node substates are vectorized, ``StateAxes``
+  can be passed to ``in_axes`` and ``out_axes`` specifying the axes to be
+  applied to each substate given a filter. The following example shows how to
+  share the parameters between the ensemble members which keeping different
+  batch statistics and dropout random state::
+
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self):
+    ...     self.a = nnx.Param(jnp.arange(4))
+    ...     self.b = nnx.BatchStat(jnp.arange(4))
+    ...
+    >>> state_axes = nnx.StateAxes({nnx.Param: 0, nnx.BatchStat: None})
+    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=0)
+    ... def mul(foo):
+    ...   return foo.a * foo.b
+    ...
+    >>> foo = Foo()
+    >>> y = mul(foo)
+    >>> y
+    Array([[0, 0, 0, 0],
+           [0, 1, 2, 3],
+           [0, 2, 4, 6],
+           [0, 3, 6, 9]], dtype=int32)
+  """
+  if isinstance(f, Missing):
+    return functools.partial(
+      vmap,
+      in_axes=in_axes,
+      out_axes=out_axes,
+      axis_name=axis_name,
+      axis_size=axis_size,
+      spmd_axis_name=spmd_axis_name,
+      transform_metadata=transform_metadata,
+    )
+
+  jax_in_axes = jax.tree.map(
+    lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
+    if isinstance(x, StateAxes)
+    else x,
+    in_axes,
+  )
+  jax_out_axes = jax.tree.map(
+    lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
+    if isinstance(x, StateAxes)
+    else x,
+    out_axes,
+  )
+  vmapped_fn = jax.vmap(
+    VmapFn(f, transform_metadata, in_axes, out_axes),
+    in_axes=jax_in_axes,
+    out_axes=(jax_in_axes, jax_out_axes),
+    axis_name=axis_name,
+    axis_size=axis_size,
+    spmd_axis_name=spmd_axis_name,
+  )
+
+  @functools.wraps(f)
+  @graph.update_context('vmap')
+  def vmap_wrapper(*args, **kwargs):
+    args = resolve_kwargs(f, args, kwargs)
+    pure_args = extract.to_tree(
+      args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='vmap'
+    )
+    pure_args_out, pure_out = vmapped_fn(*pure_args)
+    _args_out, out = extract.from_tree((pure_args_out, pure_out), ctxtag='vmap')
+    return out
+
+  return vmap_wrapper  # type: ignore
+
+
+# -------------------------------
+# pmap
+# -------------------------------
+
+@dataclasses.dataclass(frozen=True)
+class PmapFn:
+  f: tp.Callable[..., tp.Any]
+  transform_metadata: tp.Mapping[str, tp.Any]
+  in_axes: tp.Any
+  out_axes: tp.Any
+
+  def __call__(self, *pure_args: tuple[tp.Any, ...]):
+    if spmd.PARTITION_NAME in self.transform_metadata:
+      pure_args = _vmap_update_variable_axes(
+        pure_args, self.transform_metadata, spmd.remove_axis
+      )
+    args = extract.from_tree(pure_args, ctxtag='pmap')
+
+    out = self.f(*args)
+
+    args_out = extract.clear_non_graph_nodes(args)
+    pure_args_out, pure_out = extract.to_tree(
+      (args_out, out),
+      prefix=(self.in_axes, self.out_axes),
+      split_fn=_vmap_split_fn,
+      ctxtag='pmap',
+    )
+    if spmd.PARTITION_NAME in self.transform_metadata:
+      pure_args_out, pure_out = _vmap_update_variable_axes(
+        (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
+      )
+    return pure_args_out, pure_out
+
+
+@tp.overload
+def pmap(
+  *,
+  axis_name: AxisName | None = None,
+  in_axes: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  static_broadcasted_argnums: int | tp.Iterable[int] = (),
+  devices: tp.Sequence[jax.Device] | None = None,  # noqa: F811
+  backend: str | None = None,
+  axis_size: int | None = None,
+  donate_argnums: int | tp.Iterable[int] = (),
+  global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> tp.Callable[[F], F]: ...
+@tp.overload
+def pmap(
+  f: F,
+  *,
+  axis_name: AxisName | None = None,
+  in_axes: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  static_broadcasted_argnums: int | tp.Iterable[int] = (),
+  devices: tp.Sequence[jax.Device] | None = None,  # noqa: F811
+  backend: str | None = None,
+  axis_size: int | None = None,
+  donate_argnums: int | tp.Iterable[int] = (),
+  global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> F: ...
+def pmap(
+  f: F | Missing = MISSING,
+  *,
+  axis_name: AxisName | None = None,
+  in_axes: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  static_broadcasted_argnums: int | tp.Iterable[int] = (),
+  devices: tp.Sequence[jax.Device] | None = None,  # noqa: F811
+  backend: str | None = None,
+  axis_size: int | None = None,
+  donate_argnums: int | tp.Iterable[int] = (),
+  global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+) -> F | tp.Callable[[F], F]:
+  """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
+
+  Args:
+    f: Function to be mapped over additional axes.
+    in_axes: An integer, None, or sequence of values specifying which input
+      array axes to map over (see `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
+      In addition to integers and None, :class:`StateAxes`  can be used to control how
+      graph nodes like Modules are vectorized by specifying the axes to be
+      applied to substates of the graph node given a `Filter <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+    out_axes: An integer, None, or pytree indicating where the mapped axis should appear
+      in the output (see `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
+    axis_name: Optional, a hashable Python object used to identify the mapped
+      axis so that parallel collectives can be applied.
+    axis_size: Optional, an integer indicating the size of the axis to be
+      mapped. If not provided, the mapped axis size is inferred from arguments.
+
+  Returns:
+    Batched/vectorized version of ``f`` with arguments that correspond to
+    those of ``f``, but with extra array axes at positions indicated by
+    ``in_axes``, and a return value that corresponds to that of ``f``, but
+    with extra array axes at positions indicated by ``out_axes``.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> from jax import random, numpy as jnp
+    ...
+    >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> x = jnp.ones((5, 2))
+    ...
+    >>> @nnx.vmap(in_axes=(None, 0), out_axes=0)
+    ... def forward(model, x):
+    ...   return model(x)
+    ...
+    >>> y = forward(model, x)
+    >>> y.shape
+    (5, 3)
+
+  >>> class LinearEnsemble(nnx.Module):
+  ...   def __init__(self, num, rngs):
+  ...     self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
+  ...
+  >>> model = LinearEnsemble(5, rngs=nnx.Rngs(0))
+  >>> x = jnp.ones((2,))
+  ...
+  >>> @nnx.vmap(in_axes=(0, None), out_axes=0)
+  ... def forward(model, x):
+  ...   return jnp.dot(x, model.w.value)
+  ...
+  >>> y = forward(model, x)
+  >>> y.shape
+  (5, 3)
+
+  To control control how graph node substates are vectorized, ``StateAxes``
+  can be passed to ``in_axes`` and ``out_axes`` specifying the axes to be
+  applied to each substate given a filter. The following example shows how to
+  share the parameters between the ensemble members which keeping different
+  batch statistics and dropout random state::
+
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self):
+    ...     self.a = nnx.Param(jnp.arange(4))
+    ...     self.b = nnx.BatchStat(jnp.arange(4))
+    ...
+    >>> state_axes = nnx.StateAxes({nnx.Param: 0, nnx.BatchStat: None})
+    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=0)
+    ... def mul(foo):
+    ...   return foo.a * foo.b
+    ...
+    >>> foo = Foo()
+    >>> y = mul(foo)
+    >>> y
+    Array([[0, 0, 0, 0],
+           [0, 1, 2, 3],
+           [0, 2, 4, 6],
+           [0, 3, 6, 9]], dtype=int32)
+  """
+  if isinstance(f, Missing):
+    return functools.partial(
+      pmap,
+      axis_name=axis_name,
+      in_axes=in_axes,
+      out_axes=out_axes,
+      static_broadcasted_argnums=static_broadcasted_argnums,
+      devices=devices,
+      backend=backend,
+      axis_size=axis_size,
+      donate_argnums=donate_argnums,
+      global_arg_shapes=global_arg_shapes,
+      transform_metadata=transform_metadata,
+    )
+
+  jax_in_axes = jax.tree.map(
+    lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
+    if isinstance(x, StateAxes)
+    else x,
+    in_axes,
+  )
+  jax_out_axes = jax.tree.map(
+    lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
+    if isinstance(x, StateAxes)
+    else x,
+    out_axes,
+  )
+  pmapped_fn = jax.pmap(
+    PmapFn(f, transform_metadata, in_axes, out_axes),
+    axis_name=axis_name,
+    in_axes=jax_in_axes,
+    out_axes=(jax_in_axes, jax_out_axes),
+    static_broadcasted_argnums=static_broadcasted_argnums,
+    devices=devices,
+    backend=backend,
+    axis_size=axis_size,
+    donate_argnums=donate_argnums,
+    global_arg_shapes=global_arg_shapes,
+  )
+
+  @functools.wraps(f)
+  @graph.update_context('pmap')
+  def vmap_wrapper(*args):
+    pure_args = extract.to_tree(
+      args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='pmap'
+    )
+    pure_args_out, pure_out = pmapped_fn(*pure_args)
+    _args_out, out = extract.from_tree((pure_args_out, pure_out), ctxtag='pmap')
+    return out
+
+  return vmap_wrapper  # type: ignore
+
 
 # -------------------------------
 # scan
@@ -330,6 +808,25 @@ def scan_fn(
   return carry_out, scan_out
 
 
+@tp.overload
+def scan(
+  *,
+  length: int | None = None,
+  reverse: bool = False,
+  unroll: int | bool = 1,
+  _split_transpose: bool = False,
+  # extended api
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  in_axes_kwargs: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  carry_argnum: int = 0,
+  # nnx specific
+  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  scan_output: bool = True,
+) -> tp.Callable[[F], F]: ...
+@tp.overload
 def scan(
   f: F,
   *,
@@ -347,7 +844,30 @@ def scan(
   split_rngs: filterlib.Filter = ...,
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   scan_output: bool = True,
-) -> F:
+) -> F: ...
+def scan(
+  f: F | Missing = MISSING,
+  *,
+  length: int | None = None,
+  reverse: bool = False,
+  unroll: int | bool = 1,
+  _split_transpose: bool = False,
+  # extended api
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  in_axes_kwargs: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  carry_argnum: int = 0,
+  # nnx specific
+  state_axes: tp.Mapping[filterlib.Filter, int] = FrozenDict({...: 0}),
+  split_rngs: filterlib.Filter = ...,
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  scan_output: bool = True,
+) -> F | tp.Callable[[F], F]:
+  if isinstance(f, Missing):
+    return functools.partial(
+      scan, length=length, reverse=reverse, unroll=unroll
+    )
+
   @functools.wraps(f)
   @graph.update_context('scan')
   def scan_apply_wrapper(*args, **kwargs):
@@ -468,7 +988,7 @@ def scan(
       (carry_arg_out, scan_args_out), output_graph_nodes
     )
 
-    rnglib.restore_keys(input_rng_streams)
+    rnglib.restore_rngs(input_rng_streams)
 
     if scan_output:
       scan_args_out = tp.cast(B, scan_args_out)

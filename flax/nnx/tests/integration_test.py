@@ -162,7 +162,7 @@ class TestIntegration(absltest.TestCase):
         return jax.numpy.mean((y_pred - y) ** 2)
 
       # compute gradient
-      grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
+      grads: nnx.State = nnx.grad(loss_fn)(model)
       # SGD update
       nnx.update(
         model,

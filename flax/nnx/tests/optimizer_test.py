@@ -84,7 +84,7 @@ class TestOptimizer(parameterized.TestCase):
       initial_loss = loss_fn(state.model, x, y)
 
       def nnx_jit_train_step(optimizer: nnx.Optimizer, x, y):
-        grads = nnx.grad(loss_fn, wrt=nnx.Param)(optimizer.model, x, y)
+        grads = nnx.grad(loss_fn)(optimizer.model, x, y)
         optimizer.update(grads)
 
       jit_decorator(nnx_jit_train_step)(state, x, y)
@@ -114,7 +114,7 @@ class TestOptimizer(parameterized.TestCase):
     state = TrainState(model, tx, metrics)
 
     loss_fn = lambda model: ((model(x) - y) ** 2).mean()
-    grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model)
+    grads = nnx.grad(loss_fn)(state.model)
     state.update(grads=grads, values=loss_fn(state.model))
     initial_loss = state.metrics.compute()
     state.update(grads=grads, values=loss_fn(state.model))
@@ -144,7 +144,9 @@ class TestOptimizer(parameterized.TestCase):
     y = jnp.ones((1, 10))
     loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
 
-    grads = nnx.grad(loss_fn, wrt=variable)(state.model, x, y)
+    grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, variable))(
+      state.model, x, y
+    )
     initial_loss = loss_fn(model, x, y)
     state.update(grads=grads)
     self.assertTrue(loss_fn(model, x, y) < initial_loss)
