@@ -28,7 +28,7 @@ class TestVariableState(absltest.TestCase):
     r1 = nnx.VariableState(nnx.Param, 1)
     assert r1.value == 1
 
-    r2 = jax.tree_util.tree_map(lambda x: x + 1, r1)
+    r2 = jax.tree.map(lambda x: x + 1, r1)
 
     assert r1.value == 1
     assert r2.value == 2

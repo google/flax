@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -40,13 +39,15 @@ class ScanMLP(nnx.Module):
   def __init__(self, dim: int, *, n_layers: int, rngs: nnx.Rngs):
     self.n_layers = n_layers
 
-    @partial(nnx.vmap, axis_size=n_layers)
+    @nnx.split_rngs(splits=n_layers)
+    @nnx.vmap(axis_size=n_layers)
     def create_block(rngs: nnx.Rngs):
       return Block(dim, rngs=rngs)
 
     self.layers = create_block(rngs)
 
   def __call__(self, x: jax.Array) -> jax.Array:
+    @nnx.split_rngs(splits=self.n_layers)
     @nnx.scan
     def scan_fn(x: jax.Array, block: Block):
       x = block(x)
@@ -62,5 +63,5 @@ model = ScanMLP(10, n_layers=5, rngs=nnx.Rngs(0))
 x = jnp.ones((3, 10))
 y = model(x)
 
-print(jax.tree_util.tree_map(jnp.shape, nnx.state(model)))
+print(jax.tree.map(jnp.shape, nnx.state(model)))
 print(y.shape)

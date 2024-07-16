@@ -14,31 +14,15 @@
 
 # Taken from flax/core/tracer.py 🏴‍☠️
 
-import typing as tp
 
-import jax
-import jax.core
-from jax.core import MainTrace
+from jax.core import MainTrace, thread_local_state
 
 from flax.nnx.nnx import reprlib
 
 
-@tp.runtime_checkable
-class Tracer(tp.Protocol):
-  _trace: jax.core.Trace
-
-
-def get_top_trace(pytree: tp.Union[tp.Any, Tracer]) -> MainTrace:
-  """Returns the main top trace of a sequence of tracers."""
-  if isinstance(pytree, Tracer):
-    return pytree._trace.main
-
-  return jax.core.find_top_trace(jax.tree_util.tree_leaves(pytree)).main
-
-
 def current_jax_trace() -> MainTrace:
   """Returns the innermost Jax tracer."""
-  return get_top_trace(())
+  return thread_local_state.trace_state.trace_stack.dynamic
 
 
 class TraceState(reprlib.Representable):

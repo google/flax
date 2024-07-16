@@ -42,7 +42,7 @@ Params = Mapping[str, Any]
 def load_and_format_params(path: str) -> Params:
   """Loads parameters and formats them for compatibility."""
   params = load_params(path)
-  param_state = jax.tree_util.tree_map(jnp.array, params)
+  param_state = jax.tree.map(jnp.array, params)
   remapped_params = param_remapper(param_state)
   nested_params = nest_params(remapped_params)
   return nested_params

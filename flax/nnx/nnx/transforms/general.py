@@ -29,55 +29,36 @@
 import functools
 import typing as tp
 
-from flax import struct
 from flax.nnx.nnx import (
   extract,
   graph,
 )
-from flax.nnx.nnx.module import GraphDef
-from flax.nnx.nnx.state import State
+from flax.typing import MISSING, Missing
 
 A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
-class Missing:
-  pass
-
-
-MISSING = Missing()
 
 # -------------------------------
 # (split|merge)_inputs
 # -------------------------------
 
 
-class ArgState(extract.ExtractionIndex, extract.ExtractableStates):
-  _graphdef: GraphDef[tp.Any] = struct.field(pytree_node=False)
-  state: State = struct.field(pytree_node=True)
-
-  @property
-  def graphdef(self) -> GraphDef[tp.Any]:
-    return self._graphdef
-
-  @property
-  def states(self) -> tp.Iterable[State]:
-    yield self.state
-
 @tp.overload
 def split_inputs(
   *,
-  ctx_tag: str = 'split_merge_inputs',
+  ctxtag: str = 'split_merge_inputs',
 ) -> tp.Callable[[F], F]: ...
 @tp.overload
 def split_inputs(
   f: F,
   *,
-  ctx_tag: str = 'split_merge_inputs',
+  ctxtag: str = 'split_merge_inputs',
 ) -> F: ...
 def split_inputs(
   f: F | Missing = MISSING,
   *,
-  ctx_tag: str = 'split_merge_inputs',
+  ctxtag: str = 'split_merge_inputs',
 ) -> F | tp.Callable[[F], F]:
   """Takes in a function that contains graph nodes in the inputs and outputs, and
   returns a function that replaces the graph nodes with some jax-compatible data
@@ -85,7 +66,7 @@ def split_inputs(
 
   Args:
     f: The function to be transformed.
-    ctx_tag: The context tag to be used for the transformation. Defaults to
+    ctxtag: The context tag to be used for the transformation. Defaults to
       'split_merge_inputs'.
 
   Returns:
@@ -178,32 +159,14 @@ def split_inputs(
     `Functional API <https://flax.readthedocs.io/en/latest/nnx/nnx_basics.html#the-functional-api>`__.
   """
   if isinstance(f, Missing):
-    return functools.partial(split_inputs, ctx_tag=ctx_tag)  # type: ignore[return-value]
+    return functools.partial(split_inputs, ctxtag=ctxtag)  # type: ignore[return-value]
 
-  @graph.update_context(ctx_tag)
+  @graph.update_context(ctxtag)
   @functools.wraps(f)
   def split_inputs_wrapper(*args):
-    ctx = graph.current_update_context(ctx_tag)
-    args, input_graph_nodes = extract.extract_graph_nodes(args)
-    graphdef, states = ctx.split(input_graph_nodes)
-    args = extract.replace_indexes(
-      args,
-      lambda x: ArgState(
-        x.index,
-        graphdef,
-        states[x.index],  # type: ignore
-      ),
-    )
-    args_out, out = f(*args)
-    arg_states_out = extract.extract_indexes((args_out, out), types=ArgState)
-
-    if arg_states_out:
-      graphdef_out, states_out = extract.merge_extractable_states(
-        arg_states_out
-      )
-      output_nodes = ctx.merge(graphdef_out, states_out)
-      out = extract.insert_graph_nodes(out, output_nodes)
-
+    pure_args = extract.to_tree(args, ctxtag=ctxtag)
+    pure_args_out, pure_out = f(*pure_args)
+    args_out, out = extract.from_tree((pure_args_out, pure_out), ctxtag=ctxtag)
     return out
 
   return split_inputs_wrapper  # type: ignore
@@ -211,18 +174,18 @@ def split_inputs(
 @tp.overload
 def merge_inputs(
   *,
-  ctx_tag: str = 'split_merge_inputs',
+  ctxtag: str = 'split_merge_inputs',
 ) -> tp.Callable[[F], F]: ...
 @tp.overload
 def merge_inputs(
   f: F,
   *,
-  ctx_tag: str = 'split_merge_inputs',
+  ctxtag: str = 'split_merge_inputs',
 ) -> F: ...
 def merge_inputs(
   f: F | Missing = MISSING,
   *,
-  ctx_tag: str = 'split_merge_inputs',
+  ctxtag: str = 'split_merge_inputs',
 ) -> F | tp.Callable[[F], F]:
   """Takes in a function that contains jax-compatible data structures in the
   inputs and outputs, and returns a function that replaces the jax-compatible
@@ -231,7 +194,7 @@ def merge_inputs(
 
   Args:
     f: The function to be transformed.
-    ctx_tag: The context tag to be used for the transformation. Defaults to
+    ctxtag: The context tag to be used for the transformation. Defaults to
       'split_merge_inputs'.
 
   Returns:
@@ -240,36 +203,14 @@ def merge_inputs(
   For more information and examples, see :func:`split_inputs`.
   """
   if isinstance(f, Missing):
-    return functools.partial(merge_inputs, ctx_tag=ctx_tag)  # type: ignore[return-value]
+    return functools.partial(merge_inputs, ctxtag=ctxtag)  # type: ignore[return-value]
 
   @functools.wraps(f)
-  def merge_inputs_wrapper(*args):
-    ctx = graph.current_update_context(ctx_tag)
-    arg_states = extract.extract_indexes(args, types=ArgState)
-
-    if arg_states:
-      graphdef, states = extract.merge_extractable_states(arg_states)
-      inputs_graph_nodes = ctx.merge(graphdef, states)
-      args = extract.insert_graph_nodes(args, inputs_graph_nodes)
-
+  def merge_inputs_wrapper(*pure_args):
+    args = extract.from_tree(pure_args, ctxtag=ctxtag)
     out = f(*args)
-
-    (args_out, out), output_graph_nodes = extract.extract_graph_nodes(
-      (args, out)
-    )
-
-    graphdef_out, states_out = ctx.split(output_graph_nodes)
-
-    def replace_index(x: extract.Extractable):
-      return ArgState(
-        x.index,
-        graphdef_out,
-        states_out[x.index],  # type: ignore
-      )
-
-    out = extract.replace_indexes(out, replace_index)
-    args_out = extract.replace_indexes(args_out, replace_index, clear=True)
-
-    return args_out, out
+    args_out = extract.clear_non_graph_nodes(args)
+    pure_args_out, pure_out = extract.to_tree((args_out, out), ctxtag=ctxtag)
+    return pure_args_out, pure_out
 
   return merge_inputs_wrapper  # type: ignore

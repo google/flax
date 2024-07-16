@@ -198,7 +198,7 @@ class ToLinen(linen.Module):
     >>> variables.keys()
     dict_keys(['nnx', 'params'])
     >>> type(variables['nnx']['graphdef'])
-    <class 'flax.nnx.nnx.graph.GraphDef'>
+    <class 'flax.nnx.nnx.graph.NodeDef'>
 
   Args:
     nnx_class: The NNX Module class (not instance!).

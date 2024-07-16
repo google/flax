@@ -151,6 +151,10 @@ filterwarnings = [
     "ignore:.*jax.xla_computation is deprecated.*:DeprecationWarning",
     # Orbax warnings inside deprecated `flax.training` package.
     "ignore:.*Couldn't find sharding info under RestoreArgs.*:UserWarning",
+    # RuntimeWarning: invalid value encountered in cast
+    "ignore:.*invalid value encountered in cast.*:RuntimeWarning",
+    # RuntimeWarning: divide by zero encountered in equal/not_equal
+    "ignore:.*divide by zero encountered in.*:RuntimeWarning",
 ]
 
 [tool.coverage.report]

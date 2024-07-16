@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import deque
+from functools import partial
 from typing import (
   Any,
   Generic,
@@ -27,6 +29,7 @@ import jax
 from flax.core import FrozenDict
 
 import dataclasses
+import jax.tree_util as jtu
 
 
 # General
@@ -124,3 +127,35 @@ LogicalPartitionSpecPytree = Any  # pylint: disable=invalid-name
 PartitionSpecPytree = Any  # pylint: disable=invalid-name
 
 Sharding = tuple[Optional[str], ...]
+
+A = TypeVar('A')
+
+
+class PytreeDeque(deque[A]):
+  pass
+
+
+def _pytree_deque_flatten(xs: PytreeDeque, *, with_path: bool):
+  if with_path:
+    nodes = tuple((jtu.SequenceKey(i), x) for i, x in enumerate(xs))
+    return nodes, ()
+  else:
+    return xs, ()
+
+
+def _pytree_deque_unflatten(_, nodes):
+  return PytreeDeque(nodes)
+
+
+jtu.register_pytree_with_keys(
+  PytreeDeque,
+  partial(_pytree_deque_flatten, with_path=True),
+  _pytree_deque_unflatten,
+  flatten_func=partial(_pytree_deque_flatten, with_path=False),
+)
+
+class Missing:
+  pass
+
+
+MISSING = Missing()

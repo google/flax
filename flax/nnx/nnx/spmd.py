@@ -20,7 +20,6 @@ from jax.interpreters import pxla
 from jax.sharding import Mesh, PartitionSpec
 
 from flax.nnx.nnx import variables
-from flax.nnx.nnx.state import State
 from flax.typing import (
   Array,
   ArrayPytree,  # pylint: disable=invalid-name
@@ -33,50 +32,41 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 PARTITION_NAME = 'partition_name'
 
 
-@tp.runtime_checkable
-class HasSharding(tp.Protocol):
-  sharding: tp.Optional[Sharding]
-
-
-def add_axis(
-  state: State, index: int, params: tp.Mapping[tp.Any, tp.Any]
-) -> State:
+def add_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   axis_name = _get_partition_name(params)
 
   def _add_axis(x: tp.Any):
     if isinstance(x, variables.VariableState):
-      if isinstance(x, HasSharding) and x.sharding is not None:
-        sharding = list(x.sharding)
+      if hasattr(x, 'sharding') and x.sharding is not None:
+        sharding: list[str | None] = list(x.sharding)
         while len(sharding) < index:
           sharding.append(None)
         sharding.insert(index, axis_name)
-        x.sharding = tuple(sharding)
+        x.sharding = tuple(sharding)  # type: ignore
 
       x.add_axis(axis_name, index)
     return x
 
-  return jax.tree_util.tree_map(
-    _add_axis, state, is_leaf=lambda x: isinstance(x, variables.VariableState)
+  return jax.tree.map(
+    _add_axis, tree, is_leaf=lambda x: isinstance(x, variables.VariableState)
   )
 
 
-def remove_axis(
-  state: State, index: int, params: tp.Mapping[tp.Any, tp.Any]
-) -> State:
+def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   axis_name = _get_partition_name(params)
 
   def _remove_axis(x: tp.Any):
     if isinstance(x, variables.VariableState):
-      if isinstance(x, HasSharding) and x.sharding is not None:
+      if hasattr(x, 'sharding') and x.sharding is not None:
         sharding = list(x.sharding)
         assert sharding.pop(index) == axis_name
         x.sharding = tuple(sharding)
       x.remove_axis(axis_name, index)
     return x
 
-  return jax.tree_util.tree_map(
+  return jax.tree.map(
     _remove_axis,
-    state,
+    tree,
     is_leaf=lambda x: isinstance(x, variables.VariableState),
   )
 
@@ -101,21 +91,21 @@ def get_partition_spec(tree: A) -> A:
 
   def f(x):
     if isinstance(x, (variables.VariableState, variables.Variable)):
-      if isinstance(x, HasSharding) and x.sharding:
+      if hasattr(x, 'sharding') and x.sharding:
         return x.replace(PartitionSpec(*x.sharding))
       else:
         return x.replace(_maybe_replicate(x.value))
 
     return _maybe_replicate(x)
 
-  return jax.tree_util.tree_map(
+  return jax.tree.map(
     f, tree, is_leaf=lambda x: isinstance(x, variables.VariableState)
   )
 
 
 def get_named_sharding(tree: A, mesh: jax.sharding.Mesh) -> A:
   spec = get_partition_spec(tree)
-  sharding = jax.tree_util.tree_map(
+  sharding = jax.tree.map(
     lambda p: jax.sharding.NamedSharding(mesh, p), spec
   )
   return sharding
@@ -161,7 +151,7 @@ def with_sharding_constraint(
   if axis_resources is None:
     return x
   # Translate logical names to mesh assignments.
-  return jax.tree_util.tree_map(
+  return jax.tree.map(
     functools.partial(_with_sharding_constraint, mesh=mesh),
     x,
     axis_resources,

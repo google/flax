@@ -52,14 +52,14 @@ class TestModule:
 
     graphdef, state = nnx.split(m)
 
-    state = jax.tree_util.tree_map(lambda x: x + 1, state)
+    state = jax.tree.map(lambda x: x + 1, state)
 
   def test_split_2(self):
     m = nnx.Dict(a=nnx.Param(1))
 
     graphdef, empty, some = nnx.split(m, None, ...)
 
-    some = jax.tree_util.tree_map(lambda x: x + 1, some)
+    some = jax.tree.map(lambda x: x + 1, some)
 
   def test_split_merge(self):
     m = nnx.Dict(a=nnx.Param(1))
@@ -388,6 +388,13 @@ class TestModule:
     assert linear.kernel.value == jax.ShapeDtypeStruct((2, 3), jnp.float32)
     assert linear.bias.value == jax.ShapeDtypeStruct((3,), jnp.float32)
 
+  def test_create_abstract_stateful(self):
+    linear = nnx.eval_shape(lambda: nnx.Dropout(0.5, rngs=nnx.Rngs(0)))
+
+    assert linear.rngs.default.key.value == jax.ShapeDtypeStruct(
+      (), jax.random.key(0).dtype
+    )
+
   def test_partial_init(self):
     linear = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     state = nnx.state(linear)
@@ -484,7 +491,7 @@ class TestModulePytree:
 
     m = Foo()
 
-    m = jax.tree_util.tree_map(lambda x: x + 1, m)
+    m = jax.tree.map(lambda x: x + 1, m)
 
     assert m.node.value == 2
     assert m.graphdef == 1
