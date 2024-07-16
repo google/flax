@@ -22,6 +22,7 @@ import jax
 from jax._src.tree_util import broadcast_prefix
 
 from flax import struct
+from flax.nnx.nnx.object import Object
 from flax.nnx.nnx.state import State
 from flax.typing import PathParts
 from flax.nnx.nnx import graph
@@ -215,6 +216,10 @@ def check_consistent_aliasing(
   for node, prefix in zip(nodes, prefixes):
     for path, value in graph.iter_graph(node):
       if graph.is_graph_node(value):
+        if isinstance(value, Object):
+          value.check_valid_context(
+            f'Trying to extract graph node from different trace level, got {value!r}'
+          )
         if value in node_prefixes:
           paths_prefixes = node_prefixes[value]
           paths_prefixes.append((path, prefix))
