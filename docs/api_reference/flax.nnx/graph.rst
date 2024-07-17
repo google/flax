@@ -13,6 +13,7 @@ graph
 .. autofunction:: graphdef
 .. autofunction:: iter_graph
 .. autofunction:: clone
+.. autofunction:: call
 
 .. autoclass:: GraphDef
   :members:

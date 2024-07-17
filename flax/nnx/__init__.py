@@ -35,6 +35,7 @@ from .nnx.filterlib import Everything as Everything
 from .nnx.filterlib import Nothing as Nothing
 from .nnx.graph import GraphDef as GraphDef
 from .nnx.graph import GraphState as GraphState
+from .nnx.graph import GraphDefState as GraphDefState
 from .nnx.object import Object as Object
 from .nnx.helpers import Dict as Dict
 from .nnx.helpers import List as List
@@ -53,6 +54,7 @@ from .nnx.graph import pop as pop
 from .nnx.graph import state as state
 from .nnx.graph import graphdef as graphdef
 from .nnx.graph import iter_graph as iter_graph
+from .nnx.graph import call as call
 from .nnx.nn import initializers as initializers
 from .nnx.nn.activations import celu as celu
 from .nnx.nn.activations import elu as elu
