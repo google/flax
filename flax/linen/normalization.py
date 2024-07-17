@@ -33,7 +33,6 @@ from flax.typing import (
   Shape as Shape,
   Initializer,
   Axes,
-  Tuple,
 )
 
 field = dataclasses.field
@@ -163,7 +162,7 @@ def _normalize(
   bias_init: Initializer,
   scale_init: Initializer,
   force_float32_reductions: bool = True,
-  axes: Tuple[str, ...] = None,
+  axes: tuple[str, ...] = None,
 ):
   """Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
@@ -321,7 +320,7 @@ class BatchNorm(Module):
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
-  pjit_axis_name: Tuple[str, ...] = None
+  pjit_axis_name: tuple[str, ...] = None
 
   @compact
   def __call__(
@@ -501,7 +500,7 @@ class LayerNorm(Module):
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
-  pjit_axis_name: Tuple[str, ...] = None
+  pjit_axis_name: tuple[str, ...] = None
 
   @compact
   def __call__(self, x, *, mask: jax.Array | None = None):
@@ -604,7 +603,7 @@ class RMSNorm(Module):
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
-  pjit_axis_name: Tuple[str, ...] = None
+  pjit_axis_name: tuple[str, ...] = None
 
   @compact
   def __call__(self, x, *, mask: jax.Array | None = None):
@@ -733,7 +732,7 @@ class GroupNorm(Module):
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
-  pjit_axis_name: Tuple[str, ...] = None
+  pjit_axis_name: tuple[str, ...] = None
 
   @compact
   def __call__(self, x, *, mask: jax.Array | None = None):
