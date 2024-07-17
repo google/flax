@@ -44,7 +44,6 @@ from flax.typing import (
   ConvGeneralDilatedT,
   PaddingLike,
   LaxPadding,
-  Tuple,
 )
 
 
@@ -112,8 +111,8 @@ class DenseGeneral(Module):
   # Deprecated. Will be removed.
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
-  kernel_axes: Tuple[str, ...] = None
-  bias_axes: Tuple[str, ...] = None
+  kernel_axes: tuple[str, ...] = None
+  bias_axes: tuple[str, ...] = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -248,8 +247,8 @@ class Dense(Module):
   # Deprecated. Will be removed.
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
-  kernel_axes: Tuple[str, ...] = None
-  bias_axes: Tuple[str, ...] = None
+  kernel_axes: tuple[str, ...] = None
+  bias_axes: tuple[str, ...] = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -506,8 +505,8 @@ class _Conv(Module):
   # Deprecated. Will be removed.
   conv_general_dilated: ConvGeneralDilatedT | None = None
   conv_general_dilated_cls: Any = None
-  kernel_axes: Tuple[str, ...] = None
-  bias_axes: Tuple[str, ...] = None
+  kernel_axes: tuple[str, ...] = None
+  bias_axes: tuple[str, ...] = None
 
   @property
   def shared_weights(self) -> bool:  # type: ignore
@@ -922,8 +921,8 @@ class ConvTranspose(Module):
     name: str,
     init_fn,
     *init_args,
-    axes: Optional[Tuple[str, ...]] = None,
-    module: Optional[Module] = None):
+    axes: tuple[str, ...] | None = None,
+    module: Module | None = None):
     return param_with_axes(
       name,
       init_fn,
