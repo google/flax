@@ -149,6 +149,8 @@ filterwarnings = [
     "ignore:.*Deprecated call to.*pkg_resources.declare_namespace.*:DeprecationWarning",
     # jax.xla_computation is deprecated but TF still uses it.
     "ignore:.*jax.xla_computation is deprecated.*:DeprecationWarning",
+    # Orbax warnings inside deprecated `flax.training` package.
+    "ignore:.*Couldn't find sharding info under RestoreArgs.*:UserWarning",
 ]
 
 [tool.coverage.report]

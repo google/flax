@@ -618,7 +618,7 @@ def save_checkpoint(
     ...     file_path, target=None
     ...   )
     >>> restored_object
-    {'a': array([1, 2, 3], dtype=int32), 'b': array([1, 1, 1], dtype=int32)}
+    {'a': Array([1, 2, 3], dtype=int32), 'b': Array([1, 1, 1], dtype=int32)}
 
   Args:
     ckpt_dir: str or pathlib-like path to store checkpoint files in.
@@ -1039,7 +1039,7 @@ def restore_checkpoint(
     ...     file_path, target=None
     ...   )
     >>> restored_object
-    {'a': array([1, 2, 3], dtype=int32), 'b': array([1, 1, 1], dtype=int32)}
+    {'a': Array([1, 2, 3], dtype=int32), 'b': Array([1, 1, 1], dtype=int32)}
 
   Args:
     ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
