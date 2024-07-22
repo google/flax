@@ -161,6 +161,7 @@ class TestLinenConsistency(parameterized.TestCase):
     )
     variables = linen_model.init(jax.random.key(1), x)
     linen_out = linen_model.apply(variables, x, mask=mask)
+    assert isinstance(linen_out, jax.Array)
 
     nnx_model = NNXModel(
       dtype=dtype,
@@ -244,6 +245,7 @@ class TestLinenConsistency(parameterized.TestCase):
     nnx_model.linear.bias.value = variables['params']['linear']['bias']
 
     nnx_out = nnx_model(x, mask=mask)
+    assert isinstance(linen_out, jax.Array)
     np.testing.assert_array_equal(linen_out, nnx_out)
 
 
