@@ -484,6 +484,8 @@ def _fingerprint_recursive(
 
   if isinstance(obj, str):
     return obj
+  elif hasattr(obj, '__fn_or_cls__'):  # support PaxConfig objects
+    return _fingerprint_recursive(obj.__fn_or_cls__, path, seen_modules)
   elif isinstance(obj, Module):
     fingerprint: Any
     if obj._id in seen_modules:
@@ -562,7 +564,7 @@ def _check_field_is_hashable(path: tuple[str, ...], x: Any):
     raise ValueError(f"Value at '{path_name}' is not hashable: {e}") from e
 
 
-def decorator_lift_transform_jit(class_fn, **trafo_kwargs):
+def decorator_lift_transform_cached(transform, class_fn, **trafo_kwargs):
   """Decorator for lifted transform.
 
   Similar to `decorator_lift_transform` but specialized for `jit`, it reuses the
@@ -572,7 +574,6 @@ def decorator_lift_transform_jit(class_fn, **trafo_kwargs):
   # Due to the ordering of method decorators, we must wrap the class_fn
   # with the module state management wrapper first to maintain Module state
   # correctly.
-  transform = lift.jit
   multi_scope = True
 
   if isinstance(class_fn, tuple):
@@ -640,11 +641,12 @@ def decorator_lift_transform_jit(class_fn, **trafo_kwargs):
   return wrapped_fn
 
 
-def module_class_lift_transform_jit(module_class, methods=None, **trafo_kwargs):
+def module_class_lift_transform_cached(
+    transform, module_class, methods=None, **trafo_kwargs
+):
   """Module class lift transform."""
   # TODO(marcvanzee): Improve docstrings (#1977).
   # TODO(levskaya): find nicer argument convention for multi-method case?
-  transform = lift.jit
   trafo_args = ()
 
   # Prepare per-method transform args, kwargs.
@@ -760,6 +762,24 @@ def lift_transform(
   elif callable(target) and not isinstance(target, Module):
     return decorator_lift_transform(
       transform, target, *trafo_args, **trafo_kwargs
+    )
+  else:
+    raise errors.TransformTargetError(target)
+
+
+def lift_transform_cached(
+    transform, target, *trafo_args, methods=None, **trafo_kwargs
+):
+  """Applies to class or as a decorator on class fns."""
+  # TODO(marcvanzee): Improve docstrings (#1977).
+  if _is_module_class(target):
+    return module_class_lift_transform_cached(
+        transform, target, *trafo_args, methods=methods, **trafo_kwargs
+    )
+  # we presume this is being used as a function decorator in class definition
+  elif callable(target) and not isinstance(target, Module):
+    return decorator_lift_transform_cached(
+        transform, target, *trafo_args, **trafo_kwargs
     )
   else:
     raise errors.TransformTargetError(target)
@@ -941,8 +961,8 @@ def jit(
     A wrapped version of target, set up for just-in-time compilation.
   """
   # TODO(marcvanzee): Improve docstrings (#1977).
-  if _is_module_class(target):
-    return module_class_lift_transform_jit(
+  return lift_transform_cached(
+      lift.jit,
       target,
       variables=variables,
       rngs=rngs,
@@ -952,21 +972,7 @@ def jit(
       device=device,
       backend=backend,
       methods=methods,
-    )
-  # we presume this is being used as a function decorator in class definition
-  elif callable(target) and not isinstance(target, Module):
-    return decorator_lift_transform_jit(
-      target,
-      variables=variables,
-      rngs=rngs,
-      static_argnums=static_argnums,
-      static_argnames=static_argnames,
-      donate_argnums=donate_argnums,
-      device=device,
-      backend=backend,
-    )
-  else:
-    raise errors.TransformTargetError(target)
+  )
 
 
 def checkpoint(
@@ -1044,15 +1050,15 @@ def checkpoint(
   # lifted function
   static_argnums = jax.tree_util.tree_map(lambda x: x - 1, static_argnums)
   return lift_transform(
-    lift.checkpoint,
-    target,
-    variables=variables,
-    rngs=rngs,
-    concrete=concrete,
-    static_argnums=static_argnums,
-    prevent_cse=prevent_cse,
-    policy=policy,
-    methods=methods,
+      lift.checkpoint,
+      target,
+      variables=variables,
+      rngs=rngs,
+      concrete=concrete,
+      static_argnums=static_argnums,
+      prevent_cse=prevent_cse,
+      policy=policy,
+      methods=methods,
   )
 
 

@@ -1838,6 +1838,29 @@ class TransformTest(parameterized.TestCase):
     y = m.apply({}, x)
     self.assertEqual(n, 1)
 
+  def test_jit_recursive(self):
+    n = 0
+
+    class Foo(nn.Module):
+
+      @partial(nn.jit, static_argnames='recurse_once')
+      def __call__(self, x, *, recurse_once: bool = True):
+        nonlocal n
+        n += 1
+        if recurse_once:
+          x = self(x, recurse_once=False)
+        return x + 1
+
+    x = jnp.array(1.0)
+    m = Foo()
+
+    self.assertEqual(n, 0)
+
+    y = m.apply({}, x)
+    self.assertEqual(n, 2)
+    y = m.apply({}, x)
+    self.assertEqual(n, 2)
+
   @parameterized.named_parameters(('class', True), ('method', False))
   def test_jit_reuse_hash(self, jit_class: bool):
     n = 0
