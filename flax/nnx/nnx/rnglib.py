@@ -289,3 +289,54 @@ def backup_keys(node: tp.Any, /):
 def restore_keys(backups: list[tuple[RngStream, jax.Array]], /):
   for stream, key in backups:
     stream.key.value = key
+
+
+def reseed(node, /, **stream_keys: RngValue):
+  """Update the keys of the specified RNG streams with new keys.
+
+  Args:
+    node: the node to reseed the RNG streams in.
+    **stream_keys: a mapping of stream names to new keys. The keys can be
+      either integers or jax arrays. If an integer is passed in, then the
+      key will be generated using ``jax.random.key``.
+
+  Raises:
+    ValueError: if an existing stream key is not a scalar.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+    ...
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     return self.dropout(self.linear(x))
+    ...
+    >>> model = Model(nnx.Rngs(params=0, dropout=42))
+    >>> x = jnp.ones((1, 2))
+    ...
+    >>> y1 = model(x)
+    ...
+    >>> # reset the ``dropout`` stream key to 42
+    >>> nnx.reseed(model, dropout=42)
+    >>> y2 = model(x)
+    ...
+    >>> jnp.allclose(y1, y2)
+    Array(True, dtype=bool)
+  """
+  for _, stream in graph.iter_graph(node):
+    if isinstance(stream, RngStream):
+      if stream.key.tag in stream_keys:
+        if stream.key.shape != ():
+          raise ValueError(
+            f'Cannot reseed stream {stream.key.tag!r} with a non-scalar key, '
+            f' found key with shape {stream.key.shape}.'
+          )
+        key = stream_keys[stream.key.tag]
+        if isinstance(key, int):
+          key = jax.random.key(key)
+        stream.key.value = key
+        stream.count.value = jnp.array(0, dtype=jnp.uint32)
