@@ -108,6 +108,10 @@ class LazyRng(struct.PyTreeNode):
     else:
       return LazyRng(rng, suffix)
 
+  def fold(self):
+    key = self.as_jax_rng()
+    return LazyRng(key, ())
+
 
 def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
   """Legacy RNG folding."""
@@ -600,6 +604,13 @@ class Scope:
       if name not in self.reservations:
         return name
       i += 1
+
+  def fold_rngs(self):
+    """Folds the rngs of this scope into the parent scope."""
+    self._check_valid()
+    for name, rng in self.rngs.items():
+      assert isinstance(rng, LazyRng)
+      self.rngs[name] = rng.fold()
 
   def push(
     self, name: str | None = None, prefix: str = '', reuse=False

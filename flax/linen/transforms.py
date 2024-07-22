@@ -152,7 +152,7 @@ def get_module_scopes(module, args=None, kwargs=None):
     VariablePlaceholders and Module instances replaced with InstancePlaceholders
     that are compatible with jax functions.
   """
-  scopes = []
+  scopes: list[Scope] = []
   refs = {}
 
   # Gather scopes associated with Variables and Module instances passed as
@@ -620,6 +620,7 @@ def decorator_lift_transform_cached(transform, class_fn, **trafo_kwargs):
       trafo_fn = transform(*core_fns, **trafo_kwargs)
 
     module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
+
     if not multi_scope:
       if len(module_scopes) != 1:
         # TODO(levskaya): transforms like jvp & vjp have args that follow the

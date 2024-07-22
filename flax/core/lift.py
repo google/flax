@@ -36,17 +36,18 @@ from jax import random
 from . import axes_scan, meta
 from .frozen_dict import freeze, unfreeze
 from .scope import (
-  CollectionFilter,
-  DenyList,  # pylint: disable=g-multiple-import
-  Filter,
-  PRNGSequenceFilter,
-  Scope,
-  group_collections,
-  in_filter,
-  intersect_filters,
-  is_filter_empty,
-  subtract_filters,
-  union_filters,
+    CollectionFilter,
+    DenyList,  # pylint: disable=g-multiple-import
+    Filter,
+    LazyRng,
+    PRNGSequenceFilter,
+    Scope,
+    group_collections,
+    in_filter,
+    intersect_filters,
+    is_filter_empty,
+    subtract_filters,
+    union_filters,
 )
 
 traceback_util.register_exclusion(__file__)
@@ -1605,8 +1606,17 @@ def jit(
       **kwargs,
   ):
     with jit_context.push((scope_fn, repack_fn)):
-      scopes = jax.tree_util.tree_leaves(scope_fn(variable_groups, rng_groups))
+      scopes: list[Scope] = jax.tree_util.tree_leaves(
+          scope_fn(variable_groups, rng_groups)
+      )
       mutable = tuple(_hashable_filter(scope.mutable) for scope in scopes)
+
+      rng_groups = jax.tree.map(
+          lambda x: x.fold() if isinstance(x, LazyRng) else x,
+          rng_groups,
+          is_leaf=lambda x: isinstance(x, LazyRng),
+      )
+
       fingerprint = (mutable, module_hash_key)
       return jitted(fingerprint, variable_groups, rng_groups, *args, **kwargs)
 

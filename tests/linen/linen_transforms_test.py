@@ -1798,6 +1798,32 @@ class TransformTest(parameterized.TestCase):
     self.assertEqual(s, 'hi')
     np.testing.assert_array_equal(y, jnp.array(1.0))
 
+  def test_jit_and_sow(self):
+    class Inner(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        self.sow('intermediates', 'loss', jnp.sum(x))
+        return x + 1
+
+    class Outer(nn.Module):
+
+      def setup(self):
+        self.inner = Inner()
+
+      @nn.jit
+      def __call__(self, x):
+        return self.inner(x)
+
+    m = Outer()
+    x = jnp.ones((2, 2))
+    vs = m.init(random.key(0), x)
+    y, updates = m.apply(vs, x, mutable=['intermediates'])
+    np.testing.assert_array_equal(
+        updates['intermediates']['inner']['loss'], 4.0
+    )
+    np.testing.assert_array_equal(y, 2)
+
   def test_jit_repr_hash(self):
     n = 0
 
