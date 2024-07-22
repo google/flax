@@ -105,6 +105,7 @@ from .nnx.rnglib import RngKey as RngKey
 from .nnx.rnglib import RngCount as RngCount
 from .nnx.rnglib import ForkStates as ForkStates
 from .nnx.rnglib import fork as fork
+from .nnx.rnglib import reseed as reseed
 from .nnx.spmd import PARTITION_NAME as PARTITION_NAME
 from .nnx.spmd import get_partition_spec as get_partition_spec
 from .nnx.spmd import get_named_sharding as get_named_sharding

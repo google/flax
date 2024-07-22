@@ -17,12 +17,14 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
+from absl.testing import absltest
 
 from flax import nnx
 
 
-class TestRngs:
+class TestRngs(absltest.TestCase):
   def test_call(self):
     rngs = nnx.Rngs(0)
     key = rngs()
@@ -235,3 +237,23 @@ class TestRngs:
     assert broadcast_keys.dropout.key.value.shape == ()
     assert split_counts.params.count.value == 0
     assert broadcast_counts.dropout.count.value == 0
+
+  def test_reseed(self):
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+
+      def __call__(self, x):
+        return self.dropout(self.linear(x))
+
+    model = Model(nnx.Rngs(params=0, dropout=42))
+    x = jnp.ones((1, 2))
+
+    y1 = model(x)
+
+    # reset the ``dropout`` stream key to 42
+    nnx.reseed(model, dropout=42)
+    y2 = model(x)
+
+    np.testing.assert_allclose(y1, y2)
