@@ -92,6 +92,7 @@ class TestLinenConsistency(parameterized.TestCase):
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
+    assert isinstance(out, jax.Array)
     np.testing.assert_array_equal(out, out_nnx)
 
   @parameterized.product(
@@ -140,6 +141,7 @@ class TestLinenConsistency(parameterized.TestCase):
       variables['params']['bias'] = model_nnx.bias.value
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
+    assert isinstance(out, jax.Array)
     np.testing.assert_array_equal(out, out_nnx)
 
     variables = model.init(key, x)
@@ -149,6 +151,7 @@ class TestLinenConsistency(parameterized.TestCase):
       model_nnx.bias.value = variables['params']['bias']
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
+    assert isinstance(out, jax.Array)
     np.testing.assert_array_equal(out, out_nnx)
 
 

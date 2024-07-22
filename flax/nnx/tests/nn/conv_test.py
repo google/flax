@@ -108,6 +108,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
+    assert isinstance(out, jax.Array)
     np.testing.assert_array_equal(out, out_nnx)
 
   @parameterized.product(
@@ -177,6 +178,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
+    assert isinstance(out, jax.Array)
     np.testing.assert_array_equal(out, out_nnx)
 
 
