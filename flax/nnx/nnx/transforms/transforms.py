@@ -46,6 +46,7 @@ from flax.nnx.nnx.proxy_caller import (
   DelayedAccessor,
 )
 from flax.nnx.nnx.state import State
+from flax.nnx.nnx.transforms import general
 from flax.typing import Leaf
 import jax
 import jax.core
@@ -940,47 +941,7 @@ def eval_shape(
 # cond
 # -------------------------------
 
-
-@dataclasses.dataclass(frozen=True)
-class CondStaticInputs(tp.Generic[A]):
-  true_fun: tp.Callable[..., A]
-  false_fun: tp.Callable[..., A]
-
-
-jax.tree_util.register_static(CondStaticInputs)
-
-
-def _cond_fun(
-  is_true: bool,
-  static_inputs: CondStaticInputs[A],
-  graphdef: GraphDef[tuple[tp.Any, ...]],
-  state: State,
-):
-  ctx = graph.current_update_context('cond')
-  fn = static_inputs.true_fun if is_true else static_inputs.false_fun
-  operands = ctx.merge(graphdef, state)
-  out = fn(*operands)
-  graphdef_out, state_out = ctx.split((operands, out))
-  return graphdef_out, state_out
-
-
-def _cond_true_fun(
-  static_inputs: CondStaticInputs[A],
-  graphdef: GraphDef[tuple[tp.Any, ...]],
-  state: State,
-):
-  return _cond_fun(True, static_inputs, graphdef, state)
-
-
-def _cond_false_fun(
-  static_inputs: CondStaticInputs[A],
-  graphdef: GraphDef[tuple[tp.Any, ...]],
-  state: State,
-):
-  return _cond_fun(False, static_inputs, graphdef, state)
-
-
-@graph.update_context('cond')
+@general.split_inputs(ctx_tag='cond')
 def cond(
   pred,
   true_fun: tp.Callable[..., A],
@@ -988,16 +949,10 @@ def cond(
   *operands,
   **kwargs,
 ) -> A:
-  ctx: graph.UpdateContext = graph.current_update_context('cond')
-  graphdef, state = ctx.split(operands)
-  graphdef_out, state_out = jax.lax.cond(
+  return jax.lax.cond(
     pred,
-    _cond_true_fun,
-    _cond_false_fun,
-    CondStaticInputs(true_fun=true_fun, false_fun=false_fun),
-    graphdef,
-    state,
+    general.merge_inputs(true_fun, ctx_tag='cond'),
+    general.merge_inputs(false_fun, ctx_tag='cond'),
+    *operands,
     **kwargs,
   )
-  _operands_out, out = ctx.merge(graphdef_out, state_out)
-  return out
