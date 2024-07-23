@@ -1026,7 +1026,7 @@ def restore_checkpoint(
     >>> from flax.training import checkpoints
     >>> import jax.numpy as jnp
     >>> import tempfile
-
+    ...
     >>> with tempfile.TemporaryDirectory() as dir_path:
     ...   test_object = {
     ...     'a': jnp.array([1, 2, 3], jnp.int32),
@@ -1063,9 +1063,11 @@ def restore_checkpoint(
       ``orbax_checkpointer.restore()`` call.
 
   Returns:
-    Restored ``target`` updated from checkpoint file, or if no step specified and
+    Restored ``target`` updated from checkpoint file, or if no step specified
+    and
     no checkpoint files present, returns the passed-in ``target`` unchanged.
-    If a file path is specified and is not found, the passed-in ``target`` will be
+    If a file path is specified and is not found, the passed-in ``target`` will
+    be
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """
