@@ -11,3 +11,4 @@ Module
 .. autofunction:: init
 .. autofunction:: init_with_output
 .. autofunction:: intercept_methods
+.. autofunction:: share_scope

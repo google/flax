@@ -691,6 +691,24 @@ class CallUnbindOnUnboundModuleError(FlaxError):
   def __init__(self):
     super().__init__("Can't call `unbind()` on unbound modules")
 
+class CallShareScopeOnUnboundModuleError(FlaxError):
+  """This error occurs when you are trying to call ``nn.share_scope`` on an unbound
+  Module. For instance, when you try to use ``nn.share_scope`` at the top-level::
+
+    from flax import linen as nn
+
+    class CustomDense(nn.Dense):
+      def __call__(self, x):
+        return super().__call__(x) + 1
+
+    custom_dense = CustomDense(5)
+    dense = nn.Dense(5)  # has the parameters
+
+    nn.share_scope(custom_dense, dense) # <-- ERROR!
+  """
+
+  def __init__(self):
+    super().__init__("Can't call `share_scope` on unbound modules")
 
 class InvalidInstanceModuleError(FlaxError):
   """This error occurs when you are trying to call ``.init()``, ``.init_with_output()``, ``.apply()`` or ``.bind()``

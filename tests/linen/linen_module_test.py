@@ -3167,5 +3167,146 @@ class FrozenDictTests(absltest.TestCase):
       self.assertTrue(isinstance(params, dict))
 
 
+class ShareScopeTest(absltest.TestCase):
+  def test_basic(self):
+    class DenseLoRA(nn.Module):
+      inner: nn.Dense
+      rank: int
+
+      def setup(self):
+        nn.share_scope(self, self.inner)
+
+      @nn.compact
+      def __call__(self, x: jax.Array):
+        din, dout = x.shape[-1], self.inner.features
+        A = self.param('A', nn.zeros_init(), (din, self.rank))
+        B = self.param('B', nn.zeros_init(), (self.rank, dout))
+        return self.inner(x) + x @ A @ B
+
+    dense_lora = DenseLoRA(nn.Dense(10), rank=2)
+
+    params = dense_lora.init(random.key(0), jnp.ones((1, 5)))['params']
+
+    self.assertIn('kernel', params)
+    self.assertIn('bias', params)
+    self.assertIn('A', params)
+    self.assertIn('B', params)
+
+  def test_child_scope(self):
+    class DenseLoRA(nn.Module):
+      rank: int
+
+      def setup(self):
+        self.child = nn.Dense(10)
+        nn.share_scope(self, self.child)
+
+      @nn.compact
+      def __call__(self, x: jax.Array):
+        din, dout = x.shape[-1], self.child.features
+        A = self.param('A', nn.zeros_init(), (din, self.rank))
+        B = self.param('B', nn.zeros_init(), (self.rank, dout))
+        return self.child(x) + x @ A @ B
+
+    dense_lora = DenseLoRA(rank=2)
+
+    params = dense_lora.init(random.key(0), jnp.ones((1, 5)))['params']
+
+    self.assertIn('kernel', params)
+    self.assertIn('bias', params)
+    self.assertIn('A', params)
+    self.assertIn('B', params)
+
+  def test_in_compact(self):
+    class DenseLoRA(nn.Module):
+      rank: int
+
+      def setup(self):
+        self.child = nn.Dense(10)
+        nn.share_scope(self, self.child)
+
+      @nn.compact
+      def __call__(self, x: jax.Array):
+        din, dout = x.shape[-1], self.child.features
+        A = self.param('A', nn.zeros_init(), (din, self.rank))
+        B = self.param('B', nn.zeros_init(), (self.rank, dout))
+        return self.child(x) + x @ A @ B
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x: jax.Array):
+        return DenseLoRA(rank=2)(x)
+
+    model = Model()
+
+    params = model.init(random.key(0), jnp.ones((1, 5)))['params']
+
+    self.assertIn('kernel', params['DenseLoRA_0'])
+    self.assertIn('bias', params['DenseLoRA_0'])
+    self.assertIn('A', params['DenseLoRA_0'])
+    self.assertIn('B', params['DenseLoRA_0'])
+
+  def test_adopt_child_name(self):
+    class DenseLoRA(nn.Module):
+      inner: nn.Dense
+      rank: int
+
+      def setup(self):
+        nn.share_scope(self, self.inner)
+
+      @nn.compact
+      def __call__(self, x: jax.Array):
+        din, dout = x.shape[-1], self.inner.features
+        A = self.param('A', nn.zeros_init(), (din, self.rank))
+        B = self.param('B', nn.zeros_init(), (self.rank, dout))
+        return self.inner(x) + x @ A @ B
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x: jax.Array):
+        return DenseLoRA(nn.Dense(10), rank=2)(x)
+
+    model = Model()
+
+    params = model.init(random.key(0), jnp.ones((1, 5)))['params']
+
+    self.assertIn('kernel', params['Dense_0'])
+    self.assertIn('bias', params['Dense_0'])
+    self.assertIn('A', params['Dense_0'])
+    self.assertIn('B', params['Dense_0'])
+
+  def test_other_scope_is_none(self):
+    class DenseLoRA(nn.Module):
+      inner: nn.Dense
+      rank: int
+
+      def setup(self):
+        nn.share_scope(self, self.inner)
+
+      @nn.compact
+      def __call__(self, x: jax.Array):
+        din, dout = x.shape[-1], self.inner.features
+        A = self.param('A', nn.zeros_init(), (din, self.rank))
+        B = self.param('B', nn.zeros_init(), (self.rank, dout))
+        return self.inner(x) + x @ A @ B
+
+    class Model(nn.Module):
+      def setup(self):
+        # here Dense doesn't have a scope yet
+        self.dense_lora = DenseLoRA(nn.Dense(10), rank=2)
+
+      @nn.compact
+      def __call__(self, x: jax.Array):
+        return self.dense_lora(x)
+
+    model = Model()
+
+    params = model.init(random.key(0), jnp.ones((1, 5)))['params']
+
+    self.assertIn('kernel', params['dense_lora'])
+    self.assertIn('bias', params['dense_lora'])
+    self.assertIn('A', params['dense_lora'])
+    self.assertIn('B', params['dense_lora'])
+
+
 if __name__ == '__main__':
   absltest.main()
