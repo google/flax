@@ -969,6 +969,8 @@ class Scope:
     self.reserve(name, 'params')
     if self.has_variable('params', name):
       value = self.get_variable('params', name)
+      if unbox:
+        value = meta.unbox(value)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
       # in a Flax Module match the shapes coming in during apply, and if not,
@@ -994,8 +996,8 @@ class Scope:
         raise errors.ScopeParamNotFoundError(name, self.path_text)
       value = init_fn(self.make_rng('params'), *init_args, **init_kwargs)
       self.put_variable('params', name, value)
-    if unbox:
-      value = meta.unbox(value)
+      if unbox:
+        value = meta.unbox(value)
     return value
 
   def _populate_collections(self):
