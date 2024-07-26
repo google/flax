@@ -289,7 +289,7 @@ def _msgpack_ext_pack(x):
   # If they are not fully addressable, use the GDA path for checkpointing.
   if isinstance(x, (np.ndarray, jax.Array)):
     return msgpack.ExtType(_MsgpackExtType.ndarray, _ndarray_to_bytes(x))
-  if np.issctype(type(x)):
+  if isinstance(x, np.generic):
     # pack scalar as ndarray
     return msgpack.ExtType(
       _MsgpackExtType.npscalar, _ndarray_to_bytes(np.asarray(x))

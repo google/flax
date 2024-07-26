@@ -311,7 +311,7 @@ class TensorboardTest(absltest.TestCase):
       'List': [1, 2, 3],
       'Tuple': (1, 2, 3),
       'Complex': complex('1+1j'),
-      'np.complex_': np.complex_('1+1j'),
+      'np.complex_': np.complex128('1+1j'),
       # Valid Python Types
       'Bool': True,
       'Int': 1,
@@ -320,7 +320,7 @@ class TensorboardTest(absltest.TestCase):
       # Valid Numpy Types
       'np.bool_': np.bool_(1),
       'np.integer': np.int_(1),
-      'np.floating': np.float_(1.0),
+      'np.floating': np.float64(1.0),
       'np.character': np.str_('test'),
       # Nested dict to flatten
       'Nested_Dict': {
@@ -328,14 +328,14 @@ class TensorboardTest(absltest.TestCase):
         'List': [1, 2, 3],
         'Tuple': (1, 2, 3),
         'Complex': complex('1+1j'),
-        'np.complex_': np.complex_('1+1j'),
+        'np.complex_': np.complex128('1+1j'),
         'Bool': True,
         'Int': 1,
         'Float': 1.0,
         'Str': 'test',
         'np.bool_': np.bool_(1),
         'np.integer': np.int_(1),
-        'np.floating': np.float_(1.0),
+        'np.floating': np.float64(1.0),
         'np.character': np.str_('test'),
       },
     }
@@ -356,7 +356,7 @@ class TensorboardTest(absltest.TestCase):
       # Valid Numpy Types
       'np.bool_': np.bool_(1),
       'np.integer': np.int_(1),
-      'np.floating': np.float_(1.0),
+      'np.floating': np.float64(1.0),
       'np.character': np.str_('test'),
       # Nested Dict
       'Nested_Dict.None': 'None',
@@ -370,7 +370,7 @@ class TensorboardTest(absltest.TestCase):
       'Nested_Dict.Str': 'test',
       'Nested_Dict.np.bool_': np.bool_(1),
       'Nested_Dict.np.integer': np.int_(1),
-      'Nested_Dict.np.floating': np.float_(1.0),
+      'Nested_Dict.np.floating': np.float64(1.0),
       'Nested_Dict.np.character': np.str_('test'),
     }
 
