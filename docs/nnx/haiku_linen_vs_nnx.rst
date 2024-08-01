@@ -199,7 +199,7 @@ simply inspect the ``params`` object returned from ``.init()``.
 To see the parameter structure in NNX, the user can call ``nnx.split`` to
 generate ``Graphdef`` and ``State`` objects. The ``Graphdef`` is a static pytree
 denoting the structure of the model (for example usages, see
-`NNX Basics <https://flax.readthedocs.io/en/latest/experimental/nnx/nnx_basics.html>`__).
+`NNX Basics <https://flax.readthedocs.io/en/latest/nnx/nnx_basics.html>`__).
 ``State`` objects contains all the module variables (i.e. any class that sub-classes
 ``nnx.Variable``). If we filter for ``nnx.Param``, we will generate a ``State`` object
 of all the learnable module parameters.
