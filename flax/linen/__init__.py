@@ -117,6 +117,7 @@ from .module import (
     merge_param as merge_param,
     nowrap as nowrap,
     override_named_call as override_named_call,
+    share_scope as share_scope,
 )
 from .normalization import (
     BatchNorm as BatchNorm,
