@@ -69,6 +69,28 @@ class Metric(Object):
     return graph.split(self, *filters)
 
 
+class Counter(Metric):
+  """An integer counter."""
+
+  def __init__(self, argname: str = 'values'):
+    self.argname = argname
+    self.total = MetricState(jnp.array(0, dtype=jnp.uint64))
+
+  def reset(self):
+    self.total.value = jnp.array(0, dtype=jnp.uint64)
+
+  def update(self, **kwargs):
+    if self.argname not in kwargs:
+      raise TypeError(f"Expected keyword argument '{self.argname}'")
+    values: tp.Union[int, float, jax.Array] = kwargs[self.argname]
+    self.total.value += (
+        values if isinstance(values, (int, float)) else values.sum()
+    )
+
+  def compute(self):
+    return self.total.value
+
+
 class Average(Metric):
   """Average metric.
 
@@ -208,9 +230,7 @@ class Welford(Metric):
     ) - self.mean.value
     self.mean.value += delta * count / self.count.value
     m2 = 0.0 if isinstance(values, (int, float)) else values.var() * count
-    self.m2.value += (
-        m2 + delta * delta * count * original_count / self.count
-    )
+    self.m2.value += m2 + delta * delta * count * original_count / self.count
 
   def compute(self) -> Statistics:
     """Compute and return the mean and variance statistics in a

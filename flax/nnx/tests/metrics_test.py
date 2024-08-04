@@ -35,6 +35,31 @@ class TestMetrics(parameterized.TestCase):
     accuracy.update(logits=logits2, labels=labels2)
     self.assertEqual(accuracy.compute(), 0.7)
 
+  def test_counter(self):
+    values = jax.random.randint(
+        jax.random.key(0), (5, 2), minval=0, maxval=10**7
+    )
+    total = nnx.metrics.Counter()
+    total.update(values=values)
+    graphdef, state = total.split()
+    total = nnx.merge(graphdef, state)
+    expected = values.sum()
+    computed = total.compute()
+    self.assertEqual(computed, expected)
+
+  def test_counter_iterative(self):
+    values = jax.random.randint(
+        jax.random.key(0), (5, 2), minval=0, maxval=10**7
+    )
+    total = nnx.metrics.Counter()
+    for value in values:
+      total.update(values=value)
+    graphdef, state = total.split()
+    total = nnx.merge(graphdef, state)
+    expected = values.sum()
+    computed = total.compute()
+    self.assertEqual(computed, expected)
+
   def test_welford(self):
     values = jax.random.normal(jax.random.key(0), (5, 2))
 
@@ -48,8 +73,13 @@ class TestMetrics(parameterized.TestCase):
         standard_error_of_mean=values.std() / jnp.sqrt(values.size),
     )
     computed = welford.compute()
-    self.assertAlmostEqual(computed.mean, expected.mean, )
-    self.assertAlmostEqual(computed.standard_deviation, expected.standard_deviation)
+    self.assertAlmostEqual(
+        computed.mean,
+        expected.mean,
+    )
+    self.assertAlmostEqual(
+        computed.standard_deviation, expected.standard_deviation
+    )
     self.assertAlmostEqual(
         computed.standard_error_of_mean, expected.standard_error_of_mean
     )
@@ -68,7 +98,9 @@ class TestMetrics(parameterized.TestCase):
     )
     computed = welford.compute()
     self.assertAlmostEqual(computed.mean, expected.mean)
-    self.assertAlmostEqual(computed.standard_deviation, expected.standard_deviation)
+    self.assertAlmostEqual(
+        computed.standard_deviation, expected.standard_deviation
+    )
     self.assertAlmostEqual(
         computed.standard_error_of_mean, expected.standard_error_of_mean
     )
