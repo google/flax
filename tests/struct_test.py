@@ -123,6 +123,12 @@ class StructTest(parameterized.TestCase):
         class B(A, struct.PyTreeNode):
           b: int
 
+  def test_metadata_pass_through(self):
+    @struct.dataclass
+    class A:
+      foo: int = struct.field(default=9, metadata={'baz': 9})
+    assert A.__dataclass_fields__['foo'].metadata == {'baz': 9, 'pytree_node': True}
+
   @parameterized.parameters(
       {'mode': 'dataclass'},
       {'mode': 'pytreenode'},
