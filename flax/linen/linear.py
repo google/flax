@@ -32,6 +32,7 @@ from flax.linen import initializers
 from flax.linen.dtypes import promote_dtype
 from flax.linen import module
 from flax.linen.module import Module, compact
+from flax.linen.partitioning import param_with_axes
 from flax.typing import (
   Array,
   PRNGKey as PRNGKey,
@@ -94,6 +95,8 @@ class DenseGeneral(Module):
     bias_init: initializer function for the bias.
     precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
+    kernel_axes: a tuple of axes associated with the kernel.
+    bias_axes: a tuple of axes associated with the bias.
   """
 
   features: int | Sequence[int]
@@ -108,6 +111,8 @@ class DenseGeneral(Module):
   # Deprecated. Will be removed.
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
+  kernel_axes: tuple[str, ...] = None
+  bias_axes: tuple[str, ...] = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -156,8 +161,9 @@ class DenseGeneral(Module):
       if ax not in axis
     )
     kernel_shape = tuple(inputs.shape[ax] for ax in axis) + features
-    kernel = self.param(
-      'kernel', kernel_init_wrap, batch_shape + kernel_shape, self.param_dtype
+    kernel = param_with_axes(
+      'kernel', kernel_init_wrap, batch_shape + kernel_shape,
+      self.param_dtype, axes=self.kernel_axes
     )
 
     batch_ind = tuple(range(n_batch_dims))
@@ -175,9 +181,11 @@ class DenseGeneral(Module):
           return meta.replace_boxed(bias, jnp.reshape(bias.unbox(), shape))
         return jnp.reshape(bias, shape)
 
-      bias = self.param(
-        'bias', bias_init_wrap, batch_shape + features, self.param_dtype
+      bias = param_with_axes(
+        'bias', bias_init_wrap, batch_shape + features,
+        self.param_dtype, axes=self.bias_axes
       )
+
     else:
       bias = None
 
@@ -225,6 +233,8 @@ class Dense(Module):
       for details.
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
+    kernel_axes: a tuple of axes associated with the kernel.
+    bias_axes: a tuple of axes associated with the bias.
   """
 
   features: int
@@ -237,6 +247,8 @@ class Dense(Module):
   # Deprecated. Will be removed.
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
+  kernel_axes: tuple[str, ...] = None
+  bias_axes: tuple[str, ...] = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -248,15 +260,18 @@ class Dense(Module):
     Returns:
       The transformed input.
     """
-    kernel = self.param(
+    kernel = param_with_axes(
       'kernel',
       self.kernel_init,
       (jnp.shape(inputs)[-1], self.features),
       self.param_dtype,
+      axes=self.kernel_axes
     )
     if self.use_bias:
-      bias = self.param(
-        'bias', self.bias_init, (self.features,), self.param_dtype
+      bias = param_with_axes(
+        'bias', self.bias_init, (self.features,),
+        self.param_dtype,
+        axes=self.bias_axes
       )
     else:
       bias = None
@@ -469,6 +484,8 @@ class _Conv(Module):
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
+    kernel_axes: a tuple of axes associated with the kernel.
+    bias_axes: a tuple of axes associated with the bias.
   """
 
   features: int
@@ -488,6 +505,8 @@ class _Conv(Module):
   # Deprecated. Will be removed.
   conv_general_dilated: ConvGeneralDilatedT | None = None
   conv_general_dilated_cls: Any = None
+  kernel_axes: tuple[str, ...] = None
+  bias_axes: tuple[str, ...] = None
 
   @property
   def shared_weights(self) -> bool:  # type: ignore
@@ -628,8 +647,10 @@ class _Conv(Module):
         f'Shapes are: {self.mask.shape}, {kernel_shape}'
       )
 
-    kernel = self.param(
-      'kernel', self.kernel_init, kernel_shape, self.param_dtype
+    kernel = param_with_axes(
+      'kernel', self.kernel_init, kernel_shape,
+      self.param_dtype,
+      axes=self.kernel_axes
     )
 
     if self.mask is not None:
@@ -643,7 +664,7 @@ class _Conv(Module):
         # One bias weight per output entry, unshared betwen pixels.
         bias_shape = conv_output_shape[1:]
 
-      bias = self.param('bias', self.bias_init, bias_shape, self.param_dtype)
+      bias = param_with_axes('bias', self.bias_init, bias_shape, self.param_dtype, axes=self.bias_axes)
     else:
       bias = None
 
@@ -895,6 +916,21 @@ class ConvTranspose(Module):
   bias_init: Initializer = initializers.zeros_init()
   transpose_kernel: bool = False
 
+  def param_with_axes(
+    self,
+    name: str,
+    init_fn,
+    *init_args,
+    axes: tuple[str, ...] | None = None,
+    module: Module | None = None):
+    return param_with_axes(
+      name,
+      init_fn,
+      *init_args,
+      axes=axes,
+      module=module,
+    )
+
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a transposed convolution to the inputs.
@@ -958,8 +994,9 @@ class ConvTranspose(Module):
         f'Shapes are: {self.mask.shape}, {kernel_shape}'
       )
 
-    kernel = self.param(
-      'kernel', self.kernel_init, kernel_shape, self.param_dtype
+    kernel = self.param_with_axes(
+      'kernel', self.kernel_init, kernel_shape, self.param_dtype,
+      axes=('height', 'width', 'input', 'embed')
     )
 
     if self.mask is not None:
@@ -970,8 +1007,8 @@ class ConvTranspose(Module):
       padding_lax = 'VALID'
 
     if self.use_bias:
-      bias = self.param(
-        'bias', self.bias_init, (self.features,), self.param_dtype
+      bias = self.param_with_axes(
+        'bias', self.bias_init, (self.features,), self.param_dtype, axes=('embed', )
       )
     else:
       bias = None
