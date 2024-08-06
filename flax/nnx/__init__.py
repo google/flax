@@ -97,6 +97,7 @@ from .nnx.nn.lora import LoRAParam as LoRAParam
 from .nnx.nn.normalization import BatchNorm as BatchNorm
 from .nnx.nn.normalization import LayerNorm as LayerNorm
 from .nnx.nn.normalization import RMSNorm as RMSNorm
+from .nnx.nn.normalization import GroupNorm as GroupNorm
 from .nnx.nn.stochastic import Dropout as Dropout
 from .nnx.rnglib import Rngs as Rngs
 from .nnx.rnglib import RngStream as RngStream
