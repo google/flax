@@ -57,8 +57,7 @@ def dot_product_attention_weights(
     precision: PrecisionLike = None,
     module: Module | None = None,
     force_fp32_for_softmax: bool = False,
-    einsum_dot_general: Callable[..., Array] | None = None,
-    einsum: Callable[..., Array] | None = None,
+    einsum_dot_general: Callable[..., Array] = jax.lax.dot_general,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -93,30 +92,10 @@ def dot_product_attention_weights(
       fp32. This is useful for mixed-precision training where higher precision
       is desired for numerical stability.
     einsum_dot_general: the dot_general to use in einsum.
-    einsum: If unspecified, default `jnp.einsum` will be used. This argument is
-      mutually exclusive with `precision` and `einsum_dot_general`.
-
-  Raises:
-    ValueError: if both `precision`/`einsum_dot_general` and `einsum` are
-      specified.
 
   Returns:
     Output of shape ``[batch..., num_heads, q_length, kv_length]``.
   """
-  if (precision or einsum_dot_general) and einsum:
-    raise ValueError(
-        'precision/einsum_dot_general and einsum are mutually exclusive. Please'
-        ' specify only one of them.'
-    )
-  if not einsum:
-    einsum = functools.partial(
-        jnp.einsum,
-        precision=precision,
-        _dot_general=einsum_dot_general
-        if einsum_dot_general
-        else jax.lax.dot_general,
-    )
-
   query, key = promote_dtype(query, key, dtype=dtype)
   dtype = query.dtype
 
@@ -129,7 +108,13 @@ def dot_product_attention_weights(
   depth = query.shape[-1]
   query = query / jnp.sqrt(depth).astype(dtype)
   # attn weight shape is (batch..., num_heads, q_length, kv_length)
-  attn_weights = einsum('...qhd,...khd->...hqk', query, key)
+  attn_weights = jnp.einsum(
+      '...qhd,...khd->...hqk',
+      query,
+      key,
+      precision=precision,
+      _dot_general=einsum_dot_general,
+  )
 
   # apply attention bias: masking, dropout, proximity bias, etc.
   if bias is not None:
@@ -177,9 +162,7 @@ def dot_product_attention(
     precision: PrecisionLike = None,
     module: Module | None = None,
     force_fp32_for_softmax: bool = False,
-    einsum_dot_general: Callable[..., Array] | None = None,
-    qk_attn_weights_einsum: Callable[..., Array] | None = None,
-    attn_weights_value_einsum: Callable[..., Array] | None = None,
+    einsum_dot_general: Callable[..., Array] = jax.lax.dot_general,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -218,39 +201,11 @@ def dot_product_attention(
     force_fp32_for_softmax: bool, whether to force the softmax to be computed in
       fp32. This is useful for mixed-precision training where higher precision
       is desired for numerical stability.
-    einsum_dot_general: the dot_general to use in `jnp.einsum`.
-    qk_attn_weights_einsum: the einsum for computing the attention weights. When
-      unspecified, the default `jnp.einsum` will be used. This argument is
-      mutually exclusive with `precision` and `einsum_dot_general`.
-    attn_weights_value_einsum: the einsum for computing the product of the
-      attention weights and the values. When unspecified, the default
-      `jnp.einsum` will be used. This argument is mutually exclusive with
-      `precision` and `einsum_dot_general`.
+    einsum_dot_general: the dot_general to use in einsum.
 
   Returns:
     Output of shape ``[batch..., q_length, num_heads, v_depth_per_head]``.
-
-  Raises:
-    ValueError: if both `precision`/`einsum_dot_general` and
-    `qk_attn_weights_einsum`/`attn_weights_value_einsum` are
-      specified.
   """
-  if (qk_attn_weights_einsum and not attn_weights_value_einsum) or (
-      not qk_attn_weights_einsum and attn_weights_value_einsum
-  ):
-    raise ValueError(
-        'qk_attn_weights_einsum and attn_weights_value_einsum must be specified'
-        ' together.'
-    )
-  if (precision or einsum_dot_general) and (
-      qk_attn_weights_einsum or attn_weights_value_einsum
-  ):
-    raise ValueError(
-        'precision/einsum_dot_general and'
-        ' qk_attn_weights_einsum/attn_weights_value_einsum are mutually'
-        ' exclusive. Please specify only one of them.'
-    )
-
   query, key, value = promote_dtype(query, key, value, dtype=dtype)
   dtype = query.dtype
   assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
@@ -276,21 +231,16 @@ def dot_product_attention(
       precision,
       module,
       force_fp32_for_softmax,
-      qk_attn_weights_einsum,
+      einsum_dot_general=einsum_dot_general,
   )
-  if not attn_weights_value_einsum:
-    attn_weights_value_einsum = functools.partial(
-        jnp.einsum,
-        precision=precision,
-        _dot_general=einsum_dot_general
-        if einsum_dot_general
-        else jax.lax.dot_general,
-    )
+
   # return weighted sum over values for each query position
-  return attn_weights_value_einsum(
+  return jnp.einsum(
       '...hqk,...khd->...qhd',
       attn_weights,
       value,
+      precision=precision,
+      _dot_general=einsum_dot_general,
   )
 
 
@@ -370,10 +320,6 @@ class MultiHeadDotProductAttention(Module):
       num_heads, value_channels]``
     decode: Whether to prepare and use an autoregressive cache.
     normalize_qk: Should QK normalization be applied (arxiv.org/abs/2302.05442).
-    qk_attn_weights_einsum_cls: factory function to create the einsum for
-      computing the attention weights.
-    attn_weights_value_einsum_cls: factory function to create the einsum for
-      computing the product of the attention weights and the values.
   """
 
   num_heads: int
@@ -399,10 +345,6 @@ class MultiHeadDotProductAttention(Module):
   out_dot_general: DotGeneralT | None = None
   qkv_dot_general_cls: Any = None
   out_dot_general_cls: Any = None
-  qk_attn_weights_einsum_cls: Callable[..., Callable[..., Array]] | None = None
-  attn_weights_value_einsum_cls: Callable[..., Callable[..., Array]] | None = (
-      None
-  )
 
   @overload
   def __call__(
@@ -633,19 +575,6 @@ class MultiHeadDotProductAttention(Module):
     else:
       m_deterministic = True
 
-    # `qk_attn_weights_einsum` and `attn_weights_value_einsum` are optional
-    # arguments that can be used to override the default `jnp.einsum`. They
-    # exist for quantized einsum support in AQT.
-    qk_attn_weights_einsum = (
-        self.qk_attn_weights_einsum_cls()
-        if self.qk_attn_weights_einsum_cls
-        else None
-    )
-    attn_weights_value_einsum = (
-        self.attn_weights_value_einsum_cls()
-        if self.attn_weights_value_einsum_cls
-        else None
-    )
     # apply attention
     attn_args = (query, key, value)
     # This kwargs list match the default nn.dot_product_attention.
@@ -659,8 +588,6 @@ class MultiHeadDotProductAttention(Module):
       dtype=self.dtype,
       precision=self.precision,
       force_fp32_for_softmax=self.force_fp32_for_softmax,
-      qk_attn_weights_einsum=qk_attn_weights_einsum,
-      attn_weights_value_einsum=attn_weights_value_einsum,
     )
     attn_kwargs = {
         k: v

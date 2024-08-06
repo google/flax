@@ -578,47 +578,6 @@ class AttentionTest(parameterized.TestCase):
         attn_weights_dtype,
     )
 
-  @parameterized.parameters(
-      (lax.Precision.DEFAULT, None),
-      (None, jax.lax.dot_general),
-  )
-  def test_dot_product_attention_precision_and_einsum_override(
-      self, precision, einsum_dot_general
-  ):
-    # Test that we raise a ValueError if the user specifies both
-    # `precision` and/or `einsum_dot_general` and `qk_attn_weights_einsum`.
-    einsum_cls = lambda: jnp.einsum
-    self.assertRaises(
-        ValueError,
-        nn.dot_product_attention,
-        query=jnp.ones((1, 4, 2)),
-        key=jnp.ones((1, 4, 2)),
-        value=jnp.ones((1, 4, 2)),
-        precision=precision,
-        einsum_dot_general=einsum_dot_general,
-        qk_attn_weights_einsum=einsum_cls,
-        attn_weights_value_einsum=einsum_cls,
-    )
-
-  @parameterized.parameters(
-      (lambda: jax.lax.dot_general, None),
-      (None, lambda: jax.lax.dot_general),
-  )
-  def test_dot_product_attention_specify_einsums_together(
-      self, qk_attn_weights_einsum, attn_weights_value_einsum
-  ):
-    # Test that we raise a ValueError if the user specifies only one of
-    # `qk_attn_weights_einsum` and `attn_weights_value_einsum`.
-    self.assertRaises(
-        ValueError,
-        nn.dot_product_attention,
-        query=jnp.ones((1, 4, 2)),
-        key=jnp.ones((1, 4, 2)),
-        value=jnp.ones((1, 4, 2)),
-        qk_attn_weights_einsum=qk_attn_weights_einsum,
-        attn_weights_value_einsum=attn_weights_value_einsum,
-    )
-
 
 if __name__ == '__main__':
   absltest.main()
