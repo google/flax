@@ -15,3 +15,7 @@ Normalization
 .. flax_module::
   :module: flax.nnx
   :class: RMSNorm
+
+.. flax_module::
+  :module: flax.nnx
+  :class: GroupNorm
