@@ -2901,7 +2901,7 @@ class Module(ModuleBase):
     return {'/'.join(row.path): row.module_copy for row in table}
 
 
-_ParentType = Union[type[Module], Scope, type[_Sentinel], None]
+_ParentType = Union[Module, Scope, _Sentinel, None]
 
 
 def merge_param(name: str, a: T | None, b: T | None) -> T:
