@@ -250,8 +250,8 @@ def predict_step(
   module = nnx.merge(graphdef, params)
 
   # TODO(cgarciae): check how pytorch does this.
-  for _path, m in module.iter_modules():
-    if isinstance(m, HasCache):
+  for _path, m in nnx.graph.iter_nodes(module):
+    if isinstance(m, nnx.Module) and isinstance(m, HasCache):
       input_shape = (inputs.shape[0], max_decode_len, config.emb_dim)
       m.init_cache(input_shape, dtype=config.dtype)
 

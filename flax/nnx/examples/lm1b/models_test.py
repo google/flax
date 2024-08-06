@@ -246,8 +246,8 @@ class ModelTest(absltest.TestCase):
     config.attention_dropout_rate = 0.0
 
     model_nnx = nnx.eval_shape(lambda: TransformerLM(config, rngs=nnx.Rngs(0)))
-    for _path, m in model_nnx.iter_modules():
-      if isinstance(m, HasCache):
+    for _path, m in nnx.graph.iter_nodes(model_nnx):
+      if isinstance(m, nnx.Module) and isinstance(m, HasCache):
         input_shape = (batch_size, config.max_len, config.emb_dim)
         m.init_cache(input_shape, dtype=config.dtype)
 
