@@ -14,6 +14,7 @@
 
 from functools import partial
 from threading import Thread
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -42,8 +43,8 @@ class TestGraphUtils(absltest.TestCase):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    graphdef, state, refmap = nnx.graph.flatten(g)
-    assert refmap is not None
+    refmap = nnx.graph.RefMap()
+    graphdef, state = nnx.graph.flatten(g, ref_index=refmap)
 
     state[0]['b'].raw_value = 2
     state[3].raw_value = 4
@@ -321,14 +322,17 @@ class TestGraphUtils(absltest.TestCase):
     a = m.a
     b = m.b
 
+    ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
-    graphdef, state, ref_out_idx_out = nnx.graph.flatten(m)
+    graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
-      m, idx_out_ref_in = nnx.graph.unflatten(graphdef, state)
+      idx_out_ref_in: dict[int, Any] = {}
+      m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       f(m)
-      graphdef, state, ref_in_idx_in = nnx.graph.flatten(m)
+      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
       idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
@@ -340,7 +344,7 @@ class TestGraphUtils(absltest.TestCase):
     idx_in_ref_out = nnx.graph.compose_mapping_reversed(
       ref_out_idx_out, idx_out_idx_in
     )
-    m2, _ = nnx.graph.unflatten(graphdef, state, idxmap=idx_in_ref_out)
+    m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.a is b
     assert m2.b is a
@@ -358,14 +362,17 @@ class TestGraphUtils(absltest.TestCase):
     a = m.a
     b = m.b
 
+    ref_out_idx_out = nnx.graph.RefMap[Any, int]()
     graphdef: nnx.graph.GraphDef[Foo]
-    graphdef, state, ref_out_idx_out = nnx.graph.flatten(m)
+    graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
-      m, idx_out_ref_in = nnx.graph.unflatten(graphdef, state)
+      idx_out_ref_in: dict[int, Any] = {}
+      m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       f(m)
-      graphdef, state, ref_in_idx_in = nnx.graph.flatten(m)
+      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
       idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
@@ -377,7 +384,7 @@ class TestGraphUtils(absltest.TestCase):
     idx_in_ref_out = nnx.graph.compose_mapping_reversed(
       ref_out_idx_out, idx_out_idx_in
     )
-    m2, _ = nnx.graph.unflatten(graphdef, state, idxmap=idx_in_ref_out)
+    m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.a is b
     assert m2.b is a
@@ -392,14 +399,17 @@ class TestGraphUtils(absltest.TestCase):
 
     m = Foo()
 
+    ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
-    graphdef, state, ref_out_idx_out = nnx.graph.flatten(m)
+    graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
-      m, idx_out_ref_in = nnx.graph.unflatten(graphdef, state)
+      idx_out_ref_in: dict[int, Any] = {}
+      m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       f(m)
-      graphdef, state, ref_in_idx_in = nnx.graph.flatten(m)
+      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
       idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
@@ -411,7 +421,7 @@ class TestGraphUtils(absltest.TestCase):
     idx_in_ref_out = nnx.graph.compose_mapping_reversed(
       ref_out_idx_out, idx_out_idx_in
     )
-    m2, _ = nnx.graph.unflatten(graphdef, state, idxmap=idx_in_ref_out)
+    m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.ref is m2
 
