@@ -23,7 +23,7 @@ that have allowed Linen to scale effectively to large codebases.
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-! pip install -U flax penzai
+# ! pip install -U flax penzai
 ```
 
 ```{code-cell} ipython3
@@ -288,6 +288,7 @@ class StatefulLinear(nnx.Module):
 model = StatefulLinear(din=3, dout=5, rngs=nnx.Rngs(0))
 y = model(jnp.ones((1, 3)))
 
+print(f'{model.count.value = }')
 nnx.display(model)
 ```
 
@@ -313,8 +314,6 @@ update an object inplace with the content of a given State. This pattern is used
 propagate the state from a transform back to the source object outside.
 
 ```{code-cell} ipython3
-print(f'{model.count.value = }')
-
 # 1. Use split to create a pytree representation of the Module
 graphdef, state = nnx.split(model)
 
@@ -331,19 +330,12 @@ def forward(graphdef: nnx.GraphDef, state: nnx.State, x: jax.Array) -> tuple[jax
 y, state = forward(graphdef, state, x=jnp.ones((1, 3)))
 # 5. Update the state of the original Module
 nnx.update(model, state)
-
 print(f'{model.count.value = }')
 ```
 
 The key insight of this pattern is that using mutable references is 
 fine within a transform context (including the base eager interpreter)
 but its necessary to use the Functional API when crossing boundaries.
-
-**Why aren't Module's just Pytrees?** The main reason is that it is very
-easy to lose track of shared references by accident this way, for example
-if you pass two Module that have a shared Module through a JAX boundary
-you will silently lose that sharing. The Functional API makes this
-behavior explicit, and thus it is much easier to reason about.
 
 +++
 
@@ -378,3 +370,9 @@ model = nnx.merge(graphdef, params, counts)
 # update with multiple States
 nnx.update(model, params, counts)
 ```
+
+### Why Modules aren't Pytrees?
+The main reason is that it is very easy to lose track of shared references
+by accident this way, for example if you pass two Module that have a shared
+Module through a JAX boundary you will silently lose that sharing. The Functional
+API makes this behavior explicit, and thus it is much easier to reason about.
