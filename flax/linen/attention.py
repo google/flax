@@ -276,7 +276,8 @@ def dot_product_attention(
       precision,
       module,
       force_fp32_for_softmax,
-      qk_attn_weights_einsum,
+      einsum_dot_general=einsum_dot_general,
+      einsum=qk_attn_weights_einsum,
   )
   if not attn_weights_value_einsum:
     attn_weights_value_einsum = functools.partial(
