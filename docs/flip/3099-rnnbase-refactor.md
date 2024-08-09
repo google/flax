@@ -5,7 +5,7 @@ Authors: Cristian Garcia, Marcus Chiam, Jasmijn Bastings
  - Start Date: May 1, 2023
  - FLIP Issue: [TBD]
  - FLIP PR: #3053
- - Status: Implementing
+ - Status: Implemented
 
 ## Summary
 This proposal aims to improve the usability of the `RNNCellBase` class by refactoring the `initialize_carry` method and other relevant components.
