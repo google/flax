@@ -19,7 +19,7 @@ Orbax provides a variety of features for saving and loading model data, which yo
 *  Support for various array types and storage formats
 *  Asynchronous saving to reduce training wait time
 *  Versioning and automatic bookkeeping of past checkpoints
-*  Flexible [`transformations`](https://github.com/google/orbax/blob/main/docs/checkpoint.md#transformations) to tweak and load old checkpoints
+*  Flexible [`transformations`](https://orbax.readthedocs.io/en/latest/transformations.html) to tweak and load old checkpoints
 *  [`jax.sharding`](https://jax.readthedocs.io/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html)-based API to save and load in multi-host scenarios
 
 ---
