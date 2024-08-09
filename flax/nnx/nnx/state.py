@@ -327,10 +327,10 @@ class State(MutableMapping[K, V], reprlib.Representable):
     Returns:
       The merged ``State``.
     """
-    states = (state, *states)
+    if not states:
+      return state
 
-    if len(states) == 1:
-      return states[0]
+    states = (state, *states)
 
     new_state: FlatState[V] = {}
 

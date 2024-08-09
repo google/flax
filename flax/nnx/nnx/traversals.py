@@ -69,7 +69,7 @@ def flatten_mapping(xs: Mapping[Any, Any],
 
   Example::
 
-    >>> from flax.experimental import nnx
+    >>> from flax import nnx
     >>> xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
     >>> flat_xs = nnx.traversals.flatten_mapping(xs)
     >>> flat_xs
@@ -148,7 +148,7 @@ def unflatten_mapping(xs: Any,
 
   Example::
 
-    >>> from flax.experimental import nnx
+    >>> from flax import nnx
     >>> flat_xs = {
     ...   ('foo',): 1,
     ...   ('bar', 'a'): 2,

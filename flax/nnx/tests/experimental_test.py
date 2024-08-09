@@ -12,4 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import deprecated
+from absl.testing import absltest
+
+
+
+
+if __name__ == '__main__':
+  absltest.main()

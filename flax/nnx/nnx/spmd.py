@@ -20,7 +20,6 @@ from jax.interpreters import pxla
 from jax.sharding import Mesh, PartitionSpec
 
 from flax.nnx.nnx import variables
-from flax.nnx.nnx.state import State
 from flax.typing import (
   Array,
   ArrayPytree,  # pylint: disable=invalid-name
@@ -38,9 +37,7 @@ class HasSharding(tp.Protocol):
   sharding: tp.Optional[Sharding]
 
 
-def add_axis(
-  state: State, index: int, params: tp.Mapping[tp.Any, tp.Any]
-) -> State:
+def add_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   axis_name = _get_partition_name(params)
 
   def _add_axis(x: tp.Any):
@@ -56,13 +53,11 @@ def add_axis(
     return x
 
   return jax.tree_util.tree_map(
-    _add_axis, state, is_leaf=lambda x: isinstance(x, variables.VariableState)
+    _add_axis, tree, is_leaf=lambda x: isinstance(x, variables.VariableState)
   )
 
 
-def remove_axis(
-  state: State, index: int, params: tp.Mapping[tp.Any, tp.Any]
-) -> State:
+def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   axis_name = _get_partition_name(params)
 
   def _remove_axis(x: tp.Any):
@@ -76,7 +71,7 @@ def remove_axis(
 
   return jax.tree_util.tree_map(
     _remove_axis,
-    state,
+    tree,
     is_leaf=lambda x: isinstance(x, variables.VariableState),
   )
 

@@ -16,11 +16,6 @@ building and experimenting with neural networks as easy and intuitive as possibl
 * **Compatible**: NNX allows functionalizing Module state, making it possible to directly use JAX
   transformations when needed.
 
-> [!NOTE]
-> NNX is currently in an experimental state and is subject to change. Linen is still the
-   recommended option for large-scale projects. Feedback and contributions are welcome!
-
-
 ## What does NNX look like?
 
 NNX removes most of the friction from building and training neural networks in JAX. It provides
