@@ -33,10 +33,7 @@ def is_multi_device_array(value: Any) -> bool:
 
 
 def save_args_from_target(target: Any) -> Any:
-  return jax.tree_util.tree_map(
-    lambda x: ocp.SaveArgs(aggregate=not is_multi_device_array(x)),
-    target,
-  )
+  return jax.tree_util.tree_map(lambda _: ocp.SaveArgs(), target)
 
 
 def maybe_construct_transformations(
