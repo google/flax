@@ -148,7 +148,8 @@ def train_step(state, batch, learning_rate_fn):
   metrics['learning_rate'] = lr
 
   new_state = state.apply_gradients(
-      grads=grads, batch_stats=new_model_state['batch_stats']
+      grads=grads,
+      batch_stats=lax.pmean(new_model_state['batch_stats'], 'batch'),
   )
   if dynamic_scale:
     # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
@@ -225,22 +226,9 @@ def restore_checkpoint(state, workdir):
 
 
 def save_checkpoint(state, workdir):
-  state = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state))
   step = int(state.step)
   logging.info('Saving checkpoint step %d.', step)
   checkpoints.save_checkpoint_multiprocess(workdir, state, step, keep=3)
-
-
-# pmean only works inside pmap because it needs an axis name.
-# This function will average the inputs across all devices.
-cross_replica_mean = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
-
-
-def sync_batch_stats(state):
-  """Sync the batch statistics across replicas."""
-  # Each device has its own version of the running average batch statistics and
-  # we sync them before evaluation.
-  return state.replace(batch_stats=cross_replica_mean(state.batch_stats))
 
 
 def create_train_state(
@@ -361,13 +349,14 @@ def train_and_evaluate(
   state = restore_checkpoint(state, workdir)
   # step_offset > 0 if restarting from checkpoint
   step_offset = int(state.step)
-  state = jax_utils.replicate(state)
 
   p_train_step = jax.pmap(
       functools.partial(train_step, learning_rate_fn=learning_rate_fn),
+      in_axes=(None, 0),
+      out_axes=(None, 0),
       axis_name='batch',
   )
-  p_eval_step = jax.pmap(eval_step, axis_name='batch')
+  p_eval_step = jax.pmap(eval_step, in_axes=(None, 0), axis_name='batch')
 
   train_metrics = []
   hooks = []
@@ -407,8 +396,6 @@ def train_and_evaluate(
       epoch = step // steps_per_epoch
       eval_metrics = []
 
-      # sync batch statistics across replicas
-      state = sync_batch_stats(state)
       for _ in range(steps_per_eval):
         eval_batch = next(eval_iter)
         metrics = p_eval_step(state, eval_batch)
@@ -426,7 +413,6 @@ def train_and_evaluate(
       )
       writer.flush()
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
-      state = sync_batch_stats(state)
       save_checkpoint(state, workdir)
 
   # Wait until computations are done before exiting
