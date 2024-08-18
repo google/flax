@@ -28,7 +28,8 @@ A = TypeVar('A')
 
 class TestModule:
   def test_has_module_state(self):
-    class Foo(nnx.Module): ...
+    class Foo(nnx.Module):
+      ...
 
     foo = Foo()
 
@@ -621,7 +622,11 @@ class TestModuleDef:
 
     module = Foo(rngs=nnx.Rngs(0))
 
-    modules = list(module.iter_modules())
+    modules = [
+      (path, node)
+      for path, node in nnx.graph.iter_nodes(module)
+      if isinstance(node, nnx.Module)
+    ]
 
     assert len(modules) == 5
     assert modules[0][0] == ('dropout',)
@@ -647,7 +652,11 @@ class TestModuleDef:
 
     module = Foo(rngs=nnx.Rngs(0))
 
-    modules = list(module.iter_children())
+    modules = [
+      (attribute, node)
+      for attribute, node in nnx.graph.iter_child_nodes(module)
+      if isinstance(node, nnx.Module)
+    ]
 
     assert len(modules) == 2
     assert modules[0][0] == 'dropout'
