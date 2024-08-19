@@ -403,20 +403,21 @@ class Module(Object, metaclass=ModuleMeta):
         flatten_func=partial(_module_flatten, with_keys=False),
       )
 
-  def __penzai_repr__(self, path, subtree_renderer):
-    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
-    from penzai.treescope import formatting_util  # type: ignore[import-not-found,import-untyped]
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
     children = {}
     for name, value in vars(self).items():
       if name.startswith('_'):
         continue
       children[name] = value
-    return pz_repr_lib.render_object_constructor(
+    return treescope.repr_lib.render_object_constructor(
         object_type=type(self),
         attributes=children,
         path=path,
         subtree_renderer=subtree_renderer,
-        color=formatting_util.color_from_string(type(self).__qualname__)
+        color=treescope.formatting_util.color_from_string(
+            type(self).__qualname__
+        )
     )
 
 # -------------------------

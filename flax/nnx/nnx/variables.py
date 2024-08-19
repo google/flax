@@ -429,8 +429,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
         continue
       yield reprlib.Attr(name, repr(value))
 
-  def __penzai_repr__(self, path, subtree_renderer):
-    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
     children = {}
     for name, value in vars(self).items():
       if name == 'raw_value':
@@ -438,7 +438,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       if name.endswith('_hooks') or name == '_trace_state':
         continue
       children[name] = value
-    return pz_repr_lib.render_object_constructor(
+    return treescope.repr_lib.render_object_constructor(
         object_type=type(self),
         attributes=children,
         path=path,
@@ -853,14 +853,14 @@ class VariableState(tp.Generic[A], reprlib.Representable):
         continue
       yield reprlib.Attr(name, repr(value))
 
-  def __penzai_repr__(self, path, subtree_renderer):
-    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
     children = {'type': self.type}
     for name, value in vars(self).items():
       if name == 'type' or name.endswith('_hooks'):
         continue
       children[name] = value
-    return pz_repr_lib.render_object_constructor(
+    return treescope.repr_lib.render_object_constructor(
         object_type=type(self),
         attributes=children,
         path=path,

@@ -14,7 +14,7 @@ ipython_genutils
 sphinx-design
 jupytext==1.13.8
 dm-haiku
-penzai>=0.1.2; python_version>='3.10'
+treescope>=0.1.1; python_version>='3.10'
 
 # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
 # ReadTheDocs: https://stackoverflow.com/a/68008428

@@ -63,9 +63,9 @@ class ObjectState(reprlib.Representable):
     yield reprlib.Object(type(self))
     yield reprlib.Attr('trace_state', self._trace_state)
 
-  def __penzai_repr__(self, path, subtree_renderer):
-    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
-    return pz_repr_lib.render_object_constructor(
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
+    return treescope.repr_lib.render_object_constructor(
         object_type=type(self),
         attributes={'trace_state': self._trace_state},
         path=path,
@@ -173,14 +173,14 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       if clear_seen:
         CONTEXT.seen_modules_repr = None
 
-  def __penzai_repr__(self, path, subtree_renderer):
-    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
     children = {}
     for name, value in vars(self).items():
       if name.startswith('_'):
         continue
       children[name] = value
-    return pz_repr_lib.render_object_constructor(
+    return treescope.repr_lib.render_object_constructor(
         object_type=type(self),
         attributes=children,
         path=path,

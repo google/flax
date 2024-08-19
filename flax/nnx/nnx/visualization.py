@@ -14,7 +14,7 @@
 
 import importlib.util
 
-penzai_installed = importlib.util.find_spec('penzai') is not None
+treescope_installed = importlib.util.find_spec('treescope') is not None
 try:
   from IPython import get_ipython
 
@@ -24,18 +24,17 @@ except ImportError:
 
 
 def display(*args):
-  """Display the given objects using a Penzai visualizer.
+  """Display the given objects using the Treescope pretty-printer.
 
-  If Penzai is not installed or the code is not running in IPython, ``display``
-  will print the objects instead.
+  If treescope is not installed or the code is not running in IPython,
+  ``display`` will print the objects instead.
   """
-  if not penzai_installed or not in_ipython:
+  if not treescope_installed or not in_ipython:
     for x in args:
       print(x)
     return
 
-  from penzai import pz  # type: ignore[import-not-found,import-untyped]
+  import treescope  # type: ignore[import-not-found,import-untyped]
 
-  with pz.ts.active_autovisualizer.set_scoped(pz.ts.ArrayAutovisualizer()):
-    for x in args:
-      pz.ts.display(x, ignore_exceptions=True)
+  for x in args:
+    treescope.display(x, ignore_exceptions=True, autovisualize=True)

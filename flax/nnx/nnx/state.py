@@ -56,7 +56,7 @@ class NestedStateRepr(reprlib.Representable):
         continue
       yield r
 
-  def __penzai_repr__(self, path, subtree_renderer):
+  def __treescope_repr__(self, path, subtree_renderer):
     children = {}
     for k, v in self.state.items():
       if isinstance(v, State):
@@ -141,15 +141,15 @@ class State(MutableMapping[K, V], reprlib.Representable):
         v = NestedStateRepr(v)
       yield reprlib.Attr(repr(k), v)
 
-  def __penzai_repr__(self, path, subtree_renderer):
-    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
 
     children = {}
     for k, v in self.items():
       if isinstance(v, State):
         v = NestedStateRepr(v)
       children[k] = v
-    return pz_repr_lib.render_dictionary_wrapper(
+    return treescope.repr_lib.render_dictionary_wrapper(
       object_type=type(self),
       wrapped_dict=children,
       path=path,

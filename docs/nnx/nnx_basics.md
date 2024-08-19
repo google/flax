@@ -23,7 +23,7 @@ that have allowed Linen to scale effectively to large codebases.
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-! pip install -U flax penzai
+! pip install -U flax treescope
 ```
 
 ```{code-cell} ipython3
@@ -77,7 +77,7 @@ print(y)
 nnx.display(model)
 ```
 
-The above visualization by `nnx.display` is generated using the awesome [Penzai](https://penzai.readthedocs.io/en/stable/index.html#) library.
+The above visualization by `nnx.display` is generated using the awesome [Treescope](https://treescope.readthedocs.io/en/stable/index.html#) library.
 
 +++
 
