@@ -194,7 +194,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       for key, value in vars(self).items()
       if key != '_object__state'
     )
-    return nodes, type(self)
+    return nodes, (type(self), self._object__state._initializing)
 
   def _graph_node_set_key(self, key: Key, value: tp.Any):
     if not isinstance(key, str):
@@ -214,9 +214,10 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     return vars(self).pop(key)
 
   @staticmethod
-  def _graph_node_create_empty(node_type: tp.Type[G]) -> G:
+  def _graph_node_create_empty(static: tuple[tp.Type[G], bool]) -> G:
+    node_type, initializing = static
     node = object.__new__(node_type)
-    vars(node).update(_object__state=ObjectState())
+    vars(node).update(_object__state=ObjectState(initializing))
     return node
 
   def _graph_node_clear(self):

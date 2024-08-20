@@ -20,7 +20,7 @@ import jax.numpy as jnp
 import pytest
 from absl.testing import absltest
 
-from flax import nnx, struct
+from flax import nnx, struct, linen
 
 
 class StatefulLinear(nnx.Module):
@@ -470,6 +470,37 @@ class TestGraphUtils(absltest.TestCase):
     self.assertEqual(nodes['a'].count.value, 0)
     self.assertEqual(nodes['b'].count.value, 1)
 
+  def test_object_state_propagation(self):
+    test = self
+
+    class Foo(nnx.Module):
+      def __call__(self):
+        test.assertTrue(self._object__state.initializing)
+        self = nnx.merge(*nnx.split(self))
+        test.assertTrue(self._object__state.initializing)
+
+    module = Foo()
+    nnx.bridge.lazy_init(module)
+
+  def test_object_state_propagation_nested(self):
+    class NNXOuter(nnx.Module):
+      def __init__(self, dout: int, rngs: nnx.Rngs):
+        self.inner = nnx.bridge.ToNNX(linen.Dense(dout), rngs=rngs)
+        self.rngs = rngs
+
+      def __call__(self, x):
+        @partial(nnx.vmap, in_axes=None, state_axes={...: 0}, axis_size=5)
+        def vmap_fn(inner, x):
+          return inner(x)
+
+        return vmap_fn(self.inner, x)
+
+    x = jax.random.normal(jax.random.key(0), (2, 4))
+    model = NNXOuter(3, rngs=nnx.Rngs(0))
+    nnx.bridge.lazy_init(model, x)
+
+    self.assertEqual(model.inner.params['kernel'].shape, (5, 4, 3))
+    self.assertEqual(model.inner.params['bias'].shape, (5, 3))
 
 class SimpleModule(nnx.Module):
   pass

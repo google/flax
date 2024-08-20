@@ -111,7 +111,7 @@ class List(Module, tp.Generic[A]):
       if key not in ('_object__state', '_length')
     )
     nodes.append(('_length', self._length))
-    return nodes, type(self)
+    return nodes, (type(self), self._object__state._initializing)
 
   def _graph_node_set_key(self, key: Key, value: tp.Any):
     if isinstance(key, int):
