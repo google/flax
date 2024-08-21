@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
+
 from absl.testing import absltest
 import flax
 from flax import linen as nn
@@ -104,6 +106,26 @@ class TestCompatibility(absltest.TestCase):
     y = model(x, mutable=True)
     assert nnx.state(model).counter.count.value == 1
 
+  def test_linen_to_nnx_transform(self):
+    class NNXOuter(nnx.Module):
+      def __init__(self, dout: int, rngs: nnx.Rngs):
+        self.inner = nnx.bridge.ToNNX(nn.Dense(dout), rngs=rngs)
+        self.rngs = rngs
+
+      def __call__(self, x):
+        @partial(nnx.vmap, in_axes=None, state_axes={...: 0}, axis_size=5)
+        def vmap_fn(inner, x):
+          return inner(x)
+
+        return vmap_fn(self.inner, x)
+
+    x = jax.random.normal(jax.random.key(0), (2, 4))
+    model = NNXOuter(3, rngs=nnx.Rngs(0))
+    nnx.bridge.lazy_init(model, x)
+
+    self.assertEqual(model.inner.params['kernel'].shape, (5, 4, 3))
+    self.assertEqual(model.inner.params['bias'].shape, (5, 3))
+
   ##################
   ### NNXToLinen ###
   ##################
@@ -114,6 +136,8 @@ class TestCompatibility(absltest.TestCase):
     y, variables = model.init_with_output(jax.random.key(0), x)
     assert y.shape == (1, 64)
     np.testing.assert_allclose(y, x @ variables['params']['kernel'].value)
+    assert 'nnx' in variables
+    assert isinstance(variables['nnx']['graphdef'], nnx.GraphDef)
 
   def test_nnx_to_linen_multiple_rngs(self):
     class NNXInner(nnx.Module):
@@ -200,6 +224,62 @@ class TestCompatibility(absltest.TestCase):
     assert updates['Count']['count_nonzero'].value == 1
     _ = model.apply(variables | updates)
 
+  def test_nnx_to_linen_transforms(self):
+    class LinenOuter(nn.Module):
+      dout: int
+      @nn.compact
+      def __call__(self, x):
+        inner = nn.vmap(
+          bridge.ToLinen,
+          variable_axes={'params': 0, 'nnx': None},
+          split_rngs={'params': True}
+        )(nnx.Linear, args=(x.shape[-1], self.dout))
+        return inner(x)
+
+    xkey, pkey, _ = jax.random.split(jax.random.key(0), 3)
+    x = jax.random.normal(xkey, (2, 4))
+    model = LinenOuter(dout=3)
+    y, var = model.init_with_output(pkey, x)
+    k = var['params']['VmapToLinen_0']['kernel'].value
+    assert k.shape == (2, 4, 3)
+    np.testing.assert_allclose(y, jnp.einsum('ab,abc->ac', x, k))
+    assert 'nnx' in var
+
+  ############################
+  ### Hybrid mix-and-match ###
+  ############################
+
+  def test_nnx_linen_nnx(self):
+    class NNXInner(nnx.Module):
+      def __init__(self, din, dout, rngs):
+        self.w = nnx.Param(nnx.initializers.lecun_normal()(rngs.params(), (din, dout)))
+        self.dropout = nnx.Dropout(rate=0.5, rngs=rngs)
+      def __call__(self, x):
+        return self.dropout(x @ self.w.value)
+
+    class LinenMiddle(nn.Module):
+      dout: int
+      @nn.compact
+      def __call__(self, x):
+        dot = bridge.to_linen(NNXInner, x.shape[-1], self.dout, name='linen')
+        b = self.param('b', nn.zeros_init(), (1, self.dout))
+        return dot(x) + b
+
+    class NNXOuter(nnx.Module):
+      def __init__(self, dout: int, *, rngs: nnx.Rngs):
+        self.inner = bridge.ToNNX(LinenMiddle(dout), rngs=rngs)
+        self.rngs = rngs
+      def __call__(self, x):
+        return self.inner(x)
+
+    x = jax.random.normal(jax.random.key(0), (2, 4))
+    model = bridge.lazy_init(NNXOuter(3, rngs=nnx.Rngs(default=1, dropout=2)), x)
+    y1, y2 = model(x), model(x)
+    # The dropout key of lowest NNX level still changes over stateful calls
+    assert not jnp.allclose(y1, y2)
+    # Reseed resets the RNG key back
+    nnx.reseed(model, dropout=2)
+    np.testing.assert_array_equal(y1, model(x))
 
 if __name__ == '__main__':
   absltest.main()
