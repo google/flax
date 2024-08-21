@@ -16,10 +16,11 @@ import os
 import pathlib
 import tempfile
 
-import input_pipeline
-import tensorflow_datasets as tfds
 from absl.testing import absltest
+import tensorflow_datasets as tfds
+
 from configs import default
+import input_pipeline
 
 # We just use different values here to verify that the input pipeline uses the
 # the correct value for the 3 different datasets.
@@ -29,6 +30,7 @@ _PREDICT_TARGET_LENGTH = 64
 
 
 class InputPipelineTest(absltest.TestCase):
+
   def setUp(self):
     super().setUp()
     self.train_ds, self.eval_ds, self.predict_ds = self._get_datasets()

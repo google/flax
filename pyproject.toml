@@ -11,10 +11,10 @@ authors = [
     {name = "Flax team", email = "flax-dev@google.com"},
 ]
 dependencies = [
-    "numpy>=1.22",
     "numpy>=1.23.2; python_version>='3.11'",
     "numpy>=1.26.0; python_version>='3.12'",
-    "jax>=0.4.27",  # keep in sync with jax-version in .github/workflows/build.yml
+    # keep in sync with jax-version in .github/workflows/build.yml
+    "jax>=0.4.27",
     "msgpack",
     "optax",
     "orbax-checkpoint",
@@ -40,7 +40,7 @@ all = [
     "matplotlib",  # only needed for tensorboard export
 ]
 testing = [
-    "clu",  # All examples.
+    "clu",
     "clu<=0.0.9; python_version<'3.10'",
     "einops",
     "gymnasium[atari, accept-rom-license]",
@@ -55,15 +55,41 @@ testing = [
     "pytest-custom_exit_code",
     "pytest-xdist",
     "pytype",
-    "sentencepiece",  # WMT/LM1B examples
-    "tensorflow_text>=2.11.0",  # WMT/LM1B examples
+    # WMT/LM1B examples
+    "sentencepiece",
+    "tensorflow_text>=2.11.0; platform_system!='Darwin'",
     "tensorflow_datasets",
     "tensorflow>=2.12.0", # to fix Numpy np.bool8 deprecation error
     "torch",
-    "nbstripout",
-    "black[jupyter]==23.7.0",
-    # "pyink==23.5.0", # disabling pyink fow now
     "treescope>=0.1.1; python_version>='3.10'",
+]
+docs = [
+    "sphinx>=3.3.1",
+    "sphinx-book-theme",
+    "Pygments>=2.6.1",
+    "ipykernel",
+    "myst_nb",
+    "nbstripout",
+    "recommonmark",
+    "ipython_genutils",
+    "sphinx-design",
+    "jupytext==1.13.8",
+    "dm-haiku",
+
+    # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
+    # ReadTheDocs: https://stackoverflow.com/a/68008428
+    "docutils==0.16",
+
+    # The next packages are for notebooks.
+    "matplotlib",
+    "scikit-learn",
+    # The next packages are used in testcode blocks.
+    "ml_collections",
+    # notebooks
+    "einops",
+]
+dev = [
+    "pre-commit>=3.8.0",
 ]
 
 [project.urls]
@@ -151,6 +177,10 @@ filterwarnings = [
     "ignore:.*jax.xla_computation is deprecated.*:DeprecationWarning",
     # Orbax warnings inside deprecated `flax.training` package.
     "ignore:.*Couldn't find sharding info under RestoreArgs.*:UserWarning",
+    # numpy: RuntimeWarning: invalid value encountered in cast
+    "ignore:.*invalid value encountered in cast.*:RuntimeWarning",
+    # numpy: RuntimeWarning: divide by zero encountered in {not_}equal
+    "ignore:.*divide by zero encountered in.*:RuntimeWarning",
 ]
 
 [tool.coverage.report]
@@ -190,3 +220,4 @@ unfixable = []
 [tool.ruff.format]
 indent-style = "space"
 quote-style = "single"
+
