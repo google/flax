@@ -902,7 +902,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
 def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):
   metadata = tuple(x.get_metadata().items())
   if with_keys:
-    node = (jtu.GetAttrKey('raw_value'), x.value)
+    node = (jtu.GetAttrKey('value'), x.value)
   else:
     node = x.value
 

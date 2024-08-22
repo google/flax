@@ -60,7 +60,7 @@ def functional(cls: tp.Type[M]) -> tp.Callable[..., Functional[M]]:
 
 
 def _set_initializing(module: Module, initializing: bool):
-  for _, value in graph.iter_graph(module):
+  for k, value in graph.iter_graph(module):
     if isinstance(value, Object):
       value._object__state._initializing = initializing
 
@@ -73,7 +73,8 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
     module = fn
     assert callable(fn)
   else:
-    assert hasattr(fn, '__self__') and isinstance(fn.__self__, Module), f'{fn = } needs to be a method of an NNX Module.'
+    if not hasattr(fn, '__self__') and isinstance(fn.__self__, Module):
+      raise ValueError(f'{fn = } needs to be a method of an NNX Module.')
     module = fn.__self__
   _set_initializing(module, True)
   try:
@@ -98,9 +99,9 @@ class ToNNX(Module):
     >>> import jax
     >>> linen_module = nn.Dense(features=64)
     >>> x = jax.numpy.ones((1, 32))
-    >>> # Like Linen, initialize with a sample input
+    >>> # Like Linen init(), initialize with a sample input
     >>> model = nnx.bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)).lazy_init(x)
-    >>> # Like Linen apply, but using NNX's direct call method
+    >>> # Like Linen apply(), but using NNX's direct call method
     >>> y = model(x)
     >>> nnx.state(model).params.kernel.value.shape
     (32, 64)
@@ -242,11 +243,13 @@ class ToLinen(linen.Module):
       if not self.skip_rng:
         module_kwargs |= dict(rngs=nnx.Rngs(**linen_rngs_dict(self)))
       module = self.nnx_class(*self.args, **module_kwargs)
+      # TODO: add lazy_init here in case there's an `ToNNX` submodule under `module`.
       self.update_variables(module)
       return module(*args, **kwargs)
 
     # apply codepath
     gdef = self.get_variable('nnx', 'graphdef')
+    assert gdef, 'GraphDef not found in variables. Was the collection "nnx" dropped somewhere?'
     states = [State(state) for col, state in self.variables.items() if col != 'nnx']
     nnx_state = nnx.GraphState.merge(*states) if states else nnx.GraphState({})
     module = nnx.merge(gdef, nnx_state)
@@ -256,6 +259,7 @@ class ToLinen(linen.Module):
     return out
 
 
-def to_linen(nnx_class: tp.Callable[..., Module], *args, **kwargs):
-  """Shortcut of `ToLinen` if user is not changing any of its default fields."""
-  return ToLinen(nnx_class, args=args, kwargs=kwargs)
+def to_linen(nnx_class: tp.Callable[..., Module], *args,
+             name: str | None = None, **kwargs):
+  """Shortcut of `ToLinen` if user is not changing any of `ToLinen` default fields."""
+  return ToLinen(nnx_class, args=args, kwargs=kwargs, name=name)
