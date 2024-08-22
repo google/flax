@@ -58,9 +58,14 @@ To contribute code to Flax on GitHub, follow these steps:
    ```bash
    git clone https://github.com/YOUR_USERNAME/flax
    cd flax
-   pip install -e ".[all]"
-   pip install -e ".[testing]"
-   pip install -r docs/requirements.txt
+   pip install -e ".[all,testing,docs]"
+   ```
+
+   You can also use [uv](https://docs.astral.sh/uv/) to setup
+   the development environment:
+
+   ```bash
+   uv sync --all-extras
    ```
 
 5. Set up pre-commit hooks, this will run some automated checks during each `git` commit and
@@ -129,6 +134,20 @@ To contribute code to Flax on GitHub, follow these steps:
 
 You can learn more in GitHub's [Creating a pull request from a fork
 ](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork). documentation.
+
+### Adding or updating dependencies
+
+To add or update dependencies, you must use `uv` after
+updating the `pyproject.toml` file to ensure that the `uv.lock` file is up-to-date.
+
+```bash
+uv sync --all-extras
+```
+Alternatively use can use `uv add` to add or update the dependencies automatically, for example:
+
+```bash
+uv add 'some-package>=1.2.3'
+```
 
 ### Updating Jupyter Notebooks
 

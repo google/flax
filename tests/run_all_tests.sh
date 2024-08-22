@@ -1,10 +1,11 @@
 #!/bin/bash
 
+# export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 PYTEST_OPTS=
-RUN_DOCTEST=true
-RUN_MYPY=true
-RUN_PYTEST=true
-RUN_PYTYPE=true
+RUN_DOCTEST=false
+RUN_MYPY=false
+RUN_PYTEST=false
+RUN_PYTYPE=false
 GH_VENV=false
 
 for flag in "$@"; do
@@ -17,17 +18,17 @@ case $flag in
   echo "  --with-cov: Also generate pytest coverage."
   exit
   ;;
-  --no-doctest)
-  RUN_DOCTEST=false
+  --only-doctest)
+  RUN_DOCTEST=true
   ;;
-  --no-pytest)
-  RUN_PYTEST=false
+  --only-pytest)
+  RUN_PYTEST=true
   ;;
-  --no-pytype)
-  RUN_PYTYPE=false
+  --only-pytype)
+  RUN_PYTYPE=true
   ;;
-  --no-mypy)
-  RUN_MYPY=false
+  --only-mypy)
+  RUN_MYPY=true
   ;;
   --use-venv)
   GH_VENV=true
@@ -39,9 +40,17 @@ case $flag in
 esac
 done
 
+# if neither --only-doctest, --only-pytest, --only-pytype, --only-mypy is set, run all tests
+if ! $RUN_DOCTEST && ! $RUN_PYTEST && ! $RUN_PYTYPE && ! $RUN_MYPY; then
+  RUN_DOCTEST=true
+  RUN_PYTEST=true
+  RUN_PYTYPE=true
+  RUN_MYPY=true
+fi
+
 # Activate cached virtual env for github CI
 if $GH_VENV; then
-  source $(dirname "$0")/../venv/bin/activate
+  source $(dirname "$0")/../.venv/bin/activate
 fi
 
 echo "====== test config ======="

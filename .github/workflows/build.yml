@@ -70,12 +70,15 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
+    - uses: yezz123/setup-uv@v4
+      with:
+        uv-version: "0.3.0"
     - name: Install standalone dependencies only
       run: |
-        pip install -e .[all]
+        uv sync --locked --extra all
     - name: Test importing Flax
       run: |
-        python -c "import flax"
+        uv run python -c "import flax"
   tests:
     name: Run Tests
     needs: [cancel-previous, pre-commit, commit-count, test-import]
@@ -101,51 +104,40 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Get week and year
-      id: date_key
-      run: echo "DATE=$(date +%j)" >> $GITHUB_OUTPUT
-    # TODO(cgarciae): caching is breaking the install step, disabling for now.
-    # - name: Cached virtual environment
-    #   id: venv_cache
-    #   uses: actions/cache@v3
-    #   with:
-    #     path: venv
-    #     key: pip-${{ steps.setup_python.outputs.python-version }}-${{ steps.date_key.outputs.DATE }}-${{ hashFiles('**/requirements.txt', 'pyproject.toml') }}
+    - uses: yezz123/setup-uv@v4
+      with:
+        uv-version: "0.3.0"
+    - name: Cached virtual environment
+      id: venv_cache
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: pip-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('uv.lock') }}
     - name: Install Dependencies for cache
       if: steps.venv_cache.outputs.cache-hit != 'true'
       run: |
-        if [ -d "venv" ]; then rm -rf venv; fi
-        python3 -m venv venv
-        venv/bin/python3 -m pip install .[all,testing]
-        venv/bin/python3 -m pip install tensorflow_datasets[dev]
-        venv/bin/python3 -m pip install -r docs/requirements.txt
-    - name: Install Flax
+        if [ -d ".venv" ]; then rm -rf .venv; fi
+        uv sync --locked --all-extras
+    - name: Check lockfile
       run: |
-        venv/bin/python3 -m pip install -e .[all,testing]
+        uv sync --locked --all-extras
     - name: Install JAX
       run: |
         if [[ "${{ matrix.jax-version }}" == "newest" ]]; then
-          venv/bin/python3 -m pip install -U jax jaxlib
+          uv pip install -U jax jaxlib
         else
-          venv/bin/python3 -m pip install "jax==${{ matrix.jax-version }}" "jaxlib==${{ matrix.jax-version }}"
+          uv pip install "jax==${{ matrix.jax-version }}" "jaxlib==${{ matrix.jax-version }}"
         fi
-    - name: Cached mypy cache
-      id: mypy_cache
-      uses: actions/cache@v3
-      if: matrix.test-type == 'mypy'
-      with:
-        path: .mypy_cache
-        key: mypy-${{ steps.setup_python.outputs.python-version }}-${{ steps.date_key.outputs.DATE }}
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
-          tests/run_all_tests.sh --no-pytest --no-pytype --no-mypy --use-venv
+          uv run tests/run_all_tests.sh --only-doctest
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
-          tests/run_all_tests.sh --no-doctest --no-pytype --no-mypy --with-cov --use-venv
+          uv run tests/run_all_tests.sh --only-pytest
         elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
-          tests/run_all_tests.sh --no-doctest --no-pytest --no-mypy --use-venv
+          uv run tests/run_all_tests.sh --only-pytype
         elif [[ "${{ matrix.test-type }}" == "mypy" ]]; then
-          tests/run_all_tests.sh --no-doctest --no-pytest --no-pytype --use-venv
+          uv run tests/run_all_tests.sh --only-mypy
         else
           echo "Unknown test type: ${{ matrix.test-type }}"
           exit 1
