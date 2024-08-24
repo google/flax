@@ -125,7 +125,7 @@ from .nnx.training import metrics as metrics
 from .nnx.variables import (
   Param as Param,
   register_variable_name_type_pair as register_variable_name_type_pair,
-) 
+)
 # this needs to be imported before optimizer to prevent circular import
 from .nnx.training import optimizer as optimizer
 from .nnx.training.metrics import Metric as Metric

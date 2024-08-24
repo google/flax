@@ -40,7 +40,6 @@ from flax.nnx.nnx.state import State
 from flax.nnx.nnx.transforms.transforms import resolve_kwargs
 from flax.typing import Leaf, MISSING, Missing, PytreeDeque
 import jax
-from jax._src.tree_util import broadcast_prefix
 import jax.core
 import jax.numpy as jnp
 import jax.stages

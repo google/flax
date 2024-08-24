@@ -437,7 +437,10 @@ def split_rngs(
       key = stream()
       backups.append((stream, stream.key.value, stream.count.value))
       stream.key.value = jax.random.split(key, splits)
-      counts_shape = (splits, *stream.count.shape)
+      if isinstance(splits, int):
+        counts_shape = (splits, *stream.count.shape)
+      else:
+        counts_shape = (*splits, *stream.count.shape)
       stream.count.value = jnp.zeros(counts_shape, dtype=jnp.uint32)
 
   return SplitBackups(backups)
