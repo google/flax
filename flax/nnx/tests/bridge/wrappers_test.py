@@ -42,6 +42,11 @@ class TestCompatibility(absltest.TestCase):
     model = bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)).lazy_init(x)  # like linen init
     y = model(x)  # like linen apply
     assert y.shape == (1, 64)
+    self.assertIsInstance(model.params['kernel'], nnx.Variable)
+    # NNX automatically adds metadata box regardless of original Linen module.
+    linen_vars = linen_module.init(jax.random.key(0), x)
+    np.testing.assert_array_equal(linen_vars['params']['kernel'],
+                                  model.params['kernel'].value)
 
   def test_linen_to_nnx_submodule(self):
     class NNXOuter(nnx.Module):
@@ -126,6 +131,26 @@ class TestCompatibility(absltest.TestCase):
 
     self.assertEqual(model.inner.params['kernel'].shape, (5, 4, 3))
     self.assertEqual(model.inner.params['bias'].shape, (5, 3))
+
+  def test_linen_to_nnx_metadata(self):
+    linen_module = nn.Dense(
+      features=64,
+      kernel_init=nn.with_partitioning(nn.initializers.lecun_normal(), ('in', 'out')))
+    x = jax.numpy.ones((1, 32))
+    linen_vars = linen_module.init(jax.random.key(0), x)
+    nnx_model = bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)).lazy_init(x)
+    # nn.Partitioned metadata box is translated into a valid nnx.Variable / VariableState box.
+    self.assertIsInstance(linen_vars['params']['kernel'], nn.Partitioned)
+    self.assertIsInstance(nnx_model.params['kernel'], nnx.Variable)
+    np.testing.assert_array_equal(linen_vars['params']['kernel'].value,
+                                  nnx_model.params['kernel'].value)
+    assert nnx_model.params['kernel'].sharding == ('in', 'out')
+    _, nnx_state = nnx.split(nnx_model)
+    self.assertIsInstance(nnx_state['params']['kernel'], nnx.VariableState)
+    np.testing.assert_array_equal(linen_vars['params']['kernel'].value,
+                                  nnx_state['params']['kernel'].value)
+    assert nnx_state['params']['kernel'].sharding == ('in', 'out')
+
 
   ##################
   ### NNXToLinen ###
@@ -246,41 +271,76 @@ class TestCompatibility(absltest.TestCase):
     np.testing.assert_allclose(y, jnp.einsum('ab,abc->ac', x, k))
     assert 'nnx' in var
 
+  def test_nnx_to_linen_metadata(self):
+    model = bridge.to_linen(
+      nnx.Linear, 32, 64,
+      kernel_init=nnx.with_partitioning(nnx.initializers.lecun_normal(), ('in', 'out')))
+    x = jax.numpy.ones((1, 32))
+    y, variables = model.init_with_output(jax.random.key(0), x)
+    assert y.shape == (1, 64)
+    self.assertIsInstance(variables['params']['kernel'], nnx.bridge.NNXMeta)
+    assert variables['params']['kernel'].metadata['sharding'] == ('in', 'out')
+    np.testing.assert_allclose(y, x @ variables['params']['kernel'].value)
+
+  def test_nnx_to_linen_metadata_transform(self):
+    # TODO: add support and testing after axis add/remove in transform is fixed.
+    pass
+
   ############################
   ### Hybrid mix-and-match ###
   ############################
 
   def test_nnx_linen_nnx(self):
     class NNXInner(nnx.Module):
-      def __init__(self, din, dout, rngs):
-        self.w = nnx.Param(nnx.initializers.lecun_normal()(rngs.params(), (din, dout)))
-        self.dropout = nnx.Dropout(rate=0.5, rngs=rngs)
+      def __init__(self, din, dout, dropout_rate, rngs):
+        self.w = nnx.Param(
+          nnx.with_partitioning(nnx.initializers.lecun_normal(), sharding=('in', 'out')
+                                )(rngs.params(), (din, dout)))
+        self.dropout = nnx.Dropout(rate=dropout_rate, rngs=rngs)
       def __call__(self, x):
         return self.dropout(x @ self.w.value)
 
     class LinenMiddle(nn.Module):
       dout: int
+      dropout_rate: float
       @nn.compact
       def __call__(self, x):
-        dot = bridge.to_linen(NNXInner, x.shape[-1], self.dout, name='linen')
-        b = self.param('b', nn.zeros_init(), (1, self.dout))
+        dot = bridge.to_linen(NNXInner, x.shape[-1], self.dout, self.dropout_rate, name='dot')
+        b = self.param('b', nn.initializers.lecun_normal(), (1, self.dout))
         return dot(x) + b
 
     class NNXOuter(nnx.Module):
-      def __init__(self, dout: int, *, rngs: nnx.Rngs):
-        self.inner = bridge.ToNNX(LinenMiddle(dout), rngs=rngs)
+      def __init__(self, dout: int, dropout_rate: float, *, rngs: nnx.Rngs):
+        self.inner = bridge.ToNNX(LinenMiddle(dout, dropout_rate), rngs=rngs)
         self.rngs = rngs
       def __call__(self, x):
         return self.inner(x)
 
     x = jax.random.normal(jax.random.key(0), (2, 4))
-    model = bridge.lazy_init(NNXOuter(3, rngs=nnx.Rngs(default=1, dropout=2)), x)
+
+    # Test the RNG
+    model = bridge.lazy_init(NNXOuter(dout=3, dropout_rate=0.5,
+                                      rngs=nnx.Rngs(default=1, dropout=2)), x)
     y1, y2 = model(x), model(x)
     # The dropout key of lowest NNX level still changes over stateful calls
     assert not jnp.allclose(y1, y2)
     # Reseed resets the RNG key back
     nnx.reseed(model, dropout=2)
     np.testing.assert_array_equal(y1, model(x))
+
+    # Test the param value with disabled dropout
+    model = bridge.lazy_init(NNXOuter(dout=3, dropout_rate=0.,
+                                      rngs=nnx.Rngs(default=1, dropout=2)), x)
+    w, b = model.inner.params['dot']['w'], model.inner.params['b']
+    self.assertIsInstance(w, nnx.Param)
+    np.testing.assert_allclose(model(x), x @ w + b)
+    assert hasattr(w, 'sharding') and w.sharding == ('in', 'out')
+
+  def test_linen_nnx_linen(self):
+    # TODO: add when we can safely `lazy_init` the NNX module inside `ToLinen` without
+    # messing up the stateful part of the NNX module.
+    pass
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -23,3 +23,4 @@ from .wrappers import ToNNX as ToNNX
 from .wrappers import lazy_init as lazy_init
 from .wrappers import ToLinen as ToLinen
 from .wrappers import to_linen as to_linen
+from .variables import NNXMeta as NNXMeta
