@@ -96,7 +96,7 @@ class TestPartitioning:
     state = nnx.split(
       m,
     )[1]
-    state = jax.tree_util.tree_map(lambda x: x * 2, state)
+    state = jax.tree.map(lambda x: x * 2, state)
 
     nnx.update(m, state)
 
@@ -115,7 +115,7 @@ class TestPartitioning:
     graphdef, state = nnx.split(
       m,
     )
-    state = jax.tree_util.tree_map(lambda x: x * 2, state)
+    state = jax.tree.map(lambda x: x * 2, state)
 
     nnx.update(m, state)
 

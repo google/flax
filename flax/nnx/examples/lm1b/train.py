@@ -303,12 +303,10 @@ def per_host_sum_pmap(in_tree):
   host_psum = jax.pmap(lambda x: jax.lax.psum(x, 'i'), 'i', devices=devices)
 
   def pre_pmap(xs):
-    return jax.tree_util.tree_map(
-      lambda x: jnp.broadcast_to(x, (1,) + x.shape), xs
-    )
+    return jax.tree.map(lambda x: jnp.broadcast_to(x, (1,) + x.shape), xs)
 
   def post_pmap(xs):
-    return jax.tree_util.tree_map(lambda x: x[0], xs)
+    return jax.tree.map(lambda x: x[0], xs)
 
   return post_pmap(host_psum(pre_pmap(in_tree)))
 
@@ -331,13 +329,13 @@ def evaluate(
   eval_metrics = []
   eval_iter = iter(eval_ds)  # pytype: disable=wrong-arg-types
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
-    eval_batch = jax.tree_util.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
+    eval_batch = jax.tree.map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
     metrics = jit_eval_step(state.params, eval_batch, state.graphdef)
     eval_metrics.append(metrics)
   eval_metrics = common_utils.stack_forest(eval_metrics)
-  eval_metrics_sums = jax.tree_util.tree_map(jnp.sum, eval_metrics)
+  eval_metrics_sums = jax.tree.map(jnp.sum, eval_metrics)
   eval_denominator = eval_metrics_sums.pop('denominator')
-  eval_summary = jax.tree_util.tree_map(
+  eval_summary = jax.tree.map(
     lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
     eval_metrics_sums,
   )
@@ -368,7 +366,7 @@ def generate_prediction(
     cur_pred_batch_size = pred_batch.shape[0]
     if cur_pred_batch_size % n_devices:
       padded_size = int(np.ceil(cur_pred_batch_size / n_devices) * n_devices)
-      pred_batch = jax.tree_util.tree_map(
+      pred_batch = jax.tree.map(
         lambda x: pad_examples(x, padded_size), pred_batch
       )  # pylint: disable=cell-var-from-loop
     pred_batch = common_utils.shard(pred_batch)
@@ -538,7 +536,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
       predict_step,
       in_axes=(
         0,
-        jax.tree_util.tree_map(lambda x: None, state.params),
+        jax.tree.map(lambda x: None, state.params),
         0,
         None,
         None,
@@ -582,7 +580,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation('train', step_num=step):
         batch = next(train_iter)
-        batch = jax.tree_util.tree_map(lambda x: jnp.asarray(x), batch)
+        batch = jax.tree.map(lambda x: jnp.asarray(x), batch)
         state, metrics = jit_train_step(
           state, batch, learning_rate_fn, 0.0, dropout_rngs
         )
@@ -599,11 +597,9 @@ def train_and_evaluate(config: default.Config, workdir: str):
           logging.info('Gathering training metrics.')
           train_metrics = common_utils.stack_forest(train_metrics)
           lr = train_metrics.pop('learning_rate').mean()
-          metrics_sums = jax.tree_util.tree_map(jnp.sum, train_metrics)
+          metrics_sums = jax.tree.map(jnp.sum, train_metrics)
           denominator = metrics_sums.pop('denominator')
-          summary = jax.tree_util.tree_map(
-            lambda x: x / denominator, metrics_sums
-          )  # pylint: disable=cell-var-from-loop
+          summary = jax.tree.map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
           summary['learning_rate'] = lr
           summary['perplexity'] = jnp.clip(jnp.exp(summary['loss']), max=1.0e4)
           summary = {'train_' + k: v for k, v in summary.items()}

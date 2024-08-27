@@ -205,7 +205,7 @@ class LinearGeneral(Module):
         * np.prod(shape[n_batch_axis : n_in_features + n_batch_axis]),
         np.prod(shape[-n_out_features:]),
       )
-      flat_shape = jax.tree_util.tree_map(int, flat_shape)
+      flat_shape = jax.tree.map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, variables.VariableMetadata):
         kernel.raw_value = jnp.reshape(kernel.raw_value, shape)

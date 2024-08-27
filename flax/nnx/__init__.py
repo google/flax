@@ -25,6 +25,8 @@ from .nnx import helpers as helpers
 from .nnx import bridge as bridge
 from .nnx import traversals as traversals
 from .nnx import filterlib as filterlib
+from .nnx import transforms as transforms
+from .nnx import extract as extract
 from .nnx.filterlib import WithTag as WithTag
 from .nnx.filterlib import PathContains as PathContains
 from .nnx.filterlib import OfType as OfType
@@ -35,7 +37,7 @@ from .nnx.filterlib import Everything as Everything
 from .nnx.filterlib import Nothing as Nothing
 from .nnx.graph import GraphDef as GraphDef
 from .nnx.graph import GraphState as GraphState
-from .nnx.graph import GraphDefState as GraphDefState
+from .nnx.graph import PureState as PureState
 from .nnx.object import Object as Object
 from .nnx.helpers import Dict as Dict
 from .nnx.helpers import List as List
@@ -55,6 +57,10 @@ from .nnx.graph import state as state
 from .nnx.graph import graphdef as graphdef
 from .nnx.graph import iter_graph as iter_graph
 from .nnx.graph import call as call
+from .nnx.graph import SplitContext as SplitContext
+from .nnx.graph import split_context as split_context
+from .nnx.graph import MergeContext as MergeContext
+from .nnx.graph import merge_context as merge_context
 from .nnx.nn import initializers as initializers
 from .nnx.nn.activations import celu as celu
 from .nnx.nn.activations import elu as elu
@@ -107,6 +113,8 @@ from .nnx.rnglib import RngCount as RngCount
 from .nnx.rnglib import ForkStates as ForkStates
 from .nnx.rnglib import fork as fork
 from .nnx.rnglib import reseed as reseed
+from .nnx.rnglib import split_rngs as split_rngs
+from .nnx.rnglib import restore_rngs as restore_rngs
 from .nnx.spmd import PARTITION_NAME as PARTITION_NAME
 from .nnx.spmd import get_partition_spec as get_partition_spec
 from .nnx.spmd import get_named_sharding as get_named_sharding
@@ -117,25 +125,31 @@ from .nnx.training import metrics as metrics
 from .nnx.variables import (
   Param as Param,
   register_variable_name_type_pair as register_variable_name_type_pair,
-)  # this needs to be imported before optimizer to prevent circular import
+) 
+# this needs to be imported before optimizer to prevent circular import
 from .nnx.training import optimizer as optimizer
 from .nnx.training.metrics import Metric as Metric
 from .nnx.training.metrics import MultiMetric as MultiMetric
 from .nnx.training.optimizer import Optimizer as Optimizer
-from .nnx.transforms.transforms import Jit as Jit
-from .nnx.transforms.transforms import Remat as Remat
-from .nnx.transforms.looping import Scan as Scan
-from .nnx.transforms.parallelization import Vmap as Vmap
-from .nnx.transforms.parallelization import Pmap as Pmap
-from .nnx.transforms.transforms import grad as grad
-from .nnx.transforms.transforms import jit as jit
-from .nnx.transforms.transforms import remat as remat
-from .nnx.transforms.looping import scan as scan
-from .nnx.transforms.transforms import value_and_grad as value_and_grad
-from .nnx.transforms.parallelization import vmap as vmap
-from .nnx.transforms.parallelization import pmap as pmap
+from .nnx.transforms.deprecated import Jit as Jit
+from .nnx.transforms.deprecated import Remat as Remat
+from .nnx.transforms.deprecated import Scan as Scan
+from .nnx.transforms.deprecated import Vmap as Vmap
+from .nnx.transforms.deprecated import Pmap as Pmap
+from .nnx.transforms.autodiff import DiffState as DiffState
+from .nnx.transforms.autodiff import grad as grad
+from .nnx.transforms.autodiff import value_and_grad as value_and_grad
+from .nnx.transforms.autodiff import custom_vjp as custom_vjp
+from .nnx.transforms.autodiff import remat as remat
+from .nnx.transforms.compilation import jit as jit
+from .nnx.transforms.compilation import StateSharding as StateSharding
+from .nnx.transforms.iteration import Carry as Carry
+from .nnx.transforms.iteration import scan as scan
+from .nnx.transforms.iteration import vmap as vmap
+from .nnx.transforms.iteration import pmap as pmap
 from .nnx.transforms.transforms import eval_shape as eval_shape
 from .nnx.transforms.transforms import cond as cond
+from .nnx.transforms.iteration import StateAxes as StateAxes
 from .nnx.variables import EMPTY as EMPTY
 from .nnx.variables import A as A
 from .nnx.variables import BatchStat as BatchStat
@@ -147,3 +161,4 @@ from .nnx.variables import VariableState as VariableState
 from .nnx.variables import VariableMetadata as VariableMetadata
 from .nnx.variables import with_metadata as with_metadata
 from .nnx.visualization import display as display
+from .nnx.extract import to_tree, from_tree, TreeNode

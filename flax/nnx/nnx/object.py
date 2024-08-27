@@ -122,13 +122,13 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
 
   def _setattr(self, name: str, value: tp.Any) -> None:
     self.check_valid_context(
-      f"Cannot mutate '{type(self).__name__}' from different trace level"
+      lambda: f"Cannot mutate '{type(self).__name__}' from different trace level"
     )
     object.__setattr__(self, name, value)
 
-  def check_valid_context(self, error_msg: str) -> None:
+  def check_valid_context(self, error_msg: tp.Callable[[], str]) -> None:
     if not self._object__state.trace_state.is_valid():
-      raise errors.TraceContextError(error_msg)
+      raise errors.TraceContextError(error_msg())
 
   def __deepcopy__(self: G, memo=None) -> G:
     graphdef, state = graph.split(self)

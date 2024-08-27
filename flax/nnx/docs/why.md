@@ -243,7 +243,7 @@ y = ensemble(x)
 
 print(f'{y.shape = }')
 print(f'{ensemble.models.count = }')
-print(f'state = {jax.tree_util.tree_map(jnp.shape, ensemble.get_state())}')
+print(f'state = {jax.tree.map(jnp.shape, ensemble.get_state())}')
 ```
 
 #### Convenience lifted transforms
@@ -405,5 +405,5 @@ model = Example(in_filters=3,
                 rngs=nnx.Rngs(0))
 
 graphdef, state = model.split()
-jax.tree_util.tree_map(jnp.shape, state)
+jax.tree.map(jnp.shape, state)
 ```

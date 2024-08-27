@@ -117,7 +117,9 @@ class State(MutableMapping[K, V], reprlib.Representable):
     return self[key]
 
   def __setitem__(self, key: K, value: State | V) -> None:
-    if isinstance(value, State):
+    if key == '__orig_class__':
+      object.__setattr__(self, key, value)  # type: ignore
+    elif isinstance(value, State):
       self._mapping[key] = value._mapping
     else:
       self._mapping[key] = value
@@ -327,10 +329,10 @@ class State(MutableMapping[K, V], reprlib.Representable):
     Returns:
       The merged ``State``.
     """
-    states = (state, *states)
+    if not states:
+      return state
 
-    if len(states) == 1:
-      return states[0]
+    states = (state, *states)
 
     new_state: FlatState[V] = {}
 

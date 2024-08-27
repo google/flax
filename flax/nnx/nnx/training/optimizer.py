@@ -70,7 +70,7 @@ class Optimizer(Object):
     >>> loss_fn = lambda model: ((model(x) - y) ** 2).mean()
     >>> loss_fn(model)
     Array(1.7055722, dtype=float32)
-    >>> grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model)
+    >>> grads = nnx.grad(loss_fn)(state.model)
     >>> state.update(grads)
     >>> loss_fn(model)
     Array(1.6925814, dtype=float32)
@@ -91,7 +91,7 @@ class Optimizer(Object):
     >>> metrics = nnx.metrics.Average()
     >>> state = TrainState(model, tx, metrics)
     ...
-    >>> grads = nnx.grad(loss_fn, wrt=nnx.Param)(state.model)
+    >>> grads = nnx.grad(loss_fn)(state.model)
     >>> state.update(grads=grads, values=loss_fn(state.model))
     >>> state.metrics.compute()
     Array(1.6925814, dtype=float32)
@@ -185,7 +185,7 @@ class Optimizer(Object):
       >>> for variable in (nnx.Param, CustomVariable, (nnx.Param, CustomVariable)):
       ...   # make sure `wrt` arguments match for `nnx.Optimizer` and `nnx.grad`
       ...   state = nnx.Optimizer(model, optax.adam(1e-3), wrt=variable)
-      ...   grads = nnx.grad(loss_fn, wrt=variable)(
+      ...   grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, variable))(
       ...     state.model, jnp.ones((1, 2)), jnp.ones((1, 3))
       ...   )
       ...   state.update(grads=grads)

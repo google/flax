@@ -1,6 +1,5 @@
 set -e
 
-cd ../../..
 source .venv/bin/activate
 cd flax/nnx
 

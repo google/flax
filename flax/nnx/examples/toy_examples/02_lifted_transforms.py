@@ -71,9 +71,7 @@ def train_step(model: MLP, optimizer: nnx.Optimizer, batch):
     y_pred = model(x)
     return jnp.mean((y - y_pred) ** 2)
 
-  #                                    |--default--|
-  grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
-  # sgd update
+  grads: nnx.State = nnx.grad(loss_fn)(model)
   optimizer.update(grads)
 
 

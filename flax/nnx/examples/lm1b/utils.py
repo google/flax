@@ -161,7 +161,7 @@ def setup_initial_state(
     state = TrainState.create(
       apply_fn=graphdef.apply, params=params, tx=tx, graphdef=graphdef
     )
-    state = jax.tree_util.tree_map(_to_array, state)
+    state = jax.tree.map(_to_array, state)
     state_spec = nnx.get_partition_spec(state)
     state = jax.lax.with_sharding_constraint(state, state_spec)
 

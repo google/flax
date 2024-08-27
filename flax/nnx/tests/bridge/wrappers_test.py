@@ -113,7 +113,9 @@ class TestCompatibility(absltest.TestCase):
         self.rngs = rngs
 
       def __call__(self, x):
-        @partial(nnx.vmap, in_axes=None, state_axes={...: 0}, axis_size=5)
+
+        @nnx.split_rngs(splits=5)
+        @nnx.vmap(in_axes=(0, None), axis_size=5)
         def vmap_fn(inner, x):
           return inner(x)
 

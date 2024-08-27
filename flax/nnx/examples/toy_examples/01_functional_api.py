@@ -75,7 +75,7 @@ def train_step(params, counts, batch):
 
   grad, counts = jax.grad(loss_fn, has_aux=True)(params)
   #                          |-------- sgd ---------|
-  params = jax.tree_util.tree_map(lambda w, g: w - 0.1 * g, params, grad)
+  params = jax.tree.map(lambda w, g: w - 0.1 * g, params, grad)
 
   return params, counts
 

@@ -28,14 +28,6 @@ FilterLiteral = tp.Union[type, str, Predicate, bool, ellipsis, None]
 Filter = tp.Union[FilterLiteral, tuple['Filter', ...], list['Filter']]
 
 
-@tp.runtime_checkable
-class _HasTag(tp.Protocol):
-  tag: str
-
-@tp.runtime_checkable
-class _HasType(tp.Protocol):
-  type: type
-
 
 def to_predicate(filter: Filter) -> Predicate:
   """Converts a Filter to a predicate function.
@@ -68,7 +60,7 @@ class WithTag:
   tag: str
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return isinstance(x, _HasTag) and x.tag == self.tag
+    return hasattr(x, 'tag') and x.tag == self.tag
 
   def __repr__(self):
     return f'WithTag({self.tag!r})'
@@ -91,7 +83,7 @@ class OfType:
 
   def __call__(self, path: PathParts, x: tp.Any):
     return isinstance(x, self.type) or (
-      isinstance(x, _HasType) and issubclass(x.type, self.type)
+      hasattr(x, 'type') and issubclass(x.type, self.type)
     )
 
   def __repr__(self):

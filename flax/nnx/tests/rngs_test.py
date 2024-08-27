@@ -138,13 +138,11 @@ class TestRngs(absltest.TestCase):
     assert len(rng_counts.flat_state()) == 2
 
     # split dropout keys
-    split_dropout_keys = jax.tree_util.tree_map(
+    split_dropout_keys = jax.tree.map(
       lambda x: jax.random.split(x, 4), dropout_keys
     )
     # replicate params
-    params = jax.tree_util.tree_map(
-      lambda x: jnp.stack([x] * 4, axis=0), params
-    )
+    params = jax.tree.map(lambda x: jnp.stack([x] * 4, axis=0), params)
 
     @partial(
       jax.vmap,

@@ -57,7 +57,7 @@ class TestIntegration(absltest.TestCase):
       grads = loss_fn(model)
       nnx.update(
         model,
-        jax.tree_util.tree_map(
+        jax.tree.map(
           lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
         ),
       )
@@ -110,7 +110,7 @@ class TestIntegration(absltest.TestCase):
       grads = loss_fn(model)
       nnx.update(
         model,
-        jax.tree_util.tree_map(
+        jax.tree.map(
           lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
         ),
       )
@@ -162,11 +162,11 @@ class TestIntegration(absltest.TestCase):
         return jax.numpy.mean((y_pred - y) ** 2)
 
       # compute gradient
-      grads: nnx.State = nnx.grad(loss_fn, wrt=nnx.Param)(model)
+      grads: nnx.State = nnx.grad(loss_fn)(model)
       # SGD update
       nnx.update(
         model,
-        jax.tree_util.tree_map(
+        jax.tree.map(
           lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
         ),
       )
@@ -208,7 +208,7 @@ class TestIntegration(absltest.TestCase):
       # compute gradient
       grads, counts = jax.grad(loss_fn, has_aux=True)(params)
       # SGD update
-      params = jax.tree_util.tree_map(lambda w, g: w - 0.1 * g, params, grads)
+      params = jax.tree.map(lambda w, g: w - 0.1 * g, params, grads)
 
       return params, counts
 

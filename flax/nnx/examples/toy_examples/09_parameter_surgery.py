@@ -54,8 +54,6 @@ graphdef, trainable_params, non_trainable = nnx.split(model, is_trainable, ...)
 
 print(
   'trainable_params =',
-  jax.tree_util.tree_map(jax.numpy.shape, trainable_params),
+  jax.tree.map(jax.numpy.shape, trainable_params),
 )
-print(
-  'non_trainable = ', jax.tree_util.tree_map(jax.numpy.shape, non_trainable)
-)
+print('non_trainable = ', jax.tree.map(jax.numpy.shape, non_trainable))
