@@ -1,13 +1,18 @@
 
 NNX
 ========
+.. div:: sd-text-left sd-font-italic
+
+   **N**\ eural **N**\ etworks for JA\ **X**
 
 
-NNX is a **N**\ eural **N**\ etwork library for JA\ **X** that focuses on providing the best
-development experience, so building and experimenting with neural networks is easy and
-intuitive. It achieves this by embracing Python’s object-oriented model and making it
-compatible with JAX transforms, resulting in code that is easy to inspect, debug, and
-analyze.
+----
+
+NNX is a new Flax API that is designed to make it easier to create, inspect, debug,
+and analyze neural networks in JAX. It achieves this by adding first class support
+for Python reference semantics, allowing users to express their models using regular
+Python objects. NNX takes years of feedback from Linen and brings to Flax a simpler
+and more user-friendly experience.
 
 Features
 ^^^^^^^^^

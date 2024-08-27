@@ -10,20 +10,17 @@ jupytext:
 
 # NNX Basics
 
-NNX is a **N**eural **N**etwork library for JA**X** that focuses on providing the best 
-development experience, so building and experimenting with neural networks is easy and
-intuitive. It achieves this by representing objects as PyGraphs (instead of PyTrees), 
-enabling reference sharing and mutability. This design allows your models to resemble 
-familiar Python object-oriented code, particularly appealing to users of frameworks
-like PyTorch.
-
-Despite its simplified implementation, NNX supports the same powerful design patterns 
-that have allowed Linen to scale effectively to large codebases.
+NNX is a new Flax API that is designed to make it easier to create, inspect, debug,
+and analyze neural networks in JAX. It achieves this by adding first class support
+for Python reference semantics, allowing users to express their models using regular
+Python objects, which are modeled as PyGraphs (instead of PyTrees), enabling reference
+sharing and mutability. This design should should make PyTorch or Keras users feel at
+home.
 
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-! pip install -U flax treescope
+# ! pip install -U flax treescope
 ```
 
 ```{code-cell} ipython3
