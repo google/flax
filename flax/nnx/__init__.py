@@ -19,6 +19,9 @@ from flax.linen.pooling import pool as pool
 from flax.typing import Initializer as Initializer
 
 from .nnx.bridge import wrappers as wrappers
+from .nnx.bridge.variables import (
+  register_variable_name_type_pair as register_variable_name_type_pair,
+)
 from .nnx import graph as graph
 from .nnx import errors as errors
 from .nnx import helpers as helpers
@@ -124,7 +127,6 @@ from .nnx.state import State as State
 from .nnx.training import metrics as metrics
 from .nnx.variables import (
   Param as Param,
-  register_variable_name_type_pair as register_variable_name_type_pair,
 )
 # this needs to be imported before optimizer to prevent circular import
 from .nnx.training import optimizer as optimizer

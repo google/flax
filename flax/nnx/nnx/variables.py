@@ -11,20 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-# Copyright 2023 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the 'License');
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an 'AS IS' BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 # pytype: skip-file
 from __future__ import annotations
 
@@ -998,48 +984,3 @@ def with_metadata(
 
   return wrapper  # type: ignore
 
-
-### Variable type <-> name mapping ###
-# Assumption: the mapping is 1-1 and unique.
-
-def variable_type(name: str) -> tp.Type[Variable[tp.Any]]:
-  """Given a Linen-style collection name, get or create its corresponding NNX Variable type."""
-  if name not in VariableTypeCache:
-    VariableTypeCache[name] = type(name, (Variable,), {})
-  return VariableTypeCache[name]
-
-
-def variable_type_name(typ: tp.Type[Variable[tp.Any]]) -> str:
-  """Given an NNX Variable type, get or create its Linen-style collection name.
-
-  Should output the exact inversed result of `variable_type()`."""
-  for name, t in VariableTypeCache.items():
-    if typ == t:
-      return name
-  name = typ.__name__
-  if name in VariableTypeCache:
-    raise ValueError(
-      'Name {name} is already registered in the registry as {VariableTypeCache[name]}. '
-      'It cannot be linked with this type {typ}.'
-    )
-  register_variable_name_type_pair(name, typ)
-  return name
-
-
-def register_variable_name_type_pair(name, typ):
-  """Register a pair of variable type name (like Linen collections) and its NNX type."""
-  VariableTypeCache[name] = typ
-
-
-# add known variable type names
-register_variable_name_type_pair('params', Param)
-register_variable_name_type_pair('batch_stats', BatchStat)
-register_variable_name_type_pair('cache', Cache)
-register_variable_name_type_pair('intermediates', Intermediate)
-
-
-def sort_variable_types(types: list[type]):
-  def _variable_parents_count(t: type):
-    return sum(1 for p in t.mro() if issubclass(p, nnx.Variable))
-  parent_count = {t: _variable_parents_count(t) for t in types}
-  return sorted(types, key=lambda t: -parent_count[t])
