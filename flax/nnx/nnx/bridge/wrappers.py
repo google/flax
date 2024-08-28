@@ -18,8 +18,9 @@ from typing import Any
 
 from flax import nnx
 from flax import linen
+from flax.core import meta
 from flax.nnx.nnx import graph
-from flax.nnx.nnx import variables as variableslib
+from flax.nnx.nnx.bridge import variables as bv
 from flax.nnx.nnx.module import GraphDef, Module
 from flax.nnx.nnx.rnglib import Rngs
 from flax.nnx.nnx.state import State
@@ -120,7 +121,7 @@ class ToNNX(Module):
   ):
     self.module = module
     self.rngs = rngs
-    self.linen_collections: set[str] = set()
+    self.linen_collections: tuple[str, ...] = ()
 
   def lazy_init(self, *args, **kwargs):
     return lazy_init(self, *args, **kwargs)
@@ -143,16 +144,20 @@ class ToNNX(Module):
       if 'params' not in _rngs and 'default' in _rngs:
         _rngs['params'] = _rngs.pop('default')
       out, variables = self.module.init_with_output(_rngs, *args, method=method, **kwargs)
-      def nn_var_to_nnx_state(kp, v):
-        assert isinstance(kp[0], jtu.DictKey)
-        vtype = variableslib.variable_type(kp[0].key)
-        return vtype(v)
-      for col, tree in jtu.tree_map_with_path(nn_var_to_nnx_state, variables).items():
-        self._setattr(col, tree)
-        self.linen_collections.add(col)
+
+      nnx_vars = jtu.tree_map_with_path(
+        lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x),
+        variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
+      linen_collections = set()
+      for col, tree in nnx_vars.items():
+        setattr(self, col, tree)
+        linen_collections.add(col)
+      self.linen_collections = tuple(linen_collections)  # make it hashable
 
     else:
-      variables = {col: jax.tree.map(lambda v: v.value, getattr(self, col))
+      variables = {col: jax.tree.map(lambda x: bv.to_linen_var(x.to_state()),
+                                     getattr(self, col),
+                                     is_leaf=lambda x: isinstance(x, nnx.Variable))
                    for col in self.linen_collections}
       _rngs = (
         {name: stream() for name, stream in rngs.items()} if rngs else {}
@@ -162,8 +167,11 @@ class ToNNX(Module):
     # Split out the updates if `mutable` is passed into the Flax module
     if kwargs.get('mutable', False) != False:
       out, updates = out
+      updates = jtu.tree_map_with_path(
+        lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x),
+        updates, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
       for collection, value in updates.items():
-        self._setattr(collection, jax.tree.map(variableslib.variable_type(collection), value))
+        setattr(self, collection, value)
 
     return out
 
@@ -214,6 +222,7 @@ class ToLinen(linen.Module):
   args: tp.Sequence = ()
   kwargs: tp.Mapping = dataclasses.field(default_factory=dict)
   skip_rng: bool = False
+  metadata_type: tp.Type = bv.NNXMeta
 
   def update_variables(self, module):
     """Store the NNX module's graph def and state inside Linen module variables."""
@@ -225,14 +234,16 @@ class ToLinen(linen.Module):
     types = set(jax.tree.leaves(
       jax.tree.map(lambda x: x.type, state,
                     is_leaf=lambda x: isinstance(x, nnx.VariableState))))
-    types = variableslib.sort_variable_types(types)
+    types = bv.sort_variable_types(types)
     _, *state_by_types = nnx.split(module, *types)
     # Each variable type goes to its own linen collection, and
     # each attribute goes to its own linen variable
     for typ, state in zip(types, state_by_types):
-      collection = variableslib.variable_type_name(typ)
+      collection = bv.variable_type_name(typ)
       if self.is_mutable_collection(collection):
         for k, v in state.raw_mapping.items():
+          v = jax.tree.map(bv.to_linen_var, v,
+                           is_leaf=lambda x: isinstance(x, nnx.VariableState))
           self.put_variable(collection, k, v)
 
   @linen.compact
@@ -250,7 +261,11 @@ class ToLinen(linen.Module):
     # apply codepath
     gdef = self.get_variable('nnx', 'graphdef')
     assert gdef, 'GraphDef not found in variables. Was the collection "nnx" dropped somewhere?'
-    states = [State(state) for col, state in self.variables.items() if col != 'nnx']
+    variables = {col: v for col, v in self.variables.items() if col != 'nnx'}
+    states = jtu.tree_map_with_path(
+        lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x).to_state(),
+        variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
+    states = [State(v) for v in states.values()]
     nnx_state = nnx.GraphState.merge(*states) if states else nnx.GraphState({})
     module = nnx.merge(gdef, nnx_state)
     nnx.reseed(module, **linen_rngs_dict(self))  # reseed with keys from linen apply call.
