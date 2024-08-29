@@ -59,9 +59,11 @@ testing = [
     "sentencepiece",
     "tensorflow_text>=2.11.0; platform_system!='Darwin'",
     "tensorflow_datasets",
-    "tensorflow>=2.12.0", # to fix Numpy np.bool8 deprecation error
+    "tensorflow>=2.12.0",
+    # to fix Numpy np.bool8 deprecation error
     "torch",
     "treescope>=0.1.1; python_version>='3.10'",
+    "equinox>=0.11.5",
 ]
 docs = [
     "sphinx>=3.3.1",

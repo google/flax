@@ -161,4 +161,7 @@ from .nnx.variables import VariableState as VariableState
 from .nnx.variables import VariableMetadata as VariableMetadata
 from .nnx.variables import with_metadata as with_metadata
 from .nnx.visualization import display as display
-from .nnx.extract import to_tree, from_tree, TreeNode
+from .nnx.extract import to_tree as to_tree
+from .nnx.extract import from_tree as from_tree
+from .nnx.extract import TreeNode as TreeNode
+from .nnx.pytree import Pytree as Pytree

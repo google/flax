@@ -169,6 +169,7 @@ def register_graph_node_type(
 
 
 def is_node(x: tp.Any) -> bool:
+  """Returns True if x is a graph node or a Pytree."""
   if type(x) in _node_impl_for_type:
     return True
   return is_pytree_node(x)
