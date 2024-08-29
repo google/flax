@@ -775,7 +775,6 @@ class TestScan(absltest.TestCase):
     class Block(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
-        # self.node = nnx.Variable(jnp.ones((2,)))
 
       def __call__(self, x: jax.Array):
         x = self.linear(x)
@@ -791,7 +790,6 @@ class TestScan(absltest.TestCase):
 
     assert module.linear.kernel.value.shape == (5, 3, 3)
     assert module.linear.bias.value.shape == (5, 3)
-    # assert module.node.value.shape == (2,)
 
     @nnx.scan(in_axes=(nnx.Carry, 0, None), length=5)
     def forward_block(_, block: Block, x: jax.Array):
@@ -802,6 +800,170 @@ class TestScan(absltest.TestCase):
 
     assert y.shape == (5, 1, 3)
     assert out is None
+
+  def test_basic_no_carry(self):
+    class Block(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = nnx.gelu(x)
+        return x
+
+    @nnx.split_rngs(splits=5)
+    @nnx.scan(in_axes=(0,), out_axes=0, length=5)
+    def create_block(rngs: nnx.Rngs):
+      return Block(rngs=rngs)
+
+    module = create_block(nnx.Rngs(0))
+
+    assert module.linear.kernel.value.shape == (5, 3, 3)
+    assert module.linear.bias.value.shape == (5, 3)
+    # assert module.node.value.shape == (2,)
+
+    @nnx.scan(in_axes=(0, None), out_axes=0, length=5)
+    def forward_block(block: Block, x: jax.Array):
+      return block(x)
+
+    x = jnp.ones((1, 3))
+    y = forward_block(module, x)
+
+    assert y.shape == (5, 1, 3)
+
+  def test_all_carry(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      n: nnx.BatchStat[int]
+
+    foo = Foo(n=nnx.BatchStat(0))
+
+    @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
+    def loop(foo: Foo):
+      foo.n += 1
+      return foo
+
+    foo2 = loop(foo)
+
+    self.assertIs(foo2, foo)
+    self.assertEqual(foo.n.value, 3)
+
+  def test_all_carry_one_argument_error(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      n: nnx.BatchStat[int]
+
+    foo = Foo(n=nnx.BatchStat(0))
+
+    @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
+    def loop(foo: Foo, x): ...
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'When in_axes=Carry, the function must take exactly one argument',
+    ):
+      loop(foo, 0)
+
+  def test_all_carry_new_reference_error(self):
+    @dataclasses.dataclass(repr=False)
+    class Foo(nnx.Module):
+      n: nnx.BatchStat[int]
+
+    xs = jnp.arange(3)
+    foo = Foo(n=nnx.BatchStat(0))
+
+    @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0))
+    def loop(foo: Foo, x):
+      x = x + 1
+      foo = Foo(nnx.BatchStat(foo.n.value + 1))  # new reference
+      return foo, x
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Carry references must be the same between iterations',
+    ):
+      loop(foo, xs)
+
+  def test_all_scan(self):
+    @dataclasses.dataclass(repr=False)
+    class Foo(nnx.Module):
+      n: nnx.BatchStat[jax.Array]
+
+    xs = jnp.arange(3)
+    foo = Foo(n=nnx.BatchStat(jnp.arange(3)))
+
+    @nnx.scan(in_axes=0, out_axes=0)
+    def loop(foo: Foo, x):
+      x = x + 1
+      foo.n += 1
+      return x
+
+    ys = loop(foo, xs)
+
+    np.testing.assert_allclose(ys, jnp.arange(1, 4))
+    np.testing.assert_allclose(foo.n.value, jnp.arange(1, 4))
+
+  def test_all_broadcast(self):
+    @dataclasses.dataclass(repr=False)
+    class Foo(nnx.Module):
+      n: nnx.BatchStat[int]
+
+    xs = jnp.array(1)
+    foo = Foo(n=nnx.BatchStat(2))
+
+    @nnx.scan(in_axes=None, out_axes=0, length=4)
+    def loop(foo: Foo, x):
+      return x + foo.n
+
+    ys = loop(foo, xs)
+
+    np.testing.assert_allclose(ys, 3)
+    self.assertEqual(ys.shape, (4,))
+
+  def test_input_output_carry_mismatch_error(self):
+    with self.assertRaisesRegex(
+      ValueError,
+      'If one of in_axes or out_axes has Carry, the other must also have Carry',
+    ):
+
+      @nnx.scan(in_axes=0, out_axes=(nnx.Carry, 0))
+      def loop(a, b): ...
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'If one of in_axes or out_axes has Carry, the other must also have Carry',
+    ):
+
+      @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=0)
+      def loop(a, b): ...
+
+  def test_double_carry_error(self):
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found multiple Carry definitions',
+    ):
+
+      @nnx.scan(in_axes=(nnx.Carry, nnx.Carry))
+      def loop(a, b): ...
+
+  def test_broadcast_in_output_error(self):
+    with self.assertRaisesRegex(
+      ValueError,
+      'Cannot broadcast output state',
+    ):
+
+      @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, None))
+      def loop(a, b): ...
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Cannot broadcast output state. Got StateAxes',
+    ):
+
+      @nnx.scan(
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, nnx.StateAxes({...: None}))
+      )
+      def loop(a, b): ...
 
   def test_basic_combinator(self):
     class Block(nnx.Module):
@@ -888,11 +1050,11 @@ class TestScan(absltest.TestCase):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.node = nnx.BatchStat(jnp.ones((2,)))
 
-      @nnx.scan(in_axes=(state_axes, nnx.Carry), out_axes=(1, 2))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry), out_axes=(nnx.Carry, 1, 2))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = nnx.gelu(x)
-        return x, (x, x)
+        return x, x, x
 
     module = MLP(rngs=nnx.Rngs(0))
 
@@ -901,7 +1063,7 @@ class TestScan(absltest.TestCase):
     assert module.node.value.shape == (2,)
 
     x = jnp.ones((1, 3))
-    c, (y1, y2) = module(x)
+    c, y1, y2 = module(x)
 
     assert c.shape == (1, 3)
     assert y1.shape == (1, 5, 3)
@@ -918,17 +1080,17 @@ class TestScan(absltest.TestCase):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.scan(in_axes=(state_axes, nnx.Carry))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry), out_axes=nnx.Carry)
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = nnx.gelu(x)
-        return x, None
+        return x
 
     key = jax.random.split(jax.random.key(0), 5)
     module = MLP(key=key)
 
     x = jnp.ones((1, 3))
-    y, _ = module(x)
+    y = module(x)
 
     assert y.shape == (1, 3)
 

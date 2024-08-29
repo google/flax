@@ -38,7 +38,7 @@ from flax.nnx.nnx import extract, filterlib, graph, spmd
 from flax.nnx.nnx.module import Module
 from flax.nnx.nnx.state import State
 from flax.nnx.nnx.transforms.transforms import resolve_kwargs
-from flax.typing import Leaf, MISSING, Missing, PytreeDeque
+from flax.typing import Leaf, Missing, PytreeDeque
 import jax
 import jax.core
 import jax.numpy as jnp
@@ -95,7 +95,10 @@ class StateAxes:
     return self._axes
 
   def __repr__(self):
-    return f'StateAxes({dict(zip(self.filters, self.axes))})'
+    return f'StateAxes({dict(self.items())})'
+
+  def items(self):
+    return zip(self.filters, self.axes)
 
   def __eq__(self, other):
     return (
@@ -207,15 +210,15 @@ def vmap(
 
 
 def vmap(
-    f: F | Missing = MISSING,
-    *,
-    in_axes: int | None | tp.Sequence[tp.Any] = 0,
-    out_axes: tp.Any = 0,
-    axis_name: AxisName | None = None,
-    axis_size: int | None = None,
-    spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
-    # nnx specific
-    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  f: F | type[Missing] = Missing,
+  *,
+  in_axes: int | None | tp.Sequence[tp.Any] = 0,
+  out_axes: tp.Any = 0,
+  axis_name: AxisName | None = None,
+  axis_size: int | None = None,
+  spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
 ) -> F | tp.Callable[[F], F]:
   """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
 
@@ -297,7 +300,7 @@ def vmap(
            [0, 2, 4, 6],
            [0, 3, 6, 9]], dtype=int32)
   """
-  if isinstance(f, Missing):
+  if f is Missing:
     return functools.partial(
         vmap,
         in_axes=in_axes,
@@ -419,19 +422,19 @@ def pmap(
 
 
 def pmap(
-    f: F | Missing = MISSING,
-    *,
-    axis_name: AxisName | None = None,
-    in_axes: tp.Any = 0,
-    out_axes: tp.Any = 0,
-    static_broadcasted_argnums: int | tp.Iterable[int] = (),
-    devices: tp.Sequence[jax.Device] | None = None,  # noqa: F811
-    backend: str | None = None,
-    axis_size: int | None = None,
-    donate_argnums: int | tp.Iterable[int] = (),
-    global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
-    # nnx specific
-    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  f: F | type[Missing] = Missing,
+  *,
+  axis_name: AxisName | None = None,
+  in_axes: tp.Any = 0,
+  out_axes: tp.Any = 0,
+  static_broadcasted_argnums: int | tp.Iterable[int] = (),
+  devices: tp.Sequence[jax.Device] | None = None,  # noqa: F811
+  backend: str | None = None,
+  axis_size: int | None = None,
+  donate_argnums: int | tp.Iterable[int] = (),
+  global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
 ) -> F | tp.Callable[[F], F]:
   """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
 
@@ -513,7 +516,7 @@ def pmap(
            [0, 2, 4, 6],
            [0, 3, 6, 9]], dtype=int32)
   """
-  if isinstance(f, Missing):
+  if f is Missing:
     return functools.partial(
         pmap,
         axis_name=axis_name,
@@ -574,6 +577,121 @@ def pmap(
 class Broadcasted(struct.PyTreeNode):
   data: tp.Any
 
+def _get_carry_argnum(axes, is_in_axes: bool):
+  if axes is Carry:
+    return 'all'
+  elif isinstance(axes, int) or axes is None:
+    return None
+
+  obj_repr = 'in_axes' if is_in_axes else 'out_axes'
+  carry_argnum: int | None = None
+  prev_key: tp.Any = None
+  for key, x in jax.tree_util.tree_leaves_with_path(axes):
+    if x is not Carry:
+      continue
+    assert isinstance(key[0], jax.tree_util.SequenceKey)
+    i = key[0].idx
+    if len(key) >= 2:
+      raise ValueError(
+        f'Carry must at the top-level, it cannot be nested. Found {axes=}'
+      )
+    if carry_argnum is not None:
+      raise ValueError(
+        f'Found multiple Carry definitions at '
+        f'{obj_repr}{jax.tree_util.keystr(prev_key)} and '
+        f'{obj_repr}{jax.tree_util.keystr(key)}'
+      )
+    carry_argnum = i
+    prev_key = key
+
+  return carry_argnum
+
+
+def _check_out_axes(out_axes):
+  for key, x in jax.tree_util.tree_leaves_with_path(
+    out_axes, is_leaf=lambda x: x is None
+  ):
+    if x is None:
+      raise ValueError(
+        f'Cannot broadcast output state. '
+        f'Got out_axes=None at: out_axes{jax.tree_util.keystr(key)}'
+      )
+    elif isinstance(x, StateAxes):
+      for filter, value in x.items():
+        if value is None:
+          raise ValueError(
+            f'Cannot broadcast output state. '
+            f'Got StateAxes({{{filter}: None}}) at: out_axes'
+            f'{jax.tree_util.keystr(key)}'
+          )
+        elif value is Carry:
+          raise ValueError(
+            f'Cannot carry output state. '
+            f'Got StateAxes({{{filter}: Carry}}) at: out_axes'
+            f'{jax.tree_util.keystr(key)}'
+          )
+def _check_carry_same_references(carry_arg, carry_arg_out):
+  def check_carry_same_references(key_path, arg, out):
+    if (
+      not isinstance(arg, jax.Array) or not isinstance(out, jax.Array)
+    ) and arg is not out:
+      raise ValueError(
+        'Carry references must be the same between iterations. '
+        f'Got {arg=} with id={id(arg)} and {out=} with id={id(out)} '
+        f'at carry{jax.tree_util.keystr(key_path)}'
+      )
+
+  jax.tree_util.tree_map_with_path(
+    check_carry_same_references, carry_arg, carry_arg_out
+  )
+
+def _extract_index_mappings(
+  pure_carry_arg_out,
+  carry_index_mappings: list[FrozenDict[int, int]],
+  /,
+):
+  def extract_index_mappings(x):
+    if isinstance(x, extract.GraphDefState) and isinstance(
+      x.graphdef, graph.NodeDef
+    ):
+      index_mapping = x.graphdef.index_mapping
+      assert index_mapping is not None
+      carry_index_mappings.append(index_mapping)
+      x = x.replace(
+        graphdef=dataclasses.replace(x.graphdef, index_mapping=None)
+      )
+    return x
+
+  pure_carry_arg_out = jax.tree.map(
+    extract_index_mappings,
+    pure_carry_arg_out,
+    is_leaf=lambda x: isinstance(x, extract.GraphDefState),
+  )
+
+  return pure_carry_arg_out
+
+def _insert_index_mappings(
+  pure_carry_arg_out,
+  carry_index_mappings: deque[FrozenDict[int, int]],
+  /,
+):
+  def insert_index_mappings(x):
+    if isinstance(x, extract.GraphDefState) and isinstance(
+      x.graphdef, graph.NodeDef
+    ):
+      index_mapping = carry_index_mappings.popleft()
+      x = x.replace(
+        graphdef=dataclasses.replace(x.graphdef, index_mapping=index_mapping)
+      )
+    return x
+
+  pure_carry_arg_out = jax.tree.map(
+    insert_index_mappings,
+    pure_carry_arg_out,
+    is_leaf=lambda x: isinstance(x, extract.GraphDefState),
+  )
+  return pure_carry_arg_out
+
 
 def _scan_split_in(
     carry_deque: PytreeDeque[list[State]],
@@ -622,7 +740,7 @@ def _scan_split_in(
       vectorized_states.append(State({}))
     else:
       raise ValueError(
-          f'Invalid axes {prefix} at path {jax.tree_util.keystr(path)}'
+        f'Invalid axes {prefix} args{jax.tree_util.keystr(path)}'
       )
 
     if not vectorized_states:
@@ -635,8 +753,8 @@ def _scan_split_in(
   else:
     if isinstance(prefix, StateAxes):
       raise ValueError(
-          'Cannot use StateAxes on non-graph nodes, '
-          f'found {prefix} at path {jax.tree_util.keystr(path)}'
+        'Cannot use StateAxes on non-graph nodes, '
+        f'found {prefix} args{jax.tree_util.keystr(path)}'
       )
     elif prefix is Carry:
       return x
@@ -646,13 +764,13 @@ def _scan_split_in(
     elif isinstance(prefix, int):
       if not isinstance(x, (jax.Array, np.ndarray)):
         raise ValueError(
-            f'Expected an array, got {type(x).__name__} at path '
-            f'{jax.tree_util.keystr(path)}'
+          f'Expected an array, got {type(x).__name__} args'
+          f'{jax.tree_util.keystr(path)}'
         )
       return jnp.moveaxis(x, prefix, 0)
     else:
       raise ValueError(
-          f'Invalid axes {prefix} at path {jax.tree_util.keystr(path)}'
+        f'Invalid axes {prefix} args{jax.tree_util.keystr(path)}'
       )
 
 
@@ -677,23 +795,20 @@ def _scan_split_out(
 
       for state, filter, axis in zip(states, prefix.filters, prefix.axes):
         if axis is None:
-          if is_input_arg:
-            broadcast_states.append(state)
-          elif state:
-            raise ValueError(
-                f'Cannot broadcast output state. Got filter {filter} and axis'
-                f' None at path {jax.tree_util.keystr(path)}'
-            )
+          assert is_input_arg  # validated by _check_out_axes
+          broadcast_states.append(state)
         elif isinstance(axis, int):
           vectorized_states.append(state)
-        else:  # axis is Carry
-          if is_input_arg:
-            carry_states.append(state)
-          elif state:
-            raise ValueError(
-                f'Cannot carry output state. Got filter {filter} and axis'
-                f' {axis} at path {jax.tree_util.keystr(path)}'
-            )
+        elif axis is Carry:
+          assert is_input_arg  # validated by _check_out_axes
+          carry_states.append(state)
+        else:
+          obj_repr = 'args' if is_input_arg else 'out'
+          raise ValueError(
+            f'Invalid axes {axis} for filter {filter} at '
+            f'{obj_repr}{jax.tree_util.keystr(path)}'
+          )
+
       if not vectorized_states:
         vectorized_states.append(State({}))
       if is_input_arg:
@@ -706,28 +821,19 @@ def _scan_split_out(
       graphdef, state = ctx.split(x)
       vectorized_states.append(state)
     elif prefix is None:
+      assert is_input_arg  # validated by _check_out_axes
       graphdef, state = ctx.split(x)
-      if is_input_arg:
-        broadcast_states.append(state)
-        vectorized_states.append(State({}))
-      elif state:
-        raise ValueError(
-            'Cannot broadcast output state. '
-            f'Got out_axes=None at path {jax.tree_util.keystr(path)}'
-        )
+      broadcast_states.append(state)
+      vectorized_states.append(State({}))
     elif prefix is Carry:
+      assert is_input_arg  # validated by _check_out_axes
       graphdef, state = ctx.split(x)
-      if is_input_arg:
-        carry_states.append(state)
-        vectorized_states.append(State({}))
-      elif state:
-        raise ValueError(
-            'Cannot carry output state. '
-            f'Got out_axes=carry at path {jax.tree_util.keystr(path)}'
-        )
+      carry_states.append(state)
+      vectorized_states.append(State({}))
     else:
+      obj_repr = 'args' if is_input_arg else 'out'
       raise ValueError(
-          f'Invalid axes {prefix} at path {jax.tree_util.keystr(path)}'
+        f'Invalid axes {prefix} at {obj_repr}{jax.tree_util.keystr(path)}'
       )
     if not vectorized_states:
       vectorized_states.append(State({}))
@@ -739,24 +845,22 @@ def _scan_split_out(
     )
   else:
     if isinstance(prefix, StateAxes):
+      obj_repr = 'args' if is_input_arg else 'out'
       raise ValueError(
-          'Cannot use StateAxes on non-graph nodes, '
-          f'found {prefix} at path {jax.tree_util.keystr(path)}'
+        'Cannot use StateAxes on non-graph nodes, '
+        f'found {prefix} at {obj_repr}{jax.tree_util.keystr(path)}'
       )
     elif prefix is Carry:
       return x
     elif prefix is None:
-      if not is_input_arg:
-        raise ValueError(
-            'Cannot broadcast outputs. '
-            f'Got out_axes=None at path {jax.tree_util.keystr(path)}'
-        )
+      assert not is_input_arg  # validated by _check_out_axes
       return Broadcasted(None)
     elif isinstance(prefix, int):
       return x
     else:
+      obj_repr = 'args' if is_input_arg else 'out'
       raise ValueError(
-          f'Invalid axes {prefix} at path {jax.tree_util.keystr(path)}'
+        f'Invalid axes {prefix} at {obj_repr}{jax.tree_util.keystr(path)}'
       )
 
 
@@ -826,16 +930,18 @@ def _scan_merge_out(
       assert is_input_arg
       states.extend(carry_states)
     else:
+      obj_repr = 'args' if is_input_arg else 'out'
       raise ValueError(
-          f'Invalid axes {prefix} at path {jax.tree_util.keystr(path)}'
+        f'Invalid axes {prefix} at {obj_repr}{jax.tree_util.keystr(path)}'
       )
 
     return ctx.merge(x.graphdef, *states)
   else:
     if isinstance(prefix, StateAxes):
+      obj_repr = 'args' if is_input_arg else 'out'
       raise ValueError(
-          'Cannot use StateAxes on non-graph nodes, '
-          f'found {prefix} at path {jax.tree_util.keystr(path)}'
+        'Cannot use StateAxes on non-graph nodes, '
+        f'found {prefix} at {obj_repr}{jax.tree_util.keystr(path)}'
       )
     elif prefix is Carry:
       return x
@@ -843,21 +949,24 @@ def _scan_merge_out(
       return x
     elif isinstance(prefix, int):
       if not isinstance(x, (jax.Array, np.ndarray)):
+        obj_repr = 'args' if is_input_arg else 'out'
         raise ValueError(
-            f'Expected an array, got {type(x).__name__} at path '
-            f'{jax.tree_util.keystr(path)}'
+          f'Expected an array, got {type(x).__name__} at '
+          f'{obj_repr}{jax.tree_util.keystr(path)}'
         )
       return jnp.moveaxis(x, 0, prefix)
     else:
+      obj_repr = 'args' if is_input_arg else 'out'
       raise ValueError(
-          f'Invalid axes {prefix} at path {jax.tree_util.keystr(path)}'
+        f'Invalid axes {prefix} at {obj_repr}{jax.tree_util.keystr(path)}'
       )
 
 
 @dataclasses.dataclass(eq=False)
 class ScanFn:
   f: tp.Callable[..., tp.Any]
-  carry_argnum: int
+  input_carry_argnum: int | None | tp.Literal['all']
+  output_carry_argnum: int | None | tp.Literal['all']
   in_axes: tp.Any
   out_axes: tp.Any
   transform_metadata: tp.Mapping[str, tp.Any]
@@ -866,145 +975,190 @@ class ScanFn:
     functools.update_wrapper(self, self.f)
 
   def __call__(
-      self,
-      carry: tuple[
-          tp.Any,  # carry_arg
-          PytreeDeque[list[State]],  # carry_deque
-          PytreeDeque[list[State]],  # broadcast_deque
-          PytreeDeque[Broadcasted],  # broadcast_arrays
-      ],
-      pure_args: list[tp.Any],
+    self,
+    carry: tuple[
+      tp.Any,  # carry_arg
+      PytreeDeque[list[State]],  # carry_deque
+      PytreeDeque[list[State]],  # broadcast_deque
+      PytreeDeque[Broadcasted],  # broadcast_arrays
+    ],
+    pure_args: tuple[tp.Any, ...],
   ):
     pure_carry_arg, carry_deque, broadcast_deque, broadcast_arrays = carry
-    pure_args[self.carry_argnum] = pure_carry_arg
     broadcast_deque_out = PytreeDeque(broadcast_deque)
     broadcast_arrays_out = PytreeDeque(broadcast_arrays)
+
+    if self.input_carry_argnum == 'all':
+      assert pure_args == ()
+      pure_args = (pure_carry_arg,)
+    elif isinstance(self.input_carry_argnum, int):
+      assert pure_args[self.input_carry_argnum] is None
+      _pure_args = list(pure_args)
+      _pure_args[self.input_carry_argnum] = pure_carry_arg
+      pure_args = tuple(_pure_args)
+    else:
+      assert self.input_carry_argnum is None
+      assert pure_carry_arg is None
 
     if spmd.PARTITION_NAME in self.transform_metadata:
       pure_args = _update_variable_sharding_metadata(
           pure_args, self.transform_metadata, spmd.remove_axis
       )
 
-    args = extract.from_tree(
-        pure_args,
-        prefix=self.in_axes,
-        merge_fn=functools.partial(
-            _scan_merge_in, carry_deque, broadcast_deque, broadcast_arrays
-        ),
-        is_leaf=lambda x: isinstance(x, (extract.TreeNode, Broadcasted)),
-        map_non_graph_nodes=True,
-        ctxtag='scan',
+    args: tuple = extract.from_tree(
+      pure_args,
+      prefix=self.in_axes,
+      merge_fn=functools.partial(
+        _scan_merge_in, carry_deque, broadcast_deque, broadcast_arrays
+      ),
+      is_leaf=lambda x: isinstance(x, (extract.TreeNode, Broadcasted)),
+      map_non_graph_nodes=True,
+      ctxtag='scan',
     )
     assert not carry_deque and not broadcast_deque and not broadcast_arrays
 
-    carry_arg_out, scan_out = self.f(*args)
+    out = self.f(*args)
 
-    args_out = extract.clear_non_graph_nodes(args)
-    args_out[self.carry_argnum] = carry_arg_out
+    # extract the carry from the args
+    if self.input_carry_argnum == 'all':
+      carry_arg = args[0]
+    elif isinstance(self.input_carry_argnum, int):
+      carry_arg = args[self.input_carry_argnum]
+    else:
+      assert self.input_carry_argnum is None
+      carry_arg = None
+
+    # extract the carry from the output
+    if self.output_carry_argnum == 'all':
+      carry_arg_out = out
+      out = None
+    elif isinstance(self.output_carry_argnum, int):
+      assert isinstance(out, tuple)
+      carry_arg_out = out[self.output_carry_argnum]
+      _out = list(out)
+      _out[self.output_carry_argnum] = None
+      out = tuple(_out)
+    else:
+      assert self.output_carry_argnum is None
+      carry_arg_out = None
+
+    # TODO(cgarciae): allowing new references might lead to inconsistencies with
+    # scan's looping semantics and we would also need to propagate the input
+    _check_carry_same_references(carry_arg, carry_arg_out)
+
+    args_out: tuple = extract.clear_non_graph_nodes(args)
+
+    # replace the carry from the input args with the carry from the output
+    if self.input_carry_argnum == 'all':
+      args_out = (carry_arg_out,)
+    elif isinstance(self.input_carry_argnum, int):
+      _args_out = list(args_out)
+      _args_out[self.input_carry_argnum] = carry_arg_out
+      args_out = tuple(_args_out)
+    else:
+      assert self.input_carry_argnum is None
+      assert carry_arg_out is None
 
     carry_deque_out = PytreeDeque[list[State]]()
     _broadcast_deque_out_tmp = PytreeDeque[list[State]]()  # discarded
-    pure_args_out, pure_scan_out = extract.to_tree(
-        (args_out, scan_out),
-        prefix=(self.in_axes, self.out_axes),
-        split_fn=functools.partial(
-            _scan_split_out, carry_deque_out, _broadcast_deque_out_tmp
-        ),
-        map_non_graph_nodes=True,
-        ctxtag='scan',
+    pure_args_out: tuple
+    pure_args_out, pure_out = extract.to_tree(
+      (args_out, out),
+      prefix=(self.in_axes, self.out_axes),
+      split_fn=functools.partial(
+        _scan_split_out, carry_deque_out, _broadcast_deque_out_tmp
+      ),
+      map_non_graph_nodes=True,
+      ctxtag='scan',
     )
     if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args_out, pure_scan_out = _update_variable_sharding_metadata(
-          (pure_args_out, pure_scan_out),
-          self.transform_metadata,
-          spmd.add_axis,
+      pure_args_out, pure_out = _update_variable_sharding_metadata(
+        (pure_args_out, pure_out),
+        self.transform_metadata,
+        spmd.add_axis,
       )
 
-    pure_carry_arg_out = pure_args_out[self.carry_argnum]
-    pure_args_out[self.carry_argnum] = None
+    # extract the pure carry from the pure args
+    if self.input_carry_argnum == 'all':
+      pure_carry_arg_out = pure_args_out[0]
+      pure_args_out = ()
+    elif isinstance(self.input_carry_argnum, int):
+      pure_carry_arg_out = pure_args_out[self.input_carry_argnum]
+      _pure_args_out = list(pure_args_out)
+      _pure_args_out[self.input_carry_argnum] = None
+      pure_args_out = tuple(_pure_args_out)
+    else:
+      assert self.input_carry_argnum is None
+      pure_carry_arg_out = None
 
     # next we have to remove all the index_mappings from the NodeDefs
     # in the carry outputs because they are not present in the inputs
-    carry_index_mappings = list[FrozenDict[int, int]]()
-
-    def extract_index_mappings(x):
-      if isinstance(x, extract.GraphDefState) and isinstance(
-          x.graphdef, graph.NodeDef
-      ):
-        index_mapping = x.graphdef.index_mapping
-        assert index_mapping is not None
-        carry_index_mappings.append(index_mapping)
-        x = x.replace(
-            graphdef=dataclasses.replace(x.graphdef, index_mapping=None)
-        )
-      return x
-
-    pure_carry_arg_out = jax.tree.map(
-        extract_index_mappings,
-        pure_carry_arg_out,
-        is_leaf=lambda x: isinstance(x, extract.GraphDefState),
+    carry_index_mappings: list[FrozenDict[int, int]] = []
+    pure_carry_arg_out = _extract_index_mappings(
+      pure_carry_arg_out, carry_index_mappings
     )
 
     carry_arg_out = (
-        pure_carry_arg_out,
-        carry_deque_out,
-        broadcast_deque_out,
-        broadcast_arrays_out,
+      pure_carry_arg_out,
+      carry_deque_out,
+      broadcast_deque_out,
+      broadcast_arrays_out,
     )
-    return carry_arg_out, (
-        graph.Static(tuple(carry_index_mappings)),
-        pure_args_out,
-        pure_scan_out,
+    scan_out = (
+      graph.Static(tuple(carry_index_mappings)),
+      pure_args_out,
+      pure_out,
     )
+    return carry_arg_out, scan_out
 
 
 @tp.overload
 def scan(
-    *,
-    length: int | None = None,
-    reverse: bool = False,
-    unroll: int | bool = 1,
-    _split_transpose: bool = False,
-    # extended api
-    in_axes: tp.Sequence[tp.Any] = (Carry, 0),
-    out_axes: tp.Any = 0,
-    # nnx specific
-    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  *,
+  length: int | None = None,
+  reverse: bool = False,
+  unroll: int | bool = 1,
+  _split_transpose: bool = False,
+  # extended api
+  in_axes: int | None | type[Carry] | tuple[tp.Any, ...] = (Carry, 0),
+  out_axes: tp.Any = (Carry, 0),
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
 ) -> tp.Callable[[F], F]:
   ...
 
 
 @tp.overload
 def scan(
-    f: F,
-    *,
-    length: int | None = None,
-    reverse: bool = False,
-    unroll: int | bool = 1,
-    _split_transpose: bool = False,
-    # extended api
-    in_axes: tp.Sequence[tp.Any] = (Carry, 0),
-    out_axes: tp.Any = 0,
-    # nnx specific
-    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  f: F,
+  *,
+  length: int | None = None,
+  reverse: bool = False,
+  unroll: int | bool = 1,
+  _split_transpose: bool = False,
+  # extended api
+  in_axes: int | None | type[Carry] | tuple[tp.Any, ...] = (Carry, 0),
+  out_axes: tp.Any = (Carry, 0),
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
 ) -> F:
   ...
 
 
 def scan(
-    f: F | Missing = MISSING,
-    *,
-    length: int | None = None,
-    reverse: bool = False,
-    unroll: int | bool = 1,
-    _split_transpose: bool = False,
-    # extended api
-    in_axes: tp.Sequence[tp.Any] = (Carry, 0),
-    out_axes: tp.Any = 0,
-    # nnx specific
-    transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  f: F | type[Missing] = Missing,
+  *,
+  length: int | None = None,
+  reverse: bool = False,
+  unroll: int | bool = 1,
+  _split_transpose: bool = False,
+  # extended api
+  in_axes: int | None | type[Carry] | tuple[tp.Any, ...] = (Carry, 0),
+  out_axes: tp.Any = (Carry, 0),
+  # nnx specific
+  transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
 ) -> F | tp.Callable[[F], F]:
-  if isinstance(f, Missing):
+  if f is Missing:
     return functools.partial(
         scan,
         length=length,
@@ -1016,64 +1170,73 @@ def scan(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
-  carry_argnum: int = -1
-  for key, x in jax.tree_util.tree_leaves_with_path(in_axes):
-    if x is not Carry:
-      continue
-    assert isinstance(key[0], jax.tree_util.SequenceKey)
-    i = key[0].idx
-    if len(key) >= 2:
-      raise ValueError(
-          'Carry must be used direcly on an input, it cannot be nested. '
-          f'Found {in_axes=}'
-      )
-    if carry_argnum >= 0:
-      raise ValueError(f'Found multiple Carry axes in in_axes: {in_axes}')
-    carry_argnum = i
-  if carry_argnum < 0:
-    raise ValueError(f'No Carry axis specified in in_axes: {in_axes}')
+  _check_out_axes(out_axes)
 
-  in_axes = list(in_axes)
+  input_carry_argnum = _get_carry_argnum(in_axes, is_in_axes=True)
+  output_carry_argnum = _get_carry_argnum(out_axes, is_in_axes=False)
+
+  if (input_carry_argnum is None and output_carry_argnum is not None) or (
+    input_carry_argnum is not None and output_carry_argnum is None
+  ):
+    raise ValueError(
+      'If one of in_axes or out_axes has Carry, the other must also have Carry. '
+      f'Got {in_axes=!r} and {out_axes=!r}'
+    )
 
   scan_fn = ScanFn(
-      f,
-      carry_argnum,
-      in_axes,
-      out_axes,
-      transform_metadata,
+    f,
+    input_carry_argnum,
+    output_carry_argnum,
+    in_axes,
+    out_axes,
+    transform_metadata,
   )
 
   @functools.wraps(f)
   @graph.update_context('scan')
   def scan_wrapper(*args, **kwargs):
-    args = list(resolve_kwargs(f, args, kwargs))
+    args = resolve_kwargs(f, args, kwargs)
+
+    if in_axes is Carry and len(args) != 1:
+      raise ValueError(
+        f'When in_axes=Carry, the function must take exactly one argument, '
+        f'got {len(args)} arguments.'
+      )
+
     carry_deque = PytreeDeque()
     broadcast_deque = PytreeDeque()
     broadcast_arrays = PytreeDeque()
-    pure_args = extract.to_tree(
-        args,
-        prefix=in_axes,
-        split_fn=functools.partial(
-            _scan_split_in, carry_deque, broadcast_deque, broadcast_arrays
-        ),
-        map_non_graph_nodes=True,
-        ctxtag='scan',
+    pure_args: tuple = extract.to_tree(
+      args,
+      prefix=in_axes,
+      split_fn=functools.partial(
+        _scan_split_in, carry_deque, broadcast_deque, broadcast_arrays
+      ),
+      map_non_graph_nodes=True,
+      ctxtag='scan',
     )
-    pure_carry_arg = pure_args[carry_argnum]
-    pure_args[carry_argnum] = None
+    if isinstance(input_carry_argnum, int):
+      pure_carry_arg = pure_args[input_carry_argnum]
+      _pure_args = list(pure_args)
+      _pure_args[input_carry_argnum] = None
+      pure_args = tuple(_pure_args)
+    elif input_carry_argnum == 'all':
+      pure_carry_arg = pure_args[0]
+      pure_args = ()
+    else:
+      assert input_carry_argnum is None
+      pure_carry_arg = None
 
     carry = (pure_carry_arg, carry_deque, broadcast_deque, broadcast_arrays)
 
-    carry_out, (static_carry_index_mappings, pure_args_out, pure_scan_out) = (
-        jax.lax.scan(
-            scan_fn,
-            carry,
-            pure_args,
-            length=length,
-            reverse=reverse,
-            unroll=unroll,
-            _split_transpose=_split_transpose,
-        )
+    carry_out, scan_out = jax.lax.scan(
+      scan_fn,
+      carry,
+      pure_args,
+      length=length,
+      reverse=reverse,
+      unroll=unroll,
+      _split_transpose=_split_transpose,
     )
     (
         pure_carry_arg_out,
@@ -1081,42 +1244,61 @@ def scan(
         broadcast_deque_out,
         broadcast_arrays_out,
     ) = carry_out
+    (
+      static_carry_index_mappings,
+      pure_args_out,
+      pure_out,
+    ) = scan_out
 
     # next we have to insert all the index_mappings back into the NodeDefs
     # in the carry outputs
     carry_index_mappings = deque(static_carry_index_mappings.value)
-
-    def insert_index_mappings(x):
-      if isinstance(x, extract.GraphDefState) and isinstance(
-          x.graphdef, graph.NodeDef
-      ):
-        index_mapping = carry_index_mappings.popleft()
-        x = x.replace(
-            graphdef=dataclasses.replace(
-                x.graphdef, index_mapping=index_mapping
-            )
-        )
-      return x
-
-    pure_carry_arg_out = jax.tree.map(
-        insert_index_mappings,
-        pure_carry_arg_out,
-        is_leaf=lambda x: isinstance(x, extract.GraphDefState),
+    pure_carry_arg_out = _insert_index_mappings(
+      pure_carry_arg_out, carry_index_mappings
     )
 
-    pure_args_out[carry_argnum] = pure_carry_arg_out
-    args_out, scan_out = extract.from_tree(
-        (pure_args_out, pure_scan_out),
-        prefix=(in_axes, out_axes),
-        merge_fn=functools.partial(
-            _scan_merge_out, carry_deque_out, broadcast_deque_out
-        ),
-        is_leaf=lambda x: isinstance(x, (extract.TreeNode, Broadcasted)),
-        map_non_graph_nodes=True,
-        ctxtag='scan',
-    )
-    carry_out = args_out[carry_argnum]
+    # insert pure carry into pure_args_out
+    if input_carry_argnum == 'all':
+      pure_args_out = (pure_carry_arg_out,)
+    elif isinstance(input_carry_argnum, int):
+      _pure_args_out = list(pure_args_out)
+      _pure_args_out[input_carry_argnum] = pure_carry_arg_out
+      pure_args_out = tuple(_pure_args_out)
+    else:
+      assert input_carry_argnum is None
+      assert pure_carry_arg_out is None
 
-    return carry_out, scan_out
+    args_out, out = extract.from_tree(
+      (pure_args_out, pure_out),
+      prefix=(in_axes, out_axes),
+      merge_fn=functools.partial(
+        _scan_merge_out, carry_deque_out, broadcast_deque_out
+      ),
+      is_leaf=lambda x: isinstance(x, (extract.TreeNode, Broadcasted)),
+      map_non_graph_nodes=True,
+      ctxtag='scan',
+    )
+
+    # extract the carry from args_out
+    if input_carry_argnum == 'all':
+      carry_arg = args_out[0]
+    elif isinstance(input_carry_argnum, int):
+      carry_arg = args_out[input_carry_argnum]
+    else:
+      assert input_carry_argnum is None
+      carry_arg = None
+
+    # insert carry into the output
+    if output_carry_argnum == 'all':
+      out = carry_arg
+    elif isinstance(output_carry_argnum, int):
+      _out = list(out)
+      _out[output_carry_argnum] = carry_arg
+      out = tuple(_out)
+    else:
+      assert output_carry_argnum is None
+      assert carry_arg is None
+
+    return out
 
   return scan_wrapper  # type: ignore

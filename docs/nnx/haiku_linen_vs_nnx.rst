@@ -1209,7 +1209,7 @@ in ``__init__`` to scan over the sequence.
       scan_fn = lambda carry, cell, x: cell(carry, x)
       carry = self.cell.initial_state(x.shape[0])
       carry, y = nnx.scan(
-        scan_fn, in_axes=(nnx.Carry, None, 1), out_axes=1
+        scan_fn, in_axes=(nnx.Carry, None, 1), out_axes=(nnx.Carry, 1)
       )(carry, self.cell, x)
 
       return y
