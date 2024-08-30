@@ -16,15 +16,16 @@ import dataclasses
 import typing as tp
 from typing import Any
 
-from flax import nnx
 from flax import linen
+from flax import nnx
+from flax.core import FrozenDict
 from flax.core import meta
 from flax.nnx.nnx import graph
 from flax.nnx.nnx.bridge import variables as bv
 from flax.nnx.nnx.module import GraphDef, Module
+from flax.nnx.nnx.object import Object
 from flax.nnx.nnx.rnglib import Rngs
 from flax.nnx.nnx.state import State
-from flax.nnx.nnx.object import Object
 import jax
 from jax import tree_util as jtu
 
@@ -220,7 +221,7 @@ class ToLinen(linen.Module):
   """
   nnx_class: tp.Callable[..., Module]
   args: tp.Sequence = ()
-  kwargs: tp.Mapping = dataclasses.field(default_factory=dict)
+  kwargs: FrozenDict[str, Any] = FrozenDict()
   skip_rng: bool = False
   metadata_type: tp.Type = bv.NNXMeta
 
@@ -277,4 +278,4 @@ class ToLinen(linen.Module):
 def to_linen(nnx_class: tp.Callable[..., Module], *args,
              name: str | None = None, **kwargs):
   """Shortcut of `ToLinen` if user is not changing any of `ToLinen` default fields."""
-  return ToLinen(nnx_class, args=args, kwargs=kwargs, name=name)
+  return ToLinen(nnx_class, args=args, kwargs=FrozenDict(kwargs), name=name)
