@@ -18,5 +18,6 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/nnx/i
   helpers
   visualization
   filterlib
+  bridge
   experimental
 
