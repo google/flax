@@ -362,7 +362,15 @@ class MultiMetric(Metric):
       **metrics: the key-word arguments that will be used to access
         the corresponding ``Metric``.
     """
-    # TODO: raise error if a kwarg is passed that is in ('reset', 'update', 'compute'), since these names are reserved for methods
+    # Raise error if a kwarg is passed that is in ('reset', 'update', 'compute'), since these names are reserved for methods
+    reserved_names = {'reset', 'update', 'compute'}
+    for metric_name in metrics:
+        if metric_name in reserved_names:
+            raise ValueError(
+                f"The keyword argument '{metric_name}' is reserved and cannot be used. "
+                f"Please use names other than {', '.join(reserved_names)}."
+            )
+    
     self._metric_names = []
     for metric_name, metric in metrics.items():
       self._metric_names.append(metric_name)
