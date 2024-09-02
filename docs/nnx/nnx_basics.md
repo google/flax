@@ -234,12 +234,14 @@ Notice the following:
 ```{code-cell} ipython3
 from functools import partial
 
+@nnx.split_rngs(splits=5)
 @partial(nnx.vmap, axis_size=5)
 def create_model(rngs: nnx.Rngs):
   return MLP(10, 32, 10, rngs=rngs)
 
 model = create_model(nnx.Rngs(0))
 
+@nnx.split_rngs(splits=5)
 @nnx.scan
 def forward(x, model: MLP):
   x = model(x)
@@ -252,16 +254,86 @@ print(f'{y.shape = }')
 nnx.display(model)
 ```
 
-How do NNX transforms achieve this? To understand how NNX objects interact with
-JAX transforms lets take a look at the Functional API.
+## Using Modules as Pytrees
 
-+++
+Modules are not pytrees by design, however when needed `nnx.Pytree` can be used to obtain a pytree 
+representation of a Module. Pytree forwards all attribute access to the underlying Module so you can
+naturally use it as if it were the original Module.
+
+```{code-cell} ipython3
+model = nnx.Pytree(nnx.Linear(3, 3, rngs=nnx.Rngs(0)))
+model = jax.tree.map(lambda x: x, model) # its a pytree!
+
+# attribute access
+print(f'{model.kernel.shape = }')
+nnx.display(model)
+```
+
+Pytree instances cannot share references with other objects, their state is not automatically
+propagated by NNX transforms, and they do not support mutation. If mutation is needed the Pytree
+can be used as a context manager to get a reference to the underlying object:
+
+```{code-cell} ipython3
+model = nnx.Pytree(nnx.Linear(3, 3, rngs=nnx.Rngs(0)))
+
+try:
+  model.in_features = 10
+except AttributeError as e:
+  print('AttributeError:', e)
+
+with model as m:
+  m.in_features = 10
+
+print(f'{model.in_features = }')
+```
+
+All update will be propagated to the Pytree at the end of the context.
+
+### Integration Example
+
+Finally lets see an example of how to use Pytree to use a Module with the `odeint` function,
+a common use case when sampling from Diffusion Models.
+
+```{code-cell} ipython3
+from jax.experimental.ode import odeint
+
+model = nnx.Pytree(nnx.Linear(3, 3, rngs=nnx.Rngs(0)))
+
+def step_fn(y, t, model):
+  return model(y) # dy/dt
+
+y = jnp.ones((3,))
+ts = jnp.linspace(0, 1, 5)
+ts = jnp.linspace(0, 1, 5)
+
+ys = odeint(step_fn, y, ts, model)
+
+print(ys)
+```
+
+```{code-cell} ipython3
+import equinox as eqx
+
+class Model(eqx.Module):
+  linear1: eqx.nn.Linear
+  linear2: nnx.Pytree[nnx.Linear]
+
+  def __init__(self, rngs: nnx.Rngs):
+    self.linear1 = eqx.nn.Linear(2, 3, key=rngs())
+    self.linear2 = nnx.Pytree(nnx.Linear(3, 4, rngs=rngs))
+
+  def __call__(self, x: jnp.ndarray):
+    return self.linear2(jax.nn.relu(self.linear1(x)))
+
+model = Model(rngs=nnx.Rngs(0))
+
+model(jnp.ones((2,)))
+```
 
 ## The Functional API
 
-The Functional API establishes a clear boundary between reference/object semantics and
-value/pytree semantics. It also allows same amount of fine-grained control over the 
-state that Linen/Haiku users are used to. The Functional API consists of 3 basic methods:
+The Functional API allows the creation of a static representation of the Module state which enable the
+level of fine-grained control that Linen/Haiku users are used to. The API consists of 3 basic functions:
 `split`, `merge`, and `update`.
 
 The `StatefulLinear` Module shown below will serve as an example for the use of the
@@ -288,7 +360,7 @@ y = model(jnp.ones((1, 3)))
 nnx.display(model)
 ```
 
-### State and GraphDef
+### GraphDef and State
 
 A Module can be decomposed into `GraphDef` and `State` using the
 `split` function. State is a Mapping from strings to Variables or nested 

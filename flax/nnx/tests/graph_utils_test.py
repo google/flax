@@ -425,61 +425,6 @@ class TestGraphUtils(absltest.TestCase):
     assert m2 is m
     assert m2.ref is m2
 
-  def test_call_jit_update(self):
-    class Counter(nnx.Module):
-      def __init__(self):
-        self.count = jnp.zeros(())
-
-      def inc(self):
-        self.count += 1
-        return 1
-
-    graph_state = nnx.split(Counter())
-
-    @jax.jit
-    def update(graph_state: nnx.PureState[Counter]):
-      out, graph_state = nnx.call(graph_state).inc()
-      self.assertEqual(out, 1)
-      return graph_state
-
-    graph_state = update(graph_state)
-    graph_state = update(graph_state)
-
-    counter = nnx.merge(*graph_state)
-
-    self.assertEqual(counter.count, 2)
-
-  def test_stateful_linear(self):
-    linear = StatefulLinear(3, 2, nnx.Rngs(0))
-    linear_state = nnx.split(linear)
-
-    @jax.jit
-    def forward(x, pure_linear: nnx.PureState[StatefulLinear]):
-      y, pure_linear = nnx.call(pure_linear)(x)
-      return y, pure_linear
-
-    x = jnp.ones((1, 3))
-    y, linear_state = forward(x, linear_state)
-    y, linear_state = forward(x, linear_state)
-
-    self.assertEqual(linear.count.value, 0)
-    new_linear = nnx.merge(*linear_state)
-    self.assertEqual(new_linear.count.value, 2)
-
-  def test_getitem(self):
-    rngs = nnx.Rngs(0)
-    nodes = dict(
-      a=StatefulLinear(3, 2, rngs),
-      b=StatefulLinear(2, 1, rngs),
-    )
-    node_state = nnx.split(nodes)
-    _, node_state = nnx.call(node_state)['b'].increment()
-
-    nodes = nnx.merge(*node_state)
-
-    self.assertEqual(nodes['a'].count.value, 0)
-    self.assertEqual(nodes['b'].count.value, 1)
-
   def test_object_state_propagation(self):
     test = self
 
