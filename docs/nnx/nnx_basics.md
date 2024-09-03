@@ -8,9 +8,9 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
-# NNX Basics
+# Flax NNX Basics
 
-NNX is a new Flax API that is designed to make it easier to create, inspect, debug,
+Flax NNX is a new simplified API that is designed to make it easier to create, inspect, debug,
 and analyze neural networks in JAX. It achieves this by adding first class support
 for Python reference semantics, allowing users to express their models using regular
 Python objects, which are modeled as PyGraphs (instead of PyTrees), enabling reference
@@ -30,18 +30,17 @@ import jax.numpy as jnp
 ```
 
 ## The Module System
-To begin lets see how to create a `Linear` Module using NNX. The main difference between 
-NNX and Module systems like Haiku or Linen is that in NNX everything is **explicit**. This 
+To begin lets see how to create a `Linear` Module using Flax. The main difference between 
+Flax NNX and Module systems like Haiku or Flax Linen is that everything is **explicit**. This 
 means among other things that 1) the Module itself holds the state (e.g. parameters) directly, 
 2) the RNG state is threaded by the user, and 3) all shape information must be provided on 
 initialization (no shape inference).
 
 As shown next, dynamic state is usually stored in `nnx.Param`s, and static state 
-(all types not handled by NNX) such as integers or strings  are stored directly. 
+(all types not handled by Flax) such as integers or strings  are stored directly. 
 Attributes of type `jax.Array` and `numpy.ndarray` are also treated as dynamic 
 state, although storing them inside `nnx.Variable`s such as `Param` is preferred.
-Also, the `nnx.Rngs` object by can be used to get new unique keys based on a root 
-key passed to the constructor.
+Also, `nnx.Rngs` can be used to get new unique keys starting from a root key.
 
 ```{code-cell} ipython3
 class Linear(nnx.Module):
@@ -81,7 +80,7 @@ The above visualization by `nnx.display` is generated using the awesome [Treesco
 ### Stateful Computation
 
 Implementing layers such as `BatchNorm` requires performing state updates during the 
-forward pass. To implement this in NNX you just create a `Variable` and update its 
+forward pass. To implement this in Flax you just create a `Variable` and update its 
 `.value` during the forward pass.
 
 ```{code-cell} ipython3
@@ -101,7 +100,7 @@ print(f'{counter.count.value = }')
 ```
 
 Mutable references are usually avoided in JAX, however as we'll see in later sections
-NNX provides sound mechanisms to handle them.
+Flax provides sound mechanisms to handle them.
 
 +++
 
@@ -131,13 +130,13 @@ y = model(x=jnp.ones((3, 2)))
 nnx.display(model)
 ```
 
-In NNX `Dropout` is a stateful module that stores an `Rngs` object so that it can generate
+In Flax `Dropout` is a stateful module that stores an `Rngs` object so that it can generate
 new masks during the forward pass without the need for the user to pass a new key each time.
 
 +++
 
 #### Model Surgery
-NNX Modules are mutable by default, this means their structure can be changed at any time, 
+Flax NNX Modules are mutable by default, this means their structure can be changed at any time, 
 this makes model surgery quite easy as any submodule attribute can be replaced with anything
 else e.g. new Modules, existing shared Modules, Modules of different types, etc. More over, 
 `Variable`s can also be modified or replaced / shared.
@@ -169,15 +168,15 @@ y = model(x=jnp.ones((3, 2)))
 nnx.display(model)
 ```
 
-## NNX Transforms
+## Transforms
 
-NNX Transforms extend JAX transforms to support Modules and other objects.
+Flax Transforms extend JAX transforms to support Modules and other objects.
 They are supersets of their equivalent JAX counterpart with the addition of
 being aware of the object's state and providing additional APIs to transform 
-it. One of the main features of NNX Transforms is the preservation of reference semantics, 
+it. One of the main features of Flax Transforms is the preservation of reference semantics, 
 meaning that any mutation of the object graph that occurs inside the transform is
 propagated outisde as long as its legal within the transform rules. In practice this
-means that NNX programs can be express using imperative code, highly simplifying
+means that Flax programs can be express using imperative code, highly simplifying
 the user experience.
 
 In the following example we define a `train_step` function that takes a `MLP` model,
@@ -255,7 +254,7 @@ print(f'{y.shape = }')
 nnx.display(model)
 ```
 
-How do NNX transforms achieve this? To understand how NNX objects interact with
+How do Flax transforms achieve this? To understand how Flax objects interact with
 JAX transforms lets take a look at the Functional API.
 
 +++

@@ -14,21 +14,22 @@ jupytext:
 
 # MNIST Tutorial
 
-Welcome to NNX! This tutorial will guide you through building and training a simple convolutional 
-neural network (CNN) on the MNIST dataset using the NNX API. NNX is a Python neural network library
+Welcome to Flax NNX! This tutorial will guide you through building and training a simple convolutional 
+neural network (CNN) on the MNIST dataset using the Flax NNX API. Flax NNX is a Python neural network library
 built upon [JAX](https://github.com/google/jax) and currently offered as an experimental module within 
 [Flax](https://github.com/google/flax).
 
 +++
 
-## 1. Install NNX
+## 1. Install Flax
 
-Since NNX is under active development, we recommend using the latest version from the Flax GitHub repository:
+If `flax` is not installed in your environment, you can install it from PyPI, uncomment and run the 
+following cell:
 
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-# !pip install git+https://github.com/google/flax.git
+# !pip install flax
 ```
 
 ## 2. Load the MNIST Dataset
@@ -71,12 +72,12 @@ train_ds = train_ds.batch(batch_size, drop_remainder=True).take(train_steps).pre
 test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1)
 ```
 
-## 3. Define the Network with NNX
+## 3. Define the Network with Flax NNX
 
-Create a convolutional neural network with NNX by subclassing `nnx.Module`.
+Create a convolutional neural network with Flax NNX by subclassing `nnx.Module`.
 
 ```{code-cell} ipython3
-from flax import nnx  # NNX API
+from flax import nnx  # Flax NNX API
 from functools import partial
 
 class CNN(nnx.Module):
@@ -116,7 +117,7 @@ nnx.display(y)
 
 ## 4. Create Optimizer and Metrics
 
-In NNX, we create an `Optimizer` object to manage the model's parameters and apply gradients during training. `Optimizer` receives the model's reference so it can update its parameters, and an `optax` optimizer to define the update rules. Additionally, we'll define a `MultiMetric` object to keep track of the `Accuracy` and the `Average` loss.
+In Flax NNX, we create an `Optimizer` object to manage the model's parameters and apply gradients during training. `Optimizer` receives the model's reference so it can update its parameters, and an `optax` optimizer to define the update rules. Additionally, we'll define a `MultiMetric` object to keep track of the `Accuracy` and the `Average` loss.
 
 ```{code-cell} ipython3
 import optax
@@ -162,9 +163,9 @@ def eval_step(model: CNN, metrics: nnx.MultiMetric, batch):
 The [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/transforms.html#flax.nnx.jit) decorator traces the `train_step` function for just-in-time compilation with 
 [XLA](https://www.tensorflow.org/xla), optimizing performance on 
 hardware accelerators. `nnx.jit` is similar to [`jax.jit`](https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html#jax.jit),
-except it can transforms functions that contain NNX objects as inputs and outputs.
+except it can transforms functions that contain Flax NNX objects as inputs and outputs.
 
-**NOTE**: in the above code we performed serveral inplace updates to the model, optimizer, and metrics, and we did not explicitely return the state updates. This is because NNX transforms respect reference semantics for NNX objects, and will propagate the state updates of the objects passed as input arguments. This is a key feature of NNX that allows for a more concise and readable code.
+**NOTE**: in the above code we performed serveral inplace updates to the model, optimizer, and metrics, and we did not explicitely return the state updates. This is because Flax NNX transforms respect reference semantics for Flax NNX objects, and will propagate the state updates of the objects passed as input arguments. This is a key feature of Flax NNX that allows for a more concise and readable code.
 
 +++
 

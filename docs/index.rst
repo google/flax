@@ -325,6 +325,5 @@ Notable examples in Flax include:
    developer_notes/index
    philosophy
    contributing
-   experimental
    api_reference/index
-   NNX <nnx/index>
+   Flax NNX <nnx/index>
