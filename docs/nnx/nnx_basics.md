@@ -229,7 +229,7 @@ Notice the following:
 1. The `create_model` function takes in a key and returns an `MLP` object, since we create 5 keys
   and use `nnx.vmap` over `create_model` a stack of 5 `MLP` objects is created.
 2. We use `nnx.scan` to iteratively apply each `MLP` in the stack to the input `x`.
-3. The `nnx.scan` API (consciously) deviates from `jax.lax.scan` and instead mimicks `vmap` which is
+3. The `nnx.scan` API (consciously) deviates from `jax.lax.scan` and instead mimics `vmap` which is
   more expressive. `nnx.scan` allows specifying multiple inputs, the scan axes of each input/output,
   and the position of the carry.
 4. State updates for the `BatchNorm` and `Dropout` layers are automatically propagated
@@ -243,13 +243,13 @@ def create_model(key: jax.Array):
 keys = jax.random.split(jax.random.key(0), 5)
 model = create_model(keys)
 
-@nnx.scan(in_axes=(nnx.Carry, 0), out_axes=0)
-def forward(x, model: MLP):
+@nnx.scan(in_axes=(0, nnx.Carry), out_axes=nnx.Carry)
+def forward(model: MLP, x):
   x = model(x)
-  return x, None
+  return x
 
 x = jnp.ones((3, 10))
-y, _ = forward(x, model)
+y = forward(model, x)
 
 print(f'{y.shape = }')
 nnx.display(model)
