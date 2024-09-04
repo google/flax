@@ -22,17 +22,16 @@ from flax import nnx
 
 A = tp.TypeVar('A')
 
-
 class TestVariableState(absltest.TestCase):
   def test_pytree(self):
     r1 = nnx.VariableState(nnx.Param, 1)
-    assert r1.value == 1
+    self.assertEqual(r1.value, 1)
 
     r2 = jax.tree.map(lambda x: x + 1, r1)
 
-    assert r1.value == 1
-    assert r2.value == 2
-    assert r1 is not r2
+    self.assertEqual(r1.value, 1)
+    self.assertEqual(r2.value, 2)
+    self.assertIsNot(r1, r2)
 
   def test_overloads_module(self):
     class Linear(nnx.Module):
@@ -47,7 +46,7 @@ class TestVariableState(absltest.TestCase):
     linear = Linear(3, 4, nnx.Rngs(0))
     x = jax.numpy.ones((3,))
     y = linear(x)
-    assert y.shape == (4,)
+    self.assertEqual(y.shape, (4,))
 
   def test_jax_array(self):
     class Linear(nnx.Module):
@@ -62,7 +61,25 @@ class TestVariableState(absltest.TestCase):
     linear = Linear(3, 4, nnx.Rngs(0))
     x = jax.numpy.ones((3,))
     y = linear(x)
-    assert y.shape == (4,)
+    self.assertEqual(y.shape, (4,))
+
+  def test_proxy_access(self):
+    v = nnx.Param(jnp.ones((2, 3)))
+    t = v.T
+
+    self.assertEqual(t.shape, (3, 2))
+
+  def test_proxy_call(self):
+    class Callable(tp.NamedTuple):
+      value: int
+
+      def __call__(self, x):
+        return self.value * x
+
+    v = nnx.Param(Callable(2))
+    result = v(3)
+
+    self.assertEqual(result, 6)
 
 
 if __name__ == '__main__':

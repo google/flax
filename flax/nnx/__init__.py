@@ -152,11 +152,9 @@ from .nnx.transforms.iteration import pmap as pmap
 from .nnx.transforms.transforms import eval_shape as eval_shape
 from .nnx.transforms.transforms import cond as cond
 from .nnx.transforms.iteration import StateAxes as StateAxes
-from .nnx.variables import EMPTY as EMPTY
 from .nnx.variables import A as A
 from .nnx.variables import BatchStat as BatchStat
 from .nnx.variables import Cache as Cache
-from .nnx.variables import Empty as Empty
 from .nnx.variables import Intermediate as Intermediate
 from .nnx.variables import Variable as Variable
 from .nnx.variables import VariableState as VariableState
