@@ -26,7 +26,6 @@ from jax import custom_jvp, custom_vjp, lax, random
 from jax import numpy as jnp
 from jax._src import core
 from jax._src import dtypes
-from jax._src.lax import lax
 from jax._src.typing import DTypeLike
 
 try:
