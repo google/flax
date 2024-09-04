@@ -1255,9 +1255,11 @@ def get_fp8_dtypes(fp8_genre):
 
 class Fp8Test(parameterized.TestCase):
   @parameterized.parameters(
-    {'fp8_genre': 'OCP'}, {'fp8_genre': 'NANOO'}
+    {'fp8_genre': 'OCP', 'use_direct_quant': True},
+    {'fp8_genre': 'OCP', 'use_direct_quant': False},
+    {'fp8_genre': 'NANOO', 'use_direct_quant': False}
   )
-  def test_fp8_dot_general_injection(self, fp8_genre):
+  def test_fp8_dot_general_injection(self, fp8_genre, use_direct_quant):
     # Used to cast the inputs to be representable in FP8, so that the difference
     # of the results from the original gemm and fp8 gemm is small.
     cast_to_representable = functools.partial(
@@ -1276,13 +1278,20 @@ class Fp8Test(parameterized.TestCase):
       random.uniform(random_key, (16, 64)), e5m2_dtype
     )
 
+    if fp8_genre == 'NANOO':
+      assert use_direct_quant == False
+      quant_cls = nn.NANOOFp8DotGeneralOp
+    else:
+      quant_cls = (
+        nn.Fp8DirectDotGeneralOp
+        if use_direct_quant else nn.Fp8DotGeneralOp
+      )
+
     def run(fp8_injection, expected_shapes):
       p = nn.DenseGeneral(features=64, name='dense')
+
       if fp8_injection:
-        if fp8_genre == 'OCP':
-          p.dot_general_cls = nn.Fp8DotGeneralOp
-        else:
-          p.dot_general_cls = nn.NANOOFp8DotGeneralOp
+        p.dot_general_cls = quant_cls
 
       init_fn = jax.jit(p.init_with_output)
       y, initial_vars = init_fn(init_key, x)
@@ -1301,14 +1310,11 @@ class Fp8Test(parameterized.TestCase):
     expected_shapes_original = {
       'params': {'kernel': (32, 64), 'bias': (64,)},
     }
-    if fp8_genre == 'OCP':
-      fp8_op_name = 'Fp8DotGeneralOp_0'
-    else:
-      fp8_op_name = 'NANOOFp8DotGeneralOp_0'
+
     expected_shapes_new = {
       'params': {'kernel': (32, 64), 'bias': (64,)},
       fp8_ops.OVERWRITE_WITH_GRADIENT: {
-        fp8_op_name: {
+        f'{quant_cls.__name__}_0': {
           'input_amax_history': (1024,),
           'kernel_amax_history': (1024,),
           'output_grad_amax_history': (1024,),
@@ -1318,7 +1324,6 @@ class Fp8Test(parameterized.TestCase):
         }
       },
     }
-
     output1a, output1b = run(False, expected_shapes_original)
     output2a, output2b = run(True, expected_shapes_new)
     dw1, dw2 = output1b[0]['params']['kernel'], output2b[0]['params']['kernel']
@@ -1329,19 +1334,24 @@ class Fp8Test(parameterized.TestCase):
     np.testing.assert_allclose(dx1, dx2, atol=1e-04)
 
   @parameterized.parameters(
-    {'fp8_genre': 'OCP'}, {'fp8_genre': 'NANOO'}
+    {'fp8_genre': 'OCP', 'use_direct_quant': True},
+    {'fp8_genre': 'OCP', 'use_direct_quant': False},
+    {'fp8_genre': 'NANOO', 'use_direct_quant': False}
   )
-  def test_fp8_train_state(self, fp8_genre):
+  def test_fp8_train_state(self, fp8_genre, use_direct_quant):
     key, init_key, random_key = random.split(random.PRNGKey(seed=123), 3)
     x = random.uniform(random_key, (16, 16), dtype=jnp.float32)
-    if fp8_genre == 'OCP':
-      fp8_dot_op = nn.Fp8DotGeneralOp
-      fp8_op_name = 'Fp8DotGeneralOp_0'
+
+    if fp8_genre == 'NANOO':
+      assert use_direct_quant == False
+      quant_cls = nn.NANOOFp8DotGeneralOp
     else:
-      fp8_dot_op = nn.NANOOFp8DotGeneralOp
-      fp8_op_name = 'NANOOFp8DotGeneralOp_0'
+      quant_cls = (
+        nn.Fp8DirectDotGeneralOp
+        if use_direct_quant else nn.Fp8DotGeneralOp
+      )
     dense = nn.DenseGeneral(
-      features=32, use_bias=True, dot_general_cls=fp8_dot_op
+      features=32, use_bias=True, dot_general_cls=quant_cls
     )
 
     init_fn = jax.jit(dense.init)
@@ -1395,7 +1405,7 @@ class Fp8Test(parameterized.TestCase):
 
       rtol, atol = 0.001, 0.001
       fp8_vars = state.params[fp8_ops.OVERWRITE_WITH_GRADIENT][
-        fp8_op_name
+        f'{quant_cls.__name__}_0'
       ]
       np.testing.assert_allclose(
         fp8_vars['input_amax_history'],
