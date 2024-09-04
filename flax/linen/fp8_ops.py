@@ -579,7 +579,7 @@ class Fp8DotGeneralOp(Fp8DotGeneralBase):
       comp_dtype, self.e4m3_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
     )
 
-    y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers)
+    y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers)  # type: ignore
     y = out_qdq(
       comp_dtype,
       self.e5m2_dtype,
