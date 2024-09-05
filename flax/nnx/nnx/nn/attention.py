@@ -190,6 +190,9 @@ def dot_product_attention(
   dtype = query.dtype
   assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert (
+      key.ndim > 2
+  ), f'q, k, v must have at least 3 dimensions, not {key.ndim=}'
+  assert (
     query.shape[:-3] == key.shape[:-3] == value.shape[:-3]
   ), 'q, k, v batch dims must match.'
   assert (
