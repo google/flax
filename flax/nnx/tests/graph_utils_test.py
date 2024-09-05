@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
 import dataclasses
 from functools import partial
 from threading import Thread
 from typing import Any
 
-from absl.testing import absltest
+from absl.testing import absltest, parameterized
 from flax import linen, nnx, struct
 import jax
 import jax.numpy as jnp
-import pytest
 
 
 class StatefulLinear(nnx.Module):
@@ -77,7 +77,7 @@ class TestGraphUtils(absltest.TestCase):
 
     graphdef, state = nnx.split(g)
 
-    with pytest.raises(ValueError, match='Expected key'):
+    with self.assertRaisesRegex(ValueError, 'Expected key'):
       nnx.graph.unflatten(graphdef, nnx.State({}))
 
   def test_update_dynamic(self):
@@ -109,8 +109,8 @@ class TestGraphUtils(absltest.TestCase):
     g = [a, 3, a, nnx.Param(4)]
     g2 = [a, a, 3, nnx.Param(4)]
 
-    with pytest.raises(
-      ValueError, match='Trying to update a node with a different type'
+    with self.assertRaisesRegex(
+      ValueError, 'Trying to update a node with a different type'
     ):
       nnx.graph.graph_update_static(g, g2)
 
@@ -130,7 +130,7 @@ class TestGraphUtils(absltest.TestCase):
     g = nnx.List([a, 3, a, nnx.Param(4)])
     g2 = nnx.List([a, 3, a, nnx.Param(4), a])
 
-    with pytest.raises(ValueError, match='Trying to add a new node at path'):
+    with self.assertRaisesRegex(ValueError, 'Trying to add a new node at path'):
       nnx.graph.graph_update_static(g, g2)
 
   def test_module_list(self):
@@ -428,10 +428,10 @@ class TestGraphUtils(absltest.TestCase):
   def test_call_jit_update(self):
     class Counter(nnx.Module):
       def __init__(self):
-        self.count = jnp.zeros(())
+        self.count = nnx.Param(jnp.zeros(()))
 
       def inc(self):
-        self.count += 1
+        self.count.value += 1
         return 1
 
     graph_state = nnx.split(Counter())
@@ -447,7 +447,7 @@ class TestGraphUtils(absltest.TestCase):
 
     counter = nnx.merge(*graph_state)
 
-    self.assertEqual(counter.count, 2)
+    self.assertEqual(counter.count.value, 2)
 
   def test_stateful_linear(self):
     linear = StatefulLinear(3, 2, nnx.Rngs(0))
@@ -714,7 +714,7 @@ class TestGraphUtils(absltest.TestCase):
     pure_tree = nnx.to_tree(impure_tree, prefix=prefix)
 
     prefix = (0, None, 1)
-    with pytest.raises(ValueError, match='Inconsistent aliasing detected'):
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing detected'):
       nnx.to_tree(impure_tree, prefix=prefix)
 
   def test_simple_vmap(self):
@@ -798,12 +798,24 @@ class SimplePyTreeModule(nnx.Module, experimental_pytree=True):
   pass
 
 
-@pytest.mark.parametrize(['x'], [(SimpleModule(),), (SimplePyTreeModule(),)])
-def test_threading(x: nnx.Module):
-  class MyThread(Thread):
-    def run(self) -> None:
-      nnx.graph.split(x)
+class TestThreading(parameterized.TestCase):
 
-  thread = MyThread()
-  thread.start()
-  thread.join()
+  @parameterized.parameters(
+      (SimpleModule,),
+      (SimplePyTreeModule,),
+  )
+  def test_threading(self, module_fn: Callable[[], nnx.Module]):
+    x = module_fn()
+
+    class MyThread(Thread):
+
+      def run(self) -> None:
+        nnx.graph.split(x)
+
+    thread = MyThread()
+    thread.start()
+    thread.join()
+
+
+if __name__ == '__main__':
+  absltest.main()

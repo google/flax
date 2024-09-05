@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from absl.testing import absltest
 
 from flax import nnx
@@ -31,3 +30,6 @@ class TestFilters(absltest.TestCase):
 
     self.assertIn('head', head_state)
     self.assertNotIn('backbone', head_state)
+
+if __name__ == '__main__':
+  absltest.main()

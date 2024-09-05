@@ -50,17 +50,18 @@ Node = tp.TypeVar('Node')
 Leaf = tp.TypeVar('Leaf')
 AuxData = tp.TypeVar('AuxData')
 
-StateLeaf = tp.Union[VariableState[tp.Any], np.ndarray, jax.Array]
+StateLeaf = VariableState[tp.Any]
+NodeLeaf = VariableState[tp.Any]
 GraphState = State[Key, StateLeaf]
 GraphFlatState = FlatState[StateLeaf]
 
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
-  return isinstance(x, (VariableState, np.ndarray, jax.Array))
+  return isinstance(x, VariableState)
 
 
-def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
-  return isinstance(x, (Variable, np.ndarray, jax.Array))
+def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
+  return isinstance(x, Variable)
 
 
 class _HashById(tp.Hashable, tp.Generic[A]):
@@ -416,6 +417,11 @@ def _graph_flatten(
       flat_state[(*path, key)] = value
       leaves.append((key, None))
     else:
+      if isinstance(value, (jax.Array, np.ndarray)):
+        path_str = '/'.join(map(str, (*path, key)))
+        raise ValueError(
+            f'Arrays leaves are not supported, at {path_str!r}: {value}'
+        )
       static_fields.append((key, value))
 
   nodedef = NodeDef.create(

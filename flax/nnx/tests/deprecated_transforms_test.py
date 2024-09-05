@@ -368,3 +368,6 @@ class TestPmap(absltest.TestCase):
     y = module(x)
 
     assert y.shape == (1, 5, 3)
+
+if __name__ == '__main__':
+  absltest.main()

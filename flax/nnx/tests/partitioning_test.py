@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import jax
-import pytest
-
+from absl.testing import absltest
 from flax import nnx
+import jax
 
 
-class TestPartitioning:
+class TestPartitioning(absltest.TestCase):
+
   def test_partition(self):
     m = nnx.Dict(
       a=nnx.List([nnx.Param(1), nnx.BatchStat(2)]),
@@ -29,22 +28,22 @@ class TestPartitioning:
 
     graphdef, params, rest = nnx.split(m, nnx.Param, ...)
 
-    assert len(params) == 2
-    assert len(rest) == 1
+    self.assertLen(params, 2)
+    self.assertLen(rest, 1)
 
     # check params
-    assert params['a'][0].value == m.a[0].value
-    assert params['b'].value == m.b.value
+    self.assertEqual(params['a'][0].value, m.a[0].value)
+    self.assertEqual(params['b'].value, m.b.value)
 
     # check rest
-    assert rest['a'][1].value == m.a[1].value
+    self.assertEqual(rest['a'][1].value, m.a[1].value)
 
     m2 = nnx.merge(graphdef, params, rest)
 
-    assert m2.a[0].value == m.a[0].value
-    assert m2.a[1].value == m.a[1].value
-    assert m2.b.value == m.b.value
-    assert m2.c == 100
+    self.assertEqual(m2.a[0].value, m.a[0].value)
+    self.assertEqual(m2.a[1].value, m.a[1].value)
+    self.assertEqual(m2.b.value, m.b.value)
+    self.assertEqual(m2.c, 100)
 
   def test_complete_partitioning(self):
     m = nnx.Dict(
@@ -70,8 +69,8 @@ class TestPartitioning:
       b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
-    with pytest.raises(
-      ValueError, match='Non-exhaustive filters, got a non-empty remainder'
+    with self.assertRaisesRegex(
+        ValueError, 'Non-exhaustive filters, got a non-empty remainder'
     ):
       nnx.split(m, nnx.Param)
 
@@ -81,8 +80,8 @@ class TestPartitioning:
       b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
-    with pytest.raises(
-      ValueError, match='`...` or `True` can only be used as the last filters'
+    with self.assertRaisesRegex(
+        ValueError, '`...` or `True` can only be used as the last filters'
     ):
       nnx.split(m, ..., nnx.Param)
 
@@ -100,10 +99,10 @@ class TestPartitioning:
 
     nnx.update(m, state)
 
-    assert m.a[0].value == 2
-    assert m.a[1].value == 6
-    assert m.b.value == 4
-    assert m.c == 100
+    self.assertEqual(m.a[0].value, 2)
+    self.assertEqual(m.a[1].value, 6)
+    self.assertEqual(m.b.value, 4)
+    self.assertEqual(m.c, 100)
 
   def test_update_from_with_array_leaf(self):
     m = nnx.Dict(
@@ -119,10 +118,10 @@ class TestPartitioning:
 
     nnx.update(m, state)
 
-    assert m.a[0].value == 2
-    assert m.a[1].value == 6
-    assert m.b.value == 4
-    assert m.c.value == 200
+    self.assertEqual(m.a[0].value, 2)
+    self.assertEqual(m.a[1].value, 6)
+    self.assertEqual(m.b.value, 4)
+    self.assertEqual(m.c.value, 200)
 
   def test_grad_example(self):
     m = nnx.Dict(
@@ -139,10 +138,10 @@ class TestPartitioning:
     grads = jax.grad(loss)(params)
     nnx.update(m, grads)
 
-    assert m.a[0].value == 2.0
-    assert m.a[1].value == -10
-    assert m.b.value == 2.0
-    assert m.c == 100
+    self.assertEqual(m.a[0].value, 2.0)
+    self.assertEqual(m.a[1].value, -10)
+    self.assertEqual(m.b.value, 2.0)
+    self.assertEqual(m.c, 100)
 
   def test_get_paritition(self):
     m = nnx.Dict(
@@ -153,11 +152,15 @@ class TestPartitioning:
     )
 
     # test Variables not shared
-    assert vars(m.a)['0'] is not vars(m)['b']
+    self.assertIsNot(vars(m.a)['0'], vars(m)['b'])
 
     state = nnx.state(m, nnx.Variable)
-    assert state['a'][0].value == m.a[0].value
-    assert state['a'][1].value == m.a[1].value
-    assert state['b'].value == m.b.value
-    assert state.b is not state.a[0]
-    assert len(state.flat_state()) == 3
+    self.assertEqual(state['a'][0].value, m.a[0].value)
+    self.assertEqual(state['a'][1].value, m.a[1].value)
+    self.assertEqual(state['b'].value, m.b.value)
+    self.assertIsNot(state.b, state.a[0])
+    self.assertLen(state.flat_state(), 3)
+
+
+if __name__ == '__main__':
+  absltest.main()

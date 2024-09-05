@@ -18,7 +18,6 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 from absl.testing import absltest
 
 from flax import nnx
@@ -35,32 +34,32 @@ class TestRngs(absltest.TestCase):
 
   def test_fallback_error_no_default(self):
     rngs = nnx.Rngs(some_name=0)
-    with pytest.raises(AttributeError, match='No RNG named'):
+    with self.assertRaisesRegex(AttributeError, 'No RNG named'):
       key = rngs.dropout()
 
   def test_rng_stream(self):
     key0 = jax.random.key(0)
     rngs = nnx.Rngs(params=key0)
-    assert rngs.params.count.value == 0
+    self.assertEqual(rngs.params.count.value, 0)
 
     key1 = rngs.params()
-    assert rngs.params.count.value == 1
-    assert rngs.params.key.value is key0
-    assert not jnp.allclose(key0, key1)
+    self.assertEqual(rngs.params.count.value, 1)
+    self.assertIs(rngs.params.key.value, key0)
+    self.assertFalse(jnp.allclose(key0, key1))
 
     key2 = rngs.params()
-    assert rngs.params.count.value == 2
-    assert rngs.params.key.value is key0
-    assert not jnp.allclose(key1, key2)
+    self.assertEqual(rngs.params.count.value, 2)
+    self.assertIs(rngs.params.key.value, key0)
+    self.assertFalse(jnp.allclose(key1, key2))
 
   def test_rng_trace_level_constraints(self):
     rngs = nnx.Rngs(0)
 
     @jax.jit
     def f():
-      with pytest.raises(
-        nnx.errors.TraceContextError,
-        match='Cannot call RngStream from a different trace level',
+      with self.assertRaisesRegex(
+          nnx.errors.TraceContextError,
+          'Cannot call RngStream from a different trace level',
       ):
         rngs.params()
 
@@ -75,10 +74,10 @@ class TestRngs(absltest.TestCase):
 
     h()
 
-    assert isinstance(rngs1, nnx.Rngs)
-    with pytest.raises(
+    self.assertIsInstance(rngs1, nnx.Rngs)
+    with self.assertRaisesRegex(
       nnx.errors.TraceContextError,
-      match='Cannot call RngStream from a different trace level',
+      'Cannot call RngStream from a different trace level',
     ):
       rngs1.params()
 
@@ -98,7 +97,7 @@ class TestRngs(absltest.TestCase):
     m = Foo(rngs)
 
     # +1 for the Linear kernel, +1 for the Linear bias
-    assert rngs['default'].count.value == 2
+    self.assertEqual(rngs['default'].count.value, 2)
 
     @nnx.jit
     def f(m: Foo, x: jax.Array, not_rngs: nnx.Rngs):
@@ -111,7 +110,7 @@ class TestRngs(absltest.TestCase):
     x = f(m, x, rngs)
 
     # +1 for the Dropout mask
-    assert rngs['default'].count.value == 4
+    self.assertEqual(rngs['default'].count.value, 4)
 
   def test_lifting_rng_state(self):
     class Foo(nnx.Module):
@@ -131,11 +130,11 @@ class TestRngs(absltest.TestCase):
       m, nnx.Param, nnx.RngCount, 'dropout', 'params'
     )
 
-    assert m.rngs.params.count.value == 2
-    assert m.rngs['dropout'].count.value == 0
-    assert len(dropout_keys.flat_state()) == 1
-    assert len(param_keys.flat_state()) == 1
-    assert len(rng_counts.flat_state()) == 2
+    self.assertEqual(m.rngs.params.count.value, 2)
+    self.assertEqual(m.rngs['dropout'].count.value, 0)
+    self.assertLen(dropout_keys.flat_state(), 1)
+    self.assertLen(param_keys.flat_state(), 1)
+    self.assertLen(rng_counts.flat_state(), 2)
 
     # split dropout keys
     split_dropout_keys = jax.tree.map(
@@ -168,9 +167,9 @@ class TestRngs(absltest.TestCase):
 
     nnx.update(m, params, dropout_keys, param_keys, rng_counts)
 
-    assert y.shape == (4, 1, 3)
-    assert m.rngs.params.count.value == 2
-    assert m.rngs['dropout'].count.value == 1
+    self.assertEqual(y.shape, (4, 1, 3))
+    self.assertEqual(m.rngs.params.count.value, 2)
+    self.assertEqual(m.rngs['dropout'].count.value, 1)
 
   def test_state_fork_split(self):
     rngs = nnx.Rngs(params=0, dropout=1)
@@ -179,14 +178,14 @@ class TestRngs(absltest.TestCase):
       state, ..., 4
     )
 
-    assert len(jax.tree.leaves(split_keys)) == 2
-    assert len(jax.tree.leaves(split_counts)) == 2
-    assert len(jax.tree.leaves(broadcast_keys)) == 0
-    assert len(jax.tree.leaves(broadcast_counts)) == 0
-    assert split_keys.params.key.value.shape == (4,)
-    assert split_keys.dropout.key.value.shape == (4,)
-    assert split_counts.params.count.value == 0
-    assert split_counts.dropout.count.value == 0
+    self.assertLen(jax.tree.leaves(split_keys), 2)
+    self.assertLen(jax.tree.leaves(split_counts), 2)
+    self.assertEmpty(jax.tree.leaves(broadcast_keys))
+    self.assertEmpty(jax.tree.leaves(broadcast_counts))
+    self.assertEqual(split_keys.params.key.value.shape, (4,))
+    self.assertEqual(split_keys.dropout.key.value.shape, (4,))
+    self.assertEqual(split_counts.params.count.value, 0)
+    self.assertEqual(split_counts.dropout.count.value, 0)
 
   def test_state_fork_split_and_broadcast(self):
     rngs = nnx.Rngs(params=0, dropout=1)
@@ -195,14 +194,14 @@ class TestRngs(absltest.TestCase):
       state, 'params', 4
     )
 
-    assert len(jax.tree.leaves(split_keys)) == 1
-    assert len(jax.tree.leaves(split_counts)) == 1
-    assert len(jax.tree.leaves(broadcast_keys)) == 1
-    assert len(jax.tree.leaves(broadcast_counts)) == 1
-    assert split_keys.params.key.value.shape == (4,)
-    assert broadcast_keys.dropout.key.value.shape == ()
-    assert split_counts.params.count.value == 0
-    assert broadcast_counts.dropout.count.value == 0
+    self.assertLen(jax.tree.leaves(split_keys), 1)
+    self.assertLen(jax.tree.leaves(split_counts), 1)
+    self.assertLen(jax.tree.leaves(broadcast_keys), 1)
+    self.assertLen(jax.tree.leaves(broadcast_counts), 1)
+    self.assertEqual(split_keys.params.key.value.shape, (4,))
+    self.assertEqual(broadcast_keys.dropout.key.value.shape, ())
+    self.assertEqual(split_counts.params.count.value, 0)
+    self.assertEqual(broadcast_counts.dropout.count.value, 0)
 
   def test_state_fork_multidimensional_split(self):
     rngs = nnx.Rngs(params=0, dropout=1)
@@ -211,14 +210,14 @@ class TestRngs(absltest.TestCase):
       state, ..., (4, None, 3)
     )
 
-    assert len(jax.tree.leaves(split_keys)) == 2
-    assert len(jax.tree.leaves(split_counts)) == 2
-    assert len(jax.tree.leaves(broadcast_keys)) == 0
-    assert len(jax.tree.leaves(broadcast_counts)) == 0
-    assert split_keys.params.key.value.shape == (4, 1, 3)
-    assert split_keys.dropout.key.value.shape == (4, 1, 3)
-    assert split_counts.params.count.value == 0
-    assert split_counts.dropout.count.value == 0
+    self.assertLen(jax.tree.leaves(split_keys), 2)
+    self.assertLen(jax.tree.leaves(split_counts), 2)
+    self.assertEmpty(jax.tree.leaves(broadcast_keys))
+    self.assertEmpty(jax.tree.leaves(broadcast_counts))
+    self.assertEqual(split_keys.params.key.value.shape, (4, 1, 3))
+    self.assertEqual(split_keys.dropout.key.value.shape, (4, 1, 3))
+    self.assertEqual(split_counts.params.count.value, 0)
+    self.assertEqual(split_counts.dropout.count.value, 0)
 
   def test_state_fork_multidimensional_split_mixed(self):
     rngs = nnx.Rngs(params=0, dropout=1)
@@ -227,14 +226,14 @@ class TestRngs(absltest.TestCase):
       state, 'params', (4, None, 3)
     )
 
-    assert len(jax.tree.leaves(split_keys)) == 1
-    assert len(jax.tree.leaves(split_counts)) == 1
-    assert len(jax.tree.leaves(broadcast_keys)) == 1
-    assert len(jax.tree.leaves(broadcast_counts)) == 1
-    assert split_keys.params.key.value.shape == (4, 1, 3)
-    assert broadcast_keys.dropout.key.value.shape == ()
-    assert split_counts.params.count.value == 0
-    assert broadcast_counts.dropout.count.value == 0
+    self.assertLen(jax.tree.leaves(split_keys), 1)
+    self.assertLen(jax.tree.leaves(split_counts), 1)
+    self.assertLen(jax.tree.leaves(broadcast_keys), 1)
+    self.assertLen(jax.tree.leaves(broadcast_counts), 1)
+    self.assertEqual(split_keys.params.key.value.shape, (4, 1, 3))
+    self.assertEqual(broadcast_keys.dropout.key.value.shape, ())
+    self.assertEqual(split_counts.params.count.value, 0)
+    self.assertEqual(broadcast_counts.dropout.count.value, 0)
 
   def test_reseed(self):
     class Model(nnx.Module):
@@ -255,3 +254,6 @@ class TestRngs(absltest.TestCase):
     y2 = model(x)
 
     np.testing.assert_allclose(y1, y2)
+
+if __name__ == '__main__':
+  absltest.main()

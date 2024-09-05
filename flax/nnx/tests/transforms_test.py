@@ -19,12 +19,11 @@ import typing as tp
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
+from flax.nnx.nnx.transforms import general
 import jax
 from jax.experimental import mesh_utils
 import jax.numpy as jnp
 import numpy as np
-import pytest
-from flax.nnx.nnx.transforms import general
 
 
 class TestJIT(absltest.TestCase):
@@ -604,18 +603,18 @@ class TestCustomVJP(absltest.TestCase):
   def test_jax_example(self):
     @dataclasses.dataclass
     class Foo(nnx.Module):
-      x: jax.Array
-      y: jax.Array
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
       z: int
 
     @nnx.custom_vjp
     def f(m: Foo):
       m.z += 1
-      return jnp.sin(m.x) * m.y
+      return jnp.sin(m.x) * m.y  # type: ignore
 
     def f_fwd(m: Foo):
       y = f(m)
-      res = (jnp.cos(m.x), jnp.sin(m.x), m)
+      res = (jnp.cos(m.x), jnp.sin(m.x), m)  # type: ignore
       return y, res
 
     def f_bwd(res, g):
@@ -633,30 +632,30 @@ class TestCustomVJP(absltest.TestCase):
 
     f.defvjp(f_fwd, f_bwd)
 
-    m = Foo(jnp.array(1.0), jnp.array(2.0), 0)
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
     grad: nnx.State = nnx.grad(f, argnums=nnx.DiffState(0, ...))(m)
 
-    np.testing.assert_allclose(grad['x'], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'], jnp.sin(1.0))  # type: ignore
+    np.testing.assert_allclose(grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grad['y'].value, jnp.sin(1.0))  # type: ignore
     self.assertEqual(m.z, 1)
 
   def test_two_args(self):
     @dataclasses.dataclass
     class Foo(nnx.Module):
-      x: jax.Array
-      y: jax.Array
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
       z: int
 
     @nnx.custom_vjp
     def f(m1: Foo, m2: Foo):
       m1.z += 1
-      y = jnp.sin(m1.x) * m1.y
+      y = jnp.sin(m1.x) * m1.y  # type: ignore
       return y, m2
 
     def f_fwd(m1: Foo, m2: Foo):
       y, m2 = f(m1, m2)
-      res = (jnp.cos(m1.x), jnp.sin(m1.x), m1)
+      res = (jnp.cos(m1.x), jnp.sin(m1.x), m1)  # type: ignore
       return (y, m2), res
 
     def f_bwd(res, g):
@@ -675,8 +674,8 @@ class TestCustomVJP(absltest.TestCase):
 
     f.defvjp(f_fwd, f_bwd)
 
-    m1 = Foo(jnp.array(1.0), jnp.array(2.0), 0)
-    m2 = Foo(jnp.array(3.0), jnp.array(4.0), 0)
+    m1 = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
+    m2 = Foo(nnx.Param(jnp.array(3.0)), nnx.Param(jnp.array(4.0)), 0)
 
     def loss_fn(m1, m2):
       y, m2 = f(m1, m2)
@@ -688,28 +687,28 @@ class TestCustomVJP(absltest.TestCase):
         loss_fn, argnums=(nnx.DiffState(0, ...), nnx.DiffState(1, ...))
     )(m1, m2)
 
-    np.testing.assert_allclose(m1_grad['x'], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(m1_grad['y'], jnp.sin(1.0))  # type: ignore
+    np.testing.assert_allclose(m1_grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(m1_grad['y'].value, jnp.sin(1.0))  # type: ignore
     self.assertEqual(m1.z, 1)
-    np.testing.assert_allclose(m2_grad['x'], 4.0)  # type: ignore
-    np.testing.assert_allclose(m2_grad['y'], 3.0)  # type: ignore
+    np.testing.assert_allclose(m2_grad['x'].value, 4.0)  # type: ignore
+    np.testing.assert_allclose(m2_grad['y'].value, 3.0)  # type: ignore
 
   def test_non_diff_args(self):
     @dataclasses.dataclass
     class Foo(nnx.Module):
-      x: jax.Array
-      y: jax.Array
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
       z: int
 
     @nnx.custom_vjp(nondiff_argnums=(1, 2))
     def f(m1: Foo, m2: Foo, m3):
       m1.z += 1
-      y = jnp.sin(m1.x) * m1.y
+      y = jnp.sin(m1.x) * m1.y  # type: ignore
       return y, m2
 
     def f_fwd(m1: Foo, m2: Foo, m3):
       y, m2 = f(m1, m2, m3)
-      res = (jnp.cos(m1.x), jnp.sin(m1.x), m1)
+      res = (jnp.cos(m1.x), jnp.sin(m1.x), m1)  # type: ignore
       return (y, m2), res
 
     def f_bwd(m2, m3, res, g):
@@ -727,8 +726,8 @@ class TestCustomVJP(absltest.TestCase):
 
     f.defvjp(f_fwd, f_bwd)
 
-    m1 = Foo(jnp.array(1.0), jnp.array(2.0), 0)
-    m2 = Foo(jnp.array(3.0), jnp.array(4.0), 0)
+    m1 = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
+    m2 = Foo(nnx.Param(jnp.array(3.0)), nnx.Param(jnp.array(4.0)), 0)
 
     def loss_fn(m1, m2, m3):
       y, m2 = f(m1, m2, m3)
@@ -737,8 +736,8 @@ class TestCustomVJP(absltest.TestCase):
     m1_grad: nnx.State
     m1_grad = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m1, m2, m2)
 
-    np.testing.assert_allclose(m1_grad['x'], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(m1_grad['y'], jnp.sin(1.0))  # type: ignore
+    np.testing.assert_allclose(m1_grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(m1_grad['y'].value, jnp.sin(1.0))  # type: ignore
     self.assertEqual(m1.z, 1)
 
   def test_docs_example(self):
@@ -753,10 +752,10 @@ class TestCustomVJP(absltest.TestCase):
 
     @nnx.custom_vjp
     def f(m: Foo):
-      return jnp.sin(m.x) * m.y
+      return jnp.sin(m.x) * m.y  # type: ignore
 
     def f_fwd(m: Foo):
-      return f(m), (jnp.cos(m.x), jnp.sin(m.x), m)
+      return f(m), (jnp.cos(m.x), jnp.sin(m.x), m)  # type: ignore
 
     def f_bwd(res, g):
       ins_g, out_g = g
@@ -856,7 +855,8 @@ class TestScan(absltest.TestCase):
     foo = Foo(n=nnx.BatchStat(0))
 
     @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
-    def loop(foo: Foo, x): ...
+    def loop(foo: Foo, x):
+      ...
 
     with self.assertRaisesRegex(
       ValueError,
@@ -927,7 +927,8 @@ class TestScan(absltest.TestCase):
     ):
 
       @nnx.scan(in_axes=0, out_axes=(nnx.Carry, 0))
-      def loop(a, b): ...
+      def loop(a, b):
+        ...
 
     with self.assertRaisesRegex(
       ValueError,
@@ -935,7 +936,8 @@ class TestScan(absltest.TestCase):
     ):
 
       @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=0)
-      def loop(a, b): ...
+      def loop(a, b):
+        ...
 
   def test_double_carry_error(self):
     with self.assertRaisesRegex(
@@ -944,7 +946,8 @@ class TestScan(absltest.TestCase):
     ):
 
       @nnx.scan(in_axes=(nnx.Carry, nnx.Carry))
-      def loop(a, b): ...
+      def loop(a, b):
+        ...
 
   def test_broadcast_in_output_error(self):
     with self.assertRaisesRegex(
@@ -953,7 +956,8 @@ class TestScan(absltest.TestCase):
     ):
 
       @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, None))
-      def loop(a, b): ...
+      def loop(a, b):
+        ...
 
     with self.assertRaisesRegex(
       ValueError,
@@ -963,7 +967,8 @@ class TestScan(absltest.TestCase):
       @nnx.scan(
         in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, nnx.StateAxes({...: None}))
       )
-      def loop(a, b): ...
+      def loop(a, b):
+        ...
 
   def test_basic_combinator(self):
     class Block(nnx.Module):
@@ -1534,8 +1539,8 @@ class TestScan(absltest.TestCase):
 
     mlp = MLP(rngs=nnx.Rngs(0))
 
-    with pytest.raises(
-      TypeError, match='Expected at least 2 positional argument'
+    with self.assertRaisesRegex(
+        TypeError, 'Expected at least 2 positional argument'
     ):
       mlp()
 
@@ -2041,7 +2046,7 @@ class TestVmap(absltest.TestCase):
     class Foo(nnx.Module):
 
       def __init__(self):
-        self.a = jnp.zeros((5, 5))
+        self.a = nnx.Param(jnp.zeros((5, 5)))
 
     m = Foo()
 
@@ -2056,7 +2061,7 @@ class TestVmap(absltest.TestCase):
     class Foo(nnx.Module):
 
       def __init__(self):
-        self.a = jnp.zeros((2, 3))
+        self.a = nnx.Param(jnp.zeros((2, 3)))
 
     m = Foo()
 
@@ -2071,7 +2076,7 @@ class TestVmap(absltest.TestCase):
     class Shared(nnx.Module):
 
       def __init__(self):
-        self.a = jnp.zeros((3, 3))
+        self.a = nnx.Param(jnp.zeros((3, 3)))
 
     class Foo(nnx.Module):
 
@@ -2386,12 +2391,14 @@ class TestPmap(absltest.TestCase):
 class TestCond(absltest.TestCase):
   def test_basic(self):
     class TimeStep(tp.NamedTuple):
-      step: jax.Array
-      reward: jax.Array
+      step: nnx.Variable[jax.Array]
+      reward: nnx.Variable[jax.Array]
 
       @staticmethod
       def zero():
-        return TimeStep(step=jnp.array(0), reward=jnp.array(0.0))
+        return TimeStep(
+            step=nnx.Variable(jnp.array(0)), reward=nnx.Variable(jnp.array(0.0))
+        )
 
     @dataclasses.dataclass
     class Foo(nnx.Object):
@@ -2400,36 +2407,39 @@ class TestCond(absltest.TestCase):
       def update(self):
         def reward_2(self: Foo):
           self.timestep = TimeStep(
-            step=self.timestep.step + 1, reward=jnp.array(2.0)
+              step=nnx.Variable(self.timestep.step + 1),
+              reward=nnx.Variable(jnp.array(2.0)),
           )
 
         def reward_0(self: Foo):
           self.timestep = TimeStep(
-            step=self.timestep.step + 1, reward=jnp.array(0.0)
+              step=nnx.Variable(self.timestep.step + 1),
+              reward=nnx.Variable(jnp.array(0.0)),
           )
 
         nnx.cond(self.timestep.step % 2 == 0, reward_2, reward_0, self)
 
     foo = Foo(timestep=TimeStep.zero())
     foo.update()
-    assert foo.timestep.step == 1
-    assert foo.timestep.reward == 2.0
+    self.assertEqual(foo.timestep.step.value, 1)
+    self.assertEqual(foo.timestep.reward.value, 2.0)
     foo.update()
-    assert foo.timestep.step == 2
-    assert foo.timestep.reward == 0.0
+    self.assertEqual(foo.timestep.step.value, 2)
+    self.assertEqual(foo.timestep.reward.value, 0.0)
     foo.update()
-    assert foo.timestep.step == 3
-    assert foo.timestep.reward == 2.0
+    self.assertEqual(foo.timestep.step.value, 3)
+    self.assertEqual(foo.timestep.reward.value, 2.0)
     foo.update()
-    assert foo.timestep.step == 4
-    assert foo.timestep.reward == 0.0
+    self.assertEqual(foo.timestep.step.value, 4)
+    self.assertEqual(foo.timestep.reward.value, 0.0)
 
   def test_cond_and_vmap(self):
-    class Env(nnx.Module):
+
+    class Env(nnx.Object):
 
       def __init__(self):
-        self.index = jnp.arange(8)
-        self.step = jnp.zeros((8,), jnp.uint32)
+        self.index = nnx.Variable(jnp.arange(8))
+        self.step = nnx.Variable(jnp.zeros((8,), jnp.uint32))
 
     env = Env()
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
@@ -2449,7 +2459,9 @@ class TestCond(absltest.TestCase):
 
     f(env, model)
 
-    np.testing.assert_array_equal(env.step, [1, 0, 1, 0, 1, 0, 1, 0])
+    np.testing.assert_array_equal(
+        env.step.value, np.array([1, 0, 1, 0, 1, 0, 1, 0], np.uint32)
+    )
 
 
 class TestSplitMergeInputs(absltest.TestCase):
@@ -2457,7 +2469,7 @@ class TestSplitMergeInputs(absltest.TestCase):
     class StatefulLinear(nnx.Linear):
       def __init__(self, din: int, dout: int, rngs: nnx.Rngs):
         super().__init__(din, dout, rngs=rngs)
-        self.counter = jnp.array(0, jnp.uint32)
+        self.counter = nnx.BatchStat(jnp.array(0, jnp.uint32))
 
       def __call__(self, x):
         self.counter += 1
@@ -2474,12 +2486,12 @@ class TestSplitMergeInputs(absltest.TestCase):
     x = jnp.ones((2, 3))
     y = forward(model, x)
 
-    self.assertEqual(model.counter, 1)
+    self.assertEqual(model.counter.value, 1)
 
   def test_split_inputs_cond(self):
     class Counter(nnx.Linear):
       def __init__(self):
-        self.count = jnp.array(0, jnp.uint32)
+        self.count = nnx.BatchStat(jnp.array(0, jnp.uint32))
 
       def increment(self):
         self.count += 1
@@ -2496,11 +2508,11 @@ class TestSplitMergeInputs(absltest.TestCase):
 
     general.split_inputs(jax.lax.cond)(True, increment, no_nothing, counter)
 
-    self.assertEqual(counter.count, 1)
+    self.assertEqual(counter.count.value, 1)
 
     general.split_inputs(jax.lax.cond)(False, increment, no_nothing, counter)
 
-    self.assertEqual(counter.count, 1)
+    self.assertEqual(counter.count.value, 1)
 
   def test_split_inputs_vmap(self):
     class EnvState(nnx.Variable[nnx.A]):

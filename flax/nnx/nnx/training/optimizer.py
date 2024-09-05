@@ -133,7 +133,7 @@ class Optimizer(Object):
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.model = model
     self.tx = tx
-    self.opt_state = tx.init(nnx.state(model, wrt))
+    self.opt_state = OptState(tx.init(nnx.state(model, wrt)))
     self.wrt = wrt
 
   def split(self, *filters: filterlib.Filter):
@@ -198,10 +198,10 @@ class Optimizer(Object):
     """
     state = nnx.state(self.model, self.wrt)
 
-    updates, new_opt_state = self.tx.update(grads, self.opt_state, state)
+    updates, new_opt_state = self.tx.update(grads, self.opt_state.value, state)
     new_params = optax.apply_updates(state, updates)
     assert isinstance(new_params, nnx.State)
 
     self.step.value += 1
     nnx.update(self.model, new_params)
-    self.opt_state = new_opt_state
+    self.opt_state.value = new_opt_state

@@ -12,21 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import dataclasses
 from copy import deepcopy
+import dataclasses
 from typing import Any, TypeVar
 
+from absl.testing import absltest
+from flax import nnx
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
-
-from flax import nnx
 
 A = TypeVar('A')
 
 
-class TestModule:
+class TestModule(absltest.TestCase):
   def test_has_module_state(self):
     class Foo(nnx.Module): ...
 
@@ -39,9 +38,9 @@ class TestModule:
 
     @jax.jit
     def f():
-      with pytest.raises(
-        nnx.errors.TraceContextError,
-        match="Cannot mutate 'Dict' from different trace level",
+      with self.assertRaisesRegex(
+          nnx.errors.TraceContextError,
+          "Cannot mutate 'Dict' from different trace level",
       ):
         m.a = 2
 
@@ -265,7 +264,7 @@ class TestModule:
 
     m = Foo()
 
-    with pytest.raises(ValueError, match='to be a Variable, got'):
+    with self.assertRaisesRegex(ValueError, 'to be a Variable, got'):
       m(2)
 
   def test_sow_wrong_collection(self):
@@ -280,7 +279,7 @@ class TestModule:
 
     m = Foo()
 
-    with pytest.raises(ValueError, match='to be of type'):
+    with self.assertRaisesRegex(ValueError, 'to be of type'):
       m(2)
 
   def test_update_static_state_submodules(self):
@@ -466,9 +465,12 @@ class TestModule:
 
     block = Block(2, 5, rngs=nnx.Rngs(0))
 
-    with pytest.raises(
-      ValueError,
-      match="Could not find at least one instance of the following attributes: {'unknown'}",
+    with self.assertRaisesRegex(
+        ValueError,
+        (
+            'Could not find at least one instance of the following attributes:'
+            " {'unknown'}"
+        ),
     ):
       block.set_attributes(
         deterministic=True, use_running_average=True, unknown=True
@@ -662,26 +664,10 @@ class TestModuleDef:
     assert modules[1][0] == 'linear'
     assert isinstance(modules[1][1], nnx.Linear)
 
-  def test_array_in_module(self):
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.a = jnp.array(1.0)
-
-    foo = Foo()
-
-    graphdef, state = nnx.split(foo)
-
-    assert isinstance(state, nnx.State)
-    assert isinstance(state.a, jax.Array)
-
-    foo2 = nnx.merge(graphdef, state)
-
-    assert isinstance(foo2.a, jax.Array)
-
   def test_state_in_module(self):
     class Foo(nnx.Module):
       def __init__(self):
-        self.a = nnx.State({'b': jnp.array(1.0)})
+        self.a = nnx.State({'b': nnx.Param(jnp.array(1.0))})
 
     foo = Foo()
 
@@ -693,3 +679,6 @@ class TestModuleDef:
     foo2 = nnx.merge(graphdef, state)
 
     assert isinstance(foo2.a, nnx.State)
+
+if __name__ == '__main__':
+  absltest.main()
