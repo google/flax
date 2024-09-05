@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 # Script for creating VM on Google cloud and run a Flax example inside.
 # See ./README.md for instructions.
 

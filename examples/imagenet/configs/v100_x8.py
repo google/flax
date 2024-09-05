@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Hyperparameter configuration to run the example on 8 x Nvidia V100 GPUs."""
 
 from configs import default as default_lib

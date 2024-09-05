@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """A variable dict is a normal Python dictionary, which is a container for one
 or more "variable collections", each of which are nested dictionaries whose
 leaves are ``jax.numpy`` arrays.

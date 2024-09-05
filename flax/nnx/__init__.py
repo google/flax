@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from flax.linen.pooling import avg_pool as avg_pool
 from flax.linen.pooling import max_pool as max_pool
 from flax.linen.pooling import min_pool as min_pool

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Support for keyword-only fields in dataclasses for Python versions <3.10.
 
 This module provides wrappers for `dataclasses.dataclass` and

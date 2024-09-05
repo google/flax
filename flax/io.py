@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """IO Abstraction Layer.
 The sole purpose of this abstraction layer is to avoid requiring tensorflow
 as an open-source dependency solely for its tensorflow.io.gfile functions.

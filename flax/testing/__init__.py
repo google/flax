@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """Flax testing utilities."""
 
 from .benchmark import Benchmark

@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Benchmark for the ImageNet example using fake data for quick perf results.
 
 This script doesn't need the dataset, but it needs the dataset metadata.

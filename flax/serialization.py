@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Serialization utilities for Jax.
 
 All Flax classes that carry state (e.g., Optimizer) can be turned into a

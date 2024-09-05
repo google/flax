@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """"""  # Use an empty top-level docstring so Sphinx won't output the one below.
 """Flax error classes.
 
