@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 import dataclasses
+from functools import partial
+import functools
 import threading
 import typing as tp
 from abc import ABCMeta
@@ -30,26 +32,48 @@ from flax.nnx.nnx import (
   tracers,
 )
 from flax.nnx.nnx import graph
+from flax.nnx.nnx.state import State
 from flax.nnx.nnx.variables import Variable, VariableState
 from flax.typing import Key
 
-G = tp.TypeVar('G', bound='Object')
-
+O = tp.TypeVar('O', bound='Object')
+F = tp.TypeVar('F', bound=tp.Callable)
 
 @dataclasses.dataclass
-class GraphUtilsContext(threading.local):
+class ObjectContext(threading.local):
+  pytree_context_stack: list[bool] = dataclasses.field(
+    default_factory=lambda: [False]
+  )
   seen_modules_repr: set[int] | None = None
 
 
-CONTEXT = GraphUtilsContext()
+CONTEXT = ObjectContext()
 
+@dataclasses.dataclass(frozen=True, repr=False)
+class ObjectLeaf(tp.Generic[O], reprlib.Representable):
+  obj: O
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type(self))
+    yield reprlib.Attr('obj', self.obj)
+
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
+
+    return treescope.repr_lib.render_object_constructor(
+      object_type=type(self),
+      attributes={'obj': self.obj},
+      path=path,
+      subtree_renderer=subtree_renderer,
+    )
 
 class ObjectState(reprlib.Representable):
-  __slots__ = ('_trace_state', '_initializing')
+  __slots__ = ('_trace_state', '_initializing', '_is_pytree')
 
-  def __init__(self, initializing: bool = False):
+  def __init__(self, initializing: bool, is_pytree: bool):
     self._trace_state = tracers.TraceState()
     self._initializing = initializing
+    self._is_pytree = is_pytree
 
   @property
   def trace_state(self) -> tracers.TraceState:
@@ -58,6 +82,10 @@ class ObjectState(reprlib.Representable):
   @property
   def initializing(self) -> bool:
     return self._initializing
+
+  @property
+  def is_pytree(self) -> bool:
+    return self._is_pytree
 
   def __nnx_repr__(self):
     yield reprlib.Object(type(self))
@@ -82,11 +110,12 @@ class ObjectMeta(ABCMeta):
     self.__init__(*args, **kwargs)
 
 
-def _graph_node_meta_call(cls: tp.Type[G], *args, **kwargs) -> G:
+def _graph_node_meta_call(cls: tp.Type[O], *args, **kwargs) -> O:
   node = cls.__new__(cls, *args, **kwargs)
-  vars(node)['_object__state'] = ObjectState()
+  vars(node)['_object__state'] = ObjectState(
+    initializing=False, is_pytree=cls._object__is_pytree
+  )
   cls._object_meta_construct(node, *args, **kwargs)
-
   return node
 
 
@@ -100,6 +129,8 @@ class Array:
 
 
 class Object(reprlib.Representable, metaclass=ObjectMeta):
+  _object__is_pytree: bool = False
+
   if tp.TYPE_CHECKING:
     _object__state: ObjectState
 
@@ -113,6 +144,13 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       pop_key=cls._graph_node_pop_key,
       create_empty=cls._graph_node_create_empty,
       clear=cls._graph_node_clear,
+    )
+
+    jax.tree_util.register_pytree_with_keys(
+      cls,
+      partial(_flatten_object, with_keys=True),  # type: ignore
+      _unflatten_object,  # type: ignore
+      flatten_func=partial(_flatten_object, with_keys=False),  # type: ignore
     )
 
   if not tp.TYPE_CHECKING:
@@ -130,7 +168,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     if not self._object__state.trace_state.is_valid():
       raise errors.TraceContextError(error_msg())
 
-  def __deepcopy__(self: G, memo=None) -> G:
+  def __deepcopy__(self: O, memo=None) -> O:
     graphdef, state = graph.split(self)
     graphdef = deepcopy(graphdef)
     state = deepcopy(state)
@@ -194,7 +232,12 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       for key, value in vars(self).items()
       if key != '_object__state'
     )
-    return nodes, (type(self), self._object__state._initializing)
+    metadata = ObjectStaticMetadata(
+      type=type(self),
+      initializing=self._object__state._initializing,
+      is_pytree=self._object__state._is_pytree,
+    )
+    return nodes, metadata
 
   def _graph_node_set_key(self, key: Key, value: tp.Any):
     if not isinstance(key, str):
@@ -214,10 +257,13 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     return vars(self).pop(key)
 
   @staticmethod
-  def _graph_node_create_empty(static: tuple[tp.Type[G], bool]) -> G:
-    node_type, initializing = static
-    node = object.__new__(node_type)
-    vars(node).update(_object__state=ObjectState(initializing))
+  def _graph_node_create_empty(metadata: ObjectStaticMetadata[O]) -> O:
+    node = object.__new__(metadata.type)
+    vars(node).update(
+      _object__state=ObjectState(
+        initializing=metadata.initializing, is_pytree=metadata.is_pytree
+      )
+    )
     return node
 
   def _graph_node_clear(self):
@@ -225,3 +271,91 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     module_vars = vars(self)
     module_vars.clear()
     module_vars['_object__state'] = module_state
+
+@dataclasses.dataclass(frozen=True)
+class ObjectStaticMetadata(tp.Generic[O]):
+  type: tp.Type[O]
+  initializing: bool
+  is_pytree: bool
+
+
+# -------------------------
+# Pytree Definition
+# -------------------------
+def _flatten_object(obj: Object, *, with_keys: bool):
+  is_pytree = obj._object__state._is_pytree
+  if is_pytree or in_pytree_context():
+    graphdef, state = graph.split(obj)
+    key_values = sorted(state.raw_mapping.items())
+    keys = tuple(key for key, _ in key_values)
+
+    if with_keys:
+      nodes = tuple(
+        (jax.tree_util.GetAttrKey(str(key)), value) for key, value in key_values
+      )
+    else:
+      nodes = tuple(value for _, value in key_values)
+
+    return nodes, (keys, graphdef)
+  else:
+    if with_keys:
+      nodes = ((jax.tree_util.GetAttrKey('leaf'), ObjectLeaf(obj)),)
+    else:
+      nodes = (ObjectLeaf(obj),)
+    return nodes, None
+
+
+def _unflatten_object(
+  metadata: tuple[tuple[Key, ...], graph.GraphDef[O]] | None,
+  children: tuple[tp.Any, ...] | tuple[ObjectLeaf[O]],
+) -> O:
+  if metadata is None:
+    if len(children) != 1:
+      raise ValueError(f'Expected 1 child, got {len(children)}')
+    elif not isinstance(children[0], ObjectLeaf):
+      raise ValueError(f'Expected Leaf, got {type(children[0])}')
+    return children[0].obj
+  else:
+    _children = tp.cast(tuple[tp.Any, ...], children)
+    paths, graphdef = metadata
+    return graph.merge(graphdef, State(zip(paths, _children)))
+
+# -------------------------
+# pytree API
+# -------------------------
+@tp.overload
+def pytree(node_or_class: tp.Type[O]) -> tp.Type[O]: ...
+@tp.overload
+def pytree(node_or_class: O) -> O: ...
+def pytree(node_or_class: Object | type[Object]):
+  if isinstance(node_or_class, type):
+    node_or_class._object__is_pytree = True
+    return node_or_class
+  else:
+    obj = graph.clone(node_or_class)
+    obj._object__state._is_pytree = True
+    return obj
+
+
+class PytreeContext:
+  def __enter__(self):
+    CONTEXT.pytree_context_stack.append(True)
+
+  def __exit__(self, *args):
+    CONTEXT.pytree_context_stack.pop()
+
+  def __call__(self, f: F) -> F:
+    @functools.wraps(f)
+    def pytree_context_wrapper(*args, **kwargs):
+      args, kwargs = graph.clone((args, kwargs))
+      with self:
+        return f(*args, **kwargs)
+
+    return pytree_context_wrapper  # type: ignore
+
+
+pytree_context = PytreeContext()
+
+
+def in_pytree_context() -> bool:
+  return CONTEXT.pytree_context_stack[-1]

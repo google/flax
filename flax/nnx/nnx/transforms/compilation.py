@@ -35,6 +35,7 @@ from flax.nnx.nnx import (
   extract,
   filterlib,
   graph,
+  safe_tree,
 )
 import jax
 import jax.core
@@ -303,13 +304,13 @@ def jit(
       abstracted_axes=abstracted_axes,
     )  # type: ignore[return-value]
   kwarg_shardings = None
-  jax_in_shardings = jax.tree.map(
+  jax_in_shardings = safe_tree.map(
     lambda x: extract.TreeNode.from_prefixes(x.shardings, metadata=x)
     if isinstance(x, StateSharding)
     else x,
     in_shardings,
   )
-  jax_out_shardings = jax.tree.map(
+  jax_out_shardings = safe_tree.map(
     lambda x: extract.TreeNode.from_prefixes(x.shardings, metadata=x)
     if isinstance(x, StateSharding)
     else x,

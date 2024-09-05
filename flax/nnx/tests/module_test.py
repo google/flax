@@ -31,7 +31,7 @@ class TestModule(absltest.TestCase):
 
     foo = Foo()
 
-    assert hasattr(foo, '_object__state')
+    self.assertTrue(hasattr(foo, '_object__state'))
 
   def test_trace_level(self):
     m = nnx.Dict(a=nnx.Param(1))
@@ -164,9 +164,9 @@ class TestModule(absltest.TestCase):
 
     graphdef, state = g(*nnx.split(m))
     m2 = nnx.merge(graphdef, state)
-    assert m2 is not m
-    assert m.a.value == 1
-    assert m2.a.value == 2
+    self.assertIsNot(m2, m)
+    self.assertEqual(m.a.value, 1)
+    self.assertEqual(m2.a.value, 2)
 
   def test_no_rejit(self):
     n = 0
@@ -182,21 +182,21 @@ class TestModule(absltest.TestCase):
 
     m2 = nnx.merge(*g(nnx.split(m)))
 
-    assert n == 1
-    assert m2 is not m
-    assert m.a.value == 1
-    assert m2.a.value == 2
+    self.assertEqual(n, 1)
+    self.assertIsNot(m2, m)
+    self.assertEqual(m.a.value, 1)
+    self.assertEqual(m2.a.value, 2)
 
     g(nnx.split(m))
-    assert n == 1
+    self.assertEqual(n, 1)
 
     g(nnx.split(m2))
-    assert n == 1
+    self.assertEqual(n, 1)
 
     m2.b = nnx.Param(10)
     g(nnx.split(m2))
 
-    assert n == 2
+    self.assertEqual(n, 2)
 
   def test_deref_number_of_fields(self):
     r1 = nnx.Variable(1)
@@ -210,8 +210,8 @@ class TestModule(absltest.TestCase):
     )
 
     graphdef, p = nnx.split(m)
-    assert len(p.flat_state()) == 2
-    assert len(jax.tree_util.tree_leaves(p)) == 2
+    self.assertEqual(len(p.flat_state()), 2)
+    self.assertEqual(len(jax.tree_util.tree_leaves(p)), 2)
 
   def test_clone(self):
     m = nnx.Dict(
@@ -221,14 +221,14 @@ class TestModule(absltest.TestCase):
 
     m2 = nnx.clone(m)
 
-    assert m is not m2
-    assert m2.a[0] == m2.b.c
-    assert m2.a[1] == m2.b.d
+    self.assertIsNot(m, m2)
+    self.assertEqual(m2.a[0], m2.b.c)
+    self.assertEqual(m2.a[1], m2.b.d)
 
-    assert m.a[0] == m2.a[0]
-    assert m.a[1] == m2.a[1]
-    assert m.b.c == m2.b.c
-    assert m.b.d == m2.b.d
+    self.assertEqual(m.a[0], m2.a[0])
+    self.assertEqual(m.a[1], m2.a[1])
+    self.assertEqual(m.b.c, m2.b.c)
+    self.assertEqual(m.b.d, m2.b.d)
 
   def test_sow_basic(self):
     class Foo(nnx.Module):
@@ -241,16 +241,16 @@ class TestModule(absltest.TestCase):
     y1 = m(2)
     y2 = m(10)
 
-    assert y1 == 3
-    assert y2 == 11
-    assert m.y.value == (3, 11)
+    self.assertEqual(y1, 3)
+    self.assertEqual(y2, 11)
+    self.assertEqual(m.y.value, (3, 11))
 
     intermediates = nnx.pop(m, nnx.Intermediate)
 
-    assert issubclass(intermediates.y.type, nnx.Intermediate)
-    assert intermediates['y'].value == (3, 11)
+    self.assertTrue(issubclass(intermediates.y.type, nnx.Intermediate))
+    self.assertEqual(intermediates['y'].value, (3, 11))
 
-    assert not hasattr(m, 'y')
+    self.assertFalse(hasattr(m, 'y'))
 
   def test_sow_existing_non_variable_field(self):
     class Foo(nnx.Module):
@@ -304,11 +304,11 @@ class TestModule(absltest.TestCase):
 
       m3 = ctx.merge(new_graphdef, state)
 
-    assert m3 is m1
-    assert m1.a.x == 1
-    assert m1.a.y == 2
-    assert m1.b.x == 1
-    assert m1.b.y == 2
+    self.assertIs(m3, m1)
+    self.assertEqual(m1.a.x, 1)
+    self.assertEqual(m1.a.y, 2)
+    self.assertEqual(m1.b.x, 1)
+    self.assertEqual(m1.b.y, 2)
 
   def test_update_new_submodule(self):
     class Bar(nnx.Module):
@@ -331,9 +331,9 @@ class TestModule(absltest.TestCase):
 
       m3 = ctx.merge(new_graphdef, state)
 
-    assert m3 is m1
-    assert m1.a.x == 1
-    assert m1.b.x == 1
+    self.assertIs(m3, m1)
+    self.assertEqual(m1.a.x, 1)
+    self.assertEqual(m1.b.x, 1)
 
   def test_update_update_submodule(self):
     class Bar(nnx.Module):
@@ -353,9 +353,9 @@ class TestModule(absltest.TestCase):
       new_graphdef, state = ctx.split(m2)
       m3 = ctx.merge(new_graphdef, state)
 
-    assert m3 is m1
-    assert m1.a.x == 2
-    assert m1.b.x == 2
+    self.assertIs(m3, m1)
+    self.assertEqual(m1.a.x, 2)
+    self.assertEqual(m1.b.x, 2)
 
   def test_update_add_shared(self):
     class Bar(nnx.Module):
@@ -378,20 +378,23 @@ class TestModule(absltest.TestCase):
       new_graphdef, state = ctx.split(m2)
       m3 = ctx.merge(new_graphdef, state)
 
-    assert m3 is m1
-    assert hasattr(m1, 'c')
+    self.assertIs(m3, m1)
+    self.assertTrue(hasattr(m1, 'c'))
 
   def test_create_abstract(self):
     linear = nnx.eval_shape(lambda: nnx.Linear(2, 3, rngs=nnx.Rngs(0)))
 
-    assert linear.kernel.value == jax.ShapeDtypeStruct((2, 3), jnp.float32)
-    assert linear.bias.value == jax.ShapeDtypeStruct((3,), jnp.float32)
+    self.assertEqual(
+      linear.kernel.value, jax.ShapeDtypeStruct((2, 3), jnp.float32)
+    )
+    self.assertEqual(linear.bias.value, jax.ShapeDtypeStruct((3,), jnp.float32))
 
   def test_create_abstract_stateful(self):
     linear = nnx.eval_shape(lambda: nnx.Dropout(0.5, rngs=nnx.Rngs(0)))
 
-    assert linear.rngs.default.key.value == jax.ShapeDtypeStruct(
-      (), jax.random.key(0).dtype
+    self.assertEqual(
+      linear.rngs.default.key.value,
+      jax.ShapeDtypeStruct((), jax.random.key(0).dtype),
     )
 
   def test_partial_init(self):
@@ -425,11 +428,11 @@ class TestModule(absltest.TestCase):
     m1 = Foo()
     m2 = deepcopy(m1)
 
-    assert m1.a == m2.a
-    assert vars(m1)['a'] is not vars(m2)['a']
-    assert m1.b is not m2.b
-    assert m1.c is not m2.c
-    assert m1.self is m1
+    self.assertEqual(m1.a, m2.a)
+    self.assertIsNot(vars(m1)['a'], vars(m2)['a'])
+    self.assertIsNot(m1.b, m2.b)
+    self.assertIsNot(m1.c, m2.c)
+    self.assertIs(m1.self, m1)
 
   def test_set_attributes(self):
     class Block(nnx.Module):
@@ -441,18 +444,18 @@ class TestModule(absltest.TestCase):
         )
 
     block = Block(2, 5, rngs=nnx.Rngs(0))
-    assert block.dropout.deterministic == False
-    assert block.batch_norm.use_running_average == False
+    self.assertFalse(block.dropout.deterministic)
+    self.assertFalse(block.batch_norm.use_running_average)
 
     block.set_attributes(deterministic=True, use_running_average=True)
-    assert block.dropout.deterministic == True
-    assert block.batch_norm.use_running_average == True
+    self.assertTrue(block.dropout.deterministic)
+    self.assertTrue(block.batch_norm.use_running_average)
 
     block = Block(2, 5, rngs=nnx.Rngs(0))
     block.set_attributes(nnx.Dropout, deterministic=True)
     # Only the dropout will be modified
-    assert block.dropout.deterministic == True
-    assert block.batch_norm.use_running_average == False
+    self.assertTrue(block.dropout.deterministic)
+    self.assertFalse(block.batch_norm.use_running_average)
 
   def test_set_attribute_error(self):
     class Block(nnx.Module):
@@ -484,9 +487,10 @@ class TestModule(absltest.TestCase):
     )
 
 
-class TestModulePytree:
+class TestModulePytree(absltest.TestCase):
   def test_tree_map(self):
-    class Foo(nnx.Module, experimental_pytree=True):
+    @nnx.pytree
+    class Foo(nnx.Module):
       def __init__(self):
         self.node = nnx.Param(1)
         self.graphdef = 1
@@ -498,8 +502,31 @@ class TestModulePytree:
     assert m.node.value == 2
     assert m.graphdef == 1
 
+  def test_no_pytree_tree_leaves(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.node = nnx.Param(1)
+
+    m = Foo()
+
+    leaves = jax.tree.leaves(m)
+
+    self.assertIsInstance(leaves[0], nnx.ObjectLeaf)
+    self.assertIs(leaves[0].obj, m)
+
+  def test_no_jit_non_pytree(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.node = nnx.Param(1)
+
+    m = Foo()
+
+    with self.assertRaises(TypeError):
+      jax.jit(lambda m: m)(m)
+
   def test_static(self):
-    class C(nnx.Module, experimental_pytree=True):
+    @nnx.pytree
+    class C(nnx.Module):
       def __init__(self, x):
         self.x = x
 
@@ -511,16 +538,41 @@ class TestModulePytree:
       n += 1
 
     f(C(1))
-    assert n == 1
+    self.assertEqual(n, 1)
     f(C(1))
-    assert n == 1
+    self.assertEqual(n, 1)
     f(C(2))
-    assert n == 2
+    self.assertEqual(n, 2)
     f(C(2))
-    assert n == 2
+    self.assertEqual(n, 2)
+
+  def test_pytree_context(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.node = nnx.Param(1)
+
+    m = Foo()
+
+    with self.assertRaisesRegex(
+      TypeError, r'unsupported operand type\(s\) for \+'
+    ):
+      m = jax.tree.map(lambda x: x + 1, m)
+
+    with nnx.pytree_context:
+      m = jax.tree.map(lambda x: x + 1, m)
+
+    self.assertEqual(m.node.value, 2)
+
+    @nnx.pytree_context
+    def f(m):
+      m = jax.tree.map(lambda x: x + 1, m)
+
+      self.assertEqual(m.node.value, 3)
+
+    f(m)
 
 
-class TestModuleDataclass:
+class TestModuleDataclass(absltest.TestCase):
   def test_basic(self):
     @dataclasses.dataclass
     class Foo(nnx.Module):

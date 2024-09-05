@@ -42,6 +42,9 @@ from .nnx.graph import GraphDef as GraphDef
 from .nnx.graph import GraphState as GraphState
 from .nnx.graph import PureState as PureState
 from .nnx.object import Object as Object
+from .nnx.object import ObjectLeaf as ObjectLeaf
+from .nnx.object import pytree as pytree
+from .nnx.object import pytree_context as pytree_context
 from .nnx.helpers import Dict as Dict
 from .nnx.helpers import List as List
 from .nnx.helpers import Sequential as Sequential
@@ -161,4 +164,6 @@ from .nnx.variables import VariableState as VariableState
 from .nnx.variables import VariableMetadata as VariableMetadata
 from .nnx.variables import with_metadata as with_metadata
 from .nnx.visualization import display as display
-from .nnx.extract import to_tree, from_tree, TreeNode
+from .nnx.extract import to_tree as to_tree
+from .nnx.extract import from_tree as from_tree
+from .nnx.extract import TreeNode as TreeNode
