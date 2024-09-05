@@ -23,6 +23,7 @@ from flax.nnx.nnx import (
   extract,
   filterlib,
   graph,
+  safe_tree,
   variables,
 )
 from flax.nnx.nnx.state import State
@@ -164,7 +165,7 @@ def _grad_general(
       fn_out = gradded_fn(*pure_args)
 
     def process_grads(grads):
-      return jax.tree.map(
+      return safe_tree.map(
         lambda x: x.state if isinstance(x, extract.TreeNode) else x,
         grads,
         is_leaf=lambda x: isinstance(x, extract.TreeNode),
@@ -490,7 +491,7 @@ class BwdFn:
     metadata, pure_residual = res
     nondiff = extract.from_tree(nondiff)
     residual = extract.from_tree(pure_residual)
-    pure_g = jax.tree.map(
+    pure_g = safe_tree.map(
       lambda x: x.state if isinstance(x, extract.TreeNode) else x,
       pure_g,
       is_leaf=lambda x: isinstance(x, extract.TreeNode),

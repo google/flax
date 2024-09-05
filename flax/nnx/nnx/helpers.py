@@ -35,7 +35,9 @@ import jax.numpy as jnp
 import optax
 
 from flax.nnx.nnx.graph import Key
-from flax.nnx.nnx.module import GraphDef, Module
+from flax.nnx.nnx.module import Module
+from flax.nnx.nnx.graph import GraphDef
+from flax.nnx.nnx.object import ObjectStaticMetadata
 from flax.nnx.nnx.proxy_caller import ApplyCaller
 from flax.nnx.nnx.rnglib import Rngs
 from flax.nnx.nnx.state import State
@@ -111,7 +113,12 @@ class List(Module, tp.Generic[A]):
       if key not in ('_object__state', '_length')
     )
     nodes.append(('_length', self._length))
-    return nodes, (type(self), self._object__state._initializing)
+    metadata = ObjectStaticMetadata(
+      type=type(self),
+      initializing=self._object__state._initializing,
+      is_pytree=self._object__state._is_pytree,
+    )
+    return nodes, metadata
 
   def _graph_node_set_key(self, key: Key, value: tp.Any):
     if isinstance(key, int):

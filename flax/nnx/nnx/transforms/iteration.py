@@ -34,7 +34,7 @@ import typing as tp
 
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx.nnx import extract, filterlib, graph, spmd
+from flax.nnx.nnx import extract, filterlib, graph, safe_tree, spmd
 from flax.nnx.nnx.module import Module
 from flax.nnx.nnx.state import State
 from flax.nnx.nnx.transforms.transforms import resolve_kwargs
@@ -134,8 +134,8 @@ def _update_variable_sharding_metadata(
       return tree_node.replace(graphdef_states=tuple(graphdef_states_out))
     return tree_node
 
-  return jax.tree.map(
-      _update_axes_fn, tree, is_leaf=lambda x: isinstance(x, extract.TreeNode)
+  return safe_tree.map(
+    _update_axes_fn, tree, is_leaf=lambda x: isinstance(x, extract.TreeNode)
   )
 
 
@@ -311,17 +311,17 @@ def vmap(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
-  jax_in_axes = jax.tree.map(
-      lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
-      if isinstance(x, StateAxes)
-      else x,
-      in_axes,
+  jax_in_axes = safe_tree.map(
+    lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
+    if isinstance(x, StateAxes)
+    else x,
+    in_axes,
   )
-  jax_out_axes = jax.tree.map(
-      lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
-      if isinstance(x, StateAxes)
-      else x,
-      out_axes,
+  jax_out_axes = safe_tree.map(
+    lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
+    if isinstance(x, StateAxes)
+    else x,
+    out_axes,
   )
   vmapped_fn = jax.vmap(
       VmapFn(f, transform_metadata, in_axes, out_axes),
@@ -531,17 +531,17 @@ def pmap(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
-  jax_in_axes = jax.tree.map(
-      lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
-      if isinstance(x, StateAxes)
-      else x,
-      in_axes,
+  jax_in_axes = safe_tree.map(
+    lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
+    if isinstance(x, StateAxes)
+    else x,
+    in_axes,
   )
-  jax_out_axes = jax.tree.map(
-      lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
-      if isinstance(x, StateAxes)
-      else x,
-      out_axes,
+  jax_out_axes = safe_tree.map(
+    lambda x: extract.TreeNode.from_prefixes(x.axes, metadata=x)
+    if isinstance(x, StateAxes)
+    else x,
+    out_axes,
   )
   pmapped_fn = jax.pmap(
       PmapFn(f, transform_metadata, in_axes, out_axes),
@@ -586,7 +586,7 @@ def _get_carry_argnum(axes, is_in_axes: bool):
   obj_repr = 'in_axes' if is_in_axes else 'out_axes'
   carry_argnum: int | None = None
   prev_key: tp.Any = None
-  for key, x in jax.tree_util.tree_leaves_with_path(axes):
+  for key, x in safe_tree.leaves_with_path(axes):
     if x is not Carry:
       continue
     assert isinstance(key[0], jax.tree_util.SequenceKey)
@@ -641,9 +641,7 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
         f'at carry{jax.tree_util.keystr(key_path)}'
       )
 
-  jax.tree_util.tree_map_with_path(
-    check_carry_same_references, carry_arg, carry_arg_out
-  )
+  safe_tree.map_with_path(check_carry_same_references, carry_arg, carry_arg_out)
 
 def _extract_index_mappings(
   pure_carry_arg_out,
@@ -662,7 +660,7 @@ def _extract_index_mappings(
       )
     return x
 
-  pure_carry_arg_out = jax.tree.map(
+  pure_carry_arg_out = safe_tree.map(
     extract_index_mappings,
     pure_carry_arg_out,
     is_leaf=lambda x: isinstance(x, extract.GraphDefState),
@@ -685,7 +683,7 @@ def _insert_index_mappings(
       )
     return x
 
-  pure_carry_arg_out = jax.tree.map(
+  pure_carry_arg_out = safe_tree.map(
     insert_index_mappings,
     pure_carry_arg_out,
     is_leaf=lambda x: isinstance(x, extract.GraphDefState),

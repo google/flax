@@ -486,7 +486,8 @@ class TestModule(absltest.TestCase):
 
 class TestModulePytree:
   def test_tree_map(self):
-    class Foo(nnx.Module, experimental_pytree=True):
+    @nnx.pytree
+    class Foo(nnx.Module):
       def __init__(self):
         self.node = nnx.Param(1)
         self.graphdef = 1
@@ -499,7 +500,8 @@ class TestModulePytree:
     assert m.graphdef == 1
 
   def test_static(self):
-    class C(nnx.Module, experimental_pytree=True):
+    @nnx.pytree
+    class C(nnx.Module):
       def __init__(self, x):
         self.x = x
 
