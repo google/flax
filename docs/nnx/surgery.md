@@ -1,4 +1,16 @@
+---
+jupytext:
+  formats: ipynb,md:myst
+  text_representation:
+    extension: .md
+    format_name: myst
+    format_version: 0.13
+    jupytext_version: 1.13.8
+---
+
 # Model surgery
+
+> **Attention**: This page relates to the new Flax NNX API.
 
 In this guide you will learn how to do model surgery with Flax NNX with several real-scenario use cases:
 
@@ -10,8 +22,7 @@ In this guide you will learn how to do model surgery with Flax NNX with several 
 
 * __Partial initialization__: How to initialize only a part of the model from scratch using a naive method or a memory-efficient method.
 
-
-```python
+```{code-cell} ipython3
 from typing import *
 from pprint import pprint
 import functools
@@ -30,8 +41,7 @@ import orbax.checkpoint as orbax
 key = jax.random.key(0)
 ```
 
-
-```python
+```{code-cell} ipython3
 class TwoLayerMLP(nnx.Module):
   def __init__(self, dim, rngs: nnx.Rngs):
     self.linear1 = nnx.Linear(dim, dim, rngs=rngs)
@@ -48,8 +58,7 @@ Doing model surgery is easiest when you already have a fully fleshed-out model l
 
 You can perform a variety of Pythonic operations on its sub-modules, such as sub-module swapping, module sharing, variable sharing, and monkey-patching:
 
-
-```python
+```{code-cell} ipython3
 model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
 x = jax.random.normal(jax.random.key(42), (3, 4))
 np.testing.assert_allclose(model(x), model.linear2(model.linear1(x)))
@@ -77,7 +86,6 @@ model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
 def awesome_layer(x): return x
 model.linear2 = awesome_layer
 np.testing.assert_allclose(model(x), model.linear1(x))
-
 ```
 
 ## Creating an abstract model or state without memory allocation
@@ -85,46 +93,20 @@ np.testing.assert_allclose(model(x), model.linear1(x))
 For more complex model surgery, a key technique is creating and manipulating an abstract model or state without allocating any real parameter data. This makes trial iteration faster and removes any concern on memory constraints.
 
 To create an abstract model,
-* Create a function that returns a valid NNX model; and
+* Create a function that returns a valid Flax NNX model; and
 * Run `nnx.eval_shape` (not `jax.eval_shape`) upon it.
 
 Now you can use `nnx.split` as usual to get its abstract state. Note that all the fields that should be `jax.Array` in a real model are now an abstract `jax.ShapeDtypeStruct` with only shape/dtype/sharding information.
 
-
-```python
+```{code-cell} ipython3
 abs_model = nnx.eval_shape(lambda: TwoLayerMLP(4, rngs=nnx.Rngs(0)))
 gdef, abs_state = nnx.split(abs_model)
 pprint(abs_state)
 ```
 
-    State({
-      'linear1': {
-        'bias': VariableState(
-          type=Param,
-          value=ShapeDtypeStruct(shape=(4,), dtype=float32)
-        ),
-        'kernel': VariableState(
-          type=Param,
-          value=ShapeDtypeStruct(shape=(4, 4), dtype=float32)
-        )
-      },
-      'linear2': {
-        'bias': VariableState(
-          type=Param,
-          value=ShapeDtypeStruct(shape=(4,), dtype=float32)
-        ),
-        'kernel': VariableState(
-          type=Param,
-          value=ShapeDtypeStruct(shape=(4, 4), dtype=float32)
-        )
-      }
-    })
-
-
 When you fill every `VariableState` leaf's `value`s with real jax arrays, the abstract model becomes equivalent to a real model.
 
-
-```python
+```{code-cell} ipython3
 model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
 abs_state['linear1']['kernel'].value = model.linear1.kernel
 abs_state['linear1']['bias'].value = model.linear1.bias
@@ -140,9 +122,8 @@ With the abstract state technique in hand, you can do arbitrary manipulation on 
 
 This can be helpful when you are trying to change model code significantly (for example, when migrating from Flax Linen to Flax NNX), and old weights are no longer naturally compatible. Let's run a simple example here:
 
-
-```python
-# Save a version of a model into a checkpoint.
+```{code-cell} ipython3
+# Save a version of model into a checkpoint
 checkpointer = orbax.PyTreeCheckpointer()
 old_model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
 checkpointer.save(f'/tmp/nnx-surgery-state', nnx.state(model), force=True)
@@ -150,8 +131,7 @@ checkpointer.save(f'/tmp/nnx-surgery-state', nnx.state(model), force=True)
 
 In this new model, the sub-modules are renamed from `linear(1|2)` to `layer(1|2)`. Since the pytree structure changed, it's impossible to load the old checkpoint with the new model state structure:
 
-
-```python
+```{code-cell} ipython3
 class ModifiedTwoLayerMLP(nnx.Module):
   def __init__(self, dim, rngs: nnx.Rngs):
     self.layer1 = nnx.Linear(dim, dim, rngs=rngs)  # no longer linear1!
@@ -169,17 +149,9 @@ except Exception as e:
   print(f'This will throw error: {type(e)}: {e}')
 ```
 
-    This will throw error: <class 'KeyError'>: 'layer1'
-
-
-    /Users/ivyzheng/envs/py310/lib/python3.10/site-packages/orbax/checkpoint/type_handlers.py:1401: UserWarning: Couldn't find sharding info under RestoreArgs. Populating sharding info from sharding file. Please note restoration time will be slightly increased due to reading from file instead of directly from RestoreArgs. Note also that this option is unsafe when restoring on a different topology than the checkpoint was saved with.
-      warnings.warn(
-
-
 But you can load the parameter tree as a raw dictionary, make the renames, and generate a new state that is guaranteed to be compatible with your new model definition.
 
-
-```python
+```{code-cell} ipython3
 def module_from_variables_dict(module_factory, variables, map_key_fn):
   if map_key_fn is None:
     map_key_fn = lambda path: path
@@ -209,21 +181,11 @@ restored_model = module_from_variables_dict(
 np.testing.assert_allclose(restored_model(jnp.ones((3, 4))), old_model(jnp.ones((3, 4))))
 ```
 
-    {'linear1': {'bias': {'raw_value': Array([0., 0., 0., 0.], dtype=float32)},
-                 'kernel': {'raw_value': Array([[-0.80345297, -0.34071913, -0.9408296 ,  0.01005968],
-           [ 0.26146442,  1.1247735 ,  0.54563737, -0.374164  ],
-           [ 1.0281805 , -0.6798804 , -0.1488401 ,  0.05694951],
-           [-0.44308168, -0.60587114,  0.434087  , -0.40541083]],      dtype=float32)}},
-     'linear2': {'bias': {'raw_value': Array([0., 0., 0., 0.], dtype=float32)},
-                 'kernel': {'raw_value': Array([[ 0.21010089,  0.8289361 ,  0.04589564,  0.5422644 ],
-           [ 0.41914317,  0.84359694, -0.47937787, -0.49135214],
-           [-0.46072108,  0.4630125 ,  0.39276958, -0.9441406 ],
-           [-0.6690758 , -0.18474789, -0.57622856,  0.4821079 ]],      dtype=float32)}}}
-
-
 ## Partial initialization
 
 In some cases (such as with LoRA), you may want to randomly-initialize only *part of* your model parameters.  This can be achieved through naive partial initialization or memory-efficient partial initialization.
+
++++
 
 ### Naive partial initialization
 
@@ -231,9 +193,8 @@ You can simply initialize the whole model, then swap pre-trained parameters in. 
 
 > Note: You can use `jax.live_arrays()` to check all the arrays live in memory at any given time. This call can be messed up when you run a single notebook cell multiple times (due to garbage-collecting old python variables), but restarting the kernel and running from scratch will always yield same output.
 
-
-```python
-# Some pretrained model state.
+```{code-cell} ipython3
+# Some pretrained model state
 old_state = nnx.state(TwoLayerMLP(4, rngs=nnx.Rngs(0)))
 
 simple_model = nnx.eval_shape(lambda: TwoLayerMLP(4, rngs=nnx.Rngs(42)))
@@ -248,17 +209,11 @@ print(f'Number of jax arrays in memory at end: {len(jax.live_arrays())}'
       ' (2 discarded - only lora_a & lora_b are used in model)')
 ```
 
-    Number of jax arrays in memory at start: 34
-    Number of jax arrays in memory midway: 38 (4 new created in LoRALinear - kernel, bias, lora_a & lora_b)
-    Number of jax arrays in memory at end: 36 (2 discarded - only lora_a & lora_b are used in model)
-
-
 ### Memory-efficient partial initialization
 
 Use `nnx.jit`'s efficiently compiled code to make sure only the state parameters you need are initialized:
 
-
-```python
+```{code-cell} ipython3
 # Some pretrained model state
 old_state = nnx.state(TwoLayerMLP(4, rngs=nnx.Rngs(0)))
 
@@ -278,7 +233,3 @@ good_model = partial_init(old_state, nnx.Rngs(42))
 print(f'Number of jax arrays in memory at end: {len(jax.live_arrays())}'
       ' (2 new created - lora_a and lora_b)')
 ```
-
-    Number of jax arrays in memory at start: 40
-    Number of jax arrays in memory at end: 42 (2 new created - lora_a and lora_b)
-

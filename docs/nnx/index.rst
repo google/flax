@@ -1,5 +1,5 @@
 
-NNX
+Flax NNX
 ========
 .. div:: sd-text-left sd-font-italic
 
@@ -8,11 +8,15 @@ NNX
 
 ----
 
-NNX is a new Flax API that is designed to make it easier to create, inspect, debug,
-and analyze neural networks in JAX. It achieves this by adding first class support
+Flax NNX is a new simplified API that is designed to make it easier to create, inspect,
+debug, and analyze neural networks in JAX. It achieves this by adding first class support
 for Python reference semantics, allowing users to express their models using regular
-Python objects. NNX takes years of feedback from Linen and brings to Flax a simpler
-and more user-friendly experience.
+Python objects. Flax NNX is an evolution of the previous Flax Linen APIs, it takes years of
+experience to bring a simpler and more user-friendly experience.
+
+.. note::
+   Flax Linen is not going to be deprecated in the near future as most of our users still
+   rely on this API, however new users are encouraged to use Flax NNX.
 
 Features
 ^^^^^^^^^
@@ -29,7 +33,7 @@ Features
 
          .. div:: sd-font-normal
 
-            NNX supports the use of regular Python objects, providing an intuitive
+            Flax NNX supports the use of regular Python objects, providing an intuitive
             and predictable development experience.
 
    .. grid-item::
@@ -42,33 +46,34 @@ Features
 
          .. div:: sd-font-normal
 
-            NNX relies on Python's object model, which results in simplicity for
+            Flax NNX relies on Python's object model, which results in simplicity for
             the user and increases development speed.
 
    .. grid-item::
       :columns: 12 12 12 6
 
-      .. card:: Streamlined
+      .. card:: Expressive
          :class-card: sd-border-0
          :shadow: none
          :class-title: sd-fs-5
 
          .. div:: sd-font-normal
 
-            NNX integrates user feedback and hands-on experience with Linen
-            into a new simplified API.
+            Flax NNX allows fine-grained control of the model's state via
+            its `Filter <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__
+            system.
 
    .. grid-item::
       :columns: 12 12 12 6
 
-      .. card:: Compatible
+      .. card:: Familiar
          :class-card: sd-border-0
          :shadow: none
          :class-title: sd-fs-5
 
          .. div:: sd-font-normal
 
-            NNX makes it very easy to integrate objects with regular JAX code
+            Flax NNX makes it very easy to integrate objects with regular JAX code
             via the `Functional API <nnx_basics.html#the-functional-api>`__.
 
 Basic usage
@@ -114,7 +119,7 @@ Basic usage
 Installation
 ^^^^^^^^^^^^
 
-Install NNX via pip:
+Install via pip:
 
 .. code-block:: bash
 
@@ -137,7 +142,7 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`rocket_launch;2em` NNX Basics
+      .. card:: :material-regular:`rocket_launch;2em` Flax NNX Basics
          :class-card: sd-text-black sd-bg-light
          :link: nnx_basics.html
 
@@ -151,14 +156,14 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`sync_alt;2em` NNX vs JAX Transformations
+      .. card:: :material-regular:`sync_alt;2em` Flax vs JAX Transformations
          :class-card: sd-text-black sd-bg-light
          :link: transforms.html
 
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`transform;2em` Haiku and Linen vs NNX
+      .. card:: :material-regular:`transform;2em` Haiku and Flax Linen vs Flax NNX
          :class-card: sd-text-black sd-bg-light
          :link: haiku_linen_vs_nnx.html
 

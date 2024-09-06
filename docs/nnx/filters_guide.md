@@ -10,8 +10,10 @@ jupytext:
 
 # Using Filters
 
-Filters are used extensively in NNX as a way to create `State` groups in APIs
-such as `nnx.split`, `nnx.state`, and many of the NNX transforms. For example:
+> **Attention**: This page relates to the new Flax NNX API.
+
+Filters are used extensively in Flax NNX as a way to create `State` groups in APIs
+such as `nnx.split`, `nnx.state`, and many of the Flax NNX transforms. For example:
 
 ```{code-cell} ipython3
 from flax import nnx
@@ -63,8 +65,8 @@ print(f'{is_param((), nnx.VariableState(type=nnx.Param, value=0)) = }')
 ```
 
 Such function matches any value that is an instance of `Param` or any value that has a 
-`type` attribute that is a subclass of `Param`. Internally NNX uses `OfType` which defines 
-a callable of this form for a given type:
+`type` attribute that is a subclass of `Param`. Internally Flax NNX uses `OfType` which
+defines a callable of this form for a given type:
 
 ```{code-cell} ipython3
 is_param = nnx.OfType(nnx.Param)
@@ -75,11 +77,11 @@ print(f'{is_param((), nnx.VariableState(type=nnx.Param, value=0)) = }')
 
 ## The Filter DSL
 
-To avoid users having to create these functions, NNX exposes a small DSL, formalized 
+To avoid users having to create these functions, Flax NNX exposes a small DSL, formalized 
 as the `nnx.filterlib.Filter` type, which lets users pass types, booleans, ellipsis, 
 tuples/lists, etc, and converts them to the appropriate predicate internally.
 
-Here is a list of all the callable Filters included in NNX and their DSL literals 
+Here is a list of all the callable Filters included in Flax NNX and their DSL literals
 (when available):
 
 
