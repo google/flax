@@ -348,6 +348,33 @@ class TestJIT(absltest.TestCase):
 
     self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
 
+  def test_donation(self):
+    class TwoLayerMLP(nnx.Module):
+      def __init__(self, dim, rngs: nnx.Rngs):
+        self.linear1 = nnx.Linear(dim, dim, rngs=rngs)
+        self.linear2 = nnx.Linear(dim, dim, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear1(x)
+        return self.linear2(x)
+
+    old_state = nnx.state(TwoLayerMLP(4, rngs=nnx.Rngs(0)))
+
+    self.assertEqual(len(jax.live_arrays()), 4)
+
+    @partial(nnx.jit, donate_argnums=0, static_argnums=1)
+    def partial_init(old_state, rngs):
+      model = TwoLayerMLP(4, rngs=rngs)
+      # create new state
+      model.linear1 = nnx.LoRALinear(4, 4, lora_rank=3, rngs=rngs)
+      # add existing state
+      nnx.update(model, old_state)
+      return model
+
+    model = partial_init(old_state, nnx.Rngs(0))
+
+    self.assertEqual(len(jax.live_arrays()), 6)
+
 
 class TestGrad(parameterized.TestCase):
   def test_grad(self):
