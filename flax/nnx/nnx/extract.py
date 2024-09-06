@@ -23,7 +23,7 @@ import jax
 from flax import struct
 from flax.nnx.nnx.object import Object
 from flax.typing import MISSING, PathParts
-from flax.nnx.nnx import graph
+from flax.nnx.nnx import graph, safe_tree
 
 
 A = tp.TypeVar('A')
@@ -75,7 +75,7 @@ def extract_graph_nodes(
     pytree,
     prefix_is_leaf=lambda x: x is None,
   )
-  key_leaves, treedef = jax.tree_util.tree_flatten_with_path(pytree)
+  key_leaves, treedef = safe_tree.flatten_with_path(pytree)
 
   assert len(key_leaves) == len(prefix_leaves)
 
@@ -115,7 +115,7 @@ def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
       return nodes[x.index]
     return x
 
-  return jax.tree.map(
+  return safe_tree.map(
     _maybe_insert, pytree, is_leaf=lambda x: isinstance(x, ExtractionIndex)
   )
 
@@ -225,11 +225,9 @@ def broadcast_prefix(
   # ValueError; use prefix_errors to find disagreements and raise more precise
   # error messages.
   result = []
-  num_leaves = lambda t: jax.tree_util.tree_structure(
-    t, is_leaf=tree_is_leaf
-  ).num_leaves
+  num_leaves = lambda t: safe_tree.structure(t, is_leaf=tree_is_leaf).num_leaves
   add_leaves = lambda x, subtree: result.extend([x] * num_leaves(subtree))
-  jax.tree.map(add_leaves, prefix_tree, full_tree, is_leaf=prefix_is_leaf)
+  safe_tree.map(add_leaves, prefix_tree, full_tree, is_leaf=prefix_is_leaf)
   return result
 
 
@@ -342,7 +340,7 @@ def to_tree(
     tree,
     prefix_is_leaf=lambda x: x is None,
   )
-  leaf_keys, treedef = jax.tree_util.tree_flatten_with_path(tree)
+  leaf_keys, treedef = safe_tree.flatten_with_path(tree)
 
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
@@ -396,9 +394,7 @@ def from_tree(
     prefix_is_leaf=lambda x: x is None or is_leaf(x),
     tree_is_leaf=is_leaf,
   )
-  leaf_keys, treedef = jax.tree_util.tree_flatten_with_path(
-    tree, is_leaf=is_leaf
-  )
+  leaf_keys, treedef = safe_tree.flatten_with_path(tree, is_leaf=is_leaf)
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
 
@@ -416,4 +412,4 @@ def from_tree(
   return pytree_out
 
 def clear_non_graph_nodes(tree):
-  return jax.tree.map(lambda x: x if graph.is_graph_node(x) else None, tree)
+  return safe_tree.map(lambda x: x if graph.is_graph_node(x) else None, tree)

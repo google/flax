@@ -20,8 +20,9 @@ from flax import nnx
 from flax import linen
 from flax.core import meta
 from flax.nnx.nnx import graph
+from flax.nnx.nnx.graph import GraphDef
 from flax.nnx.nnx.bridge import variables as bv
-from flax.nnx.nnx.module import GraphDef, Module
+from flax.nnx.nnx.module import Module
 from flax.nnx.nnx.rnglib import Rngs
 from flax.nnx.nnx.state import State
 from flax.nnx.nnx.object import Object

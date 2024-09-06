@@ -794,7 +794,8 @@ class SimpleModule(nnx.Module):
   pass
 
 
-class SimplePyTreeModule(nnx.Module, experimental_pytree=True):
+@nnx.pytree
+class SimplePyTreeModule(nnx.Module):
   pass
 
 

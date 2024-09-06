@@ -21,7 +21,8 @@ import typing as tp
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx.nnx import extract, filterlib, graph, rnglib, spmd, variables
-from flax.nnx.nnx.module import GraphDef, Module
+from flax.nnx.nnx.module import Module
+from flax.nnx.nnx.graph import GraphDef
 from flax.nnx.nnx.proxy_caller import DelayedAccessor
 from flax.nnx.nnx.state import State
 from flax.nnx.nnx.transforms.transforms import LiftedModule
