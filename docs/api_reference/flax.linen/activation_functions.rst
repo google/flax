@@ -21,15 +21,18 @@ Activation functions
 .. autofunction:: log_sigmoid
 .. autofunction:: log_softmax
 .. autofunction:: logsumexp
+.. autofunction:: mish
 .. autofunction:: one_hot
 .. autofunction:: relu
-.. autofunction:: relu6 as relu6,
+.. autofunction:: relu6,
 .. autofunction:: selu
 .. autofunction:: sigmoid
 .. autofunction:: silu
 .. autofunction:: soft_sign
 .. autofunction:: softmax
 .. autofunction:: softplus
+.. autofunction:: sparse_plus
+.. autofunction:: squareplus
 .. autofunction:: standardize
 .. autofunction:: swish
 .. autofunction:: tanh

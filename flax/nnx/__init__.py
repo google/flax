@@ -77,6 +77,7 @@ from .nnx.nn.activations import leaky_relu as leaky_relu
 from .nnx.nn.activations import log_sigmoid as log_sigmoid
 from .nnx.nn.activations import log_softmax as log_softmax
 from .nnx.nn.activations import logsumexp as logsumexp
+from .nnx.nn.activations import mish as mish
 from .nnx.nn.activations import one_hot as one_hot
 from .nnx.nn.activations import relu as relu
 from .nnx.nn.activations import relu6 as relu6
@@ -86,6 +87,8 @@ from .nnx.nn.activations import silu as silu
 from .nnx.nn.activations import soft_sign as soft_sign
 from .nnx.nn.activations import softmax as softmax
 from .nnx.nn.activations import softplus as softplus
+from .nnx.nn.activations import sparse_plus as sparse_plus
+from .nnx.nn.activations import squareplus as squareplus
 from .nnx.nn.activations import standardize as standardize
 from .nnx.nn.activations import swish as swish
 from .nnx.nn.activations import tanh as tanh
