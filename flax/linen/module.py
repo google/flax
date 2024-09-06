@@ -3244,7 +3244,7 @@ def share_scope(module: Module, other: Module, /):
     >>> list(params['DenseLoRA_0'].keys())
     ['A', 'B', 'kernel', 'bias']
   """
-  if module.scope is None:
+  if module.scope is None or other.scope is None:
     raise errors.CallShareScopeOnUnboundModuleError()
 
   def _is_child_scope(scope: Scope, other: Scope) -> bool:
@@ -3256,10 +3256,27 @@ def share_scope(module: Module, other: Module, /):
       target = target.parent
     return False
 
-  if other.scope is not None and _is_child_scope(module.scope, other.scope):
+  if _is_child_scope(module.scope, other.scope):
     # Child is a true child, overwrite its scope
-    object.__setattr__(other, 'scope', module.scope)
+    module_to_update = other
+    new_scope = module.scope
   else:
     # Child has its own independent scope, overwrite
     # parent scope, so that we preserve the sharing
-    object.__setattr__(module, 'scope', other.scope)
+    module_to_update = module
+    new_scope = other.scope
+
+  old_scope = module_to_update.scope
+  object.__setattr__(module_to_update, 'scope', new_scope)
+
+  # Reattach all the children to the new scope as well.
+  for m in module_to_update._state.children.values():
+    if not isinstance(m, Module):
+      continue
+    # Should we go recursively to check if any of the ancestors point to the old
+    # scope?
+    if m.scope and m.scope.parent == old_scope:
+      # Reserve the scope, so that if there is a conflict we can raise an error.
+      if isinstance(m.scope.name, str):
+        new_scope.reserve(m.scope.name)
+      m.scope.parent = new_scope

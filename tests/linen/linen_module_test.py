@@ -3307,6 +3307,34 @@ class ShareScopeTest(absltest.TestCase):
     self.assertIn('A', params['dense_lora'])
     self.assertIn('B', params['dense_lora'])
 
+  def test_external_grandchild_scope_correct(self):
+    class GrandChild(nn.Module):
+      @nn.compact
+      def __call__(self):
+        return nn.Dense(50)(jnp.zeros(10))
+
+    class Child(nn.Module):
+      child: GrandChild
+
+      @nn.compact
+      def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self.child(*args, **kwargs)
+
+    class Parent(nn.Module):
+      main_child: Child
+
+      def setup(self):
+        nn.share_scope(self, self.main_child)
+
+      @nn.compact
+      def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        nn.Dense(10)(jnp.zeros(10))
+        r = self.main_child(*args, **kwargs)
+        return r
+
+    params = Parent(Child(GrandChild())).init(jax.random.key(0))
+    self.assertNotIn('main_child', params['params'])
+    self.assertIn('child', params['params'])
 
 if __name__ == '__main__':
   absltest.main()
