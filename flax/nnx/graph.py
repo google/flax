@@ -594,7 +594,7 @@ def _graph_unflatten(
                 raise ValueError(
                   f'Expected a Variable type for {key!r}, but got {type(variable)}.'
                 )
-              variable.copy_from_state(value)
+              variable.update_from_state(value)
             else:  # if it doesn't, create a new variable
               assert isinstance(value, VariableState)
               variable = value.to_variable()
@@ -729,7 +729,7 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[Key, tp.Any]):
           f'Trying to update a non-Variable attribute {key!r} with a Variable: '
           f'{value!r}'
         )
-      current_value.copy_from_state(value)
+      current_value.update_from_state(value)
     elif is_state_leaf(value):
       # case 4: state field is being updated
       if isinstance(node_impl, PytreeNodeImpl):

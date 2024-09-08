@@ -20,6 +20,8 @@ from functools import partial
 import typing as tp
 from typing import Any
 
+import jax
+
 from flax import nnx
 from flax.nnx import reprlib, tracers
 from flax.typing import Missing
@@ -128,6 +130,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def __init__(
     self,
     value: tp.Union[A, VariableMetadata[A]],
+    *,
     set_value_hooks: tp.Union[
       SetValueHook[A], tp.Sequence[SetValueHook[A]]
     ] = (),
@@ -281,7 +284,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars_dict.clear()
     vars_dict.update(other_vars, _trace_state=trace_state)
 
-  def copy_from_state(self, variable_state: VariableState[A]):
+  def update_from_state(self, variable_state: VariableState[A]):
     trace_state = self._trace_state
     variable_vars = vars(self)
     variable_vars.clear()
@@ -815,6 +818,12 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     self.value = value
     vars(self).update(metadata)
 
+  if tp.TYPE_CHECKING:
+
+    def __getattr__(self, name: str) -> None: ...
+    def __setattr__(self, name: str, value: Any) -> None: ...
+    def __delattr__(self, name: str) -> None: ...
+
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
     yield reprlib.Attr('type', self.type.__name__)
@@ -851,6 +860,9 @@ class VariableState(tp.Generic[A], reprlib.Representable):
       metadata, raw_value=self.value, _trace_state=tracers.TraceState()
     )
     return variables
+
+  def copy(self: VariableState[A]) -> VariableState[A]:
+    return jax.tree.map(lambda x: x, self)
 
   def get_metadata(self) -> dict[str, tp.Any]:
     metadata = vars(self).copy()

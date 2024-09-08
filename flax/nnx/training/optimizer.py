@@ -13,21 +13,92 @@
 # limitations under the License.
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import optax
 
 from flax import nnx
-from flax.nnx import filterlib, graph
+from flax.nnx import filterlib
+from flax.nnx import variables
 from flax.nnx.object import Object
-from flax.nnx.variables import Variable
+from flax.nnx.variables import Variable, VariableState
 
 # TODO: add tests and docstrings
 
 
 class OptState(Variable):
-  """Wrapper class for Optimizer Variables."""
+  """Holds any optimizer state."""
 
   pass
+
+
+class OptArray(OptState):
+  """Holds an array of optimizer state."""
+
+  pass
+
+
+class OptVariable(OptState):
+  """Holds Variable state."""
+
+  source_type: type[Variable]
+  pass
+
+
+def _wrap_optimizer_state(opt_state):
+  def wrap_optimizer_state_fn(x):
+    if isinstance(x, variables.VariableState):
+      new_state = x.copy()
+      new_state.source_type = x.type
+      new_state.type = OptVariable
+      return new_state.to_variable()
+    else:
+      return OptArray(x)
+
+  return jax.tree.map(
+    wrap_optimizer_state_fn,
+    opt_state,
+    is_leaf=lambda x: isinstance(x, variables.VariableState),
+  )
+
+
+def _opt_state_variables_to_state(opt_state):
+  def optimizer_variable_to_state_fn(x):
+    if isinstance(x, OptVariable):
+      state = x.to_state()
+      state.type = x.source_type
+      del state.source_type
+      return state
+    elif isinstance(x, OptArray):
+      return x.value
+    else:
+      raise TypeError(
+        f'Unexpected type when converting optimizer state: {type(x)}'
+      )
+
+  return jax.tree.map(optimizer_variable_to_state_fn, opt_state)
+
+
+def _update_opt_state(opt_state, updates):
+  def optimizer_update_variables(x, update):
+    if isinstance(x, OptVariable):
+      if not isinstance(update, VariableState):
+        raise TypeError(
+          f'Expected update to be VariableState, got {type(update)}'
+        )
+      x.raw_value = update.value
+    elif isinstance(x, OptArray):
+      if isinstance(update, VariableState):
+        raise TypeError(
+          f'Expected update to not to be a VariableState, got {update}'
+        )
+      x.raw_value = update
+    else:
+      raise TypeError(
+        f'Unexpected type when updating optimizer state: {type(x)}'
+      )
+
+  return jax.tree.map(optimizer_update_variables, opt_state, updates)
 
 
 class Optimizer(Object):
@@ -119,11 +190,8 @@ class Optimizer(Object):
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.model = model
     self.tx = tx
-    self.opt_state = OptState(tx.init(nnx.state(model, wrt)))
+    self.opt_state = _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
     self.wrt = wrt
-
-  def split(self, *filters: filterlib.Filter):
-    return graph.split(self, *filters)
 
   def update(self, grads):
     """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
@@ -182,12 +250,13 @@ class Optimizer(Object):
     Args:
       grads: the gradients derived from ``nnx.grad``.
     """
-    state = nnx.state(self.model, self.wrt)
+    params = nnx.state(self.model, self.wrt)
+    opt_state = _opt_state_variables_to_state(self.opt_state)
 
-    updates, new_opt_state = self.tx.update(grads, self.opt_state.value, state)
-    new_params = optax.apply_updates(state, updates)
+    updates, new_opt_state = self.tx.update(grads, opt_state, params)
+    new_params = optax.apply_updates(params, updates)
     assert isinstance(new_params, nnx.State)
 
     self.step.value += 1
     nnx.update(self.model, new_params)
-    self.opt_state.value = new_opt_state
+    _update_opt_state(self.opt_state, new_opt_state)
