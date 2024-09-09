@@ -185,5 +185,6 @@ Learn more
    mnist_tutorial
    transforms
    haiku_linen_vs_nnx
+   bridge_guide
    filters_guide
    surgery
