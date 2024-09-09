@@ -204,7 +204,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       and isinstance(variable := getattr(self, key), Variable)
       and isinstance(value, VariableState)
     ):
-      variable.copy_from_state(value)
+      variable.update_from_state(value)
     else:
       setattr(self, key, value)
 

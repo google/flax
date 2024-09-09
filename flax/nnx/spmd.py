@@ -17,7 +17,7 @@ import typing as tp
 
 import jax
 from jax.interpreters import pxla
-from jax.sharding import Mesh, PartitionSpec
+from jax.sharding import PartitionSpec
 
 from flax.nnx import variables
 from flax.typing import (
@@ -159,57 +159,14 @@ def with_sharding_constraint(
   )
 
 
-# -------------------------------------
-# Partitioning Axis Metadata
-# -------------------------------------
-
-
-@tp.runtime_checkable
-class Partitioned(tp.Protocol):
-  get_value_hooks: tp.Callable[[variables.Variable[tp.Any]], tp.Any]
-  sharding: Sharding
-  mesh: tp.Optional[Mesh]
-
-
-def sharding_hook(
-  node: variables.Variable[tp.Any],
-  value: tp.Any,
-  /,
-) -> tp.Any:
-  if _global_mesh_defined() or (
-    isinstance(node, Partitioned) and node.mesh is not None
-  ):
-    spec = get_partition_spec(node).raw_value
-    return with_sharding_constraint(value, spec, mesh=node.mesh)
-  return value
-
-
 def with_partitioning(
   initializer: F,
   sharding: Sharding,
   mesh: tp.Optional[jax.sharding.Mesh] = None,
-  get_value_hooks: tp.Union[
-    variables.GetValueHook[A], tp.Sequence[variables.GetValueHook[A]]
-  ] = (),
-  create_value_hooks: tp.Union[
-    variables.CreateValueHook[A], tp.Sequence[variables.CreateValueHook[A]]
-  ] = (),
   **metadata: tp.Any,
 ) -> F:
-  if callable(get_value_hooks):
-    get_value_hooks = (get_value_hooks, sharding_hook)
-  else:
-    get_value_hooks = (*get_value_hooks, sharding_hook)
-
-  if callable(create_value_hooks):
-    create_value_hooks = (create_value_hooks, sharding_hook)
-  else:
-    create_value_hooks = (*create_value_hooks, sharding_hook)
-
   return variables.with_metadata(
     initializer,
-    get_value_hooks=get_value_hooks,
-    create_value_hooks=create_value_hooks,
     sharding=sharding,
     mesh=mesh,
     **metadata,

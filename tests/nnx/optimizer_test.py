@@ -41,11 +41,45 @@ class TestOptimizer(parameterized.TestCase):
     x = jax.random.normal(jax.random.key(0), (1, 2))
     model = module_cls(2, 4, rngs=nnx.Rngs(0))
     tx = optax.adam(1e-3)
-    state = nnx.Optimizer(model, tx)
-    out = state.model(x)
-    graphdef, state = state.split()
-    state = nnx.merge(graphdef, state)
-    np.testing.assert_allclose(out, state.model(x))
+    optimizer = nnx.Optimizer(model, tx)
+    out = optimizer.model(x)
+    graphdef, optimizer = nnx.split(optimizer)
+    optimizer = nnx.merge(graphdef, optimizer)
+    np.testing.assert_allclose(out, optimizer.model(x))
+
+  def test_update(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    optimizer = nnx.Optimizer(model, optax.adamw(0.1))
+
+    def loss_fn(model):
+      params = nnx.state(model)
+      loss = sum(jnp.sum(x**2) for x in jax.tree.leaves(params))
+      return loss
+
+    grads = nnx.grad(loss_fn)(model)
+    optimizer.update(grads)
+
+  def test_sharding_propagation(self):
+    model = nnx.Linear(
+      2,
+      3,
+      rngs=nnx.Rngs(0),
+      kernel_init=nnx.with_partitioning(
+        nnx.initializers.lecun_normal(),
+        sharding=('a', 'b'),
+      ),
+      use_bias=False,
+    )
+    optimizer = nnx.Optimizer(model, optax.adamw(0.1))
+
+    state = nnx.state(optimizer)
+    partition_spec = nnx.get_partition_spec(state)
+
+    self.assertEqual(state.opt_state[0].mu.kernel.sharding, ('a', 'b'))
+    self.assertEqual(
+      partition_spec.opt_state[0].mu.kernel.value,
+      jax.sharding.PartitionSpec('a', 'b'),
+    )
 
   @parameterized.product(
     module_cls=[nnx.Linear, Model],
@@ -73,9 +107,11 @@ class TestOptimizer(parameterized.TestCase):
         model_static, model_state = nnx.split(state.model)
         grads = jax.grad(loss_fn, argnums=1)(model_static, model_state, x, y)
         state.update(grads)
-        return state.split()
+        return nnx.split(state)
 
-      graphdef, state = jit_decorator(jax_jit_train_step)(*state.split(), x, y)
+      graphdef, state = jit_decorator(jax_jit_train_step)(
+        *nnx.split(state), x, y
+      )
       state = nnx.merge(graphdef, state)
       new_loss = loss_fn(*nnx.split(state.model), x, y)
 
