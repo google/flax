@@ -21,6 +21,7 @@ import numpy as np
 from absl.testing import absltest
 
 from flax import nnx
+from flax import errors
 
 
 class TestRngs(absltest.TestCase):
@@ -58,7 +59,7 @@ class TestRngs(absltest.TestCase):
     @jax.jit
     def f():
       with self.assertRaisesRegex(
-          nnx.errors.TraceContextError,
+          errors.TraceContextError,
           'Cannot call RngStream from a different trace level',
       ):
         rngs.params()
@@ -76,7 +77,7 @@ class TestRngs(absltest.TestCase):
 
     self.assertIsInstance(rngs1, nnx.Rngs)
     with self.assertRaisesRegex(
-      nnx.errors.TraceContextError,
+      errors.TraceContextError,
       'Cannot call RngStream from a different trace level',
     ):
       rngs1.params()
