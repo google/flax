@@ -26,6 +26,7 @@ from flax.typing import (
   PartitionSpecPytree,  # pylint: disable=invalid-name
   Sharding,
 )
+from flax import errors
 
 A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
@@ -38,13 +39,15 @@ def add_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   def _add_axis(x: tp.Any):
     if isinstance(x, variables.VariableState):
       if hasattr(x, 'sharding') and x.sharding is not None:
+        if axis_name is None:
+          raise errors.AxisNameMissingError(x.sharding)
         sharding: list[str | None] = list(x.sharding)
         while len(sharding) < index:
           sharding.append(None)
         sharding.insert(index, axis_name)
         x.sharding = tuple(sharding)  # type: ignore
 
-      x.add_axis(axis_name, index)
+      x.add_axis(index, axis_name)
     return x
 
   return jax.tree.map(
@@ -58,10 +61,12 @@ def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   def _remove_axis(x: tp.Any):
     if isinstance(x, variables.VariableState):
       if hasattr(x, 'sharding') and x.sharding is not None:
+        if axis_name is None:
+          raise errors.AxisNameMissingError(x.sharding)
         sharding = list(x.sharding)
         assert sharding.pop(index) == axis_name
         x.sharding = tuple(sharding)
-      x.remove_axis(axis_name, index)
+      x.remove_axis(index, axis_name)
     return x
 
   return jax.tree.map(
@@ -71,12 +76,9 @@ def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   )
 
 
-def _get_partition_name(params: tp.Mapping[tp.Any, tp.Any]) -> str:
+def _get_partition_name(params: tp.Mapping[tp.Any, tp.Any]) -> str | None:
   if PARTITION_NAME not in params:
-    raise ValueError(
-      'Trying to transform a Partitioned variable but "partition_name" '
-      f'is not specified in scan_metadata: {params}'
-    )
+    return None
   return params[PARTITION_NAME]
 
 

@@ -152,10 +152,10 @@ class VmapFn:
     functools.update_wrapper(self, self.f)
 
   def __call__(self, *pure_args: tuple[tp.Any, ...]):
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args = _update_variable_sharding_metadata(
-          pure_args, self.transform_metadata, spmd.remove_axis
-      )
+    print(self.transform_metadata)
+    pure_args = _update_variable_sharding_metadata(
+        pure_args, self.transform_metadata, spmd.remove_axis
+    )
     args = extract.from_tree(pure_args, ctxtag='vmap')
 
     out = self.f(*args)
@@ -167,10 +167,9 @@ class VmapFn:
         split_fn=_vmap_split_fn,
         ctxtag='vmap',
     )
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args_out, pure_out = _update_variable_sharding_metadata(
-          (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
-      )
+    pure_args_out, pure_out = _update_variable_sharding_metadata(
+        (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
+    )
     return pure_args_out, pure_out
 
 
@@ -356,10 +355,9 @@ class PmapFn:
     functools.update_wrapper(self, self.f)
 
   def __call__(self, *pure_args: tuple[tp.Any, ...]):
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args = _update_variable_sharding_metadata(
-          pure_args, self.transform_metadata, spmd.remove_axis
-      )
+    pure_args = _update_variable_sharding_metadata(
+        pure_args, self.transform_metadata, spmd.remove_axis
+    )
     args = extract.from_tree(pure_args, ctxtag='pmap')
 
     out = self.f(*args)
@@ -371,10 +369,9 @@ class PmapFn:
         split_fn=_vmap_split_fn,
         ctxtag='pmap',
     )
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args_out, pure_out = _update_variable_sharding_metadata(
-          (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
-      )
+    pure_args_out, pure_out = _update_variable_sharding_metadata(
+        (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
+    )
     return pure_args_out, pure_out
 
 
@@ -994,10 +991,9 @@ class ScanFn:
       assert self.input_carry_argnum is None
       assert pure_carry_arg is None
 
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args = _update_variable_sharding_metadata(
-          pure_args, self.transform_metadata, spmd.remove_axis
-      )
+    pure_args = _update_variable_sharding_metadata(
+        pure_args, self.transform_metadata, spmd.remove_axis
+    )
 
     args: tuple = extract.from_tree(
       pure_args,
@@ -1065,12 +1061,11 @@ class ScanFn:
       map_non_graph_nodes=True,
       ctxtag='scan',
     )
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args_out, pure_out = _update_variable_sharding_metadata(
-        (pure_args_out, pure_out),
-        self.transform_metadata,
-        spmd.add_axis,
-      )
+    pure_args_out, pure_out = _update_variable_sharding_metadata(
+      (pure_args_out, pure_out),
+      self.transform_metadata,
+      spmd.add_axis,
+    )
 
     # extract the pure carry from the pure args
     if self.input_carry_argnum == 'all':
