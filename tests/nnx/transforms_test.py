@@ -323,7 +323,7 @@ class TestJIT(absltest.TestCase):
 
   def test_apply_shardings(self):
     n_devices = max(jax.local_device_count() // 2, 1)
-    devices = mesh_utils.create_device_mesh((n_devices, n_devices))
+    devices = mesh_utils.create_device_mesh((n_devices, jax.local_device_count() // n_devices))
     mesh = jax.sharding.Mesh(devices, ('a', 'b'))
 
     def sharding(*args):

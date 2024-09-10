@@ -89,9 +89,15 @@ def get_partition_spec(tree: A) -> A:
     else:
       return None
 
+  def from_rules(sharding, sharding_rules):
+    rules = {alias: on_mesh for (alias, on_mesh) in sharding_rules}
+    return (rules[s] if s in rules else s for s in sharding)
+
   def f(x):
     if isinstance(x, (variables.VariableState, variables.Variable)):
       if hasattr(x, 'sharding') and x.sharding:
+        if hasattr(x, 'sharding_rules') and x.sharding_rules:
+          return x.replace(PartitionSpec(*from_rules(x.sharding, x.sharding_rules)))
         return x.replace(PartitionSpec(*x.sharding))
       else:
         return x.replace(_maybe_replicate(x.value))
