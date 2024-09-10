@@ -870,17 +870,15 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     del metadata['value']
     return metadata
 
-  def add_axis(self, axis_name: AxisName, axis_index: AxisIndex):
-    if not hasattr(self, 'add_axis_hooks'):
-      raise ValueError(f'No add_axis_hooks found for VariableState: {self}')
-    for hook in self.add_axis_hooks:
-      hook(self, axis_name, axis_index)
+  def add_axis(self, axis_index: AxisIndex, axis_name: AxisName | None = None):
+    if hasattr(self, 'add_axis_hooks'):
+      for hook in self.add_axis_hooks:
+        hook(self, axis_name, axis_index)
 
-  def remove_axis(self, axis_name: AxisName, axis_index: AxisIndex):
-    if not hasattr(self, 'remove_axis_hooks'):
-      raise ValueError(f'No remove_axis_hooks found for VariableState: {self}')
-    for hook in self.remove_axis_hooks:
-      hook(self, axis_name, axis_index)
+  def remove_axis(self, axis_index: AxisIndex, axis_name: AxisName | None = None):
+    if hasattr(self, 'remove_axis_hooks'):
+      for hook in self.remove_axis_hooks:
+        hook(self, axis_name, axis_index)
 
 
 def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):

@@ -65,6 +65,25 @@ class FlaxError(Exception):
 
 
 #################################################
+# NNX errors                                    #
+#################################################
+
+
+class TraceContextError(FlaxError):
+  pass
+
+
+class AxisNameMissingError(FlaxError):
+  def __init__(self, x_sharding):
+    super().__init__(
+      'You are trying to modify param dimension via transforms like `nnx.vmap` '
+      f'or `nnx.scan`, while the param is partition-annotated as: {x_sharding} '
+      'You need to provide the axis name of the transform via extra '
+      'argument: transform_metadata={nnx.PARTITION_NAME: "your_axis_name"}'
+    )
+
+
+#################################################
 # lazy_init.py errors                           #
 #################################################
 

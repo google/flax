@@ -107,17 +107,25 @@ def _update_variable_sharding_metadata(
 ):
   def _update_axes_fn(tree_node):
     if isinstance(tree_node, extract.TreeNode) and isinstance(
-        tree_node.metatata, StateAxes
+      tree_node.metatata, (StateAxes, int)
     ):
-      graphdef_states_out: list[extract.GraphDefState] = []
-      for graphdef_state, axis in zip(
+      if isinstance(tree_node.metatata, int):
+        graph_def_state = tree_node.graphdef_states[0]
+        assert isinstance(graph_def_state, extract.GraphDefState)
+        graphdef_state = axis_fn(
+          graph_def_state, tree_node.metatata, transform_metadata
+        )
+        return tree_node.replace(graphdef_states=(graphdef_state,))
+      else:
+        graphdef_states_out: list[extract.GraphDefState] = []
+        for graphdef_state, axis in zip(
           tree_node.graphdef_states, tree_node.metatata.axes
-      ):
-        assert isinstance(graphdef_state, extract.GraphDefState)
-        if isinstance(axis, int):
-          graphdef_state = axis_fn(graphdef_state, axis, transform_metadata)
-        graphdef_states_out.append(graphdef_state)
-      return tree_node.replace(graphdef_states=tuple(graphdef_states_out))
+        ):
+          assert isinstance(graphdef_state, extract.GraphDefState)
+          if isinstance(axis, int):
+            graphdef_state = axis_fn(graphdef_state, axis, transform_metadata)
+          graphdef_states_out.append(graphdef_state)
+        return tree_node.replace(graphdef_states=tuple(graphdef_states_out))
     return tree_node
 
   return jax.tree.map(
@@ -130,7 +138,7 @@ def _vmap_split_fn(ctx: graph.SplitContext, path, prefix, x):
     return extract.TreeNode.from_split(
         *ctx.split(x, *prefix.filters), metadata=prefix
     )
-  return extract.TreeNode.from_split(*ctx.split(x))
+  return extract.TreeNode.from_split(*ctx.split(x), metadata=prefix)
 
 
 @dataclasses.dataclass(eq=False)
@@ -144,10 +152,10 @@ class VmapFn:
     functools.update_wrapper(self, self.f)
 
   def __call__(self, *pure_args: tuple[tp.Any, ...]):
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args = _update_variable_sharding_metadata(
-          pure_args, self.transform_metadata, spmd.remove_axis
-      )
+    print(self.transform_metadata)
+    pure_args = _update_variable_sharding_metadata(
+        pure_args, self.transform_metadata, spmd.remove_axis
+    )
     args = extract.from_tree(pure_args, ctxtag='vmap')
 
     out = self.f(*args)
@@ -159,10 +167,9 @@ class VmapFn:
         split_fn=_vmap_split_fn,
         ctxtag='vmap',
     )
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args_out, pure_out = _update_variable_sharding_metadata(
-          (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
-      )
+    pure_args_out, pure_out = _update_variable_sharding_metadata(
+        (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
+    )
     return pure_args_out, pure_out
 
 
@@ -348,10 +355,9 @@ class PmapFn:
     functools.update_wrapper(self, self.f)
 
   def __call__(self, *pure_args: tuple[tp.Any, ...]):
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args = _update_variable_sharding_metadata(
-          pure_args, self.transform_metadata, spmd.remove_axis
-      )
+    pure_args = _update_variable_sharding_metadata(
+        pure_args, self.transform_metadata, spmd.remove_axis
+    )
     args = extract.from_tree(pure_args, ctxtag='pmap')
 
     out = self.f(*args)
@@ -363,10 +369,9 @@ class PmapFn:
         split_fn=_vmap_split_fn,
         ctxtag='pmap',
     )
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args_out, pure_out = _update_variable_sharding_metadata(
-          (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
-      )
+    pure_args_out, pure_out = _update_variable_sharding_metadata(
+        (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
+    )
     return pure_args_out, pure_out
 
 
@@ -986,10 +991,9 @@ class ScanFn:
       assert self.input_carry_argnum is None
       assert pure_carry_arg is None
 
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args = _update_variable_sharding_metadata(
-          pure_args, self.transform_metadata, spmd.remove_axis
-      )
+    pure_args = _update_variable_sharding_metadata(
+        pure_args, self.transform_metadata, spmd.remove_axis
+    )
 
     args: tuple = extract.from_tree(
       pure_args,
@@ -1057,12 +1061,11 @@ class ScanFn:
       map_non_graph_nodes=True,
       ctxtag='scan',
     )
-    if spmd.PARTITION_NAME in self.transform_metadata:
-      pure_args_out, pure_out = _update_variable_sharding_metadata(
-        (pure_args_out, pure_out),
-        self.transform_metadata,
-        spmd.add_axis,
-      )
+    pure_args_out, pure_out = _update_variable_sharding_metadata(
+      (pure_args_out, pure_out),
+      self.transform_metadata,
+      spmd.add_axis,
+    )
 
     # extract the pure carry from the pure args
     if self.input_carry_argnum == 'all':
