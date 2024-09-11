@@ -44,7 +44,7 @@ def add_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
         sharding.insert(index, axis_name)
         x.sharding = tuple(sharding)  # type: ignore
 
-      x.add_axis(axis_name, index)
+      x.add_axis(index, axis_name)
     return x
 
   return jax.tree.map(
@@ -61,7 +61,7 @@ def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
         sharding = list(x.sharding)
         assert sharding.pop(index) == axis_name
         x.sharding = tuple(sharding)
-      x.remove_axis(axis_name, index)
+      x.remove_axis(index, axis_name)
     return x
 
   return jax.tree.map(

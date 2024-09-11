@@ -36,8 +36,8 @@ SetValueHook = tp.Callable[['Variable[A]', A], A]
 CreateValueHook = tp.Callable[['Variable[A]', A], A]
 AxisName = str
 AxisIndex = int
-AddAxisHook = tp.Callable[[V, AxisName, AxisIndex], None]
-RemoveAxisHook = tp.Callable[[V, AxisName, AxisIndex], None]
+AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
+RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
 VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
 
@@ -150,67 +150,43 @@ class Variable(tp.Generic[A], reprlib.Representable):
     **metadata: tp.Any,
   ):
     vars(self)['_trace_state'] = tracers.TraceState()
-    if set_value_hooks:
-      if callable(set_value_hooks):
-        set_value_hooks = (set_value_hooks,)
-      else:
-        set_value_hooks = tuple(set_value_hooks)
+    if callable(set_value_hooks):
+      set_value_hooks = (set_value_hooks,)
     else:
-      set_value_hooks = ()
-    if get_value_hooks:
-      if callable(get_value_hooks):
-        get_value_hooks = (get_value_hooks,)
-      else:
-        get_value_hooks = tuple(get_value_hooks)
-    else:
-      get_value_hooks = ()
+      set_value_hooks = tuple(set_value_hooks)
 
-    if create_value_hooks:
-      if callable(create_value_hooks):
-        create_value_hooks = (create_value_hooks,)
-      else:
-        create_value_hooks = tuple(create_value_hooks)
+    if callable(get_value_hooks):
+      get_value_hooks = (get_value_hooks,)
     else:
-      create_value_hooks = ()
+      get_value_hooks = tuple(get_value_hooks)
 
-    if add_axis_hooks:
-      if callable(add_axis_hooks):
-        add_axis_hooks = (add_axis_hooks,)
-      else:
-        add_axis_hooks = tuple(add_axis_hooks)
+    if callable(create_value_hooks):
+      create_value_hooks = (create_value_hooks,)
     else:
-      add_axis_hooks = ()
+      create_value_hooks = tuple(create_value_hooks)
 
-    if remove_axis_hooks:
-      if callable(remove_axis_hooks):
-        remove_axis_hooks = (remove_axis_hooks,)
-      else:
-        remove_axis_hooks = tuple(remove_axis_hooks)
+    if callable(add_axis_hooks):
+      add_axis_hooks = (add_axis_hooks,)
     else:
-      remove_axis_hooks = ()
+      add_axis_hooks = tuple(add_axis_hooks)
+
+    if callable(remove_axis_hooks):
+      remove_axis_hooks = (remove_axis_hooks,)
+    else:
+      remove_axis_hooks = tuple(remove_axis_hooks)
 
     if isinstance(value, VariableMetadata):
       value_metadata = dict(value.metadata)
-      if set_value_hooks and value.set_value_hooks:
+      if value.set_value_hooks:
         set_value_hooks = set_value_hooks + value.set_value_hooks
-      elif value.set_value_hooks:
-        set_value_hooks = value.set_value_hooks
-      if get_value_hooks and value.get_value_hooks:
+      if value.get_value_hooks:
         get_value_hooks = get_value_hooks + value.get_value_hooks
-      elif value.get_value_hooks:
-        get_value_hooks = value.get_value_hooks
-      if create_value_hooks and value.create_value_hooks:
+      if value.create_value_hooks:
         create_value_hooks = create_value_hooks + value.create_value_hooks
-      elif value.create_value_hooks:
-        create_value_hooks = value.create_value_hooks
-      if add_axis_hooks and value.add_axis_hooks:
+      if value.add_axis_hooks:
         add_axis_hooks = add_axis_hooks + value.add_axis_hooks
-      elif value.add_axis_hooks:
-        add_axis_hooks = value.add_axis_hooks
-      if remove_axis_hooks and value.remove_axis_hooks:
+      if value.remove_axis_hooks:
         remove_axis_hooks = remove_axis_hooks + value.remove_axis_hooks
-      elif value.remove_axis_hooks:
-        remove_axis_hooks = value.remove_axis_hooks
 
       metadata.update(value_metadata)
       value = tp.cast(A, value.raw_value)
@@ -318,13 +294,13 @@ class Variable(tp.Generic[A], reprlib.Representable):
       value = hook(self, value)
     return value
 
-  def add_axis(self, axis_name: AxisName, axis_index: AxisIndex):
+  def add_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
     for hook in self.add_axis_hooks:
-      hook(self, axis_name, axis_index)
+      hook(self, axis_index, axis_name)
 
-  def remove_axis(self, axis_name: AxisName, axis_index: AxisIndex):
+  def remove_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
     for hook in self.remove_axis_hooks:
-      hook(self, axis_name, axis_index)
+      hook(self, axis_index, axis_name)
 
   def __eq__(self, other: object) -> bool:
     return type(self) is type(other) and vars(other) == vars(self)
@@ -418,11 +394,11 @@ class Variable(tp.Generic[A], reprlib.Representable):
     def on_create_value(self, value: A) -> A: ...
 
     def on_add_axis(
-      self: V, axis_name: AxisName, axis_index: AxisIndex
+      self: V, axis_index: AxisIndex, axis_name: AxisName | None
     ) -> V: ...
 
     def on_remove_axis(
-      self: V, axis_name: AxisName, axis_index: AxisIndex
+      self: V, axis_index: AxisIndex, axis_name: AxisName | None
     ) -> V: ...
 
   def __jax_array__(self):
@@ -870,17 +846,13 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     del metadata['value']
     return metadata
 
-  def add_axis(self, axis_name: AxisName, axis_index: AxisIndex):
-    if not hasattr(self, 'add_axis_hooks'):
-      raise ValueError(f'No add_axis_hooks found for VariableState: {self}')
+  def add_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
     for hook in self.add_axis_hooks:
-      hook(self, axis_name, axis_index)
+      hook(self, axis_index, axis_name)
 
-  def remove_axis(self, axis_name: AxisName, axis_index: AxisIndex):
-    if not hasattr(self, 'remove_axis_hooks'):
-      raise ValueError(f'No remove_axis_hooks found for VariableState: {self}')
+  def remove_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
     for hook in self.remove_axis_hooks:
-      hook(self, axis_name, axis_index)
+      hook(self, axis_index, axis_name)
 
 
 def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):
