@@ -22,7 +22,7 @@ from typing import Any
 
 import jax
 
-from flax import nnx
+from flax import errors
 from flax.nnx import reprlib, tracers
 from flax.typing import Missing
 import jax.tree_util as jtu
@@ -235,7 +235,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
   def _setattr(self, name: str, value: tp.Any):
     if not self._trace_state.is_valid():
-      raise nnx.errors.TraceContextError(
+      raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
 
