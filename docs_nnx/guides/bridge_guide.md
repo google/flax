@@ -1,6 +1,6 @@
 # Use Flax NNX along with Flax Linen
 
-This guide is for existing Flax users who want to make their codebase a mixture of Flax Linen and Flax NNX `Module`s, which is made possible thanks to the `flax.nnx.bridge` API. 
+This guide is for existing Flax users who want to make their codebase a mixture of Flax Linen and Flax NNX `Module`s, which is made possible thanks to the `flax.nnx.bridge` API.
 
 This will be helpful if you:
 
@@ -9,9 +9,9 @@ This will be helpful if you:
 
 We hope this allows you to move and try out NNX at your own pace, and leverage the best of both worlds. We will also talk about how to resolve the caveats of interoperating the two APIs, on a few aspects that they are fundamentally different.
 
-**Note**: 
+**Note**:
 
-This guide is about glueing Linen and NNX modules. To migrate an existing Linen module to NNX, check out the [Migrate from Flax Linen to Flax NNX](https://flax.readthedocs.io/en/latest/nnx/haiku_linen_vs_nnx.html) guide. 
+This guide is about glueing Linen and NNX modules. To migrate an existing Linen module to NNX, check out the [Migrate from Flax Linen to Flax NNX](https://flax.readthedocs.io/en/latest/nnx/haiku_linen_vs_nnx.html) guide.
 
 And all built-in Linen layers should have equivalent NNX versions! Check out the list of [Built-in NNX layers](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/nn/index.html).
 
@@ -31,7 +31,7 @@ from typing import *
 
 ## Submodule is all you need
 
-A Flax model is always a tree of modules - either old Linen modules (`flax.linen.Module`, usually written as `nn.Module`) or NNX modules (`nnx.Module`). 
+A Flax model is always a tree of modules - either old Linen modules (`flax.linen.Module`, usually written as `nn.Module`) or NNX modules (`nnx.Module`).
 
 An `nnx.bridge` wrapper glues the two types together, in both ways:
 
@@ -295,7 +295,7 @@ model = bridge.ToLinen(NNXAddConstant, skip_rng=True)
 y, var = model.init_with_output(jax.random.key(0), x)
 ```
 
-You may notice that you need to an additional `.value` to access this Flax `w` param. This is because all NNX variables will be wrapped with an `nnx.Variable` class, which will allow it to be annotated with various information, such as its partitioning. This was translated into an equivalent `nnx.bridge.NNXMeta` wrapper. 
+You may notice that you need to an additional `.value` to access this Flax `w` param. This is because all NNX variables will be wrapped with an `nnx.Variable` class, which will allow it to be annotated with various information, such as its partitioning. This was translated into an equivalent `nnx.bridge.NNXMeta` wrapper.
 
 If you use [partition metadata in Linen](https://flax.readthedocs.io/en/latest/guides/parallel_training/flax_on_pjit.html), you can learn more about how that works in NNX in [Partition Metadata Section](#partition-metadata) below.
 
@@ -309,7 +309,7 @@ print(type(variables['params']['w'].value))   # => jax.Array
     <class 'jaxlib.xla_extension.ArrayImpl'>
 
 
-Similar to `ToNNX`, you can use `ToLinen` to create a submodule of another Linen module. 
+Similar to `ToNNX`, you can use `ToLinen` to create a submodule of another Linen module.
 
 
 ```python
@@ -361,7 +361,7 @@ If you convert an NNX module to Linen, the underlying NNX module's RNG states wi
 
 Now, it really depends on whether your underlying NNX module generates new random data from its RNG state, or from the passed-in argument. Fortunately, `nnx.Dropout` supports both - using passed-in keys if there is any, and use its own RNG state if not.
 
-And this leaves you with two style options of handling the RNG keys: 
+And this leaves you with two style options of handling the RNG keys:
 
 * The NNX style (recommended): Let the underlying NNX state manage the RNG keys, no need to pass in extra keys in `apply()`. This means a few more lines to mutate the `variables` for every apply call, but things will look easier once your whole model no longer needs `ToLinen`.
 
@@ -403,13 +403,13 @@ assert jnp.allclose(y3, y5)      # When you use same top-level RNG, outputs are 
 
 When you want to group some variables as one category, in Linen you use different collections; in NNX, since all variables shall be top-level Python attributes, you use different variable types.
 
-Therefore, when mixing Linen and NNX modules, Flax must know the 1-to-1 mapping between Linen collections and NNX variable types, so that `ToNNX` and `ToLinen` can do the conversion automatically. 
+Therefore, when mixing Linen and NNX modules, Flax must know the 1-to-1 mapping between Linen collections and NNX variable types, so that `ToNNX` and `ToLinen` can do the conversion automatically.
 
 Flax keeps a registry for this, and it already covers all Flax's built-in Linen collections. You can register extra mapping of NNX variable type and Linen collection names using `nnx.register_variable_name_type_pair`.
 
 ### Linen to NNX
 
-For any collection of your Linen module, `ToNNX` will convert all its endpoint arrays (aka. leaves) to a subtype of `nnx.Variable`, either from registry or automatically created on-the-fly. 
+For any collection of your Linen module, `ToNNX` will convert all its endpoint arrays (aka. leaves) to a subtype of `nnx.Variable`, either from registry or automatically created on-the-fly.
 
 (However, we still keep the whole collection as one class attribute, because Linen modules may have duplicated names over different collections.)
 
@@ -515,17 +515,17 @@ print(var['params'])
 
 ## Partition metadata
 
-Flax uses a metadata wrapper box over the raw JAX array to annotate how a variable should be sharded. 
+Flax uses a metadata wrapper box over the raw JAX array to annotate how a variable should be sharded.
 
-In Linen, this is an optional feature that triggered by using `nn.with_partitioning` on initializers (see more on [Linen partition metadata guide](https://flax.readthedocs.io/en/latest/guides/parallel_training/flax_on_pjit.html)). In NNX, since all NNX variables are wrapped by `nnx.Variable` class anyway, that class will hold the sharding annotations too. 
+In Linen, this is an optional feature that triggered by using `nn.with_partitioning` on initializers (see more on [Linen partition metadata guide](https://flax.readthedocs.io/en/latest/guides/parallel_training/flax_on_pjit.html)). In NNX, since all NNX variables are wrapped by `nnx.Variable` class anyway, that class will hold the sharding annotations too.
 
 The `bridge.ToNNX` and `bridge.ToLinen` API will automatically convert the sharding annotations, if you use the built-in annotation methods (aka. `nn.with_partitioning` for Linen and `nnx.with_partitioning` for NNX).
 
 ### Linen to NNX
 
-Even if you are not using any partition metadata in your Linen module, the variable JAX arrays will be converted to `nnx.Variable`s that wraps the true JAX array within. 
+Even if you are not using any partition metadata in your Linen module, the variable JAX arrays will be converted to `nnx.Variable`s that wraps the true JAX array within.
 
-If you use `nn.with_partitioning` to annotate your Linen module's variables, the annotation will be converted to a `.sharding` field in the corresponding `nnx.Variable`. 
+If you use `nn.with_partitioning` to annotate your Linen module's variables, the annotation will be converted to a `.sharding` field in the corresponding `nnx.Variable`.
 
 You can then use `nnx.with_sharding_constraint` to explicitly put the arrays into the annotated partitions within a `jax.jit`-compiled function, to initialize the whole model with every array at the right sharding.
 
@@ -535,7 +535,7 @@ class LinenDotWithPartitioning(nn.Module):
   out_dim: int
   @nn.compact
   def __call__(self, x):
-    w = self.param('w', nn.with_partitioning(nn.initializers.lecun_normal(), ('in', 'out')), 
+    w = self.param('w', nn.with_partitioning(nn.initializers.lecun_normal(), ('in', 'out')),
                    (x.shape[-1], self.out_dim))
     return x @ w
 
@@ -604,7 +604,7 @@ print(type(unboxed['params']['w']))     # The raw jax.Array
 
 ## Lifted transforms
 
-In general, if you want to apply Linen/NNX-style lifted transforms upon an `nnx.bridge`-converted module, just go ahead and do it in the usual Linen/NNX syntax. 
+In general, if you want to apply Linen/NNX-style lifted transforms upon an `nnx.bridge`-converted module, just go ahead and do it in the usual Linen/NNX syntax.
 
 For Linen-style transforms, note that `bridge.ToLinen` is the top level module class, so you may want to just use it as the first argument of your transforms (which needs to be a `linen.Module` class in most cases)
 

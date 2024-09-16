@@ -58,10 +58,10 @@ def variable_type_name(typ: tp.Type[variableslib.Variable[tp.Any]]) -> str:
 
 
 def register_variable_name_type_pair(name, typ, overwrite = False):
-  """Register a pair of Linen collection name and its NNX type."""
+  """Register a pair of variable type name (like Linen collections) and its NNX type."""
   if not overwrite and name in VariableTypeCache:
     raise ValueError(f'Name {name} already mapped to type {VariableTypeCache[name]}. '
-                     'To overwrite, call register_variable_name_type_pair() with `overwrite=True`.')
+                     'To overwrite, call with `overwrite=True`.')
   VariableTypeCache[name] = typ
 
 
@@ -85,7 +85,8 @@ def sort_variable_types(types: tp.Iterable[type]):
 
 
 class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
-  """Default Flax metadata class for `nnx.VariableState`."""
+  """Default Flax metadata class for `nnx.VariableState`.
+  """
 
   var_type: type[variableslib.Variable[tp.Any]] = struct.field(pytree_node=False)
   value: Any = struct.field(pytree_node=True)
@@ -109,11 +110,10 @@ class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
 def to_linen_var(vs: variableslib.VariableState) -> meta.AxisMetadata:
   metadata = vs.get_metadata()
   if 'linen_meta_type' in metadata:
-    linen_type = metadata['linen_meta_type']
-    if hasattr(linen_type, 'from_nnx_metadata'):
-      return linen_type.from_nnx_metadata({'value': vs.value, **metadata})
-    return linen_type(vs.value, **metadata)
-  return NNXMeta(vs.type, vs.value, metadata)
+    if metadata['linen_meta_type'] is not meta.Partitioned:
+      raise ValueError('Not supporting Linen metadata types other than nn.Partitioned')
+    return meta.Partitioned(vs.value, names=metadata['sharding'], mesh=metadata['mesh'])
+  return NNXMeta(vs.type, vs.value, vs.get_metadata())
 
 
 def get_col_name(keypath: tp.Sequence[Any]) -> str:
@@ -124,15 +124,15 @@ def get_col_name(keypath: tp.Sequence[Any]) -> str:
 
 
 def to_nnx_var(col: str, x: meta.AxisMetadata | Any) -> variableslib.Variable:
-  """Convert a Linen variable to an NNX variable."""
+  """Convert a Linen variable to an NNX variable.
+  This process needs the collection name,
+  """
   vtype = variable_type(col)
   if isinstance(x, NNXMeta):
     assert vtype == x.var_type, f'Type stored in NNXMeta {x.var_type} != type inferred from collection name {vtype}'
     return x.var_type(x.value, **x.metadata)
   if isinstance(x, meta.AxisMetadata):
-    x_metadata = vars(x)
-    if hasattr(x, 'to_nnx_metadata'):
-      x_metadata = x.to_nnx_metadata()
-    assert hasattr(x, 'value')
-    return vtype(**x_metadata, linen_meta_type=type(x))
+    if isinstance(x, meta.Partitioned):
+      return vtype(x.value, sharding=x.names, mesh=x.mesh, linen_meta_type=meta.Partitioned)
+    raise ValueError('Not yet supporting metadata types other than nn.Partitioned and NNXMeta')
   return vtype(x)

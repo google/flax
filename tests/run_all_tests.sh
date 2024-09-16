@@ -88,8 +88,10 @@ if $RUN_DOCTEST; then
   echo "=== RUNNING DOCTESTS ==="
   # test doctest
   sphinx-build -M doctest docs docs/_build -T
+  sphinx-build -M doctest docs_nnx docs_nnx/_build -T
   # test build html
   sphinx-build -M html docs docs/_build -T
+  sphinx-build -M html docs_nnx docs_nnx/_build -T
   # test docstrings
   pytest -n auto flax \
     --doctest-modules \

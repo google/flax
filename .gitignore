@@ -3,8 +3,6 @@
 *.pyc
 .tfds
 .DS_Store
-docs/**/_autosummary
-docs/_build
 dist/
 build/
 *.egg-info
@@ -12,7 +10,9 @@ build/
 .pytype
 .vscode/*
 /.devcontainer
-docs/**/tmp
+docs*/**/_autosummary
+docs*/_build
+docs*/**/tmp
 
 # used by direnv
 .envrc
