@@ -90,6 +90,8 @@ docs = [
 ]
 dev = [
     "pre-commit>=3.8.0",
+    "maturin>=1.7.1",
+    "pip>=24.2",
 ]
 
 [project.urls]

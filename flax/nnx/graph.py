@@ -51,7 +51,7 @@ Leaf = tp.TypeVar('Leaf')
 AuxData = tp.TypeVar('AuxData')
 
 StateLeaf = VariableState[tp.Any]
-NodeLeaf = VariableState[tp.Any]
+NodeLeaf = Variable[tp.Any]
 GraphState = State[Key, StateLeaf]
 GraphFlatState = FlatState[StateLeaf]
 
