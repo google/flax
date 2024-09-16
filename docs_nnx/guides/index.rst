@@ -4,6 +4,7 @@ Guides
 .. toctree::
    :maxdepth: 2
 
+   transforms
    filters_guide
    haiku_linen_vs_nnx
    bridge_guide
