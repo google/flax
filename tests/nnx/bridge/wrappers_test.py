@@ -50,11 +50,11 @@ class TestCompatibility(absltest.TestCase):
     model = bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)).lazy_init(x)  # like linen init
     y = model(x)  # like linen apply
     assert y.shape == (1, 64)
-    self.assertIsInstance(model.params['kernel'], nnx.Variable)
+    self.assertIsInstance(model.kernel, nnx.Variable)
     # NNX automatically adds metadata box regardless of original Linen module.
     linen_vars = linen_module.init(jax.random.key(0), x)
     np.testing.assert_array_equal(linen_vars['params']['kernel'],
-                                  model.params['kernel'].value)
+                                  model.kernel.value)
 
   def test_linen_to_nnx_submodule(self):
     class NNXOuter(nnx.Module):
@@ -74,10 +74,11 @@ class TestCompatibility(absltest.TestCase):
     bridge.lazy_init(model, x)
     gdef_full, state = nnx.split(model)
     assert gdef_before_lazy_init != gdef_full
-    assert 'params' in state.nn_dense1
-    assert 'batch_stats' in state.batchnorm
+    assert 'nn_dense1' in state
+    assert 'batchnorm' in state
+    assert 'kernel' in state.nn_dense1
     y = model(x)
-    k, b = state.nn_dense1.params.kernel.value, state.b.value
+    k, b = state['nn_dense1']['kernel'].value, state['b'].value
     np.testing.assert_allclose(y, x @ k + b, rtol=1e-5)
     assert gdef_full == nnx.graphdef(model)  # static data is stable now
 
@@ -97,7 +98,7 @@ class TestCompatibility(absltest.TestCase):
     model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0))
     bridge.lazy_init(model, x, method=model.module.dot)
     y = model(x, method=model.module.dot)
-    np.testing.assert_allclose(y, x @ nnx.state(model).params.w.value)
+    np.testing.assert_allclose(y, x @ nnx.state(model).w.value)
     # lazy_init only initialized param w inside dot(), so calling __call__ should fail
     with self.assertRaises(flax.errors.ScopeParamNotFoundError):
       y = model(x)
@@ -114,9 +115,9 @@ class TestCompatibility(absltest.TestCase):
 
     x = lambda: jnp.zeros((), jnp.int32)
     model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0)).lazy_init(x)
-    assert nnx.state(model).counter.count.value == 0
+    self.assertEqual(nnx.state(model).count.value, 0)
     y = model(x, mutable=True)
-    assert nnx.state(model).counter.count.value == 1
+    self.assertEqual(nnx.state(model).count.value, 1)
 
   def test_linen_to_nnx_transform(self):
     class NNXOuter(nnx.Module):
@@ -137,8 +138,8 @@ class TestCompatibility(absltest.TestCase):
     model = NNXOuter(3, rngs=nnx.Rngs(0))
     nnx.bridge.lazy_init(model, x)
 
-    self.assertEqual(model.inner.params['kernel'].shape, (5, 4, 3))
-    self.assertEqual(model.inner.params['bias'].shape, (5, 3))
+    self.assertEqual(model.inner.kernel.shape, (5, 4, 3))
+    self.assertEqual(model.inner.bias.shape, (5, 3))
 
   def test_linen_to_nnx_metadata(self):
     linen_module = nn.Dense(
@@ -163,16 +164,58 @@ class TestCompatibility(absltest.TestCase):
     # nn.Partitioned metadata boxes translated into valid nnx.Variable boxes.
     self.assertIsInstance(linen_vars['params']['kernel'], nn.Partitioned)
     self.assertIsInstance(linen_vars['params']['bias'], nn.LogicallyPartitioned)
-    self.assertIsInstance(nnx_model.params['kernel'], nnx.Variable)
-    assert nnx_model.params['kernel'].sharding == ('in', 'out')
-    assert nnx_model.params['kernel'].value.sharding.is_equivalent_to(
+    self.assertIsInstance(nnx_model.kernel, nnx.Variable)
+    assert nnx_model.kernel.sharding == ('in', 'out')
+    assert nnx_model.kernel.value.sharding.is_equivalent_to(
       jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('in', 'out')), ndim=2)
 
-    assert nnx_model.params['bias'].sharding == ('out-alias',)
-    assert nnx_model.params['bias'].sharding_rules == (('out-alias', 'out'),)
-    assert nnx_model.params['bias'].value.sharding.is_equivalent_to(
+    assert nnx_model.bias.sharding == ('out-alias',)
+    assert nnx_model.bias.sharding_rules == (('out-alias', 'out'),)
+    assert nnx_model.bias.value.sharding.is_equivalent_to(
       jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('out',)), ndim=1)
 
+
+  def test_linen_to_nnx_state_structure_consistency(self):
+    class LinenInner(nn.Module):
+      dout: int
+      @nn.compact
+      def __call__(self, x):
+        w = self.param('w', nn.initializers.lecun_normal(), (x.shape[-1], self.dout))
+        return nn.Dropout(rate=0.5, deterministic=False)(x @ w)
+
+    class LinenMiddle(nn.Module):
+      dout: int
+      @nn.compact
+      def __call__(self, x):
+        dot = LinenInner(self.dout, name='dot')
+        b = self.variable('bias', 'b', nn.initializers.zeros_init(), None, (1, self.dout))
+        return dot(x) + b.value
+
+    class Bias(nnx.Variable): pass
+    nnx.register_variable_name_type_pair('bias', Bias)
+    class NNXMiddle(nnx.Module):
+      def __init__(self, dout: int, *, rngs: nnx.Rngs):
+        self.dot = bridge.ToNNX(LinenInner(dout), rngs=rngs)
+        self.b = Bias(nnx.initializers.zeros_init()(rngs.params(), (1, dout)))
+      def __call__(self, x):
+        return self.dot(x) + self.b
+
+    x = jax.random.normal(jax.random.key(42), (2, 4))
+    from_top = bridge.lazy_init(
+      bridge.ToNNX(LinenMiddle(dout=3), rngs=nnx.Rngs(0, dropout=1)), x)
+    from_middle = bridge.lazy_init(
+      NNXMiddle(dout=3, rngs=nnx.Rngs(0, dropout=1)), x)
+
+    # Remove the NNX-module-local RNG states, which will be different
+    # because the NNX modules are on different level
+    def get_weights(model):
+      return nnx.split(model, nnx.RngCount, nnx.RngKey, ...)[3]
+    from_top_weights = get_weights(from_top)
+    from_middle_weights = get_weights(from_middle)
+
+    # Confirm the rest of the state has the same structure.
+    self.assertEqual(jax.tree.structure(from_top_weights),
+                     jax.tree.structure(from_middle_weights))
 
   ##################
   ### NNXToLinen ###
@@ -183,7 +226,7 @@ class TestCompatibility(absltest.TestCase):
     x = jax.numpy.ones((1, 32))
     y, variables = model.init_with_output(jax.random.key(0), x)
     assert y.shape == (1, 64)
-    np.testing.assert_allclose(y, x @ variables['params']['kernel'].value)
+    np.testing.assert_allclose(y, x @ variables['params']['kernel'])
     assert 'nnx' in variables
     assert isinstance(variables['nnx']['graphdef'], nnx.GraphDef)
 
@@ -238,10 +281,10 @@ class TestCompatibility(absltest.TestCase):
 
     model = bridge.ToLinen(Counter, skip_rng=True)
     variables = model.init(jax.random.key(0))
-    assert variables['Count']['count'].value == 0
+    assert variables['Count']['count'] == 0
 
     _, updates = model.apply(variables, mutable='Count')
-    assert updates['Count']['count'].value == 1
+    assert updates['Count']['count'] == 1
     _ = model.apply(variables | updates)
 
   def test_nnx_to_linen_mutated_static_data(self):
@@ -257,19 +300,19 @@ class TestCompatibility(absltest.TestCase):
 
     model = bridge.ToLinen(Counter, skip_rng=True)
     variables = model.init(jax.random.key(0))
-    assert variables['Count']['count'].value == 0
+    assert variables['Count']['count'] == 0
 
     # This does not work, because the __call__ also changes the static data of the model.
     _, updates = model.apply(variables, mutable='Count')
-    assert updates['Count']['count'].value == 1
-    assert updates['Count']['count_nonzero'].value == 1
+    assert updates['Count']['count'] == 1
+    assert updates['Count']['count_nonzero'] == 1
     with self.assertRaises(ValueError):
       _ = model.apply(variables | updates)
 
     # This makes sure the static data is updated too. Using mutable=True also works.
     _, updates = model.apply(variables, mutable=['Count', 'nnx'])
-    assert updates['Count']['count'].value == 1
-    assert updates['Count']['count_nonzero'].value == 1
+    assert updates['Count']['count'] == 1
+    assert updates['Count']['count_nonzero'] == 1
     _ = model.apply(variables | updates)
 
   def test_nnx_to_linen_transforms(self):
@@ -288,7 +331,7 @@ class TestCompatibility(absltest.TestCase):
     x = jax.random.normal(xkey, (2, 4))
     model = LinenOuter(dout=3)
     y, var = model.init_with_output(pkey, x)
-    k = var['params']['VmapToLinen_0']['kernel'].value
+    k = var['params']['VmapToLinen_0']['kernel']
     assert k.shape == (2, 4, 3)
     np.testing.assert_allclose(y, jnp.einsum('ab,abc->ac', x, k))
     assert 'nnx' in var
@@ -302,11 +345,59 @@ class TestCompatibility(absltest.TestCase):
     assert y.shape == (1, 64)
     self.assertIsInstance(variables['params']['kernel'], nnx.bridge.NNXMeta)
     assert variables['params']['kernel'].metadata['sharding'] == ('in', 'out')
+    self.assertEqual(nn.get_partition_spec(variables)['params']['kernel'],
+                     jax.sharding.PartitionSpec('in', 'out'))
     np.testing.assert_allclose(y, x @ variables['params']['kernel'].value)
 
   def test_nnx_to_linen_metadata_transform(self):
     # TODO: add support and testing after axis add/remove in transform is fixed.
     pass
+
+  def test_nnx_to_linen_pytree_structure_consistency(self):
+    class NNXInner(nnx.Module):
+      def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
+        self.w = nnx.Param(nnx.initializers.lecun_normal()(rngs.params(), (din, dout)))
+        self.dropout = nnx.Dropout(rate=0.5, rngs=rngs)
+      def __call__(self, x):
+        return self.dropout(x @ self.w)
+
+    class Bias(nnx.Variable): pass
+    nnx.register_variable_name_type_pair('bias', Bias, overwrite=True)
+    class NNXMiddle(nnx.Module):
+      def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
+        self.dot = NNXInner(din, dout, rngs=rngs)
+        self.b = Bias(nnx.initializers.zeros_init()(rngs.params(), (1, dout)))
+      def __call__(self, x):
+        return self.dot(x) + self.b
+
+    class LinenMiddle(nn.Module):
+      dout: int
+      @nn.compact
+      def __call__(self, x):
+        dot = bridge.to_linen(NNXInner, x.shape[-1], self.dout, name='dot')
+        b = self.variable('bias', 'b', nn.initializers.zeros_init(), None, (1, self.dout))
+        return dot(x) + b.value
+
+    x = jax.random.normal(jax.random.key(42), (2, 4))
+    keys = {'params': jax.random.key(0), 'dropout': jax.random.key(1)}
+    from_top = bridge.to_linen(NNXMiddle, din=4, dout=3).init(keys, x)
+    from_middle = LinenMiddle(dout=3).init(keys, x)
+
+    # Remove the NNX-module-local RNG states, which will be different
+    # because the NNX modules are on different level
+    def get_weights(variables):
+      non_rngs = {}
+      for kp, v in flax.traverse_util.flatten_dict(variables).items():
+        if 'rngs' not in kp and 'nnx' not in kp:
+          non_rngs[kp] = v
+      return flax.traverse_util.unflatten_dict(non_rngs)
+    from_top_weights = get_weights(from_top)
+    from_middle_weights = get_weights(from_middle)
+
+    # Confirm the rest of the state has the same structure.
+    self.assertEqual(jax.tree.structure(from_top_weights),
+                     jax.tree.structure(from_middle_weights))
+
 
   ############################
   ### Hybrid mix-and-match ###
@@ -355,7 +446,7 @@ class TestCompatibility(absltest.TestCase):
     # Test the param value with disabled dropout
     model = bridge.lazy_init(NNXOuter(dout=3, dropout_rate=0.,
                                       rngs=nnx.Rngs(default=1, dropout=2)), x)
-    w, b = model.inner.params['dot']['w'], model.inner.params['b']
+    w, b = model.inner.dot['w'], model.inner.b
     self.assertIsInstance(w, nnx.Param)
     np.testing.assert_allclose(model(x), x @ w + b)
     assert hasattr(w, 'sharding') and w.sharding == ('in', 'out')

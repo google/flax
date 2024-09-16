@@ -104,7 +104,7 @@ class ToNNX(Module):
     >>> model = nnx.bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)).lazy_init(x)
     >>> # Like Linen apply(), but using NNX's direct call method
     >>> y = model(x)
-    >>> nnx.state(model).params.kernel.value.shape
+    >>> model.kernel.shape
     (32, 64)
 
   Args:
@@ -121,7 +121,7 @@ class ToNNX(Module):
   ):
     self.module = module
     self.rngs = rngs
-    self.linen_collections: tuple[str, ...] = ()
+    self.linen_attributes: tuple[str, ...] = ()
 
   def lazy_init(self, *args, **kwargs):
     """A shortcut of calling `nnx.bridge.lazy_init()` upon this module."""
@@ -146,20 +146,17 @@ class ToNNX(Module):
         _rngs['params'] = _rngs.pop('default')
       out, variables = self.module.init_with_output(_rngs, *args, method=method, **kwargs)
 
-      nnx_vars = jtu.tree_map_with_path(
-        lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x),
-        variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
-      linen_collections = set()
-      for col, tree in nnx_vars.items():
-        setattr(self, col, tree)
-        linen_collections.add(col)
-      self.linen_collections = tuple(linen_collections)  # make it hashable
+      nnx_attrs = bv.linen_vars_to_nnx_attrs(variables)
+      linen_attributes = set()
+      for attr_name, value in nnx_attrs.items():
+        setattr(self, attr_name, value)
+        linen_attributes.add(attr_name)
+      self.linen_attributes = tuple(linen_attributes)  # make it hashable
 
     else:
-      variables = {col: jax.tree.map(lambda x: bv.to_linen_var(x.to_state()),
-                                     getattr(self, col),
-                                     is_leaf=lambda x: isinstance(x, nnx.Variable))
-                   for col in self.linen_collections}
+      nnx_attrs = {name: getattr(self, name) for name in self.linen_attributes}
+      variables = bv.nnx_attrs_to_linen_vars(nnx_attrs)
+
       _rngs = (
         {name: stream() for name, stream in rngs.items()} if rngs else {}
       )
@@ -168,11 +165,13 @@ class ToNNX(Module):
     # Split out the updates if `mutable` is passed into the Flax module
     if kwargs.get('mutable', False) != False:
       out, updates = out
-      updates = jtu.tree_map_with_path(
-        lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x),
-        updates, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
-      for collection, value in updates.items():
-        setattr(self, collection, value)
+      nnx_attrs = bv.linen_vars_to_nnx_attrs(updates)
+      for attr_name, value in nnx_attrs.items():
+        if hasattr(self, attr_name) and isinstance(value, dict):
+          original_tree = getattr(self, attr_name)
+          setattr(self, attr_name, original_tree | value)
+        else:
+          setattr(self, attr_name, value)
 
     return out
 
@@ -202,7 +201,7 @@ class ToLinen(linen.Module):
     >>> y, variables = model.init_with_output(jax.random.key(0), x)
     >>> y.shape
     (1, 64)
-    >>> variables['params']['kernel'].value.shape
+    >>> variables['params']['kernel'].shape
     (32, 64)
     >>> # The static GraphDef of the underlying NNX module
     >>> variables.keys()

@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import defaultdict
 from typing import Any, TypeVar
 
 import jax
 from flax import struct
 from flax.core import meta
+from flax.nnx import spmd
+from flax.nnx import traversals
 from flax.nnx import variables as variableslib
+from flax.nnx.module import GraphDef
 import typing as tp
 
 
@@ -105,6 +109,28 @@ class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
     # TODO: implement this, supporting hooks
     return self
 
+  def get_partition_spec(self) -> jax.sharding.PartitionSpec:
+    """Returns the ``Partitionspec`` for this partitioned value."""
+    nnx_var = self.to_nnx_variable().to_state()
+    return spmd.get_partition_spec(nnx_var).value
+
+  def to_nnx_variable(self) -> variableslib.Variable:
+    return self.var_type(self.value, **self.metadata)
+
+
+def is_vanilla_variable(vs: variableslib.VariableState) -> bool:
+  """A variables state is vanilla if its metadata is essentially blank.
+
+  Returns False only if it has non-empty hooks or any non-built-in attribute.
+  """
+  for key, value in vs.get_metadata().items():
+    if key.endswith('_hooks'):
+      if value != ():
+        return False
+    else:
+      return False
+  return True
+
 
 def to_linen_var(vs: variableslib.VariableState) -> meta.AxisMetadata:
   metadata = vs.get_metadata()
@@ -113,6 +139,8 @@ def to_linen_var(vs: variableslib.VariableState) -> meta.AxisMetadata:
     if hasattr(linen_type, 'from_nnx_metadata'):
       return linen_type.from_nnx_metadata({'value': vs.value, **metadata})
     return linen_type(vs.value, **metadata)
+  if is_vanilla_variable(vs):
+    return vs.value
   return NNXMeta(vs.type, vs.value, metadata)
 
 
@@ -128,7 +156,7 @@ def to_nnx_var(col: str, x: meta.AxisMetadata | Any) -> variableslib.Variable:
   vtype = variable_type(col)
   if isinstance(x, NNXMeta):
     assert vtype == x.var_type, f'Type stored in NNXMeta {x.var_type} != type inferred from collection name {vtype}'
-    return x.var_type(x.value, **x.metadata)
+    return x.to_nnx_variable()
   if isinstance(x, meta.AxisMetadata):
     x_metadata = vars(x)
     if hasattr(x, 'to_nnx_metadata'):
@@ -136,3 +164,45 @@ def to_nnx_var(col: str, x: meta.AxisMetadata | Any) -> variableslib.Variable:
     assert hasattr(x, 'value')
     return vtype(**x_metadata, linen_meta_type=type(x))
   return vtype(x)
+
+
+def _recursive_merge(dict1, dict2):
+  """Recursively merge two dicts."""
+  flat_map = traversals.flatten_mapping(dict1)
+  flat_map |= traversals.flatten_mapping(dict2)
+  return traversals.unflatten_mapping(flat_map)
+
+
+def linen_vars_to_nnx_attrs(variables: tp.Mapping[str, Any]) -> dict[str, Any]:
+  nnx_vars = jax.tree_util.tree_map_with_path(
+    lambda kp, x: to_nnx_var(get_col_name(kp), x),
+    variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
+  nnx_attrs: dict[str, Any] = defaultdict(dict)
+  for _, col_tree in nnx_vars.items():
+    assert isinstance(col_tree, dict)
+    for attr_name, value in col_tree.items():
+      assert isinstance(attr_name, str)
+      if isinstance(value, tp.Mapping):  # it's a sublayer
+        nnx_attrs[attr_name] = _recursive_merge(nnx_attrs[attr_name], value)
+      else:
+        nnx_attrs[attr_name] = value     # it's a variable on this layer
+  return nnx_attrs
+
+
+def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
+  linen_structured = {}
+  for kp, v in traversals.flatten_mapping(
+      nnx_attrs,
+      is_leaf=lambda _, x: isinstance(x, variableslib.Variable | GraphDef),
+      ).items():
+    if isinstance(v, variableslib.Variable):
+      col_name = variable_type_name(type(v))
+    else:
+      col_name = 'nnx'  # it must be an nnx.GraphDef, for some ToLinen submodule
+    linen_structured[(col_name, *kp)] = v
+  variables = traversals.unflatten_mapping(linen_structured)
+  variables = jax.tree.map(lambda x: to_linen_var(x.to_state()),
+                            variables,
+                            is_leaf=lambda x: isinstance(x, variableslib.Variable))
+  return variables
+
