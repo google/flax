@@ -324,7 +324,6 @@ def jit(
       (args, kwargs),
       prefix=(in_shardings, kwarg_shardings),
       split_fn=_jit_split_fn,
-      check_aliasing=in_shardings is not None,
       ctxtag='jit',
     )
     pure_args_out, pure_kwargs_out, pure_out = jitted_fn(

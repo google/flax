@@ -17,7 +17,7 @@ import dataclasses
 from typing import Any, TypeVar
 
 from absl.testing import absltest
-from flax import nnx, errors
+from flax import nnx
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -39,7 +39,7 @@ class TestModule(absltest.TestCase):
     @jax.jit
     def f():
       with self.assertRaisesRegex(
-          errors.TraceContextError,
+          nnx.errors.TraceContextError,
           "Cannot mutate 'Dict' from different trace level",
       ):
         m.a = 2

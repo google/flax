@@ -50,8 +50,8 @@ In general Filter are predicate functions of the form:
 ```
 where `Key` is a hashable and comparable type, `path` is a tuple of `Key`s representing the path to the value in a nested structure, and `value` is the value at the path. The function returns `True` if the value should be included in the group and `False` otherwise.
 
-Types are obviously not functions of this form, so the reason why they are treated as Filters 
-is because, as we will see next, types and some other literals are converted to predicates. For example, 
+Types are obviously not functions of this form, so the reason why they are treated as Filters
+is because, as we will see next, types and some other literals are converted to predicates. For example,
 `Param` is roughly converted to a predicate like this:
 
 ```{code-cell} ipython3
@@ -64,7 +64,7 @@ print(f'{is_param((), nnx.Param(0)) = }')
 print(f'{is_param((), nnx.VariableState(type=nnx.Param, value=0)) = }')
 ```
 
-Such function matches any value that is an instance of `Param` or any value that has a 
+Such function matches any value that is an instance of `Param` or any value that has a
 `type` attribute that is a subclass of `Param`. Internally Flax NNX uses `OfType` which
 defines a callable of this form for a given type:
 
@@ -77,8 +77,8 @@ print(f'{is_param((), nnx.VariableState(type=nnx.Param, value=0)) = }')
 
 ## The Filter DSL
 
-To avoid users having to create these functions, Flax NNX exposes a small DSL, formalized 
-as the `nnx.filterlib.Filter` type, which lets users pass types, booleans, ellipsis, 
+To avoid users having to create these functions, Flax NNX exposes a small DSL, formalized
+as the `nnx.filterlib.Filter` type, which lets users pass types, booleans, ellipsis,
 tuples/lists, etc, and converts them to the appropriate predicate internally.
 
 Here is a list of all the callable Filters included in Flax NNX and their DSL literals
@@ -151,7 +151,7 @@ def split(node, *filters):
         break
     else:
       raise ValueError(f'No filter matched {path = } {value = }')
-    
+
   states: tuple[nnx.GraphState, ...] = tuple(
     nnx.State.from_flat_path(flat_state) for flat_state in flat_states
   )
@@ -166,11 +166,11 @@ print(f'{params = }')
 print(f'{batch_stats = }')
 ```
 
-One very important thing to note is that **filtering is order-dependent**. The first filter that 
-matches a value will keep it, therefore you should place more specific filters before more general 
-filters. For example if we create a `SpecialParam` type that is a subclass of `Param`, and a `Bar` 
-object that contains both types of parameters, if we try to split the `Param`s before the 
-`SpecialParam`s then all the values will be placed in the `Param` group and the `SpecialParam` group 
+One very important thing to note is that **filtering is order-dependent**. The first filter that
+matches a value will keep it, therefore you should place more specific filters before more general
+filters. For example if we create a `SpecialParam` type that is a subclass of `Param`, and a `Bar`
+object that contains both types of parameters, if we try to split the `Param`s before the
+`SpecialParam`s then all the values will be placed in the `Param` group and the `SpecialParam` group
 will be empty because all `SpecialParam`s are also `Param`s:
 
 ```{code-cell} ipython3

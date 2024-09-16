@@ -22,7 +22,7 @@ import jax
 
 from flax import struct
 from flax.nnx.object import Object
-from flax.typing import Missing, PathParts
+from flax.typing import MISSING, PathParts
 from flax.nnx import graph
 
 
@@ -59,7 +59,7 @@ def extract_graph_nodes(
   pytree: A,
   /,
   *,
-  prefix: tp.Any = Missing,
+  prefix: tp.Any = MISSING,
   validate_fn: tp.Callable[[KeyPath, Prefix, Leaf], None] | None = None,
 ) -> (
   tuple[A, tuple[tp.Any, ...]]
@@ -101,7 +101,7 @@ def extract_graph_nodes(
 
   pytree_out = jax.tree.unflatten(treedef, leaves)
 
-  if prefix is Missing:
+  if prefix is MISSING:
     return pytree_out, tuple(nodes)  # type: ignore[bad-return-type]
   else:
     return pytree_out, tuple(nodes), tuple(node_prefixes)  # type: ignore[bad-return-type]
@@ -330,13 +330,12 @@ def to_tree(
   tree,
   /,
   *,
-  prefix: tp.Any = Missing,
+  prefix: tp.Any = MISSING,
   split_fn: tp.Callable[
     [graph.SplitContext, KeyPath, Prefix, Leaf], tp.Any
   ] = default_split_fn,
   map_non_graph_nodes: bool = False,
   ctxtag: str | None = None,
-  check_aliasing: bool = True,
 ) -> tp.Any:
   leaf_prefixes = broadcast_prefix(
     prefix,
@@ -352,10 +351,9 @@ def to_tree(
   with graph.split_context(ctxtag) as split_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
       if graph.is_graph_node(leaf):
-        if check_aliasing:
-          check_consistent_aliasing(
-            leaf, leaf_prefix, node_prefixes=node_prefixes
-          )
+        check_consistent_aliasing(
+          leaf, leaf_prefix, node_prefixes=node_prefixes
+        )
         tree_node = split_fn(split_ctx, keypath, leaf_prefix, leaf)
         leaves_out.append(tree_node)
       else:
@@ -383,7 +381,7 @@ def from_tree(
   tree: tp.Any,
   /,
   *,
-  prefix: tp.Any = Missing,
+  prefix: tp.Any = MISSING,
   merge_fn: tp.Callable[
     [graph.MergeContext, KeyPath, Prefix, Leaf], tp.Any
   ] = merge_tree_node,

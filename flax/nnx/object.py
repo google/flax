@@ -25,13 +25,13 @@ import jax
 import numpy as np
 
 from flax.nnx import (
+  errors,
   reprlib,
   tracers,
 )
 from flax.nnx import graph
 from flax.nnx.variables import Variable, VariableState
 from flax.typing import Key
-from flax import errors
 
 G = tp.TypeVar('G', bound='Object')
 

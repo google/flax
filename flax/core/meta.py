@@ -22,7 +22,6 @@ to keep track of how variables should be partitioned with ``jax.pjit``.
 """
 
 import abc
-import dataclasses
 import functools
 from typing import Any, Generic, TypeVar
 from collections.abc import Callable
@@ -287,19 +286,6 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
   def get_sharding(self, mesh: jax.sharding.Mesh) -> jax.sharding.Sharding:
     """Returns the ``NamedSharding`` for this partitioned value."""
     return jax.sharding.NamedSharding(mesh, self.get_partition_spec())
-
-  def to_nnx_metadata(self) -> dict[str, Any]:
-    """Return a dict of metadata that can translate into an `nnx.Variable`."""
-    metadata = vars(self)
-    metadata['sharding'] = metadata.pop('names')
-    return metadata
-
-  @classmethod
-  def from_nnx_metadata(cls, metadata: dict[str, Any]):
-    """Given a dict of `nnx.Variable` format metadata, create a `nn.Partitioned`."""
-    metadata['names'] = metadata.pop('sharding')
-    fields = {x.name for x in dataclasses.fields(cls)}
-    return cls(**{k: v for k, v in metadata.items() if k in fields})
 
 
 def with_partitioning(

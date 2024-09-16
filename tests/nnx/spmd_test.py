@@ -100,64 +100,6 @@ class TestSPMD(absltest.TestCase):
     assert state_spec.opt_state[0].mu['w'].value == PartitionSpec('row', 'col')
     assert state_spec.opt_state[0].nu['w'].value == PartitionSpec('row', 'col')
 
-  def test_add_remove_axis_in_transform(self):
-    test = self
-    kadds, kremoves, badds, bremoves = [], [], [], []
-    class MLP(nnx.Module):
-
-      @nnx.split_rngs(splits=5)
-      @nnx.vmap(
-          in_axes=(0, 0),
-          transform_metadata={nnx.PARTITION_NAME: 'layers'},
-      )
-      def __init__(self, rngs: nnx.Rngs):
-        self.linear = nnx.Linear(
-            3,
-            3,
-            kernel_init=nnx.with_metadata(
-                nnx.initializers.lecun_normal(), sharding=('din', 'dout'),
-                add_axis_hooks=lambda _, idx, name: kadds.append((idx, name)),
-                remove_axis_hooks=lambda _, idx, name: kremoves.append((idx, name)),
-            ),
-            bias_init=nnx.with_metadata(
-                nnx.initializers.zeros_init(),  # no sharding annotation here!
-                add_axis_hooks=lambda _, idx, name: badds.append((idx, name)),
-                remove_axis_hooks=lambda _, idx, name: bremoves.append((idx, name)),
-            ),
-            rngs=rngs,
-        )
-
-      @nnx.scan(
-          in_axes=(0, nnx.Carry),
-          transform_metadata={nnx.PARTITION_NAME: 'layers'}
-      )
-      def __call__(self, x: jax.Array):
-        x = self.linear(x)
-        # test sharding layer axes is not present inside scan
-        test.assertEqual(self.linear.kernel.shape, (3, 3))
-        test.assertEqual(self.linear.kernel.sharding, ('din', 'dout'))
-        # at least a remove_axis was already called to remove the layer axis
-        test.assertEqual(kremoves[-1], (0, 'layers'))
-        test.assertEqual(bremoves[-1], (0, 'layers'))
-        return x, None
-
-    m = MLP(rngs=nnx.Rngs(0))
-    self.assertEqual(m.linear.kernel.shape, (5, 3, 3))
-    self.assertEqual(m.linear.kernel.sharding, ('layers', 'din', 'dout'))
-    self.assertEqual(m.linear.bias.shape, (5, 3))
-    # One add_axis called to add the `nnx.vmap` dimension
-    self.assertEqual(kadds, [(0, 'layers')])
-    self.assertEqual(kremoves, [])
-    self.assertEqual(badds, [(0, 'layers')])
-    self.assertEqual(bremoves, [])
-
-    # One remove_axis and one add_axis called when in and out of `nnx.scan`
-    y = m(jnp.ones((5, 3)))
-    self.assertEqual(kadds, [(0, 'layers'), (0, 'layers')])
-    self.assertEqual(kremoves, [(0, 'layers')])
-    self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
-    self.assertEqual(bremoves, [(0, 'layers')])
-
 
 if __name__ == '__main__':
   absltest.main()

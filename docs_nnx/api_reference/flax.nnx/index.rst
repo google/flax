@@ -19,5 +19,3 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/nnx/i
   visualization
   filterlib
   bridge
-  experimental
-

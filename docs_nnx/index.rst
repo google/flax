@@ -179,12 +179,11 @@ Learn more
 
 .. toctree::
    :hidden:
-   :maxdepth: 1
+   :maxdepth: 2
 
    nnx_basics
    mnist_tutorial
-   transforms
-   haiku_linen_vs_nnx
-   bridge_guide
-   filters_guide
-   surgery
+   guides/index
+   The Flax philosophy <philosophyhttps://flax.readthedocs.io/en/latest/philosophy.html>
+   How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
+   api_reference/index

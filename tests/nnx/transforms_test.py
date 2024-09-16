@@ -323,7 +323,7 @@ class TestJIT(absltest.TestCase):
 
   def test_apply_shardings(self):
     n_devices = max(jax.local_device_count() // 2, 1)
-    devices = mesh_utils.create_device_mesh((n_devices, jax.local_device_count() // n_devices))
+    devices = mesh_utils.create_device_mesh((n_devices, n_devices))
     mesh = jax.sharding.Mesh(devices, ('a', 'b'))
 
     def sharding(*args):
@@ -2234,27 +2234,6 @@ class TestVmap(absltest.TestCase):
     y = forward(model, x)
 
     self.assertEqual(y.shape, (5, 4, 3))
-
-  def test_metadata(self):
-    @nnx.vmap(
-      in_axes=(None,),
-      out_axes=0,
-      axis_size=5,
-      transform_metadata={nnx.spmd.PARTITION_NAME: 'c'},
-    )
-    def create_block(rngs: nnx.Rngs):
-      return nnx.Linear(
-        16,
-        32,
-        rngs=rngs,
-        kernel_init=nnx.with_partitioning(
-          nnx.initializers.lecun_normal(), ('a', 'b')
-        ),
-      )
-
-    m = create_block(nnx.Rngs(0))
-    self.assertEqual(m.kernel.value.shape, (5, 16, 32))
-    self.assertEqual(m.kernel.sharding, ('c', 'a', 'b'))
 
 
 class TestPmap(absltest.TestCase):

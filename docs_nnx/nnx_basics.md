@@ -8,7 +8,7 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
-# Flax NNX Basics
+# Flax Basics
 
 Flax NNX is a new simplified API that is designed to make it easier to create, inspect, debug,
 and analyze neural networks in JAX. It achieves this by adding first class support
@@ -30,15 +30,15 @@ import jax.numpy as jnp
 ```
 
 ## The Module System
-To begin lets see how to create a `Linear` Module using Flax. The main difference between 
-Flax NNX and Module systems like Haiku or Flax Linen is that everything is **explicit**. This 
-means among other things that 1) the Module itself holds the state (e.g. parameters) directly, 
-2) the RNG state is threaded by the user, and 3) all shape information must be provided on 
+To begin lets see how to create a `Linear` Module using Flax. The main difference between
+Flax NNX and Module systems like Haiku or Flax Linen is that everything is **explicit**. This
+means among other things that 1) the Module itself holds the state (e.g. parameters) directly,
+2) the RNG state is threaded by the user, and 3) all shape information must be provided on
 initialization (no shape inference).
 
-As shown next, dynamic state is usually stored in `nnx.Param`s, and static state 
-(all types not handled by Flax) such as integers or strings  are stored directly. 
-Attributes of type `jax.Array` and `numpy.ndarray` are also treated as dynamic 
+As shown next, dynamic state is usually stored in `nnx.Param`s, and static state
+(all types not handled by Flax) such as integers or strings  are stored directly.
+Attributes of type `jax.Array` and `numpy.ndarray` are also treated as dynamic
 state, although storing them inside `nnx.Variable`s such as `Param` is preferred.
 Also, `nnx.Rngs` can be used to get new unique keys starting from a root key.
 
@@ -60,9 +60,9 @@ arithmetic expressions (as shown above). Additionally, Variables can passed
 to any JAX function as they implement the `__jax_array__` protocol (as long as their
 inner value is a JAX array).
 
-To actually initialize a Module you simply call the constructor, all the parameters 
-of a Module are usually created eagerly. Since Modules hold their own state methods 
-can be called directly without the need for a separate `apply` method, this is very 
+To actually initialize a Module you simply call the constructor, all the parameters
+of a Module are usually created eagerly. Since Modules hold their own state methods
+can be called directly without the need for a separate `apply` method, this is very
 convenient for debugging as entire structure of the model can be inspected directly.
 
 ```{code-cell} ipython3
@@ -79,8 +79,8 @@ The above visualization by `nnx.display` is generated using the awesome [Treesco
 
 ### Stateful Computation
 
-Implementing layers such as `BatchNorm` requires performing state updates during the 
-forward pass. To implement this in Flax you just create a `Variable` and update its 
+Implementing layers such as `BatchNorm` requires performing state updates during the
+forward pass. To implement this in Flax you just create a `Variable` and update its
 `.value` during the forward pass.
 
 ```{code-cell} ipython3
@@ -106,7 +106,7 @@ Flax provides sound mechanisms to handle them.
 
 ### Nested Modules
 
-As expected, Modules can be used to compose other Modules in a nested structure, these can 
+As expected, Modules can be used to compose other Modules in a nested structure, these can
 be assigned directly as attributes, or inside an attribute of any (nested) pytree type e.g.
  `list`, `dict`, `tuple`, etc. In the example below we define a simple `MLP` Module that
 consists of two `Linear` layers, a `Dropout` layer, and a `BatchNorm` layer.
@@ -122,7 +122,7 @@ class MLP(nnx.Module):
   def __call__(self, x: jax.Array):
     x = nnx.gelu(self.dropout(self.bn(self.linear1(x))))
     return self.linear2(x)
-  
+
 model = MLP(2, 16, 5, rngs=nnx.Rngs(0))
 
 y = model(x=jnp.ones((3, 2)))
@@ -136,9 +136,9 @@ new masks during the forward pass without the need for the user to pass a new ke
 +++
 
 #### Model Surgery
-Flax NNX Modules are mutable by default, this means their structure can be changed at any time, 
+Flax NNX Modules are mutable by default, this means their structure can be changed at any time,
 this makes model surgery quite easy as any submodule attribute can be replaced with anything
-else e.g. new Modules, existing shared Modules, Modules of different types, etc. More over, 
+else e.g. new Modules, existing shared Modules, Modules of different types, etc. More over,
 `Variable`s can also be modified or replaced / shared.
 
 The following example shows how to replace the `Linear` layers in the `MLP` model
@@ -172,8 +172,8 @@ nnx.display(model)
 
 Flax Transforms extend JAX transforms to support Modules and other objects.
 They are supersets of their equivalent JAX counterpart with the addition of
-being aware of the object's state and providing additional APIs to transform 
-it. One of the main features of Flax Transforms is the preservation of reference semantics, 
+being aware of the object's state and providing additional APIs to transform
+it. One of the main features of Flax Transforms is the preservation of reference semantics,
 meaning that any mutation of the object graph that occurs inside the transform is
 propagated outisde as long as its legal within the transform rules. In practice this
 means that Flax programs can be express using imperative code, highly simplifying
@@ -262,13 +262,13 @@ JAX transforms lets take a look at the Functional API.
 ## The Functional API
 
 The Functional API establishes a clear boundary between reference/object semantics and
-value/pytree semantics. It also allows same amount of fine-grained control over the 
+value/pytree semantics. It also allows same amount of fine-grained control over the
 state that Linen/Haiku users are used to. The Functional API consists of 3 basic methods:
 `split`, `merge`, and `update`.
 
 The `StatefulLinear` Module shown below will serve as an example for the use of the
 Functional API. It contains some `nnx.Param` Variables and a custom `Count` Variable
-type which is used to keep track of integer scalar state that increases on every 
+type which is used to keep track of integer scalar state that increases on every
 forward pass.
 
 ```{code-cell} ipython3
@@ -283,7 +283,7 @@ class StatefulLinear(nnx.Module):
   def __call__(self, x: jax.Array):
     self.count += 1
     return x @ self.w + self.b
-  
+
 model = StatefulLinear(din=3, dout=5, rngs=nnx.Rngs(0))
 y = model(jnp.ones((1, 3)))
 
@@ -293,8 +293,8 @@ nnx.display(model)
 ### State and GraphDef
 
 A Module can be decomposed into `GraphDef` and `State` using the
-`split` function. State is a Mapping from strings to Variables or nested 
-States. GraphDef contains all the static information needed to reconstruct 
+`split` function. State is a Mapping from strings to Variables or nested
+States. GraphDef contains all the static information needed to reconstruct
 a Module graph, it is analogous to JAX's `PyTreeDef`.
 
 ```{code-cell} ipython3
@@ -308,7 +308,7 @@ nnx.display(graphdef, state)
 `merge` is the reverse of `split`, it takes the GraphDef + State and reconstructs
 the Module. As shown in the example below, by using `split` and `merge` in sequence
 any Module can be lifted to be used in any JAX transform. `update` can
-update an object inplace with the content of a given State. This pattern is used to 
+update an object inplace with the content of a given State. This pattern is used to
 propagate the state from a transform back to the source object outside.
 
 ```{code-cell} ipython3
@@ -334,7 +334,7 @@ nnx.update(model, state)
 print(f'{model.count.value = }')
 ```
 
-The key insight of this pattern is that using mutable references is 
+The key insight of this pattern is that using mutable references is
 fine within a transform context (including the base eager interpreter)
 but its necessary to use the Functional API when crossing boundaries.
 

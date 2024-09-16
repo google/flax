@@ -113,10 +113,10 @@ html_extra_path = ['robots.txt']
 # href with no underline and white bold text color
 announcement = """
 <a
-  href="https://flax.readthedocs.io/en/latest/nnx/index.html"
+  href="https://flax-nnx.readthedocs.io/en/latest/index.html"
   style="text-decoration: none; color: white;"
 >
-  📣 Check out the new <b>NNX</b> API!
+  This is the Flax Linen site. Check out the new <b>Flax NNX</b>!
 </a>
 """
 
