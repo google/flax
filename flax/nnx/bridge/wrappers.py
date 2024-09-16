@@ -74,7 +74,7 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
     module = fn
     assert callable(fn)
   else:
-    if not (hasattr(fn, '__self__') and isinstance(fn.__self__, Module)):
+    if not hasattr(fn, '__self__') and isinstance(fn.__self__, Module):
       raise ValueError(f'{fn = } needs to be a method of an NNX Module.')
     module = fn.__self__
   _set_initializing(module, True)
@@ -124,6 +124,7 @@ class ToNNX(Module):
     self.linen_collections: tuple[str, ...] = ()
 
   def lazy_init(self, *args, **kwargs):
+    """A shortcut of calling `nnx.bridge.lazy_init()` upon this module."""
     return lazy_init(self, *args, **kwargs)
 
   def __call__(
@@ -224,7 +225,34 @@ class ToLinen(linen.Module):
   skip_rng: bool = False
   metadata_type: tp.Type = bv.NNXMeta
 
-  def update_variables(self, module):
+  @linen.compact
+  def __call__(self, *args, **kwargs):
+    # init codepath
+    if self.is_initializing():
+      module_kwargs = dict(self.kwargs)
+      if not self.skip_rng:
+        module_kwargs |= dict(rngs=nnx.Rngs(**linen_rngs_dict(self)))
+      module = self.nnx_class(*self.args, **module_kwargs)
+      # TODO: add lazy_init here in case there's an `ToNNX` submodule under `module`.
+      self._update_variables(module)
+      return module(*args, **kwargs)
+
+    # apply codepath
+    gdef = self.get_variable('nnx', 'graphdef')
+    assert gdef, 'GraphDef not found in variables. Was the collection "nnx" dropped somewhere?'
+    variables = {col: v for col, v in self.variables.items() if col != 'nnx'}
+    states = jtu.tree_map_with_path(
+        lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x).to_state(),
+        variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
+    states = [State(v) for v in states.values()]
+    nnx_state = nnx.GraphState.merge(*states) if states else nnx.GraphState({})
+    module = nnx.merge(gdef, nnx_state)
+    nnx.reseed(module, **linen_rngs_dict(self))  # reseed with keys from linen apply call.
+    out = module(*args, **kwargs)
+    self._update_variables(module)
+    return out
+
+  def _update_variables(self, module):
     """Store the NNX module's graph def and state inside Linen module variables."""
     gdef, state = nnx.split(module)
     # Save the graph def.
@@ -246,35 +274,8 @@ class ToLinen(linen.Module):
                            is_leaf=lambda x: isinstance(x, nnx.VariableState))
           self.put_variable(collection, k, v)
 
-  @linen.compact
-  def __call__(self, *args, **kwargs):
-    # init codepath
-    if self.is_initializing():
-      module_kwargs = dict(self.kwargs)
-      if not self.skip_rng:
-        module_kwargs |= dict(rngs=nnx.Rngs(**linen_rngs_dict(self)))
-      module = self.nnx_class(*self.args, **module_kwargs)
-      # TODO: add lazy_init here in case there's an `ToNNX` submodule under `module`.
-      self.update_variables(module)
-      return module(*args, **kwargs)
-
-    # apply codepath
-    gdef = self.get_variable('nnx', 'graphdef')
-    assert gdef, 'GraphDef not found in variables. Was the collection "nnx" dropped somewhere?'
-    variables = {col: v for col, v in self.variables.items() if col != 'nnx'}
-    states = jtu.tree_map_with_path(
-        lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x).to_state(),
-        variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
-    states = [State(v) for v in states.values()]
-    nnx_state = nnx.GraphState.merge(*states) if states else nnx.GraphState({})
-    module = nnx.merge(gdef, nnx_state)
-    nnx.reseed(module, **linen_rngs_dict(self))  # reseed with keys from linen apply call.
-    out = module(*args, **kwargs)
-    self.update_variables(module)
-    return out
-
 
 def to_linen(nnx_class: tp.Callable[..., Module], *args,
              name: str | None = None, **kwargs):
-  """Shortcut of `ToLinen` if user is not changing any of `ToLinen` default fields."""
+  """Shortcut of `nnx.bridge.ToLinen` if user is not changing any of its default fields."""
   return ToLinen(nnx_class, args=args, kwargs=kwargs, name=name)

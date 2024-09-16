@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=4'
 
 from absl.testing import absltest
 import flax
@@ -24,6 +26,12 @@ import numpy as np
 
 
 class TestCompatibility(absltest.TestCase):
+  def setUp(self):
+    super().setUp()
+    dim1 = max(jax.device_count() // 2, 1)
+    device_mesh = np.array(jax.devices()).reshape(dim1, jax.device_count() // dim1)
+    self.mesh = jax.sharding.Mesh(devices=device_mesh, axis_names=('in', 'out'))
+
   def test_functional(self):
     # Functional API for NNX Modules
     functional = bridge.functional(nnx.Linear)(32, 64)
@@ -135,21 +143,35 @@ class TestCompatibility(absltest.TestCase):
   def test_linen_to_nnx_metadata(self):
     linen_module = nn.Dense(
       features=64,
-      kernel_init=nn.with_partitioning(nn.initializers.lecun_normal(), ('in', 'out')))
+      kernel_init=nn.with_partitioning(nn.initializers.lecun_normal(), ('in', 'out')),
+      bias_init=nn.with_logical_partitioning(nn.initializers.zeros_init(), ('out-alias',),
+                                             rules=(('out-alias', 'out'),)),
+      )
     x = jax.numpy.ones((1, 32))
     linen_vars = linen_module.init(jax.random.key(0), x)
-    nnx_model = bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)).lazy_init(x)
-    # nn.Partitioned metadata box is translated into a valid nnx.Variable / VariableState box.
+
+    @nnx.jit
+    def create_sharded_nnx_module(x):
+      model = bridge.lazy_init(bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)), x)
+      state = nnx.state(model)
+      sharded_state = nnx.with_sharding_constraint(state, nnx.get_partition_spec(state))
+      nnx.update(model, sharded_state)
+      return model
+    with self.mesh:
+      nnx_model = create_sharded_nnx_module(x)
+
+    # nn.Partitioned metadata boxes translated into valid nnx.Variable boxes.
     self.assertIsInstance(linen_vars['params']['kernel'], nn.Partitioned)
+    self.assertIsInstance(linen_vars['params']['bias'], nn.LogicallyPartitioned)
     self.assertIsInstance(nnx_model.params['kernel'], nnx.Variable)
-    np.testing.assert_array_equal(linen_vars['params']['kernel'].value,
-                                  nnx_model.params['kernel'].value)
     assert nnx_model.params['kernel'].sharding == ('in', 'out')
-    _, nnx_state = nnx.split(nnx_model)
-    self.assertIsInstance(nnx_state['params']['kernel'], nnx.VariableState)
-    np.testing.assert_array_equal(linen_vars['params']['kernel'].value,
-                                  nnx_state['params']['kernel'].value)
-    assert nnx_state['params']['kernel'].sharding == ('in', 'out')
+    assert nnx_model.params['kernel'].value.sharding.is_equivalent_to(
+      jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('in', 'out')), ndim=2)
+
+    assert nnx_model.params['bias'].sharding == ('out-alias',)
+    assert nnx_model.params['bias'].sharding_rules == (('out-alias', 'out'),)
+    assert nnx_model.params['bias'].value.sharding.is_equivalent_to(
+      jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('out',)), ndim=1)
 
 
   ##################
@@ -306,7 +328,9 @@ class TestCompatibility(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         dot = bridge.to_linen(NNXInner, x.shape[-1], self.dout, self.dropout_rate, name='dot')
-        b = self.param('b', nn.initializers.lecun_normal(), (1, self.dout))
+        logical_init = nn.with_logical_partitioning(
+          nn.initializers.lecun_normal(), ('out-alias',), rules=(('out-alias', 'out')))
+        b = self.param('b', logical_init, (1, self.dout))
         return dot(x) + b
 
     class NNXOuter(nnx.Module):
@@ -335,6 +359,7 @@ class TestCompatibility(absltest.TestCase):
     self.assertIsInstance(w, nnx.Param)
     np.testing.assert_allclose(model(x), x @ w + b)
     assert hasattr(w, 'sharding') and w.sharding == ('in', 'out')
+    assert hasattr(b, 'sharding') and b.sharding == ('out-alias', )
 
   def test_linen_nnx_linen(self):
     # TODO: add when we can safely `lazy_init` the NNX module inside `ToLinen` without
