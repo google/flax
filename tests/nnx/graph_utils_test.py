@@ -23,6 +23,26 @@ from flax import linen, nnx, struct
 import jax
 import jax.numpy as jnp
 
+class List(nnx.Module):
+  def __init__(self, items):
+    self.items = list(items)
+
+  def __getitem__(self, idx):
+    return self.items[idx]
+
+  def __setitem__(self, idx, value):
+    self.items[idx] = value
+
+
+class Dict(nnx.Module):
+  def __init__(self, *args, **kwargs):
+    self.items = dict(*args, **kwargs)
+
+  def __getitem__(self, key):
+    return self.items[key]
+
+  def __setitem__(self, key, value):
+    self.items[key] = value
 
 class StatefulLinear(nnx.Module):
   def __init__(self, din, dout, rngs):
@@ -54,8 +74,8 @@ class TestGraphUtils(absltest.TestCase):
     assert g[3] in refmap
 
   def test_unflatten(self):
-    a = nnx.Dict(a=1, b=nnx.Param(2))
-    g = nnx.List([a, 3, a, nnx.Param(4)])
+    a = Dict(a=1, b=nnx.Param(2))
+    g = List([a, 3, a, nnx.Param(4)])
 
     graphdef, state = nnx.split(g)
     g = nnx.merge(graphdef, state)
@@ -72,8 +92,8 @@ class TestGraphUtils(absltest.TestCase):
     assert g[0] is not g[2]
 
   def test_unflatten_empty(self):
-    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
-    g = nnx.List([a, 3, a, nnx.Param(4)])
+    a = Dict({'a': 1, 'b': nnx.Param(2)})
+    g = List([a, 3, a, nnx.Param(4)])
 
     graphdef, state = nnx.split(g)
 
@@ -92,46 +112,6 @@ class TestGraphUtils(absltest.TestCase):
     assert g[0]['b'].value == 3
     assert g[2]['b'].value == 3
 
-  def test_update_static(self):
-    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
-    g = nnx.List([a, 3, a, nnx.Param(4)])
-
-    g2 = nnx.graph.clone(g)
-    g2[0]['a'] = 5
-
-    nnx.graph.graph_update_static(g, g2)
-
-    assert g[0]['a'] == 5
-    assert g[2]['a'] == 5
-
-  def test_update_static_inconsistent_types(self):
-    a = {'a': 1, 'b': nnx.Param(2)}
-    g = [a, 3, a, nnx.Param(4)]
-    g2 = [a, a, 3, nnx.Param(4)]
-
-    with self.assertRaisesRegex(
-      ValueError, 'Trying to update a node with a different type'
-    ):
-      nnx.graph.graph_update_static(g, g2)
-
-  def test_update_static_add_new(self):
-    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
-    b = nnx.List([5, 6])
-    g = nnx.List([a, 3, a, nnx.Param(4)])
-    g2 = nnx.List([a, 3, a, nnx.Param(4), b])
-
-    nnx.graph.graph_update_static(g, g2)
-
-    assert g[4][0] == 5
-    assert g[4][1] == 6
-
-  def test_update_static_add_shared_error(self):
-    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
-    g = nnx.List([a, 3, a, nnx.Param(4)])
-    g2 = nnx.List([a, 3, a, nnx.Param(4), a])
-
-    with self.assertRaisesRegex(ValueError, 'Trying to add a new node at path'):
-      nnx.graph.graph_update_static(g, g2)
 
   def test_module_list(self):
     rngs = nnx.Rngs(0)
@@ -621,10 +601,10 @@ class TestGraphUtils(absltest.TestCase):
     t2 = pure_tree[2]['b']
 
     self.assertEqual(pure_tree[1], 1)
-    self.assertIsInstance(t1, nnx.TreeNode)
-    assert isinstance(t1, nnx.TreeNode)
-    self.assertIsInstance(t2, nnx.TreeNode)
-    assert isinstance(t2, nnx.TreeNode)
+    self.assertIsInstance(t1, nnx.NodeStates)
+    assert isinstance(t1, nnx.NodeStates)
+    self.assertIsInstance(t2, nnx.NodeStates)
+    assert isinstance(t2, nnx.NodeStates)
     self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
     self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
     self.assertLen(t1.states[0].flat_state(), 2)
@@ -656,10 +636,10 @@ class TestGraphUtils(absltest.TestCase):
       t2 = pure_tree[2]['b']
 
       self.assertEqual(pure_tree[1], 1)
-      self.assertIsInstance(t1, nnx.TreeNode)
-      assert isinstance(t1, nnx.TreeNode)
-      self.assertIsInstance(t2, nnx.TreeNode)
-      assert isinstance(t2, nnx.TreeNode)
+      self.assertIsInstance(t1, nnx.NodeStates)
+      assert isinstance(t1, nnx.NodeStates)
+      self.assertIsInstance(t2, nnx.NodeStates)
+      assert isinstance(t2, nnx.NodeStates)
       self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
       self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
       self.assertLen(t1.states[0].flat_state(), 1)
@@ -683,10 +663,10 @@ class TestGraphUtils(absltest.TestCase):
         t2 = pure_tree2[2]['b']
 
         # self.assertEqual(pure_tree2[1], 1)
-        self.assertIsInstance(t1, nnx.TreeNode)
-        assert isinstance(t1, nnx.TreeNode)
-        self.assertIsInstance(t2, nnx.TreeNode)
-        assert isinstance(t2, nnx.TreeNode)
+        self.assertIsInstance(t1, nnx.NodeStates)
+        assert isinstance(t1, nnx.NodeStates)
+        self.assertIsInstance(t2, nnx.NodeStates)
+        assert isinstance(t2, nnx.NodeStates)
         self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
         self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
         self.assertLen(t1.states[0].flat_state(), 1)
@@ -738,19 +718,19 @@ class TestGraphUtils(absltest.TestCase):
       m1_axes = StateAxes(None, 0)
       in_axes = (m1_axes, None, {'b': m1_axes})
       jax_in_axes = jax.tree.map(
-          lambda x: nnx.TreeNode.from_prefixes((x.params, x.batch_stats))
-          if isinstance(x, StateAxes)
-          else x,
-          in_axes,
+        lambda x: nnx.NodeStates.from_prefixes((x.params, x.batch_stats))
+        if isinstance(x, StateAxes)
+        else x,
+        in_axes,
       )
       out_axes = 0
 
       def split_fn(ctx: nnx.SplitContext, path, prefix, x):
         if isinstance(prefix, StateAxes):
-          return nnx.TreeNode.from_split(
-              *ctx.split(x, nnx.Param, nnx.BatchStat)
+          return nnx.NodeStates.from_split(
+            *ctx.split(x, nnx.Param, nnx.BatchStat)
           )
-        return nnx.TreeNode.from_split(*ctx.split(x))
+        return nnx.NodeStates.from_split(*ctx.split(x))
 
       pure_args = nnx.to_tree(
           args, ctxtag=ctxtag, prefix=in_axes, split_fn=split_fn

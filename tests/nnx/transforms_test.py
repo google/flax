@@ -26,12 +26,38 @@ import jax.numpy as jnp
 import numpy as np
 
 
+class List(nnx.Module):
+  def __init__(self, items):
+    vars(self).update({str(i): item for i, item in enumerate(items)})
+
+  def __getitem__(self, idx):
+    return getattr(self, str(idx))
+
+  def __setitem__(self, idx, value):
+    setattr(self, str(idx), value)
+
+
+class Dict(nnx.Module):
+  def __init__(self, *args, **kwargs):
+    vars(self).update(dict(*args, **kwargs))
+
+  def __getitem__(self, key):
+    return vars(self)[key]
+
+  def __setitem__(self, key, value):
+    vars(self)[key] = value
+
+  if tp.TYPE_CHECKING:
+
+    def __getattr__(self, key): ...
+
+
 class TestJIT(absltest.TestCase):
   def test_jit(self):
-    m = nnx.Dict(a=nnx.Param(1))
+    m = Dict(a=nnx.Param(1))
 
     @nnx.jit
-    def g(m: nnx.Dict):
+    def g(m: Dict):
       m.a = 2
       return 1.0
 
@@ -354,15 +380,15 @@ class TestGrad(parameterized.TestCase):
     p1 = nnx.Param(10.0)
     p2 = nnx.Param(20.0)
 
-    m = nnx.Dict(
-      a=nnx.List([p1, p2]),
+    m = Dict(
+      a=List([p1, p2]),
       b=p1,
       c=7,
       d=5.0,
     )
 
     @nnx.grad
-    def f(m: nnx.Dict):
+    def f(m: Dict):
       # sum all params
       return m['a'][0].value + m['a'][1].value + m['b'].value
 
@@ -370,10 +396,10 @@ class TestGrad(parameterized.TestCase):
 
     assert m.a[0] is m.b
     assert isinstance(grads, nnx.State)
-    assert grads['a'][0].value == 2.0
-    assert issubclass(grads.a[0].type, nnx.Variable)
-    assert grads['a'][1].value == 1.0
-    assert issubclass(grads.a[1].type, nnx.Variable)
+    assert grads['a']['0'].value == 2.0
+    assert issubclass(grads.a['0'].type, nnx.Variable)
+    assert grads['a']['1'].value == 1.0
+    assert issubclass(grads.a['1'].type, nnx.Variable)
     assert len(grads.flat_state()) == 2
 
     nnx.update(m, grads)
@@ -386,57 +412,57 @@ class TestGrad(parameterized.TestCase):
     assert m['d'] == 5.0
 
   def test_grad_with_multiple_ref_types(self):
-    m = nnx.Dict(
-      a=nnx.List([nnx.Param(10.0), nnx.BatchStat(20.0)]),
+    m = Dict(
+      a=List([nnx.Param(10.0), nnx.BatchStat(20.0)]),
       b=nnx.Param(10.0),
       c=7,
       d=5.0,
     )
 
     @nnx.grad
-    def f(m: nnx.Dict):
+    def f(m: Dict):
       # sum all params
       return m.a[0].value + m.a[1].value + m.b.value
 
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a'][0].value == 1.0
-    assert issubclass(grads.a[0].type, nnx.Param)
+    assert grads['a']['0'].value == 1.0
+    assert issubclass(grads.a['0'].type, nnx.Param)
     assert len(grads) == 2
 
     nnx.update(m, grads)
 
-    assert m.a[0].value == 1.0
-    assert m.a[1].value == 20.0
+    assert m.a['0'].value == 1.0
+    assert m.a['1'].value == 20.0
     assert m.b.value == 1.0
     assert m.c == 7
     assert m.d == 5.0
 
   def test_grad_with_type_predicate(self):
-    m = nnx.Dict(
-      a=nnx.List([nnx.Param(10.0), nnx.BatchStat(20.0)]),
+    m = Dict(
+      a=List([nnx.Param(10.0), nnx.BatchStat(20.0)]),
       b=nnx.Param(10.0),
       c=7,
       d=5.0,
     )
 
     @nnx.grad(argnums=nnx.DiffState(0, nnx.BatchStat))
-    def f(m: nnx.Dict):
+    def f(m: Dict):
       # sum all params
       return m.a[0].value + m.a[1].value + m.b.value
 
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a'][1].value == 1.0
-    assert issubclass(grads.a[1].type, nnx.BatchStat)
+    assert grads['a']['1'].value == 1.0
+    assert issubclass(grads.a['1'].type, nnx.BatchStat)
     assert len(grads) == 1
 
     nnx.update(m, grads)
 
-    assert m.a[0].value == 10.0
-    assert m.a[1].value == 1.0
+    assert m.a['0'].value == 10.0
+    assert m.a['1'].value == 1.0
     assert m.b.value == 10.0
     assert m.c == 7
     assert m.d == 5.0

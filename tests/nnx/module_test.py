@@ -14,7 +14,7 @@
 
 from copy import deepcopy
 import dataclasses
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from absl.testing import absltest
 from flax import nnx, errors
@@ -23,6 +23,35 @@ import jax.numpy as jnp
 import numpy as np
 
 A = TypeVar('A')
+
+class List(nnx.Module):
+  def __init__(self, items):
+    self.items = list(items)
+
+  def __getitem__(self, idx):
+    return self.items[idx]
+
+  def __setitem__(self, idx, value):
+    self.items[idx] = value
+
+
+class Dict(nnx.Module):
+  def __init__(self, *args, **kwargs):
+    self.items = dict(*args, **kwargs)
+
+  def __getitem__(self, key):
+    return vars(self)['items'][key]
+
+  def __setitem__(self, key, value):
+    vars(self)['items'][key] = value
+
+  def __getattr__(self, key):
+    attrs = vars(self)
+    if 'items' not in attrs:
+      raise AttributeError('items')
+    elif key not in attrs['items']:
+      raise AttributeError(key)
+    return attrs['items'][key]
 
 
 class TestModule(absltest.TestCase):
@@ -34,7 +63,7 @@ class TestModule(absltest.TestCase):
     assert hasattr(foo, '_object__state')
 
   def test_trace_level(self):
-    m = nnx.Dict(a=nnx.Param(1))
+    m = Dict(a=nnx.Param(1))
 
     @jax.jit
     def f():
@@ -47,24 +76,24 @@ class TestModule(absltest.TestCase):
     f()
 
   def test_tree_map(self):
-    m = nnx.Dict(a=nnx.Param(1))
+    m = Dict(a=nnx.Param(1))
 
     graphdef, state = nnx.split(m)
 
     state = jax.tree.map(lambda x: x + 1, state)
 
   def test_split_2(self):
-    m = nnx.Dict(a=nnx.Param(1))
+    m = Dict(a=nnx.Param(1))
 
     graphdef, empty, some = nnx.split(m, None, ...)
 
     some = jax.tree.map(lambda x: x + 1, some)
 
   def test_split_merge(self):
-    m = nnx.Dict(a=nnx.Param(1))
+    m = Dict(a=nnx.Param(1))
 
     @jax.jit
-    def g(graphdef: nnx.GraphDef[nnx.Dict[int]], state: nnx.State):
+    def g(graphdef: nnx.GraphDef[Dict], state: nnx.State):
       m = nnx.merge(graphdef, state)
       m.a = 2
       return nnx.split(m)
@@ -77,7 +106,7 @@ class TestModule(absltest.TestCase):
   def test_no_trace_level_error_on_grad(self):
     # No trace level error occurs because jax doesn't update
     # its top trace for grad.
-    m = nnx.Dict(a=nnx.Param(1.0))
+    m = Dict(a=nnx.Param(1.0))
 
     @jax.grad
     def f(_):
@@ -104,8 +133,8 @@ class TestModule(absltest.TestCase):
     assert isinstance(y, jax.Array)
 
   def test_shared_module(self):
-    m1 = nnx.Dict(a=nnx.Param(1), b=nnx.Param(2))
-    m2 = nnx.Dict(x=m1, y=m1, z=nnx.Param(3))
+    m1 = Dict(a=nnx.Param(1), b=nnx.Param(2))
+    m2 = Dict(x=m1, y=m1, z=nnx.Param(3))
 
     m3 = nnx.merge(*nnx.split(m2))
 
@@ -131,10 +160,10 @@ class TestModule(absltest.TestCase):
     r1 = nnx.Variable(1)
     r2 = nnx.Variable(2)
 
-    m = m0 = nnx.Dict({'a': nnx.List([r1, r2]), 'b': r1})
+    m = m0 = Dict({'a': List([r1, r2]), 'b': r1})
 
     @jax.jit
-    def f(graphdef: nnx.GraphDef[nnx.Dict[Any]], state: nnx.State):
+    def f(graphdef: nnx.GraphDef[Dict], state: nnx.State):
       m = nnx.merge(graphdef, state)
 
       assert m['a'][0] is m['b']
@@ -154,10 +183,10 @@ class TestModule(absltest.TestCase):
     assert m['b'] is not m0['b']
 
   def test_cross_barrier(self):
-    m = nnx.Dict(a=nnx.Param(1))
+    m = Dict(a=nnx.Param(1))
 
     @jax.jit
-    def g(graphdef: nnx.GraphDef[nnx.Dict[nnx.Param[int]]], state: nnx.State):
+    def g(graphdef: nnx.GraphDef[Dict], state: nnx.State):
       m = nnx.merge(graphdef, state)
       m.a.value += 1
       return nnx.split(m)
@@ -170,7 +199,7 @@ class TestModule(absltest.TestCase):
 
   def test_no_rejit(self):
     n = 0
-    m = nnx.Dict(a=nnx.Param(1))
+    m = Dict(a=nnx.Param(1))
 
     @jax.jit
     def g(state_and_def):
@@ -202,10 +231,10 @@ class TestModule(absltest.TestCase):
     r1 = nnx.Variable(1)
     r2 = nnx.Variable(2)
     v1 = 3
-    m = nnx.Dict(
+    m = Dict(
       {
-        'a': nnx.List([r1, r2, v1]),
-        'b': nnx.Dict({'c': r1, 'd': r2}),
+        'a': List([r1, r2, v1]),
+        'b': Dict({'c': r1, 'd': r2}),
       }
     )
 
@@ -214,9 +243,9 @@ class TestModule(absltest.TestCase):
     assert len(jax.tree_util.tree_leaves(p)) == 2
 
   def test_clone(self):
-    m = nnx.Dict(
-      a=nnx.List([nnx.Param(1), nnx.Param(2), 3]),
-      b=nnx.Dict(c=nnx.Param(1), d=nnx.Param(2)),
+    m = Dict(
+      a=List([nnx.Param(1), nnx.Param(2), 3]),
+      b=Dict(c=nnx.Param(1), d=nnx.Param(2)),
     )
 
     m2 = nnx.clone(m)

@@ -20,7 +20,6 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from flax.nnx.graph import Key
 from flax.nnx.module import GraphDef, Module
 from flax.nnx.proxy_caller import ApplyCaller
 from flax.nnx.rnglib import Rngs
@@ -62,53 +61,6 @@ class Dict(Module, tp.Mapping[str, A]):
 
   def __len__(self) -> int:
     return len(vars(self))
-
-
-class List(Module, tp.Generic[A]):
-  def __init__(self, elems: tp.Iterable[A], /):
-    i = 0
-    for i, value in enumerate(elems):
-      setattr(self, str(i), value)
-    self._length = i + 1
-
-  def __getitem__(self, key: int) -> A:
-    if key >= len(self) or key < -len(self):
-      raise IndexError(f'index {key} out of range for {self}')
-    if key < 0:
-      key = self._length + key
-    return getattr(self, str(key))
-
-  def __setitem__(self, key: int, value: A):
-    if key >= len(self):
-      raise IndexError(f'index {key} out of range for {self}')
-    setattr(self, str(key), value)
-
-  def __iter__(self) -> tp.Iterator[A]:
-    for i in range(len(self)):
-      yield getattr(self, str(i))
-
-  def __len__(self) -> int:
-    return self._length
-
-  def _graph_node_flatten(self):
-    nodes: list[tuple[Key, tp.Any]] = sorted(
-      (int(key), value)
-      for key, value in vars(self).items()
-      if key not in ('_object__state', '_length')
-    )
-    nodes.append(('_length', self._length))
-    return nodes, (type(self), self._object__state._initializing)
-
-  def _graph_node_set_key(self, key: Key, value: tp.Any):
-    if isinstance(key, int):
-      key = str(key)
-    return super()._graph_node_set_key(key, value)
-
-  def _graph_node_pop_key(self, key: Key):
-    if isinstance(key, int):
-      key = str(key)
-    return super()._graph_node_pop_key(key)
-
 
 class Sequential(Module):
   def __init__(self, *fns: tp.Callable[..., tp.Any]):

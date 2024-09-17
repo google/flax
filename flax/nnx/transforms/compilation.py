@@ -75,10 +75,10 @@ class StateSharding:
 
 def _jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
   if isinstance(prefix, StateSharding):
-    return extract.TreeNode.from_split(
+    return extract.NodeStates.from_split(
       *ctx.split(x, *prefix.filters), metadata=prefix
     )
-  return extract.TreeNode.from_split(*ctx.split(x))
+  return extract.NodeStates.from_split(*ctx.split(x))
 
 
 @dataclasses.dataclass(eq=False)
@@ -290,13 +290,13 @@ def jit(
     )  # type: ignore[return-value]
   kwarg_shardings = None
   jax_in_shardings = jax.tree.map(
-    lambda x: extract.TreeNode.from_prefixes(x.shardings, metadata=x)
+    lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
     if isinstance(x, StateSharding)
     else x,
     in_shardings,
   )
   jax_out_shardings = jax.tree.map(
-    lambda x: extract.TreeNode.from_prefixes(x.shardings, metadata=x)
+    lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
     if isinstance(x, StateSharding)
     else x,
     out_shardings,
