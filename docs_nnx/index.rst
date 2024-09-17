@@ -8,10 +8,10 @@ Flax NNX
 
 ----
 
-Flax NNX is a new simplified API that is designed to make it easier to create, inspect,
-debug, and analyze neural networks in JAX. It achieves this by adding first class support
+**Flax NNX is a simplified API that makes it easier to create, inspect,
+debug, and analyze neural networks in JAX.** It has first class support
 for Python reference semantics, allowing users to express their models using regular
-Python objects. Flax NNX is an evolution of the previous Flax Linen APIs, it takes years of
+Python objects. Flax NNX is an evolution of the previous Flax Linen APIs, and it takes years of
 experience to bring a simpler and more user-friendly experience.
 
 .. note::
@@ -104,14 +104,14 @@ Basic usage
    model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
    optimizer = nnx.Optimizer(model, optax.adam(1e-3))  # reference sharing
 
-   @nnx.jit # automatic state management
+   @nnx.jit  # automatic state management for JAX transforms
    def train_step(model, optimizer, x, y):
      def loss_fn(model):
        y_pred = model(x)  # call methods directly
        return ((y_pred - y) ** 2).mean()
 
      loss, grads = nnx.value_and_grad(loss_fn)(model)
-     optimizer.update(grads)  # inplace updates
+     optimizer.update(grads)  # in-place updates
 
      return loss
 
@@ -184,6 +184,7 @@ Learn more
    nnx_basics
    mnist_tutorial
    guides/index
+   examples/index
    The Flax philosophy <philosophyhttps://flax.readthedocs.io/en/latest/philosophy.html>
    How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
    api_reference/index
