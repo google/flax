@@ -510,8 +510,8 @@ class TestGraphUtils(absltest.TestCase):
     model = NNXOuter(3, rngs=nnx.Rngs(0))
     nnx.bridge.lazy_init(model, x)
 
-    self.assertEqual(model.inner.params['kernel'].shape, (5, 4, 3))
-    self.assertEqual(model.inner.params['bias'].shape, (5, 3))
+    self.assertEqual(model.inner.kernel.shape, (5, 4, 3))
+    self.assertEqual(model.inner.bias.shape, (5, 3))
 
   def test_split_merge_context(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))

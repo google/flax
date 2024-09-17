@@ -337,7 +337,7 @@ def get_partition_spec(tree: Any) -> Any:
   """Extracts a PartitionSpec tree from a PyTree containing ``Partitioned`` values."""
 
   def f(x):
-    if isinstance(x, Partitioned):
+    if hasattr(x, 'get_partition_spec'):
       return x.get_partition_spec()
     # Unboxed arrays, which should be replicated across all devices
     elif hasattr(x, 'shape'):
@@ -346,7 +346,7 @@ def get_partition_spec(tree: Any) -> Any:
       return None
 
   return jax.tree_util.tree_map(
-      f, tree, is_leaf=lambda x: isinstance(x, Partitioned)
+      f, tree, is_leaf=lambda x: isinstance(x, AxisMetadata)
   )
 
 
