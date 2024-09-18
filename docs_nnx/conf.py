@@ -116,7 +116,7 @@ announcement = """
   href="https://flax.readthedocs.io/en/latest"
   style="text-decoration: none; color: white;"
 >
-  This site covers the new Flax NNX API. Click here for <b>Flax Linen</b>.
+  This Flax NNX. Click here for <b>Flax Linen</b>.
 </a>
 """
 
