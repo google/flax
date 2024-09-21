@@ -1,5 +1,5 @@
 
-Migrating from Haiku/Linen to NNX
+Migrating from Haiku to Flax
 =================================
 
 This guide will showcase the differences between Haiku, Flax Linen and Flax NNX.

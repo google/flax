@@ -18,6 +18,8 @@ experience to bring a simpler and more user-friendly experience.
    Flax Linen is not going to be deprecated in the near future as most of our users still
    rely on this API, however new users are encouraged to use Flax NNX.
 
+   For existing Linen users to move to NNX, check out the `evolution guide <guides/linen_to_nnx.html>`_.
+
 Features
 ^^^^^^^^^
 
