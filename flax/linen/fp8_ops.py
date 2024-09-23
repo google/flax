@@ -140,9 +140,9 @@ def dequantize(x, dq_dtype, scale):
   return x.astype(dq_dtype) * jnp.broadcast_to(scale.astype(dq_dtype), x.shape)
 
 
-def quantize_dequantize(x, q_dtype, scale, compute_dtype, quanitze_only=False):
+def quantize_dequantize(x, q_dtype, scale, compute_dtype, quantize_only=False):
   qx = quantize(x, q_dtype, scale, compute_dtype)
-  if quanitze_only:
+  if quantize_only:
     return qx
   return dequantize(qx, x.dtype, scale)
 
@@ -169,7 +169,7 @@ def compute_amax_history(x, amax_history):
 
 def quantize_and_update(
     x, q_dtype, scale, amax_history, compute_dtype, use_direct_quant=False,
-    quanitze_only=False,
+    quantize_only=False,
 ):
   is_fmax32 = (scale.dtype == fm32 and amax_history.dtype == fm32)
   # convert fm32->f32 so we can do math
@@ -191,7 +191,7 @@ def quantize_and_update(
 
   # Quantize the input
   if not use_direct_quant:
-    qx = quantize_dequantize(x, q_dtype, new_scale, compute_dtype, quanitze_only=quanitze_only)
+    qx = quantize_dequantize(x, q_dtype, new_scale, compute_dtype, quantize_only=quantize_only)
     return qx, new_scale, new_history
 
   return new_scale, new_history
@@ -285,7 +285,7 @@ def out_qdq_bwd(compute_dtype, q_dtype, res, g):
 out_qdq.defvjp(out_qdq_fwd, out_qdq_bwd)
 
 
-@partial(custom_vjp, nondiff_argnums=(0, 1, 2))
+@partial(custom_vjp, nondiff_argnums=(0, 1))
 def in_q(compute_dtype, q_dtype, inp, scale, amax_history):
     qin, new_scale, new_history = quantize_and_update(
         inp, q_dtype, scale, amax_history, compute_dtype, quantize_only=True
@@ -298,10 +298,10 @@ def in_q_fwd(compute_dtype, q_dtype, inp, scale, amax_history):
     )
     return (qin, new_scale), (new_scale, new_history)
 
-def in_q_bwd(compute_dtype, q_dtype, inp, res, g):
+def in_q_bwd(compute_dtype, q_dtype, res, _):
     new_scale, new_history = res
     # We don't compute gradients for inp, scale and amax_history, but we pass through scale and history
-    return new_scale, new_history
+    return None, new_scale, new_history
 
 in_q.defvjp(in_q_fwd, in_q_bwd)
 
@@ -421,7 +421,7 @@ class Fp8DirectDotGeneralOp(Fp8DotGeneralBase):
     )
 
     q_x, new_input_scale = in_q(
-      comp_dtype, jnp.float8_e4m3fn, x, self.input_scale.value, self.input_amax_history)
+      comp_dtype, self.e4m3_dtype, x, self.input_scale.value, self.input_amax_history.value)
 
     y = one_sided_q_dot_dq(
         x,
@@ -436,23 +436,8 @@ class Fp8DirectDotGeneralOp(Fp8DotGeneralBase):
         dimension_numbers,
         preferred_element_type=x.dtype
     )
-    return y
+    return y  # type: ignore
 
-    # y = q_dot_dq(
-    #   x,
-    #   k,
-    #   self.input_scale.value,
-    #   self.kernel_scale.value,
-    #   self.output_grad_scale.value,
-    #   self.input_amax_history.value,
-    #   self.kernel_amax_history.value,
-    #   self.output_grad_amax_history.value,
-    #   comp_dtype,
-    #   dimension_numbers,
-    #   preferred_element_type=x.dtype
-    # )
-
-    # return y  # type: ignore
 def one_sided_q_dot_dq_impl(
     lhs,
     q_lhs,
@@ -492,6 +477,7 @@ def one_sided_q_dot_dq_impl(
 			res = (
 					lhs,
 					q_lhs,
+          lhs_scale,
 					rhs,
 					q_rhs,
 					new_rhs_scale,
@@ -503,7 +489,7 @@ def one_sided_q_dot_dq_impl(
 	else:
 			return out
 
-@partial(custom_vjp, nondiff_argnums=(1,2,8, 9, 10,11))
+@partial(custom_vjp, nondiff_argnums=(8, 9, 10, 11))
 def one_sided_q_dot_dq(
     lhs,
     q_lhs,
@@ -551,6 +537,7 @@ def one_sided_q_dot_dq_fwd(
 	return one_sided_q_dot_dq_impl(
 			lhs,
 			q_lhs,
+      lhs_scale,
 			rhs,
 			rhs_scale,
 			out_grad_scale,
@@ -564,8 +551,6 @@ def one_sided_q_dot_dq_fwd(
 	)
 
 def one_sided_q_dot_dq_bwd(
-	  q_lhs,
-		lhs_scale,
     compute_dtype,
     dimension_numbers,
     precision,
@@ -576,6 +561,7 @@ def one_sided_q_dot_dq_bwd(
 	(
 		lhs,
 		q_lhs,
+    lhs_scale,
 		rhs,
 		q_rhs,
 		new_rhs_scale,
@@ -617,6 +603,8 @@ def one_sided_q_dot_dq_bwd(
 
 	return (
 		grad_lhs,
+    None,
+    None,
 		grad_rhs,
 		new_rhs_scale,
 		new_out_grad_scale,

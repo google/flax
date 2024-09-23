@@ -89,7 +89,6 @@ from .combinators import Sequential as Sequential
 from .fp8_ops import (
     Fp8DotGeneralOp as Fp8DotGeneralOp,
     Fp8DirectDotGeneralOp as Fp8DirectDotGeneralOp,
-    Fp8DirectDoubleDotGeneralOp as Fp8DirectDoubleDotGeneralOp,
     NANOOFp8DotGeneralOp as NANOOFp8DotGeneralOp,
 )
 from .initializers import (
