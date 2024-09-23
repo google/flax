@@ -48,7 +48,6 @@ from .scope import (
 from .tracers import (
     check_trace_level as check_trace_level,
     current_trace as current_trace,
-    trace_level as trace_level,
 )
 
 from flax.typing import (

@@ -454,7 +454,7 @@ class Scope:
     self.flags = freeze({} if flags is None else flags)
 
     self._root = parent.root if parent else None
-    self.trace_level = tracers.trace_level(tracers.current_trace())
+    self.trace_level = tracers.current_trace()
 
     self.rng_counters = {key: 0 for key in self.rngs}
     self.reservations = collections.defaultdict(set)
