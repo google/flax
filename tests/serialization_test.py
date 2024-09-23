@@ -197,8 +197,7 @@ class SerializationTest(parameterized.TestCase):
     )
     self.assertEqual(variables, deserialized_state)
 
-  @parameterized.parameters(
-    [
+  @parameterized.parameters([
       'byte',
       'b',
       'ubyte',
@@ -222,11 +221,9 @@ class SerializationTest(parameterized.TestCase):
       'd',
       'longdouble',
       'g',
-      'cfloat',
       'cdouble',
       'clongdouble',
       'm',
-      'bool8',
       'b1',
       'int64',
       'i8',
@@ -259,26 +256,15 @@ class SerializationTest(parameterized.TestCase):
       'i1',
       'uint8',
       'u1',
-      'complex_',
-      'int0',
-      'uint0',
       'single',
       'csingle',
-      'singlecomplex',
-      'float_',
       'intc',
       'uintc',
-      'int_',
-      'longfloat',
-      'clongfloat',
-      'longcomplex',
-      'bool_',
       'int',
       'float',
       'complex',
       'bool',
-    ]
-  )
+  ])
   def test_numpy_serialization(self, dtype):
     np.random.seed(0)
     if (

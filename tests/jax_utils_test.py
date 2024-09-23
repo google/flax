@@ -17,12 +17,12 @@
 from functools import partial
 
 from absl.testing import absltest
-import chex
-import jax
-import numpy as np
 from absl.testing import parameterized
-
+import chex
 from flax import jax_utils
+import jax
+import jax.numpy as jnp
+import numpy as np
 
 NDEV = 4
 
@@ -44,6 +44,7 @@ class PadShardUnpadTest(chex.TestCase):
     # Just tests that basic calling works without exploring caveats.
     @partial(jax_utils.pad_shard_unpad, static_argnums=())
     def add(a, b):
+      b = jnp.asarray(b, dtype=dtype)
       return a + b
 
     x = np.arange(bs, dtype=dtype)
@@ -58,7 +59,7 @@ class PadShardUnpadTest(chex.TestCase):
     def add(a, b):
       return a['a'] + b[0]
 
-    x = np.arange(bs, dtype=dtype)
+    x = jnp.arange(bs, dtype=dtype)
     y = add(dict(a=x), (10 * x,))
     chex.assert_type(y.dtype, x.dtype)
     np.testing.assert_allclose(np.float64(y), np.float64(x + 10 * x))
@@ -69,12 +70,13 @@ class PadShardUnpadTest(chex.TestCase):
     @jax.jit
     @chex.assert_max_traces(n=1)
     def add(a, b):
+      b = jnp.asarray(b, dtype=dtype)
       return a + b
 
     chex.clear_trace_counter()
 
     for bs in self.BATCH_SIZES:
-      x = np.arange(bs, dtype=dtype)
+      x = jnp.arange(bs, dtype=dtype)
       y = add(x, 10 * x, min_device_batch=9)  # pylint: disable=unexpected-keyword-arg
       chex.assert_type(y.dtype, x.dtype)
       np.testing.assert_allclose(np.float64(y), np.float64(x + 10 * x))
@@ -83,9 +85,9 @@ class PadShardUnpadTest(chex.TestCase):
   def test_static_argnum(self, dtype, bs):
     @partial(jax_utils.pad_shard_unpad, static_argnums=(1,))
     def add(a, b):
-      return a + b
+      return a + jnp.asarray(b, dtype=dtype)
 
-    x = np.arange(bs, dtype=dtype)
+    x = jnp.arange(bs, dtype=dtype)
     y = add(x, 10)
     chex.assert_type(y.dtype, x.dtype)
     np.testing.assert_allclose(np.float64(y), np.float64(x + 10))
@@ -96,9 +98,11 @@ class PadShardUnpadTest(chex.TestCase):
     # test the default/most canonical path where `params` are the first arg.
     @partial(jax_utils.pad_shard_unpad, static_argnames=('b',))
     def add(params, a, *, b):
+      params = jnp.asarray(params, dtype=dtype)
+      b = jnp.asarray(b, dtype=dtype)
       return params * a + b
 
-    x = np.arange(bs, dtype=dtype)
+    x = jnp.arange(bs, dtype=dtype)
     y = add(5, x, b=10)
     chex.assert_type(y.dtype, x.dtype)
     np.testing.assert_allclose(np.float64(y), np.float64(5 * x + 10))
