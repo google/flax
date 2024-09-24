@@ -5,6 +5,7 @@ Guides
    :maxdepth: 2
 
    transforms
+   flax_gspmd
    filters_guide
    linen_to_nnx
    bridge_guide
