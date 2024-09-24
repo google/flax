@@ -91,7 +91,7 @@ def get_partition_spec(tree: A) -> A:
 
   def from_rules(sharding, sharding_rules):
     rules = {alias: on_mesh for (alias, on_mesh) in sharding_rules}
-    return (rules[s] if s in rules else s for s in sharding)
+    return (rules[s] if s in rules else None for s in sharding)
 
   def f(x):
     if isinstance(x, (variables.VariableState, variables.Variable)):
