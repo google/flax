@@ -350,6 +350,11 @@ def _parse_dot_inputs(*args, **kwargs):
   x = jnp.asarray(x, comp_dtype)
   return x, k, dimension_numbers, comp_dtype
 
+def _fm32_to_float32(value):
+  if value.dtype == fm32:
+    return lax.convert_element_type(value, jnp.float32)
+  return value
+
 # Convenience wrappers for the quantize-dot-dequantize
 def q_dot_dq(
   lhs,
@@ -385,6 +390,29 @@ def q_dot_dq(
   )
   return y  # type: ignore
 
+# This decorator wraps a function to perform one-sided quantized dot product and dequantization.
+# It prepares the arguments for fp8_ops.one_sided_q_dot_dq, including the pre-quantized input,
+# scales, and amax histories. This allows for efficient FP8 matrix multiplication while
+# managing quantization parameters.
+def one_sided_q_dot_dq_config(comp_dtype, q_x, input_scale, kernel_scale, out_grad_scale, kernel_amax_history, out_grad_amax_history):
+  def decorator(func):
+    def wrapper(lhs, rhs, dimension_numbers, precision=None, preferred_element_type=None):
+      return one_sided_q_dot_dq(
+          lhs=lhs,
+          q_lhs=q_x,
+          lhs_scale=input_scale,
+          rhs=rhs,
+          rhs_scale=kernel_scale,
+          out_grad_scale=out_grad_scale,
+          rhs_amax_history=kernel_amax_history,
+          out_grad_amax_history=out_grad_amax_history,
+          compute_dtype=comp_dtype,
+          dimension_numbers=dimension_numbers,
+          precision=precision,
+          preferred_element_type=preferred_element_type
+      )
+    return wrapper
+  return decorator
 
 class Fp8DotGeneralBase(module.Module):
   amax_history_length: int = 1024
@@ -494,7 +522,7 @@ def one_sided_q_dot_dq_impl(
 			use_direct_quant=True
 	)
 
-	q_rhs = quantize(rhs, jnp.float8_e4m3fn, new_rhs_scale, preferred_element_type)
+	q_rhs = quantize(rhs, jnp.float8_e4m3fn, _fm32_to_float32(new_rhs_scale), preferred_element_type)
 
 	out = lax.dot_general(
 			q_lhs,
@@ -504,7 +532,7 @@ def one_sided_q_dot_dq_impl(
 			precision=lax.Precision.DEFAULT,
 	)
 
-	out = dequantize(out, preferred_element_type, new_rhs_scale * lhs_scale)
+	out = dequantize(out, preferred_element_type, _fm32_to_float32(new_rhs_scale) * _fm32_to_float32(lhs_scale))
 	if is_training:
 			res = (
 					lhs,
@@ -611,7 +639,7 @@ def one_sided_q_dot_dq_bwd(
 			use_direct_quant=True
 	)
 
-	q_g = quantize(g, jnp.float8_e5m2, new_out_grad_scale, preferred_element_type)
+	q_g = quantize(g, jnp.float8_e5m2, _fm32_to_float32(new_out_grad_scale), preferred_element_type)
 
 	grad_lhs = dot_general_transpose_lhs(
 			q_g,
@@ -621,7 +649,7 @@ def one_sided_q_dot_dq_bwd(
 			precision=lax.Precision.HIGHEST,
 			preferred_element_type=preferred_element_type,
 	)
-	grad_lhs = dequantize(grad_lhs, preferred_element_type, new_rhs_scale * new_out_grad_scale)
+	grad_lhs = dequantize(grad_lhs, preferred_element_type, _fm32_to_float32(new_rhs_scale) * _fm32_to_float32(new_out_grad_scale))
 
 	grad_rhs = dot_general_transpose_rhs(
 			q_g,
@@ -631,7 +659,7 @@ def one_sided_q_dot_dq_bwd(
 			precision=lax.Precision.HIGHEST,
 			preferred_element_type=preferred_element_type,
 	)
-	grad_rhs = dequantize(grad_rhs, preferred_element_type, lhs_scale * new_out_grad_scale)
+	grad_rhs = dequantize(grad_rhs, preferred_element_type, _fm32_to_float32(lhs_scale) * _fm32_to_float32(new_out_grad_scale))
 
 	return (
 		grad_lhs,
