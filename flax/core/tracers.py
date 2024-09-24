@@ -20,18 +20,17 @@ from .. import errors
 
 
 def current_trace():
-  """Returns the innermost Jax tracer."""
-  return jax.core.find_top_trace(())
+  """Returns the current JAX state tracer."""
+  if jax.__version_info__ <= (0, 4, 33):
+    top = jax.core.find_top_trace(())
+    if top:
+      return top.level
+    else:
+      return float('-inf')
 
-
-def trace_level(main):
-  """Returns the level of the trace of -infinity if it is None."""
-  if main:
-    return main.level
-  return float('-inf')
-
+  return jax.core.get_opaque_trace_state(convention="flax")
 
 def check_trace_level(base_level):
-  level = trace_level(current_trace())
+  level = current_trace()
   if level != base_level:
     raise errors.JaxTransformError()

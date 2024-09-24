@@ -15,14 +15,16 @@
 # Taken from flax/core/tracer.py 🏴‍☠️
 
 
-from jax.core import MainTrace, thread_local_state
+from jax.core import get_opaque_trace_state, OpaqueTraceState
 
 from flax.nnx import reprlib
 
 
-def current_jax_trace() -> MainTrace:
-  """Returns the innermost Jax tracer."""
-  return thread_local_state.trace_state.trace_stack.dynamic
+def current_jax_trace() -> OpaqueTraceState:
+  """Returns the Jax tracing state."""
+  if jax.__version_info__ <= (0, 4, 33):
+    return thread_local_state.trace_state.trace_stack.dynamic
+  return get_opaque_trace_state(convention="nnx")
 
 
 class TraceState(reprlib.Representable):
@@ -36,7 +38,10 @@ class TraceState(reprlib.Representable):
     return self._jax_trace
 
   def is_valid(self) -> bool:
-    return self._jax_trace is current_jax_trace()
+    if jax.__version_info__ <= (0, 4, 33):
+      return self._jax_trace is current_jax_trace()
+
+    return self._jax_trace == current_jax_trace()
 
   def __nnx_repr__(self):
     yield reprlib.Object(f'{type(self).__name__}')
@@ -52,4 +57,7 @@ class TraceState(reprlib.Representable):
     )
 
   def __eq__(self, other):
-    return isinstance(other, TraceState) and self._jax_trace is other._jax_trace
+    if jax.__version_info__ <= (0, 4, 33):
+      return isinstance(other, TraceState) and self._jax_trace is other._jax_trace
+
+    return isinstance(other, TraceState) and self._jax_trace == other._jax_trace
