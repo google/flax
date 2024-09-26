@@ -237,58 +237,25 @@ class GraphDefState(struct.PyTreeNode):
   graphdef: graph.GraphDef[tp.Any] = struct.field(pytree_node=False)
   state: graph.GraphState = struct.field(pytree_node=True)
 
-class StateOnly(struct.PyTreeNode):
-  state: graph.GraphState = struct.field(pytree_node=True)
+
+class NodeStates(struct.PyTreeNode):
+  _graphdef: graph.GraphDef[tp.Any] | None
+  states: tuple[graph.GraphState, ...]
+  metadata: tp.Any = struct.field(pytree_node=False)
 
   @property
   def graphdef(self) -> graph.GraphDef[tp.Any]:
-    raise ValueError('No graphdef available in StateOnly')
-
-
-@dataclasses.dataclass(frozen=True)
-class StateSequence(tp.Sequence[graph.GraphState]):
-  graphdef_states: tuple[GraphDefState | StateOnly, ...]
-
-  @tp.overload
-  def __getitem__(self, index: int) -> graph.GraphState: ...
-  @tp.overload
-  def __getitem__(self, index: slice) -> 'StateSequence': ...
-  def __getitem__(self, index):
-    if isinstance(index, slice):
-      return StateSequence(self.graphdef_states[index])
-    elif isinstance(index, int):
-      return self.graphdef_states[index].state
-    else:
-      raise TypeError(f'Invalid index type: {type(index)}')
-
-  def __len__(self):
-    return len(self.graphdef_states)
-
-  def __iter__(self):
-    return (s.state for s in self.graphdef_states)
-
-
-class TreeNode(struct.PyTreeNode):
-  metatata: tp.Any = struct.field(pytree_node=False)
-  graphdef_states: tuple[GraphDefState | StateOnly, ...] = struct.field(
-    pytree_node=True
-  )
-
-  @property
-  def graphdef(self) -> graph.GraphDef[tp.Any]:
-    return self.graphdef_states[0].graphdef
+    if self._graphdef is None:
+      raise ValueError('No graphdef available')
+    return self._graphdef
 
   @property
   def state(self) -> graph.GraphState:
-    if len(self.graphdef_states) != 1:
+    if len(self.states) != 1:
       raise ValueError(
-        f'Expected exactly one GraphDefState, got {len(self.graphdef_states)}'
+        f'Expected exactly one GraphDefState, got {len(self.states)}'
       )
-    return self.graphdef_states[0].state
-
-  @property
-  def states(self) -> tp.Sequence[graph.GraphState]:
-    return StateSequence(self.graphdef_states)
+    return self.states[0]
 
   @classmethod
   def from_split(
@@ -299,15 +266,11 @@ class TreeNode(struct.PyTreeNode):
     *states: graph.GraphState,
     metadata: tp.Any = None,
   ):
-    states = (state, *states)
-    return cls(
-      metadata, tuple(GraphDefState(graphdef, state) for state in states)
-    )
+    return cls(_graphdef=graphdef, states=(state, *states), metadata=metadata)
 
   @classmethod
   def from_states(cls, state: graph.GraphState, *states: graph.GraphState):
-    states = (state, *states)
-    return cls(None, tuple(StateOnly(state) for state in states))
+    return cls(_graphdef=None, states=(state, *states), metadata=None)
 
   @classmethod
   def from_prefixes(
@@ -317,13 +280,13 @@ class TreeNode(struct.PyTreeNode):
     *,
     metadata: tp.Any = None,
   ):
-    return cls(metadata, tuple(prefixes))
+    return cls(_graphdef=None, states=tuple(prefixes), metadata=metadata)
 
 
 def default_split_fn(
   ctx: graph.SplitContext, path: KeyPath, prefix: Prefix, leaf: Leaf
 ) -> tp.Any:
-  return TreeNode.from_split(*ctx.split(leaf))
+  return NodeStates.from_split(*ctx.split(leaf))
 
 
 def to_tree(
@@ -370,13 +333,13 @@ def to_tree(
 def merge_tree_node(
   ctx: graph.MergeContext, path: KeyPath, prefix: Prefix, leaf: Leaf
 ) -> tp.Any:
-  if not isinstance(leaf, TreeNode):
+  if not isinstance(leaf, NodeStates):
     raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
   return ctx.merge(leaf.graphdef, *leaf.states)
 
 
 def is_tree_node(x):
-  return isinstance(x, TreeNode)
+  return isinstance(x, NodeStates)
 
 
 def from_tree(

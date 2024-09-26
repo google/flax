@@ -35,7 +35,6 @@ from .graph import GraphState as GraphState
 from .graph import PureState as PureState
 from .object import Object as Object
 from .helpers import Dict as Dict
-from .helpers import List as List
 from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
@@ -153,4 +152,6 @@ from .variables import VariableState as VariableState
 from .variables import VariableMetadata as VariableMetadata
 from .variables import with_metadata as with_metadata
 from .visualization import display as display
-from .extract import to_tree, from_tree, TreeNode
+from .extract import to_tree as to_tree
+from .extract import from_tree as from_tree
+from .extract import NodeStates as NodeStates

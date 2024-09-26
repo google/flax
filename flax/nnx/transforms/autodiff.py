@@ -73,7 +73,7 @@ class GradFn:
     nondiff_states: deque[State | None] = extract.get_broadcast_state('grad')
 
     def _grad_merge_fn(
-      ctx: graph.MergeContext, path, prefix, value: extract.TreeNode
+      ctx: graph.MergeContext, path, prefix, value: extract.NodeStates
     ):
       nondiff = nondiff_states.popleft()
       if nondiff is None:
@@ -149,11 +149,11 @@ def _grad_general(
     ):
       if prefix is None:
         nondiff_states.append(None)
-        return extract.TreeNode.from_split(*ctx.split(value))
+        return extract.NodeStates.from_split(*ctx.split(value))
       else:
         graphdef, diff, nondiff = ctx.split(value, prefix.filter, ...)  # type: ignore[misc]
         nondiff_states.append(nondiff)
-        return extract.TreeNode.from_split(graphdef, diff)
+        return extract.NodeStates.from_split(graphdef, diff)
 
     arg_filters = tuple(index_filter.get(i) for i in range(len(args)))
     pure_args = extract.to_tree(
@@ -165,9 +165,9 @@ def _grad_general(
 
     def process_grads(grads):
       return jax.tree.map(
-        lambda x: x.state if isinstance(x, extract.TreeNode) else x,
+        lambda x: x.state if isinstance(x, extract.NodeStates) else x,
         grads,
-        is_leaf=lambda x: isinstance(x, extract.TreeNode),
+        is_leaf=lambda x: isinstance(x, extract.NodeStates),
       )
 
     def process_out(pure_out: A, /) -> A:
@@ -367,7 +367,7 @@ def _custom_vjp_merge_fn(
   ctx: graph.MergeContext,
   path,
   prefix: bool | DiffState,
-  value: extract.TreeNode,
+  value: extract.NodeStates,
   *,
   nondiff_states: deque[extract.GraphDefState],
 ):
@@ -390,7 +390,7 @@ def _custom_vjp_split_fn(
     graphdef, passed = ctx.split(value)
     broadcast = State({})  # type: ignore[var-annotated]
     nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
-    return extract.TreeNode.from_split(graphdef, passed)
+    return extract.NodeStates.from_split(graphdef, passed)
   elif prefix is True:
     # pure differentiable arg, we pass all the state through
     # but we return a TreeNode.from_states which doesn't have a graphdef
@@ -398,7 +398,7 @@ def _custom_vjp_split_fn(
     graphdef, passed = ctx.split(value)
     broadcast = State({})
     nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
-    return extract.TreeNode.from_states(passed)
+    return extract.NodeStates.from_states(passed)
   else:
     # differentiable arg with DiffState filter, we use the filter to split the state
     # as before we return a TreeNode.from_states to keep the gradients clean
@@ -406,7 +406,7 @@ def _custom_vjp_split_fn(
     # which is broadcasted during the forward pass
     graphdef, passed, broadcast = ctx.split(value, prefix.filter, ...)  # type: ignore[misc]
     nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
-    return extract.TreeNode.from_states(passed)
+    return extract.NodeStates.from_states(passed)
 
 
 class CustomVjpMetadata(struct.PyTreeNode):
@@ -491,9 +491,9 @@ class BwdFn:
     nondiff = extract.from_tree(nondiff)
     residual = extract.from_tree(pure_residual)
     pure_g = jax.tree.map(
-      lambda x: x.state if isinstance(x, extract.TreeNode) else x,
+      lambda x: x.state if isinstance(x, extract.NodeStates) else x,
       pure_g,
-      is_leaf=lambda x: isinstance(x, extract.TreeNode),
+      is_leaf=lambda x: isinstance(x, extract.NodeStates),
     )
 
     tangent = self.bwd(*nondiff, residual, pure_g)
@@ -502,7 +502,7 @@ class BwdFn:
       if is_tree_node:
         if not isinstance(x, State):
           raise ValueError(f'Expected State, got {type(x)}')
-        return extract.TreeNode.from_states(x)
+        return extract.NodeStates.from_states(x)
       return x
 
     pure_tangent = jax.tree.map(
@@ -567,9 +567,9 @@ class CustomVjp(tp.Generic[A]):
         tuple(x for x in arg_filters if x is not False),
       )
       tree_node_args = jax.tree.map(
-        lambda x: isinstance(x, extract.TreeNode),
+        lambda x: isinstance(x, extract.NodeStates),
         pure_args,
-        is_leaf=lambda x: isinstance(x, extract.TreeNode),
+        is_leaf=lambda x: isinstance(x, extract.NodeStates),
       )
       tangent_tree_node_args = tuple(
         arg
