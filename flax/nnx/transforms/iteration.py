@@ -901,9 +901,6 @@ def _scan_merge_out(
       broadcast_states = deque[State]()
     if isinstance(prefix, StateAxes):
       vectorized_states = deque(x.states)
-      assert len(prefix.axes) == len(vectorized_states) + len(
-          carry_states
-      ) + len(broadcast_states)
       for axis in prefix.axes:
         if isinstance(axis, int):
           state = vectorized_states.popleft()
@@ -913,7 +910,10 @@ def _scan_merge_out(
           states.append(broadcast_states.popleft())
         else:  # axis is Carry
           states.append(carry_states.popleft())
-      assert not vectorized_states and not carry_states and not broadcast_states
+      assert not carry_states and not broadcast_states
+      assert not vectorized_states or (
+        len(vectorized_states) == 1 and not vectorized_states[0]
+      )
     elif isinstance(prefix, int):
       state = jax.tree.map(lambda x: jnp.moveaxis(x, 0, prefix), x.state)
       states.extend((state, *carry_states, *broadcast_states))

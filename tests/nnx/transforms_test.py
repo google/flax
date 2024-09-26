@@ -1614,6 +1614,41 @@ class TestScan(absltest.TestCase):
     assert jnp.equal(dropout_keys[0], dropout_keys[1])
     assert jnp.equal(dropout_keys[1], dropout_keys[2])
 
+  def test_rnn_example(self):
+    class RNNCell(nnx.Module):
+      def __init__(self, input_size, hidden_size, rngs):
+        self.linear = nnx.Linear(
+          hidden_size + input_size, hidden_size, rngs=rngs
+        )
+        self.drop = nnx.Dropout(0.1, rngs=rngs)
+        self.hidden_size = hidden_size
+
+      def __call__(self, carry, x) -> tuple[jax.Array, jax.Array]:
+        carry = self.drop(carry)  # recurrent dropout
+        x = nnx.relu(self.linear(jnp.concatenate([carry, x], axis=-1)))
+        return x, x
+
+      def initial_state(self, batch_size: int):
+        return jnp.zeros((batch_size, self.hidden_size))
+
+    cell = RNNCell(20, 20, nnx.Rngs(params=0, dropout=1))
+
+    state_axes = nnx.StateAxes({'dropout': None, ...: nnx.Carry})
+
+    def rnn_forward(cell: RNNCell, x: jax.Array):
+      carry = cell.initial_state(x.shape[0])
+
+      @nnx.scan(in_axes=(state_axes, nnx.Carry, 1), out_axes=(nnx.Carry, 1))
+      def unroll(cell: RNNCell, carry, x) -> tuple[jax.Array, jax.Array]:
+        return cell(carry, x)
+
+      _, y = unroll(cell, carry, x)
+      return y
+
+    x = jnp.ones((16, 10, 20))
+    y = rnn_forward(cell, x)
+    print(y.shape)
+
 
 class TestRemat(absltest.TestCase):
   def test_basic_remat(self):
