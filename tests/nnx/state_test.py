@@ -15,6 +15,8 @@
 from absl.testing import absltest
 
 from flax import nnx
+import jax
+from jax import numpy as jnp
 
 
 class StateTest(absltest.TestCase):
@@ -74,6 +76,21 @@ class StateTest(absltest.TestCase):
     assert state.layers[0].kernel.value.shape == (1, 2)
     assert module.layers[1].kernel.value.shape == (2, 3)
     assert state.layers[1].kernel.value.shape == (2, 3)
+
+  def test_pure_dict(self):
+    module = nnx.Linear(4, 5, rngs=nnx.Rngs(0))
+    state = nnx.state(module)
+    pure_dict = state.to_pure_dict()
+    assert isinstance(pure_dict, dict)
+    assert isinstance(pure_dict['kernel'], jax.Array)
+    assert isinstance(pure_dict['bias'], jax.Array)
+    state.replace_by_pure_dict(jax.tree.map(jnp.zeros_like, pure_dict))
+    assert isinstance(state, nnx.State)
+    assert isinstance(state.kernel, nnx.VariableState)
+    assert jnp.array_equal(state.kernel.value, jnp.zeros((4, 5)))
+    assert state.kernel.type == nnx.Param
+    nnx.update(module, state)
+    assert jnp.array_equal(module(jnp.ones((3, 4))), jnp.zeros((3, 5)))
 
 
 if __name__ == '__main__':
