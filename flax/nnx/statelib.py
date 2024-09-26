@@ -28,6 +28,8 @@ K = tp.TypeVar('K', bound=tp.Hashable)
 V = tp.TypeVar('V')
 
 FlatState = dict[PathParts, V]
+ExtractValueFn = tp.Callable[[tp.Any], tp.Any]
+SetValueFn = tp.Callable[[V, tp.Any], V]
 
 
 class NestedStateRepr(reprlib.Representable):
@@ -157,6 +159,28 @@ class State(MutableMapping[K, V], reprlib.Representable):
       flat_state = dict(flat_state)
     nested_state = traversals.unflatten_mapping(flat_state)
     return cls(nested_state)
+
+  def to_pure_dict(self,
+                   extract_fn: ExtractValueFn | None = None
+                   ) -> dict[str, tp.Any]:
+    # Works for nnx.Variable and nnx.VariableState
+    if extract_fn is None:
+      extract_fn = lambda x: x.value if hasattr(x, 'value') else x
+    flat_values = {k: extract_fn(x) for k, x in self.flat_state().items()}
+    return traversals.unflatten_mapping(flat_values)
+
+  def replace_by_pure_dict(self,
+                           pure_dict: dict[str, tp.Any],
+                           replace_fn: SetValueFn | None = None):
+    # Works for nnx.Variable and nnx.VariableState
+    if replace_fn is None:
+      replace_fn = lambda x, v: x.replace(v) if hasattr(x, 'replace') else v
+    current_flat = self.flat_state()
+    for kp, v in traversals.flatten_mapping(pure_dict).items():
+      if kp not in current_flat:
+        raise ValueError(f'key in pure_dict not available in state: {kp}')
+      current_flat[kp] = replace_fn(current_flat[kp], v)
+    self.update(traversals.unflatten_mapping(current_flat))
 
   @tp.overload
   def split(self, first: filterlib.Filter, /) -> State[K, V]: ...
