@@ -437,8 +437,9 @@ def _get_module_table(
 
       def _get_variables():
         return module.init(*args, **kwargs)
-
-      variables = jax.eval_shape(_get_variables)
+      # TODO(cgarciae): is it possible to avoid leaking tracers for summaries?
+      with jax.check_tracer_leaks(False):
+        variables = jax.eval_shape(_get_variables)
       calls = module_lib._context.call_info_stack[-1].calls
       calls.sort(key=lambda c: c.index)
 

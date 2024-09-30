@@ -127,7 +127,7 @@ def _partial_pack(
     out_variable_filters: Sequence[CollectionFilter],
     rng_filters: Sequence[PRNGSequenceFilter],
     name=None,
-) -> tuple[Callable[..., Any], Callable[..., Any], Any, Any, Callable[..., Any], Callable[..., Any]]:
+) -> tuple[Callable[..., Any], Callable[..., Any], Any, Any, Callable[..., Any]]:
   """Pack variables and rngs for functional transformations.
 
   The _partial_pack function is the building block for all other lifted transformations.
@@ -175,16 +175,11 @@ def _partial_pack(
     inner_rng_counters.append(rng_counters)
   rng_groups_xs_t = _transpose(rng_groups_xs)
 
-  inner_scopes: list[Scope] = []
-
   def scope_fn(
       variable_groups_xs_t,
       rng_groups_xs_t,
       mutable_filter: CollectionFilter = True,
   ):
-    nonlocal inner_scopes
-    for inner_scope in inner_scopes:
-      inner_scope.invalidate()
     inner_scopes = []
     mutable: Filter = False
     for out_filter in out_variable_filters:
@@ -260,10 +255,6 @@ def _partial_pack(
 
     return _transpose(out_variable_groups_xs)
 
-  def invalidate_scopes_fn():
-    for inner_scope in inner_scopes:
-      inner_scope.invalidate()
-
   def publish_results_fn(out_variable_groups_xs_t):
     out_variable_groups_xs = _transpose(out_variable_groups_xs_t)
     for scope, out_variable_groups, rng_counters in zip(
@@ -278,13 +269,13 @@ def _partial_pack(
             scope.put_variable(col_name, var_name, value)
 
   return (
-        scope_fn,
-        repack_fn,
-        variable_groups_xs_t,
-        rng_groups_xs_t,
-        publish_results_fn,
-        invalidate_scopes_fn,
+      scope_fn,
+      repack_fn,
+      variable_groups_xs_t,
+      rng_groups_xs_t,
+      publish_results_fn,
     )
+
 
 def pack(
     fn: Callable[..., Any],
@@ -322,24 +313,20 @@ def pack(
         variable_groups_xs_t,
         rng_groups_xs_t,
         publish_results_fn,
-        invalidate_scopes_fn,
     ) = _partial_pack(scope_tree, in_variable_filters, out_variable_filters, rng_filters, name)
-    try:
-      if enable_kwargs:
-        y, out_variable_groups_xs_t = fn(
-            scope_fn,
-            repack_fn,
-            variable_groups_xs_t,
-            rng_groups_xs_t,
-            *args,
-            **kwargs,
-        )
-      else:
-        y, out_variable_groups_xs_t = fn(
-            scope_fn, repack_fn, variable_groups_xs_t, rng_groups_xs_t, *args
-        )
-    finally:
-      invalidate_scopes_fn()
+    if enable_kwargs:
+      y, out_variable_groups_xs_t = fn(
+          scope_fn,
+          repack_fn,
+          variable_groups_xs_t,
+          rng_groups_xs_t,
+          *args,
+          **kwargs,
+      )
+    else:
+      y, out_variable_groups_xs_t = fn(
+          scope_fn, repack_fn, variable_groups_xs_t, rng_groups_xs_t, *args
+      )
     publish_results_fn(out_variable_groups_xs_t)
     return y
 

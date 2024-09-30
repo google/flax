@@ -31,6 +31,7 @@ from typing import (
   TypeVar,
   Union,
 )
+import weakref
 from collections.abc import Callable, Iterable, Mapping, Sequence
 
 from flax import core
@@ -440,20 +441,24 @@ class _HashableProxy:
   function should be retraced or not
   """
 
-  module: Module
+  module_ref: weakref.ref
   hash_key: int
 
   @classmethod
   def from_module(cls, module: Module) -> '_HashableProxy':
     fingerprint = _module_fingerprint(module)
     hash_key = hash(fingerprint)
-    return cls(module, hash_key)
+    return cls(weakref.ref(module), hash_key)
 
   def __hash__(self):
     return self.hash_key
 
   def __eq__(self, other):
     return isinstance(other, _HashableProxy) and self.hash_key == other.hash_key
+
+  @property
+  def module(self):
+    return self.module_ref()
 
 
 def _module_fingerprint(module: Module) -> tuple[type[Any], Any]:

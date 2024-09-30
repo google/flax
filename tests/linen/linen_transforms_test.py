@@ -2627,6 +2627,25 @@ class TransformTest(parameterized.TestCase):
     y = Top().apply(vs, jnp.ones((2, 5)))
     assert vs['aux']['vfoo']['v'].value.shape == ()
 
+  def test_vjp_tracer_leak(self):
+    class LearnScale(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('scale', nn.initializers.zeros, ())
+        return p * x
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        y, bwd = nn.vjp(lambda mdl, x: mdl(x), LearnScale(), x)
+        params_grad, x_grad = bwd(jnp.ones(y.shape))
+        return y, params_grad, x_grad
+    key = jax.random.PRNGKey(0)
+    x = jnp.ones((2, 3))
+    foo = Foo()
+    with jax.check_tracer_leaks():
+      params = foo.init(key, x)
+      foo.apply(params, x)
+
 
 if __name__ == '__main__':
   absltest.main()
