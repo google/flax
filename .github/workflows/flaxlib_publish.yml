@@ -1,0 +1,94 @@
+name: Flaxlib - Build and upload to PyPI
+
+# for testing only:
+on:
+  push:
+    branches: [main]
+    paths: ['flaxlib/**']
+  release:
+    types: [published]
+
+jobs:
+  build_wheels:
+    if: github.event_name == 'push' && contains(github.event.head_commit.modified, 'flaxlib/')
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macos-13 is an intel runner, macos-14 is apple silicon
+        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: Install cibuildwheel
+      run: python -m pip install cibuildwheel==2.21.0
+
+    - name: Build wheels
+      run: python -m cibuildwheel --output-dir ./flaxlib/wheelhouse ./flaxlib
+      env:
+        # rust doesn't seem to be available for musl linux on i686
+        CIBW_SKIP: "*-musllinux_i686"
+        CIBW_ENVIRONMENT: 'PATH="$HOME/.cargo/bin:$PATH" CARGO_TERM_COLOR="always"'
+        CIBW_ENVIRONMENT_WINDOWS: 'PATH="$UserProfile\.cargo\bin;$PATH"'
+        CIBW_BEFORE_BUILD: rustup show
+        CIBW_BEFORE_BUILD_LINUX: |
+          curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable --profile=minimal -y &&
+          rustup show
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+        path: ./flaxlib/wheelhouse/*.whl
+
+  build_sdist:
+    if: github.event_name == 'push' && contains(github.event.head_commit.modified, 'flaxlib/')
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: Build sdist
+      run: pipx run build --sdist flaxlib
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: cibw-sdist
+        path: ./flaxlib/dist/*.tar.gz
+
+  upload_pypi:
+    if: github.event_name == 'push' && contains(github.event.head_commit.modified, 'flaxlib/')
+    name: Upload to PyPI
+    needs: [build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+    - uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install setuptools build wheel twine
+    - uses: actions/download-artifact@v4
+      with:
+        # unpacks all CIBW artifacts into dist/
+        pattern: cibw-*
+        path: ./flaxlib/dist
+        merge-multiple: true
+
+    - name: Build and publish
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.FLAXLIB_PYPI_TOKEN }}
+      run: |
+        twine upload flaxlib/dist/*
