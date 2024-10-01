@@ -1,11 +1,11 @@
 # This workflows will upload a Python Package using Twine when a release is created
 # For more information see: https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
 
-name: Upload Python Package
+name: Flax - Build and upload to PyPI
 
 on:
   release:
-    types: [created]
+    types: [published]
 
 jobs:
   deploy:

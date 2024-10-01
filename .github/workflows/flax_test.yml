@@ -1,7 +1,7 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: Build
+name: Flax - Test
 
 on:
   push:
@@ -70,7 +70,7 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    - uses: yezz123/setup-uv@v4
+    - uses: astral-sh/setup-uv@v2
       with:
         uv-version: "0.3.0"
     - name: Install standalone dependencies only
@@ -104,23 +104,17 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    - uses: yezz123/setup-uv@v4
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v2
       with:
-        uv-version: "0.3.0"
-    - name: Cached virtual environment
-      id: venv_cache
-      uses: actions/cache@v3
-      with:
-        path: .venv
-        key: pip-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('uv.lock') }}
-    - name: Install Dependencies for cache
-      if: steps.venv_cache.outputs.cache-hit != 'true'
+        version: "0.3.0"
+    - name: Setup Rust (flaxlib)
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: Install dependencies
       run: |
-        if [ -d ".venv" ]; then rm -rf .venv; fi
-        uv sync --locked --all-extras
-    - name: Check lockfile
-      run: |
-        uv sync --locked --all-extras
+        uv sync --locked --extra all --extra testing --extra docs
+        uv pip install ./flaxlib
     - name: Install JAX
       run: |
         if [[ "${{ matrix.jax-version }}" == "newest" ]]; then

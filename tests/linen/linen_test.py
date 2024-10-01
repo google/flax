@@ -1263,7 +1263,7 @@ class Fp8Test(parameterized.TestCase):
     # Used to cast the inputs to be representable in FP8, so that the difference
     # of the results from the original gemm and fp8 gemm is small.
     cast_to_representable = functools.partial(
-      fp8_ops.quantize_dequantize,
+      fp8_ops.qdq,
       scale=jnp.ones((1,)),
       compute_dtype=jnp.float32,
     )
