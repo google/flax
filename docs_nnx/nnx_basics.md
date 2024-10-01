@@ -56,9 +56,7 @@ class Linear(nnx.Module):
 
 `nnx.Variable`'s inner values can be accessed using the `.value` property, however
 for convenience they implement all numeric operators and can be used directly in
-arithmetic expressions (as shown above). Additionally, Variables can passed
-to any JAX function as they implement the `__jax_array__` protocol (as long as their
-inner value is a JAX array).
+arithmetic expressions (as shown above).
 
 To actually initialize a Module you simply call the constructor, all the parameters
 of a Module are usually created eagerly. Since Modules hold their own state methods
