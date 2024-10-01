@@ -42,7 +42,7 @@ After July 30 2023, Flax's legacy `flax.training.checkpoints` API will be deprec
 
 For backward-compatibility, this guide shows the Orbax-equivalent calls in the Flax legacy `flax.training.checkpoints` API.
 
-If you need to learn more about `orbax.checkpoint`, refer to the [Orbax docs](https://github.com/google/orbax/blob/main/docs/checkpoint.md).
+If you need to learn more about `orbax.checkpoint`, refer to the [Orbax docs](https://orbax.readthedocs.io/en/latest/).
 
 
 
@@ -130,7 +130,7 @@ orbax_checkpointer.save('/tmp/flax_ckpt/orbax/single_save', ckpt, save_args=save
 
 Next, to use versioning and automatic bookkeeping features, you need to wrap `orbax.checkpoint.CheckpointManager` over `orbax.checkpoint.PyTreeCheckpointer`.
 
-In addition, provide `orbax.checkpoint.CheckpointManagerOptions` that customizes your needs, such as how often and on what criteria you prefer old checkpoints be deleted. See [documentation](https://github.com/google/orbax/blob/main/docs/checkpoint.md#checkpointmanager) for a full list of options offered.
+In addition, provide `orbax.checkpoint.CheckpointManagerOptions` that customizes your needs, such as how often and on what criteria you prefer old checkpoints be deleted. See [documentation](https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html) for a full list of options offered.
 
 `orbax.checkpoint.CheckpointManager` should be placed at the top-level outside your training steps to manage your saves.
 
@@ -284,7 +284,7 @@ restored
 
 On the other hand, if the reference object contains a value that is not available in the checkpoint, the checkpointing code will by default warn that some data is not compatible.
 
-To bypass the error, you need to pass an Orbax [`transform`](https://github.com/google/orbax/blob/main/docs/checkpoint.md#transformations) that teaches Orbax how to conform this checkpoint into the structure of the `custom_target`.
+To bypass the error, you need to pass an Orbax [`transform`](https://orbax.readthedocs.io/en/latest/guides/checkpoint/transformations.html) that teaches Orbax how to conform this checkpoint into the structure of the `custom_target`.
 
 In this case, pass a default `{}` that lets Orbax use values in the `custom_target` to fill in the blank. This allows you to restore an old checkpoint into a new data structure, the `CustomTrainState`.
 
@@ -324,7 +324,7 @@ checkpoints.restore_checkpoint('/tmp/flax_ckpt/flax-checkpointing', target=custo
 
 ##### With the legacy API
 
-Using the legacy `flax.training.checkpoints` API, similar things are doable too, but they are not as flexible as the [Orbax Transformations](https://github.com/google/orbax/blob/main/docs/checkpoint.md#transformations).
+Using the legacy `flax.training.checkpoints` API, similar things are doable too, but they are not as flexible as the [Orbax Transformations](https://orbax.readthedocs.io/en/latest/guides/checkpoint/transformations.html).
 
 You need to restore the checkpoint to a raw dict with `target=None`, modify the structure accordingly, and then deserialize it back to the original target.
 
