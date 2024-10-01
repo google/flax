@@ -116,7 +116,7 @@ announcement = """
   href="https://flax-linen.readthedocs.io/en/latest"
   style="text-decoration: none; color: white;"
 >
-  This Flax NNX. Click here for <b>Flax Linen</b>.
+  <span style="color: lightgray;">[Flax NNX]</span> Click here for the old <b>Flax Linen</b>
 </a>
 """
 
