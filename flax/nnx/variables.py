@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import functools
 from functools import partial
 import typing as tp
