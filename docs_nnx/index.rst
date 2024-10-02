@@ -185,6 +185,7 @@ Learn more
 
    nnx_basics
    mnist_tutorial
+   why
    guides/index
    examples/index
    The Flax philosophy <philosophyhttps://flax.readthedocs.io/en/latest/philosophy.html>
