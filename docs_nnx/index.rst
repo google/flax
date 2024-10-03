@@ -1,5 +1,5 @@
 
-Flax NNX
+Flax
 ========
 .. div:: sd-text-left sd-font-italic
 
@@ -8,16 +8,19 @@ Flax NNX
 
 ----
 
-**Flax NNX is a simplified API that makes it easier to create, inspect,
+Flax delivers an **end-to-end and flexible user experience for researchers
+who use JAX with neural networks**. Flax
+exposes the full power of `JAX <https://jax.readthedocs.io>`__.
+
+At its core is **Flax NNX, a simplified API that makes it easier to create, inspect,
 debug, and analyze neural networks in JAX.** It has first class support
 for Python reference semantics, allowing users to express their models using regular
-Python objects. Flax NNX is an evolution of the previous Flax Linen APIs, and it takes years of
+Python objects. Flax NNX is an evolution of the previous Flax Linen APIs, and it took years of
 experience to bring a simpler and more user-friendly experience.
 
 .. note::
-   Flax Linen is not going to be deprecated in the near future as most of our users still
+   Flax Linen API is not going to be deprecated in the near future as most of our users still
    rely on this API, however new users are encouraged to use Flax NNX.
-
    For existing Linen users to move to NNX, check out the `evolution guide <guides/linen_to_nnx.html>`_.
 
 Features
@@ -76,7 +79,7 @@ Features
          .. div:: sd-font-normal
 
             Flax NNX makes it very easy to integrate objects with regular JAX code
-            via the `Functional API <nnx_basics.html#the-functional-api>`__.
+            via the `Functional API <nnx_basics.html#the-flax-functional-api>`__.
 
 Basic usage
 ^^^^^^^^^^^^
@@ -158,23 +161,30 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`sync_alt;2em` Flax vs JAX Transformations
+      .. card:: :material-regular:`library_books;2em` Guides
          :class-card: sd-text-black sd-bg-light
-         :link: transforms.html
+         :link: guides/index.html
 
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`transform;2em` Haiku and Flax Linen vs Flax NNX
+      .. card:: :material-regular:`transform;2em` Flax Linen to Flax NNX
          :class-card: sd-text-black sd-bg-light
-         :link: haiku_linen_vs_nnx.html
+         :link: guides/linen_to_nnx.html
 
    .. grid-item::
       :columns: 6 6 6 4
 
       .. card:: :material-regular:`menu_book;2em` API reference
          :class-card: sd-text-black sd-bg-light
-         :link: ../api_reference/flax.nnx/index.html
+         :link: /api_reference/index.html
+
+   .. grid-item::
+      :columns: 6 6 6 4
+
+      .. card:: :material-regular:`import_contacts;2em` Glossary
+         :class-card: sd-text-black sd-bg-light
+         :link: glossary.html
 
 
 ----
@@ -187,6 +197,7 @@ Learn more
    mnist_tutorial
    guides/index
    examples/index
+   glossary
    The Flax philosophy <philosophyhttps://flax.readthedocs.io/en/latest/philosophy.html>
    How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
    api_reference/index
