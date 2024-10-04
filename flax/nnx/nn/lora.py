@@ -31,14 +31,6 @@ A = tp.TypeVar('A')
 
 default_kernel_init = initializers.lecun_normal()
 
-"""
-This module provides utilities for handling Low-Rank Adaptation (LoRA) layers.
-
-Classes:
-    LoRA: A standalone Low-Rank Adaptation (LoRA) layer.
-    LoRALinear: An `nnx.Linear` layer in which the output will be LoRAified.
-"""
-
 class LoRAParam(variables.Param[A]):
   pass
 
@@ -124,16 +116,6 @@ class LoRALinear(Linear):
 
   The model state structure will be compatible with that of Linear.
 
-  Attributes:
-    in_features (int): The number of input features.
-    out_features (int): The number of output features.
-    lora_rank (int): The rank of the LoRA dimension.
-    base_module (Module, optional): A base module to call and substitute, if possible.
-    dtype (Dtype, optional): The dtype of the computation (default: infer from input and params).
-    param_dtype (Dtype): The dtype passed to parameter initializers (default: float32).
-    precision (jax.lax.Precision, optional): Numerical precision of the computation.
-    kernel_init (Initializer): Initializer function for the weight matrices.
-    lora_param_type (Type[variables.Variable]): The type of the LoRA params.
 
   Example usage::
   
