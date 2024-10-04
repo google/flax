@@ -18,6 +18,8 @@ graph
 .. autoclass:: GraphDef
   :members:
 
+.. autofunction:: flatten
+
 .. autoclass:: UpdateContext
   :members:
 
