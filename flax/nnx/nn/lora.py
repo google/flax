@@ -35,8 +35,8 @@ default_kernel_init = initializers.lecun_normal()
 This module provides utilities for handling Low-Rank Adaptation (LoRA) layers.
 
 Classes:
-    LoRA: A standalone LoRA layer.
-    LoRALinear: A Linear layer enhanced with LoRA.
+    LoRA: A standalone Low-Rank Adaptation (LoRA) layer.
+    LoRALinear: An `nnx.Linear` layer in which the output will be LoRAified.
 """
 
 class LoRAParam(variables.Param[A]):
@@ -45,9 +45,9 @@ class LoRAParam(variables.Param[A]):
 
 
 class LoRA(Module):
-    """A standalone LoRA layer.
+    """A standalone Low-Rank Adaptation (LoRA) layer.
 
-    This layer applies a Low-Rank Adaptation (LoRA) transformation to the input.
+    This layer applies LoRA transformation to the input.
     It can also wrap around an existing module to add the LoRA transformation
     to its output.
 
@@ -81,7 +81,10 @@ class LoRA(Module):
         >>> y = layer(jnp.ones((16, 3)))
         >>> y.shape
         (16, 4)
-    """
+
+        Raises:
+            ValueError: If `base_module` is not callable.
+  """
 
   def __init__(
     self,
@@ -124,8 +127,18 @@ class LoRALinear(Linear):
 
   The model state structure will be compatible with that of Linear.
 
-  Example usage::
+  Attributes:
+    in_features (int): The number of input features.
+    out_features (int): The number of output features.
+    lora_rank (int): The rank of the LoRA dimension.
+    base_module (Module, optional): A base module to call and substitute, if possible.
+    dtype (Dtype, optional): The dtype of the computation (default: infer from input and params).
+    param_dtype (Dtype): The dtype passed to parameter initializers (default: float32).
+    precision (jax.lax.Precision, optional): Numerical precision of the computation.
+    kernel_init (Initializer): Initializer function for the weight matrices.
+    lora_param_type (Type[variables.Variable]): The type of the LoRA params.
 
+  Examples:
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
     >>> linear = nnx.Linear(3, 4, rngs=nnx.Rngs(0))
