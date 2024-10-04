@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 ******************************
-Flax
+Flax Linen
 ******************************
 
 
@@ -15,14 +15,14 @@ Flax
 
 ----
 
-Flax delivers an **end-to-end and flexible user experience for researchers
+Flax Linen delivers an **end-to-end and flexible user experience for researchers
 who use JAX with neural networks**. Flax
 exposes the full power of `JAX <https://jax.readthedocs.io>`__. It is made up of
 loosely coupled libraries, which are showcased with end-to-end integrated
 `guides <https://flax.readthedocs.io/en/latest/guides/index.html>`__
 and `examples <https://flax.readthedocs.io/en/latest/examples.html>`__.
 
-Flax is used by
+Flax Linen is used by
 `hundreds of projects (and growing) <https://github.com/google/flax/network/dependents?package_id=UGFja2FnZS01MjEyMjA2MA%3D%3D>`__,
 both in the open source community
 (like `Hugging Face <https://huggingface.co/flax-community>`__)

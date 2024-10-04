@@ -6,6 +6,8 @@ models, and side-by-side comparisions to help you migrate your code from the Lin
 
 Before this guide, it's highly recommended to read through `The Basics of Flax NNX <https://flax-nnx.readthedocs.io/en/latest/nnx_basics.html>`__ to learn about the core concepts and code examples of Flax NNX.
 
+This guide mainly covers converting arbitratry Linen code to NNX. If you want to play it safe and convert your codebase iteratively, check out the guide that allows you to `use NNX and Linen code together <https://flax-nnx.readthedocs.io/en/latest/guides/bridge_guide.html>`__
+
 
 .. testsetup:: Linen, NNX
 
