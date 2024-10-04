@@ -62,7 +62,8 @@ class LoRA(Module):
         kernel_init (Initializer): Initializer function for the weight matrices.
         lora_param_type (Type[variables.Variable]): The type of the LoRA params.
 
-    Examples:
+    Example usage::
+
         >>> from flax import nnx
         >>> import jax, jax.numpy as jnp
         >>> layer = nnx.LoRA(3, 2, 4, rngs=nnx.Rngs(0))
@@ -138,7 +139,8 @@ class LoRALinear(Linear):
     kernel_init (Initializer): Initializer function for the weight matrices.
     lora_param_type (Type[variables.Variable]): The type of the LoRA params.
 
-  Examples:
+  Example usage::
+  
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
     >>> linear = nnx.Linear(3, 4, rngs=nnx.Rngs(0))
