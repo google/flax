@@ -10,6 +10,7 @@ graph
 .. autofunction:: update
 .. autofunction:: pop
 .. autofunction:: state
+.. autofunction:: graph
 .. autofunction:: graphdef
 .. autofunction:: iter_graph
 .. autofunction:: clone
@@ -17,8 +18,6 @@ graph
 
 .. autoclass:: GraphDef
   :members:
-
-.. autofunction:: flatten
 
 .. autoclass:: UpdateContext
   :members:
