@@ -45,46 +45,42 @@ class LoRAParam(variables.Param[A]):
 
 
 class LoRA(Module):
-    """A standalone Low-Rank Adaptation (LoRA) layer.
+  """A standalone Low-Rank Adaptation (LoRA) layer.
 
-    This layer applies LoRA transformation to the input.
-    It can also wrap around an existing module to add the LoRA transformation
-    to its output.
+  Attributes:
+      in_features (int): The number of input features.
+      lora_rank (int): The rank of the LoRA dimension.
+      out_features (int): The number of output features.
+      base_module (Module, optional): A base module to call and substitute, if possible.
+      dtype (Dtype, optional): The dtype of the computation (default: infer from input and params).
+      param_dtype (Dtype): The dtype passed to parameter initializers (default: float32).
+      precision (jax.lax.Precision, optional): Numerical precision of the computation.
+      kernel_init (Initializer): Initializer function for the weight matrices.
+      lora_param_type (Type[variables.Variable]): The type of the LoRA params.
 
-    Attributes:
-        in_features (int): The number of input features.
-        lora_rank (int): The rank of the LoRA dimension.
-        out_features (int): The number of output features.
-        base_module (Module, optional): A base module to call and substitute, if possible.
-        dtype (Dtype, optional): The dtype of the computation (default: infer from input and params).
-        param_dtype (Dtype): The dtype passed to parameter initializers (default: float32).
-        precision (jax.lax.Precision, optional): Numerical precision of the computation.
-        kernel_init (Initializer): Initializer function for the weight matrices.
-        lora_param_type (Type[variables.Variable]): The type of the LoRA params.
+  Example usage::
 
-    Example usage::
+      >>> from flax import nnx
+      >>> import jax, jax.numpy as jnp
+      >>> layer = nnx.LoRA(3, 2, 4, rngs=nnx.Rngs(0))
+      >>> layer.lora_a.value.shape
+      (3, 2)
+      >>> layer.lora_b.value.shape
+      (2, 4)
+      >>> # Wrap around existing layer
+      >>> linear = nnx.Linear(3, 4, rngs=nnx.Rngs(0))
+      >>> wrapper = nnx.LoRA(3, 2, 4, base_module=linear, rngs=nnx.Rngs(1))
+      >>> assert wrapper.base_module == linear
+      >>> wrapper.lora_a.value.shape
+      (3, 2)
+      >>> layer.lora_b.value.shape
+      (2, 4)
+      >>> y = layer(jnp.ones((16, 3)))
+      >>> y.shape
+      (16, 4)
 
-        >>> from flax import nnx
-        >>> import jax, jax.numpy as jnp
-        >>> layer = nnx.LoRA(3, 2, 4, rngs=nnx.Rngs(0))
-        >>> layer.lora_a.value.shape
-        (3, 2)
-        >>> layer.lora_b.value.shape
-        (2, 4)
-        >>> # Wrap around existing layer
-        >>> linear = nnx.Linear(3, 4, rngs=nnx.Rngs(0))
-        >>> wrapper = nnx.LoRA(3, 2, 4, base_module=linear, rngs=nnx.Rngs(1))
-        >>> assert wrapper.base_module == linear
-        >>> wrapper.lora_a.value.shape
-        (3, 2)
-        >>> layer.lora_b.value.shape
-        (2, 4)
-        >>> y = layer(jnp.ones((16, 3)))
-        >>> y.shape
-        (16, 4)
-
-        Raises:
-            ValueError: If `base_module` is not callable.
+      Raises:
+          ValueError: If `base_module` is not callable.
   """
 
   def __init__(
