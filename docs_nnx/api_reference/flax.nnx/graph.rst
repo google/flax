@@ -14,10 +14,11 @@ graph
 .. autofunction:: iter_graph
 .. autofunction:: clone
 .. autofunction:: call
-.. autofunction:: flatten
 
 .. autoclass:: GraphDef
   :members:
+
+.. autofunction:: flatten
 
 .. autoclass:: UpdateContext
   :members:
