@@ -156,16 +156,15 @@ class LoRALinear(Linear):
     (16, 4)
 
   Attributes:
-    in_features: the number of input features.
-    out_features: the number of output features.
-    lora_rank: the rank of the LoRA dimension.
-    base_module: a base module to call and substitute, if possible.
-    dtype: the dtype of the computation (default: infer from input and params).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
-      for details.
-    kernel_init: initializer function for the weight matrices.
-    lora_param_type: the type of the LoRA params.
+    in_features (int): The number of input features.
+    out_features (int): The number of output features.
+    lora_rank (int): The rank of the LoRA dimension.
+    base_module (Module, optional): A base module to call and substitute, if possible.
+    dtype (Dtype, optional): The dtype of the computation (default: infer from input and params).
+    param_dtype (Dtype): The dtype passed to parameter initializers (default: float32).
+    precision (jax.lax.Precision, optional): Numerical precision of the computation.
+    kernel_init (Initializer): Initializer function for the weight matrices.
+    lora_param_type (Type[variables.Variable]): The type of the LoRA params.
   """
 
   def __init__(
