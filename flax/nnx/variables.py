@@ -404,6 +404,13 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def __jax_array__(self):
     return self.value
 
+  # pickle support
+  def __getstate__(self):
+    return vars(self).copy()
+
+  def __setstate__(self, state):
+    vars(self).update(state)
+
   # --------------------------------------------
   # proxy methods
   # --------------------------------------------
