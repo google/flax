@@ -370,6 +370,7 @@ class Linear(Module):
       (((inputs.ndim - 1,), (0,)), ((), ())),
       precision=self.precision,
     )
+    assert self.use_bias == (bias is not None)
     if bias is not None:
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y

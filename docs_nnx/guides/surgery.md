@@ -152,31 +152,24 @@ except Exception as e:
 But you can load the parameter tree as a raw dictionary, make the renames, and generate a new state that is guaranteed to be compatible with your new model definition.
 
 ```{code-cell} ipython3
-def module_from_variables_dict(module_factory, variables, map_key_fn):
-  if map_key_fn is None:
-    map_key_fn = lambda path: path
-  mdl = nnx.eval_shape(module_factory)
-  graph_def, state = nnx.split(mdl)
-  state = state.flat_state()
-  for path, val in flax.traverse_util.flatten_dict(variables).items():
-    mapped_path = map_key_fn(path)
-    if mapped_path not in state:
-      raise ValueError(f"{mapped_path} doesn't exist in {state.keys()}")
-    state[mapped_path].value = val
-  state = nnx.State.from_flat_path(state)
-  return nnx.merge(graph_def, state)
+def process_raw_dict(raw_state_dict):
+  flattened = nnx.traversals.flatten_mapping(raw_state_dict)
+  # Cut off the '.value' postfix on every leaf path.
+  flattened = {(path[:-1] if path[-1] == 'value' else path): value
+               for path, value in flattened.items()}
+  return nnx.traversals.unflatten_mapping(flattened)
 
-# Make your local change on the checkpoint.
-raw = checkpointer.restore('/tmp/nnx-surgery-state')
-pprint(raw)
-raw['layer1'], raw['layer2'] = raw['linear1'], raw['linear2']
-del raw['linear1'], raw['linear2']
+# Make your local change on the checkpoint dictionary.
+raw_dict = checkpointer.restore('/tmp/nnx-surgery-state')
+pprint(raw_dict)
+raw_dict['layer1'] = raw_dict.pop('linear1')
+raw_dict['layer2'] = raw_dict.pop('linear2')
 
-restored_model = module_from_variables_dict(
-  lambda: nnx.eval_shape(lambda: ModifiedTwoLayerMLP(4, rngs=nnx.Rngs(0))),
-  raw,
-  lambda path: path[:-1] if path[-1] == 'raw_value' else path
-)
+# Fit it into the model state.
+abs_model = nnx.eval_shape(lambda: ModifiedTwoLayerMLP(4, rngs=nnx.Rngs(0)))
+graph_def, state = nnx.split(abs_model)
+state.replace_by_pure_dict(process_raw_dict(raw_dict))
+restored_model = nnx.merge(graph_def, state)
 
 np.testing.assert_allclose(restored_model(jnp.ones((3, 4))), old_model(jnp.ones((3, 4))))
 ```
@@ -218,7 +211,7 @@ Use `nnx.jit`'s efficiently compiled code to make sure only the state parameters
 old_state = nnx.state(TwoLayerMLP(4, rngs=nnx.Rngs(0)))
 
 # Use `nnx.jit` (which wraps `jax.jit`) to automatically skip unused arrays - memory efficient!
-@functools.partial(nnx.jit, donate_argnums=0, static_argnums=1)
+@nnx.jit(donate_argnums=0)
 def partial_init(old_state, rngs):
   model = TwoLayerMLP(4, rngs=rngs)
   # Create a new state.
@@ -232,4 +225,12 @@ print(f'Number of jax arrays in memory at start: {len(jax.live_arrays())}')
 good_model = partial_init(old_state, nnx.Rngs(42))
 print(f'Number of jax arrays in memory at end: {len(jax.live_arrays())}'
       ' (2 new created - lora_a and lora_b)')
+```
+
+```{code-cell} ipython3
+
+```
+
+```{code-cell} ipython3
+
 ```
