@@ -98,12 +98,13 @@ Here is a list of all the callable Filters included in Flax NNX and their DSL li
 
 Let see the DSL in action with a `nnx.vmap` example. Lets say we want vectorized all parameters
 and `dropout` Rng(Keys|Counts) on the 0th axis, and broadcasted the rest. To do so we can
-use the following filters:
+use the following filters to define a `nnx.StateAxes` object that we can pass to `nnx.vmap`'s `in_axes`
+to specify how `model`'s various substates should be vectorized:
 
 ```{code-cell} ipython3
-from functools import partial
+state_axes = nnx.StateAxes({(nnx.Param, 'dropout'): 0, ...: None})
 
-@partial(nnx.vmap, in_axes=(None, 0), state_axes={(nnx.Param, 'dropout'): 0, ...: None})
+@nnx.vmap(in_axes=(state_axes, 0))
 def forward(model, x):
   ...
 ```
@@ -140,7 +141,7 @@ from typing import Any
 KeyPath = tuple[nnx.graph.Key, ...]
 
 def split(node, *filters):
-  graphdef, state, _ = nnx.graph.flatten(node)
+  graphdef, state = nnx.graph.flatten(node)
   predicates = [nnx.filterlib.to_predicate(f) for f in filters]
   flat_states: list[dict[KeyPath, Any]] = [{} for p in predicates]
 

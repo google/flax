@@ -48,7 +48,7 @@ class Count(nnx.Variable):   # custom Variable types define the "collections"
   pass
 
 model = MLP(5, 4, rngs=nnx.Rngs(0))  # no special `init` method
-model.set_attributes(deterministic=False, use_running_average=False)  # set flags
+model.set_attributes(use_running_average=False)  # set flags
 y = model(jnp.ones((2, 4)))  # call methods directly
 
 print(f'{model = }'[:500] + '\n...')
