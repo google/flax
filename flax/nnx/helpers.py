@@ -32,6 +32,17 @@ TS = tp.TypeVar('TS', bound='TrainState')
 
 
 class Dict(Module, tp.Mapping[str, A]):
+  """ A simple module that behaves like a dictionary.
+
+    This class provides a basic implementation of a dictionary-like data structure,
+    allowing for the storage and retrieval of key-value pairs. It supports common
+    dictionary operations such as item access, assignment, deletion, and iteration
+    over keys, values, and items.
+
+    Attributes:
+        data (dict): The internal storage for the dictionary.
+    """
+
   @tp.overload
   def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /): ...
 
@@ -63,6 +74,16 @@ class Dict(Module, tp.Mapping[str, A]):
     return len(vars(self))
 
 class Sequential(Module):
+  """A module that applies a sequence of functions in order.
+
+    This class provides a basic implementation of a sequential module, which
+    applies a sequence of functions in order to an input. The functions can be
+    any callable object, such as a function, method, or module. The output of
+    each function is passed as input to the next function in the sequence.
+
+    Attributes:
+        layers (list): The sequence of functions to apply.
+    """
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
     self.layers = list(fns)
 
@@ -97,6 +118,20 @@ class ModuleDefApply(tp.Protocol, tp.Generic[M]):
 
 
 class TrainState(tp.Generic[M], struct.PyTreeNode):
+  """A dataclass that holds the state of a training loop.
+
+    This class provides a basic implementation of a training state, which holds
+    the state of a training loop. It contains the parameters of a model, the
+    optimizer state, the current step, and the gradient transformation function
+    used to update the parameters.
+
+    Attributes:
+        graphdef (GraphDef): The graph definition of the model.
+        params (State): The parameters of the model.
+        opt_state (optax.OptState): The optimizer state.
+        step (int): The current step of the training loop.
+        tx (optax.GradientTransformation): The gradient transformation function.
+    """
   graphdef: GraphDef[M]
   params: State
   opt_state: optax.OptState
@@ -113,6 +148,24 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
     step: int = 0,
     **kwargs,
   ):
+    """Creates a new training state.
+
+    This function creates a new training state with the given graph definition,
+    model parameters, optimizer state, and gradient transformation function. It
+    is typically used to initialize the state of a training loop before training
+    a model.
+
+    Args:
+        graphdef: The graph definition of the model.
+        params: The parameters of the model.
+        tx: The gradient transformation function used to update the model parameters.
+        step: The current step of the training loop.
+        kwargs: Additional keyword arguments to pass to the training state.
+    
+    Returns:
+        A new training state with the given parameters.
+    """
+    
     return cls(
       graphdef=graphdef,
       params=params,
@@ -129,6 +182,19 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
   def apply(
     self, state: tp.Union[State, str], *states: tp.Union[State, str]
   ) -> ApplyCaller[tuple[GraphDef[M], State]]:
+    """Applies the model to a set of states.
+
+    This function applies the model to a set of states, producing a new state
+    that contains the output of the model. It is typically used to compute the
+    output of a model given a set of input states.
+
+    Args:
+        state: The state to apply the model to.
+        states: Additional states to apply the model to.
+    
+    Returns:
+        A new state containing the output of the model.
+    """
     states = (state, *states)
 
     _states: list[State] = []
@@ -146,6 +212,20 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
     return self.graphdef.apply(*_states)
 
   def apply_gradients(self: TS, grads: State, **kwargs) -> TS:
+    """
+    Applies gradients to the optimizer to update model parameters.
+
+    This function takes an optimizer and a set of gradients, and applies the gradients
+    to the optimizer to update the model parameters accordingly. It is typically used
+    during the training loop to adjust the model's weights based on the computed gradients.
+
+    Args:
+        optimizer: The optimizer instance used to update the model parameters.
+        gradients: A list or dictionary of gradients to be applied to the optimizer.
+
+    Returns:
+        The updated optimizer with the applied gradients.
+    """
     updates, opt_state = self.tx.update(grads, self.opt_state, self.params)
     params = optax.apply_updates(self.params, updates)  # type: ignore
     step = self.step + 1
@@ -158,7 +238,19 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
 
 
 def has_keyword_arg(func: tp.Callable[..., tp.Any], name: str) -> bool:
-  """Return True if func has keyword-only arguments with the given name."""
+  """Return True if func has keyword-only arguments with the given name.
+
+    This function checks if a callable object has any keyword-only arguments with
+    the given name. It is used to determine if a function accepts a specific keyword
+    argument, which is useful for handling optional arguments in a generic way.
+
+    Args:
+        func: The callable object to check for keyword-only arguments.
+        name: The name of the keyword argument to check for.
+
+    Returns:
+        True if func has a keyword-only argument with the given name, False otherwise.
+    """
   return any(
     param.name == name
     and param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
