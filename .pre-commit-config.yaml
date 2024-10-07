@@ -23,7 +23,7 @@ repos:
   hooks:
   - id: check-toml
   - id: trailing-whitespace
-    exclude: ^docs*/.*\.md$
+    exclude: ^docs.*\.md$
 - repo: https://github.com/kynan/nbstripout
   rev: 0.6.1
   hooks:
