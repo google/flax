@@ -357,7 +357,7 @@ however Linen transforms have the following drawbacks:
   * They accepts other Modules as arguments but not as return values.
 3. They can only be used inside ``apply``.
 
-`Flax NNX transforms <https://flax-nnx.readthedocs.io/en/latest/guides/transforms.html>`_ on the other hand
+`Flax NNX transforms <https://flax.readthedocs.io/en/latest/guides/transforms.html>`_ on the other hand
 are intented to be equivalent to JAX transforms with the exception that they can be used on Modules. This
 means they have the same API as JAX transforms, can accepts Modules on any argument and Modules can be
 returned from them, and they can be used anywhere including the training loop.
