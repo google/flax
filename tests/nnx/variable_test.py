@@ -14,6 +14,7 @@
 
 import typing as tp
 
+import numpy as np
 import jax
 import jax.numpy as jnp
 
@@ -81,6 +82,20 @@ class TestVariableState(absltest.TestCase):
 
     self.assertEqual(result, 6)
 
+  def test_proxy_dlpack(self):
+    v = nnx.Param(jnp.ones((2, 3)))
+
+    self.assertEqual(np.from_dlpack(v).shape, (2, 3))
+
+  def test_proxy_array(self):
+    v = nnx.Param(jnp.ones((2, 3)))
+
+    self.assertEqual(np.asarray(v).shape, (2, 3))
+
+  def test_proxy_array_namespace(self):
+    v = nnx.Param(jnp.ones((2, 3)))
+
+    self.assertEqual(v.__array_namespace__(), jnp)
 
 if __name__ == '__main__':
   absltest.main()

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import dataclasses
+import enum
 import functools
 from functools import partial
 import typing as tp
@@ -661,6 +662,17 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def __ceil__(self) -> A:
     return self.value.__ceil__()  # type: ignore
 
+  def __array__(self, *args, **kwargs):
+    return self.value.__array__(*args, **kwargs)  # type: ignore
+
+  def __array_namespace__(self, *args, **kwargs):
+    return self.value.__array_namespace__(*args, **kwargs)  # type: ignore
+
+  def __dlpack__(self, *args, **kwargs):
+    return self.value.__dlpack__(*args, **kwargs)  # type: ignore
+
+  def __dlpack_device__(self) -> tuple[enum.Enum, int]:
+    return self.value.__dlpack_device__()  # type: ignore
 
 class Param(Variable[A]):
   """The canonical learnable parameter. All learnable parameters
