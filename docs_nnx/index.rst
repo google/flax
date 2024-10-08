@@ -195,6 +195,7 @@ Learn more
 
    nnx_basics
    mnist_tutorial
+   why
    guides/index
    examples/index
    glossary
