@@ -109,15 +109,28 @@ class DenseGeneral(Module):
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
 
+  _dot_dimension_numbers = tuple[
+      tuple[Sequence[int], Sequence[int]], tuple[Sequence[int], Sequence[int]]
+  ]
+
   @compact
-  def __call__(self, inputs: Array) -> Array:
-    """Applies a linear transformation to the inputs along multiple dimensions.
+  def get_inputs_kernel_bias(
+      self, inputs: Array
+  ) -> tuple[Array, Array, Array, Any, _dot_dimension_numbers, Sequence[int]]:
+    """Gets the inputs, kernel and bias arrays in user-defined dtypes.
 
     Args:
       inputs: The nd-array to be transformed.
 
     Returns:
-      The transformed input.
+      The tuple contains [inputs, kernel, bias, dot_general, dot_dimension_nums,
+      out_shape_sequence_int].
+
+      dot_dimension_numbers: The dot dimension number for dot_general -- a tuple
+      of tuples of sequences of ints of the form ``((lhs_contracting_dims,
+      rhs_contracting_dims), (lhs_batch_dims, rhs_batch_dims))``
+
+      output_shape: a sequence of ints representing the output shape.
     """
     features = _canonicalize_tuple(self.features)
     axis = _canonicalize_tuple(self.axis)
@@ -189,16 +202,39 @@ class DenseGeneral(Module):
       dot_general = self.dot_general
     else:
       dot_general = lax.dot_general
+
+    return (
+        inputs,
+        kernel,
+        bias,
+        dot_general,
+        ((axis, contract_ind), (batch_dims, batch_ind)),
+        expanded_batch_shape + features,
+    )
+
+  def __call__(self, inputs: Array) -> Array:
+    """Applies a linear transformation to the inputs along multiple dimensions.
+
+    Args:
+      inputs: The nd-array to be transformed.
+
+    Returns:
+      The transformed input.
+    """
+    inputs, kernel, bias, dot_general, dot_dimension_nums, out_shape = (
+        self.get_inputs_kernel_bias(inputs)
+    )
+
     out = dot_general(
-      inputs,
-      kernel,
-      ((axis, contract_ind), (batch_dims, batch_ind)),
-      precision=self.precision,
+        inputs,
+        kernel,
+        dot_dimension_nums,
+        precision=self.precision,
     )
     # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if self.use_bias:
       # expand bias shape to broadcast bias over batch dims.
-      bias = jnp.reshape(bias, expanded_batch_shape + features)
+      bias = jnp.reshape(bias, out_shape)
       out += bias
     return out
 
