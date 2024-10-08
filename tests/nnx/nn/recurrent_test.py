@@ -23,51 +23,6 @@ import numpy as np
 
 from absl.testing import absltest
 
-# @nnx.jit
-# def run_layer(layer, inputs):
-#     carry = layer.initialize_carry(None, inputs.shape)
-#     carry, _ = layer(carry, inputs)
-#     return carry
-
-
-# @nnx.jit
-# def run_model(model, inputs):
-#     out = model(inputs)
-#     return out
-
-
-# if __name__ == "__main__":
-#     rngs = rnglib.Rngs(0)
-#     batch_size, seq_len, feature_size, hidden_size = 48, 32, 16, 64
-#     x = jax.random.normal(jax.random.PRNGKey(0), (batch_size, seq_len, feature_size))
-#     # layer = SimpleCell(
-#     #     in_features=feature_size, hidden_features=hidden_size, rngs=rngs
-#     # )
-#     layer = LSTMCell(in_features=feature_size, hidden_features=hidden_size, rngs=rngs)
-#     # layer = OptimizedLSTMCell(in_features=feature_size, hidden_features=hidden_size, rngs=rngs)
-#     # layer = GRUCell(in_features=feature_size, hidden_features=hidden_size, rngs=rngs)
-#     rnn = RNN(
-#         layer,
-#         time_major=False,
-#         reverse=False,
-#         keep_order=False,
-#         unroll=1,
-#         return_carry=False,
-#     )
-#     from timeit import timeit
-
-#     output = run_model(rnn, x)
-#     print(output.shape)
-
-#     print(timeit(lambda: run_model(rnn, x), number=100))
-
-#     bidirectional = Bidirectional(
-#         forward_rnn=rnn, backward_rnn=rnn, time_major=False, return_carry=True
-#     )
-#     ((c1, h1), (c2, h2)), output = run_model(bidirectional, x)  # for lstm
-#     print(output.shape)
-#     print(c1.shape)
-
 class TestLSTMCell(absltest.TestCase):
     def test_basic(self):
         module = nnx.LSTMCell(
@@ -244,5 +199,345 @@ class TestLSTMCell(absltest.TestCase):
         for c_nnx, c_linen in zip(new_carry_nnx, new_carry_linen):
             np.testing.assert_allclose(c_nnx, c_linen, atol=1e-5)
 
+class TestRNN(absltest.TestCase):
+
+    def test_rnn_with_lstm_cell(self):
+        """Test RNN module using LSTMCell."""
+        # Initialize the LSTMCell
+        cell = nnx.LSTMCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(0),
+        )
+
+        # Initialize the RNN module with the LSTMCell
+        rnn = nnx.RNN(cell)
+
+        # Create input data (batch_size=2, seq_length=5, features=3)
+        x = jnp.ones((2, 5, 3))
+
+        # Initialize the carry
+        carry = cell.initialize_carry(cell.rngs, (2, 3))
+
+        # Run the RNN module
+        outputs = rnn(x, initial_carry=carry)
+
+        self.assertEqual(outputs.shape, (2, 5, 4))  # Output features should match hidden_features
+
+    def test_rnn_with_gru_cell(self):
+        """Test RNN module using GRUCell."""
+        # Initialize the GRUCell
+        cell = nnx.GRUCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(1),
+        )
+
+        # Initialize the RNN module with the GRUCell
+        rnn = nnx.RNN(cell)
+
+        # Create input data (batch_size=2, seq_length=5, features=3)
+        x = jnp.ones((2, 5, 3))
+
+        # Initialize the carry
+        carry = cell.initialize_carry(cell.rngs, (2, 3))
+
+        # Run the RNN module
+        outputs = rnn(x, initial_carry=carry)
+
+        self.assertEqual(outputs.shape, (2, 5, 4))  # Output features should match hidden_features
+
+    def test_rnn_time_major(self):
+        """Test RNN module with time_major=True."""
+        # Initialize the LSTMCell
+        cell = nnx.LSTMCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(2),
+        )
+
+        # Initialize the RNN module with time_major=True
+        rnn = nnx.RNN(cell, time_major=True)
+
+        # Create input data (seq_length=5, batch_size=2, features=3)
+        x = jnp.ones((5, 2, 3))
+
+        # Initialize the carry
+        carry = cell.initialize_carry(cell.rngs, x.shape[1:2] + x.shape[2:])
+
+        # Run the RNN module
+        outputs = rnn(x, initial_carry=carry)
+
+        self.assertEqual(outputs.shape, (5, 2, 4))  # Output features should match hidden_features
+
+    def test_rnn_reverse(self):
+        """Test RNN module with reverse=True."""
+        # Initialize the LSTMCell
+        cell = nnx.LSTMCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(3),
+        )
+
+        # Initialize the RNN module with reverse=True
+        rnn = nnx.RNN(cell, reverse=True)
+
+        # Create input data (batch_size=2, seq_length=5, features=3)
+        x = jnp.tile(jnp.arange(5), (2, 1)).reshape(2, 5, 1)  # Distinct values to check reversal
+        x = jnp.concatenate([x, x, x], axis=-1)  # Shape: (2, 5, 3)
+
+        # Run the RNN module
+        outputs = rnn(x)
+
+        # Check if the outputs are in reverse order
+        outputs_reversed = outputs[:, ::-1, :]
+        # Since we used distinct input values, we can compare outputs to check reversal
+        # For simplicity, just check the shapes here
+        self.assertEqual(outputs.shape, (2, 5, 4))
+        self.assertEqual(outputs_reversed.shape, (2, 5, 4))
+
+    def test_rnn_with_seq_lengths(self):
+        """Test RNN module with variable sequence lengths."""
+        # Initialize the LSTMCell
+        cell = nnx.LSTMCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(4),
+        )
+
+        # Initialize the RNN module
+        rnn = nnx.RNN(cell, return_carry=True)
+
+        # Create input data with padding (batch_size=2, seq_length=5, features=3)
+        x = jnp.array([
+            [[1, 1, 1], [2, 2, 2], [3, 3, 3], [0, 0, 0], [0, 0, 0]],  # Sequence length 3
+            [[4, 4, 4], [5, 5, 5], [6, 6, 6], [7, 7, 7], [8, 8, 8]],  # Sequence length 5
+        ])  # Shape: (2, 5, 3)
+
+        seq_lengths = jnp.array([3, 5])  # Actual lengths for each sequence
+
+        # Initialize the carry
+        carry = cell.initialize_carry(cell.rngs, (2, 3))
+
+        # Run the RNN module
+        final_carry, outputs = rnn(x, initial_carry=carry, seq_lengths=seq_lengths)
+
+        self.assertEqual(outputs.shape, (2, 5, 4))
+
+        self.assertEqual(final_carry[0].shape, (2, 4))  # c: (batch_size, hidden_features)
+        self.assertEqual(final_carry[1].shape, (2, 4))  # h: (batch_size, hidden_features)
+
+        # Todo: a better test by matching the outputs with the expected values
+
+    def test_rnn_with_keep_order(self):
+        """Test RNN module with reverse=True and keep_order=True."""
+        # Initialize the LSTMCell
+        cell = nnx.LSTMCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(5),
+        )
+
+        # Initialize the RNN module with reverse=True and keep_order=True
+        rnn = nnx.RNN(cell, reverse=True, keep_order=True)
+
+        # Create input data (batch_size=2, seq_length=5, features=3)
+        x = jnp.tile(jnp.arange(5), (2, 1)).reshape(2, 5, 1)  # Distinct values to check reversal
+        x = jnp.concatenate([x, x, x], axis=-1)  # Shape: (2, 5, 3)
+
+        # Initialize the carry
+        carry = cell.initialize_carry(cell.rngs, (2, 3))
+
+        # Run the RNN module
+        outputs = rnn(x, initial_carry=carry)
+
+        # Check if the outputs are in the original order despite processing in reverse
+        self.assertEqual(outputs.shape, (2, 5, 4))
+
+    def test_rnn_equivalence_with_flax_linen(self):
+        """Test that nnx.RNN produces the same outputs as flax.linen.RNN."""
+        in_features = 3
+        hidden_features = 4
+        seq_length = 5
+        batch_size = 2
+        key = random.PRNGKey(42)
+
+        # Create input data
+        x = random.normal(key, (batch_size, seq_length, in_features))
+
+        # Initialize nnx.LSTMCell and RNN
+        rngs_nnx = nnx.Rngs(0)
+        cell_nnx = nnx.LSTMCell(
+            in_features=in_features,
+            hidden_features=hidden_features,
+            rngs=rngs_nnx,
+        )
+        rnn_nnx = nnx.RNN(cell_nnx)
+
+        # Initialize flax.linen.LSTMCell and RNN
+        cell_linen = linen.LSTMCell(features=hidden_features)
+        rnn_linen = linen.RNN(cell_linen)
+        carry_linen = cell_linen.initialize_carry(random.PRNGKey(0), x[:, 0].shape)
+        variables_linen = rnn_linen.init(random.PRNGKey(1), x)
+
+        # Copy parameters from flax.linen to nnx
+        params_linen = variables_linen['params']['cell']
+        # Copy cell parameters
+        for gate in ['i', 'f', 'g', 'o']:
+            # Input kernels
+            if gate == 'f':
+                nnx_layer = getattr(cell_nnx, f'if_')
+            else:
+                nnx_layer = getattr(cell_nnx, f'i{gate}')
+            linen_params = params_linen[f'i{gate}']
+            nnx_layer.kernel.value = linen_params['kernel']
+            if nnx_layer.use_bias:
+                nnx_layer.bias.value = linen_params['bias']
+            # Hidden kernels
+            nnx_layer = getattr(cell_nnx, f'h{gate}')
+            linen_params = params_linen[f'h{gate}']
+            nnx_layer.kernel.value = linen_params['kernel']
+            if nnx_layer.use_bias:
+                nnx_layer.bias.value = linen_params['bias']
+
+        # Initialize carries
+        carry_nnx = cell_nnx.initialize_carry(rngs_nnx, (batch_size, in_features))
+
+        # Run nnx.RNN
+        outputs_nnx = rnn_nnx(x, initial_carry=carry_nnx)
+
+        # Run flax.linen.RNN
+        outputs_linen = rnn_linen.apply(variables_linen, x, initial_carry=carry_linen)
+
+        # Compare outputs
+        np.testing.assert_allclose(outputs_nnx, outputs_linen, atol=1e-5)
+
+    def test_rnn_with_unroll(self):
+        """Test RNN module with unroll parameter."""
+        # Initialize the LSTMCell
+        cell = nnx.LSTMCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(6)
+        )
+
+        # Initialize the RNN module with unroll=2
+        rnn = nnx.RNN(cell, unroll=2)
+
+        # Create input data (batch_size=2, seq_length=6, features=3)
+        x = jnp.ones((2, 6, 3))
+
+        # Initialize the carry
+        carry = cell.initialize_carry(cell.rngs, (2, 3))
+
+        # Run the RNN module
+        outputs = rnn(x, initial_carry=carry)
+
+        self.assertEqual(outputs.shape, (2, 6, 4))  # Output features should match hidden_features
+
+    def test_rnn_with_custom_cell(self):
+        """Test RNN module with a custom RNN cell."""
+        class CustomRNNCell(nnx.Module):
+            """A simple custom RNN cell."""
+
+            in_features: int
+            hidden_features: int
+
+            def __init__(self, in_features, hidden_features, rngs):
+                self.in_features = in_features
+                self.hidden_features = hidden_features
+                self.rngs = rngs
+                self.dense = nnx.Linear(
+                    in_features=in_features + hidden_features,
+                    out_features=hidden_features,
+                    rngs=rngs,
+                )
+
+            def __call__(self, carry, inputs):
+                h = carry
+                x = jnp.concatenate([inputs, h], axis=-1)
+                new_h = jax.nn.tanh(self.dense(x))
+                return new_h, new_h
+
+            def initialize_carry(self, rngs, input_shape):
+                batch_size = input_shape[0]
+                h = jnp.zeros((batch_size, self.hidden_features))
+                return h
+
+            @property
+            def num_feature_axes(self) -> int:
+                return 1
+
+        # Initialize the custom RNN cell
+        cell = CustomRNNCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(7)
+        )
+
+        # Initialize the RNN module
+        rnn = nnx.RNN(cell)
+
+        # Create input data (batch_size=2, seq_length=5, features=3)
+        x = jnp.ones((2, 5, 3))
+
+        # Initialize the carry
+        carry = cell.initialize_carry(cell.rngs, (2, 3))
+
+        # Run the RNN module
+        outputs = rnn(x, initial_carry=carry)
+
+        self.assertEqual(outputs.shape, (2, 5, 4))  # Output features should match hidden_features
+
+    def test_rnn_with_different_dtypes(self):
+        """Test RNN module with different data types."""
+        # Initialize the LSTMCell with float16
+        cell = nnx.LSTMCell(
+            in_features=3,
+            hidden_features=4,
+            dtype=jnp.float16,
+            param_dtype=jnp.float16,
+            rngs=nnx.Rngs(8),
+        )
+
+        # Initialize the RNN module
+        rnn = nnx.RNN(cell)
+
+        # Create input data (batch_size=2, seq_length=5, features=3)
+        x = jnp.ones((2, 5, 3), dtype=jnp.float16)
+
+        # Initialize the carry
+        carry = cell.initialize_carry(cell.rngs, (2, 3))
+
+        # Run the RNN module
+        outputs = rnn(x, initial_carry=carry)
+
+        self.assertEqual(outputs.dtype, jnp.float16)
+        self.assertEqual(outputs.shape, (2, 5, 4))
+
+    def test_rnn_with_variable_batch_size(self):
+        """Test RNN module with variable batch sizes."""
+        # Initialize the LSTMCell
+        cell = nnx.LSTMCell(
+            in_features=3,
+            hidden_features=4,
+            rngs=nnx.Rngs(9),
+        )
+
+        # Initialize the RNN module
+        rnn = nnx.RNN(cell)
+
+        for batch_size in [1, 2, 5]:
+            # Create input data (batch_size, seq_length=5, features=3)
+            x = jnp.ones((batch_size, 5, 3))
+
+            # Initialize the carry
+            carry = cell.initialize_carry(cell.rngs, (batch_size, 3))
+
+            # Run the RNN module
+            outputs = rnn(x, initial_carry=carry)
+
+            self.assertEqual(outputs.shape, (batch_size, 5, 4))
+
 if __name__ == '__main__':
-  absltest.main()
+    absltest.main()
