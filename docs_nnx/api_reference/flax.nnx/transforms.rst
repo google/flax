@@ -21,3 +21,4 @@ transforms
 .. autofunction:: vmap
 .. autofunction:: eval_shape
 .. autofunction:: cond
+.. autofunction:: custom_vjp
