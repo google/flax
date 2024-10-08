@@ -62,3 +62,10 @@ class TraceState(reprlib.Representable):
       return isinstance(other, TraceState) and self._jax_trace is other._jax_trace
 
     return isinstance(other, TraceState) and self._jax_trace == other._jax_trace
+
+  # pickle support
+  def __getstate__(self):
+    return {}
+
+  def __setstate__(self, state):
+    self._jax_trace = current_jax_trace()

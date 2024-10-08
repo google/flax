@@ -144,7 +144,7 @@ nb_execution_timeout = 100
 # files that will not be executed.
 myst_enable_extensions = ['dollarmath']
 nb_execution_excludepatterns = [
-  'quick_start.ipynb',  # <-- times out
+  'mnist_tutorial.ipynb',  # <-- times out
   'transfer_learning.ipynb',  # <-- transformers requires flax<=0.7.0
   'flax/nnx',  # exclude nnx
   'guides/demo.ipynb',  # TODO(cgarciae): broken, remove or update

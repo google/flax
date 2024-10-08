@@ -14,9 +14,12 @@
 
 from copy import deepcopy
 import dataclasses
+import pickle
+import tempfile
 from typing import TypeVar
 
 from absl.testing import absltest
+import cloudpickle
 from flax import nnx, errors
 import jax
 import jax.numpy as jnp
@@ -511,6 +514,34 @@ class TestModule(absltest.TestCase):
       unknown=True,
       raise_if_not_found=False,
     )
+
+  def test_cloud_pickle(self):
+    class Model(nnx.Module):
+      def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dmid, rngs=rngs)
+        self.bn = nnx.BatchNorm(dmid, rngs=rngs)
+        self.dropout = nnx.Dropout(0.1, rngs=rngs)
+        self.linear_out = nnx.Linear(dmid, dout, rngs=rngs)
+
+      def __call__(self, x):
+        x = nnx.relu(self.dropout(self.bn(self.linear(x))))
+        return self.linear_out(x)
+
+    model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
+    model.eval()
+
+    y1 = model(jnp.ones((5, 2)))
+    with tempfile.TemporaryDirectory() as tmpdir:
+      path = f'{tmpdir}/model.pkl'
+      with open(path, 'wb') as f:
+        cloudpickle.dump(model, f)
+        del model
+      with open(path, 'rb') as f:
+        model = pickle.load(f)
+
+    self.assertIsInstance(model, Model)
+    y2 = model(jnp.ones((5, 2)))
+    np.testing.assert_allclose(y1, y2)
 
 
 class TestModulePytree:

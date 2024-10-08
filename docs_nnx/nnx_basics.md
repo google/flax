@@ -27,7 +27,7 @@ In this guide you will learn about:
 
 ## Setup
 
-Install Flax with `pip` and impost necessary dependencies:
+Install Flax with `pip` and import necessary dependencies:
 
 ```{code-cell} ipython3
 :tags: [skip-execution]

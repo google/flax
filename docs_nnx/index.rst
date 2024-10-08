@@ -177,7 +177,7 @@ Learn more
 
       .. card:: :material-regular:`menu_book;2em` API reference
          :class-card: sd-text-black sd-bg-light
-         :link: /api_reference/index.html
+         :link: api_reference/index.html
 
    .. grid-item::
       :columns: 6 6 6 4
@@ -195,6 +195,7 @@ Learn more
 
    nnx_basics
    mnist_tutorial
+   why
    guides/index
    examples/index
    glossary
