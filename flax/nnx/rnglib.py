@@ -230,6 +230,13 @@ class Rngs(Object, tp.Mapping[str, tp.Callable[[], jax.Array]]):
   def __contains__(self, name: tp.Any) -> bool:
     return name in vars(self)
 
+  # pickle support
+  def __getstate__(self):
+    return vars(self).copy()
+
+  def __setstate__(self, state):
+    vars(self).update(state)
+
 
 class ForkStates(tp.NamedTuple):
   split_keys: State
