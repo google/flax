@@ -32,7 +32,8 @@ from flax.nnx.proxy_caller import (
   DelayedAccessor,
 )
 from flax.nnx.statelib import FlatState, State
-from flax.nnx.variables import Variable, VariableState
+from flax.nnx import variablelib
+from flax.nnx.variablelib import Variable, VariableState
 from flax.typing import Key, PathParts
 
 A = tp.TypeVar('A')
@@ -1325,15 +1326,47 @@ def update(node, state: State, /, *states: State) -> None:
 
   _graph_update_dynamic(node, state.raw_mapping)
 
+def _variables_generator(node) -> tp.Iterable[tuple[PathParts, Variable]]:
+  for path, value in iter_graph(node):
+    if isinstance(value, Variable):
+      yield path, value
+
+
+@tp.overload
+def variables(node, /) -> State[Key, Variable]: ...
+@tp.overload
+def variables(node, first: filterlib.Filter, /) -> State[Key, Variable]: ...
+@tp.overload
+def variables(
+  node,
+  first: filterlib.Filter,
+  second: filterlib.Filter,
+  /,
+  *filters: filterlib.Filter,
+) -> tuple[State[Key, Variable], ...]: ...
+def variables(
+  node,
+  *filters: filterlib.Filter,
+) -> tp.Union[State[Key, Variable], tuple[State[Key, Variable], ...]]:
+  num_filters = len(filters)
+  if num_filters == 0:
+    filters = (..., ...)
+  else:
+    filters = (*filters, ...)
+
+  variables_iterable = _variables_generator(node)
+  flat_states = variablelib.split_flat_state(
+    variables_iterable, (*filters, ...)
+  )
+  states = tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
+  if num_filters < 2:
+    return states[0]
+  return states
 
 @tp.overload
 def state(node, /) -> GraphState: ...
-
-
 @tp.overload
 def state(node, first: filterlib.Filter, /) -> GraphState: ...
-
-
 @tp.overload
 def state(
   node,
@@ -1342,8 +1375,6 @@ def state(
   /,
   *filters: filterlib.Filter,
 ) -> tuple[GraphState, ...]: ...
-
-
 def state(
   node,
   *filters: filterlib.Filter,

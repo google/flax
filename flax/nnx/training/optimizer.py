@@ -19,9 +19,9 @@ import optax
 
 from flax import nnx
 from flax.nnx import filterlib
-from flax.nnx import variables
+from flax.nnx import variablelib
 from flax.nnx.object import Object
-from flax.nnx.variables import Variable, VariableState
+from flax.nnx.variablelib import Variable, VariableState
 
 # TODO: add tests and docstrings
 
@@ -47,7 +47,7 @@ class OptVariable(OptState):
 
 def _wrap_optimizer_state(opt_state):
   def wrap_optimizer_state_fn(x):
-    if isinstance(x, variables.VariableState):
+    if isinstance(x, variablelib.VariableState):
       new_state = x.copy()
       new_state.source_type = x.type
       new_state.type = OptVariable
@@ -58,7 +58,7 @@ def _wrap_optimizer_state(opt_state):
   return jax.tree.map(
     wrap_optimizer_state_fn,
     opt_state,
-    is_leaf=lambda x: isinstance(x, variables.VariableState),
+    is_leaf=lambda x: isinstance(x, variablelib.VariableState),
   )
 
 
