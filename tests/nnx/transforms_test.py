@@ -2135,7 +2135,6 @@ class TestVmap(absltest.TestCase):
 
   def test_consistent_aliasing_shared(self):
     class Shared(nnx.Module):
-
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((3, 3)))
 
@@ -2148,16 +2147,45 @@ class TestVmap(absltest.TestCase):
     m1 = Foo(shared)
     m2 = Foo(shared)
 
-    @partial(nnx.vmap, in_axes=(0, 1))
+    @nnx.vmap(in_axes=(0, 1))
     def f(m1, m2):
       pass
 
     with self.assertRaisesRegex(
-        ValueError,
-        r'Inconsistent aliasing detected([\s\S]*)Shared([\s\S]*)a:'
-        r' 0([\s\S]*)a: 1',
+      ValueError,
+      r'Inconsistent aliasing detected([\s\S]*)Param([\s\S]*)a:'
+      r' 0([\s\S]*)a: 1',
     ):
       f(m1, m2)
+
+  def test_equivalent_state_axes_mapping(self):
+    m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
+
+    sa1 = nnx.StateAxes({...: 0})
+    sa2 = nnx.StateAxes({nnx.Param: 0})
+
+    @nnx.vmap(in_axes=(0, sa1, sa2))
+    def f(m1, m2, m3):
+      pass
+
+    f(m, m, m)
+
+  def test_equivalent_state_sharding_mapping(self):
+    m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
+
+    mesh = jax.sharding.Mesh(jax.devices(), ('mp',))
+    sharding = jax.sharding.NamedSharding(
+      mesh, jax.sharding.PartitionSpec('mp')
+    )
+
+    sa1 = nnx.StateSharding({...: sharding})
+    sa2 = nnx.StateSharding({nnx.Param: sharding})
+
+    @nnx.jit(in_shardings=(sharding, sa1, sa2))
+    def f(m1, m2, m3):
+      pass
+
+    f(m, m, m)
 
   @absltest.skip('Enable once jax#19586 resolved')
   def test_captured_module_in_return_error(self):

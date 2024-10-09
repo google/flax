@@ -21,6 +21,7 @@ from flax.nnx import (
   extract,
   filterlib,
   graph,
+  variablelib,
 )
 import jax
 import jax.core
@@ -36,7 +37,7 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 # -------------------------------
 
 
-class StateSharding:
+class StateSharding(extract.PrefixMapping):
   def __init__(
     self,
     filter_sharding: tp.Mapping[filterlib.Filter, tp.Any]
@@ -58,6 +59,15 @@ class StateSharding:
   @property
   def shardings(self) -> tuple[tp.Any, ...]:
     return self._shardings
+
+  def map_prefix(
+    self, path: variablelib.PathParts, variable: variablelib.Variable
+  ) -> tp.Any:
+    for filter, sharding in zip(self.filters, self.shardings):
+      predicate = filterlib.to_predicate(filter)
+      if predicate(path, variable):
+        return sharding
+    raise ValueError(f'No axis found for {path=}, {variable=}')
 
   def __repr__(self):
     return f'StateSharding({dict(zip(self.filters, self.shardings))})'
