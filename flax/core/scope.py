@@ -89,7 +89,7 @@ class LazyRng(struct.PyTreeNode):
   """Wrapper around JAX PRNGKey that lazily maintains a tuple of static data to be folded into the rng."""
 
   rng: PRNGKey
-  suffix: tuple[PRNGFoldable, ...] = struct.field(pytree_node=False)
+  count: jax.Array
 
   def as_jax_rng(self) -> PRNGKey:
     return _fold_in_static(self.rng, self.suffix)
@@ -456,7 +456,9 @@ class Scope:
     self._root = parent.root if parent else None
     self.trace_level = tracers.current_trace()
 
-    self.rng_counters = {key: 0 for key in self.rngs}
+    self.rng_counters = {
+      key: jnp.array(0, dtype=jnp.uint32) for key in self.rngs
+    }
     self.reservations = collections.defaultdict(set)
 
     self._invalid = False
@@ -605,13 +607,6 @@ class Scope:
         return name
       i += 1
 
-  def fold_rngs(self):
-    """Folds the rngs of this scope into the parent scope."""
-    self._check_valid()
-    for name, rng in self.rngs.items():
-      assert isinstance(rng, LazyRng)
-      self.rngs[name] = rng.fold()
-
   def push(
     self, name: str | None = None, prefix: str = '', reuse=False
   ) -> 'Scope':
@@ -637,7 +632,7 @@ class Scope:
     if rng_key in self.rng_counters:
       rng_counters = self.rng_counters.get(rng_key)  # type: ignore
     else:
-      rng_counters = {key: 0 for key in rngs}
+      rng_counters = {key: jnp.array(0, dtype=jnp.uint32) for key in rngs}
       self.rng_counters[rng_key] = rng_counters  # type: ignore
     scope = Scope(
       {},
@@ -757,8 +752,9 @@ class Scope:
         raise errors.InvalidRngError(f'{self.name} needs PRNG for "{name}"')
     self._check_valid()
     self._validate_trace_level()
+    key = jax.random.fold_in(self.rngs[name], self.rng_counters[name])
     self.rng_counters[name] += 1
-    return LazyRng.create(self.rngs[name], self.rng_counters[name]).as_jax_rng()
+    return key
 
   def get_variable(self, col: str, name: str, default: Any = None) -> Any:
     """Retrieves the value of a Variable.
