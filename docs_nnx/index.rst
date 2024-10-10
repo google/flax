@@ -182,7 +182,7 @@ Learn more
 
       .. card:: :material-regular:`import_contacts;2em` Glossary
          :class-card: sd-text-black sd-bg-light
-         :link: glossary.html
+         :link: nnx_glossary.html
 
 
 ----
@@ -196,7 +196,7 @@ Learn more
    why
    guides/index
    examples/index
-   glossary
+   nnx_glossary
    The Flax philosophy <philosophyhttps://flax.readthedocs.io/en/latest/philosophy.html>
    How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
    api_reference/index

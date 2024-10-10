@@ -4,8 +4,8 @@ Why Flax NNX?
 In 2020, the Flax team released the Flax Linen API to support modeling research on JAX, with a focus on scaling
 and performance. We have learned a lot from users since then. The team introduced certain ideas that have proven to be beneficial to users, such as:
 
-* Organizing variables into `collections <https://flax.readthedocs.io/en/latest/glossary.html#term-Variable-collections>`_.
-* Automatic and efficient `pseudorandom number generator (PRNG) management <https://flax.readthedocs.io/en/latest/glossary.html#term-RNG-sequences>`_.
+* Organizing variables into `collections <https://flax.readthedocs.io/en/latest/nnx_glossary.html#term-Variable-collections>`_.
+* Automatic and efficient `pseudorandom number generator (PRNG) management <https://flax.readthedocs.io/en/latest/nnx_glossary.html#term-RNG-sequences>`_.
 * `Variable metadata <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/spmd.html#flax.linen.with_partitioning>`_
   for `Single Program Multi Data (SPMD) <https://jax.readthedocs.io/en/latest/glossary.html#term-SPMD>`_ annotations, optimizer metadata, and other use cases.
 
