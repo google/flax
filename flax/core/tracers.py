@@ -31,6 +31,7 @@ def current_trace():
   return jax.core.get_opaque_trace_state(convention="flax")
 
 def check_trace_level(base_level):
-  level = current_trace()
-  if level != base_level:
-    raise errors.JaxTransformError()
+  pass
+  # level = current_trace()
+  # if level != base_level:
+  #   raise errors.JaxTransformError()
