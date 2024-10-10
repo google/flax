@@ -20,7 +20,7 @@ import typing as tp
 
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx import extract, filterlib, graph, spmd
+from flax.nnx import extract, filterlib, graph, spmd, variablelib
 from flax.nnx.module import Module
 from flax.nnx.statelib import State
 from flax.nnx.transforms.transforms import resolve_kwargs
@@ -54,7 +54,7 @@ class Carry:
 # -------------------------------
 
 
-class StateAxes:
+class StateAxes(extract.PrefixMapping):
 
   def __init__(
       self,
@@ -79,6 +79,15 @@ class StateAxes:
   @property
   def axes(self) -> tuple[Index | type[Carry] | None, ...]:
     return self._axes
+
+  def map_prefix(
+    self, path: variablelib.PathParts, variable: variablelib.Variable
+  ) -> tp.Any:
+    for filter, axis in zip(self.filters, self.axes):
+      predicate = filterlib.to_predicate(filter)
+      if predicate(path, variable):
+        return axis
+    raise ValueError(f'No axis found for {path=}, {variable=}')
 
   def __repr__(self):
     return f'StateAxes({dict(self.items())})'
