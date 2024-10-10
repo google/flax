@@ -2212,7 +2212,7 @@ wheels = [
 
 [[package]]
 name = "orbax-checkpoint"
-version = "0.6.0"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
