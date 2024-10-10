@@ -62,7 +62,7 @@ Features
 
          .. div:: sd-font-normal
 
-            Flax NNX allows fine-grained control of the model's state via
+            Flax NNX enables fine-grained control of the model's state via
             its `Filter <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__
             system.
 
@@ -197,6 +197,6 @@ Learn more
    guides/index
    examples/index
    glossary
-   The Flax philosophy <philosophyhttps://flax.readthedocs.io/en/latest/philosophy.html>
+   The Flax philosophy <https://flax.readthedocs.io/en/latest/philosophy.html>
    How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
    api_reference/index
