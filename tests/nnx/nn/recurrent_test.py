@@ -31,7 +31,7 @@ class TestLSTMCell(absltest.TestCase):
             rngs=nnx.Rngs(0),
         )
         x = jnp.ones((2, 3))
-        carry = module.initialize_carry(module.rngs, x.shape)
+        carry = module.initialize_carry(x.shape, module.rngs)
         new_carry, y = module(carry, x)
         self.assertEqual(y.shape, (2, 4))
 
@@ -43,7 +43,7 @@ class TestLSTMCell(absltest.TestCase):
             rngs=nnx.Rngs(0),
         )
         x = random.normal(random.PRNGKey(1), (5, 2, 3))  # seq_len, batch, feature
-        carry = module.initialize_carry(module.rngs, x.shape[1:])
+        carry = module.initialize_carry(x.shape[1:], module.rngs)
         outputs = []
         for t in range(x.shape[0]):
             carry, y = module(carry, x[t])
@@ -61,7 +61,7 @@ class TestLSTMCell(absltest.TestCase):
             rngs=nnx.Rngs(0),
         )
         x = jnp.ones((2, 3), dtype=jnp.bfloat16)
-        carry = module.initialize_carry(module.rngs, x.shape)
+        carry = module.initialize_carry(x.shape, module.rngs)
         new_carry, y = module(carry, x)
         self.assertEqual(y.dtype, jnp.bfloat16)
         self.assertEqual(y.shape, (2, 4))
@@ -76,7 +76,7 @@ class TestLSTMCell(absltest.TestCase):
             rngs=nnx.Rngs(0),
         )
         x = jnp.ones((1, 3))
-        carry = module.initialize_carry(module.rngs, x.shape)
+        carry = module.initialize_carry(x.shape, module.rngs)
         new_carry, y = module(carry, x)
         self.assertEqual(y.shape, (1, 4))
 
@@ -89,7 +89,7 @@ class TestLSTMCell(absltest.TestCase):
             rngs=nnx.Rngs(0),
         )
         x_shape = (1, 3)
-        carry = module.initialize_carry(module.rngs, x_shape)
+        carry = module.initialize_carry(x_shape, module.rngs)
         c, h = carry
         self.assertTrue(jnp.all(c == 1.0))
         self.assertTrue(jnp.all(h == 1.0))
@@ -113,7 +113,7 @@ class TestLSTMCell(absltest.TestCase):
         seq_lengths = jnp.array([2, 3])  # Actual lengths for each sequence
         batch_size = x.shape[0]
         max_seq_length = x.shape[1]
-        carry = module.initialize_carry(module.rngs, (batch_size, 3))
+        carry = module.initialize_carry((batch_size, 3), module.rngs)
         outputs = []
         for t in range(max_seq_length):
             input_t = x[:, t, :]
@@ -135,7 +135,7 @@ class TestLSTMCell(absltest.TestCase):
         )
         x1 = jnp.ones((1, 3))
         x2 = jnp.ones((1, 3)) * 2
-        carry = module.initialize_carry(module.rngs, x1.shape)
+        carry = module.initialize_carry(x1.shape)
         carry, y1 = module(carry, x1)
         carry, y2 = module(carry, x2)
         self.assertEqual(y1.shape, (1, 4))
@@ -155,7 +155,7 @@ class TestLSTMCell(absltest.TestCase):
             hidden_features=hidden_features,
             rngs=rngs_nnx,
         )
-        carry_nnx = module_nnx.initialize_carry(rngs_nnx, x.shape)
+        carry_nnx = module_nnx.initialize_carry(x.shape, rngs_nnx)
         # Initialize flax.linen.LSTMCell
         module_linen = linen.LSTMCell(
             features=hidden_features,
@@ -217,7 +217,7 @@ class TestRNN(absltest.TestCase):
         x = jnp.ones((2, 5, 3))
 
         # Initialize the carry
-        carry = cell.initialize_carry(cell.rngs, (2, 3))
+        carry = cell.initialize_carry((2, 3), cell.rngs)
 
         # Run the RNN module
         outputs = rnn(x, initial_carry=carry)
@@ -240,7 +240,7 @@ class TestRNN(absltest.TestCase):
         x = jnp.ones((2, 5, 3))
 
         # Initialize the carry
-        carry = cell.initialize_carry(cell.rngs, (2, 3))
+        carry = cell.initialize_carry((2, 3), cell.rngs)
 
         # Run the RNN module
         outputs = rnn(x, initial_carry=carry)
@@ -263,7 +263,7 @@ class TestRNN(absltest.TestCase):
         x = jnp.ones((5, 2, 3))
 
         # Initialize the carry
-        carry = cell.initialize_carry(cell.rngs, x.shape[1:2] + x.shape[2:])
+        carry = cell.initialize_carry(x.shape[1:2] + x.shape[2:], cell.rngs)
 
         # Run the RNN module
         outputs = rnn(x, initial_carry=carry)
@@ -317,7 +317,7 @@ class TestRNN(absltest.TestCase):
         seq_lengths = jnp.array([3, 5])  # Actual lengths for each sequence
 
         # Initialize the carry
-        carry = cell.initialize_carry(cell.rngs, (2, 3))
+        carry = cell.initialize_carry((2, 3), cell.rngs)
 
         # Run the RNN module
         final_carry, outputs = rnn(x, initial_carry=carry, seq_lengths=seq_lengths)
@@ -346,7 +346,7 @@ class TestRNN(absltest.TestCase):
         x = jnp.concatenate([x, x, x], axis=-1)  # Shape: (2, 5, 3)
 
         # Initialize the carry
-        carry = cell.initialize_carry(cell.rngs, (2, 3))
+        carry = cell.initialize_carry((2, 3), cell.rngs)
 
         # Run the RNN module
         outputs = rnn(x, initial_carry=carry)
@@ -401,7 +401,7 @@ class TestRNN(absltest.TestCase):
                 nnx_layer.bias.value = linen_params['bias']
 
         # Initialize carries
-        carry_nnx = cell_nnx.initialize_carry(rngs_nnx, (batch_size, in_features))
+        carry_nnx = cell_nnx.initialize_carry((batch_size, in_features), rngs_nnx)
 
         # Run nnx.RNN
         outputs_nnx = rnn_nnx(x, initial_carry=carry_nnx)
@@ -428,7 +428,7 @@ class TestRNN(absltest.TestCase):
         x = jnp.ones((2, 6, 3))
 
         # Initialize the carry
-        carry = cell.initialize_carry(cell.rngs, (2, 3))
+        carry = cell.initialize_carry((2, 3), cell.rngs)
 
         # Run the RNN module
         outputs = rnn(x, initial_carry=carry)
@@ -459,7 +459,7 @@ class TestRNN(absltest.TestCase):
                 new_h = jax.nn.tanh(self.dense(x))
                 return new_h, new_h
 
-            def initialize_carry(self, rngs, input_shape):
+            def initialize_carry(self, input_shape, rngs):
                 batch_size = input_shape[0]
                 h = jnp.zeros((batch_size, self.hidden_features))
                 return h
@@ -482,7 +482,7 @@ class TestRNN(absltest.TestCase):
         x = jnp.ones((2, 5, 3))
 
         # Initialize the carry
-        carry = cell.initialize_carry(cell.rngs, (2, 3))
+        carry = cell.initialize_carry((2, 3), cell.rngs)
 
         # Run the RNN module
         outputs = rnn(x, initial_carry=carry)
@@ -507,7 +507,7 @@ class TestRNN(absltest.TestCase):
         x = jnp.ones((2, 5, 3), dtype=jnp.float16)
 
         # Initialize the carry
-        carry = cell.initialize_carry(cell.rngs, (2, 3))
+        carry = cell.initialize_carry((2, 3), cell.rngs)
 
         # Run the RNN module
         outputs = rnn(x, initial_carry=carry)
@@ -532,7 +532,7 @@ class TestRNN(absltest.TestCase):
             x = jnp.ones((batch_size, 5, 3))
 
             # Initialize the carry
-            carry = cell.initialize_carry(cell.rngs, (batch_size, 3))
+            carry = cell.initialize_carry((batch_size, 3), cell.rngs)
 
             # Run the RNN module
             outputs = rnn(x, initial_carry=carry)

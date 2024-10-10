@@ -51,7 +51,7 @@ class RNNCellBase(Module):
     """RNN cell base class."""
 
     def initialize_carry(
-        self, rngs: rnglib.Rngs | None, input_shape: tuple[int, ...]
+        self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
     ) -> Carry:
         """Initialize the RNN cell carry.
 
@@ -192,7 +192,7 @@ class LSTMCell(RNNCellBase):
         return (new_c, new_h), new_h
 
     def initialize_carry(
-        self, rngs: rnglib.Rngs | None, input_shape: tuple[int, ...]
+        self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
     ) -> tuple[Array, Array]:
         """Initialize the RNN cell carry.
 
@@ -206,8 +206,8 @@ class LSTMCell(RNNCellBase):
         if rngs is None:
             rngs = self.rngs
         mem_shape = batch_dims + (self.hidden_features,)
-        c = self.carry_init(rngs.params(), mem_shape, self.param_dtype)
-        h = self.carry_init(rngs.params(), mem_shape, self.param_dtype)
+        c = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
+        h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
         return (c, h)
 
     @property
@@ -332,7 +332,7 @@ class OptimizedLSTMCell(RNNCellBase):
         return (new_c, new_h), new_h
 
     def initialize_carry(
-        self, rngs: rnglib.Rngs | None, input_shape: tuple[int, ...]
+        self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
     ) -> tuple[Array, Array]:
         """Initialize the RNN cell carry.
 
@@ -347,8 +347,8 @@ class OptimizedLSTMCell(RNNCellBase):
         if rngs is None:
             rngs = self.rngs
         mem_shape = batch_dims + (self.hidden_features,)
-        c = self.carry_init(rngs.params(), mem_shape, self.param_dtype)
-        h = self.carry_init(rngs.params(), mem_shape, self.param_dtype)
+        c = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
+        h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
         return (c, h)
 
     @property
@@ -434,7 +434,7 @@ class SimpleCell(RNNCellBase):
         new_carry = self.activation_fn(new_carry)
         return new_carry, new_carry
 
-    def initialize_carry(self, rngs: rnglib.Rngs | None, input_shape: tuple[int, ...]):
+    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> Array:
         """Initialize the RNN cell carry.
 
         Args:
@@ -448,7 +448,7 @@ class SimpleCell(RNNCellBase):
             rngs = self.rngs
         batch_dims = input_shape[:-1]
         mem_shape = batch_dims + (self.hidden_features,)
-        return self.carry_init(rngs.params(), mem_shape, self.param_dtype)
+        return self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
 
     @property
     def num_feature_axes(self) -> int:
@@ -569,7 +569,7 @@ class GRUCell(RNNCellBase):
         return new_h, new_h
 
     def initialize_carry(
-        self, rngs: rnglib.Rngs | None, input_shape: tuple[int, ...]
+        self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
     ) -> Array:
         """Initialize the RNN cell carry.
 
@@ -584,7 +584,7 @@ class GRUCell(RNNCellBase):
         if rngs is None:
             rngs = self.rngs
         mem_shape = batch_dims + (self.hidden_features,)
-        h = self.carry_init(rngs.params(), mem_shape, self.param_dtype)
+        h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
         return h
 
     @property
@@ -606,6 +606,7 @@ class RNN(Module):
         reverse: bool = False,
         keep_order: bool = False,
         unroll: int = 1,
+        rngs: rnglib.Rngs | None = None,
     ):
         self.cell = cell
         self.time_major = time_major
@@ -613,6 +614,9 @@ class RNN(Module):
         self.reverse = reverse
         self.keep_order = keep_order
         self.unroll = unroll
+        if rngs is None:
+            rngs = rnglib.Rngs(0)
+        self.rngs = rngs
 
     def __call__(
         self,
@@ -661,10 +665,10 @@ class RNN(Module):
                 inputs,
             )
         if rngs is None:
-            rngs = rnglib.Rngs(0)
+            rngs = self.rngs
         carry: Carry = (
             self.cell.initialize_carry(
-                rngs, inputs.shape[:time_axis] + inputs.shape[time_axis + 1 :]
+                inputs.shape[:time_axis] + inputs.shape[time_axis + 1 :], rngs
             )
             if initial_carry is None
             else initial_carry
@@ -672,20 +676,19 @@ class RNN(Module):
 
         slice_carry = seq_lengths is not None and return_carry
 
-        def scan_fn(carry: Carry, x: Array) -> tuple[Carry, Array]:
-            carry, y = self.cell(carry, x)
+        def scan_fn(cell: RNNCellBase, carry: Carry, x: Array) -> tuple[Carry, Array]:
+            carry, y = cell(carry, x)
             if slice_carry:
                 return carry, (carry, y)
             return carry, y
-
+        state_axes = nnx.StateAxes({...: Carry})
         scan = nnx.scan(
             scan_fn,
-            in_axes=(Carry, time_axis),
+            in_axes=(state_axes, Carry, time_axis),
             out_axes=(Carry, (0, time_axis)) if slice_carry else (Carry, time_axis),
             unroll=self.unroll,
         )
-
-        scan_output = scan(carry, inputs)
+        scan_output = scan(self.cell, carry, inputs)
 
         # Next we select the final carry. If a segmentation mask was provided and
         # return_carry is True we slice the carry history and select the last valid
@@ -849,12 +852,16 @@ class Bidirectional(Module):
         merge_fn: Callable[[Array, Array], Array] = _concatenate,
         time_major: bool = False,
         return_carry: bool = False,
+        rngs: rnglib.Rngs | None = None,
     ):
         self.forward_rnn = forward_rnn
         self.backward_rnn = backward_rnn
         self.merge_fn = merge_fn
         self.time_major = time_major
         self.return_carry = return_carry
+        if rngs is None:
+            rngs = rnglib.Rngs(0)
+        self.rngs = rngs
 
     def __call__(
         self,
@@ -873,7 +880,7 @@ class Bidirectional(Module):
         if return_carry is None:
             return_carry = self.return_carry
         if rngs is None:
-            rngs = rnglib.Rngs(0)
+            rngs = self.rngs
         if initial_carry is not None:
             initial_carry_forward, initial_carry_backward = initial_carry
         else:
