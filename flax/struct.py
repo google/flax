@@ -15,6 +15,7 @@
 """Utilities for defining custom classes that can be used with jax transformations."""
 
 import dataclasses
+import functools
 from typing import TypeVar
 
 import jax
@@ -33,7 +34,7 @@ def field(pytree_node=True, *, metadata=None, **kwargs):
 
 
 @dataclass_transform(field_specifiers=(field,))  # type: ignore[literal-required]
-def dataclass(clz: _T, **kwargs) -> _T:
+def dataclass(clz: _T | None = None, **kwargs) -> _T:
   """Create a class which can be passed to functional transformations.
 
   .. note::
@@ -99,9 +100,15 @@ def dataclass(clz: _T, **kwargs) -> _T:
 
   Args:
     clz: the class that will be transformed by the decorator.
+    **kwargs: arguments to pass to the dataclass constructor.
+
   Returns:
     The new class.
   """
+  # Support passing arguments to the decorator (e.g. @dataclass(kw_only=True))
+  if clz is None:
+    return functools.partial(dataclass, **kwargs)
+
   # check if already a flax dataclass
   if '_flax_dataclass' in clz.__dict__:
     return clz
@@ -119,7 +126,7 @@ def dataclass(clz: _T, **kwargs) -> _T:
       meta_fields.append(field_info.name)
 
   def replace(self, **updates):
-    """ "Returns a new object replacing the specified fields with new values."""
+    """Returns a new object replacing the specified fields with new values."""
     return dataclasses.replace(self, **updates)
 
   data_clz.replace = replace
