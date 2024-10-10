@@ -40,7 +40,7 @@ sys.path.append(os.path.abspath('./_ext'))
 # -- Project information -----------------------------------------------------
 
 project = 'Flax'
-copyright = '2023, The Flax authors'  # pylint: disable=redefined-builtin
+copyright = '2024, The Flax authors'  # pylint: disable=redefined-builtin
 author = 'The Flax authors'
 
 
@@ -113,7 +113,7 @@ html_extra_path = ['robots.txt']
 # href with no underline and white bold text color
 announcement = """
 <a
-  href="https://flax-linen.readthedocs.io/en/latest"
+  href="https://flax.readthedocs.io/en/latest"
   style="text-decoration: none; color: white;"
 >
   This site covers the new Flax NNX API. <span style="color: lightgray;">[Click here for the old <b>Flax Linen</b> API]</span>
@@ -151,6 +151,7 @@ nb_execution_excludepatterns = [
   'guides/why.ipynb',  # TODO(cgarciae): broken, remove in favor on the new guide
   'guides/flax_gspmd.ipynb',  # TODO(IvyZX): broken, needs to be updated
   'guides/surgery.ipynb',  # TODO(IvyZX): broken, needs to be updated
+  'guides/checkpointing.ipynb',
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False
