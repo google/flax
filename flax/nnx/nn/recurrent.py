@@ -16,7 +16,7 @@
 
 from typing import (
     Any,
-    TypeVar,
+    TypeVar
 )
 from collections.abc import Callable
 from functools import partial
@@ -170,7 +170,7 @@ class LSTMCell(RNNCellBase):
         self.hg = dense_h()
         self.ho = dense_h()
 
-    def __call__(self, carry: tuple[Array, Array], inputs: Array) -> tuple[tuple[Array, Array], Array]:
+    def __call__(self, carry: tuple[Array, Array], inputs: Array) -> tuple[tuple[Array, Array], Array]: # type: ignore[override]
         r"""A long short-term memory (LSTM) cell.
 
         Args:
@@ -191,9 +191,7 @@ class LSTMCell(RNNCellBase):
         new_h = o * self.activation_fn(new_c)
         return (new_c, new_h), new_h
 
-    def initialize_carry(
-        self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
-    ) -> tuple[Array, Array]:
+    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> tuple[Array, Array]: # type: ignore[override]
         """Initialize the RNN cell carry.
 
         Args:
@@ -300,7 +298,7 @@ class OptimizedLSTMCell(RNNCellBase):
             rngs=rngs,
         )
 
-    def __call__(self, carry: tuple[Array, Array], inputs: Array) -> tuple[tuple[Array, Array], Array]:
+    def __call__(self, carry: tuple[Array, Array], inputs: Array) -> tuple[tuple[Array, Array], Array]: # type: ignore[override]
         r"""An optimized long short-term memory (LSTM) cell.
 
         Args:
@@ -331,9 +329,7 @@ class OptimizedLSTMCell(RNNCellBase):
         new_h = o * self.activation_fn(new_c)
         return (new_c, new_h), new_h
 
-    def initialize_carry(
-        self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
-    ) -> tuple[Array, Array]:
+    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> tuple[Array, Array]: # type: ignore[override]
         """Initialize the RNN cell carry.
 
         Args:
@@ -427,14 +423,14 @@ class SimpleCell(RNNCellBase):
             rngs=rngs,
         )
 
-    def __call__(self, carry, inputs):
+    def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]: # type: ignore[override]
         new_carry = self.dense_i(inputs) + self.dense_h(carry)
         if self.residual:
             new_carry += carry
         new_carry = self.activation_fn(new_carry)
         return new_carry, new_carry
 
-    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> Array:
+    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> Array: # type: ignore[override]
         """Initialize the RNN cell carry.
 
         Args:
@@ -535,7 +531,7 @@ class GRUCell(RNNCellBase):
             rngs=rngs,
         )
 
-    def __call__(self, carry, inputs):
+    def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]: # type: ignore[override]
         """Gated recurrent unit (GRU) cell.
 
         Args:
@@ -568,9 +564,7 @@ class GRUCell(RNNCellBase):
         new_h = (1.0 - z) * n + z * h
         return new_h, new_h
 
-    def initialize_carry(
-        self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
-    ) -> Array:
+    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> Array: # type: ignore[override]
         """Initialize the RNN cell carry.
 
         Args:
@@ -676,12 +670,12 @@ class RNN(Module):
 
         slice_carry = seq_lengths is not None and return_carry
 
-        def scan_fn(cell: RNNCellBase, carry: Carry, x: Array) -> tuple[Carry, Array]:
+        def scan_fn(cell: RNNCellBase, carry: Carry, x: Array) -> tuple[Carry, Array] | tuple[Carry, tuple[Carry, Array]]:
             carry, y = cell(carry, x)
             if slice_carry:
                 return carry, (carry, y)
             return carry, y
-        state_axes = nnx.StateAxes({...: Carry})
+        state_axes = nnx.StateAxes({...: Carry}) # type: ignore[arg-type]
         scan = nnx.scan(
             scan_fn,
             in_axes=(state_axes, Carry, time_axis),
@@ -867,7 +861,7 @@ class Bidirectional(Module):
         self,
         inputs: Array,
         *,
-        initial_carry: Carry | None = None,
+        initial_carry: tuple[Carry, Carry] | None = None,
         rngs: rnglib.Rngs | None = None,
         seq_lengths: Array | None = None,
         return_carry: bool | None = None,
@@ -884,7 +878,8 @@ class Bidirectional(Module):
         if initial_carry is not None:
             initial_carry_forward, initial_carry_backward = initial_carry
         else:
-            initial_carry_forward = initial_carry_backward = None
+            initial_carry_forward = None
+            initial_carry_backward = None
         # Throw a warning in case the user accidentally re-uses the forward RNN
         # for the backward pass and does not intend for them to share parameters.
         if self.forward_rnn is self.backward_rnn:
