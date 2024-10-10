@@ -14,7 +14,7 @@ In this guide, you will learn how to perform model surgery in Flax NNX using sev
 
 * __Pythonic `nnx.Module` manipulation__: Using Pythonic ways to manipulate sub-`Module`s given a model.
 
-* __Manipulation of an abstract model or state__: A key trick for playing with `flax.nnxModule`s and states without memory allocation.
+* __Manipulation of an abstract model or state__: A key trick for playing with `flax.nnx.Module`s and states without memory allocation.
 
 * __Checkpoint surgery from a raw state to model__: How to manipulate parameter states when they are incompatible with existing model code.
 
@@ -106,7 +106,7 @@ gdef, abs_state = nnx.split(abs_model)
 pprint(abs_state)
 ```
 
-When you fill every `nnx.VariableState` pytree leaf's `value`s with real `jax.Array`s, the abstract model becomes equivalent to a real model.
+When you fill every `nnx.VariableState` pytree leaf's `value` attributes with real `jax.Array`s, the abstract model becomes equivalent to a real model.
 
 ```{code-cell} ipython3
 model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
@@ -133,7 +133,7 @@ old_model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
 checkpointer.save(f'/tmp/nnx-surgery-state', nnx.state(model), force=True)
 ```
 
-In this new model, the sub-`Module`s are renamed from `linear(1|2)` to `layer(1|2)`. Since the pytree structure has changed, it is impossible to load the old checkpoint with the new model state structure:
+In this new model, the sub-`Module`s are renamed from `linear(1|2)` to `layer(1|2)`. Since the pytree structure has changed, it is impossible to directly load the old checkpoint with the new model state structure:
 
 ```{code-cell} ipython3
 class ModifiedTwoLayerMLP(nnx.Module):
@@ -191,7 +191,7 @@ In some cases - such as with LoRA (Low-Rank Adaption) - you may want to randomly
 
 To do naive partial initialization, you can just initialize the whole model, then swap the pre-trained parameters in. However, this approach may allocate additional memory midway if your modification requires re-creating module parameters that you will later discard. Below is an example of this.
 
-> **Note:** You can use `jax.live_arrays()` to check all the arrays live in memory at any given time. This call can be “messed up” when you run a single Jupyter notebook cell multiple times (because of old garbage-collecting Python variables). However, restarting the Python kernel in the notebook and running the code from scratch will always yield the same output.
+> **Note:** You can use `jax.live_arrays()` to check all the arrays live in memory at any given time. This call can be “messed up” when you run a single Jupyter notebook cell multiple times (due to garbage-collection of old Python variables). However, restarting the Python kernel in the notebook and running the code from scratch will always yield the same output.
 
 ```{code-cell} ipython3
 # Some pretrained model state
