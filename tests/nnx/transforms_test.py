@@ -2345,6 +2345,44 @@ class TestVmap(absltest.TestCase):
     self.assertEqual(m.kernel.value.shape, (5, 16, 32))
     self.assertEqual(m.kernel.sharding, ('c', 'a', 'b'))
 
+  def test_state_axes_from_state(self):
+    class Model(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.bn = nnx.BatchNorm(dout, rngs=rngs)
+
+    model = Model(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.state(model)
+
+    state['linear']['kernel'] = 0
+    state['linear']['bias'] = 1
+    state['bn']['scale'] = 0
+    state['bn']['mean'] = 1
+    state['bn']['var'] = 0
+    state['bn']['bias'] = None
+
+    state_axes = nnx.StateAxes(state)
+
+    self.assertEqual(state_axes.map_prefix(('linear', 'kernel'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('linear', 'bias'), None), 1)
+    self.assertEqual(state_axes.map_prefix(('bn', 'scale'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('bn', 'mean'), None), 1)
+    self.assertEqual(state_axes.map_prefix(('bn', 'var'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('bn', 'bias'), None), None)
+
+    @nnx.vmap(out_axes=state_axes, axis_size=5)
+    def create_block():
+      return Model(2, 3, rngs=nnx.Rngs(0))
+
+    model = create_block()
+
+    self.assertEqual(model.linear.kernel.shape, (5, 2, 3))
+    self.assertEqual(model.linear.bias.shape, (3, 5))
+    self.assertEqual(model.bn.scale.shape, (5, 3))
+    self.assertEqual(model.bn.mean.shape, (3, 5))
+    self.assertEqual(model.bn.var.shape, (5, 3))
+    self.assertEqual(model.bn.bias.shape, (3,))
+
 
 class TestPmap(absltest.TestCase):
 

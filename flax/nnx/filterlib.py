@@ -87,6 +87,24 @@ class PathContains:
     return f'PathContains({self.key!r})'
 
 
+class PathIn:
+  def __init__(self, *paths: PathParts):
+    self.paths = frozenset(paths)
+
+  def __call__(self, path: PathParts, x: tp.Any):
+    return path in self.paths
+
+  def __repr__(self):
+    paths_repr = ','.join(map(repr, self.paths))
+    return f'PathIn({paths_repr})'
+
+  def __eq__(self, other):
+    return isinstance(other, PathIn) and self.paths == other.paths
+
+  def __hash__(self):
+    return hash(self.paths)
+
+
 @dataclasses.dataclass(frozen=True)
 class OfType:
   type: type

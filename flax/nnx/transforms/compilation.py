@@ -21,6 +21,7 @@ from flax.nnx import (
   extract,
   filterlib,
   graph,
+  statelib,
   variablelib,
 )
 import jax
@@ -40,10 +41,14 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 class StateSharding(extract.PrefixMapping):
   def __init__(
     self,
-    filter_sharding: tp.Mapping[filterlib.Filter, tp.Any]
+    filter_sharding: statelib.State
+    | tp.Mapping[filterlib.Filter, tp.Any]
     | tp.Iterable[tuple[filterlib.Filter, tp.Any]],
     /,
   ):
+    if isinstance(filter_sharding, statelib.State):
+      filter_sharding = statelib.create_path_filters(filter_sharding)  # type: ignore
+
     iterable = tuple(
       filter_sharding.items()
       if isinstance(filter_sharding, tp.Mapping)

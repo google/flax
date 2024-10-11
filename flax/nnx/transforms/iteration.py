@@ -21,6 +21,7 @@ import typing as tp
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx import extract, filterlib, graph, spmd, variablelib
+from flax.nnx import statelib
 from flax.nnx.module import Module
 from flax.nnx.statelib import State
 from flax.nnx.transforms.transforms import resolve_kwargs
@@ -57,13 +58,17 @@ class Carry:
 class StateAxes(extract.PrefixMapping):
 
   def __init__(
-      self,
-      filter_axes: (
-          tp.Mapping[filterlib.Filter, Index | type[Carry] | None]
-          | tp.Iterable[tuple[filterlib.Filter, Index | type[Carry] | None]]
-      ),
-      /,
+    self,
+    filter_axes: (
+      statelib.State
+      | tp.Mapping[filterlib.Filter, Index | type[Carry] | None]
+      | tp.Iterable[tuple[filterlib.Filter, Index | type[Carry] | None]]
+    ),
+    /,
   ):
+    if isinstance(filter_axes, statelib.State):
+      filter_axes = statelib.create_path_filters(filter_axes)  # type: ignore
+
     iterable = tuple(
         filter_axes.items()
         if isinstance(filter_axes, tp.Mapping)
