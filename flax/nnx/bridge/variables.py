@@ -20,7 +20,7 @@ from flax import struct
 from flax.core import meta
 from flax.nnx import spmd
 from flax.nnx import traversals
-from flax.nnx import variables as variableslib
+from flax.nnx import variablelib as variableslib
 from flax.nnx.module import GraphDef
 import typing as tp
 

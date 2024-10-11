@@ -29,7 +29,7 @@ from flax.nnx import (
   tracers,
 )
 from flax.nnx import graph
-from flax.nnx.variables import Variable, VariableState
+from flax.nnx.variablelib import Variable, VariableState
 from flax.typing import Key
 from flax import errors
 

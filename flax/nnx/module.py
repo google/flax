@@ -23,7 +23,7 @@ from flax.nnx import (
   filterlib,
   graph,
 )
-from flax.nnx import variables as variableslib
+from flax.nnx import variablelib as variableslib
 from flax.nnx.graph import GraphDef
 from flax.nnx.object import Object, ObjectMeta
 from flax.nnx.graph import GraphState, StateLeaf

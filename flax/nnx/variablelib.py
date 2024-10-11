@@ -23,8 +23,8 @@ from typing import Any
 import jax
 
 from flax import errors
-from flax.nnx import reprlib, tracers
-from flax.typing import Missing
+from flax.nnx import filterlib, reprlib, tracers
+from flax.typing import Missing, PathParts
 import jax.tree_util as jtu
 
 A = tp.TypeVar('A')
@@ -244,6 +244,12 @@ class Variable(tp.Generic[A], reprlib.Representable):
   @classmethod
   def state(cls, value: A, **metadata) -> VariableState[A]:
     return cls(value, **metadata).to_state()
+
+  def get_metadata(self):
+    metadata = vars(self).copy()
+    del metadata['raw_value']
+    del metadata['_trace_state']
+    return metadata
 
   def copy_from(self, other: Variable[A]) -> None:
     if type(self) is not type(other):
@@ -960,3 +966,29 @@ def with_metadata(
     )
 
   return wrapper  # type: ignore
+
+
+def split_flat_state(
+  flat_state: tp.Iterable[tuple[PathParts, Variable | VariableState]],
+  filters: tuple[filterlib.Filter, ...],
+) -> tuple[list[tuple[PathParts, Variable | VariableState]], ...]:
+  predicates = filterlib.filters_to_predicates(filters)
+  # we have n + 1 states, where n is the number of predicates
+  # the last state is for values that don't match any predicate
+  flat_states: tuple[list[tuple[PathParts, Variable | VariableState]], ...] = (
+    tuple([] for _ in predicates)
+  )
+
+  for path, value in flat_state:
+    for i, predicate in enumerate(predicates):
+      if predicate(path, value):
+        flat_states[i].append((path, value))
+        break
+    else:
+      raise ValueError(
+        'Non-exhaustive filters, got a non-empty remainder: '
+        f'{path} -> {value}.'
+        '\nUse `...` to match all remaining elements.'
+      )
+
+  return flat_states
