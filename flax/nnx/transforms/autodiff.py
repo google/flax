@@ -23,7 +23,7 @@ from flax.nnx import (
   extract,
   filterlib,
   graph,
-  variables,
+  variablelib,
 )
 from flax.nnx.statelib import State
 import jax
@@ -126,7 +126,7 @@ def _grad_general(
     index_filter[index] = (
       dataclasses.replace(argnum, argnum=-1)
       if isinstance(argnum, DiffState)
-      else DiffState(-1, variables.Param)
+      else DiffState(-1, variablelib.Param)
     )
 
   gradded_fn = transform(

@@ -18,7 +18,7 @@ import typing as tp
 import jax
 import jax.numpy as jnp
 
-from flax.nnx import rnglib, variables
+from flax.nnx import rnglib, variablelib
 from flax.nnx.module import Module
 from flax.nnx.nn import initializers
 from flax.nnx.nn.linear import Linear
@@ -32,7 +32,7 @@ A = tp.TypeVar('A')
 default_kernel_init = initializers.lecun_normal()
 
 
-class LoRAParam(variables.Param[A]):
+class LoRAParam(variablelib.Param[A]):
   pass
 
 
@@ -84,7 +84,7 @@ class LoRA(Module):
     dtype: tp.Optional[Dtype] = None,
     param_dtype: Dtype = jnp.float32,
     kernel_init: Initializer = default_kernel_init,
-    lora_param_type: tp.Type[variables.Variable] = LoRAParam,
+    lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
     rngs: rnglib.Rngs,
   ):
     self.in_features = in_features
@@ -155,7 +155,7 @@ class LoRALinear(Linear):
     lora_dtype: tp.Optional[Dtype] = None,
     lora_param_dtype: Dtype = jnp.float32,
     lora_kernel_init: Initializer = default_kernel_init,
-    lora_param_type: tp.Type[variables.Variable] = LoRAParam,
+    lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
     rngs: rnglib.Rngs,
     **kwargs,
   ):

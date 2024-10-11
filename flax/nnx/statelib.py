@@ -146,6 +146,12 @@ class State(MutableMapping[K, V], reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
+  def map(self, f: tp.Callable[[tuple, V], V]) -> State[K, V]:
+    flat_state = self.flat_state()
+    for path, variable_state in flat_state.items():
+      flat_state[path] = f(path, variable_state)
+    return State.from_flat_path(flat_state)
+
   def flat_state(self) -> FlatState[V]:
     return traversals.flatten_mapping(self._mapping)
 

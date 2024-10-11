@@ -1,6 +1,6 @@
 
 Flax
-========
+====
 .. div:: sd-text-left sd-font-italic
 
    **N**\ eural **N**\ etworks for JA\ **X**
@@ -8,20 +8,18 @@ Flax
 
 ----
 
-Flax delivers an **end-to-end and flexible user experience for researchers
-who use JAX with neural networks**. Flax
-exposes the full power of `JAX <https://jax.readthedocs.io>`__.
+Flax provides a **flexible end-to-end user experience for researchers and developers who use JAX for neural networks**. Flax enables you to use the full power of `JAX <https://jax.readthedocs.io>`__.
 
-At its core is **Flax NNX, a simplified API that makes it easier to create, inspect,
-debug, and analyze neural networks in JAX.** It has first class support
-for Python reference semantics, allowing users to express their models using regular
-Python objects. Flax NNX is an evolution of the previous Flax Linen APIs, and it took years of
-experience to bring a simpler and more user-friendly experience.
+At the core of Flax is **NNX - a simplified API that makes it easier to create, inspect,
+debug, and analyze neural networks in JAX.** Flax NNX has first class support
+for Python reference semantics, enabling users to express their models using regular
+Python objects. Flax NNX is an evolution of the previous `Flax Linen <https://flax-linen.readthedocs.io/>`__
+API, and it took years of experience to bring a simpler and more user-friendly API.
 
 .. note::
-   Flax Linen API is not going to be deprecated in the near future as most of our users still
-   rely on this API, however new users are encouraged to use Flax NNX.
-   For existing Linen users to move to NNX, check out the `evolution guide <guides/linen_to_nnx.html>`_.
+   Flax Linen API is not going to be deprecated in the near future as most of Flax users still
+   rely on this API. However, new users are encouraged to use Flax NNX.
+   For existing Flax Linen users planning to move to Flax NNX, check out the `evolution guide <guides/linen_to_nnx.html>`_ and `Why Flax NNX <why.html>`_.
 
 Features
 ^^^^^^^^^

@@ -19,7 +19,7 @@ import jax
 from jax.interpreters import pxla
 from jax.sharding import PartitionSpec
 
-from flax.nnx import variables
+from flax.nnx import variablelib
 from flax.typing import (
   Array,
   ArrayPytree,  # pylint: disable=invalid-name
@@ -36,7 +36,7 @@ def add_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   axis_name = _get_partition_name(params)
 
   def _add_axis(x: tp.Any):
-    if isinstance(x, variables.VariableState):
+    if isinstance(x, variablelib.VariableState):
       if hasattr(x, 'sharding') and x.sharding is not None:
         sharding: list[str | None] = list(x.sharding)
         while len(sharding) < index:
@@ -48,7 +48,7 @@ def add_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
     return x
 
   return jax.tree.map(
-    _add_axis, tree, is_leaf=lambda x: isinstance(x, variables.VariableState)
+    _add_axis, tree, is_leaf=lambda x: isinstance(x, variablelib.VariableState)
   )
 
 
@@ -56,7 +56,7 @@ def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   axis_name = _get_partition_name(params)
 
   def _remove_axis(x: tp.Any):
-    if isinstance(x, variables.VariableState):
+    if isinstance(x, variablelib.VariableState):
       if hasattr(x, 'sharding') and x.sharding is not None:
         sharding = list(x.sharding)
         assert sharding.pop(index) == axis_name
@@ -67,7 +67,7 @@ def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   return jax.tree.map(
     _remove_axis,
     tree,
-    is_leaf=lambda x: isinstance(x, variables.VariableState),
+    is_leaf=lambda x: isinstance(x, variablelib.VariableState),
   )
 
 
@@ -94,7 +94,7 @@ def get_partition_spec(tree: A) -> A:
     return (rules[s] if s in rules else None for s in sharding)
 
   def f(x):
-    if isinstance(x, (variables.VariableState, variables.Variable)):
+    if isinstance(x, (variablelib.VariableState, variablelib.Variable)):
       if hasattr(x, 'sharding') and x.sharding:
         if hasattr(x, 'sharding_rules') and x.sharding_rules:
           return x.replace(PartitionSpec(*from_rules(x.sharding, x.sharding_rules)))
@@ -105,7 +105,7 @@ def get_partition_spec(tree: A) -> A:
     return _maybe_replicate(x)
 
   return jax.tree.map(
-    f, tree, is_leaf=lambda x: isinstance(x, variables.VariableState)
+    f, tree, is_leaf=lambda x: isinstance(x, variablelib.VariableState)
   )
 
 
@@ -171,7 +171,7 @@ def with_partitioning(
   mesh: tp.Optional[jax.sharding.Mesh] = None,
   **metadata: tp.Any,
 ) -> F:
-  return variables.with_metadata(
+  return variablelib.with_metadata(
     initializer,
     sharding=sharding,
     mesh=mesh,

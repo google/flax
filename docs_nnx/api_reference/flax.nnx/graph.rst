@@ -10,6 +10,7 @@ graph
 .. autofunction:: update
 .. autofunction:: pop
 .. autofunction:: state
+.. autofunction:: graph
 .. autofunction:: graphdef
 .. autofunction:: iter_graph
 .. autofunction:: clone

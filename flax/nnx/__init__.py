@@ -55,6 +55,7 @@ from .graph import SplitContext as SplitContext
 from .graph import split_context as split_context
 from .graph import MergeContext as MergeContext
 from .graph import merge_context as merge_context
+from .graph import variables as variables
 from .nn import initializers as initializers
 from .nn.activations import celu as celu
 from .nn.activations import elu as elu
@@ -116,7 +117,7 @@ from .spmd import with_partitioning as with_partitioning
 from .spmd import with_sharding_constraint as with_sharding_constraint
 from .statelib import State as State
 from .training import metrics as metrics
-from .variables import (
+from .variablelib import (
   Param as Param,
 )
 # this needs to be imported before optimizer to prevent circular import
@@ -143,14 +144,14 @@ from .transforms.iteration import pmap as pmap
 from .transforms.transforms import eval_shape as eval_shape
 from .transforms.transforms import cond as cond
 from .transforms.iteration import StateAxes as StateAxes
-from .variables import A as A
-from .variables import BatchStat as BatchStat
-from .variables import Cache as Cache
-from .variables import Intermediate as Intermediate
-from .variables import Variable as Variable
-from .variables import VariableState as VariableState
-from .variables import VariableMetadata as VariableMetadata
-from .variables import with_metadata as with_metadata
+from .variablelib import A as A
+from .variablelib import BatchStat as BatchStat
+from .variablelib import Cache as Cache
+from .variablelib import Intermediate as Intermediate
+from .variablelib import Variable as Variable
+from .variablelib import VariableState as VariableState
+from .variablelib import VariableMetadata as VariableMetadata
+from .variablelib import with_metadata as with_metadata
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree
