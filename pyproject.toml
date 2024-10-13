@@ -90,6 +90,8 @@ docs = [
     "einops",
 ]
 dev = [
+    "maturin>=1.7.4",
+    "pip>=24.2",
     "pre-commit>=3.8.0",
 ]
 

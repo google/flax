@@ -12,4 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Any
+from flax import nnx
+
 def sum_as_string(a: int, b: int) -> str: ...
+def flatten(
+  node: Any, ref_index: nnx.graph.RefMap
+) -> tuple[
+  nnx.GraphDef, list[tuple[nnx.graph.PathParts, nnx.VariableState]]
+]: ...
