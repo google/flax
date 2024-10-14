@@ -1,17 +1,39 @@
+---
+jupytext:
+  formats: ipynb,md:myst
+  text_representation:
+    extension: .md
+    format_name: myst
+    format_version: 0.13
+    jupytext_version: 1.13.8
+---
+
 # Save and load checkpoints
 
-Flax does not actively maintain a library for saving and loading model checkpoints to disk. We recommend you to use external libraries like [Orbax](https://orbax.readthedocs.io/en/latest/index.html) to do it.
+This guide demonstrates how to save and load Flax NNX model checkpoints with [Orbax](https://orbax.readthedocs.io/).
 
-This guide will cover a few user-side scenarios of saving and loading Flax NNX model checkpoints using Orbax. The Orbax API we use here are for demonstration purposes only - please check out the [Orbax website](https://orbax.readthedocs.io/en/latest/index.html) for the most up-to-date recommended API.
+> **Note:** The Flax team does not actively maintain a library for saving and loading model checkpoints to disk. Therefore, it is recommended you use external libraries like [Orbax](https://orbax.readthedocs.io/en/latest/index.html) to do it.
 
-> Note: Flax's legacy `flax.training.checkpoints` package is deprecated. Its documentation resides in the [legacy documentation site](https://flax-linen.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html).
+In this guide you will learn how to:
+
+* Save checkpoints.
+* Restore checkpoints.
+* Restore checkpoints if checkpoint structures differ. 
+* Perform multi-process checkpointing. 
+
+The Orbax API examples used throughout the guide are for demonstration purposes, and for the most up-to-date recommended APIs refer to the [Orbax website](https://orbax.readthedocs.io/).
+
+> **Note:** The Flax team recommends using [Orbax](https://orbax.readthedocs.io/en/latest/index.html) for saving and loading checkpoints to disk, as we do not actively maintain a library for these functionalities.
+
+> **Note:** If you are looking for Flax Linen's legacy `flax.training.checkpoints` package, it was deprecated in 2023 in favor of Orbax. The documentation resides on the [Flax Linen site](https://flax-linen.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html).
+
++++
 
 ### Setup
 
-We first set up a checkpoint directory and an example NNX model.
+Import the necessary dependencies, set up a checkpoint directory and an example Flax NNX model - `TwoLayerMLP` - by subclassing [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html).
 
-
-```python
+```{code-cell} ipython3
 from flax import nnx
 import orbax.checkpoint as ocp
 import jax
@@ -21,8 +43,7 @@ import numpy as np
 ckpt_dir = ocp.test_utils.erase_and_create_empty('/tmp/my-checkpoints/')
 ```
 
-
-```python
+```{code-cell} ipython3
 class TwoLayerMLP(nnx.Module):
   def __init__(self, dim, rngs: nnx.Rngs):
     self.linear1 = nnx.Linear(dim, dim, rngs=rngs, use_bias=False)
@@ -32,7 +53,7 @@ class TwoLayerMLP(nnx.Module):
     x = self.linear1(x)
     return self.linear2(x)
 
-# Create this model and show we can run it
+# Instantiate the model and show we can run it.
 model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
 x = jax.random.normal(jax.random.key(42), (3, 4))
 assert model(x).shape == (3, 4)
@@ -40,19 +61,17 @@ assert model(x).shape == (3, 4)
 
 ## Save checkpoints
 
-JAX checkpointing libraries save [Pytrees](https://jax.readthedocs.io/en/latest/pytrees.html), which is a pure, possibly nested container of JAX arrays (or, "tensors" as some other frameworks would put it). In the context of machine learning, the checkpoint is usually a pytree of model parameters and other data such as optimizer states.
+JAX checkpointing libraries, such as Orbax, can save and load any given JAX [pytree](https://jax.readthedocs.io/en/latest/pytrees.html), which is a pure, possibly nested container of [`jax.Array`s)](https://jax.readthedocs.io/en/latest/key-concepts.html#jax-arrays-jax-array) (or, "tensors" as some other frameworks would put it). In the context of machine learning, the checkpoint is usually a pytree of model parameters and other data, such as optimizer states.
 
-In Flax NNX, you can obtain such a pytree from an [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html) by calling [`nnx.split`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.split) and pick up the returned [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State).
+In Flax NNX, you can obtain such a pytree from an [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html) by calling [`nnx.split`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.split), and picking up the returned [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State).
 
-
-```python
+```{code-cell} ipython3
 _, state = nnx.split(model)
 nnx.display(state)
 
 checkpointer = ocp.StandardCheckpointer()
 checkpointer.save(ckpt_dir / 'state', state)
 ```
-
 
 <script> (()=>{ if (customElements.get('treescope-container') === undefined) { class TreescopeContainer extends HTMLElement { constructor() { super(); this.attachShadow({mode: "open"}); this.defns = {}; this.state = {}; } } customElements.define("treescope-container", TreescopeContainer); } if (customElements.get('treescope-run-here') === undefined) { class RunHere extends HTMLElement { constructor() { super() } connectedCallback() { const run = child => { const fn = new Function(child.textContent); child.textContent = ""; fn.call(this); this.remove(); }; const child = this.querySelector("script"); if (child) { run(child); } else { new MutationObserver(()=>{ run(this.querySelector("script")); }).observe(this, {childList: true}); } } } customElements.define("treescope-run-here", RunHere); } })(); </script> <treescope-container class="treescope_out_5ecb69e45849446495cac4e3367e5c4f" ></treescope-container> <treescope-run-here><script type="application/octet-stream"> const root = ( Array.from(document.getElementsByClassName( "treescope_out_5ecb69e45849446495cac4e3367e5c4f")) .filter((elt) => !elt.dataset.setup) )[0]; root.dataset.setup = 1; const msg = document.createElement("span"); msg.style = "color: #cccccc; font-family: monospace;"; msg.textContent = "(Loading...)"; root.state.loadingMsg = msg; root.shadowRoot.appendChild(msg); root.state.chain = new Promise((resolve, reject) => { const observer = new IntersectionObserver((entries) => { for (const entry of entries) { if (entry.isIntersecting) { resolve(); observer.disconnect(); return; } } }, {rootMargin: "1000px"}); window.setTimeout(() => { observer.observe(root); }, 0); }); root.state.deferring = false; const _insertNode = (node) => { for (let oldScript of node.querySelectorAll("script")) { let newScript = document.createElement("script"); newScript.type = oldScript.type; newScript.textContent = oldScript.textContent; oldScript.parentNode.replaceChild(newScript, oldScript); } if (root.state.loadingMsg) { root.state.loadingMsg.remove(); root.state.loadingMsg = null; } root.shadowRoot.appendChild(node); }; root.defns.insertContent = ((contentNode, compressed) => { if (compressed) { root.state.deferring = true; } if (root.state.deferring) { root.state.chain = (async () => { await root.state.chain; if (compressed) { const encoded = contentNode.textContent; const blob = new Blob([ Uint8Array.from(atob(encoded), (m) => m.codePointAt(0)) ]); const reader = blob.stream().pipeThrough( new DecompressionStream("deflate") ).pipeThrough( new TextDecoderStream("utf-8") ).getReader(); const parts = []; while (true) { const step = await reader.read(); if (step.done) { break; } parts.push(step.value); } const tpl = document.createElement('template'); tpl.innerHTML = parts.join(""); _insertNode(tpl.content); } else { _insertNode(contentNode.content); } })(); } else { _insertNode(contentNode.content); } }); </script></treescope-run-here><div style="display:none"> <script type="application/octet-stream" >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</script> <treescope-run-here><script type="application/octet-stream"> const root = ( Array.from(document.getElementsByClassName( "treescope_out_5ecb69e45849446495cac4e3367e5c4f")) .filter((elt) => !elt.dataset['step0']) )[0]; root.dataset['step0'] = 1; root.defns.insertContent( this.parentNode.querySelector('script[type="application/octet-stream"]'), true ); this.parentNode.remove(); </script></treescope-run-here> </div>
 
@@ -63,15 +82,14 @@ checkpointer.save(ckpt_dir / 'state', state)
 
 ## Restore checkpoints
 
-Note that you saved the checkpoint as a class of `nnx.State`, which is also nested with `nnx.VariableState` and `nnx.Param` Python classes. At restoration time, you need to have these classes ready in your runtime, and tell the checkpointing library to restore your pytree back to that structure.
+Note that you saved the checkpoint as a Flax class of [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State), which is also nested with [`nnx.VariableState`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.VariableState) and [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param) classes.
 
-You can achive this by creating an abstract NNX model (without allocating any memory for arrays) and show its abstract variable state to the checkpointing library.
+At checkpoint restoration time, you need to have these classes ready in your runtime, and instruct the checkpointing library (Orbax) to restore your pytree back to that structure. This can be achieved as follows:
+- First, create an abstract Flax NNX model (without allocating any memory for arrays), and show its abstract variable state to the checkpointing library.
+- Once you have the state, use [`nnx.merge`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.merge) to obtain your Flax NNX model, and use it as usual.
 
-Once you have the state, use `nnx.merge` to obtain your NNX model and use it as usual.
-
-
-```python
-# Restore the checkpoint back to its `nnx.State` structure - need an abstract reference
+```{code-cell} ipython3
+# Restore the checkpoint back to its `nnx.State` structure - need an abstract reference.
 abstract_model = nnx.eval_shape(lambda: TwoLayerMLP(4, rngs=nnx.Rngs(0)))
 graphdef, abstract_state = nnx.split(abstract_model)
 print('The abstract NNX state (all leaves are abstract arrays):')
@@ -82,7 +100,7 @@ jax.tree.map(np.testing.assert_array_equal, state, state_restored)
 print('NNX State restored: ')
 nnx.display(state_restored)
 
-# The model is good to use as ever!
+# The model is now good to use!
 model = nnx.merge(graphdef, state_restored)
 assert model(x).shape == (3, 4)
 ```
@@ -111,24 +129,22 @@ assert model(x).shape == (3, 4)
 
 ## Save and restore as pure dictionaries
 
-You might prefer to work with Python built-in container types when interacting with checkpoint libraries. In that case, you can use the `nnx.State.to_pure_dict` and `nnx.State.replace_by_pure_dict` API to convert an `nnx.State` to and from pure nested dictionaries.
+When interacting with checkpoint libraries (like Orbax), you may prefer to work with Python built-in container types. In this case, you can use the [`nnx.State.to_pure_dict`](https://github.com/google/flax/blob/764e1732dcd3b8bf178b9ba73ddecf125709b5d7/flax/nnx/statelib.py#L170) and [`nnx.State.replace_by_pure_dict`](https://github.com/google/flax/blob/764e1732dcd3b8bf178b9ba73ddecf125709b5d7/flax/nnx/statelib.py#L179) API to convert an [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State) to and from pure nested dictionaries.
 
-
-```python
+```{code-cell} ipython3
 # Save as pure dict
 pure_dict_state = state.to_pure_dict()
 nnx.display(pure_dict_state)
 checkpointer.save(ckpt_dir / 'pure_dict', pure_dict_state)
 
-# Restore as pure dict
+# Restore as a pure dictionary.
 restored_pure_dict = checkpointer.restore(ckpt_dir / 'pure_dict')
 abstract_model = nnx.eval_shape(lambda: TwoLayerMLP(4, rngs=nnx.Rngs(0)))
 graphdef, abstract_state = nnx.split(abstract_model)
 abstract_state.replace_by_pure_dict(restored_pure_dict)
 model = nnx.merge(graphdef, abstract_state)
-assert model(x).shape == (3, 4)  # the model still works!
+assert model(x).shape == (3, 4)  # The model still works!
 ```
-
 
 <script> (()=>{ if (customElements.get('treescope-container') === undefined) { class TreescopeContainer extends HTMLElement { constructor() { super(); this.attachShadow({mode: "open"}); this.defns = {}; this.state = {}; } } customElements.define("treescope-container", TreescopeContainer); } if (customElements.get('treescope-run-here') === undefined) { class RunHere extends HTMLElement { constructor() { super() } connectedCallback() { const run = child => { const fn = new Function(child.textContent); child.textContent = ""; fn.call(this); this.remove(); }; const child = this.querySelector("script"); if (child) { run(child); } else { new MutationObserver(()=>{ run(this.querySelector("script")); }).observe(this, {childList: true}); } } } customElements.define("treescope-run-here", RunHere); } })(); </script> <treescope-container class="treescope_out_277cbde407034bf9addfa8e4969bce7e" ></treescope-container> <treescope-run-here><script type="application/octet-stream"> const root = ( Array.from(document.getElementsByClassName( "treescope_out_277cbde407034bf9addfa8e4969bce7e")) .filter((elt) => !elt.dataset.setup) )[0]; root.dataset.setup = 1; const msg = document.createElement("span"); msg.style = "color: #cccccc; font-family: monospace;"; msg.textContent = "(Loading...)"; root.state.loadingMsg = msg; root.shadowRoot.appendChild(msg); root.state.chain = new Promise((resolve, reject) => { const observer = new IntersectionObserver((entries) => { for (const entry of entries) { if (entry.isIntersecting) { resolve(); observer.disconnect(); return; } } }, {rootMargin: "1000px"}); window.setTimeout(() => { observer.observe(root); }, 0); }); root.state.deferring = false; const _insertNode = (node) => { for (let oldScript of node.querySelectorAll("script")) { let newScript = document.createElement("script"); newScript.type = oldScript.type; newScript.textContent = oldScript.textContent; oldScript.parentNode.replaceChild(newScript, oldScript); } if (root.state.loadingMsg) { root.state.loadingMsg.remove(); root.state.loadingMsg = null; } root.shadowRoot.appendChild(node); }; root.defns.insertContent = ((contentNode, compressed) => { if (compressed) { root.state.deferring = true; } if (root.state.deferring) { root.state.chain = (async () => { await root.state.chain; if (compressed) { const encoded = contentNode.textContent; const blob = new Blob([ Uint8Array.from(atob(encoded), (m) => m.codePointAt(0)) ]); const reader = blob.stream().pipeThrough( new DecompressionStream("deflate") ).pipeThrough( new TextDecoderStream("utf-8") ).getReader(); const parts = []; while (true) { const step = await reader.read(); if (step.done) { break; } parts.push(step.value); } const tpl = document.createElement('template'); tpl.innerHTML = parts.join(""); _insertNode(tpl.content); } else { _insertNode(contentNode.content); } })(); } else { _insertNode(contentNode.content); } }); </script></treescope-run-here><div style="display:none"> <script type="application/octet-stream" >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</script> <treescope-run-here><script type="application/octet-stream"> const root = ( Array.from(document.getElementsByClassName( "treescope_out_277cbde407034bf9addfa8e4969bce7e")) .filter((elt) => !elt.dataset['step0']) )[0]; root.dataset['step0'] = 1; root.defns.insertContent( this.parentNode.querySelector('script[type="application/octet-stream"]'), true ); this.parentNode.remove(); </script></treescope-run-here> </div>
 
@@ -142,12 +158,11 @@ assert model(x).shape == (3, 4)  # the model still works!
 
 ## Restore when checkpoint structures differ
 
-The ability to load a checkpoint as a pure nested dictionary can come in handy when you want to load some outdated checkpoints that no longer matches with your current model code. Check out this simple example below.
+The ability to load a checkpoint as a pure nested dictionary can come in handy when you want to load some outdated checkpoints that no longer match with your current model code. Check out this simple example below.
 
-This pattern also works if you saved the checkpoint as `nnx.State` instead of pure dictionary. Check out the [checkpoint surgery guide](https://flax.readthedocs.io/en/latest/guides/surgery.html#checkpoint-surgery) for a code example. The only difference is you need to re-process your raw diciontary a bit before calling `restore_from_pure_dict`.
+This pattern also works if you save the checkpoint as an [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State) instead of a pure dictionary. Check out the [Checkpoint surgery section](https://flax.readthedocs.io/en/latest/guides/surgery.html#checkpoint-surgery) of the [Model Surgery](https://flax.readthedocs.io/en/latest/guides/surgery.html) guide for an example with code. The only difference is you need to reprocess your raw dictionary a bit before calling [`nnx.State.replace_by_pure_dict`](https://github.com/google/flax/blob/764e1732dcd3b8bf178b9ba73ddecf125709b5d7/flax/nnx/statelib.py#L179).
 
-
-```python
+```{code-cell} ipython3
 class ModifiedTwoLayerMLP(nnx.Module):
   """A modified version of TwoLayerMLP, which requires bias arrays."""
   def __init__(self, dim, rngs: nnx.Rngs):
@@ -158,17 +173,17 @@ class ModifiedTwoLayerMLP(nnx.Module):
     x = self.linear1(x)
     return self.linear2(x)
 
-# Accomodate your old checkpoint to the new code...
+# Accommodate your old checkpoint to the new code.
 restored_pure_dict = checkpointer.restore(ckpt_dir / 'pure_dict')
 restored_pure_dict['linear1']['bias'] = jnp.zeros((4,))
 restored_pure_dict['linear2']['bias'] = jnp.zeros((4,))
 
-# Same restore code as above
+# Same restore code as above.
 abstract_model = nnx.eval_shape(lambda: ModifiedTwoLayerMLP(4, rngs=nnx.Rngs(0)))
 graphdef, abstract_state = nnx.split(abstract_model)
 abstract_state.replace_by_pure_dict(restored_pure_dict)
 model = nnx.merge(graphdef, abstract_state)
-assert model(x).shape == (3, 4)  # the new model works!
+assert model(x).shape == (3, 4)  # The new model works!
 
 nnx.display(model.linear1)
 ```
@@ -186,16 +201,20 @@ nnx.display(model.linear1)
 
 ## Multi-process checkpointing
 
-In multi-host/multi-process environment, you would want to restore your checkpoint as sharded across multiple devices. Check out [this section of the Flax scale-up guide](https://flax.readthedocs.io/en/latest/guides/flax_gspmd.html#load-sharded-model-from-a-checkpoint) to learn how to derive a sharding tree and use it to load your checkpoint.
+In a multi-host/multi-process environment, you would want to restore your checkpoint as sharded across multiple devices. Check out the [Load sharded model from a checkpoint](https://flax.readthedocs.io/en/latest/guides/flax_gspmd.html#load-sharded-model-from-a-checkpoint) section in the Flax [Scale up on multiple devices](https://flax.readthedocs.io/en/latest/guides/flax_gspmd.html) guide to learn how to derive a sharding pytree and use it to load your checkpoint.
+
+> **Note:** JAX provides several ways to scale up your code on multiple hosts at the same time. This usually happens when the number of devices (CPU/GPU/TPU) is so large that different devices are managed by different hosts (CPU). Check out JAX’s [Introduction to parallel programming](https://jax.readthedocs.io/en/latest/sharded-computation.html), [Using JAX in multi-host and multi-process environments](https://jax.readthedocs.io/en/latest/multi_process.html), [Distributed arrays and automatic parallelization](https://jax.readthedocs.io/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html), and [Manual parallelism with `shard_map`](https://jax.readthedocs.io/en/latest/notebooks/shard_map.html).
+
++++
 
 ## Other checkpointing features
 
-This guide only use the simplest Orbax save/load API ([`orbax.checkpoint.StandardCheckpointer`](https://orbax.readthedocs.io/en/latest/api_reference/checkpoint.checkpointers.html#standardcheckpointer)) to showcase all the tricks on the Flax modeling side. Feel free to use other tools or libraries as you see fit.
+This guide only uses the simplest [`orbax.checkpoint.StandardCheckpointer`](https://orbax.readthedocs.io/en/latest/api_reference/checkpoint.checkpointers.html#standardcheckpointer) API to show how to save and load on the Flax modeling side. Feel free to use other tools or libraries as you see fit.
 
-Check out [the Orbax website](https://orbax.readthedocs.io/en/latest/index.html) for other commonly used features, such as:
+In addition, check out [the Orbax website](https://orbax.readthedocs.io/en/latest/index.html) for other commonly used features, such as:
 
-* [CheckpointManager](https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html) to track checkpoints from different steps
+* [`CheckpointManager`](https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html) to track checkpoints from different steps.
 
-* [Asynchronous checkpointing](https://orbax.readthedocs.io/en/latest/guides/checkpoint/async_checkpointing.html)
+* [Asynchronous checkpointing](https://orbax.readthedocs.io/en/latest/guides/checkpoint/async_checkpointing.html).
 
-* [Transformations](https://orbax.readthedocs.io/en/latest/guides/checkpoint/transformations.html): a way to modify pytree structure during loading time (not after loading time, as in this guide)
+* [Orbax transformations](https://orbax.readthedocs.io/en/latest/guides/checkpoint/transformations.html): A way to modify pytree structure during loading time, instead of after loading time, which is demonstrated in this guide.
