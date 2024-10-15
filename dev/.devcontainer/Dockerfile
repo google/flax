@@ -3,7 +3,7 @@
 # Licensed under the MIT License. See https://go.microsoft.com/fwlink/?linkid=2090316 for license information.
 #-------------------------------------------------------------------------------------------------------------
 
-FROM python:3.7
+FROM python:3.12
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -52,7 +52,7 @@ RUN apt-get update \
 RUN pip install numpy jaxlib tensorflow tensorflow-datasets matplotlib msgpack \
     jupyter pytest pytest-xdist \
     twine \
-    sphinx sphinx_rtd_theme ipykernel nbsphinx recommonmark sklearn
+    sphinx sphinx_rtd_theme ipykernel nbsphinx recommonmark scikit-learn
 
 # Switch back to dialog for any ad-hoc use of apt-get
 ENV DEBIAN_FRONTEND=dialog
