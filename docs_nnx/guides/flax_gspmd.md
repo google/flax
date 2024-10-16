@@ -232,7 +232,7 @@ abs_state = jax.tree.map(
   abs_state, nnx.get_named_sharding(abs_state, mesh)
 )
 loaded_sharded = checkpointer.restore(path / 'checkpoint_name',
-                                      args=ocp.args.StandardRestore(abs_state))
+                                      target=abs_state)
 jax.debug.visualize_array_sharding(loaded_sharded.dot1.kernel.value)
 jax.debug.visualize_array_sharding(loaded_sharded.w2.value)
 ```

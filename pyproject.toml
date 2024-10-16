@@ -222,3 +222,7 @@ unfixable = []
 indent-style = "space"
 quote-style = "single"
 
+
+[tool.uv]
+# Ignore uv.lock and always upgrade the package to the latest
+upgrade-package = ["jax", "jaxlib", "orbax-checkpoint"]
