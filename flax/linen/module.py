@@ -2201,7 +2201,7 @@ class Module(ModuleBase):
 
     Returns:
       If ``mutable`` is False, returns output. If any collections are
-      mutable, returns ``(output, vars)``, where ``vars`` are is a dict
+      mutable, returns ``(output, vars)``, where ``vars`` is a dict
       of the modified collections.
     """
     Module._module_checks(self)
