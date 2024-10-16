@@ -86,6 +86,13 @@ from .nn.attention import combine_masks as combine_masks
 from .nn.attention import dot_product_attention as dot_product_attention
 from .nn.attention import make_attention_mask as make_attention_mask
 from .nn.attention import make_causal_mask as make_causal_mask
+from .nn.recurrent import RNNCellBase as RNNCellBase
+from .nn.recurrent import LSTMCell as LSTMCell
+from .nn.recurrent import GRUCell as GRUCell
+from .nn.recurrent import OptimizedLSTMCell as OptimizedLSTMCell
+from .nn.recurrent import SimpleCell as SimpleCell
+from .nn.recurrent import RNN as RNN
+from .nn.recurrent import Bidirectional as Bidirectional
 from .nn.linear import Conv as Conv
 from .nn.linear import ConvTranspose as ConvTranspose
 from .nn.linear import Embed as Embed
