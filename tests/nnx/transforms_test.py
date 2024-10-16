@@ -2135,7 +2135,6 @@ class TestVmap(absltest.TestCase):
 
   def test_consistent_aliasing_shared(self):
     class Shared(nnx.Module):
-
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((3, 3)))
 
@@ -2148,16 +2147,45 @@ class TestVmap(absltest.TestCase):
     m1 = Foo(shared)
     m2 = Foo(shared)
 
-    @partial(nnx.vmap, in_axes=(0, 1))
+    @nnx.vmap(in_axes=(0, 1))
     def f(m1, m2):
       pass
 
     with self.assertRaisesRegex(
-        ValueError,
-        r'Inconsistent aliasing detected([\s\S]*)Shared([\s\S]*)a:'
-        r' 0([\s\S]*)a: 1',
+      ValueError,
+      r'Inconsistent aliasing detected([\s\S]*)Param([\s\S]*)a:'
+      r' 0([\s\S]*)a: 1',
     ):
       f(m1, m2)
+
+  def test_equivalent_state_axes_mapping(self):
+    m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
+
+    sa1 = nnx.StateAxes({...: 0})
+    sa2 = nnx.StateAxes({nnx.Param: 0})
+
+    @nnx.vmap(in_axes=(0, sa1, sa2))
+    def f(m1, m2, m3):
+      pass
+
+    f(m, m, m)
+
+  def test_equivalent_state_sharding_mapping(self):
+    m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
+
+    mesh = jax.sharding.Mesh(jax.devices(), ('mp',))
+    sharding = jax.sharding.NamedSharding(
+      mesh, jax.sharding.PartitionSpec('mp')
+    )
+
+    sa1 = nnx.StateSharding({...: sharding})
+    sa2 = nnx.StateSharding({nnx.Param: sharding})
+
+    @nnx.jit(in_shardings=(sharding, sa1, sa2))
+    def f(m1, m2, m3):
+      pass
+
+    f(m, m, m)
 
   @absltest.skip('Enable once jax#19586 resolved')
   def test_captured_module_in_return_error(self):
@@ -2316,6 +2344,44 @@ class TestVmap(absltest.TestCase):
     m = create_block(nnx.Rngs(0))
     self.assertEqual(m.kernel.value.shape, (5, 16, 32))
     self.assertEqual(m.kernel.sharding, ('c', 'a', 'b'))
+
+  def test_state_axes_from_state(self):
+    class Model(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.bn = nnx.BatchNorm(dout, rngs=rngs)
+
+    model = Model(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.state(model)
+
+    state['linear']['kernel'] = 0
+    state['linear']['bias'] = 1
+    state['bn']['scale'] = 0
+    state['bn']['mean'] = 1
+    state['bn']['var'] = 0
+    state['bn']['bias'] = None
+
+    state_axes = nnx.StateAxes(state)
+
+    self.assertEqual(state_axes.map_prefix(('linear', 'kernel'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('linear', 'bias'), None), 1)
+    self.assertEqual(state_axes.map_prefix(('bn', 'scale'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('bn', 'mean'), None), 1)
+    self.assertEqual(state_axes.map_prefix(('bn', 'var'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('bn', 'bias'), None), None)
+
+    @nnx.vmap(out_axes=state_axes, axis_size=5)
+    def create_block():
+      return Model(2, 3, rngs=nnx.Rngs(0))
+
+    model = create_block()
+
+    self.assertEqual(model.linear.kernel.shape, (5, 2, 3))
+    self.assertEqual(model.linear.bias.shape, (3, 5))
+    self.assertEqual(model.bn.scale.shape, (5, 3))
+    self.assertEqual(model.bn.mean.shape, (3, 5))
+    self.assertEqual(model.bn.var.shape, (5, 3))
+    self.assertEqual(model.bn.bias.shape, (3,))
 
 
 class TestPmap(absltest.TestCase):

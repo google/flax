@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import abc
 import contextlib
 import dataclasses
 import threading
@@ -23,7 +24,7 @@ import jax
 from flax import struct
 from flax.nnx.object import Object
 from flax.typing import Missing, PathParts
-from flax.nnx import graph
+from flax.nnx import graph, variablelib
 
 
 A = tp.TypeVar('A')
@@ -119,6 +120,14 @@ def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
     _maybe_insert, pytree, is_leaf=lambda x: isinstance(x, ExtractionIndex)
   )
 
+class PrefixMapping(abc.ABC):
+  @abc.abstractmethod
+  def map_prefix(
+    self,
+    path: variablelib.PathParts,
+    variable: variablelib.Variable,
+    /,
+  ) -> tp.Any: ...
 
 def check_consistent_aliasing(
   node: tuple[tp.Any, ...],
@@ -143,11 +152,16 @@ def check_consistent_aliasing(
           raise ValueError(
             f'Cannot extract graph node from different trace level, got {value!r}'
           )
-      if value in node_prefixes:
-        paths_prefixes = node_prefixes[value]
-        paths_prefixes.append((path, prefix))
-      else:
-        node_prefixes[value] = [(path, prefix)]
+        if isinstance(prefix, PrefixMapping):
+          variable_prefix = prefix.map_prefix(path, value)
+        else:
+          variable_prefix = prefix
+
+        if value in node_prefixes:
+          paths_prefixes = node_prefixes[value]
+          paths_prefixes.append((path, variable_prefix))
+        else:
+          node_prefixes[value] = [(path, variable_prefix)]
 
   # check for inconsistent aliasing
   node_msgs = []

@@ -21,6 +21,7 @@ import jax.tree_util as jtu
 
 from flax.nnx import traversals
 from flax.nnx import filterlib, reprlib
+from flax.nnx import variablelib
 from flax.typing import PathParts
 
 A = tp.TypeVar('A')
@@ -425,3 +426,13 @@ def _split_state(
       flat_states[-1][path] = value  # type: ignore[index] # mypy is wrong here?
 
   return tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
+
+
+def create_path_filters(state: State):
+  flat_state = state.flat_state()
+  value_paths: dict[tp.Any, set[PathParts]] = {}
+  for path, value in flat_state.items():
+    if isinstance(value, (variablelib.Variable, variablelib.VariableState)):
+      value = value.value
+    value_paths.setdefault(value, set()).add(path)
+  return {filterlib.PathIn(*value_paths[value]): value for value in value_paths}
