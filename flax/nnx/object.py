@@ -128,6 +128,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
 
   def check_valid_context(self, error_msg: tp.Callable[[], str]) -> None:
     if not self._object__state.trace_state.is_valid():
+      breakpoint()
       raise errors.TraceContextError(error_msg())
 
   def __deepcopy__(self: G, memo=None) -> G:
