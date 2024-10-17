@@ -381,7 +381,7 @@ def _custom_vjp_split_fn(
   prefix: bool | DiffState,
   value,
   *,
-  nondiff_states: deque[extract.GraphDefState],
+  nondiff_states: list[extract.GraphDefState],
 ):
   if prefix is False:
     # pure non-differentiable arg, we pass all the state through
@@ -429,7 +429,7 @@ class CustomVjpFnWrapper:
     args = extract.from_tree(
       pure_args,
       merge_fn=functools.partial(
-        _custom_vjp_merge_fn, nondiff_states=nondiff_states
+        _custom_vjp_merge_fn, nondiff_states=deque(nondiff_states)
       ),
       ctxtag=self.ctxtag,
     )
@@ -460,16 +460,21 @@ class FwdFn:
     args = extract.from_tree(
       pure_args,
       merge_fn=functools.partial(
-        _custom_vjp_merge_fn, nondiff_states=nondiff_states
+        _custom_vjp_merge_fn, nondiff_states=deque(nondiff_states)
       ),
-      ctxtag=self.ctxtag,
+      ctxtag=self.ctxtag
+      if self.ctxtag in graph.GRAPH_CONTEXT.update_context_stacks
+      else None,
     )
 
     out, residual = self.fwd(*args)
 
     args_out = extract.clear_non_graph_nodes(args)
     pure_args_out, pure_out = extract.to_tree(
-      (args_out, out), ctxtag=self.ctxtag
+      (args_out, out),
+      ctxtag=self.ctxtag
+      if self.ctxtag in graph.GRAPH_CONTEXT.update_context_stacks
+      else None,
     )
     pure_residual = extract.to_tree(residual)
 
@@ -521,6 +526,7 @@ class CustomVjp(tp.Generic[A]):
     nondiff_argnums: tuple[int | DiffState, ...],
   ):
     functools.update_wrapper(self, fun)
+    # offset by 1 so broadcast_state is non-differentiable
     jax_nondiff_argnums = tuple(
       x.argnum if isinstance(x, DiffState) else x for x in nondiff_argnums
     )
@@ -542,6 +548,8 @@ class CustomVjp(tp.Generic[A]):
       )
 
   def __getattr__(self, name: str) -> tp.Any:
+    if not hasattr(self.custom_vjp_fn, name):
+      raise AttributeError(f'{self.__class__.__name__} has no attribute {name}')
     return getattr(self.custom_vjp_fn, name)
 
   def __call__(
@@ -550,7 +558,7 @@ class CustomVjp(tp.Generic[A]):
     with graph.update_context(self.ctxtag):
       args = resolve_kwargs(self.custom_vjp_fn, args, kwargs)
       del kwargs
-      nondiff_states: deque[extract.GraphDefState] = deque()
+      nondiff_states: list[extract.GraphDefState] = []
       arg_filters = tuple(
         self.diff_filter.get(i, True) for i in range(len(args))
       )
@@ -571,6 +579,7 @@ class CustomVjp(tp.Generic[A]):
         pure_args,
         is_leaf=lambda x: isinstance(x, extract.NodeStates),
       )
+      # TODO(cgarciae): why is this unused?
       tangent_tree_node_args = tuple(
         arg
         for arg, is_tree_node in zip(args, tree_node_args)

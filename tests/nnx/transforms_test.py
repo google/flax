@@ -644,16 +644,16 @@ class TestCustomVJP(absltest.TestCase):
       return y, res
 
     def f_bwd(res, g):
-      inputs_g, out_g = g
+      (m_g,), out_g = g
       cos_x, sin_x, m = res
 
-      self.assertIsInstance(inputs_g, tuple)
-      self.assertLen(inputs_g, 1)
-      self.assertIsInstance(inputs_g[0], nnx.State)
+      self.assertIsInstance(m_g, nnx.State)
       self.assertEqual(out_g.shape, ())
       self.assertIsInstance(m, Foo)
 
-      m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      m_g.x.value = cos_x * out_g * m.y
+      m_g.y.value = sin_x * out_g
       return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
