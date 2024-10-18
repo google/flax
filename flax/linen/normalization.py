@@ -343,13 +343,20 @@ class BatchNorm(Module):
     feature_shape = [x.shape[ax] for ax in feature_axes]
 
     ra_mean = self.variable(
-      'batch_stats',
-      'mean',
-      lambda s: jnp.zeros(s, jnp.float32),
-      feature_shape,
+        'batch_stats',
+        'mean',
+        lambda s: jnp.zeros(
+            s, jnp.float32 if self.force_float32_reductions else x.dtype
+        ),
+        feature_shape,
     )
     ra_var = self.variable(
-      'batch_stats', 'var', lambda s: jnp.ones(s, jnp.float32), feature_shape
+        'batch_stats',
+        'var',
+        lambda s: jnp.ones(
+            s, jnp.float32 if self.force_float32_reductions else x.dtype
+        ),
+        feature_shape,
     )
 
     if use_running_average:
