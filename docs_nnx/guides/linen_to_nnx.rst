@@ -1,13 +1,11 @@
-Evolution from Linen to NNX
-##########
+Evolution from Flax Linen to NNX
+################################
 
-This guide will walk you through the differences between Flax Linen and Flax NNX
-models, and side-by-side comparisions to help you migrate your code from the Linen API to NNX.
+This guide demonstrates the differences between Flax Linen and Flax NNX models, providing side-by-side example code to help you migrate to the Flax NNX API from Flax Linen.
 
-Before this guide, it's highly recommended to read through `The Basics of Flax NNX <https://flax.readthedocs.io/en/latest/nnx_basics.html>`__ to learn about the core concepts and code examples of Flax NNX.
+This document mainly teaches how to convert arbitrary Flax Linen code to Flax NNX. If you want to play it “safe” and convert your codebase iteratively, check out the `Use Flax NNX and Linen together via nnx.bridge <https://flax.readthedocs.io/en/latest/guides/bridge_guide.html>`__ guide.
 
-This guide mainly covers converting arbitratry Linen code to NNX. If you want to play it safe and convert your codebase iteratively, check out the guide that allows you to `use NNX and Linen code together <https://flax.readthedocs.io/en/latest/guides/bridge_guide.html>`__
-
+To get the most out of this guide, it is highly recommended to get go through `Flax NNX basics <https://flax.readthedocs.io/en/latest/nnx_basics.html>`__ document, which covers the :class:`nnx.Module<flax.nnx.Module>` system, `Flax transformations <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`__, and the `Functional API <https://flax.readthedocs.io/en/latest/nnx_basics.html#the-flax-functional-api>`__ with examples.
 
 .. testsetup:: Linen, NNX
 
@@ -17,18 +15,18 @@ This guide mainly covers converting arbitratry Linen code to NNX. If you want to
   import flax.linen as nn
   from typing import Any
 
-Basic Module Definition
-==========
+Basic ``Module`` definition
+===========================
 
-Both Linen and NNX uses the ``Module`` as the default way to express a neural
-library layer.  There are two fundamental difference between Linen and NNX
-modules:
+Both Flax Linen and Flax NNX use the ``Module`` class as the default unit to express a neural network library layer. In the example below, you first create a ``Block`` (by subclassing ``Module``) composed of one linear layer with dropout and a ReLU activation function; then you use it as a sub-``Module`` when creating a ``Model`` (also by subclassing ``Module``), which is made up of ``Block`` and a linear layer.
 
-* **Stateless vs. stateful**: Linen module instances are stateless: variables are returned from a purely functional ``.init()`` call and managed separately. NNX modules, however, owns its variables as attributes of this Python object.
+There are two fundamental differences between Flax Linen and Flax NNX ``Module`` objects:
 
-* **Lazy vs. eager**: Linen modules only allocate space to create variables when they actually see their input. Whereas NNX module instances create their variables the moment they are instantiated, without seeing a sample input.
+* **Stateless vs. stateful**: A ``flax.linen.Module`` (``nn.Module``) instance is stateless - the variables are returned from a purely functional ``Module.init()`` call and managed separately. A :class:`flax.nnx.Module`, however, owns its variables as attributes of this Python object.
 
-  * Linen can use the ``@nn.compact`` decorator to define the model in a single method and use shape inference from the input sample, whereas NNX modules generally requests additional shape information to create all parameters during ``__init__``  and separately define the computation in ``__call__``.
+* **Lazy vs. eager**: A ``flax.linen.Module`` only allocates space to create variables when they actually see their input (lazy). A :class:`flax.nnx.Module` instance creates variables the moment they are instantiated before seeing a sample input (eager).
+
+* Flax Linen can use the ``@nn.compact`` decorator to define the model in a single method, and use shape inference from the input sample. A Flax NNX ``Module`` generally requests additional shape information to create all parameters during ``__init__`` , and separately defines the computation in the ``__call__`` method.
 
 .. codediff::
   :title: Linen, NNX
@@ -83,14 +81,16 @@ modules:
       return x
 
 
-Variable Creation
-==========
+Variable creation
+=================
 
-To generate the model parameters for a Linen model, you call the ``init`` method with a ``jax.random.key`` plus some sample inputs that the model shall take. The result is a nested dictionary of JAX arrays to be carried around and maintained separately.
+Next, let’s discuss instantiating the model and initializing its parameters:
 
-In NNX, the model parameters are automatically initialized when the user instantiates the model, and the variables are stored inside the module (or its submodule) as attributes. You still need to give it an RNG key, but the key will be wrapped inside a ``nnx.Rngs`` class and will be stored inside, generating more RNG keys when needed.
+* To generate model parameters for a Flax Linen model, you call the ``flax.linen.Module.init`` (``nn.Module.init``) method with a ``jax.random.key`` (`doc <https://jax.readthedocs.io/en/latest/random-numbers.html>`__) plus some sample inputs that the model shall take. This results in a nested dictionary of `JAX Arrays <https://jax.readthedocs.io/en/latest/key-concepts.html#jax-arrays-jax-array>`__ (``jax.Array`` data types) to be carried around and maintained separately.
 
-If you want to access NNX model parameters in the stateless, dictionary-like fashion for checkpoint saving or model surgery, check out the `NNX split/merge API <https://flax.readthedocs.io/en/latest/nnx_basics.html#state-and-graphdef>`__.
+* In Flax NNX, the model parameters are automatically initialized when you instantiate the model, and the variables (:class:`nnx.Variable<flax.nnx.Variable>` objects) are stored inside the :class:`nnx.Module<flax.nnx.Module>` (or its sub-``Module``) as attributes. You still need to provide it with a `pseudorandom number generator (PRNG) <https://jax.readthedocs.io/en/latest/random-numbers.html>`__ key, but that key will be wrapped inside an :class:`nnx.Rngs<flax.nnx.Rngs>` class and stored inside, generating more PRNG keys when needed.
+
+If you want to access Flax NNX model parameters in the stateless, dictionary-like fashion for checkpoint saving or model surgery, check out the `Flax NNX split/merge API <https://flax.readthedocs.io/en/latest/nnx_basics.html#state-and-graphdef>`__ (:func:`nnx.split<flax.nnx.split>` / :func:`nnx.merge<flax.nnx.merge>`).
 
 .. codediff::
   :title: Linen, NNX
@@ -109,28 +109,41 @@ If you want to access NNX model parameters in the stateless, dictionary-like fas
   model = Model(784, 256, 10, rngs=nnx.Rngs(0))
 
 
-  # parameters were already initialized during model instantiation
+  # Parameters were already initialized during model instantiation.
 
   assert model.linear.bias.value.shape == (10,)
   assert model.block.linear.kernel.value.shape == (784, 256)
 
 
-Training Step and Compilation
-==========
+Training step and compilation
+=============================
 
-Now we write a training step and compile it using JAX just-in-time compilation. Note a few differences here:
+Now, let’s proceed to writing a training step and compiling it using `JAX just-in-time compilation <https://jax.readthedocs.io/en/latest/jit-compilation.html>`__. Below are certain differences between Flax Linen and Flax NNX approaches.
 
-* Linen uses ``@jax.jit`` to compile the training step, whereas NNX uses ``@nnx.jit``.  ``jax.jit`` only accepts pure stateless arguments, but ``nnx.jit`` allows the arguments to be stateful NNX modules. This greatly reduced the number of lines needed for a train step.
+Compiling the training step:
 
-* Similarly, Linen uses ``jax.grad()`` to return a raw dictionary of gradients, wheras NNX can use ``nnx.grad`` to return the gradients of Modules as NNX ``State`` dictionaries. To use regular ``jax.grad`` with NNX you need to use the `NNX split/merge API <https://flax.readthedocs.io/en/latest/nnx_basics.html#state-and-graphdef>`__.
+* Flax Linen uses ``@jax.jit`` - a `JAX transform <https://jax.readthedocs.io/en/latest/key-concepts.html#transformations>`__ - to compile the training step.
+* Flax NNX uses :meth:`@nnx.jit<flax.nnx.jit>` - a `Flax NNX transform <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`__ (one of several transform APIs that behave similarly to JAX transforms, but also `work well with Flax NNX objects <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`__). So, while ``jax.jit`` only accepts functions pure stateless arguments, ``nnx.jit`` allows the arguments to be stateful NNX Modules. This greatly reduced the number of lines needed for a train step.
 
-  * If you are already using Optax optimizers like ``optax.adamw`` (instead of the raw ``jax.tree.map`` computation shown here), check out `nnx.Optimizer example <https://flax.readthedocs.io/en/latest/nnx_basics.html#transforms>`__ for a much more concise way of training and updating your model.
+Taking gradients:
 
-* The Linen train step needs to return a tree of parameters, as the input of the next step. On the other hand, NNX's step doesn't need to return anything, because the ``model`` was already in-place-updated within ``nnx.jit``.
+* Similarly, Flax Linen uses ``jax.grad`` (a JAX transform for `automatic differentiation <https://jax.readthedocs.io/en/latest/automatic-differentiation.html#taking-gradients-with-jax-grad>`__) to return a raw dictionary of gradients.
+* Flax NNX uses :meth:`nnx.grad<flax.nnx.grad>` (a Flax NNX transform) to return the gradients of NNX Modules as :class:`nnx.State<flax.nnx.State>` dictionaries. If you want to use regular ``jax.grad`` with Flax NNX you need to use the `Flax NNX split/merge API <https://flax.readthedocs.io/en/latest/nnx_basics.html#state-and-graphdef>`__.
 
-* NNX modules are stateful and automatically tracks a few things within, such as RNG keys and BatchNorm stats. That's why you don't need to explicitly pass an RNG key in on every step. Note that you can use `nnx.reseed <https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/rnglib.html#flax.nnx.reseed>`__ to reset its underlying RNG state.
+Optimizers:
 
-* In Linen, you need to explicitly define and pass in an argument ``training`` to control the behavior of ``nn.Dropout`` (namely, its ``deterministic`` flag, which means random dropout only happens if ``training=True``). In NNX, you can call ``model.train()`` to automatically switch ``nnx.Dropout`` to training mode. Conversely, call ``model.eval()`` to turn off training mode. You can learn more about what this API does at its `API reference <https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html#flax.nnx.Module.train>`__.
+* If you are already using `Optax <https://optax.readthedocs.io/>`__ optimizers like ``optax.adamw`` (instead of the raw ``jax.tree.map`` computation shown here) with Flax Linen, check out the :class:`nnx.Optimizer<flax.nnx.Optimizer>` example in the `Flax NNX basics <https://flax.readthedocs.io/en/latest/nnx_basics.html#transforms>`__ guide for a much more concise way of training and updating your model.
+
+Model updates during each training step:
+
+* The Flax Linen training step needs to return a `pytree <https://jax.readthedocs.io/en/latest/working-with-pytrees.html>`__ of parameters as the input of the next step.
+* The Flax NNX training step doesn't need to return anything, because the ``model`` was already updated in-place within :meth:`nnx.jit<flax.nnx.jit>`.
+* In addition, :class:`nnx.Module<flax.nnx.Module>` objects are stateful, and ``Module`` automatically tracks several things within it, such as PRNG keys and ``BatchNorm`` stats. That is why you don't need to explicitly pass an PRNG key in on every step. Also note that you can use :meth:`nnx.reseed<flax.nnx.reseed>` to reset its underlying PRNG state.
+
+Dropout behavior:
+
+* In Flax Linen, you need to explicitly define and pass in the ``training`` argument to control the behavior of ``flax.linen.Dropout`` (``nn.Dropout``), namely, its ``deterministic`` flag, which means random dropout only happens if ``training=True``.
+* In Flax NNX, you can call ``model.train()`` (:meth:`flax.nnx.Module.train`) to automatically switch :class:`nnx.Dropout<flax.nnx.Dropout>` to the training mode. Conversely, you can call ``model.eval()`` (:meth:`flax.nnx.Module.eval`) to turn off the training mode. You can learn more about what ``nnx.Module.train`` does in its `API reference <https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html#flax.nnx.Module.train>`__.
 
 
 .. codediff::
@@ -185,22 +198,19 @@ Now we write a training step and compile it using JAX just-in-time compilation. 
   train_step(model, sample_x, jnp.ones((1,), dtype=jnp.int32))
 
 
-Collections and Variable Types
-==========
+Collections and variable types
+==============================
 
-One key difference between Linen and NNX APIs is how we group variables into categories. In Linen, we use different collections; in NNX, since all variables shall be top-level Python attributes, you use different variable types.
+One key difference between Flax Linen and NNX APIs is how they group variables into categories. Flax Linen uses different collections, while Flax NNX, since all variables shall be top-level Python attributes, you use different variable types.
 
-You can freely create your own variable types as subclasses of ``nnx.Variable``.
+In Flax NNX, you can freely create your own variable types as subclasses of ``nnx.Variable``.
 
-For all the built-in Flax Linen layers and collections, NNX already created the corresponding layers and variable type. For example:
+For all the built-in Flax Linen layers and collections, Flax NNX already creates the corresponding layers and variable types. For example:
 
- * ``nn.Dense`` creates ``params`` -> ``nnx.Linear`` creates ``nnx.Param``.
-
- * ``nn.BatchNorm`` creates ``batch_stats`` -> ``nnx.BatchNorm`` creates ``nnx.BatchStats``.
-
- * ``linen.Module.sow()`` creates ``intermediates`` -> ``nnx.Module.sow()`` creates ``nnx.Intermediates``.
-
-   * You can also simply get the intermediates by assigning it to a module attribute, like ``self.sowed = nnx.Intermediates(x)``. This will be similar to Linen's ``self.variable('intermediates' 'sowed', lambda: x)``.
+* ``flax.linen.Dense`` (``nn.Dense``) creates ``params`` -> :class:`nnx.Linear<flax.nnx.Linear>` creates :class:nnx.Param<flax.nnx.Param>`.
+* ``flax.linen.BatchNorm`` (``nn.BatchNorm``) creates ``batch_stats`` -> :class:`nnx.BatchNorm<flax.nnx.BatchNorm>` creates :class:`nnx.BatchStats<flax.nnx.BatchStats>`.
+* ``flax.linen.Module.sow()`` creates ``intermediates`` -> :class:`nnx.Module.sow()<flax.nnx.Module.sow>` creates :class:`nnx.Intermediaries<flax.nnx.Intermediates>`.
+* In Flax NNX, you can also simply obtain the intermediates by assigning it to an ``nnx.Module`` attribute - for example, ``self.sowed = nnx.Intermediates(x)``. This will be similar to Flax Linen's ``self.variable('intermediates' 'sowed', lambda: x)``.
 
 .. codediff::
   :title: Linen, NNX
@@ -257,7 +267,10 @@ For all the built-in Flax Linen layers and collections, NNX already created the 
   model.batchnorm.mean  # BatchStat(value=...)
   model.count           # Counter(value=...)
 
-If you want to extract certain arrays from the tree of variables, you can access the specific dictionary path in Linen, or use ``nnx.split`` to distinguish the types apart in NNX. The code below is an easier example, and check out `Filter API Guide <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__ for more sophisticated filtering expressions.
+If you want to extract certain arrays from the pytree of variables:
+
+* In Flax Linen, you can access the specific dictionary path.
+* In Flax NNX, you can use :func:`nnx.split<flax.nnx.split>` to distinguish the types apart in Flax NNX. The code below is a simple example that splits up the variables by their types - check out the `Flax NNX Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__ guide for more sophisticated filtering expressions.
 
 .. codediff::
   :title: Linen, NNX
@@ -287,17 +300,15 @@ If you want to extract certain arrays from the tree of variables, you can access
 
 
 
-Using Multiple Methods
-==========
+Using multiple methods
+======================
 
-In this section we will take a look at how to use multiple methods in both
-frameworks. As an example, we will implement an auto-encoder model with three methods:
-``encode``, ``decode``, and ``__call__``.
+In this section you will learn how to use multiple methods in both Flax Linen and Flax NNX. As an example, you will implement an auto-encoder model with three methods: ``encode``, ``decode``, and ``__call__``.
 
-As before, we define the encoder and decoder layers without having to pass in the
-input shape, since the module parameters will be initialized lazily using shape
-inference in Linen. In NNX, we must pass in the input shape
-since the module parameters will be initialized eagerly without shape inference.
+Defining the encoder and decoder layers:
+
+* In Flax Linen, as before, define the layers without having to pass in the input shape, since the ``flax.linen.Module`` parameters will be initialized lazily using shape inference.
+* In Flax NNX, you must pass in the input shape since the :class:`nnx.Module<flax.nnx.Module>` parameters will be initialized eagerly without shape inference.
 
 .. codediff::
   :title: Linen, NNX
@@ -389,7 +400,10 @@ The variable structure is as follows:
         }
       })
 
-To call methods other than ``__call__``, in Linen you still need to use the ``apply`` API, wheras in NNX you can simply call the method directly.
+To call methods other than ``__call__``:
+
+* In Flax Linen, you still need to use the ``apply`` API.
+* In Flax NNX, you can simply call the method directly.
 
 .. codediff::
   :title: Linen, NNX
@@ -403,18 +417,17 @@ To call methods other than ``__call__``, in Linen you still need to use the ``ap
 
 
 
-Lifted Transforms
-==========
+Transformations
+===============
 
-Flax APIs provide a set of transforms, which we will refer to as lifted transforms, that wrap JAX transforms in such a way that they can be used with Modules.
+Both Flax Linen and `Flax NNX transformations <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`__ provide their own set of transforms that wrap `JAX transforms <https://jax.readthedocs.io/en/latest/key-concepts.html#transformations>`__ in a way that they can be used with ``Module`` objects.
 
-Most of the transforms in Linen doesn't change much in NNX. See the next section (Scan over Layers) for a case in which the code differs a lot more.
+Most of the transforms in Flax Linen, such as ``grad`` or ``jit``, don't change much in Flax NNX. But, for example, if you try to do ``scan`` over layers, as described in the next section, the code differs by a lot.
 
-To begin, we will first define a ``RNNCell`` module that will contain the logic for a single
-step of the RNN. We will also define a ``initial_state`` method that will be used to initialize
-the state (a.k.a. ``carry``) of the RNN. Like with ``jax.lax.scan``, the ``RNNCell.__call__``
-method will be a function that takes the carry and input, and returns the new
-carry and output. In this case, the carry and the output are the same.
+Let’s start with an example:
+
+* First, define an ``RNNCell`` ``Module`` that will contain the logic for a single step of the RNN.
+* Define a ``initial_state`` method that will be used to initialize the state (a.k.a. ``carry``) of the RNN. Like with ``jax.lax.scan`` (`API doc <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>`__), the ``RNNCell.__call__`` method will be a function that takes the carry and input, and returns the new carry and output. In this case, the carry and the output are the same.
 
 .. codediff::
   :title: Linen, NNX
@@ -450,21 +463,16 @@ carry and output. In this case, the carry and the output are the same.
     def initial_state(self, batch_size: int):
       return jnp.zeros((batch_size, self.hidden_size))
 
-Next, we will define a ``RNN`` Module that will contain the logic for the entire RNN.
+Next, define an ``RNN`` ``Module`` that will contain the logic for the entire RNN.
 
-In Linen, we will use ``nn.scan`` to define a new temporary type that wraps
-``RNNCell``. During this process we will also specify instruct ``nn.scan`` to broadcast
-the ``params`` collection (all steps share the same parameters) and to not split the
-``params`` rng stream (so all steps intialize with the same parameters), and finally
-we will specify that we want scan to run over the second axis of the input and stack
-the outputs along the second axis as well. We will then use this temporary type immediately
-to create an instance of the lifted ``RNNCell`` and use it to create the ``carry`` and
-the run the ``__call__`` method which will ``scan`` over the sequence.
+In Flax Linen:
 
-In NNX, we define a scan function ``scan_fn`` that will use the ``RNNCell`` defined
-in ``__init__`` to scan over the sequence, and explicitly set ``in_axes=(nnx.Carry, None, 1)``,
-``Carry`` means that the ``carry`` argument will be the carry, ``None`` means that ``cell`` will
-be broadcasted to all steps, and ``1`` means ``x`` will be scanned across axis 1.
+* You will use ``flax.linen.scan`` (``nn.scan``) to define a new temporary type that wraps ``RNNCell``. During this process you will also: 1) instruct ``nn.scan`` to broadcast the ``params`` collection (all steps share the same parameters) and to not split the ``params`` PRNG stream (so that all steps initialize with the same parameters); and, finally, 2) specify that you want scan to run over the second axis of the input and stack outputs along the second axis as well.
+* You will then use this temporary type immediately to create an instance of the “lifted” ``RNNCell`` and use it to create the ``carry``, and the run the ``__call__`` method, which will ``scan`` over the sequence.
+
+In Flax NNX:
+
+* You will create a ``scan`` function (``scan_fn``) that will use the ``RNNCell`` defined in ``__init__`` to scan over the sequence, and explicitly set ``in_axes=(nnx.Carry, None, 1)``. ``nnx.Carry`` means that the ``carry`` argument will be the carry, ``None`` means that ``cell`` will be broadcasted to all steps, and ``1`` means ``x`` will be scanned across axis `1`.
 
 .. codediff::
   :title: Linen, NNX
@@ -512,20 +520,18 @@ be broadcasted to all steps, and ``1`` means ``x`` will be scanned across axis 1
 
 
 
-Scan over Layers
-==========
+Scan over layers
+================
 
-In general, lifted transforms of Linen and NNX should look the same. However, NNX lifted transforms are designed to be closer to their lower level JAX counterparts, and thus we throw away some assumptions in certain Linen lifted transforms. This scan-over-layers use case will be a good example to showcase it.
+In general, transforms of Flax Linen and Flax NNX should look the same. However, `Flax NNX transforms <https://flax.readthedocs.io/en/latest/guides/transforms.html>`__ are designed to be closer to their lower-level `JAX counterparts <https://jax.readthedocs.io/en/latest/key-concepts.html#transformations>`__, and thus we throw away some assumptions in certain Linen lifted transforms. This scan-over-layers use case will be a good example to showcase it.
 
-Scan-over-layers is a technique in which, we want run an input through a sequence of N repeated layers, passing the output of each layer as the input to the next layer. This pattern can significantly reduce compilation time for big models. In this example, we will repeat the module ``Block`` for 5 times in a top-level module ``MLP``.
+Scan-over-layers is a technique where you run an input through a sequence of N repeated layers, passing the output of each layer as the input to the next layer. This pattern can significantly reduce compilation time for large models. In the example below, you will repeat the ``Block`` ``Module`` 5 times in the top-level ``MLP`` ``Module``.
 
-In Linen, we apply a ``nn.scan`` upon the module ``Block`` to create a larger module ``ScanBlock`` that contains 5 ``Block``. It will automatically create a large parameter of shape ``(5, 64, 64)`` at initialization time, and at call time iterate over every ``(64, 64)`` slice for a total of 5 times, like a ``jax.lax.scan`` would.
+* In Flax Linen, you apply the ``flax.linen.scan`` (``nn.scan``) transforms upon the ``Block`` ``nn.Module`` to create a larger ``ScanBlock`` ``nn.Module`` that contains 5 ``Block`` ``nn.Module`` objects. It will automatically create a large parameter of shape ``(5, 64, 64)`` at initialization time, and iterate over at call time every ``(64, 64)`` slice for a total of 5 times, like a ``jax.lax.scan`` (`API doc <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>`__) would.
+* Up close, in the logic of this model there actually is no need for the ``jax.lax.scan`` operation at initialization time. What happens there is more like a ``jax.vmap`` operation - you are given a ``Block`` sub-``Module`` that accepts ``(in_dim, out_dim)``, and you "vmap" it over ``num_layers`` of times to create a larger array.
+* In Flax NNX, you take advantage of the fact that model initialization and running code are completely decoupled, and instead use the :func:`nnx.vmap<flax.nnx.vmap>` transform to initialize the underlying ``Block`` parameters, and the :func:`nnx.scan<flax.nnx.scan>` transform to run the model input through them.
 
-But if you think closely, there actually isn't any need for ``jax.lax.scan`` operation at initialization time. What happened there is more like a ``jax.vmap`` operation - you are given a ``Block`` that accepts ``(in_dim, out_dim)``, and you "vmap" it over ``num_layers`` of times to create a larger array.
-
-In NNX we take advantage of the fact that model initialization and running code are completely decoupled, and instead use ``nnx.vmap`` to initialize the underlying blocks, and ``nnx.scan`` to run the model input through them.
-
-For more information on NNX transforms, check out the `Transforms Guide <https://flax.readthedocs.build/en/guides/transforms.html>`__.
+For more information on Flax NNX transforms, check out the `Transforms guide <https://flax.readthedocs.build/en/guides/transforms.html>`__.
 
 .. codediff::
   :title: Linen, NNX
@@ -595,23 +601,23 @@ For more information on NNX transforms, check out the `Transforms Guide <https:/
   model = MLP(64, num_layers=5, rngs=nnx.Rngs(0))
 
 
-There are a few other details to explain in this example:
+There are a few other details to explain in the Flax NNX example above:
 
-* **What is that `nnx.split_rngs` decorator?** NNX transforms are completely agnostic of RNG state, which makes them behave more like JAX transforms but diverge from the Linen transforms that handle RNG state. To regain this functionality, the ``nnx.split_rngs`` decorator allows you to split the ``Rngs`` before passing them to the decorated function and 'lower' them afterwards so they can be used outside.
+* **The `@nnx.split_rngs` decorator:** Flax NNX transforms are completely agnostic of PRNG state, which makes them behave more like JAX transforms but diverge from the Flax Linen transforms that handle PRNG state. To regain this functionality, the ``nnx.split_rngs`` decorator allows you to split the ``nnx.Rngs`` before passing them to the decorated function and 'lower' them afterwards, so they can be used outside.
 
-  * Here we split the RNG keys because ``jax.vmap`` and ``jax.lax.scan`` requires a list of RNG keys if each of its internal operations needs its own key. So for the 5 layers inside ``MLP``, we split and provide 5 different RNG keys from its arguments before going down to the JAX transform.
+  * Here, you split the PRNG keys because ``jax.vmap`` and ``jax.lax.scan`` require a list of PRNG keys if each of its internal operations needs its own key. So for the 5 layers inside the ``MLP``, you split and provide 5 different PRNG keys from its arguments before going down to the JAX transform.
 
-  * Note that actually ``create_block()`` knows it needs to create 5 layers *precisely because* it sees 5 RNG keys, because ``in_axes=(0,)`` means ``vmap`` will look into the first argument's first dimension to know the size it will map over.
+  * Note that actually ``create_block()`` knows it needs to create 5 layers *precisely because* it sees 5 PRNG keys, because ``in_axes=(0,)`` indicates that ``vmap`` will look into the first argument's first dimension to know the size it will map over.
 
-  * Same goes for ``forward()``, which looks at the variables inside the first argument (aka. ``model``) to find out how many times it needs to scan. ``nnx.split_rngs`` here actually splits the RNG state inside the ``model``. (If ``Block`` doesn't have dropout, you don't need the ``nnx.split_rngs`` line because it would not consume any RNG key anyway.)
+  * Same goes for ``forward()``, which looks at the variables inside the first argument (aka. ``model``) to find out how many times it needs to scan. ``nnx.split_rngs`` here actually splits the PRNG state inside the ``model``. (If the ``Block`` ``Module`` doesn't have dropout, you don't need the :meth:`nnx.split_rngs<flax.nnx.split_rngs>` line as it would not consume any PRNG key anyway.)
 
-* **Why the `Block` in NNX doesn't need to take and return that extra dummy value?** This is a requirement from `jax.lax.scan <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>`__. NNX simplifies this so that now you can choose to ignore the second input/output if you set ``out_axes=nnx.Carry`` instead of the default ``(nnx.Carry, 0)``.
+* **Why the Block Module in Flax NNX doesn't need to take and return that extra dummy value:** This is a requirement from ``jax.lax.scan`` `(API doc <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>`__. Flax NNX simplifies this, so that you can now choose to ignore the second output if you set ``out_axes=nnx.Carry`` instead of the default ``(nnx.Carry, 0)``.
 
-  * This is one of the rare cases in which NNX transforms diverge from JAX transforms API.
+  * This is one of the rare cases where Flax NNX transforms diverge from the `JAX transforms <https://jax.readthedocs.io/en/latest/key-concepts.html#transformations>`__ APIs.
 
-This is more lines of code, but it expresses what happened at each time more precisely. Since NNX lifted transforms become way closer to JAX APIs, it's recommended to have a good understanding of the underlying JAX transform before using their NNX versions.
+There are more lines of code in the Flax NNX example above, but they express what happens at each time more precisely. Since Flax NNX transforms become way closer to the JAX transform APIs, it is recommended to have a good understanding of the underlying `JAX transforms <https://jax.readthedocs.io/en/latest/key-concepts.html#transformations>`__ before using their `Flax NNX equivalents <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`__
 
-Now take a look at the variable tree on both sides:
+Now inspect the variable pytree on both sides:
 
 .. tab-set::
 
@@ -648,22 +654,32 @@ Now take a look at the variable tree on both sides:
       })
 
 
-Using ``TrainState`` in NNX
-==========
+Using ``TrainState`` in Flax NNX
+================================
 
-Flax offered a convenient ``TrainState`` dataclass to bundle the model,
-parameters and optimizer. This is not really necessary in NNX era, but this section we would show how to construct your NNX code around it, for any backward compatibility needs.
+Flax Linen has a convenient ``TrainState`` data class to bundle the model,
+parameters and optimizer. In Flax NNX, this is not really necessary. In this section,
+you will learn how to construct your Flax NNX code around ``TrainState`` for any backward
+compatibility needs.
 
-In NNX, we must first call ``nnx.split`` on the model to get the
-separated ``GraphDef`` and ``State`` objects. We can pass in ``nnx.Param`` to filter
-all trainable parameters into a single ``State``, and pass in ``...`` for the remaining
-variables. We also need to subclass ``TrainState`` to add a field for the other variables.
-We can then pass in ``GraphDef.apply`` as the apply function, ``State`` as the parameters
-and other variables and an optimizer as arguments to the ``TrainState`` constructor.
-One thing to note is that ``GraphDef.apply`` will take in ``State``'s as arguments and
+In Flax NNX:
+
+* You must first call :meth:`nnx.split<flax.linen.split>` on the model to get the
+  separate :class:`nnx.GraphDef<flax.nnx.GraphDef>` and :class:`nnx.State<flax.nnx.State>`
+  objects.
+* You can pass in :class:`nnx.Param<flax.nnx.Param>` to filter all trainable parameters
+  into a single :class:`nnx.State<flax.nnx.State>`, and pass in ``...`` for the remaining
+  variables.
+* You also need to subclass ``TrainState`` to add a field for the other variables.
+* Then, you can pass in :meth:`nnx.GraphDef.apply<flax.nnx.GraphDef.apply>` as the ``apply`` function,
+  :class:`nnx.State<flax.nnx.State>` as the parameters and other variables, and an optimizer as arguments to the
+  ``TrainState`` constructor.
+
+Note that :class:`nnx.GraphDef.apply<flax.nnx.GraphDef.apply>` will take in :class:`nnx.State<flax.nnx.State>` objects as arguments and
 return a callable function. This function can be called on the inputs to output the
-model's logits, as well as updated ``GraphDef`` and ``State`` objects. Notice we also use
-``@jax.jit`` since we aren't passing in NNX modules into ``train_step``.
+model's logits, as well as the updated :class:`nnx.GraphDef<flax.nnx.GraphDef>` and :class:`nnx.State<flax.nnx.State>` objects.
+Notice below the use of ``@jax.jit`` since you aren't passing in Flax NNX Modules into
+the ``train_step``.
 
 .. codediff::
   :title: Linen, NNX
@@ -747,3 +763,5 @@ model's logits, as well as updated ``GraphDef`` and ``State`` objects. Notice we
 
   sample_x = jnp.ones((1, 784))
   train_step(state, sample_x, jnp.ones((1,), dtype=jnp.int32))
+
+
