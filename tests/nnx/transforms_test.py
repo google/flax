@@ -644,16 +644,16 @@ class TestCustomVJP(absltest.TestCase):
       return y, res
 
     def f_bwd(res, g):
-      inputs_g, out_g = g
+      (m_g,), out_g = g
       cos_x, sin_x, m = res
 
-      self.assertIsInstance(inputs_g, tuple)
-      self.assertLen(inputs_g, 1)
-      self.assertIsInstance(inputs_g[0], nnx.State)
+      self.assertIsInstance(m_g, nnx.State)
       self.assertEqual(out_g.shape, ())
       self.assertIsInstance(m, Foo)
 
-      m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      m_g.x.value = cos_x * out_g * m.y
+      m_g.y.value = sin_x * out_g
       return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
@@ -726,45 +726,49 @@ class TestCustomVJP(absltest.TestCase):
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.custom_vjp(nondiff_argnums=(1, 2))
-    def f(m1: Foo, m2: Foo, m3):
-      m1.z += 1
-      y = jnp.sin(m1.x) * m1.y  # type: ignore
-      return y, m2
+    @nnx.custom_vjp(nondiff_argnums=(0, 2))
+    def f(a, m: Foo, b):
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      m.z += 1
+      return jnp.sin(m.x) * m.y  # type: ignore
 
-    def f_fwd(m1: Foo, m2: Foo, m3):
-      y, m2 = f(m1, m2, m3)
-      res = (jnp.cos(m1.x), jnp.sin(m1.x), m1)  # type: ignore
-      return (y, m2), res
+    def f_fwd(a, m: Foo, b):
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      y = f(a, m, b)
+      res = (jnp.cos(m.x), jnp.sin(m.x), m)  # type: ignore
+      return y, res
 
-    def f_bwd(m2, m3, res, g):
-      (m1_g, m2_g, m3_g), (y_g, _) = g
+    def f_bwd(a, b, res, g):
+      (m_g,), out_g = g
       cos_x, sin_x, m = res
 
-      self.assertIsInstance(m1_g, nnx.State)
-      self.assertIsInstance(m2_g, nnx.State)
-      self.assertEqual(y_g.shape, ())
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      self.assertIsInstance(m_g, nnx.State)
+      self.assertEqual(out_g.shape, ())
       self.assertIsInstance(m, Foo)
 
-      m1_g = nnx.State(dict(x=cos_x * y_g * m.y, y=sin_x * y_g))
-
-      return (m1_g,)
+      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      m_g.x.value = cos_x * out_g * m.y
+      m_g.y.value = sin_x * out_g
+      return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
 
-    m1 = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
-    m2 = Foo(nnx.Param(jnp.array(3.0)), nnx.Param(jnp.array(4.0)), 0)
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
-    def loss_fn(m1, m2, m3):
-      y, m2 = f(m1, m2, m3)
-      return y + m2.x * m2.y
+    def loss_fn(m):
+      a = 1
+      b = 2
+      return f(a, m, b)
 
-    m1_grad: nnx.State
-    m1_grad = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m1, m2, m2)
+    grad: nnx.State = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
 
-    np.testing.assert_allclose(m1_grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(m1_grad['y'].value, jnp.sin(1.0))  # type: ignore
-    self.assertEqual(m1.z, 1)
+    np.testing.assert_allclose(grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grad['y'].value, jnp.sin(1.0))  # type: ignore
+    self.assertEqual(m.z, 1)
 
   def test_docs_example(self):
     import jax.numpy as jnp
@@ -793,6 +797,58 @@ class TestCustomVJP(absltest.TestCase):
 
     m = Foo(x=jnp.array(1.0), y=jnp.array(2.0))
     grads = nnx.grad(f)(m)
+
+  def test_issue(self):
+    class MyLinear(nnx.Module):
+      def __init__(
+        self, in_features: int, out_features: int, *, rngs: nnx.Rngs
+      ):
+        kernel_init = nnx.initializers.normal(in_features**-0.5)
+        self.kernel = nnx.Param(
+          kernel_init(rngs.params(), (in_features, out_features), jnp.float32)
+        )
+        self.bias = nnx.Param(jnp.zeros((out_features,), jnp.float32))
+
+      def __call__(self, x: jax.Array):
+        pass
+
+    @nnx.custom_vjp
+    def linear(m: MyLinear, x: jax.Array) -> jax.Array:
+      y = x @ m.kernel + m.bias
+      return y
+
+    def linear_fwd(m: MyLinear, x: jax.Array):
+      return linear(m, x), (m, x)
+
+    def linear_bwd(res, g):
+      m, x = res
+      (m_g, x_g), outputs_g = g
+      kernel_grad = outputs_g[None, :] * x[:, None]
+      bias_grad = outputs_g
+      x_grad = m.kernel @ outputs_g
+      assert x_grad.shape == x.shape, 'Shape mismatch for x'
+      assert (
+        m.kernel.value.shape == kernel_grad.shape
+      ), 'Shape mismatch for kernel'
+      assert m.bias.value.shape == bias_grad.shape, 'Shape mismatch for bias'
+      # m_g = nnx.State(dict(kernel=kernel_grad, bias=bias_grad))
+      # x_g = nnx.State((x_grad,))
+      # x_g = nnx.State(dict(x=x_grad))
+      return (m_g, x_g)
+
+    linear.defvjp(linear_fwd, linear_bwd)
+
+    @nnx.jit
+    def loss_fn(x):
+      mod = MyLinear(10, 5, rngs=nnx.Rngs(0))
+      # y = mylinear(x)
+      y = linear(mod, x)
+      # y = simple(x)
+      return y.mean()
+
+    x = jax.random.normal(jax.random.key(0), (10,))
+    grad_fn = nnx.value_and_grad(loss_fn)
+    val, grad = grad_fn(x)
 
 
 class TestScan(absltest.TestCase):
