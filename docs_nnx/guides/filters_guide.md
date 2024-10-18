@@ -8,12 +8,18 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
-# Using Filters
+# Using `Filter`s
 
-> **Attention**: This page relates to the new Flax NNX API.
+Flax NNX uses [`Filter`s](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/filterlib.html) extensively as a way to create [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State) groups in APIs, such as [`nnx.split`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.split), [`nnx.state()`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.state), and many of the [Flax NNX transformations (transforms)](https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html).
 
-Filters are used extensively in Flax NNX as a way to create `State` groups in APIs
-such as `nnx.split`, `nnx.state`, and many of the Flax NNX transforms. For example:
+In this guide you will learn:
+
+* What is a `Filter`?
+* Why are types, such as [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param) or [`nnx.BatchStat`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.BatchStat), treated as `Filter`s?
+* What is the `Filter` domain specific language (DSL)?
+* How is [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State) grouped / filtered?
+
+In the following example [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param) and [`nnx.BatchStat`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.BatchStat) are used as `Filter`s to split the model into two groups: one with the parameters and the other with the batch statistics:
 
 ```{code-cell} ipython3
 from flax import nnx
@@ -31,28 +37,29 @@ print(f'{params = }')
 print(f'{batch_stats = }')
 ```
 
-Here `nnx.Param` and `nnx.BatchStat` are used as Filters to split the model into two groups: one with the parameters and the other with the batch statistics. However, this begs the following questions:
-
-* What is a Filter?
-* Why are types, such as `Param` or `BatchStat`, Filters?
-* How is `State` grouped / filtered?
+Let's dive deeper into `Filter`s.
 
 +++
 
-## The Filter Protocol
+## The `Filter` Protocol
 
-In general Filter are predicate functions of the form:
+In general, Flax `Filter`s are predicate functions of the form:
 
 ```python
 
 (path: tuple[Key, ...], value: Any) -> bool
 
 ```
-where `Key` is a hashable and comparable type, `path` is a tuple of `Key`s representing the path to the value in a nested structure, and `value` is the value at the path. The function returns `True` if the value should be included in the group and `False` otherwise.
 
-Types are obviously not functions of this form, so the reason why they are treated as Filters
-is because, as we will see next, types and some other literals are converted to predicates. For example,
-`Param` is roughly converted to a predicate like this:
+where:
+
+- `Key` is a hashable and comparable type;
+- `path` is a tuple of `Key`s representing the path to the value in a nested structure; and
+- `value` is the value at the path.
+
+The function returns `True` if the value should be included in the group, and `False` otherwise.
+
+Types are not functions of this form. They are treated as `Filter`s because, as you will learn in the next section, types and some other literals are converted to _predicates_. For example, [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param) is roughly converted to a predicate like this:
 
 ```{code-cell} ipython3
 def is_param(path, value) -> bool:
@@ -64,9 +71,7 @@ print(f'{is_param((), nnx.Param(0)) = }')
 print(f'{is_param((), nnx.VariableState(type=nnx.Param, value=0)) = }')
 ```
 
-Such function matches any value that is an instance of `Param` or any value that has a
-`type` attribute that is a subclass of `Param`. Internally Flax NNX uses `OfType` which
-defines a callable of this form for a given type:
+Such function matches any value that is an instance of [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param) or any value that has a `type` attribute that is a subclass of [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param). Internally Flax NNX uses `OfType` which defines a callable of this form for a given type:
 
 ```{code-cell} ipython3
 is_param = nnx.OfType(nnx.Param)
@@ -75,14 +80,11 @@ print(f'{is_param((), nnx.Param(0)) = }')
 print(f'{is_param((), nnx.VariableState(type=nnx.Param, value=0)) = }')
 ```
 
-## The Filter DSL
+## The `Filter` DSL
 
-To avoid users having to create these functions, Flax NNX exposes a small DSL, formalized
-as the `nnx.filterlib.Filter` type, which lets users pass types, booleans, ellipsis,
-tuples/lists, etc, and converts them to the appropriate predicate internally.
+To help users avoid having to create functions mentioned in the previous section, Flax NNX exposes a small domain specific language ([DSL](https://en.wikipedia.org/wiki/Domain-specific_language)), formalized as the [`nnx.filterlib.Filter`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/filterlib.html) type. The `Filter` DSL allows users to pass types, booleans, ellipsis, tuples/lists, etc, and converts them to the appropriate predicate internally.
 
-Here is a list of all the callable Filters included in Flax NNX and their DSL literals
-(when available):
+Here is a list of all the callable `Filter`s included in Flax NNX, and their corresponding DSL literals (when available):
 
 
 | Literal | Callable | Description |
@@ -96,10 +98,14 @@ Here is a list of all the callable Filters included in Flax NNX and their DSL li
 | | `All(*filters)` | Matches values that match all of the inner `filters` |
 | | `Not(filter)` | Matches values that do not match the inner `filter` |
 
-Let see the DSL in action with a `nnx.vmap` example. Lets say we want vectorized all parameters
-and `dropout` Rng(Keys|Counts) on the 0th axis, and broadcasted the rest. To do so we can
-use the following filters to define a `nnx.StateAxes` object that we can pass to `nnx.vmap`'s `in_axes`
-to specify how `model`'s various substates should be vectorized:
+
+Let's check out the DSL in action by using [`nnx.vmap`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/transforms.html#flax.nnx.vmap) as an example. Consider the following:
+
+1) You want to vectorize all parameters;
+2) Apply `'dropout'` `Rng(Keys|Counts)` on the `0`th axis; and
+3) Broadcast the rest.
+
+To do this, you can use the following `Filter`s to define a `nnx.StateAxes` object that you can pass to `nnx.vmap`'s `in_axes` to specify how the `model`'s various sub-states should be vectorized:
 
 ```{code-cell} ipython3
 state_axes = nnx.StateAxes({(nnx.Param, 'dropout'): 0, ...: None})
@@ -109,10 +115,9 @@ def forward(model, x):
   ...
 ```
 
-Here `(nnx.Param, 'dropout')` expands to `Any(OfType(nnx.Param), WithTag('dropout'))` and `...`
-expands to `Everything()`.
+Here `(nnx.Param, 'dropout')` expands to `Any(OfType(nnx.Param), WithTag('dropout'))` and `...` expands to `Everything()`.
 
-If you wish to manually convert literal into a predicate to can use `nnx.filterlib.to_predicate`:
+If you wish to manually convert literal into a predicate, you can use [`nnx.filterlib.to_predicate`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/filterlib.html#flax.nnx.filterlib.to_predicate):
 
 ```{code-cell} ipython3
 is_param = nnx.filterlib.to_predicate(nnx.Param)
@@ -126,15 +131,15 @@ print(f'{nothing = }')
 print(f'{params_or_dropout = }')
 ```
 
-## Grouping States
+## Grouping `State`s
 
-With the knowledge of Filters at hand, let's see how `nnx.split` is roughly implemented. Key ideas:
+With the knowledge of `Filter`s from previous sections at hand, let's learn how to roughly implement [`nnx.split`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.split). Here are the key ideas:
 
-* Use `nnx.graph.flatten` to get the `GraphDef` and `State` representation of the node.
-* Convert all the filters to predicates.
+* Use `nnx.graph.flatten` to get the [`GraphDef`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.GraphDef) and [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State) representation of the node.
+* Convert all the `Filter`s to predicates.
 * Use `State.flat_state` to get the flat representation of the state.
 * Traverse all the `(path, value)` pairs in the flat state and group them according to the predicates.
-* Use `State.from_flat_state` to convert the flat states to nested `State`s.
+* Use `State.from_flat_state` to convert the flat states to nested [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State)s.
 
 ```{code-cell} ipython3
 from typing import Any
@@ -158,7 +163,7 @@ def split(node, *filters):
   )
   return graphdef, *states
 
-# lets test it...
+# Let's test it.
 foo = Foo()
 
 graphdef, params, batch_stats = split(foo, nnx.Param, nnx.BatchStat)
@@ -167,12 +172,14 @@ print(f'{params = }')
 print(f'{batch_stats = }')
 ```
 
-One very important thing to note is that **filtering is order-dependent**. The first filter that
-matches a value will keep it, therefore you should place more specific filters before more general
-filters. For example if we create a `SpecialParam` type that is a subclass of `Param`, and a `Bar`
-object that contains both types of parameters, if we try to split the `Param`s before the
-`SpecialParam`s then all the values will be placed in the `Param` group and the `SpecialParam` group
-will be empty because all `SpecialParam`s are also `Param`s:
+**Note:*** It's very important to know that **filtering is order-dependent**. The first `Filter` that matches a value will keep it, and therefore you should place more specific `Filter`s before more general `Filter`s.
+
+For example, as demonstrated below, if you:
+
+1) Create a `SpecialParam` type that is a subclass of [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param), and a `Bar` object (subclassing [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html)) that contains both types of parameters; and
+2) Try to split the [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param)s before the `SpecialParam`s
+
+then all the values will be placed in the [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param) group, and the `SpecialParam` group will be empty because all `SpecialParam`s are also [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param)s:
 
 ```{code-cell} ipython3
 class SpecialParam(nnx.Param):
@@ -190,7 +197,7 @@ print(f'{params = }')
 print(f'{special_params = }')
 ```
 
-Reversing the order will make sure that the `SpecialParam` are captured first
+And reversing the order will ensure that the `SpecialParam` are captured first:
 
 ```{code-cell} ipython3
 graphdef, special_params, params = split(bar, SpecialParam, nnx.Param) # correct!
