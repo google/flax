@@ -179,11 +179,17 @@ class State(MutableMapping[K, V], reprlib.Representable):
   def replace_by_pure_dict(self,
                            pure_dict: dict[str, tp.Any],
                            replace_fn: SetValueFn | None = None):
+    def try_convert_int(x):
+      try:
+        return int(x)
+      except ValueError:
+        return x
     # Works for nnx.Variable and nnx.VariableState
     if replace_fn is None:
       replace_fn = lambda x, v: x.replace(v) if hasattr(x, 'replace') else v
     current_flat = self.flat_state()
     for kp, v in traversals.flatten_mapping(pure_dict).items():
+      kp = tuple(map(try_convert_int, kp))
       if kp not in current_flat:
         raise ValueError(f'key in pure_dict not available in state: {kp}')
       current_flat[kp] = replace_fn(current_flat[kp], v)
