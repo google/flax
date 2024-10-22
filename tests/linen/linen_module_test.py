@@ -1008,6 +1008,16 @@ class ModuleTest(absltest.TestCase):
     variables = foo.init(random.key(0), x)
     self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
 
+  def test_set_write_only_property_error(self):
+
+    class Foo(nn.Module):
+      bar = property(lambda self: 5)
+
+    foo = Foo()
+    with self.assertRaisesRegex(
+        AttributeError, "can't set attribute 'bar' on value with type .*Foo"):
+      foo.bar = 12
+
   def test_noncompact_module_frozen(self):
     class Foo(nn.Module):
       def setup(self):
