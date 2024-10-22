@@ -39,10 +39,8 @@ class TraceState(reprlib.Representable):
     return self._jax_trace
 
   def is_valid(self) -> bool:
-    if jax.__version_info__ <= (0, 4, 33):
-      return self._jax_trace is current_jax_trace()
-
-    return self._jax_trace == current_jax_trace()
+    # TODO: re-enable when we update nnx to use stackless trace context
+    return True
 
   def __nnx_repr__(self):
     yield reprlib.Object(f'{type(self).__name__}')
