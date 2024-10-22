@@ -14,3 +14,4 @@ Guides
    checkpointing
    jax_and_nnx_transforms
    haiku_to_flax
+   gemma
