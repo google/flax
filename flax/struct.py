@@ -124,41 +124,7 @@ def dataclass(clz: _T, **kwargs) -> _T:
 
   data_clz.replace = replace
 
-  # Remove this guard once minimux JAX version is >0.4.26.
-  try:
-    if hasattr(jax.tree_util, 'register_dataclass'):
-      jax.tree_util.register_dataclass(
-          data_clz, data_fields, meta_fields
-      )
-    else:
-      raise NotImplementedError
-  except NotImplementedError:
-
-    def iterate_clz(x):
-      meta = tuple(getattr(x, name) for name in meta_fields)
-      data = tuple(getattr(x, name) for name in data_fields)
-      return data, meta
-
-    def iterate_clz_with_keys(x):
-      meta = tuple(getattr(x, name) for name in meta_fields)
-      data = tuple(
-          (jax.tree_util.GetAttrKey(name), getattr(x, name))
-          for name in data_fields
-      )
-      return data, meta
-
-    def clz_from_iterable(meta, data):
-      meta_args = tuple(zip(meta_fields, meta))
-      data_args = tuple(zip(data_fields, data))
-      kwargs = dict(meta_args + data_args)
-      return data_clz(**kwargs)
-
-    jax.tree_util.register_pytree_with_keys(
-        data_clz,
-        iterate_clz_with_keys,
-        clz_from_iterable,
-        iterate_clz,
-    )
+  jax.tree_util.register_dataclass(data_clz, data_fields, meta_fields)
 
   def to_state_dict(x):
     state_dict = {
