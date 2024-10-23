@@ -20,26 +20,34 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 +++
 
-# Getting Started with Gemma Sampling using NNX: A Step-by-Step Guide
+# Get started with Gemma sampling/inference using Flax NNX
 
-You will find in this colab a detailed tutorial explaining how to use NNX to load a Gemma checkpoint and sample from it.
+In this tutorial, you will learn step-by-step how to use Flax NNX to load the [Gemma](https://ai.google.dev/gemma) open model files and use them to perform sampling/inference for generating text. You will use the [Flax NNX `gemma` code](https://github.com/google/flax/tree/main/examples/gemma) for model parameter configuration and inference that was written with Flax and JAX.
+
+> Gemma is a family of lightweight, state-of-the-art open models based on Google DeepMind’s [Gemini](https://deepmind.google/technologies/gemini/#introduction). Read more about [Gemma](https://blog.google/technology/developers/gemma-open-models/) and [Gemma 2](https://blog.google/technology/developers/google-gemma-2/).
+
+You are recommended to use [Google Colab](https://colab.research.google.com/) with TPU v2-8 acceleration to run the code.
+
+Let’s get started.
 
 +++
 
 ## Installation
+
+Install the necessary dependencies, including `kagglehub`.
 
 ```{code-cell} ipython3
 ! pip install --no-deps -U flax
 ! pip install jaxtyping kagglehub penzai
 ```
 
-## Downloading the checkpoint
+## Download the model
 
-"To use Gemma's checkpoints, you'll need a Kaggle account and API key. Here's how to get them:
+To use Gemma model, you'll need a [Kaggle](https://www.kaggle.com/models/google/gemma/) account and API key:
 
-1. Visit https://www.kaggle.com/ and create an account.
-2. Go to your account settings, then the 'API' section.
-3. Click 'Create new token' to download your key.
+1. To create an account, visit [Kaggle](https://www.kaggle.com/) and click on 'Register'.
+2. If/once you have an account, you need to sign in, go to your ['Settings'](https://www.kaggle.com/settings), and under 'API' click on 'Create New Token' to generate and download your Kaggle API key.
+3. OPTIONAL: In [Google Colab](https://colab.research.google.com/), under 'Secrets' add your Kaggle username and API key, storing the username as `KAGGLE_USERNAME` and the key as `KAGGLE_KEY`. If you are using a [Kaggle Notebook](https://www.kaggle.com/code) for free TPU or other hardware acceleration, it has a key storage feature under 'Add-ons' > 'Secrets', along with instructions for accessing stored keys.
 
 Then run the cell below.
 
@@ -48,13 +56,21 @@ import kagglehub
 kagglehub.login()
 ```
 
-If everything went well, you should see:
-```
-Kaggle credentials set.
-Kaggle credentials successfully validated.
-```
+If everything went well, it should say `Kaggle credentials set. Kaggle credentials successfully validated.`.
 
-Now select and download the checkpoint you want to try. Note that you will need an A100 runtime for the 7b models.
+**Note:** In Google Colab, you can instead authenticate into Kaggle using the code below after following the optional step 3 from above.
+
+```
+import os
+from google.colab import userdata # `userdata` is a Colab API.
+
+os.environ["KAGGLE_USERNAME"] = userdata.get('KAGGLE_USERNAME')
+os.environ["KAGGLE_KEY"] = userdata.get('KAGGLE_KEY')
+``` 
+
+Now, load the Gemma model you want to try. The code in the next cell utilizes [`kagglehub.model_download`](https://github.com/Kaggle/kagglehub/blob/8efe3e99477aa4f41885840de6903e61a49df4aa/src/kagglehub/models.py#L16) to download model files.
+
+**Note:** For larger models, such as `gemma 7b` and `gemma 7b-it` (instruct), you may require a hardware accelerator with plenty of memory, such as the NVIDIA A100.
 
 ```{code-cell} ipython3
 VARIANT = '2b-it' # @param ['2b', '2b-it', '7b', '7b-it'] {type:"string"}
@@ -70,34 +86,35 @@ from flax import nnx
 import sentencepiece as spm
 ```
 
-Flax examples are not exposed as packages so you need to use the workaround in the next cells to import from NNX's Gemma example.
+To interact with the Gemma model, you will use the Flax NNX `gemma` code from [`google/flax` examples on GitHub](https://github.com/google/flax/tree/main/examples/gemma). Since it is not exposed as a package, you need to use the following workaround to import from the Flax NNX `gemma` example.
 
 ```{code-cell} ipython3
 ! git clone https://github.com/google/flax.git flax_examples
 ```
 
+Import wrapper modules and functions:
+
 ```{code-cell} ipython3
 import sys
 
-sys.path.append("./flax_examples/flax/nnx/examples/gemma")
+sys.path.append("./flax_examples/examples/gemma")
 import params as params_lib
 import sampler as sampler_lib
 import transformer as transformer_lib
 sys.path.pop();
 ```
 
-## Start Generating with Your Model
+## Load and prepare the Gemma model
 
-Load and prepare your LLM's checkpoint for use with Flax.
+First, load the Gemma model parameters for use with Flax.
 
 ```{code-cell} ipython3
 :cellView: form
 
-# Load parameters
 params = params_lib.load_and_format_params(ckpt_path)
 ```
 
-Load your tokenizer, which we'll construct using the [SentencePiece](https://github.com/google/sentencepiece) library.
+Next, load the tokenizer file constructed using the [SentencePiece](https://github.com/google/sentencepiece) library.
 
 ```{code-cell} ipython3
 :cellView: form
@@ -106,19 +123,22 @@ vocab = spm.SentencePieceProcessor()
 vocab.Load(vocab_path)
 ```
 
-Use the `transformer_lib.TransformerConfig.from_params` function to automatically load the correct configuration from a checkpoint. Note that the vocabulary size is smaller than the number of input embeddings due to unused tokens in this release.
+Then, use the Flax NNX [`gemma.transformer.TransformerConfig.from_params`](https://github.com/google/flax/blob/3f3c03b23d4fd3d85d1c5d4d97381a8a2c48b475/examples/gemma/transformer.py#L193) function to automatically load the correct configuration from a checkpoint.
+
+**Note:** The vocabulary size is smaller than the number of input embeddings due to unused tokens in this release.
 
 ```{code-cell} ipython3
 transformer = transformer_lib.Transformer.from_params(params)
 nnx.display(transformer)
 ```
 
-Finally, build a sampler on top of your model and your tokenizer.
+## Perform sampling/inference
+
+Build a Flax NNX [`gemma.Sampler`](https://github.com/google/flax/blob/main/examples/gemma/sampler.py) on top of your model and tokenizer with the right parameter shapes.
 
 ```{code-cell} ipython3
 :cellView: form
 
-# Create a sampler with the right param shapes.
 sampler = sampler_lib.Sampler(
     transformer=transformer,
     vocab=vocab,
@@ -126,7 +146,11 @@ sampler = sampler_lib.Sampler(
 )
 ```
 
-You're ready to start sampling ! This sampler uses just-in-time compilation, so changing the input shape triggers recompilation, which can slow things down. For the fastest and most efficient results, keep your batch size consistent.
+You're ready to start sampling!
+
+**Note:** This Flax NNX [`gemma.Sampler`](https://github.com/google/flax/blob/main/examples/gemma/sampler.py) uses JAX’s [just-in-time (JIT) compilation](https://jax.readthedocs.io/en/latest/jit-compilation.html), so changing the input shape triggers recompilation, which can slow things down. For the fastest and most efficient results, keep your batch size consistent.
+
+Write a prompt in `input_batch` and perform inference. Feel free to tweak `total_generation_steps` (the number of steps performed when generating a response).
 
 ```{code-cell} ipython3
 :cellView: form
@@ -138,7 +162,7 @@ input_batch = [
 
 out_data = sampler(
     input_strings=input_batch,
-    total_generation_steps=300,  # number of steps performed when generating
+    total_generation_steps=300,  # The number of steps performed when generating a response.
   )
 
 for input_string, out_string in zip(input_batch, out_data.text):
@@ -147,4 +171,4 @@ for input_string, out_string in zip(input_batch, out_data.text):
   print(10*'#')
 ```
 
-You should get an implementation of bubble sort and a description of the solar system.
+You should get a Python implementation of the bubble sort algorithm and a description of planets in the solar system.
