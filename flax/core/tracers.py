@@ -16,8 +16,6 @@
 
 import jax
 
-from .. import errors
-
 
 def current_trace():
   """Returns the current JAX state tracer."""
