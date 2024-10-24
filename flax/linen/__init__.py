@@ -32,7 +32,6 @@ from flax.core.meta import (
     with_partitioning as with_partitioning,
 )
 from .activation import (
-    GeGLU as GeGLU,
     PReLU as PReLU,
     celu as celu,
     elu as elu,

@@ -8,7 +8,7 @@ vNext
 -
 -
 -
--
+- removed GeGLU simplistic activation, it should be implemented manually.
 -
 -
 -
