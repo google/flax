@@ -32,10 +32,6 @@ from jax import random
 import jax.numpy as jnp
 import numpy as np
 
-# TODO(jakevdp): use jax.debug_key_reuse directly once min jax version is 0.4.26
-jax_debug_key_reuse = (jax.debug_key_reuse if hasattr(jax, 'debug_key_reuse')
-                       else jax.enable_key_reuse_checks)
-
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
@@ -2141,7 +2137,7 @@ class TransformTest(parameterized.TestCase):
     self.assertTrue(
       jnp.equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
     )
-    with jax_debug_key_reuse(False):
+    with jax.debug_key_reuse(False):
       self.assertFalse(
         jnp.equal(
           vars['state']['rng_loop'][0],

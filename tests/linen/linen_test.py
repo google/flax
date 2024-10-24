@@ -1040,17 +1040,12 @@ class StochasticTest(parameterized.TestCase):
         self.assertTrue(slice_fn(out, i).sum() in (0, summed_total))
 
   def test_dropout_manual_rng(self):
-    def clone(key):
-      if hasattr(jax.random, 'clone'):
-        # JAX v0.4.26+
-        return jax.random.clone(key)
-      return key
     class Foo(nn.Module):
       @nn.compact
       def __call__(self, x):
         key = self.make_rng('dropout')
         x1 = nn.Dropout(rate=0.5, deterministic=False)(x, rng=key)
-        x2 = nn.Dropout(rate=0.5, deterministic=False)(x, rng=clone(key))
+        x2 = nn.Dropout(rate=0.5, deterministic=False)(x, rng=jax.random.clone(key))
         return x1, x2
 
     module = Foo()

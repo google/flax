@@ -23,10 +23,6 @@ from jax import random
 from flax import errors
 from flax.core import FrozenDict, apply, copy, init, lift, nn
 
-# TODO(jakevdp): use jax.debug_key_reuse directly once min jax version is 0.4.26
-jax_debug_key_reuse = (jax.debug_key_reuse if hasattr(jax, 'debug_key_reuse')
-                       else jax.enable_key_reuse_checks)
-
 
 class LiftTest(absltest.TestCase):
   def test_aliasing(self):
@@ -128,11 +124,6 @@ class LiftTest(absltest.TestCase):
     np.testing.assert_allclose(y_t, jnp.ones_like(x))
 
   def test_while_loop(self):
-    def clone(key):
-      if hasattr(jax.random, "clone"):
-        # jax v0.4.26+
-        return jax.random.clone(key)
-      return key
 
     def f(scope, x):
       key_zero = random.key(0)
@@ -140,7 +131,7 @@ class LiftTest(absltest.TestCase):
       scope.param('inc', lambda _: 1)
       scope.put_variable('state', 'acc', 0)
       scope.put_variable('state', 'rng_params', key_zero)
-      scope.put_variable('state', 'rng_loop', clone(key_zero))
+      scope.put_variable('state', 'rng_loop', jax.random.clone(key_zero))
 
       def cond_fn(scope, c):
         acc = scope.get_variable('state', 'acc')
@@ -182,7 +173,7 @@ class LiftTest(absltest.TestCase):
     np.testing.assert_array_equal(
       vars['state']['rng_params'][0], vars['state']['rng_params'][1]
     )
-    with jax_debug_key_reuse(False):
+    with jax.debug_key_reuse(False):
       np.testing.assert_array_compare(
         operator.__ne__,
         vars['state']['rng_loop'][0],
