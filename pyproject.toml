@@ -76,11 +76,9 @@ docs = [
     "sphinx-design",
     "jupytext==1.13.8",
     "dm-haiku",
-
     # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
     # ReadTheDocs: https://stackoverflow.com/a/68008428
     "docutils==0.16",
-
     # The next packages are for notebooks.
     "matplotlib",
     "scikit-learn",
@@ -88,6 +86,8 @@ docs = [
     "ml_collections",
     # notebooks
     "einops",
+    "kagglehub>=0.3.3",
+    "ipywidgets>=8.1.5",
 ]
 dev = [
     "pre-commit>=3.8.0",
