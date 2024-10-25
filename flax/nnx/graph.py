@@ -229,10 +229,9 @@ class NodeRef(GraphDef[Node], reprlib.Representable):
     yield reprlib.Attr('type', self.type.__name__)
     yield reprlib.Attr('index', self.index)
 
-  def __penzai_repr__(self, path, subtree_renderer):
-    from penzai.treescope import repr_lib as pz_repr_lib  # type: ignore[import-not-found,import-untyped]
-
-    return pz_repr_lib.render_object_constructor(
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
+    return treescope.repr_lib.render_object_constructor(
       object_type=type(self),
       attributes={'type': self.type, 'index': self.index},
       path=path,

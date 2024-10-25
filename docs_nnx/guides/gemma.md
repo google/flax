@@ -30,7 +30,7 @@ You will find in this colab a detailed tutorial explaining how to use NNX to loa
 
 ```{code-cell} ipython3
 ! pip install --no-deps -U flax
-! pip install jaxtyping kagglehub penzai
+! pip install jaxtyping kagglehub treescope
 ```
 
 ## Downloading the checkpoint
