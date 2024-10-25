@@ -15,7 +15,6 @@
 """Tests for flax.struct."""
 
 import dataclasses
-import functools
 from typing import Any
 
 import jax
@@ -49,8 +48,8 @@ class StructTest(parameterized.TestCase):
       p.y = 3
 
   def test_slots(self):
-    slots_dataclass = functools.partial(struct.dataclass, frozen=False, slots=True)
-    @slots_dataclass
+
+    @struct.dataclass(frozen=False, slots=True)
     class SlotsPoint:
       x: float
       y: float
@@ -100,7 +99,7 @@ class StructTest(parameterized.TestCase):
       class A:
         a: int = 1
 
-      @functools.partial(struct.dataclass, kw_only=True)
+      @struct.dataclass(kw_only=True)
       class B(A):
         b: int
     elif mode == 'pytreenode':
@@ -139,7 +138,7 @@ class StructTest(parameterized.TestCase):
       class A:
         a: int = 1
 
-      @functools.partial(struct.dataclass, frozen=False)
+      @struct.dataclass(frozen=False)
       class B:
         b: int = 1
     elif mode == 'pytreenode':
