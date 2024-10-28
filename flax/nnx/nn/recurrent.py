@@ -742,16 +742,17 @@ def flip_sequences(
     values for those sequences that were padded. This function keeps the padding
     at the end, while flipping the rest of the elements.
 
-    Example:
-    ```python
-    inputs = [[1, 0, 0],
-              [2, 3, 0]
-              [4, 5, 6]]
-    lengths = [1, 2, 3]
-    flip_sequences(inputs, lengths) = [[1, 0, 0],
-                                       [3, 2, 0],
-                                       [6, 5, 4]]
-    ```
+    Example::
+
+      >>> from flax.nnx.nn.recurrent import flip_sequences
+      >>> from jax import numpy as jnp
+      >>> inputs = jnp.array([[1, 0, 0], [2, 3, 0], [4, 5, 6]])
+      >>> lengths = jnp.array([1, 2, 3])
+      >>> flip_sequences(inputs, lengths, 1, False)
+      Array([[1, 0, 0],
+             [3, 2, 0],
+             [6, 5, 4]], dtype=int32)
+
 
     Args:
       inputs: An array of input IDs <int>[batch_size, seq_length].
@@ -810,27 +811,27 @@ class RNNBase(Protocol):
 class Bidirectional(Module):
     """Processes the input in both directions and merges the results.
 
-    Example usage:
+    Example usage::
 
-    ```python
-    import nnx
-    import jax
-    import jax.numpy as jnp
+      >>> from flax import nnx
+      >>> import jax
+      >>> import jax.numpy as jnp
 
-    # Define forward and backward RNNs
-    forward_rnn = RNN(GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0)))
-    backward_rnn = RNN(GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0)))
+      >>> # Define forward and backward RNNs
+      >>> forward_rnn = RNN(GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0)))
+      >>> backward_rnn = RNN(GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0)))
 
-    # Create Bidirectional layer
-    layer = Bidirectional(forward_rnn=forward_rnn, backward_rnn=backward_rnn)
+      >>> # Create Bidirectional layer
+      >>> layer = Bidirectional(forward_rnn=forward_rnn, backward_rnn=backward_rnn)
 
-    # Input data
-    x = jnp.ones((2, 3, 3))
+      >>> # Input data
+      >>> x = jnp.ones((2, 3, 3))
 
-    # Apply the layer
-    out = layer(x)
-    print(out.shape)
-    ```
+      >>> # Apply the layer
+      >>> out = layer(x)
+      >>> print(out.shape)
+      (2, 3, 8)
+
     """
 
     forward_rnn: RNNBase
