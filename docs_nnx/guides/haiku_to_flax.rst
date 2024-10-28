@@ -82,7 +82,7 @@ There are two fundamental differences between Haiku and Flax ``Module`` objects:
 
 
 Variable creation
-======================
+=======================
 
 Next, let's discuss instantiating the model and initializing its parameters
 
@@ -122,7 +122,7 @@ If you want to access Flax model parameters in the stateless, dictionary-like fa
   assert model.block.linear.kernel.value.shape == (784, 256)
 
 Training step and compilation
-======================
+=======================
 
 
 Now, let's proceed to writing a training step and compiling it using `JAX just-in-time compilation <https://jax.readthedocs.io/en/latest/jit-compilation.html>`__. Below are certain differences between Haiku and Flax NNX approaches.
@@ -401,7 +401,7 @@ To call those custom methods:
 
 
 Transformations
-===============
+=======================
 
 Both Haiku and `Flax transformations <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`__ provide their own set of transforms that wrap `JAX transforms <https://jax.readthedocs.io/en/latest/key-concepts.html#transformations>`__ in a way that they can be used with ``Module`` objects.
 
@@ -488,7 +488,7 @@ The only difference is that Flax ``nnx.scan`` allows you to specify which axis t
 
 
 Scan over layers
-================
+=======================
 
 Most Haiku transforms should look similar with Flax, since they all wraps their JAX counterparts, but the scan-over-layers use case is an exception.
 
@@ -636,7 +636,7 @@ Now inspect the variable pytree on both sides:
 
 
 Top-level Haiku functions vs top-level Flax modules
-================
+=======================
 
 In Haiku, it is possible to write the entire model as a single function by using
 the raw ``hk.{get,set}_{parameter,state}`` to define/access model parameters and
