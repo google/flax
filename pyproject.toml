@@ -182,6 +182,8 @@ filterwarnings = [
     "ignore:.*invalid value encountered in cast.*:RuntimeWarning",
     # RuntimeWarning: divide by zero encountered in equal/not_equal
     "ignore:.*divide by zero encountered in.*:RuntimeWarning",
+    # DeprecationWarning: numpy.core is deprecated
+    "ignore:.*numpy.core is deprecated.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
