@@ -12,7 +12,7 @@ vNext
 -
 -
 -
--
+- removed FLAX_LAZY_RNG flag support for old non-lazy PRNG derivation mode
 -
 -
 -

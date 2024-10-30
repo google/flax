@@ -38,7 +38,6 @@ from jax import numpy as jnp
 from jax import random, tree_util
 
 from flax import config as config
-from flax import configurations as legacy_config  # only for flax_lazy_rng
 from flax import errors, struct, traceback_util
 from flax.ids import uuid
 from flax.typing import (
@@ -98,11 +97,6 @@ class LazyRng(struct.PyTreeNode):
   def create(
     rng: Union['LazyRng', PRNGKey], *suffix: PRNGFoldable
   ) -> 'LazyRng':
-    if not legacy_config.flax_lazy_rng:
-      if isinstance(rng, LazyRng):
-        assert not rng.suffix
-        rng = rng.rng
-      return LazyRng(_legacy_rng_fold_in(rng, suffix), ())
     if isinstance(rng, LazyRng):
       return LazyRng(rng.rng, rng.suffix + suffix)
     else:
@@ -111,22 +105,6 @@ class LazyRng(struct.PyTreeNode):
   def fold(self):
     key = self.as_jax_rng()
     return LazyRng(key, ())
-
-
-def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
-  """Legacy RNG folding."""
-  for x in data:
-    if isinstance(x, str):
-      m = hashlib.sha1()
-      m.update(x.encode('utf-8'))
-      d = m.digest()
-      hash_int = int.from_bytes(d[:4], byteorder='big')
-      rng = random.fold_in(rng, jnp.uint32(hash_int))  # type: ignore
-    elif isinstance(x, int):
-      rng = random.fold_in(rng, x)
-    else:
-      raise ValueError(f'Expected int or string, got: {x}')
-  return rng
 
 
 def _fold_in_static(
