@@ -279,7 +279,7 @@ is a simplified version of a ``BatchNorm`` layer that updates the mean and varia
 Model surgery
 ^^^^^^^^^^^^^
 
-In Flax Linen, model surgery has historically been challenging because of two reasons:
+In Flax Linen, `model surgery <https://flax.readthedocs.io/en/latest/guides/surgery.html>`_ has historically been challenging because of two reasons:
 
 1. Due to lazy initialization, it is not guaranteed that you can replace a sub-``Module`` with a new one.
 2. The parameter structure is separated from the ``flax.linen.Module`` structure, which means you have to manually keep them in sync.
