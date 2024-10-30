@@ -1351,6 +1351,25 @@ def variables(
   node,
   *filters: filterlib.Filter,
 ) -> tp.Union[State[Key, Variable], tuple[State[Key, Variable], ...]]:
+  """Similar to :func:`state` but returns the current :class:`Variable` objects instead
+  of new :class:`VariableState` instances.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> params = nnx.variables(model, nnx.Param)
+    ...
+    >>> assert params['kernel'] is model.kernel
+    >>> assert params['bias'] is model.bias
+
+  Args:
+    node: A graph node object.
+    *filters: One or more :class:`Variable` objects to filter by.
+  Returns:
+    One or more :class:`State` mappings containing the :class:`Variable` objects.
+  """
   num_filters = len(filters)
   if num_filters == 0:
     filters = (..., ...)
