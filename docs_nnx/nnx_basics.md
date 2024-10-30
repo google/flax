@@ -143,7 +143,7 @@ In Flax, [`nnx.Dropout`](https://flax.readthedocs.io/en/latest/api_reference/fla
 
 ### Model surgery
 
-Flax [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html)s are mutable by default. This means that their structure can be changed at any time, which makes model surgery quite easy as any sub-`Module` attribute can be replaced with anything else, such as new `Module`s, existing shared `Module`s, `Module`s of different types, and so on. Moreover, [`nnx.Variable`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Variable)s can also be modified or replaced/shared.
+Flax [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html)s are mutable by default. This means that their structure can be changed at any time, which makes [model surgery](https://flax.readthedocs.io/en/latest/guides/surgery.html) quite easy, as any sub-`Module` attribute can be replaced with anything else, such as new `Module`s, existing shared `Module`s, `Module`s of different types, and so on. Moreover, [`nnx.Variable`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Variable)s can also be modified or replaced/shared.
 
 The following example shows how to replace the `Linear` layers in the `MLP` model from the previous example with `LoraLinear` layers:
 
