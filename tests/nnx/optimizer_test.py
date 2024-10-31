@@ -134,7 +134,7 @@ class TestOptimizer(parameterized.TestCase):
     jit_decorator=[lambda f: f, nnx.jit, jax.jit],
     optimizer=[optax.lbfgs],
   )
-  def test_jit_lbfgs(self, module_cls, jit_decorator, optimizer):
+  def test_jit_linesearch(self, module_cls, jit_decorator, optimizer):
     x = jax.random.normal(jax.random.key(0), (1, 2))
     y = jnp.ones((1, 4))
     model = module_cls(2, 4, rngs=nnx.Rngs(0))
@@ -256,7 +256,7 @@ class TestOptimizer(parameterized.TestCase):
     #{'variable': nnx.LoRAParam},
     {'variable': (nnx.Param, nnx.LoRAParam)},
   )
-  def test_wrt_update_lbfgs(self, variable):
+  def test_wrt_update_linesearch(self, variable):
     in_features = 4
     out_features = 10
     model = nnx.LoRA(
