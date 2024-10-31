@@ -2922,6 +2922,19 @@ class TestWhileLoop(absltest.TestCase):
       (0, m, m),
     )
 
+  def test_fori_loop_basic(self):
+    def fwd_fn(i, input):
+      m, x = input
+      m.kernel.value = jnp.identity(10) * i
+      return m, m(x)
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    x = jax.random.normal(jax.random.key(0), (10,))
+
+    _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x))
+    np.testing.assert_array_equal(y, x * 2 * 3)
+
+
 class TestSplitMergeInputs(absltest.TestCase):
   def test_split_inputs(self):
     class StatefulLinear(nnx.Linear):
