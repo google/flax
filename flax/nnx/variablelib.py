@@ -351,6 +351,14 @@ class Variable(tp.Generic[A], reprlib.Representable):
     vars(obj).update(attributes)
     return obj
 
+  @classmethod
+  def from_metadata(cls, value: A, attributes: tp.Mapping[str, tp.Any]):
+    obj = object.__new__(cls)
+    vars(obj).update(
+      attributes, raw_value=value, _trace_state=tracers.TraceState()
+    )
+    return obj
+
   def copy(self: Variable[A]) -> Variable[A]:
     obj = object.__new__(type(self))
     attributes = vars(self).copy()
@@ -359,9 +367,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return obj
 
   def to_state(self: Variable[A]) -> VariableState[A]:
-    metadata = vars(self).copy()
-    del metadata['raw_value']
-    del metadata['_trace_state']
+    metadata = self.get_metadata()
     return VariableState(type(self), self.raw_value, **metadata)
 
   def __nnx_repr__(self):

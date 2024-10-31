@@ -31,19 +31,26 @@ A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 PARTITION_NAME = 'partition_name'
 
+class HasSharding(tp.Protocol):
+  sharding: tuple[str | None, ...] | None
 
-def add_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
+
+def _has_sharding(x: tp.Any) -> tp.TypeGuard[HasSharding]:
+  return hasattr(x, 'sharding') and x.sharding is not None
+
+def add_axis(tree: A, index: int, params: tp.Mapping) -> A:
   axis_name = _get_partition_name(params)
 
   def _add_axis(x: tp.Any):
     if isinstance(x, variablelib.VariableState):
-      if hasattr(x, 'sharding') and x.sharding is not None:
+      if _has_sharding(x) and x.sharding is not None:
         sharding: list[str | None] = list(x.sharding)
         while len(sharding) < index:
           sharding.append(None)
         sharding.insert(index, axis_name)
         x.sharding = tuple(sharding)  # type: ignore
 
+      assert isinstance(x, variablelib.VariableState)
       x.add_axis(index, axis_name)
     return x
 

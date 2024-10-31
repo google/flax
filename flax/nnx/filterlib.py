@@ -65,12 +65,21 @@ def filters_to_predicates(filters: tuple[Filter, ...]) -> tuple[Predicate, ...]:
         )
   return tuple(map(to_predicate, filters))
 
+
+class HasTag(tp.Protocol):
+  tag: str
+
+
+def _has_tag(x: tp.Any) -> tp.TypeGuard[HasTag]:
+  return hasattr(x, 'tag')
+
+
 @dataclasses.dataclass(frozen=True)
 class WithTag:
   tag: str
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return hasattr(x, 'tag') and x.tag == self.tag
+    return _has_tag(x) and x.tag == self.tag
 
   def __repr__(self):
     return f'WithTag({self.tag!r})'

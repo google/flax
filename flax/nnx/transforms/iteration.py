@@ -1342,7 +1342,7 @@ def _add_fake_index_mapping(tree: tp.Any):
       for sub_nd in nd.subgraphs.values():
         per_node_def(sub_nd)
       for l in nd.leaves.values():
-        if isinstance(l, graph.NodeRef) and l.index >= 0:
+        if isinstance(l, (graph.VariableDef, graph.NodeRef)) and l.index >= 0:
           global_index_mapping[l.index] = l.index
       return
 
