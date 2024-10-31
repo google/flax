@@ -1673,7 +1673,6 @@ class TestScan(absltest.TestCase):
 
     x = jnp.ones((16, 10, 20))
     y = rnn_forward(cell, x)
-    print(y.shape)
 
 
 class TestRemat(absltest.TestCase):
@@ -2610,6 +2609,161 @@ class TestCond(absltest.TestCase):
     np.testing.assert_array_equal(
         env.step.value, np.array([1, 0, 1, 0, 1, 0, 1, 0], np.uint32)
     )
+
+
+class TestSwitch(absltest.TestCase):
+  def test_basic(self):
+    class RoundTable(nnx.Module):
+      def __init__(self):
+        self.next_index = 0
+        self.linear = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+        self.linear.kernel.value = jnp.identity(10)
+        self.rounds_count = nnx.Variable(jnp.array(0))
+
+      def __call__(self, x):
+        def fn0(m, x):
+          m.rounds_count += 1
+          return m.linear(x)
+        def fn1(m, x):
+          return m.linear(x) * 2
+        def fn2(m, x):
+          m.linear.kernel.value = jnp.zeros((10, 10))
+          return m.linear(x)
+
+        # y = nnx.cond(self.next_index.value == 0, fn0, fn1, self, x)
+        y = nnx.switch(self.next_index, (fn0, fn1, fn2), self, x)
+        self.next_index = (self.next_index + 1) % 3
+        return y
+
+    model = RoundTable()
+    x = jnp.ones((10,))
+    np.testing.assert_array_equal(model(x), x)
+    assert model.rounds_count.value == 1
+    assert model.next_index == 1
+    np.testing.assert_array_equal(model(x), x * 2)
+    assert model.rounds_count.value == 1
+    assert model.next_index == 2
+    np.testing.assert_array_equal(model(x), jnp.zeros((10,)))
+    assert model.rounds_count.value == 1
+    assert model.next_index == 0
+    np.testing.assert_array_equal(model(x), jnp.zeros((10,)))
+    assert model.rounds_count.value == 2
+    assert model.next_index == 1
+
+
+class TestWhileLoop(absltest.TestCase):
+  def test_basic(self):
+    def fwd_fn(input):
+      m, x, c = input
+      y = m(x)
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    module.kernel.value = jnp.identity(10) * 2
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+    np.testing.assert_array_equal(y, x * 8)
+
+  def test_multiple_objects(self):
+    def fwd_fn(input):
+      m1, (w2,), x, c = input
+      y = m1(x) @ w2
+      return m1, (w2,), y, c - 1.0
+
+    m1 = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    m1.kernel.value = jnp.identity(10) * 2
+    w2 = nnx.Variable(jnp.identity(10) * 0.5)
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    _, _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (m1, (w2,), x, 3.0))
+    np.testing.assert_allclose(y, x)
+
+  def test_nested_module(self):
+    def fwd_fn(input):
+      m, x, c = input
+      y = m(x)
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    module.kernel.value = jnp.identity(10) * 2
+    module = nnx.Sequential(module)
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+    np.testing.assert_array_equal(y, x * 8)
+
+
+  def test_shared_module(self):
+    m1 = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(0))
+    m2.kernel = m1.kernel
+    module = nnx.Sequential(m1, m2)
+    self.assertLen(jax.tree.leaves(nnx.state(module)), 2)  # only m1 params
+
+    def fwd_fn(input):
+      m, x, c = input
+      y = m(x)
+      m.layers[0].kernel.value = jnp.zeros_like(m.layers[0].kernel.value)
+      return m, y, c - 1.0
+
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0))
+    self.assertLen(jax.tree.leaves(nnx.state(module)), 2)  # only m1 params
+    np.testing.assert_array_equal(m1.kernel.value, jnp.zeros((10, 10,)))
+    np.testing.assert_array_equal(m2.kernel.value, jnp.zeros((10, 10,)))
+    np.testing.assert_array_equal(y, jnp.zeros((10,)))
+
+
+  def test_value_changed(self):
+    def fwd_fn(input):
+      m, x, c = input
+      m.kernel.value = jnp.zeros_like(m.kernel.value)
+      y = m(x)
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+    np.testing.assert_array_equal(module.kernel.value, jnp.zeros((10, 10,)))
+    np.testing.assert_array_equal(y, jnp.zeros((10,)))
+
+
+  def test_ref_changed(self):
+    def fwd_fn(input):
+      m, x, c = input
+      y = m(x)
+      m.kernel = nnx.Param(jnp.zeros_like(m.kernel.value))
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    with self.assertRaises(ValueError):
+      _, y, _ = nnx.while_loop(
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0))
+
+
+  def test_structure_changed(self):
+    def fwd_fn(input):
+      m, x, c = input
+      m = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(1))
+      m.kernel.value = jnp.identity(10) * 2
+      y = m(x)
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, use_bias=True, rngs=nnx.Rngs(0))
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    with self.assertRaises(ValueError):
+      _, y, _ = nnx.while_loop(
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
 
 
 class TestSplitMergeInputs(absltest.TestCase):
