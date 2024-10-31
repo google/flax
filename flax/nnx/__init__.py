@@ -150,6 +150,8 @@ from .transforms.iteration import vmap as vmap
 from .transforms.iteration import pmap as pmap
 from .transforms.transforms import eval_shape as eval_shape
 from .transforms.transforms import cond as cond
+from .transforms.transforms import switch as switch
+from .transforms.iteration import while_loop as while_loop
 from .transforms.iteration import StateAxes as StateAxes
 from .variablelib import A as A
 from .variablelib import BatchStat as BatchStat
