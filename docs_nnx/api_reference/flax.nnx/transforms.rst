@@ -24,3 +24,4 @@ transforms
 .. autofunction:: cond
 .. autofunction:: switch
 .. autofunction:: while_loop
+.. autofunction:: fori_loop
