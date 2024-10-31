@@ -245,9 +245,8 @@ class Optimizer(Object):
       ...   state.update(grads=grads)
 
     Note that internally this function calls ``.tx.update()`` followed by a call
-    to ``optax.apply_updates()`` to update ``params`` and ``opt_state``.
-
-    For  ``optax.GradientTransformationExtraArgs`` such as ``optax.scale_by_zoom_linesearch``,
+    to ``optax.apply_updates()`` to update ``params`` and ``opt_state``.  For
+    ``optax.GradientTransformationExtraArgs`` such as ``optax.scale_by_zoom_linesearch``,
     the optional ``value, value_fn`` and ``**kwargs`` are passed to ``.tx.update()``.
 
     The ``value_fn`` is assumed to be a univariate function of ``state.model`` if
@@ -257,10 +256,10 @@ class Optimizer(Object):
 
     Args:
       grads: the gradients derived from ``nnx.grad``.
-      value_fn (optional): function to evaluate the objective given the model, used by linesearch optimizers
-      value (optional): value of the objective associated with the current grads update
-      model_static (optional): graph of static elements from ``nnx.split(state.model, self.wrt)``
-      **kwargs: additional keyword arguments passed to the tx.update
+      value_fn (optional): function to evaluate the objective given the model, used by linesearch optimizers.
+      value (optional): value of the objective associated with the current grads update.
+      model_static (optional): graph of static elements from ``nnx.split(state.model, self.wrt)``.
+      **kwargs: additional keyword arguments passed to the tx.update.
     """
     params = nnx.state(self.model, self.wrt)
     opt_state = _opt_state_variables_to_state(self.opt_state)
