@@ -128,6 +128,54 @@ class TestOptimizer(parameterized.TestCase):
 
     self.assertTrue(new_loss < initial_loss)
 
+
+  @parameterized.product(
+    module_cls=[nnx.Linear, Model],
+    jit_decorator=[lambda f: f, nnx.jit, jax.jit],
+    optimizer=[optax.lbfgs],
+  )
+  def test_jit_lbfgs(self, module_cls, jit_decorator, optimizer):
+    x = jax.random.normal(jax.random.key(0), (1, 2))
+    y = jnp.ones((1, 4))
+    model = module_cls(2, 4, rngs=nnx.Rngs(0))
+    tx = optimizer(
+      1e-3
+    )
+    state = nnx.Optimizer(model, tx)
+
+    if jit_decorator == jax.jit:
+      model_static, model_state = nnx.split(state.model)
+      loss_fn = lambda graphdef, state, x, y: (
+        (nnx.merge(graphdef, state)(x) - y) ** 2
+      ).mean()
+      initial_loss = loss_fn(model_static, model_state, x, y)
+
+      def jax_jit_train_step(graphdef, state, x, y):
+        state = nnx.merge(graphdef, state)
+        model_static, model_state = nnx.split(state.model)
+        grads = jax.grad(loss_fn, argnums=1)(model_static, model_state, x, y)
+        state.update(grads, value = initial_loss, model_static = model_static, value_fn = lambda state: loss_fn(model_static, state, x, y))
+        return nnx.split(state)
+
+      graphdef, state = jit_decorator(jax_jit_train_step)(
+        *nnx.split(state), x, y
+      )
+      state = nnx.merge(graphdef, state)
+      new_loss = loss_fn(*nnx.split(state.model), x, y)
+
+    else:
+      loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
+      initial_loss = loss_fn(state.model, x, y)
+
+      def nnx_jit_train_step(optimizer: nnx.Optimizer, x, y):
+        grads = nnx.grad(loss_fn)(optimizer.model, x, y)
+        optimizer.update(grads, value = initial_loss,value_fn = lambda model: loss_fn(model, x, y))
+
+      jit_decorator(nnx_jit_train_step)(state, x, y)
+      new_loss = loss_fn(state.model, x, y)
+
+    self.assertTrue(new_loss < initial_loss)
+
   @parameterized.product(
     module_cls=[nnx.Linear, Model],
     optimizer=[optax.sgd, optax.adam],
@@ -203,6 +251,52 @@ class TestOptimizer(parameterized.TestCase):
         )
       )
 
+  @parameterized.parameters(
+    {'variable': nnx.Param},
+    #{'variable': nnx.LoRAParam},
+    {'variable': (nnx.Param, nnx.LoRAParam)},
+  )
+  def test_wrt_update_lbfgs(self, variable):
+    in_features = 4
+    out_features = 10
+    model = nnx.LoRA(
+      in_features=in_features,
+      lora_rank=2,
+      out_features=out_features,
+      base_module=Model(
+        in_features=in_features, out_features=out_features, rngs=nnx.Rngs(0)
+      ),
+      rngs=nnx.Rngs(1),
+    )
+    state = nnx.Optimizer(model, optax.lbfgs(), wrt=variable)
+    prev_variables, prev_other_variables = nnx.state(model, variable, ...)
+
+    x = jnp.ones((1, 4))
+    y = jnp.ones((1, 10))
+    loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
+
+    grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, variable))(
+      state.model, x, y
+    )
+    initial_loss = loss_fn(model, x, y)
+    state.update(grads=grads, value_fn = lambda model: loss_fn(model, x, y), value = initial_loss)
+    self.assertTrue(loss_fn(model, x, y) < initial_loss)
+
+    # make sure only the Variable's filtered in `wrt` are changed, and the others are unchanged
+    variables, other_variables = nnx.state(model, variable, ...)
+    self.assertTrue(
+      jax.tree.all(
+        jax.tree.map(lambda x, y: (x != y).all(), prev_variables, variables)
+      )
+    )
+    if other_variables:
+      self.assertTrue(
+        jax.tree.all(
+          jax.tree.map(
+            lambda x, y: (x == y).all(), prev_other_variables, other_variables
+          )
+        )
+      )
 
 if __name__ == '__main__':
   absltest.main()

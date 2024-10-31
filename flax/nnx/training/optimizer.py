@@ -193,7 +193,7 @@ class Optimizer(Object):
     self.opt_state = _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
     self.wrt = wrt
 
-  def update(self, grads):
+  def update(self, grads, value=None, value_fn=None, model_static=None, **kwargs):
     """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
     The ``grads`` must be derived from ``nnx.grad(..., wrt=self.wrt)``, where the
     gradients are with respect to the same :class:`Variable` types as defined in
@@ -247,13 +247,45 @@ class Optimizer(Object):
     Note that internally this function calls ``.tx.update()`` followed by a call
     to ``optax.apply_updates()`` to update ``params`` and ``opt_state``.
 
+    For  ``optax.GradientTransformationExtraArgs`` such as ``optax.scale_by_zoom_linesearch``,
+    the optional ``value, value_fn`` and ``**kwargs`` are passed to ``.tx.update()``.
+
+    The ``value_fn`` is assumed to be a univariate function of ``state.model`` if
+    ``model_static`` is not provided.  Otherwise, ``model_static`` is assumed to be the result of
+    ``model_static, model_state = nnx.split(state.model, self.wrt)``, and ``value_fn`` is a
+    univariate function of ``model_state``.
+
     Args:
       grads: the gradients derived from ``nnx.grad``.
+      value_fn (optional): function to evaluate the objective given the model, used by linesearch optimizers
+      value (optional): value of the objective associated with the current grads update
+      model_static (optional): graph of static elements from ``nnx.split(state.model, self.wrt)``
+      **kwargs: additional keyword arguments passed to the tx.update
     """
     params = nnx.state(self.model, self.wrt)
     opt_state = _opt_state_variables_to_state(self.opt_state)
 
-    updates, new_opt_state = self.tx.update(grads, opt_state, params)
+    if value is None or value_fn is None:
+        updates, new_opt_state = self.tx.update(grads, opt_state, params)
+    else:
+        if model_static is None:
+          graphdef, _ = nnx.split(self.model, self.wrt)
+          def value_fn_wrapped(state):
+              model = nnx.merge(graphdef, state)
+              return value_fn(model)
+        else:
+          value_fn_wrapped = value_fn
+
+        updates, new_opt_state = self.tx.update(
+            grads,
+            opt_state,
+            params,
+            grad=grads,
+            value=value,
+            value_fn=value_fn_wrapped,
+            **kwargs,
+        )
+
     new_params = optax.apply_updates(params, updates)
     assert isinstance(new_params, nnx.State)
 
