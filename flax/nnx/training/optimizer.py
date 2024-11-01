@@ -44,6 +44,13 @@ class OptVariable(OptState):
   source_type: type[Variable]
   pass
 
+def _to_variable_state(variables):
+  def to_variable_state(x):
+    if isinstance(x, Variable):
+      return x.to_state()
+    return x
+
+  return jax.tree.map(to_variable_state, variables)
 
 def _wrap_optimizer_state(opt_state):
   def wrap_optimizer_state_fn(x):
@@ -188,9 +195,12 @@ class Optimizer(Object):
         :func:`update` method.
     """
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
-    self.model = model
+    self.params = nnx.variables(model, wrt)
+    self.model = model  # TODO(cgarciae): remove this line once tests are fixed
+    self.opt_state = _wrap_optimizer_state(
+      tx.init(_to_variable_state(self.params))
+    )
     self.tx = tx
-    self.opt_state = _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
     self.wrt = wrt
 
   def update(self, grads):
@@ -250,7 +260,7 @@ class Optimizer(Object):
     Args:
       grads: the gradients derived from ``nnx.grad``.
     """
-    params = nnx.state(self.model, self.wrt)
+    params = _to_variable_state(self.params)
     opt_state = _opt_state_variables_to_state(self.opt_state)
 
     updates, new_opt_state = self.tx.update(grads, opt_state, params)
@@ -258,5 +268,9 @@ class Optimizer(Object):
     assert isinstance(new_params, nnx.State)
 
     self.step.value += 1
-    nnx.update(self.model, new_params)
+
+    def update_param(param: Variable, new_param: VariableState):
+      param.value = new_param.value
+
+    jax.tree.map(update_param, self.params, new_params)
     _update_opt_state(self.opt_state, new_opt_state)
