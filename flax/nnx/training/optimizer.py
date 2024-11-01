@@ -193,7 +193,7 @@ class Optimizer(Object):
     self.opt_state = _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
     self.wrt = wrt
 
-  def update(self, grads):
+  def update(self, grads, **kwargs):
     """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
     The ``grads`` must be derived from ``nnx.grad(..., wrt=self.wrt)``, where the
     gradients are with respect to the same :class:`Variable` types as defined in
@@ -249,11 +249,13 @@ class Optimizer(Object):
 
     Args:
       grads: the gradients derived from ``nnx.grad``.
+      **kwargs: additional keyword arguments passed to the tx.update, to support
+      ``GradientTransformationExtraArgs``, such as ``optax.scale_by_backtracking_linesearch``.
     """
     params = nnx.state(self.model, self.wrt)
     opt_state = _opt_state_variables_to_state(self.opt_state)
 
-    updates, new_opt_state = self.tx.update(grads, opt_state, params)
+    updates, new_opt_state = self.tx.update(grads, opt_state, params, **kwargs)
     new_params = optax.apply_updates(params, updates)
     assert isinstance(new_params, nnx.State)
 
