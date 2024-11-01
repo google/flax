@@ -117,16 +117,17 @@ Axes = Union[int, Sequence[int]]
 # SPMD
 
 LogicalNames = tuple[Union[str, None], ...]
+AxisName = str | tuple[str, ...] | None
 
 # Maps each logical axis  to physical mesh, can be either None (replicated),
 # one physical axis or a tuple of physical axes.
-LogicalRules = Sequence[tuple[str, Union[str, tuple[str, ...], None]]]
+LogicalRules = Sequence[tuple[str, AxisName]]
 ArrayPytree = Any  # pylint: disable=invalid-name
 LogicalPartitionSpec = Any  # pylint: disable=invalid-name
 LogicalPartitionSpecPytree = Any  # pylint: disable=invalid-name
 PartitionSpecPytree = Any  # pylint: disable=invalid-name
 
-Sharding = tuple[Optional[str], ...]
+Sharding = tuple[AxisName, ...]
 
 A = TypeVar('A')
 

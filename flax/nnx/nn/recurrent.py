@@ -590,7 +590,7 @@ class GRUCell(RNNCellBase):
 class RNN(Module):
     """The ``RNN`` module takes any :class:`RNNCellBase` instance and applies it over a sequence
 
-    using :func:`flax.linen.scan`.
+    using :func:`flax.nnx.scan`.
     """
 
     def __init__(

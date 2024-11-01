@@ -36,9 +36,9 @@ AXIS_RULES_2 = (('foo', 'model'), ('bar', None), ('baz', 'data'))
 
 class PartitioningTest(parameterized.TestCase):
   def test_axis_rules(self):
-    self.assertEqual(partitioning._axis_rules.rules, ())
+    self.assertEqual(nn.spmd.get_logical_axis_rules(), ())
     partitioning.set_axis_rules(AXIS_RULES_1)
-    self.assertEqual(partitioning._axis_rules.rules, AXIS_RULES_1)
+    self.assertEqual(nn.spmd.get_logical_axis_rules(), AXIS_RULES_1)
     self.assertEqual(partitioning.get_axis_rules(), AXIS_RULES_1)
     partitioning.set_axis_rules(())
 

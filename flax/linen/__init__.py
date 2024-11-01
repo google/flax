@@ -31,6 +31,11 @@ from flax.core.meta import (
     unbox as unbox,
     with_partitioning as with_partitioning,
 )
+from flax.core.spmd import (
+    get_logical_axis_rules as get_logical_axis_rules,
+    logical_axis_rules as logical_axis_rules,
+    set_logical_axis_rules as set_logical_axis_rules,
+)
 from .activation import (
     PReLU as PReLU,
     celu as celu,
@@ -130,12 +135,9 @@ from .recurrent import (
 )
 from .spmd import (
     LogicallyPartitioned as LogicallyPartitioned,
-    get_logical_axis_rules as get_logical_axis_rules,
-    logical_axis_rules as logical_axis_rules,
     logical_to_mesh,
     logical_to_mesh_axes,
     logical_to_mesh_sharding,
-    set_logical_axis_rules as set_logical_axis_rules,
     with_logical_constraint,
     with_logical_partitioning as with_logical_partitioning,
 )
