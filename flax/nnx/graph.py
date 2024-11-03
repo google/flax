@@ -1462,6 +1462,73 @@ def graphdef(node: tp.Any, /) -> GraphDef[tp.Any]:
   graphdef, _ = flatten(node)
   return graphdef
 
+class MapStateFn(tp.Protocol):
+  def __call__(self, *states: State) -> State | tuple[State, ...]: ...
+
+
+def map_state(f, node, *filters: filterlib.Filter):
+  """Maps a function over the :class:`State` of the given graph node
+  and updates the input node with the new state. Equivalent to::
+
+    state = nnx.state(node)
+    state = f(state)
+    nnx.update(node, state)
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax
+    >>> import jax.numpy as jnp
+    >>> from jax.sharding import PartitionSpec as P
+    ...
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self, dim1, dim2):
+    ...     self.param = nnx.Param(jnp.zeros((dim1, dim2)))
+    ...     self.batch_stat = nnx.BatchStat(jnp.zeros((dim1, dim2)))
+    ...
+    >>> num_devices = jax.local_device_count()
+    >>> model = Foo(num_devices * 2, 10)
+    >>> mesh = jax.make_mesh((num_devices,), ('data',))
+    >>> sharding = jax.NamedSharding(mesh, P())  # replicate
+    ...
+    >>> nnx.map_state(lambda state: jax.device_put(state, sharding), model)
+    ...
+    >>> model.param.value.sharding.spec
+    PartitionSpec()
+
+  dsfdfs
+
+    >>> model = Foo(num_devices * 2, 10)
+    ...
+    >>> param_sharding = jax.NamedSharding(mesh, P())  # replicate
+    >>> batch_stat_sharding = jax.NamedSharding(mesh, P('data'))  # shard
+    ...
+    >>> nnx.map_state(
+    ...   lambda params, batch_stats: (
+    ...     jax.device_put(params, param_sharding),
+    ...     jax.device_put(batch_stats, batch_stat_sharding),
+    ...   ),
+    ...   model,
+    ...   nnx.Param,
+    ...   nnx.BatchStat,
+    ... )
+    >>> model.param.value.sharding.spec
+    PartitionSpec()
+    >>> model.batch_stat.value.sharding.spec
+    PartitionSpec('data',)
+
+  """
+  states = state(node, *filters)
+  if not isinstance(states, tuple):
+    states = (states,)
+
+  states = f(*states)
+
+  if not isinstance(states, tuple):
+    states = (states,)
+
+  update(node, *states)
+
 
 @tp.overload
 def pop(

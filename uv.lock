@@ -767,7 +767,7 @@ wheels = [
 
 [[package]]
 name = "flax"
-version = "0.10.1"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "jax" },

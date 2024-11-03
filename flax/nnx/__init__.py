@@ -49,6 +49,7 @@ from .graph import clone as clone
 from .graph import pop as pop
 from .graph import state as state
 from .graph import graphdef as graphdef
+from .graph import map_state as map_state
 from .graph import iter_graph as iter_graph
 from .graph import call as call
 from .graph import SplitContext as SplitContext
