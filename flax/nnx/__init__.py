@@ -55,6 +55,7 @@ from .graph import SplitContext as SplitContext
 from .graph import split_context as split_context
 from .graph import MergeContext as MergeContext
 from .graph import merge_context as merge_context
+from .graph import unsafe_graph_cache as unsafe_graph_cache
 from .graph import variables as variables
 from .nn import initializers as initializers
 from .nn.activations import celu as celu
