@@ -110,6 +110,19 @@ class TransformTest(parameterized.TestCase):
 
     self.assertTrue(np.all(y1 == y2))
 
+  def test_jit_init_fn(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(2)(x)
+
+      @nn.jit
+      def init_with_output(self, rngs, *args, **kwargs):
+        return super().init_with_output(rngs, *args, **kwargs)
+
+    Foo().init_with_output(random.key(0), jnp.ones((2, 3)))
+
+
   def test_remat(self):
     key1, key2 = random.split(random.key(3), 2)
     x = random.uniform(key1, (4, 4))
@@ -1577,6 +1590,7 @@ class TransformTest(parameterized.TestCase):
       def helper(self, x, ms):
         return ms[0](x) + ms[1](x)
 
+      @nn.fold_rngs
       def __call__(self, x):
         return self.helper(x, self.inners)
 
@@ -1585,7 +1599,6 @@ class TransformTest(parameterized.TestCase):
       def setup(self):
         self.inners = [nn.Dense(2), nn.Dense(2)]
 
-      @nn.jit
       def helper(self, x, ms):
         return ms[0](x) + ms[1](x)
 
@@ -1741,6 +1754,7 @@ class TransformTest(parameterized.TestCase):
       def setup_helper(self):
         self.b = nn.Dense(2)
 
+      @nn.fold_rngs
       def __call__(self, x):
         return self.b(self.a(x))
 
@@ -1819,6 +1833,61 @@ class TransformTest(parameterized.TestCase):
         updates['intermediates']['inner']['loss'], 4.0
     )
     np.testing.assert_array_equal(y, 2)
+
+  def test_fold_rngs(self):
+    class Foo(nn.Module):
+
+      def __call__(self, use_jit: bool):
+        def f(foo: Foo):
+          return foo.make_rng('params')
+
+        if use_jit:
+          key = nn.jit(f)(self)
+        else:
+          key = nn.fold_rngs(f)(self)
+
+        return key
+
+    foo = Foo()
+    key_jit = foo.apply({}, True, rngs={'params': random.key(0)})
+    key_fold_rngs = foo.apply({}, False, rngs={'params': random.key(0)})
+
+    np.testing.assert_array_equal(key_jit, key_fold_rngs)
+
+  def test_same_key(self):
+
+    class Block(nn.Module):
+
+      @nn.jit
+      @nn.compact
+      def __call__(self, carry, inputs):
+        # dump_rng_info(self)
+        key = self.make_rng('params')
+        # y = jax.random.uniform(self.make_rng('params'), (2,))
+        return carry, key
+
+    class Transformer(nn.Module):
+
+      @nn.compact
+      def __call__(self):
+        num_blocks = 10
+        carry, key = nn.scan(
+            Block,
+            variable_axes={'params': 0},
+            split_rngs={'params': True},
+            # length=num_blocks,
+        )()(None, jnp.arange(num_blocks))
+        return key
+
+    model = Transformer()
+    keys1, _ = model.init_with_output(jax.random.key(1))
+    keys2, _ = model.init_with_output(jax.random.key(1))
+    keys3, _ = model.init_with_output(jax.random.key(1))
+    keys4, _ = model.init_with_output(jax.random.key(1))
+
+    np.testing.assert_array_equal(keys1, keys2)
+    np.testing.assert_array_equal(keys2, keys3)
+    np.testing.assert_array_equal(keys2, keys3)
 
   def test_jit_repr_hash(self):
     n = 0
