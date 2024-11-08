@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import functools
+import importlib.util
 import threading
 import typing as tp
 
@@ -35,6 +36,11 @@ from flax.nnx.statelib import FlatState, State
 from flax.nnx import variablelib
 from flax.nnx.variablelib import Variable, VariableState
 from flax.typing import Key, PathParts
+
+if importlib.util.find_spec('flaxlib') is not None:
+  import flaxlib
+else:
+  flaxlib = None
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -303,19 +309,20 @@ class NodeDef(GraphDef[Node], reprlib.Representable):
 
   def __treescope_repr__(self, path, subtree_renderer):
     import treescope  # type: ignore[import-not-found,import-untyped]
+
     return treescope.repr_lib.render_object_constructor(
-        object_type=type(self),
-        attributes={
-            'type': self.type,
-            'index': self.index,
-            'attributes': self.attributes,
-            'subgraphs': dict(self.subgraphs),
-            'static_fields': dict(self.static_fields),
-            'leaves': dict(self.leaves),
-            'metadata': self.metadata,
-        },
-        path=path,
-        subtree_renderer=subtree_renderer,
+      object_type=type(self),
+      attributes={
+        'type': self.type,
+        'index': self.index,
+        'attributes': self.attributes,
+        'subgraphs': dict(self.subgraphs),
+        'static_fields': dict(self.static_fields),
+        'leaves': dict(self.leaves),
+        'metadata': self.metadata,
+      },
+      path=path,
+      subtree_renderer=subtree_renderer,
     )
 
   def apply(
@@ -352,15 +359,18 @@ def flatten(
   """
   if ref_index is None:
     ref_index = RefMap()
-  flat_state: dict[PathParts, StateLeaf] = {}
-  graphdef = _graph_flatten((), ref_index, flat_state, node)
+  if flaxlib is not None:
+    graphdef, flat_state = flaxlib.flatten(node, ref_index)
+  else:
+    flat_state: list[tuple[PathParts, StateLeaf]] = []
+    graphdef = _graph_flatten((), ref_index, flat_state, node)
   return graphdef, GraphState.from_flat_path(flat_state)
 
 
 def _graph_flatten(
   path: PathParts,
   ref_index: RefMap[tp.Any, Index],
-  flat_state: dict[PathParts, StateLeaf],
+  flat_state: list[tuple[PathParts, StateLeaf]],
   node: Node,
 ) -> NodeDef[Node] | NodeRef:
   if not is_node(node):
@@ -384,24 +394,25 @@ def _graph_flatten(
 
   values, metadata = node_impl.flatten(node)
   for key, value in values:
+    child_path = (*path, key)
     if is_node(value):
-      nodedef = _graph_flatten((*path, key), ref_index, flat_state, value)
+      nodedef = _graph_flatten(child_path, ref_index, flat_state, value)
       subgraphs.append((key, nodedef))
     elif isinstance(value, Variable):
       if value in ref_index:
         leaves.append((key, NodeRef(type(value), ref_index[value])))
       else:
-        flat_state[(*path, key)] = value.to_state()
+        flat_state.append((child_path, value.to_state()))
         variable_index = ref_index[value] = len(ref_index)
         leaves.append((key, NodeRef(type(value), variable_index)))
     elif is_state_leaf(value):
-      flat_state[(*path, key)] = value
+      flat_state.append((child_path, value))
       leaves.append((key, None))
     else:
       if isinstance(value, (jax.Array, np.ndarray)):
-        path_str = '/'.join(map(str, (*path, key)))
+        path_str = '/'.join(map(str, child_path))
         raise ValueError(
-            f'Arrays leaves are not supported, at {path_str!r}: {value}'
+          f'Arrays leaves are not supported, at {path_str!r}: {value}'
         )
       static_fields.append((key, value))
 
@@ -448,6 +459,7 @@ def unflatten(
     graphdef, state.raw_mapping, index_ref, index_ref_cache
   )
   return node
+
 
 def _graph_unflatten(
   nodedef: NodeDef[Node] | NodeRef[Node],
@@ -724,9 +736,11 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[Key, tp.Any]):
         f'Unsupported update type: {type(value)} for key {key!r}'
       )
 
+
 # --------------------------------------------------------
 # UpdateContext
 # --------------------------------------------------------
+
 
 @dataclasses.dataclass
 class GraphContext(threading.local):
@@ -1022,7 +1036,7 @@ class UpdateContextManager:
   def __exit__(self, *args):
     if self.tag not in GRAPH_CONTEXT.update_context_stacks:
       raise RuntimeError(
-          f'No update context found for tag {self.tag!r}, this is a bug.'
+        f'No update context found for tag {self.tag!r}, this is a bug.'
       )
     stack = GRAPH_CONTEXT.update_context_stacks[self.tag]
 
@@ -1148,6 +1162,7 @@ def current_update_context(tag: str) -> UpdateContext:
 # --------------------------------------------------------
 # Functional API
 # --------------------------------------------------------
+
 
 def _split_state(
   state: GraphState,
@@ -1329,6 +1344,7 @@ def update(node, state: State, /, *states: State) -> None:
 
   _graph_update_dynamic(node, state.raw_mapping)
 
+
 def _variables_generator(node) -> tp.Iterable[tuple[PathParts, Variable]]:
   for path, value in iter_graph(node):
     if isinstance(value, Variable):
@@ -1384,6 +1400,7 @@ def variables(
   if num_filters < 2:
     return states[0]
   return states
+
 
 @tp.overload
 def state(node, /) -> GraphState: ...
@@ -1724,6 +1741,7 @@ class Static(tp.Generic[A]):
 
 
 jax.tree_util.register_static(Static)
+
 
 # ---------------------------------------------------------
 # Pytree
