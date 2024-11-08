@@ -102,8 +102,8 @@ class LazyRng(struct.PyTreeNode):
     else:
       return LazyRng(rng, suffix)
 
-  def fold(self):
-    key = self.as_jax_rng()
+  def clear_suffix(self):
+    key = self.rng
     return LazyRng(key, ())
 
 
@@ -582,13 +582,6 @@ class Scope:
       if name not in self.reservations:
         return name
       i += 1
-
-  def fold_rngs(self):
-    """Folds the rngs of this scope into the parent scope."""
-    self._check_valid()
-    for name, rng in self.rngs.items():
-      assert isinstance(rng, LazyRng)
-      self.rngs[name] = rng.fold()
 
   def push(
     self, name: str | None = None, prefix: str = '', reuse=False

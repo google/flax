@@ -24,6 +24,7 @@ from typing import Any, Generic, TypeVar
 import warnings
 
 from flax import traceback_util
+from flax import traverse_util
 from flax.typing import (
     In,
     InOutAxis,
@@ -1499,6 +1500,81 @@ def _hashable_filter(x):
   return x
 
 
+class CountsHolder:
+
+  def __init__(self, flat_d):
+    self.flat_d = flat_d
+
+  @classmethod
+  def make(cls, d):
+    flat_d = traverse_util.flatten_dict(d)
+    flat_d = {k: v for k, v in flat_d.items()}
+    return cls(flat_d)
+
+  def sub(self, other):
+    delta_flat_d = {}
+    new_flat_d = collections.defaultdict(int, self.flat_d)
+    old_flat_d = collections.defaultdict(int, other.flat_d)
+    for k in new_flat_d:
+      delta_flat_d[k] = new_flat_d[k] - old_flat_d[k]
+    return CountsHolder(delta_flat_d)
+
+  def add(self, other):
+    delta_flat_d = {}
+    new_flat_d = collections.defaultdict(int, self.flat_d)
+    old_flat_d = collections.defaultdict(int, other.flat_d)
+    for k in new_flat_d:
+      delta_flat_d[k] = new_flat_d[k] + old_flat_d[k]
+    return CountsHolder(delta_flat_d)
+
+  def unflat(self):
+    return traverse_util.unflatten_dict(self.flat_d)
+
+
+def set_from_dict(original, updates):
+  for k in updates:
+    if k not in original:
+      original[k] = updates[k]
+    else:
+      if isinstance(updates[k], dict):
+        set_from_dict(original[k], updates[k])
+      else:
+        original[k] = updates[k]
+
+
+class _SideEffectCache(threading.local):
+
+  def __init__(self):
+    self.cache = {}
+
+
+_side_effect_cache = _SideEffectCache()
+
+
+def _restore_rng_counters(scopes, fingerprint, capture_old_counts):
+  if fingerprint not in _side_effect_cache.cache:
+    capture_new_counts = jax.tree.map(
+        lambda s: CountsHolder.make(s.rng_counters), scopes
+    )
+    capture_delta_counts = jax.tree.map(
+        lambda old, new: new.sub(old),
+        capture_old_counts,
+        capture_new_counts,
+    )
+    _side_effect_cache.cache[fingerprint] = capture_delta_counts
+  else:
+    updated_counts = jax.tree.map(
+        lambda x, y: x.add(y).unflat(),
+        _side_effect_cache.cache[fingerprint],
+        capture_old_counts,
+    )
+    jax.tree.map(
+        lambda s, u: set_from_dict(s.rng_counters, u),
+        scopes,
+        updated_counts,
+    )
+
+
 def jit(
     fn: Callable[..., Any],
     variables: CollectionFilter = True,
@@ -1599,13 +1675,18 @@ def jit(
       mutable = tuple(_hashable_filter(scope.mutable) for scope in scopes)
 
       rng_groups = jax.tree.map(
-          lambda x: x.fold() if isinstance(x, LazyRng) else x,
+          lambda x: x.clear_suffix() if isinstance(x, LazyRng) else x,
           rng_groups,
           is_leaf=lambda x: isinstance(x, LazyRng),
       )
 
       fingerprint = (mutable, module_hash_key)
-      return jitted(fingerprint, variable_groups, rng_groups, *args, **kwargs)
+      capture_old_counts = jax.tree.map(
+          lambda s: CountsHolder.make(s.rng_counters), scopes
+      )
+      res = jitted(fingerprint, variable_groups, rng_groups, *args, **kwargs)
+      _restore_rng_counters(scopes, fingerprint, capture_old_counts)
+      return res
 
   return pack(
       inner, (variables,), (variables,), (rngs,), name='jit', enable_kwargs=True
@@ -1692,3 +1773,64 @@ def remat_scan(
 def _unzip2(xs):
   ys = tuple(zip(*xs))
   return ys if ys else ((), ())
+
+
+def fold_rngs(
+    fn: Callable[..., Any],
+    variables: CollectionFilter = True,
+    rngs: PRNGSequenceFilter = True,
+) -> Callable[..., Any]:
+  # Close over scope_fn & repack_fn to avoid recompilation
+  # this is impure but we use the fingerprint arg to differentiate between cases
+  # where scope_fn or repack_fn actually produce non-identical results.
+  fold_rngs_context = TransformContext[tuple[Callable, Callable]]()
+
+  @functools.wraps(fn)
+  def wrapped_fold_rngs(fingerprint, variable_groups, rng_groups, *args, **kwargs):
+    scope_fn, repack_fn = fold_rngs_context.get()
+    hash_key = fingerprint[1]
+    # fingerprint is only used to differentiate the cache signature
+    # del fingerprint
+    scope = scope_fn(variable_groups, rng_groups)  # pylint: disable=not-callable
+    y = fn(scope, hash_key, *args, **kwargs)
+    return y, repack_fn(scope)  # pylint: disable=not-callable
+
+  def inner_fold_rngs(
+      scope_fn,
+      repack_fn,
+      variable_groups,
+      rng_groups,
+      module_hash_key,
+      *args,
+      **kwargs,
+  ):
+    with fold_rngs_context.push((scope_fn, repack_fn)):
+      scopes: list[Scope] = jax.tree_util.tree_leaves(
+          scope_fn(variable_groups, rng_groups)
+      )
+      mutable = tuple(_hashable_filter(scope.mutable) for scope in scopes)
+
+      rng_groups = jax.tree.map(
+          lambda x: x.clear_suffix() if isinstance(x, LazyRng) else x,
+          rng_groups,
+          is_leaf=lambda x: isinstance(x, LazyRng),
+      )
+
+      fingerprint = (mutable, module_hash_key)
+      capture_old_counts = jax.tree.map(
+          lambda s: CountsHolder.make(s.rng_counters), scopes
+      )
+      res = wrapped_fold_rngs(
+          fingerprint, variable_groups, rng_groups, *args, **kwargs
+      )
+      _restore_rng_counters(scopes, fingerprint, capture_old_counts)
+      return res
+
+  return pack(
+      inner_fold_rngs,
+      (variables,),
+      (variables,),
+      (rngs,),
+      name='fold_rngs',
+      enable_kwargs=True,
+  )
