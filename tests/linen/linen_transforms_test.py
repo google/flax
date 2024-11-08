@@ -86,6 +86,10 @@ def decorated_MLP(transform: Callable = id_fn):
 
 class TransformTest(parameterized.TestCase):
 
+  def assert_keys_equal(self, key1, key2):
+    self.assertEqual(key1.dtype, key2.dtype)
+    np.testing.assert_array_equal(random.key_data(key1), random.key_data(key2))
+
   def test_jit(self):
     key1, key2 = random.split(random.key(3), 2)
     x = random.uniform(key1, (4, 4))
@@ -1852,7 +1856,7 @@ class TransformTest(parameterized.TestCase):
     key_jit = foo.apply({}, True, rngs={'params': random.key(0)})
     key_fold_rngs = foo.apply({}, False, rngs={'params': random.key(0)})
 
-    np.testing.assert_array_equal(key_jit, key_fold_rngs)
+    self.assert_keys_equal(key_jit, key_fold_rngs)
 
   def test_same_key(self):
 
@@ -1885,9 +1889,9 @@ class TransformTest(parameterized.TestCase):
     keys3, _ = model.init_with_output(jax.random.key(1))
     keys4, _ = model.init_with_output(jax.random.key(1))
 
-    np.testing.assert_array_equal(keys1, keys2)
-    np.testing.assert_array_equal(keys2, keys3)
-    np.testing.assert_array_equal(keys2, keys3)
+    self.assert_keys_equal(keys1, keys2)
+    self.assert_keys_equal(keys2, keys3)
+    self.assert_keys_equal(keys2, keys3)
 
   def test_jit_repr_hash(self):
     n = 0
