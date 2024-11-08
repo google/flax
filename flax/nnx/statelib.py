@@ -319,7 +319,9 @@ class State(MutableMapping[K, V], reprlib.Representable):
     return states  # type: ignore[bad-return-type]
 
   @staticmethod
-  def merge(state: State[K, V], /, *states: State[K, V]) -> State[K, V]:
+  def merge(
+    state: tp.Mapping[K, V], /, *states: tp.Mapping[K, V]
+  ) -> State[K, V]:
     """The inverse of :meth:`split() <flax.nnx.State.state.split>`.
 
     ``merge`` takes one or more ``State``'s and creates
@@ -352,14 +354,16 @@ class State(MutableMapping[K, V], reprlib.Representable):
       The merged ``State``.
     """
     if not states:
-      return state
+      if isinstance(state, State):
+        return state
+      return State(state)
 
     states = (state, *states)
 
     new_state: FlatState[V] = {}
 
     for state in states:
-      new_state.update(state.flat_state())  # type: ignore[attribute-error] # pytype is wrong here
+      new_state.update(traversals.flatten_mapping(state))  # type: ignore[attribute-error] # pytype is wrong here
 
     return State.from_flat_path(new_state)
 

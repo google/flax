@@ -82,6 +82,17 @@ class TestGraphUtils(absltest.TestCase):
 
     assert g[0] is g[2]
 
+  def test_unflatten_pure_dict(self):
+    a = Dict(a=1, b=nnx.Param(2))
+    g = List([a, 3, a, nnx.Param(4)])
+
+    graphdef, state = nnx.split(g)
+    pure_state = state.to_pure_dict()
+
+    g = nnx.merge(graphdef, pure_state)
+
+    assert g[0] is g[2]
+
   def test_unflatten_pytree(self):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
@@ -107,7 +118,20 @@ class TestGraphUtils(absltest.TestCase):
     graphdef, state = nnx.split(g)
 
     state[0]['b'].value = 3
-    nnx.graph.update(g, state)
+    nnx.update(g, state)
+
+    assert g[0]['b'].value == 3
+    assert g[2]['b'].value == 3
+
+  def test_update_from_pure_dict(self):
+    a = {'a': 1, 'b': nnx.Param(2)}
+    g = [a, 3, a, nnx.Param(4)]
+
+    graphdef, state = nnx.split(g)
+    pure_state = state.to_pure_dict()
+
+    pure_state[0]['b'] = 3
+    nnx.update(g, pure_state)
 
     assert g[0]['b'].value == 3
     assert g[2]['b'].value == 3

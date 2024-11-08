@@ -19,9 +19,9 @@ from typing import (
   Generic,
   Optional,
   Protocol,
+  TypeGuard,
   TypeVar,
   Union,
-  runtime_checkable,
 )
 from collections.abc import Callable, Hashable, Mapping, Sequence
 
@@ -41,11 +41,12 @@ Dtype = Union[jax.typing.DTypeLike, Any]
 Shape = Sequence[int]
 K = TypeVar('K')
 
-@runtime_checkable
 class Key(Hashable, Protocol):
   def __lt__(self: K, value: K, /) -> bool:
     ...
 
+def is_key_like(x: Any) -> TypeGuard[Key]:
+  return hasattr(x, '__hash__') and hasattr(x, '__lt__')
 
 Path = str
 PathParts = tuple[Key, ...]
