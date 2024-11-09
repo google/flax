@@ -13,13 +13,13 @@
 # limitations under the License.
 
 from absl.testing import absltest
-import jax
-import jax.numpy as jnp
-import optax
-from jax.experimental import mesh_utils
-from jax.sharding import Mesh, PartitionSpec
-
+import flax
 from flax import nnx
+import jax
+from jax.experimental import mesh_utils
+import jax.numpy as jnp
+from jax.sharding import Mesh, PartitionSpec
+import optax
 
 
 class TestSPMD(absltest.TestCase):
@@ -158,7 +158,39 @@ class TestSPMD(absltest.TestCase):
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(bremoves, [(0, 'layers')])
 
+  def test_logical_rules(self):
+    class Foo(nnx.Module):
+
+      def __init__(self):
+        self.w = nnx.Param(
+            nnx.with_partitioning(
+                lambda: jnp.ones((8, 2)),
+                sharding=('row-alias', 'col-alias'),
+                sharding_rules=(('row-alias', 'row'),),
+            )()
+        )
+        self.b = nnx.Param(
+            nnx.with_partitioning(
+                lambda: jnp.zeros((2,)), sharding=('col-alias',)
+            )()
+        )
+
+      def __call__(self, x):
+        return x @ self.w + self.b
+
+    graphdef, params = nnx.split(Foo())
+    state = nnx.TrainState.create(
+        graphdef,
+        params=params,
+        tx=optax.adam(1e-3),
+    )
+    with flax.core.spmd.logical_axis_rules((('col-alias', 'col'),)):
+      state_spec = nnx.get_partition_spec(state)
+
+    assert state_spec.params['w'].value == PartitionSpec('row', 'col')
+    assert state_spec.opt_state[0].mu['w'].value == PartitionSpec('row', 'col')
+    assert state_spec.opt_state[0].nu['w'].value == PartitionSpec('row', 'col')
+
 
 if __name__ == '__main__':
   absltest.main()
-

@@ -15,10 +15,7 @@
 import functools
 import typing as tp
 
-import jax
-from jax.interpreters import pxla
-from jax.sharding import PartitionSpec
-
+import flax.core.spmd as core_spmd
 from flax.nnx import variablelib
 from flax.typing import (
   Array,
@@ -26,6 +23,9 @@ from flax.typing import (
   PartitionSpecPytree,  # pylint: disable=invalid-name
   Sharding,
 )
+import jax
+from jax.interpreters import pxla
+from jax.sharding import PartitionSpec
 
 A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
@@ -96,15 +96,16 @@ def get_partition_spec(tree: A) -> A:
     else:
       return None
 
-  def from_rules(sharding, sharding_rules):
-    rules = {alias: on_mesh for (alias, on_mesh) in sharding_rules}
-    return (rules[s] if s in rules else None for s in sharding)
-
   def f(x):
     if isinstance(x, (variablelib.VariableState, variablelib.Variable)):
       if hasattr(x, 'sharding') and x.sharding:
-        if hasattr(x, 'sharding_rules') and x.sharding_rules:
-          return x.replace(PartitionSpec(*from_rules(x.sharding, x.sharding_rules)))
+        if core_spmd.get_logical_axis_rules() or hasattr(x, 'sharding_rules'):
+          context_rules = core_spmd.get_logical_axis_rules()
+          local_rules = getattr(x, 'sharding_rules', ())
+          rules = core_spmd.composite_rules(context_rules, local_rules)
+          return x.replace(
+              PartitionSpec(*core_spmd.from_sharding_rules(x.sharding, rules))
+          )
         return x.replace(PartitionSpec(*x.sharding))
       else:
         return x.replace(_maybe_replicate(x.value))
