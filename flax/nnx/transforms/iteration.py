@@ -1406,10 +1406,10 @@ class WhileLoopBodyFn:
 def while_loop(cond_fun: tp.Callable[[T], tp.Any],
                body_fun: tp.Callable[[T], T],
                init_val: T) -> T:
-  """NNX transform of `jax.lax.while_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.while_loop.html>`_.
+  """A Flax NNX transformation of `jax.lax.while_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.while_loop.html>`_.
 
   Caution: for the NNX internal reference tracing mechanism to work, you cannot
-  change the variable reference structure of `init_val` inside `body_fun`.
+  change the variable reference structure of ``init_val`` inside ``body_fun``.
 
   Example::
 
@@ -1427,12 +1427,12 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
 
 
   Args:
-    cond_fun: a function for the continue condition of the while loop, taking a
-      single input of type `T` and outputting a boolean.
-    body_fun: a function that takes an input of type `T` and outputs an `T`.
-      Note that both data and modules of `T` must have the same reference
+    cond_fun: A function for the continue condition of the while loop, taking a
+      single input of type ``T`` and outputting a boolean.
+    body_fun: A function that takes an input of type ``T`` and outputs an ``T``.
+      Note that both data and modules of ``T`` must have the same reference
       structure between inputs and outputs.
-    init_val: the initial input for cond_fun and body_fun. Must be of type `T`.
+    init_val: The initial input for ``cond_fun`` and ``body_fun``. Must be of type ``T``.
 
   """
 
