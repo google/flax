@@ -19,7 +19,6 @@ import typing as tp
 
 
 from flax import struct
-from flax.core.frozen_dict import FrozenDict
 from flax.nnx import (
   extract,
   filterlib,
@@ -428,7 +427,7 @@ def _custom_vjp_split_fn(
   nondiff_argnums: tuple[int, ...] = struct.field(pytree_node=False)
   tangent_tree_node_args: tuple[tp.Any, ...] = struct.field(pytree_node=False)
 
-def _extract_index_mappings(x, *, index_mappings: deque[FrozenDict]):
+def _extract_index_mappings(x, *, index_mappings: deque[graph.HashableMapping]):
   if isinstance(x, graph.NodeDef):
     assert x.index_mapping is not None
     index_mappings.append(x.index_mapping)
@@ -466,7 +465,9 @@ class CustomVjpFnWrapper:
       (args_out, out), ctxtag=self.ctxtag
     )
     # remove index_mapping from NodeDef's but store them in global context
-    index_mappings: deque[FrozenDict] = extract.get_broadcast_state(self.ctxtag)
+    index_mappings: deque[graph.HashableMapping] = extract.get_broadcast_state(
+      self.ctxtag
+    )
 
     pure_args_out, pure_out = jax.tree.map(
       functools.partial(_extract_index_mappings, index_mappings=index_mappings),
@@ -519,8 +520,8 @@ class FwdFn:
 
     if update_context_active:
       # remove index_mapping from NodeDef's but store them in global context
-      index_mappings: deque[FrozenDict] = extract.get_broadcast_state(
-        self.ctxtag
+      index_mappings: deque[graph.HashableMapping] = (
+        extract.get_broadcast_state(self.ctxtag)
       )
       pure_args_out, pure_out = jax.tree.map(
         functools.partial(
@@ -631,7 +632,7 @@ class CustomVjp(tp.Generic[A]):
         for i, x in enumerate(tree_node_args)
         if i not in self.jax_nondiff_argnums
       )
-      index_mappings: deque[FrozenDict] = deque()
+      index_mappings: deque[graph.HashableMapping] = deque()
       with extract.broadcast_state(self.ctxtag, index_mappings):
         if self.fwd is None or self.bwd is None or self.symbolic_zeros is None:
           raise ValueError()
@@ -663,7 +664,7 @@ class CustomVjp(tp.Generic[A]):
       # insert index_mappings
       def _insert_index_mappings(x):
         if isinstance(x, graph.NodeDef):
-          index_mapping: FrozenDict = index_mappings.popleft()
+          index_mapping: graph.HashableMapping = index_mappings.popleft()
           return dataclasses.replace(x, index_mapping=index_mapping)
         return x
 

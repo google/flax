@@ -650,7 +650,7 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
 
 def _extract_index_mappings(
   pure_carry_arg_out,
-  carry_index_mappings: list[FrozenDict[int, int]],
+  carry_index_mappings: list[graph.HashableMapping[int, int]],
   /,
 ):
   def extract_index_mappings(x):
@@ -675,7 +675,7 @@ def _extract_index_mappings(
 
 def _insert_index_mappings(
   pure_carry_arg_out,
-  carry_index_mappings: deque[FrozenDict[int, int]],
+  carry_index_mappings: deque[graph.HashableMapping[int, int]],
   /,
 ):
   def insert_index_mappings(x):
@@ -1096,7 +1096,7 @@ class ScanFn:
 
     # next we have to remove all the index_mappings from the NodeDefs
     # in the carry outputs because they are not present in the inputs
-    carry_index_mappings: list[FrozenDict[int, int]] = []
+    carry_index_mappings: list[graph.HashableMapping[int, int]] = []
     pure_carry_arg_out = _extract_index_mappings(
       pure_carry_arg_out, carry_index_mappings
     )
@@ -1347,10 +1347,12 @@ def _add_fake_index_mapping(tree: tp.Any):
       return
 
     per_node_def(ns._graphdef)
-    return dataclasses.replace(ns, _graphdef=dataclasses.replace(
-        ns._graphdef,
-        index_mapping=FrozenDict(global_index_mapping)
-      ))
+    return dataclasses.replace(
+      ns,
+      _graphdef=dataclasses.replace(
+        ns._graphdef, index_mapping=graph.HashableMapping(global_index_mapping)
+      ),
+    )
 
   return jax.tree.map(per_node_state, tree,
                       is_leaf=lambda x: isinstance(x, extract.NodeStates))

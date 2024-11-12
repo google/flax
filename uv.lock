@@ -81,6 +81,12 @@ dependencies = [
     { name = "etils", version = "1.9.2", source = { registry = "https://pypi.org/simple" }, extra = ["epath"], marker = "python_full_version >= '3.11' and platform_system != 'Darwin'" },
 ]
 wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/9b/fe3cc94350cf082d3fb70a1393b259cd1d9bce5212f14f53deea1008b94b/array_record-0.5.1-1-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:3dbfac79589b53ad765d247b4b6b6c108623053950a8ae36d8a5f2bfec396bd1", size = 2140349 },
+    { url = "https://files.pythonhosted.org/packages/ce/fd/a241172b054f0c496cc575a6081e2b457ef3cf520e652ee22f3035714535/array_record-0.5.1-1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:a0911cca3f71aa6724ae08c351e486acc2dcdc098df0e4ae9aa920f16aee2385", size = 2200584 },
+    { url = "https://files.pythonhosted.org/packages/7f/b9/ab118be4efaae976db4dbffbf4d9479151509668261d95beaa80a956a757/array_record-0.5.1-1-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:e6b297b9241d10f072f00a85e97c8743c9e623be20e413ab3403b9326ed98890", size = 2140482 },
+    { url = "https://files.pythonhosted.org/packages/d8/5e/9379b00e5b17ea280845b82c492cab9298eb658ea9d40c21f0fd064a4dd5/array_record-0.5.1-1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e39b2001fbed6f6d621a5f2079609037167ee06bf977fd6c37d225043c39a015", size = 2200598 },
+    { url = "https://files.pythonhosted.org/packages/45/9b/74eb64c839871cb3adfb254246e42be8a7ce636debe9ab9a3748cb0c484b/array_record-0.5.1-1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:c4e6e5cef45a82641f4bb008c2a1409cd043f46dd3f0e5a2e7f232416435186d", size = 2140093 },
+    { url = "https://files.pythonhosted.org/packages/b7/4d/8ed8fbef16144db66b92e3fcbcb4656edaa5cf538d20fe7913c1caa78b68/array_record-0.5.1-1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:927f5f0bdbb141e75d370ade9ce784514babcb78f86d23badbab2d7fd6b7cd48", size = 2200996 },
     { url = "https://files.pythonhosted.org/packages/76/85/f8e77e0ee6644ab3585de1b73a183e6831ded6e7b791f21a3de5f6e29aeb/array_record-0.5.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b9f2e304e59a17af9f5bf2a86b93ad4700d0eeb85d742a884aa38dc0b54dda5b", size = 2135133 },
     { url = "https://files.pythonhosted.org/packages/9e/da/a7c513f35d4878888ca5d1e8548324e90414106ece7b44908002c800a22f/array_record-0.5.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:897362036f2920093eff3d729c2a6e1844e3077f513d6bd29640cd02f98e07c7", size = 2195378 },
     { url = "https://files.pythonhosted.org/packages/61/7f/e0329a2aad1cf96e2b797e55e744af94c3d8d1969240c0153660214477c0/array_record-0.5.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6ebe99f37e3a797322f4f5cfc6902b5e852012ba2729fac628aad6affb225247", size = 2135268 },
@@ -767,7 +773,7 @@ wheels = [
 
 [[package]]
 name = "flax"
-version = "0.10.1"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "jax" },
@@ -2255,7 +2261,7 @@ wheels = [
 
 [[package]]
 name = "orbax-checkpoint"
-version = "0.8.0"
+version = "0.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
@@ -2272,9 +2278,9 @@ dependencies = [
     { name = "tensorstore" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/48/54339d92c2b37f2ddea72501653f1b85a85ca2f19f4102b4b966260c2700/orbax_checkpoint-0.8.0.tar.gz", hash = "sha256:0754ecc2e5fc858e62bbcf610606502d8e1c9ada7295d9bb49cc172f884b0b1e", size = 206396 }
+sdist = { url = "https://files.pythonhosted.org/packages/48/ce/4a3386e9e4bc95ab638c2779e259a231ffc2ae1fc2b67a68f4d6d8a794f2/orbax_checkpoint-0.9.1.tar.gz", hash = "sha256:edf76d8fc482a9a0296645522f6d13ee09c499af0ef2f9369899cbfee31c7f88", size = 212247 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/35/1a3ec885f192884867c1325920171d67ca2fa9122837ea96af284a2a2f05/orbax_checkpoint-0.8.0-py3-none-any.whl", hash = "sha256:df8e353feb7f4eeba9f5b16f704699df54c3c44c5c6ec4d4d117c40bf27830cc", size = 286357 },
+    { url = "https://files.pythonhosted.org/packages/8a/41/19de59b4a8581ad364970b2429481838cea8d190f50bc8f672ca329b64e0/orbax_checkpoint-0.9.1-py3-none-any.whl", hash = "sha256:d33e23e63b7ffcf66de3fb5daa3d11bf24a34e66d133eb4a037788f22155857e", size = 296514 },
 ]
 
 [[package]]
