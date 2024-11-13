@@ -26,7 +26,7 @@ from absl import app
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum('mode', 'all', ['all', 'nnx', 'jax'], 'Mode to run the script in')
-flags.DEFINE_integer('total_steps', 10_000, 'Total number of training steps')
+flags.DEFINE_integer('total_steps', 100, 'Total number of training steps')
 flags.DEFINE_integer('width', 32, 'Hidden layer size')
 flags.DEFINE_integer('depth', 5, 'Depth of the model')
 
@@ -34,11 +34,15 @@ flags.DEFINE_integer('depth', 5, 'Depth of the model')
 
 class Linear(nnx.Module):
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-    self.w = nnx.Param(jax.random.uniform(rngs.params(), (din, dout)))
-    self.b = nnx.Param(jnp.zeros((dout,)))
+    self.list = [
+      nnx.Param(jax.random.uniform(rngs.params(), (din, dout))),
+      nnx.Param(jnp.zeros((dout,))),
+    ]
+    self.dict = {
+      'w': nnx.Param(jax.random.uniform(rngs.params(), (din, dout))),
+      'b': nnx.Param(jnp.zeros((dout,))),
+    }
 
-  def __call__(self, x):
-    return x @ self.w + self.b
 
 
 class MLP(nnx.Module):
