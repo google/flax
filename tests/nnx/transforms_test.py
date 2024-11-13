@@ -2934,6 +2934,40 @@ class TestWhileLoop(absltest.TestCase):
     _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x))
     np.testing.assert_array_equal(y, x * 2 * 3)
 
+  def test_fori_loop_with_sharing(self):
+    class A(nnx.Object):
+      def __init__(self):
+        self.params = nnx.Param(jnp.zeros((10,), dtype=int))
+
+    class B(nnx.Object):
+      def __init__(self, a: A):
+        self.a = a
+
+    class C(nnx.Object):
+      def __init__(self, a: A):
+        self.a = a
+
+    class D(nnx.Object):
+      def __init__(self):
+        self.a = A()
+        self.b = B(self.a)
+        self.c = C(self.a)
+
+    def increment(_, d: D) -> D:
+      d.a.params += 1
+      return d
+
+    @nnx.jit
+    def rollout(d: D):
+      nnx.fori_loop(0, 10, increment, d)
+
+    d = D()
+    rollout(d)
+
+    np.testing.assert_array_equal(
+      d.a.params.value, np.full((10,), 10, dtype=int)
+    )
+
 
 class TestSplitMergeInputs(absltest.TestCase):
   def test_split_inputs(self):

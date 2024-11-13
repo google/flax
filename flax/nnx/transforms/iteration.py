@@ -1336,9 +1336,13 @@ def _add_fake_index_mapping(tree: tp.Any):
     ):
       return ns
 
-    def per_node_def(nd: graph.NodeDef | tp.Any):
+    def per_node_def(nd: graph.NodeDef | graph.NodeRef):
       if nd.index >= 0:
         global_index_mapping[nd.index] = nd.index
+
+      if isinstance(nd, graph.NodeRef):
+        return
+
       for sub_nd in nd.subgraphs.values():
         per_node_def(sub_nd)
       for l in nd.leaves.values():
