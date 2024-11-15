@@ -1493,7 +1493,7 @@ def fori_loop(lower: int, upper: int,
               init_val: T,
               *,
               unroll: int | bool | None = None) -> T:
-  """NNX transform of `jax.lax.fori_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.fori_loop.html>`_.
+  """A Flax NNX transformation of `jax.lax.fori_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.fori_loop.html>`_.
 
   Caution: for the NNX internal reference tracing mechanism to work, you cannot
   change the variable reference structure of `init_val` inside `body_fun`.
@@ -1515,21 +1515,21 @@ def fori_loop(lower: int, upper: int,
 
 
   Args:
-    lower: an integer representing the loop index lower bound (inclusive)
-    upper: an integer representing the loop index upper bound (exclusive)
-    body_fun: a function that takes an input of type `T` and outputs an `T`.
-      Note that both data and modules of `T` must have the same reference
+    lower: An integer representing the loop index lower bound (inclusive).
+    upper: An integer representing the loop index upper bound (exclusive).
+    body_fun: a function that takes an input of type ``T`` and outputs an ``T``.
+      Note that both data and modules of ``T`` must have the same reference
       structure between inputs and outputs.
-    init_val: the initial input for body_fun. Must be of type `T`.
+    init_val: the initial input for body_fun. Must be of type ``T``.
     unroll: An optional integer or boolean that determines how much to unroll
       the loop. If an integer is provided, it determines how many unrolled
       loop iterations to run within a single rolled iteration of the loop. If a
       boolean is provided, it will determine if the loop is competely unrolled
-      (i.e. `unroll=True`) or left completely unrolled (i.e. `unroll=False`).
+      (i.e. ``unroll=True``) or left completely unrolled (i.e. ``unroll=False``).
       This argument is only applicable if the loop bounds are statically known.
 
   Returns:
-    Loop value from the final iteration, of type ``T``.
+    A loop value from the final iteration, of type ``T``.
 
   """
 
