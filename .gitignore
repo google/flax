@@ -17,8 +17,7 @@ flaxlib_src/build
 flaxlib_src/builddir
 flaxlib_src/dist
 flaxlib_src/subprojects
-target/
-flaxlib.cpython-*
+
 # used by direnv
 .envrc
 
