@@ -303,7 +303,7 @@ class TestGraphUtils(absltest.TestCase):
 
     assert 'tree' in state
     assert 'a' in state.tree
-    assert graphdef.subgraphs['tree'].type is nnx.graph.PytreeType
+    assert graphdef.subgraphs['tree'].type is nnx.graph.GenericPytree
 
     m2 = nnx.merge(graphdef, state)
 
