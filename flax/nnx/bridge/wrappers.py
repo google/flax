@@ -28,6 +28,19 @@ from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 import jax
 from jax import tree_util as jtu
+from importlib.util import find_spec
+from flax.nnx import variablelib
+
+# import keras
+if find_spec('keras') is not None:
+  import keras
+  from keras.src import backend as keras_backend
+  from keras.src import dtype_policies as keras_dtype_policies
+else:
+  keras = None
+  keras_backend = None
+  keras_dtype_policies = None
+
 
 M = tp.TypeVar('M', bound=Module)
 
@@ -279,3 +292,102 @@ def to_linen(nnx_class: tp.Callable[..., Module], *args,
              name: str | None = None, **kwargs):
   """Shortcut of `nnx.bridge.ToLinen` if user is not changing any of its default fields."""
   return ToLinen(nnx_class, args=args, kwargs=FrozenDict(kwargs), name=name)
+
+class NonTrainable(variablelib.Variable):
+  pass
+
+
+class KerasToNNX(Module):
+  def __init__(self, keras_model):
+    if keras is None:
+      raise ImportError('Keras is not installed.')
+    if not isinstance(keras_model, keras.Layer):
+      raise ValueError(f'{keras_model} is not a Keras model.')
+    self.keras_model = keras_model
+    self.trainable_variables = [
+      nnx.Param(v.value) for v in keras_model.trainable_variables
+    ]
+    self.non_trainable_variables = [
+      NonTrainable(v.value) for v in keras_model.non_trainable_variables
+    ]
+
+  def __call__(self, *args, **kwargs):
+    if keras is None:
+      raise ImportError('Keras is not installed.')
+    assert keras_backend is not None
+    assert keras_dtype_policies is not None
+
+    keras_model = self.keras_model
+    keras_model._check_super_called()
+
+    trainable_variables = [
+      keras.Variable(v.value, trainable=True) for v in self.trainable_variables
+    ]
+    non_trainable_variables = [
+      keras.Variable(v.value, trainable=False)
+      for v in self.non_trainable_variables
+    ]
+
+    if not keras_model.built:
+      raise ValueError(
+        f'To call stateless_call, {keras_model.__class__.__name__} must be '
+        'built (i.e. its variables must have been already created). '
+        'You can build it by calling it on some data.'
+      )
+    if len(trainable_variables) != len(keras_model.trainable_variables):
+      raise ValueError(
+        'Argument `trainable_variables` must be a list of tensors '
+        'corresponding 1:1 to '
+        f'{keras_model.__class__.__name__}().trainable_variables. '
+        f'Received list with length {len(trainable_variables)}, '
+        f'but expected {len(keras_model.trainable_variables)} variables.'
+      )
+    if len(non_trainable_variables) != len(keras_model.non_trainable_variables):
+      raise ValueError(
+        'Argument `non_trainable_variables` must be a list of tensors '
+        'corresponding 1:1 to '
+        f'{keras_model.__class__.__name__}().non_trainable_variables. '
+        f'Received list with length {len(non_trainable_variables)}, '
+        f'but expected {len(keras_model.non_trainable_variables)} variables.'
+      )
+
+    # Gather variable mapping
+    trainable_mapping = zip(
+      keras_model.trainable_variables, trainable_variables
+    )
+    non_trainable_mapping = zip(
+      keras_model.non_trainable_variables, non_trainable_variables
+    )
+    mapping = list(trainable_mapping) + list(non_trainable_mapping)
+
+    # Call in stateless scope
+    losses = None
+    with keras_backend.StatelessScope(
+      state_mapping=mapping, collect_losses=True
+    ) as scope:
+      if isinstance(
+        keras_model.dtype_policy, keras_dtype_policies.QuantizedDTypePolicy
+      ):
+        outputs = keras_model.quantized_call(*args, **kwargs)
+      else:
+        outputs = keras_model.call(*args, **kwargs)
+
+      losses = keras_model.losses
+      losses
+
+      for nnx_var, keras_var in zip(
+        self.trainable_variables, keras_model.trainable_variables
+      ):
+        nnx_var.value = keras_var.value
+      for nnx_var, keras_var in zip(
+        self.non_trainable_variables, keras_model.non_trainable_variables
+      ):
+        nnx_var.value = keras_var.value
+
+    # Gather updated non-trainable variables
+    non_trainable_variables = []
+    for v in keras_model.non_trainable_variables:
+      new_v = scope.get_current_value(v)
+      non_trainable_variables.append(new_v)
+
+    return outputs

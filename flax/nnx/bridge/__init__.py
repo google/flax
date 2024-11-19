@@ -16,6 +16,7 @@
 from .wrappers import functional as functional
 from .wrappers import Functional as Functional
 from .wrappers import ToNNX as ToNNX
+from .wrappers import KerasToNNX as KerasToNNX
 from .wrappers import lazy_init as lazy_init
 from .wrappers import ToLinen as ToLinen
 from .wrappers import to_linen as to_linen

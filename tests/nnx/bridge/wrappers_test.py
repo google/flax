@@ -457,6 +457,20 @@ class TestCompatibility(absltest.TestCase):
     # messing up the stateful part of the NNX module.
     pass
 
+class TestKerasToNNX(absltest.TestCase):
+  def test_keras_to_nnx(self):
+    import keras
+
+    keras_model = keras.layers.Dense(3)
+    x = jnp.ones((1, 2))
+    y1 = keras_model(x)  # build the model
+
+    nnx_model = bridge.KerasToNNX(keras_model)
+    y2 = nnx_model(x)
+
+    self.assertEqual(y1.shape, (1, 3))
+    np.testing.assert_allclose(y1, y2)
+
 
 if __name__ == '__main__':
   absltest.main()
