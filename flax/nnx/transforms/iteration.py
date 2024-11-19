@@ -1329,8 +1329,8 @@ class WhileLoopCondFn:
 
 
 def _add_fake_index_mapping(tree: tp.Any):
+  global_index_mapping = {}  # for the whole context, over all inputs
   def per_node_state(ns: extract.NodeStates | tp.Any):
-    global_index_mapping = {}
     if not isinstance(ns, extract.NodeStates) or not isinstance(
       ns._graphdef, graph.NodeDef
     ):
@@ -1339,10 +1339,8 @@ def _add_fake_index_mapping(tree: tp.Any):
     def per_node_def(nd: graph.NodeDef | graph.NodeRef):
       if nd.index >= 0:
         global_index_mapping[nd.index] = nd.index
-
       if isinstance(nd, graph.NodeRef):
         return
-
       for sub_nd in nd.subgraphs.values():
         per_node_def(sub_nd)
       for l in nd.leaves.values():
@@ -1480,7 +1478,7 @@ class ForiLoopBodyFn:
              "have the same reference and pytree structure, but they differ. "
              "If the mismatch comes from `index_mapping` field, you might "
              "have modified reference structure within the body function, "
-             "which is not allowed."
+             "which is not allowed. "
              f"Detail of the mismatch: \n {str(e)}")
       raise ValueError(msg)
 

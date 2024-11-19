@@ -2969,6 +2969,22 @@ class TestWhileLoop(absltest.TestCase):
       d.a.params.value, np.full((10,), 10, dtype=int)
     )
 
+  def test_loops_multiple_modules(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.param = nnx.Param(jnp.zeros((1,)))
+      def __call__(self, x):
+        return self.param
+
+    def loop_fn(inputs):
+      return inputs
+    while_loop_fn = lambda inputs: (*loop_fn(inputs[:-1]), inputs[-1]-1)
+    fori_loop_fn = lambda i, inputs: loop_fn(inputs)
+    a = Foo()
+    b = Foo()
+    nnx.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2))
+    nnx.fori_loop(0, 2, fori_loop_fn, (a, b))
+
 
 class TestSplitMergeInputs(absltest.TestCase):
   def test_split_inputs(self):
