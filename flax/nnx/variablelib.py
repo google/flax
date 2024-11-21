@@ -429,6 +429,9 @@ class Variable(tp.Generic[A], reprlib.Representable):
   # NOTE: we dont override __setattr__ to avoid cases where
   # you need to set an attribute on the variable instance
   def __getattr__(self, name: str) -> tp.Any:
+    vars_self = vars(self)
+    if name in vars_self:
+      return vars_self[name]
     return getattr(self.value, name)
 
   def __getitem__(self, key) -> tp.Any:

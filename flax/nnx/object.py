@@ -206,7 +206,8 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     ):
       variable.update_from_state(value)
     else:
-      setattr(self, key, value)
+      # setattr(self, key, value)
+      vars(self)[key] = value
 
   def _graph_node_pop_key(self, key: Key):
     if not isinstance(key, str):
