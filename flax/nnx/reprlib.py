@@ -122,3 +122,13 @@ class PrettyMapping(Representable):
 
     for key, value in self.mapping.items():
       yield Attr(repr(key), value)
+
+@dataclasses.dataclass(repr=False)
+class PrettySequence(Representable):
+  list: tp.Sequence
+
+  def __nnx_repr__(self):
+    yield Object(type='', value_sep='', start='[', end=']')
+
+    for value in self.list:
+      yield Attr('', value)
