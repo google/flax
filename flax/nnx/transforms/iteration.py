@@ -1341,11 +1341,16 @@ def _add_fake_index_mapping(tree: tp.Any):
         global_index_mapping[nd.index] = nd.index
       if isinstance(nd, graph.NodeRef):
         return
-      for sub_nd in nd.subgraphs.values():
-        per_node_def(sub_nd)
-      for l in nd.leaves.values():
-        if isinstance(l, (graph.VariableDef, graph.NodeRef)) and l.index >= 0:
-          global_index_mapping[l.index] = l.index
+
+      for attribute in nd.attributes:
+        if type(attribute) is graph.SubGraphAttribute:
+          per_node_def(attribute.value)
+        elif (
+          type(attribute) is graph.LeafAttribute
+          and isinstance(attribute.value, (graph.VariableDef, graph.NodeRef))
+          and attribute.value.index >= 0
+        ):
+          global_index_mapping[attribute.value.index] = attribute.value.index
       return
 
     per_node_def(ns._graphdef)
