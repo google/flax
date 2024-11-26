@@ -12,27 +12,12 @@ jupytext:
 
 Flax NNX is a new simplified API that is designed to make it easier to create, inspect, debug, and analyze neural networks in [JAX](https://jax.readthedocs.io/). It achieves this by adding first class support for Python reference semantics. This allows users to express their models using regular Python objects, which are modeled as PyGraphs (instead of pytrees), enabling reference sharing and mutability. Such API design should make PyTorch or Keras users feel at home.
 
-In this guide you will learn about:
-
-- The Flax [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html) system: An example of creating and initializing a custom `Linear` layer.
-  - Stateful computation: An example of creating a Flax [`nnx.Variable`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Variable) and updating its value (such as state updates needed during the forward pass).
-  - Nested [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html)s: An MLP example with `Linear`, [`nnx.Dropout`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/nn/stochastic.html#flax.nnx.Dropout), and [`nnx.BatchNorm`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/nn/normalization.html#flax.nnx.BatchNorm) layers.
-  - Model surgery: An example of replacing custom `Linear` layers inside a model with custom `LoraLinear` layers.
-- Flax transformations: An example of using [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/transforms.html#flax.nnx.jit) for automatic state management.
-  - [`nnx.scan`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/transforms.html#flax.nnx.scan) over layers.
-- The Flax NNX Functional API: An example of a custom `StatefulLinear` layer with [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param)s with fine-grained control over the state.
-  - [`State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State) and [`GraphDef`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.GraphDef).
-  - [`split`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.split), [`merge`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/graph.html#flax.nnx.merge), and `update`
-  - Fine-grained [`State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State) control: An example of using [`nnx.Variable`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Variable) type `Filter`s to split into multiple [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State)s.
-
-## Setup
-
-Install Flax with `pip` and import necessary dependencies:
+To begin, install Flax with `pip` and import necessary dependencies:
 
 ```{code-cell} ipython3
 :tags: [skip-execution]
 
-# ! pip install -U flax treescope
+# ! pip install -U flax
 ```
 
 ```{code-cell} ipython3
@@ -43,17 +28,9 @@ import jax.numpy as jnp
 
 ## The Flax NNX Module system
 
-The main difference between the Flax[`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html) and other `Module` systems in [Flax Linen](https://flax-linen.readthedocs.io/en/latest/api_reference/flax.linen/module.html) or [Haiku](https://dm-haiku.readthedocs.io/en/latest/notebooks/basics.html#Built-in-Haiku-nets-and-nested-modules) is that in NNX everything is **explicit**. This  means, among other things, that:
+The main difference between the Flax[`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html) and other `Module` systems in [Flax Linen](https://flax-linen.readthedocs.io/en/latest/api_reference/flax.linen/module.html) or [Haiku](https://dm-haiku.readthedocs.io/en/latest/notebooks/basics.html#Built-in-Haiku-nets-and-nested-modules) is that in NNX everything is **explicit**. This  means, among other things, that the [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html) itself holds the state (such as parameters) directly, the [PRNG](https://jax.readthedocs.io/en/latest/random-numbers.html) state is threaded by the user, and all shape information must be provided on initialization (no shape inference).
 
-1) The [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html) itself holds the state (such as parameters) directly.
-2) The [PRNG](https://jax.readthedocs.io/en/latest/random-numbers.html) state is threaded by the user.
-3) All shape information must be provided on  initialization (no shape inference).
-
-Let's begin by creating a `Linear` [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html). The following code shows that:
-
-- Dynamic state is usually stored in [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param)s, and static state  (all types not handled by NNX), such as integers or strings are stored directly.
-- Attributes of type [`jax.Array`](https://jax.readthedocs.io/en/latest/_autosummary/jax.Array.html) and `numpy.ndarray` are also treated as dynamic states, although storing them inside [`nnx.Variable`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Variable)s, such as `Param`, is preferred.
-- The [`nnx.Rngs`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/rnglib.html#flax.nnx.Rngs) object can be used to get new unique keys based on a root PRNG key passed to the constructor.
+Let's begin by creating a `Linear` [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html). As shown next, dynamic state is usually stored in `nnx.Param`s, and static state (all types not handled by NNX) such as integers or strings are stored directly. Attributes of type `jax.Array` and `numpy.ndarray` are also treated as dynamic states, although storing them inside `nnx.Variable`s, such as `Param`, is preferred. Also the [`nnx.Rngs`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/rnglib.html#flax.nnx.Rngs) object can be used to get new unique keys based on a root PRNG key passed to the constructor.
 
 ```{code-cell} ipython3
 class Linear(nnx.Module):
@@ -67,9 +44,7 @@ class Linear(nnx.Module):
     return x @ self.w + self.b
 ```
 
-Also note that:
-
-- The inner values of [`nnx.Variable`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Variable) can be accessed using the `value` property, but for convenience they implement all numeric operators and can be used directly in arithmetic expressions (as shown in the code above).
+Also note that the inner values of `nnx.Variable`s can be accessed using the `value` property, but for convenience they implement all numeric operators and can be used directly in arithmetic expressions (as shown in the code above).
 
 To initialize a Flax [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html), you just call the constructor, and all the parameters of a `Module` are usually created eagerly. Since [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html)s hold their own state methods, you can call them directly without the need for a separate `apply` method.
 This can be very convenient for debugging, allowing you to directly inspect the entire structure of the model.
@@ -208,6 +183,8 @@ There are two things happening in this example that are worth mentioning:
 
 1. The updates to each of the [`nnx.BatchNorm`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/nn/normalization.html#flax.nnx.BatchNorm) and [`nnx.Dropout`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/nn/stochastic.html#flax.nnx.Dropout) layer's state is automatically propagated from within `loss_fn` to `train_step` all the way to the `model` reference outside.
 2. The `optimizer` holds a mutable reference to the `model` - this relationship is preserved inside the `train_step` function making it possible to update the model's parameters using the optimizer alone.
+
+> **Note**<br> `nnx.jit` has performance overhead for small models, check the [Performance Considerations](https://flax.readthedocs.io/en/latest/guides/performance.html) guide for more information.
 
 ### Scan over layers
 

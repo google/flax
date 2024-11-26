@@ -8,6 +8,7 @@ Guides
    flax_gspmd
    filters_guide
    randomness
+   performance
    linen_to_nnx
    bridge_guide
    surgery
