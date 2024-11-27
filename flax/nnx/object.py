@@ -30,7 +30,6 @@ from flax.nnx import (
 )
 from flax.nnx import graph
 from flax.nnx.variablelib import Variable, VariableState
-from flax.typing import Key
 from flax import errors
 
 G = tp.TypeVar('G', bound='Object')
@@ -109,10 +108,11 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     graph.register_graph_node_type(
       type=cls,
       flatten=cls._graph_node_flatten,
-      set_key=cls._graph_node_set_key,
-      pop_key=cls._graph_node_pop_key,
+      set_key=cls._graph_node_set_key,  # type: ignore
+      pop_key=cls._graph_node_pop_key,  # type: ignore
       create_empty=cls._graph_node_create_empty,
       clear=cls._graph_node_clear,
+      init=cls._graph_node_init,  # type: ignore
     )
 
   if not tp.TYPE_CHECKING:
@@ -189,14 +189,12 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
 
   # Graph Definition
   def _graph_node_flatten(self):
-    nodes = sorted(
-      (key, value)
-      for key, value in vars(self).items()
-      if key != '_object__state'
-    )
+    nodes = vars(self).copy()
+    del nodes['_object__state']
+    nodes = sorted(nodes.items())
     return nodes, (type(self), self._object__state._initializing)
 
-  def _graph_node_set_key(self, key: Key, value: tp.Any):
+  def _graph_node_set_key(self, key: str, value: tp.Any):
     if not isinstance(key, str):
       raise KeyError(f'Invalid key: {key!r}')
     elif (
@@ -208,7 +206,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     else:
       setattr(self, key, value)
 
-  def _graph_node_pop_key(self, key: Key):
+  def _graph_node_pop_key(self, key: str):
     if not isinstance(key, str):
       raise KeyError(f'Invalid key: {key!r}')
     return vars(self).pop(key)
@@ -225,3 +223,6 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     module_vars = vars(self)
     module_vars.clear()
     module_vars['_object__state'] = module_state
+
+  def _graph_node_init(self, attributes: tp.Iterable[tuple[str, tp.Any]]):
+    vars(self).update(attributes)

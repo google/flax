@@ -28,7 +28,6 @@ A = tp.TypeVar('A')
 K = tp.TypeVar('K', bound=tp.Hashable)
 V = tp.TypeVar('V')
 
-FlatState = dict[PathParts, V]
 ExtractValueFn = tp.Callable[[tp.Any], tp.Any]
 SetValueFn = tp.Callable[[V, tp.Any], V]
 
@@ -53,6 +52,55 @@ class NestedStateRepr(reprlib.Representable):
       children[k] = v
     # Render as the dictionary itself at the same path.
     return subtree_renderer(children, path=path)
+
+class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.PrettySequence):
+  _keys: tuple[PathParts, ...]
+  _values: list[V]
+
+  def __init__(self, items: tp.Iterable[tuple[PathParts, V]]):
+    keys, values = [], []
+    for key, value in items:
+      keys.append(key)
+      values.append(value)
+    self._keys = tuple(keys)
+    self._values = values
+
+  @tp.overload
+  def __getitem__(self, index: int) -> tuple[PathParts, V]: ...
+  @tp.overload
+  def __getitem__(self, index: slice) -> FlatState[V]: ...
+  def __getitem__(
+    self, index: int | slice
+  ) -> tuple[PathParts, V] | FlatState[V]:
+    if isinstance(index, int):
+      return self._keys[index], self._values[index]
+    return FlatState(zip(self._keys[index], self._values[index]))
+
+  def __len__(self) -> int:
+    return len(self._keys)
+
+  def __iter__(self) -> tp.Iterator[tuple[PathParts, V]]:
+    return iter(zip(self._keys, self._values))
+
+
+def _flat_state_pytree_flatten(x: FlatState[V]):
+  return x._values, x._keys
+
+
+def _flat_state_pytree_unflatten(
+  keys: tuple[PathParts, ...], values: list[V]
+) -> FlatState[V]:
+  flat_state = object.__new__(FlatState)
+  flat_state._keys = keys
+  flat_state._values = values
+  return flat_state
+
+
+jax.tree_util.register_pytree_node(
+  FlatState,
+  _flat_state_pytree_flatten,
+  _flat_state_pytree_unflatten,
+)
 
 
 class State(MutableMapping[K, V], reprlib.Representable):
@@ -148,12 +196,14 @@ class State(MutableMapping[K, V], reprlib.Representable):
 
   def map(self, f: tp.Callable[[tuple, V], V]) -> State[K, V]:
     flat_state = self.flat_state()
-    for path, variable_state in flat_state.items():
-      flat_state[path] = f(path, variable_state)
-    return State.from_flat_path(flat_state)
+    result = []
+    for path, variable_state in flat_state:
+      variable_state = f(path, variable_state)
+      result.append((path, variable_state))
+    return State.from_flat_path(result)
 
   def flat_state(self) -> FlatState[V]:
-    return traversals.flatten_mapping(self._mapping)
+    return FlatState(traversals.flatten_to_sequence(self._mapping))
 
   @classmethod
   def from_flat_path(
@@ -172,7 +222,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     # Works for nnx.Variable and nnx.VariableState
     if extract_fn is None:
       extract_fn = lambda x: x.value if hasattr(x, 'value') else x
-    flat_values = {k: extract_fn(x) for k, x in self.flat_state().items()}
+    flat_values = {k: extract_fn(x) for k, x in self.flat_state()}
     return traversals.unflatten_mapping(flat_values)
 
   def replace_by_pure_dict(self,
@@ -186,7 +236,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     # Works for nnx.Variable and nnx.VariableState
     if replace_fn is None:
       replace_fn = lambda x, v: x.replace(v) if hasattr(x, 'replace') else v
-    current_flat = self.flat_state()
+    current_flat = dict(self.flat_state())
     for kp, v in traversals.flatten_mapping(pure_dict).items():
       kp = tuple(map(try_convert_int, kp))
       if kp not in current_flat:
@@ -241,7 +291,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
       One or more ``States`` equal to the number of filters passed.
     """
     filters = (first, *filters)
-    *states_, rest = _split_state(self, *filters)
+    *states_, rest = _split_state(self.flat_state(), *filters)
 
     if rest:
       raise ValueError(
@@ -254,7 +304,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
       states = states_[0]
     else:
       states = tuple(states_)
-    return states  # type: ignore[bad-return-type]
+    return states  # type: ignore
 
   @tp.overload
   def filter(
@@ -306,7 +356,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     Returns:
       One or more ``States`` equal to the number of filters passed.
     """
-    *states_, _rest = _split_state(self, first, *filters)
+    *states_, _rest = _split_state(self.flat_state(), first, *filters)
 
     assert len(states_) == len(filters) + 1
 
@@ -316,7 +366,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     else:
       states = tuple(states_)
 
-    return states  # type: ignore[bad-return-type]
+    return states  # type: ignore
 
   @staticmethod
   def merge(
@@ -360,7 +410,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
 
     states = (state, *states)
 
-    new_state: FlatState[V] = {}
+    new_state: dict[PathParts, V] = {}
 
     for state in states:
       new_state.update(traversals.flatten_mapping(state))  # type: ignore[attribute-error] # pytype is wrong here
@@ -376,8 +426,8 @@ class State(MutableMapping[K, V], reprlib.Representable):
     if not other:
       return self
 
-    self_flat = self.flat_state()
-    other_flat = other.flat_state()
+    self_flat = dict(self.flat_state())
+    other_flat = dict(other.flat_state())
     diff = {k: v for k, v in self_flat.items() if k not in other_flat}
 
     return State.from_flat_path(diff)
@@ -404,9 +454,9 @@ jax.tree_util.register_pytree_with_keys(
 
 
 def _split_state(
-  state: State[K, V],
+  flat_state: FlatState[V],
   *filters: filterlib.Filter,
-) -> tuple[State[K, V], ...]:
+) -> tuple[State[PathParts, V], ...]:
   for i, filter_ in enumerate(filters):
     if filter_ in (..., True) and i != len(filters) - 1:
       remaining_filters = filters[i + 1 :]
@@ -417,22 +467,20 @@ def _split_state(
         )
   predicates = tuple(map(filterlib.to_predicate, filters))
 
-  flat_state = state.flat_state()
-
   # we have n + 1 states, where n is the number of predicates
   # the last state is for values that don't match any predicate
-  flat_states: tuple[FlatState[V], ...] = tuple(
-    {} for _ in range(len(predicates) + 1)
+  flat_states: tuple[list[tuple[PathParts, V]], ...] = tuple(
+    [] for _ in range(len(predicates) + 1)
   )
 
-  for path, value in flat_state.items():
+  for path, value in flat_state:
     for i, predicate in enumerate(predicates):
       if predicate(path, value):
-        flat_states[i][path] = value  # type: ignore[index] # mypy is wrong here?
+        flat_states[i].append((path, value))  # type: ignore[index] # mypy is wrong here?
         break
     else:
       # if we didn't break, set leaf to last state
-      flat_states[-1][path] = value  # type: ignore[index] # mypy is wrong here?
+      flat_states[-1].append((path, value))  # type: ignore[index] # mypy is wrong here?
 
   return tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
 
@@ -440,7 +488,7 @@ def _split_state(
 def create_path_filters(state: State):
   flat_state = state.flat_state()
   value_paths: dict[tp.Any, set[PathParts]] = {}
-  for path, value in flat_state.items():
+  for path, value in flat_state:
     if isinstance(value, (variablelib.Variable, variablelib.VariableState)):
       value = value.value
     value_paths.setdefault(value, set()).add(path)
