@@ -40,13 +40,19 @@ class List(nnx.Module):
 
 class Dict(nnx.Module):
   def __init__(self, *args, **kwargs):
-    self.items = dict(*args, **kwargs)
+    vars(self)['items'] = dict(*args, **kwargs)
 
   def __getitem__(self, key):
     return vars(self)['items'][key]
 
   def __setitem__(self, key, value):
     vars(self)['items'][key] = value
+
+  def __setattr__(self, key, value):
+    if key == 'items':
+      object.__setattr__(self, key, value)
+    else:
+      vars(self)['items'][key] = value
 
   def __getattr__(self, key):
     attrs = vars(self)

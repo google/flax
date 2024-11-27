@@ -21,15 +21,15 @@ class TestContainers(absltest.TestCase):
   def test_unbox(self):
     x = nnx.Param(
       1,
-      get_value_hooks=[lambda c, x: x + 1, lambda c, x: x * 2],  # type: ignore
+      on_get_value=lambda c, x: x + 3,  # type: ignore
     )
 
     assert x.value == 4
 
-  def test_box(self):
+  def test_on_set_value(self):
     x: nnx.Param[int] = nnx.Param(
       1,  # type: ignore
-      set_value_hooks=[lambda c, x: x + 1, lambda c, x: x * 2],  # type: ignore
+      on_set_value=lambda c, x: x + 7,  # type: ignore
     )
     x.value = 5
 
@@ -38,9 +38,7 @@ class TestContainers(absltest.TestCase):
   def test_module_unbox(self):
     class Foo(nnx.Module):
       def __init__(self) -> None:
-        self.x = nnx.Param(
-          1, get_value_hooks=[lambda c, x: x + 1, lambda c, x: x * 2]
-        )
+        self.x = nnx.Param(1, on_get_value=lambda c, x: x + 3)
 
     module = Foo()
 
@@ -51,7 +49,8 @@ class TestContainers(absltest.TestCase):
     class Foo(nnx.Module):
       def __init__(self) -> None:
         self.x = nnx.Param(
-          1, set_value_hooks=[lambda c, x: x + 1, lambda c, x: x * 2]
+          1,
+          on_set_value=lambda c, x: x + 7,  # type: ignore
         )
 
     module = Foo()
