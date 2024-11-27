@@ -16,7 +16,6 @@ import contextlib
 import dataclasses
 import threading
 import typing as tp
-from abc import ABC, abstractmethod
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -48,10 +47,9 @@ class Attr:
   end: str = ''
 
 
-class Representable(ABC):
+class Representable:
   __slots__ = ()
 
-  @abstractmethod
   def __nnx_repr__(self) -> tp.Iterator[tp.Union[Object, Attr]]:
     raise NotImplementedError
 

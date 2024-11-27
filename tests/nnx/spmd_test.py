@@ -112,19 +112,20 @@ class TestSPMD(absltest.TestCase):
       )
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(
-            3,
-            3,
-            kernel_init=nnx.with_metadata(
-                nnx.initializers.lecun_normal(), sharding=('din', 'dout'),
-                add_axis_hooks=lambda _, idx, name: kadds.append((idx, name)),
-                remove_axis_hooks=lambda _, idx, name: kremoves.append((idx, name)),
-            ),
-            bias_init=nnx.with_metadata(
-                nnx.initializers.zeros_init(),  # no sharding annotation here!
-                add_axis_hooks=lambda _, idx, name: badds.append((idx, name)),
-                remove_axis_hooks=lambda _, idx, name: bremoves.append((idx, name)),
-            ),
-            rngs=rngs,
+          3,
+          3,
+          kernel_init=nnx.with_metadata(
+            nnx.initializers.lecun_normal(),
+            sharding=('din', 'dout'),
+            on_add_axis=lambda _, idx, name: kadds.append((idx, name)),
+            on_remove_axis=lambda _, idx, name: kremoves.append((idx, name)),
+          ),
+          bias_init=nnx.with_metadata(
+            nnx.initializers.zeros_init(),  # no sharding annotation here!
+            on_add_axis=lambda _, idx, name: badds.append((idx, name)),
+            on_remove_axis=lambda _, idx, name: bremoves.append((idx, name)),
+          ),
+          rngs=rngs,
         )
 
       @nnx.scan(
