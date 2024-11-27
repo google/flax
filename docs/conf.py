@@ -113,7 +113,7 @@ html_extra_path = ['robots.txt']
 # href with no underline and white bold text color
 announcement = """
 <a
-  href="https://flax-nnx.readthedocs.io/en/latest/index.html"
+  href="https://flax.readthedocs.io/en/latest/index.html"
   style="text-decoration: none; color: white;"
 >
   This site covers the old Flax Linen API. <span style="color: lightgray;">[Explore the new <b>Flax NNX</b> API ✨]</span>

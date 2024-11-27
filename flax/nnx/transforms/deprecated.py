@@ -20,7 +20,7 @@ import typing as tp
 
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx import extract, filterlib, graph, rnglib, spmd, variables
+from flax.nnx import extract, filterlib, graph, rnglib, spmd, variablelib
 from flax.nnx.module import GraphDef, Module
 from flax.nnx.proxy_caller import DelayedAccessor
 from flax.nnx.statelib import State
@@ -1685,7 +1685,7 @@ def grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   *,
-  wrt: filterlib.Filter = variables.Param,
+  wrt: filterlib.Filter = variablelib.Param,
 ) -> tp.Callable[..., tp.Any]:
   """Lifted version of ``jax.grad`` that can handle Modules / graph nodes as
   arguments.
@@ -1770,7 +1770,7 @@ def value_and_grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   *,
-  wrt: filterlib.Filter = variables.Param,
+  wrt: filterlib.Filter = variablelib.Param,
 ) -> tp.Callable[..., tp.Any]:
   return _grad_general(
     f,
@@ -1794,7 +1794,7 @@ class Grad(tp.Generic[M], LiftedModule[M]):
     reduce_axes: tp.Sequence[AxisName] = (),
     return_value: bool = False,
     *,
-    wrt: filterlib.Filter = variables.Param,
+    wrt: filterlib.Filter = variablelib.Param,
   ) -> tp.Callable[..., Grad[MA]]:
     def _create_grad(*args, **kwargs):
       return Grad(
@@ -1821,7 +1821,7 @@ class Grad(tp.Generic[M], LiftedModule[M]):
     allow_int: bool = False,
     reduce_axes: tp.Sequence[AxisName] = (),
     *,
-    wrt: filterlib.Filter = variables.Param,
+    wrt: filterlib.Filter = variablelib.Param,
     # submodule args
     module_init_args: tuple[tp.Any, ...],
     module_init_kwargs: dict[str, tp.Any],

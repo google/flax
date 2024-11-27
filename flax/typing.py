@@ -19,9 +19,9 @@ from typing import (
   Generic,
   Optional,
   Protocol,
+  TypeGuard,
   TypeVar,
   Union,
-  runtime_checkable,
 )
 from collections.abc import Callable, Hashable, Mapping, Sequence
 
@@ -41,11 +41,12 @@ Dtype = Union[jax.typing.DTypeLike, Any]
 Shape = Sequence[int]
 K = TypeVar('K')
 
-@runtime_checkable
 class Key(Hashable, Protocol):
   def __lt__(self: K, value: K, /) -> bool:
     ...
 
+def is_key_like(x: Any) -> TypeGuard[Key]:
+  return hasattr(x, '__hash__') and hasattr(x, '__lt__')
 
 Path = str
 PathParts = tuple[Key, ...]
@@ -117,16 +118,17 @@ Axes = Union[int, Sequence[int]]
 # SPMD
 
 LogicalNames = tuple[Union[str, None], ...]
+AxisName = str | tuple[str, ...] | None
 
 # Maps each logical axis  to physical mesh, can be either None (replicated),
 # one physical axis or a tuple of physical axes.
-LogicalRules = Sequence[tuple[str, Union[str, tuple[str, ...], None]]]
+LogicalRules = Sequence[tuple[str, AxisName]]
 ArrayPytree = Any  # pylint: disable=invalid-name
 LogicalPartitionSpec = Any  # pylint: disable=invalid-name
 LogicalPartitionSpecPytree = Any  # pylint: disable=invalid-name
 PartitionSpecPytree = Any  # pylint: disable=invalid-name
 
-Sharding = tuple[Optional[str], ...]
+Sharding = tuple[AxisName, ...]
 
 A = TypeVar('A')
 

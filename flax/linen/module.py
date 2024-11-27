@@ -2702,11 +2702,13 @@ class Module(ModuleBase):
       if not self.scope.has_variable(collection, name):
         self.scope.reserve(name, collection)
         self._state.children[name] = collection
-        self.scope.put_variable(collection, name, jnp.zeros_like(value))  # type: ignore
+        zeros = jax.tree.map(jnp.zeros_like, value)
+        self.scope.put_variable(collection, name, zeros)  # type: ignore
 
     if collection in self.scope.root._variables:
       if self.scope.has_variable(collection, name):
-        value += self.scope.get_variable(collection, name)  # type: ignore
+        old_value = self.scope.get_variable(collection, name)
+        value = jax.tree.map(jnp.add, value, old_value)  # type: ignore
       else:
         raise ValueError(f"Perturbation collection {collection} present, but "
                          f"missing perturbation variable {name}")

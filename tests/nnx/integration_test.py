@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import typing as tp
 
 from absl.testing import absltest
 import jax
 import jax.numpy as jnp
 import numpy as np
+import orbax.checkpoint as ocp
 
 from flax import nnx
 
@@ -258,6 +260,44 @@ class TestIntegration(absltest.TestCase):
     intermediates, state = state.split(nnx.Intermediate, ...)
 
     assert 'y' in intermediates
+
+  def test_replace_by_pure_dict(self):
+    class MLPs(nnx.Module):
+      def __init__(self, dim, rngs: nnx.Rngs):
+        self.layers = []
+        for _ in range(4):
+          self.layers.append(nnx.Linear(dim, dim, rngs=rngs, use_bias=False))
+
+      def __call__(self, x):
+        for layer in self.layers:
+          x = layer(x)
+        return x
+
+    model = MLPs(4, rngs=nnx.Rngs(0))
+    x = jax.random.normal(jax.random.key(42), (3, 4))
+    assert model(x).shape == (3, 4)
+
+    _, state = nnx.split(model)
+    pure_dict_state = state.to_pure_dict()
+    nnx.display(pure_dict_state)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+      ckpt_dir = ocp.test_utils.erase_and_create_empty(
+        tmpdir + '/my-checkpoints/'
+      )
+      checkpointer = ocp.StandardCheckpointer()
+      # checkpointer.save(ckpt_dir / 'state', state)
+      checkpointer.save(ckpt_dir / 'pure_dict', pure_dict_state)
+
+      # Restore as a pure dictionary.
+      restored_pure_dict = checkpointer.restore(ckpt_dir / 'pure_dict')
+      nnx.display(restored_pure_dict)
+
+      abstract_model = nnx.eval_shape(lambda: MLPs(4, rngs=nnx.Rngs(0)))
+      graphdef, abstract_state = nnx.split(abstract_model)
+      abstract_state.replace_by_pure_dict(restored_pure_dict)
+      model = nnx.merge(graphdef, abstract_state)
+      assert model(x).shape == (3, 4)  # The model still works!
 
 
 if __name__ == '__main__':

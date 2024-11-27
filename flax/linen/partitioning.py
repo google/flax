@@ -42,16 +42,14 @@ from flax.core.scope import (
   CollectionFilter as CollectionFilter,
   PRNGSequenceFilter as PRNGSequenceFilter,
 )
-from flax.linen.spmd import _axis_rules  # pylint: disable=unused-import
-from flax.linen.spmd import _AxisRules  # pylint: disable=unused-import
+from flax.core.spmd import logical_axis_rules as axis_rules  # pylint: disable=unused-import
+from flax.core.spmd import set_logical_axis_rules as set_axis_rules  # pylint: disable=unused-import
+from flax.core.spmd import get_logical_axis_rules as get_axis_rules  # pylint: disable=unused-import
 from flax.linen.spmd import _is_logical_spec
 from flax.linen.spmd import _with_sharding_constraint  # pylint: disable=unused-import
-from flax.linen.spmd import get_logical_axis_rules as get_axis_rules  # pylint: disable=unused-import
-from flax.linen.spmd import logical_axis_rules as axis_rules  # pylint: disable=unused-import
 from flax.linen.spmd import logical_to_mesh  # pylint: disable=unused-import
 from flax.linen.spmd import logical_to_mesh_axes  # pylint: disable=unused-import
 from flax.linen.spmd import RulesFallback
-from flax.linen.spmd import set_logical_axis_rules as set_axis_rules  # pylint: disable=unused-import
 from flax.linen.spmd import with_logical_constraint as with_sharding_constraint
 from flax.traverse_util import flatten_dict
 from flax.traverse_util import unflatten_dict

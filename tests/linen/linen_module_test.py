@@ -1783,7 +1783,7 @@ class ModuleTest(absltest.TestCase):
       submodule: MyComponent2[jnp.ndarray]
 
   def test_jit_rng_equivalance(self):
-    model = nn.Dense(1, use_bias=False)
+    model = nn.fold_rngs(nn.Dense)(1, use_bias=False)
     jit_model = nn.jit(nn.Dense)(1, use_bias=False)
     param = model.init(random.key(0), np.ones((1, 1)))['params']['kernel']
     param_2 = jit_model.init(random.key(0), np.ones((1, 1)))['params']['kernel']

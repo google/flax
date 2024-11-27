@@ -23,7 +23,7 @@ import opt_einsum
 
 from flax.core.frozen_dict import FrozenDict
 from flax import nnx
-from flax.nnx import rnglib, variables
+from flax.nnx import rnglib, variablelib
 from flax.nnx.module import Module, first_from
 from flax.nnx.nn import dtypes, initializers
 from flax.typing import (
@@ -193,7 +193,7 @@ class LinearGeneral(Module):
       )
       flat_shape = jax.tree.map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
-      if isinstance(kernel, variables.VariableMetadata):
+      if isinstance(kernel, variablelib.VariableMetadata):
         kernel.raw_value = jnp.reshape(kernel.raw_value, shape)
       else:
         kernel = jnp.reshape(kernel, shape)
@@ -215,7 +215,7 @@ class LinearGeneral(Module):
       def bias_init_wrap(rng, shape, dtype):
         flat_shape = (int(np.prod(shape)),)
         bias = self.bias_init(rng, flat_shape, dtype)
-        if isinstance(bias, variables.VariableMetadata):
+        if isinstance(bias, variablelib.VariableMetadata):
           bias.raw_value = jnp.reshape(bias.raw_value, shape)
         else:
           bias = jnp.reshape(bias, shape)
@@ -370,6 +370,7 @@ class Linear(Module):
       (((inputs.ndim - 1,), (0,)), ((), ())),
       precision=self.precision,
     )
+    assert self.use_bias == (bias is not None)
     if bias is not None:
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y

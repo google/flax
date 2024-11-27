@@ -9,8 +9,11 @@ See the `NNX page <https://flax.readthedocs.io/en/latest/nnx/index.html>`__ for 
 
   activations
   attention
+  dtypes
   initializers
   linear
+  lora
   normalization
+  recurrent
   stochastic
 

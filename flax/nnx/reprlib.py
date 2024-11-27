@@ -16,7 +16,6 @@ import contextlib
 import dataclasses
 import threading
 import typing as tp
-from abc import ABC, abstractmethod
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -48,10 +47,9 @@ class Attr:
   end: str = ''
 
 
-class Representable(ABC):
+class Representable:
   __slots__ = ()
 
-  @abstractmethod
   def __nnx_repr__(self) -> tp.Iterator[tp.Union[Object, Attr]]:
     raise NotImplementedError
 
@@ -122,3 +120,13 @@ class PrettyMapping(Representable):
 
     for key, value in self.mapping.items():
       yield Attr(repr(key), value)
+
+@dataclasses.dataclass(repr=False)
+class PrettySequence(Representable):
+  list: tp.Sequence
+
+  def __nnx_repr__(self):
+    yield Object(type='', value_sep='', start='[', end=']')
+
+    for value in self.list:
+      yield Attr('', value)

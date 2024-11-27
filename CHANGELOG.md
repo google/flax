@@ -8,11 +8,11 @@ vNext
 -
 -
 -
+- removed GeGLU simplistic activation, it should be implemented manually.
 -
 -
 -
--
--
+- removed FLAX_LAZY_RNG flag support for old non-lazy PRNG derivation mode
 -
 -
 -

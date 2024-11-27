@@ -21,9 +21,10 @@ from absl.testing import parameterized
 from flax import nnx
 from flax.nnx.transforms import general
 import jax
-from jax.experimental import mesh_utils
+from jax.experimental import mesh_utils, checkify
 import jax.numpy as jnp
 import numpy as np
+
 
 
 class List(nnx.Module):
@@ -598,7 +599,7 @@ class TestGrad(parameterized.TestCase):
     self.assertIn('bias', grads_m2[0])
 
 
-class TestCustomVJP(absltest.TestCase):
+class TestCustomVJP(parameterized.TestCase):
 
   def test_basic_call(self):
     m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
@@ -644,16 +645,16 @@ class TestCustomVJP(absltest.TestCase):
       return y, res
 
     def f_bwd(res, g):
-      inputs_g, out_g = g
+      (m_g,), out_g = g
       cos_x, sin_x, m = res
 
-      self.assertIsInstance(inputs_g, tuple)
-      self.assertLen(inputs_g, 1)
-      self.assertIsInstance(inputs_g[0], nnx.State)
+      self.assertIsInstance(m_g, nnx.State)
       self.assertEqual(out_g.shape, ())
       self.assertIsInstance(m, Foo)
 
-      m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      m_g.x.value = cos_x * out_g * m.y
+      m_g.y.value = sin_x * out_g
       return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
@@ -661,6 +662,92 @@ class TestCustomVJP(absltest.TestCase):
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
     grad: nnx.State = nnx.grad(f, argnums=nnx.DiffState(0, ...))(m)
+
+    np.testing.assert_allclose(grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grad['y'].value, jnp.sin(1.0))  # type: ignore
+    self.assertEqual(m.z, 1)
+
+  def test_diff_state(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
+      z: int
+
+    x_in_path = nnx.PathContains('x')
+    diff_state = nnx.DiffState(0, x_in_path)
+
+    @nnx.custom_vjp(nondiff_argnums=(diff_state,))
+    def f(m: Foo):
+      m.z += 1
+      return jnp.sin(m.x) * m.y  # type: ignore
+
+    def f_fwd(m: Foo):
+      y = f(m)
+      res = (jnp.cos(m.x), m)  # type: ignore
+      return y, res
+
+    def f_bwd(res, g):
+      (m_g,), out_g = g
+      cos_x, m = res
+
+      self.assertIsInstance(m_g, nnx.State)
+      self.assertEqual(out_g.shape, ())
+      self.assertIsInstance(m, Foo)
+
+      m_g.x.value = cos_x * out_g * m.y
+      del m_g['y']
+      return (m_g,)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
+
+    grad: nnx.State = nnx.grad(f, argnums=nnx.DiffState(0, x_in_path))(m)
+
+    np.testing.assert_allclose(grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
+    self.assertEqual(m.z, 1)
+
+  def test_jax_example_with_remat(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
+      z: int
+
+    @nnx.custom_vjp
+    @nnx.remat
+    def f(m: Foo):
+      m.z += 1
+      return jnp.sin(m.x.value) * m.y  # type: ignore
+
+    def f_fwd(m: Foo):
+      y = f(m)
+      res = (jnp.cos(m.x.value), jnp.sin(m.x.value), m)  # type: ignore
+      return y, res
+
+    def f_bwd(res, g):
+      (m_g,), out_g = g
+      cos_x, sin_x, m = res
+
+      self.assertIsInstance(m_g, nnx.State)
+      self.assertEqual(out_g.shape, ())
+      self.assertIsInstance(m, Foo)
+
+      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      m_g.x.value = cos_x * out_g * m.y
+      m_g.y.value = sin_x * out_g
+      return (m_g,)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
+
+    @nnx.jit
+    def loss_fn(m):
+      return f(m)
+
+    grad: nnx.State = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
 
     np.testing.assert_allclose(grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
     np.testing.assert_allclose(grad['y'].value, jnp.sin(1.0))  # type: ignore
@@ -726,45 +813,49 @@ class TestCustomVJP(absltest.TestCase):
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.custom_vjp(nondiff_argnums=(1, 2))
-    def f(m1: Foo, m2: Foo, m3):
-      m1.z += 1
-      y = jnp.sin(m1.x) * m1.y  # type: ignore
-      return y, m2
+    @nnx.custom_vjp(nondiff_argnums=(0, 2))
+    def f(a, m: Foo, b):
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      m.z += 1
+      return jnp.sin(m.x) * m.y  # type: ignore
 
-    def f_fwd(m1: Foo, m2: Foo, m3):
-      y, m2 = f(m1, m2, m3)
-      res = (jnp.cos(m1.x), jnp.sin(m1.x), m1)  # type: ignore
-      return (y, m2), res
+    def f_fwd(a, m: Foo, b):
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      y = f(a, m, b)
+      res = (jnp.cos(m.x), jnp.sin(m.x), m)  # type: ignore
+      return y, res
 
-    def f_bwd(m2, m3, res, g):
-      (m1_g, m2_g, m3_g), (y_g, _) = g
+    def f_bwd(a, b, res, g):
+      (m_g,), out_g = g
       cos_x, sin_x, m = res
 
-      self.assertIsInstance(m1_g, nnx.State)
-      self.assertIsInstance(m2_g, nnx.State)
-      self.assertEqual(y_g.shape, ())
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      self.assertIsInstance(m_g, nnx.State)
+      self.assertEqual(out_g.shape, ())
       self.assertIsInstance(m, Foo)
 
-      m1_g = nnx.State(dict(x=cos_x * y_g * m.y, y=sin_x * y_g))
-
-      return (m1_g,)
+      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
+      m_g.x.value = cos_x * out_g * m.y
+      m_g.y.value = sin_x * out_g
+      return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
 
-    m1 = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
-    m2 = Foo(nnx.Param(jnp.array(3.0)), nnx.Param(jnp.array(4.0)), 0)
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
-    def loss_fn(m1, m2, m3):
-      y, m2 = f(m1, m2, m3)
-      return y + m2.x * m2.y
+    def loss_fn(m):
+      a = 1
+      b = 2
+      return f(a, m, b)
 
-    m1_grad: nnx.State
-    m1_grad = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m1, m2, m2)
+    grad: nnx.State = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
 
-    np.testing.assert_allclose(m1_grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(m1_grad['y'].value, jnp.sin(1.0))  # type: ignore
-    self.assertEqual(m1.z, 1)
+    np.testing.assert_allclose(grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grad['y'].value, jnp.sin(1.0))  # type: ignore
+    self.assertEqual(m.z, 1)
 
   def test_docs_example(self):
     import jax.numpy as jnp
@@ -793,6 +884,60 @@ class TestCustomVJP(absltest.TestCase):
 
     m = Foo(x=jnp.array(1.0), y=jnp.array(2.0))
     grads = nnx.grad(f)(m)
+
+  @parameterized.parameters(
+    {'use_custom_vjp': False},
+    {'use_custom_vjp': True},
+  )
+  def test_issue(self, use_custom_vjp: bool):
+    class MyLinear(nnx.Module):
+      def __init__(
+        self, in_features: int, out_features: int, *, rngs: nnx.Rngs
+      ):
+        kernel_init = nnx.initializers.normal(in_features**-0.5)
+        self.kernel = nnx.Param(
+          kernel_init(rngs.params(), (in_features, out_features), jnp.float32)
+        )
+        self.bias = nnx.Param(jnp.zeros((out_features,), jnp.float32))
+        self.n = nnx.BatchStat(jnp.array(0, jnp.uint32))
+
+    def linear(m: MyLinear, x: jax.Array) -> jax.Array:
+      m.n.value += 1
+      y = x @ m.kernel + m.bias
+      return y
+
+    def linear_fwd(m: MyLinear, x: jax.Array):
+      return linear(m, x), (m, x)
+
+    def linear_bwd(res, g):
+      m, x = res
+      (m_g, _x_grad), outputs_g = g
+      kernel_grad = outputs_g[None, :] * x[:, None]
+      bias_grad = outputs_g
+      x_grad = m.kernel @ outputs_g
+      assert x_grad.shape == x.shape, 'Shape mismatch for x'
+      assert (
+        m.kernel.value.shape == kernel_grad.shape
+      ), 'Shape mismatch for kernel'
+      assert m.bias.value.shape == bias_grad.shape, 'Shape mismatch for bias'
+      return (m_g, x_grad)
+
+    if use_custom_vjp:
+      linear = nnx.custom_vjp(linear)
+      linear.defvjp(linear_fwd, linear_bwd)
+
+    @nnx.jit
+    def loss_fn(x, mod):
+      y = linear(mod, x)
+      return y.mean()
+
+    mod = MyLinear(10, 5, rngs=nnx.Rngs(0))
+    self.assertEqual(mod.n.value, 0)
+    x = jax.random.normal(jax.random.key(0), (10,))
+    loss, grad = nnx.value_and_grad(loss_fn)(x, mod)
+    self.assertEqual(loss.shape, ())
+    self.assertEqual(grad.shape, (10,))
+    self.assertEqual(mod.n.value, 1)
 
 
 class TestScan(absltest.TestCase):
@@ -1673,7 +1818,6 @@ class TestScan(absltest.TestCase):
 
     x = jnp.ones((16, 10, 20))
     y = rnn_forward(cell, x)
-    print(y.shape)
 
 
 class TestRemat(absltest.TestCase):
@@ -2135,7 +2279,6 @@ class TestVmap(absltest.TestCase):
 
   def test_consistent_aliasing_shared(self):
     class Shared(nnx.Module):
-
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((3, 3)))
 
@@ -2148,16 +2291,45 @@ class TestVmap(absltest.TestCase):
     m1 = Foo(shared)
     m2 = Foo(shared)
 
-    @partial(nnx.vmap, in_axes=(0, 1))
+    @nnx.vmap(in_axes=(0, 1))
     def f(m1, m2):
       pass
 
     with self.assertRaisesRegex(
-        ValueError,
-        r'Inconsistent aliasing detected([\s\S]*)Shared([\s\S]*)a:'
-        r' 0([\s\S]*)a: 1',
+      ValueError,
+      r'Inconsistent aliasing detected([\s\S]*)Param([\s\S]*)a:'
+      r' 0([\s\S]*)a: 1',
     ):
       f(m1, m2)
+
+  def test_equivalent_state_axes_mapping(self):
+    m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
+
+    sa1 = nnx.StateAxes({...: 0})
+    sa2 = nnx.StateAxes({nnx.Param: 0})
+
+    @nnx.vmap(in_axes=(0, sa1, sa2))
+    def f(m1, m2, m3):
+      pass
+
+    f(m, m, m)
+
+  def test_equivalent_state_sharding_mapping(self):
+    m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
+
+    mesh = jax.sharding.Mesh(jax.devices(), ('mp',))
+    sharding = jax.sharding.NamedSharding(
+      mesh, jax.sharding.PartitionSpec('mp')
+    )
+
+    sa1 = nnx.StateSharding({...: sharding})
+    sa2 = nnx.StateSharding({nnx.Param: sharding})
+
+    @nnx.jit(in_shardings=(sharding, sa1, sa2))
+    def f(m1, m2, m3):
+      pass
+
+    f(m, m, m)
 
   @absltest.skip('Enable once jax#19586 resolved')
   def test_captured_module_in_return_error(self):
@@ -2316,6 +2488,44 @@ class TestVmap(absltest.TestCase):
     m = create_block(nnx.Rngs(0))
     self.assertEqual(m.kernel.value.shape, (5, 16, 32))
     self.assertEqual(m.kernel.sharding, ('c', 'a', 'b'))
+
+  def test_state_axes_from_state(self):
+    class Model(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.bn = nnx.BatchNorm(dout, rngs=rngs)
+
+    model = Model(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.state(model)
+
+    state['linear']['kernel'] = 0
+    state['linear']['bias'] = 1
+    state['bn']['scale'] = 0
+    state['bn']['mean'] = 1
+    state['bn']['var'] = 0
+    state['bn']['bias'] = None
+
+    state_axes = nnx.StateAxes(state)
+
+    self.assertEqual(state_axes.map_prefix(('linear', 'kernel'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('linear', 'bias'), None), 1)
+    self.assertEqual(state_axes.map_prefix(('bn', 'scale'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('bn', 'mean'), None), 1)
+    self.assertEqual(state_axes.map_prefix(('bn', 'var'), None), 0)
+    self.assertEqual(state_axes.map_prefix(('bn', 'bias'), None), None)
+
+    @nnx.vmap(out_axes=state_axes, axis_size=5)
+    def create_block():
+      return Model(2, 3, rngs=nnx.Rngs(0))
+
+    model = create_block()
+
+    self.assertEqual(model.linear.kernel.shape, (5, 2, 3))
+    self.assertEqual(model.linear.bias.shape, (3, 5))
+    self.assertEqual(model.bn.scale.shape, (5, 3))
+    self.assertEqual(model.bn.mean.shape, (3, 5))
+    self.assertEqual(model.bn.var.shape, (5, 3))
+    self.assertEqual(model.bn.bias.shape, (3,))
 
 
 class TestPmap(absltest.TestCase):
@@ -2546,6 +2756,236 @@ class TestCond(absltest.TestCase):
     )
 
 
+class TestSwitch(absltest.TestCase):
+  def test_basic(self):
+    class RoundTable(nnx.Module):
+      def __init__(self):
+        self.next_index = 0
+        self.linear = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+        self.linear.kernel.value = jnp.identity(10)
+        self.rounds_count = nnx.Variable(jnp.array(0))
+
+      def __call__(self, x):
+        def fn0(m, x):
+          m.rounds_count += 1
+          return m.linear(x)
+        def fn1(m, x):
+          return m.linear(x) * 2
+        def fn2(m, x):
+          m.linear.kernel.value = jnp.zeros((10, 10))
+          return m.linear(x)
+
+        # y = nnx.cond(self.next_index.value == 0, fn0, fn1, self, x)
+        y = nnx.switch(self.next_index, (fn0, fn1, fn2), self, x)
+        self.next_index = (self.next_index + 1) % 3
+        return y
+
+    model = RoundTable()
+    x = jnp.ones((10,))
+    np.testing.assert_array_equal(model(x), x)
+    assert model.rounds_count.value == 1
+    assert model.next_index == 1
+    np.testing.assert_array_equal(model(x), x * 2)
+    assert model.rounds_count.value == 1
+    assert model.next_index == 2
+    np.testing.assert_array_equal(model(x), jnp.zeros((10,)))
+    assert model.rounds_count.value == 1
+    assert model.next_index == 0
+    np.testing.assert_array_equal(model(x), jnp.zeros((10,)))
+    assert model.rounds_count.value == 2
+    assert model.next_index == 1
+
+
+class TestWhileLoop(absltest.TestCase):
+  def test_basic(self):
+    def fwd_fn(input):
+      m, x, c = input
+      y = m(x)
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    module.kernel.value = jnp.identity(10) * 2
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+    np.testing.assert_array_equal(y, x * 8)
+
+  def test_multiple_objects(self):
+    def fwd_fn(input):
+      m1, (w2,), x, c = input
+      y = m1(x) @ w2
+      return m1, (w2,), y, c - 1.0
+
+    m1 = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    m1.kernel.value = jnp.identity(10) * 2
+    w2 = nnx.Variable(jnp.identity(10) * 0.5)
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    _, _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (m1, (w2,), x, 3.0))
+    np.testing.assert_allclose(y, x)
+
+  def test_nested_module(self):
+    def fwd_fn(input):
+      m, x, c = input
+      y = m(x)
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    module.kernel.value = jnp.identity(10) * 2
+    module = nnx.Sequential(module)
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+    np.testing.assert_array_equal(y, x * 8)
+
+
+  def test_shared_module(self):
+    m1 = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(0))
+    m2.kernel = m1.kernel
+    module = nnx.Sequential(m1, m2)
+    self.assertLen(jax.tree.leaves(nnx.state(module)), 2)  # only m1 params
+
+    def fwd_fn(input):
+      m, x, c = input
+      y = m(x)
+      m.layers[0].kernel.value = jnp.zeros_like(m.layers[0].kernel.value)
+      return m, y, c - 1.0
+
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0))
+    self.assertLen(jax.tree.leaves(nnx.state(module)), 2)  # only m1 params
+    np.testing.assert_array_equal(m1.kernel.value, jnp.zeros((10, 10,)))
+    np.testing.assert_array_equal(m2.kernel.value, jnp.zeros((10, 10,)))
+    np.testing.assert_array_equal(y, jnp.zeros((10,)))
+
+
+  def test_value_changed(self):
+    def fwd_fn(input):
+      m, x, c = input
+      m.kernel.value = jnp.zeros_like(m.kernel.value)
+      y = m(x)
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+    np.testing.assert_array_equal(module.kernel.value, jnp.zeros((10, 10,)))
+    np.testing.assert_array_equal(y, jnp.zeros((10,)))
+
+
+  def test_ref_changed(self):
+    def fwd_fn(input):
+      m, x, c = input
+      y = m(x)
+      m.kernel = nnx.Param(jnp.zeros_like(m.kernel.value))
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    with self.assertRaises(ValueError):
+      _, y, _ = nnx.while_loop(
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0))
+
+
+  def test_structure_changed(self):
+    def fwd_fn(input):
+      m, x, c = input
+      m = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(1))
+      m.kernel.value = jnp.identity(10) * 2
+      y = m(x)
+      return m, y, c - 1.0
+
+    module = nnx.Linear(10, 10, use_bias=True, rngs=nnx.Rngs(0))
+    x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
+
+    with self.assertRaises(ValueError):
+      _, y, _ = nnx.while_loop(
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+
+  def test_repeated_object(self):
+    m = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+
+    def body_fn(val):
+      count, m, _ = val
+      return count + 1, m, m
+
+    count, m, _ = nnx.while_loop(
+      lambda val: val[0] < 2,
+      body_fn,
+      (0, m, m),
+    )
+
+  def test_fori_loop_basic(self):
+    def fwd_fn(i, input):
+      m, x = input
+      m.kernel.value = jnp.identity(10) * i
+      return m, m(x)
+
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    x = jax.random.normal(jax.random.key(0), (10,))
+
+    _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x))
+    np.testing.assert_array_equal(y, x * 2 * 3)
+
+  def test_fori_loop_with_sharing(self):
+    class A(nnx.Object):
+      def __init__(self):
+        self.params = nnx.Param(jnp.zeros((10,), dtype=int))
+
+    class B(nnx.Object):
+      def __init__(self, a: A):
+        self.a = a
+
+    class C(nnx.Object):
+      def __init__(self, a: A):
+        self.a = a
+
+    class D(nnx.Object):
+      def __init__(self):
+        self.a = A()
+        self.b = B(self.a)
+        self.c = C(self.a)
+
+    def increment(_, d: D) -> D:
+      d.a.params += 1
+      return d
+
+    @nnx.jit
+    def rollout(d: D):
+      nnx.fori_loop(0, 10, increment, d)
+
+    d = D()
+    rollout(d)
+
+    np.testing.assert_array_equal(
+      d.a.params.value, np.full((10,), 10, dtype=int)
+    )
+
+  def test_loops_multiple_modules(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.param = nnx.Param(jnp.zeros((1,)))
+      def __call__(self, x):
+        return self.param
+
+    def loop_fn(inputs):
+      return inputs
+    while_loop_fn = lambda inputs: (*loop_fn(inputs[:-1]), inputs[-1]-1)
+    fori_loop_fn = lambda i, inputs: loop_fn(inputs)
+    a = Foo()
+    b = Foo()
+    nnx.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2))
+    nnx.fori_loop(0, 2, fori_loop_fn, (a, b))
+
+
 class TestSplitMergeInputs(absltest.TestCase):
   def test_split_inputs(self):
     class StatefulLinear(nnx.Linear):
@@ -2635,6 +3075,22 @@ class TestSplitMergeInputs(absltest.TestCase):
       env.step.value, np.array([1, 0, 1, 0, 1, 0, 1, 0], np.uint32)
     )
 
+class TestCheckify(absltest.TestCase):
+  def test_basic(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      a: nnx.Param
+
+    @nnx.jit
+    def f(m):
+      y = jnp.sin(m.a.value)  # error
+      return m.a + y
+
+    m = Foo(a=nnx.Param(jnp.inf))
+    err, out = nnx.checkify(f, errors=checkify.float_checks)(m)
+
+    with self.assertRaisesRegex(ValueError, 'nan generated by primitive: sin'):
+      err.throw()
 
 if __name__ == '__main__':
   absltest.main()

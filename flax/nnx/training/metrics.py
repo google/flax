@@ -20,7 +20,7 @@ import numpy as np
 from flax import struct
 from flax.nnx import filterlib, graph
 from flax.nnx.object import Object
-from flax.nnx.variables import Variable
+from flax.nnx.variablelib import Variable
 import jax, jax.numpy as jnp
 
 # TODO: add tests and docstrings

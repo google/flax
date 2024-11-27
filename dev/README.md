@@ -14,3 +14,6 @@ the environments used by contributors and maintainers.
    VSCode should recommend this action in a popup. Alternatively,
    use the green button in the bottom left container to control the
    remote extension.
+
+## Troubleshoot:
+If you have the following error `~/.docker/buildx/current: permission denied`, try running `sudo chown -R $(whoami) ~/.docker`

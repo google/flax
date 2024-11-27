@@ -20,4 +20,8 @@ transforms
 .. autofunction:: value_and_grad
 .. autofunction:: vmap
 .. autofunction:: eval_shape
+.. autofunction:: custom_vjp
 .. autofunction:: cond
+.. autofunction:: switch
+.. autofunction:: while_loop
+.. autofunction:: fori_loop

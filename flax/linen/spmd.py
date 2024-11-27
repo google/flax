@@ -25,11 +25,9 @@ introducing logical axis metadata into a model's variables.
 """
 
 import collections
-import contextlib
 import dataclasses
 import enum
 import functools
-import threading
 from typing import Any
 from collections.abc import Callable, Sequence
 
@@ -39,6 +37,9 @@ from jax.interpreters import pxla
 
 from flax import struct
 from flax.core import meta
+from flax.core.spmd import (
+    get_logical_axis_rules,
+)
 from flax.typing import (
   Array,
   LogicalNames,
@@ -47,42 +48,6 @@ from flax.typing import (
   LogicalPartitionSpec,  # pylint: disable=unused-import
   LogicalPartitionSpecPytree,  # pylint: disable=invalid-name
   )
-
-
-# Dynamic Axis Mapping Context
-# ------------------------------------------------------------------------------
-
-
-@dataclasses.dataclass
-class _AxisRules(threading.local):
-  """Dynamic logical axis to mesh axis binding context."""
-
-  rules: LogicalRules = ()
-
-
-# Global axis binding context.
-_axis_rules = _AxisRules()
-
-
-def set_logical_axis_rules(rules: LogicalRules):
-  """Sets the global logical axis to mesh axis binding."""
-  _axis_rules.rules = rules
-
-
-def get_logical_axis_rules() -> LogicalRules:
-  """Returns the global logical axis to mesh axis binding."""
-  return _axis_rules.rules
-
-
-@contextlib.contextmanager
-def logical_axis_rules(rules: LogicalRules):
-  """Context manager for setting the logical to mesh axis bindings."""
-  old_rules = _axis_rules.rules
-  try:
-    _axis_rules.rules = rules
-    yield
-  finally:
-    _axis_rules.rules = old_rules
 
 
 class _UnassignedAxis:
@@ -115,7 +80,7 @@ def _logical_to_mesh_axes(
   if array_dim_names is None:
     return None
   if rules is None:
-    rules = _axis_rules.rules
+    rules = get_logical_axis_rules()
   axis_name_counts = collections.Counter(array_dim_names)
   dups = tuple(
     k for k, v in axis_name_counts.items() if v > 1 and k is not None
@@ -292,7 +257,7 @@ def with_logical_constraint(
   """Version of jit's with_sharding_constraint that uses logical axis names."""
   # If no axis binding is set, this is a no-op.
   if rules is None:
-    rules = _axis_rules.rules
+    rules = get_logical_axis_rules()
   if not rules or logical_axis_resources is None:
     return x
   # Translate logical names to mesh assignments.

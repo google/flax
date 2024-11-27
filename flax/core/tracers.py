@@ -16,8 +16,6 @@
 
 import jax
 
-from .. import errors
-
 
 def current_trace():
   """Returns the current JAX state tracer."""
@@ -31,6 +29,5 @@ def current_trace():
   return jax.core.get_opaque_trace_state(convention="flax")
 
 def check_trace_level(base_level):
-  level = current_trace()
-  if level != base_level:
-    raise errors.JaxTransformError()
+  pass
+  # TODO: re-enable when we update flax to use stackless trace context

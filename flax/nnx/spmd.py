@@ -15,40 +15,47 @@
 import functools
 import typing as tp
 
-import jax
-from jax.interpreters import pxla
-from jax.sharding import PartitionSpec
-
-from flax.nnx import variables
+import flax.core.spmd as core_spmd
+from flax.nnx import variablelib
 from flax.typing import (
   Array,
   ArrayPytree,  # pylint: disable=invalid-name
   PartitionSpecPytree,  # pylint: disable=invalid-name
   Sharding,
 )
+import jax
+from jax.interpreters import pxla
+from jax.sharding import PartitionSpec
 
 A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 PARTITION_NAME = 'partition_name'
 
+class HasSharding(tp.Protocol):
+  sharding: tuple[str | None, ...] | None
 
-def add_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
+
+def _has_sharding(x: tp.Any) -> tp.TypeGuard[HasSharding]:
+  return hasattr(x, 'sharding') and x.sharding is not None
+
+def add_axis(tree: A, index: int, params: tp.Mapping) -> A:
   axis_name = _get_partition_name(params)
 
   def _add_axis(x: tp.Any):
-    if isinstance(x, variables.VariableState):
-      if hasattr(x, 'sharding') and x.sharding is not None:
+    if isinstance(x, variablelib.VariableState):
+      if _has_sharding(x) and x.sharding is not None:
         sharding: list[str | None] = list(x.sharding)
         while len(sharding) < index:
           sharding.append(None)
         sharding.insert(index, axis_name)
         x.sharding = tuple(sharding)  # type: ignore
 
+      assert isinstance(x, variablelib.VariableState)
       x.add_axis(index, axis_name)
     return x
 
   return jax.tree.map(
-    _add_axis, tree, is_leaf=lambda x: isinstance(x, variables.VariableState)
+    _add_axis, tree, is_leaf=lambda x: isinstance(x, variablelib.VariableState)
   )
 
 
@@ -56,7 +63,7 @@ def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   axis_name = _get_partition_name(params)
 
   def _remove_axis(x: tp.Any):
-    if isinstance(x, variables.VariableState):
+    if isinstance(x, variablelib.VariableState):
       if hasattr(x, 'sharding') and x.sharding is not None:
         sharding = list(x.sharding)
         assert sharding.pop(index) == axis_name
@@ -67,7 +74,7 @@ def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   return jax.tree.map(
     _remove_axis,
     tree,
-    is_leaf=lambda x: isinstance(x, variables.VariableState),
+    is_leaf=lambda x: isinstance(x, variablelib.VariableState),
   )
 
 
@@ -89,15 +96,16 @@ def get_partition_spec(tree: A) -> A:
     else:
       return None
 
-  def from_rules(sharding, sharding_rules):
-    rules = {alias: on_mesh for (alias, on_mesh) in sharding_rules}
-    return (rules[s] if s in rules else None for s in sharding)
-
   def f(x):
-    if isinstance(x, (variables.VariableState, variables.Variable)):
+    if isinstance(x, (variablelib.VariableState, variablelib.Variable)):
       if hasattr(x, 'sharding') and x.sharding:
-        if hasattr(x, 'sharding_rules') and x.sharding_rules:
-          return x.replace(PartitionSpec(*from_rules(x.sharding, x.sharding_rules)))
+        if core_spmd.get_logical_axis_rules() or hasattr(x, 'sharding_rules'):
+          context_rules = core_spmd.get_logical_axis_rules()
+          local_rules = getattr(x, 'sharding_rules', ())
+          rules = core_spmd.composite_rules(context_rules, local_rules)
+          return x.replace(
+              PartitionSpec(*core_spmd.from_sharding_rules(x.sharding, rules))
+          )
         return x.replace(PartitionSpec(*x.sharding))
       else:
         return x.replace(_maybe_replicate(x.value))
@@ -105,7 +113,7 @@ def get_partition_spec(tree: A) -> A:
     return _maybe_replicate(x)
 
   return jax.tree.map(
-    f, tree, is_leaf=lambda x: isinstance(x, variables.VariableState)
+    f, tree, is_leaf=lambda x: isinstance(x, variablelib.VariableState)
   )
 
 
@@ -171,7 +179,7 @@ def with_partitioning(
   mesh: tp.Optional[jax.sharding.Mesh] = None,
   **metadata: tp.Any,
 ) -> F:
-  return variables.with_metadata(
+  return variablelib.with_metadata(
     initializer,
     sharding=sharding,
     mesh=mesh,

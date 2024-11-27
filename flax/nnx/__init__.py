@@ -55,6 +55,7 @@ from .graph import SplitContext as SplitContext
 from .graph import split_context as split_context
 from .graph import MergeContext as MergeContext
 from .graph import merge_context as merge_context
+from .graph import variables as variables
 from .nn import initializers as initializers
 from .nn.activations import celu as celu
 from .nn.activations import elu as elu
@@ -85,6 +86,13 @@ from .nn.attention import combine_masks as combine_masks
 from .nn.attention import dot_product_attention as dot_product_attention
 from .nn.attention import make_attention_mask as make_attention_mask
 from .nn.attention import make_causal_mask as make_causal_mask
+from .nn.recurrent import RNNCellBase as RNNCellBase
+from .nn.recurrent import LSTMCell as LSTMCell
+from .nn.recurrent import GRUCell as GRUCell
+from .nn.recurrent import OptimizedLSTMCell as OptimizedLSTMCell
+from .nn.recurrent import SimpleCell as SimpleCell
+from .nn.recurrent import RNN as RNN
+from .nn.recurrent import Bidirectional as Bidirectional
 from .nn.linear import Conv as Conv
 from .nn.linear import ConvTranspose as ConvTranspose
 from .nn.linear import Embed as Embed
@@ -116,7 +124,7 @@ from .spmd import with_partitioning as with_partitioning
 from .spmd import with_sharding_constraint as with_sharding_constraint
 from .statelib import State as State
 from .training import metrics as metrics
-from .variables import (
+from .variablelib import (
   Param as Param,
 )
 # this needs to be imported before optimizer to prevent circular import
@@ -142,15 +150,19 @@ from .transforms.iteration import vmap as vmap
 from .transforms.iteration import pmap as pmap
 from .transforms.transforms import eval_shape as eval_shape
 from .transforms.transforms import cond as cond
+from .transforms.transforms import switch as switch
+from .transforms.transforms import checkify as checkify
+from .transforms.iteration import while_loop as while_loop
+from .transforms.iteration import fori_loop as fori_loop
 from .transforms.iteration import StateAxes as StateAxes
-from .variables import A as A
-from .variables import BatchStat as BatchStat
-from .variables import Cache as Cache
-from .variables import Intermediate as Intermediate
-from .variables import Variable as Variable
-from .variables import VariableState as VariableState
-from .variables import VariableMetadata as VariableMetadata
-from .variables import with_metadata as with_metadata
+from .variablelib import A as A
+from .variablelib import BatchStat as BatchStat
+from .variablelib import Cache as Cache
+from .variablelib import Intermediate as Intermediate
+from .variablelib import Variable as Variable
+from .variablelib import VariableState as VariableState
+from .variablelib import VariableMetadata as VariableMetadata
+from .variablelib import with_metadata as with_metadata
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree

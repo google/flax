@@ -1,12 +1,12 @@
 [build-system]
-requires = ["maturin>=1.7,<2.0"]
-build-backend = "maturin"
+requires = ['meson-python']
+build-backend = 'mesonpy'
 
 [project]
 name = "flaxlib"
 requires-python = ">=3.10"
 classifiers = [
-    "Programming Language :: Rust",
+    "Programming Language :: C++",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
@@ -15,5 +15,3 @@ dynamic = ["version"]
 tests = [
     "pytest",
 ]
-[tool.maturin]
-features = ["pyo3/extension-module"]
