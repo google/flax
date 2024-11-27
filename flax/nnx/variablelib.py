@@ -216,7 +216,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def update_from_state(self, variable_state: VariableState[A]):
     vars_self = vars(self)
     vars_self['raw_value'] = variable_state.value
-    vars_self['_var_metadata'] = variable_state.get_metadata().copy()
+    vars_self['_var_metadata'] = variable_state._var_metadata.copy()
 
   @property
   def value(self) -> A:
@@ -308,8 +308,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return obj
 
   def to_state(self: Variable[A]) -> VariableState[A]:
-    metadata = self.get_metadata()
-    return VariableState(type(self), self.raw_value, **metadata)
+    return VariableState(type(self), self.raw_value, **self._var_metadata)
 
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))

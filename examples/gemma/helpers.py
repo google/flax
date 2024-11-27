@@ -62,7 +62,7 @@ def module_from_linen_variables(
 
   mdl: M = nnx.eval_shape(module_factory)
   graph_def, state = nnx.split(mdl)
-  state = state.flat_state()
+  state = dict(state.flat_state())
   for path, val in flax.traverse_util.flatten_dict(variables).items():
     mapped_path = map_key_fn(path)
     if mapped_path not in state:
