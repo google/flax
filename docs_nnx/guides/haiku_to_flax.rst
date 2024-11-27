@@ -414,7 +414,7 @@ Transformations
 
 Both Haiku and `Flax transformations <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`__ provide their own set of transforms that wrap `JAX transforms <https://jax.readthedocs.io/en/latest/key-concepts.html#transformations>`__ in a way that they can be used with ``Module`` objects.
 
-For more information on Flax transforms, check out the `Transforms guide <https://flax.readthedocs.build/en/guides/transforms.html>`__.
+For more information on Flax transforms, check out the `Transforms guide <https://flax.readthedocs.io/en/latest/guides/transforms.html>`__.
 
 Let's start with an example:
 
