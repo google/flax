@@ -302,12 +302,14 @@ def split_rngs(
   *,
   splits: int | tuple[int, ...],
   only: filterlib.Filter = ...,
+  squeeze: bool = False,
 ) -> SplitBackups: ...
 @tp.overload
 def split_rngs(
   *,
   splits: int | tuple[int, ...],
   only: filterlib.Filter = ...,
+  squeeze: bool = False,
 ) -> tp.Callable[[F], F]: ...
 def split_rngs(
   node: tp.Any = MISSING,
@@ -315,6 +317,7 @@ def split_rngs(
   *,
   splits: int | tuple[int, ...],
   only: filterlib.Filter = ...,
+  squeeze: bool = False,
 ) -> SplitBackups | tp.Callable[[F], F]:
   """Splits the (nested) Rng states of the given node.
 
@@ -412,12 +415,17 @@ def split_rngs(
     def split_rngs_decorator(f: F) -> F:
       @functools.wraps(f)
       def split_rngs_wrapper(*args, **kwargs):
-        with split_rngs((args, kwargs), splits=splits, only=only):
+        with split_rngs(
+          (args, kwargs), splits=splits, only=only, squeeze=squeeze
+        ):
           return f(*args, **kwargs)
 
       return tp.cast(F, split_rngs_wrapper)
 
     return split_rngs_decorator  # type: ignore[bad-return-type]
+
+  if squeeze and splits != 1:
+    raise ValueError('squeeze=True is only supported for splits=1')
 
   predicate = filterlib.to_predicate(only)
   backups: list[StreamBackup] = []
@@ -429,8 +437,13 @@ def split_rngs(
     ):
       key = stream()
       backups.append((stream, stream.key.value, stream.count.value))
-      stream.key.value = jax.random.split(key, splits)
-      if isinstance(splits, int):
+      key = jax.random.split(key, splits)
+      if squeeze:
+        key = key[0]
+      stream.key.value = key
+      if squeeze:
+        counts_shape = stream.count.shape
+      elif isinstance(splits, int):
         counts_shape = (splits, *stream.count.shape)
       else:
         counts_shape = (*splits, *stream.count.shape)
