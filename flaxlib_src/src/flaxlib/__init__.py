@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .flaxlib_cpp import IndexMapping as IndexMapping
+from .flaxlib_cpp import RefIndexMapping as RefIndexMapping
+from .flaxlib_cpp import IndexRefMapping as IndexRefMapping
+from .flaxlib_cpp import create_index_ref as create_index_ref
+from .flaxlib_cpp import _graph_flatten as _graph_flatten
+from .flaxlib_cpp import _graph_flatten_top as _graph_flatten_top
 
-# TODO: Re-enable this test after setting up CI build for flaxlib CC.
+# -----------------------------
+# Register pytrees types
+# -----------------------------
+import jax
 
-# from absl.testing import absltest
-# import flaxlib
+jax.tree_util.register_static(IndexMapping)
 
-
-# class TestFlaxlib(absltest.TestCase):
-
-#   def test_flaxlib(self):
-#     self.assertEqual(flaxlib.sum_as_string(1, 2), '3')
+del jax

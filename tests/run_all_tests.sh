@@ -63,6 +63,7 @@ echo "GH_VENV: $GH_VENV"
 echo "WHICH PYTHON: $(which python)"
 echo "jax: $(python -c 'import jax; print(jax.__version__)')"
 echo "flax: $(python -c 'import flax; print(flax.__version__)')"
+echo "flax config: $(python -c 'from flax import config; print(config)')"
 echo "=========================="
 echo ""
 

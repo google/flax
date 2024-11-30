@@ -12,4 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def sum_as_string(a: int, b: int) -> str: ...
+from absl.testing import absltest
+
+if __name__ == '__main__':
+  absltest.main()

@@ -23,6 +23,7 @@ from typing import (
   TypeVar,
   Union,
 )
+from collections.abc import Iterator
 from collections.abc import Callable, Hashable, Mapping, Sequence
 
 import jax
@@ -161,3 +162,35 @@ class Missing:
 
 
 MISSING = Missing()
+HA = TypeVar('HA', bound=Hashable)
+HB = TypeVar('HB', bound=Hashable)
+
+
+class HashableMapping(Mapping[HA, HB], Hashable):
+  def __init__(self, mapping: Mapping[HA, HB], copy: bool = True):
+    self._mapping = (
+      dict(mapping) if copy or not isinstance(mapping, dict) else mapping
+    )
+
+  def __contains__(self, key: object) -> bool:
+    return key in self._mapping
+
+  def __getitem__(self, key: HA) -> HB:
+    return self._mapping[key]
+
+  def __iter__(self) -> Iterator[HA]:
+    return iter(self._mapping)
+
+  def __len__(self) -> int:
+    return len(self._mapping)
+
+  def __hash__(self) -> int:
+    return hash(tuple(sorted(self._mapping.items())))
+
+  def __eq__(self, other: Any) -> bool:
+    return (
+      isinstance(other, HashableMapping) and self._mapping == other._mapping
+    )
+
+  def __repr__(self) -> str:
+    return repr(self._mapping)

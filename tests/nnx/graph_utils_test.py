@@ -59,11 +59,15 @@ class StatefulLinear(nnx.Module):
 
 
 class TestGraphUtils(absltest.TestCase):
+  def test_flatten_basic(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    graphdef, state = nnx.split(m)
+
   def test_flatten(self):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    refmap = nnx.graph.RefMap()
+    refmap = nnx.graph.RefIndexMapping({})
     graphdef, state = nnx.graph.flatten(g, ref_index=refmap)
 
     state[0]['b'].raw_value = 2
@@ -326,7 +330,7 @@ class TestGraphUtils(absltest.TestCase):
     a = m.a
     b = m.b
 
-    ref_out_idx_out = nnx.graph.RefMap()
+    ref_out_idx_out = nnx.graph.RefIndexMapping({})
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
 
@@ -335,19 +339,19 @@ class TestGraphUtils(absltest.TestCase):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      ref_in_idx_in = nnx.graph.RefIndexMapping({})
       graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
-      idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
+      idx_out_idx_in = nnx.graph.create_index_mapping(
+        idx_out_ref_in, ref_in_idx_in
+      )
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
 
     static_out: nnx.graph.Static
     state, static_out = f_pure(graphdef, state)
-    idx_out_idx_in: dict[int, int]
+    idx_out_idx_in: nnx.graph.IndexMapping
     graphdef, idx_out_idx_in = static_out.value
-    idx_in_ref_out = nnx.graph.compose_mapping_reversed(
-      ref_out_idx_out, idx_out_idx_in
-    )
+    idx_in_ref_out = nnx.graph.create_index_ref(ref_out_idx_out, idx_out_idx_in)
     m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.a is b
@@ -366,7 +370,7 @@ class TestGraphUtils(absltest.TestCase):
     a = m.a
     b = m.b
 
-    ref_out_idx_out = nnx.graph.RefMap[Any, int]()
+    ref_out_idx_out = nnx.graph.RefIndexMapping({})
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
 
@@ -375,19 +379,19 @@ class TestGraphUtils(absltest.TestCase):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      ref_in_idx_in = nnx.graph.RefIndexMapping({})
       graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
-      idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
+      idx_out_idx_in = nnx.graph.create_index_mapping(
+        idx_out_ref_in, ref_in_idx_in
+      )
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
 
     static_out: nnx.graph.Static
     state, static_out = f_pure(graphdef, state)
-    idx_out_idx_in: dict[int, int]
+    idx_out_idx_in: nnx.graph.IndexMapping
     graphdef, idx_out_idx_in = static_out.value
-    idx_in_ref_out = nnx.graph.compose_mapping_reversed(
-      ref_out_idx_out, idx_out_idx_in
-    )
+    idx_in_ref_out = nnx.graph.create_index_ref(ref_out_idx_out, idx_out_idx_in)
     m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.a is b
@@ -403,7 +407,7 @@ class TestGraphUtils(absltest.TestCase):
 
     m = Foo()
 
-    ref_out_idx_out = nnx.graph.RefMap()
+    ref_out_idx_out = nnx.graph.RefIndexMapping({})
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
 
@@ -412,19 +416,19 @@ class TestGraphUtils(absltest.TestCase):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      ref_in_idx_in = nnx.graph.RefIndexMapping({})
       graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
-      idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
+      idx_out_idx_in = nnx.graph.create_index_mapping(
+        idx_out_ref_in, ref_in_idx_in
+      )
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
 
     static_out: nnx.graph.Static
     state, static_out = f_pure(graphdef, state)
-    idx_out_idx_in: dict[int, int]
+    idx_out_idx_in: nnx.graph.IndexMapping
     graphdef, idx_out_idx_in = static_out.value
-    idx_in_ref_out = nnx.graph.compose_mapping_reversed(
-      ref_out_idx_out, idx_out_idx_in
-    )
+    idx_in_ref_out = nnx.graph.create_index_ref(ref_out_idx_out, idx_out_idx_in)
     m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.ref is m2

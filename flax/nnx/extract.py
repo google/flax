@@ -67,7 +67,7 @@ def extract_graph_nodes(
   | tuple[A, tuple[tp.Any, ...], tuple[tp.Any, ...]]
 ):
   """Extracts all graph nodes from a pytree."""
-  nodes = graph.RefMap[tp.Any, Index]()
+  nodes = graph.RefMap[tp.Any, Index]({})
   node_prefixes = []
   leaves = []
 
@@ -138,7 +138,7 @@ def check_consistent_aliasing(
   | None = None,
 ):
   if node_prefixes is None:
-    node_prefixes = graph.RefMap()
+    node_prefixes = graph.RefMap({})
 
   # collect all paths and prefixes for each node
   for path, value in graph.iter_graph(node):
@@ -324,7 +324,7 @@ def to_tree(
 
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
-  node_prefixes = graph.RefMap[tp.Any, list[tuple[PathParts, tp.Any]]]()
+  node_prefixes = graph.RefMap[tp.Any, list[tuple[PathParts, tp.Any]]]({})
 
   with graph.split_context(ctxtag) as split_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):

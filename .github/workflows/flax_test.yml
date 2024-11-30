@@ -88,15 +88,23 @@ jobs:
         python-version: ['3.10', '3.11']
         test-type: [doctest, pytest, pytype, mypy]
         jax-version: [newest]
+        use-flaxlib: [true, false]
         exclude:
           - test-type: pytype
             python-version: '3.10'
           - test-type: mypy
             python-version: '3.11'
+          - use-flaxlib: true
+            test-type: doctest
+          - use-flaxlib: true
+            test-type: pytype
+          - use-flaxlib: true
+            test-type: mypy
         include:
           - python-version: '3.10'
             test-type: pytest
             jax-version: '0.4.27'  # keep in sync with jax pin in pyproject.toml
+            use-flaxlib: false
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -119,12 +127,17 @@ jobs:
         else
           uv pip install "jax==${{ matrix.jax-version }}" "jaxlib==${{ matrix.jax-version }}"
         fi
+        if [[ "${{ matrix.use-flaxlib }}" == "true" ]]; then
+          uv pip install "nanobind" "scikit-build-core[pyproject]"
+          uv pip install -e flaxlib_src
+        fi
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
           uv run tests/run_all_tests.sh --only-doctest
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
-          uv run tests/run_all_tests.sh --only-pytest
+          FLAX_USE_FLAXLIB=${{ matrix.use-flaxlib }} \
+            uv run tests/run_all_tests.sh --only-pytest
         elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
           uv run tests/run_all_tests.sh --only-pytype
         elif [[ "${{ matrix.test-type }}" == "mypy" ]]; then
