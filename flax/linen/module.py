@@ -2187,7 +2187,7 @@ class Module(ModuleBase):
         module. If provided, applies this method. If not provided, applies the
         ``__call__`` method of the module. A string can also be provided to
         specify a method by name.
-      mutable: Can be bool, str, or list. Specifies which collections should be
+      mutable: Can be `bool`, `str`, or `list`. Specifies which collections should be
         treated as mutable: ``bool``: all/no collections are mutable. ``str``:
         The name of a single mutable collection. ``list``: A list of names of
         mutable collections.
@@ -2201,7 +2201,7 @@ class Module(ModuleBase):
 
     Returns:
       If ``mutable`` is False, returns output. If any collections are
-      mutable, returns ``(output, vars)``, where ``vars`` are is a dict
+      mutable, returns ``(output, vars)``, where ``vars`` is a dict
       of the modified collections.
     """
     Module._module_checks(self)
