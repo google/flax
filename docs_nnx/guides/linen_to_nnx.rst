@@ -531,7 +531,7 @@ Scan-over-layers is a technique where you run an input through a sequence of N r
 * Up close, in the logic of this model there actually is no need for the ``jax.lax.scan`` operation at initialization time. What happens there is more like a ``jax.vmap`` operation - you are given a ``Block`` sub-``Module`` that accepts ``(in_dim, out_dim)``, and you "vmap" it over ``num_layers`` of times to create a larger array.
 * In Flax NNX, you take advantage of the fact that model initialization and running code are completely decoupled, and instead use the :func:`nnx.vmap<flax.nnx.vmap>` transform to initialize the underlying ``Block`` parameters, and the :func:`nnx.scan<flax.nnx.scan>` transform to run the model input through them.
 
-For more information on Flax NNX transforms, check out the `Transforms guide <https://flax.readthedocs.build/en/guides/transforms.html>`__.
+For more information on Flax NNX transforms, check out the `Transforms guide <https://flax.readthedocs.io/en/latest/guides/transforms.html>`__.
 
 .. codediff::
   :title: Linen, NNX
