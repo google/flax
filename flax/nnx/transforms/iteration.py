@@ -67,9 +67,6 @@ class StateAxes(extract.PrefixMapping):
     ),
     /,
   ):
-    if isinstance(filter_axes, statelib.State):
-      filter_axes = statelib.create_path_filters(filter_axes)  # type: ignore
-
     iterable = tuple(
         filter_axes.items()
         if isinstance(filter_axes, tp.Mapping)
@@ -77,6 +74,11 @@ class StateAxes(extract.PrefixMapping):
     )
     self._filters = tuple(filter for filter, _ in iterable)
     self._axes = tuple(axis for _, axis in iterable)
+
+  @staticmethod
+  def from_state(state: statelib.State):
+    filter_axes = statelib.create_path_filters(state)
+    return StateAxes(filter_axes)
 
   @property
   def filters(self) -> tuple[filterlib.Filter, ...]:

@@ -78,8 +78,8 @@ np.testing.assert_allclose(model(x), model.linear1(model.linear1(x)))
 # Variable sharing (weight-tying).
 model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
 model.linear1.kernel = model.linear2.kernel  # the bias parameter is kept separate
-assert hasattr(nnx.state(model), 'linear2')
-assert hasattr(nnx.state(model)['linear2'], 'bias')
+assert 'linear2' in nnx.state(model)
+assert 'bias' in nnx.state(model)['linear2']
 assert not hasattr(nnx.state(model)['linear2'], 'kernel')
 
 # Monkey-patching.
@@ -172,7 +172,7 @@ raw_dict['layer2'] = raw_dict.pop('linear2')
 # Fit it into the model state.
 abs_model = nnx.eval_shape(lambda: ModifiedTwoLayerMLP(4, rngs=nnx.Rngs(0)))
 graph_def, state = nnx.split(abs_model)
-state.replace_by_pure_dict(process_raw_dict(raw_dict))
+nnx.replace_by_pure_dict(state, process_raw_dict(raw_dict))
 restored_model = nnx.merge(graph_def, state)
 
 np.testing.assert_allclose(restored_model(jnp.ones((3, 4))), old_model(jnp.ones((3, 4))))

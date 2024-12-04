@@ -255,16 +255,13 @@ def grad(
     ...
     >>> grads = grad_fn(m, x, y)
     >>> jax.tree.map(jnp.shape, grads)
-    State({
-      'bias': VariableState(
-        type=Param,
-        value=(3,)
-      ),
-      'kernel': VariableState(
-        type=Param,
-        value=(2, 3)
-      )
-    })
+    {'bias': VariableState(
+      type=Param,
+      value=(3,)
+    ), 'kernel': VariableState(
+      type=Param,
+      value=(2, 3)
+    )}
 
   Args:
     fun: Function to be differentiated. Its arguments at positions specified by
@@ -411,7 +408,7 @@ def _custom_vjp_split_fn(
     # but we return a TreeNode.from_states which doesn't have a graphdef
     # in order to keep the gradients clean from any metadata
     graphdef, passed = ctx.split(value)
-    broadcast = State({})
+    broadcast = State()
     nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
     return extract.NodeStates.from_states(passed)
   else:
@@ -537,7 +534,7 @@ class FwdFn:
 @dataclasses.dataclass(eq=False)
 class BwdFn:
   bwd: tp.Callable[..., tp.Any]
-  tree_node_args: tuple[tp.Any, ...]
+  is_differentiable_node_arg: tuple[tp.Any, ...]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.bwd)
@@ -557,16 +554,15 @@ class BwdFn:
       if is_differentiable:
         if isinstance(x, jax.Array):
           return x
-        elif not isinstance(x, State):
+        if not isinstance(x, State):
           raise ValueError(f'Expected State, got {type(x)}')
         return extract.NodeStates.from_states(x)
       return x
 
     pure_tangent = jax.tree.map(
       state_to_node_states,
-      self.tree_node_args,
+      self.is_differentiable_node_arg,
       tangent,
-      is_leaf=lambda x: isinstance(x, State),
     )
     return pure_tangent
 
@@ -599,11 +595,6 @@ class CustomVjp(tp.Generic[A]):
         else False
       )
 
-  # def __getattr__(self, name: str) -> tp.Any:
-  #   if not hasattr(self.custom_vjp_fn, name):
-  #     raise AttributeError(f'{type(self).__name__} has no attribute {name}')
-  #   return getattr(self.custom_vjp_fn, name)
-
   def __call__(
     self, *args: tp.Any, **kwargs: tp.Any
   ) -> A:  # pytype: disable=invalid-annotation
@@ -622,14 +613,9 @@ class CustomVjp(tp.Generic[A]):
         ),
         ctxtag=self.ctxtag,
       )
-      tree_node_args = jax.tree.map(
-        lambda x: isinstance(x, extract.NodeStates),
-        pure_args,
-        is_leaf=lambda x: isinstance(x, extract.NodeStates),
-      )
-      tree_node_args = tuple(
-        x
-        for i, x in enumerate(tree_node_args)
+      is_differentiable_node_arg = tuple(
+        isinstance(x, extract.NodeStates)
+        for i, x in enumerate(pure_args)
         if i not in self.jax_nondiff_argnums
       )
       index_mappings: deque[graph.HashableMapping] = deque()
@@ -655,7 +641,7 @@ class CustomVjp(tp.Generic[A]):
           ),
           bwd=BwdFn(
             bwd=self.bwd,
-            tree_node_args=tree_node_args,
+            is_differentiable_node_arg=is_differentiable_node_arg,
           ),
           symbolic_zeros=self.symbolic_zeros,
         )
@@ -752,16 +738,13 @@ def custom_vjp(
     >>> grads = nnx.grad(f)(m)
     ...
     >>> jax.tree.map(jnp.shape, grads)
-    State({
-      'x': VariableState(
-        type=Param,
-        value=()
-      ),
-      'y': VariableState(
-        type=Param,
-        value=()
-      )
-    })
+    {'x': VariableState(
+      type=Param,
+      value=()
+    ), 'y': VariableState(
+      type=Param,
+      value=()
+    )}
 
   Note that the State objects that represent Module terms on ``input_updates_g`` have the
   same shape as the State objects expected in the output tanget. This means that you can
@@ -790,7 +773,7 @@ def custom_vjp(
     ...   (m_updates_g,) = input_updates_g
     ...   m_g = jax.tree.map(lambda x: x, m_updates_g) # create copy
     ...
-    ...   m_g.x.value = cos_x * out_g * m.y
+    ...   m_g['x'].value = cos_x * out_g * m.y
     ...   del m_g['y'] # y is not differentiable
     ...   return (m_g,)
 
@@ -800,12 +783,10 @@ def custom_vjp(
     >>> grad = nnx.grad(f, argnums=nnx.DiffState(0, x_attribute))(m)
     ...
     >>> jax.tree.map(jnp.shape, grad)
-    State({
-      'x': VariableState(
-        type=Param,
-        value=()
-      )
-    })
+    {'x': VariableState(
+      type=Param,
+      value=()
+    )}
 
   Note that ``grad`` cannot calculate gradients for states that don't have a tangent
   defined by ``custom_vjp``, in the example above we reuse the same ``x_attribute``

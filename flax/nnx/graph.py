@@ -26,6 +26,7 @@ import numpy as np
 import typing_extensions as tpe
 
 from flax.nnx import filterlib, reprlib
+from flax.nnx import statelib
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -396,7 +397,7 @@ def flatten(
   else:
     flat_state = []
     graphdef = _graph_flatten([], ref_index, flat_state, node)
-  return graphdef, GraphState.from_flat_path(flat_state)
+  return graphdef, statelib.from_flat_state(flat_state)
 
 
 def _graph_flatten(
@@ -490,8 +491,6 @@ def unflatten(
       existing graph nodes are mutated to have the new content/topology
       specified by the graphdef.
   """
-  if isinstance(state, State):
-    state = state.raw_mapping  # type: ignore
   if index_ref is None:
     index_ref = IndexRefMapping({})
   assert isinstance(graphdef, (NodeDef, NodeRef))
@@ -863,7 +862,7 @@ class MergeContext:
       # inner merge (2)
       index_ref_cache = None
 
-    state = State.merge(state, *states)
+    state = statelib.merge_state(state, *states)
     node = unflatten(
       graphdef,
       state,
@@ -955,41 +954,27 @@ class UpdateContext:
       >>> graphdef, params, batch_stats = nnx.split(node, nnx.Param, nnx.BatchStat)
       ...
       >>> jax.tree.map(jnp.shape, params)
-      State({
-        'batch_norm': {
-          'bias': VariableState(
-            type=Param,
-            value=(2,)
-          ),
-          'scale': VariableState(
-            type=Param,
-            value=(2,)
-          )
-        },
-        'linear': {
-          'bias': VariableState(
-            type=Param,
-            value=(3,)
-          ),
-          'kernel': VariableState(
-            type=Param,
-            value=(2, 3)
-          )
-        }
-      })
+      {'batch_norm': {'bias': VariableState(
+        type=Param,
+        value=(2,)
+      ), 'scale': VariableState(
+        type=Param,
+        value=(2,)
+      )}, 'linear': {'bias': VariableState(
+        type=Param,
+        value=(3,)
+      ), 'kernel': VariableState(
+        type=Param,
+        value=(2, 3)
+      )}}
       >>> jax.tree.map(jnp.shape, batch_stats)
-      State({
-        'batch_norm': {
-          'mean': VariableState(
-            type=BatchStat,
-            value=(2,)
-          ),
-          'var': VariableState(
-            type=BatchStat,
-            value=(2,)
-          )
-        }
-      })
+      {'batch_norm': {'mean': VariableState(
+        type=BatchStat,
+        value=(2,)
+      ), 'var': VariableState(
+        type=BatchStat,
+        value=(2,)
+      )}}
 
     Arguments:
       node: graph node to split.
@@ -1013,8 +998,8 @@ class UpdateContext:
   def merge(
     self,
     graphdef: GraphDef[A],
-    state: GraphState,
-    *states: GraphState,
+    state: State,
+    *states: State,
   ) -> A:
     """merge"""
     if not isinstance(graphdef, NodeDef):
@@ -1032,7 +1017,7 @@ class UpdateContext:
       # inner merge (2)
       index_ref_cache = None
 
-    state = State.merge(state, *states)
+    state = statelib.merge_state(state, *states)
     index_ref = IndexRefMapping({})
     node = unflatten(
       graphdef, state, index_ref=index_ref, index_ref_cache=index_ref_cache
@@ -1194,8 +1179,8 @@ def _split_state(
 ) -> tuple[GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
   if not filters:
     return (state,)
-  states = state.split(*filters)
-  if isinstance(states, State):
+  states = statelib.split_state(state, *filters)
+  if not isinstance(states, tuple):
     return (states,)
   assert len(states) > 0
   return states  # type: ignore[return-value]
@@ -1238,41 +1223,27 @@ def split(
     >>> graphdef, params, batch_stats = nnx.split(node, nnx.Param, nnx.BatchStat)
     ...
     >>> jax.tree.map(jnp.shape, params)
-    State({
-      'batch_norm': {
-        'bias': VariableState(
-          type=Param,
-          value=(2,)
-        ),
-        'scale': VariableState(
-          type=Param,
-          value=(2,)
-        )
-      },
-      'linear': {
-        'bias': VariableState(
-          type=Param,
-          value=(3,)
-        ),
-        'kernel': VariableState(
-          type=Param,
-          value=(2, 3)
-        )
-      }
-    })
+    {'batch_norm': {'bias': VariableState(
+      type=Param,
+      value=(2,)
+    ), 'scale': VariableState(
+      type=Param,
+      value=(2,)
+    )}, 'linear': {'bias': VariableState(
+      type=Param,
+      value=(3,)
+    ), 'kernel': VariableState(
+      type=Param,
+      value=(2, 3)
+    )}}
     >>> jax.tree.map(jnp.shape, batch_stats)
-    State({
-      'batch_norm': {
-        'mean': VariableState(
-          type=BatchStat,
-          value=(2,)
-        ),
-        'var': VariableState(
-          type=BatchStat,
-          value=(2,)
-        )
-      }
-    })
+    {'batch_norm': {'mean': VariableState(
+      type=BatchStat,
+      value=(2,)
+    ), 'var': VariableState(
+      type=BatchStat,
+      value=(2,)
+    )}}
 
   :func:`split` and :func:`merge` are primarily used to interact directly with JAX
   transformations, see
@@ -1331,7 +1302,7 @@ def merge(
   Returns:
     The merged :class:`Module`.
   """
-  state = State.merge(state, *states)
+  state = statelib.merge_state(state, *states)
   node = unflatten(graphdef, state)
   return node
 
@@ -1365,9 +1336,7 @@ def update(
     *states: Additional :class:`State` objects.
   """
   if states:
-    state = State.merge(state, *states)
-  if isinstance(state, State):
-    state = state.raw_mapping
+    state = statelib.merge_state(state, *states)
   _graph_update_dynamic(node, state)
 
 def _variables_generator(node) -> tp.Iterable[tuple[PathParts, Variable]]:
@@ -1421,7 +1390,9 @@ def variables(
   flat_states = variablelib.split_flat_state(
     variables_iterable, (*filters, ...)
   )
-  states = tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
+  states = tuple(
+    statelib.from_flat_state(flat_state) for flat_state in flat_states
+  )
   if num_filters < 2:
     return states[0]
   return states
@@ -1477,9 +1448,9 @@ def state(
   if len(filters) == 0:
     states = state
   elif len(filters) == 1:
-    states = state.filter(filters[0])
+    states = statelib.filter_state(state, filters[0])
   else:
-    states = state.filter(filters[0], filters[1], *filters[2:])
+    states = statelib.filter_state(state, filters[0], filters[1], *filters[2:])
 
   return states
 
@@ -1576,7 +1547,7 @@ def pop(
     predicates=predicates,
   )
   states = tuple(
-    GraphState.from_flat_path(flat_state) for flat_state in flat_states
+    statelib.from_flat_state(flat_state) for flat_state in flat_states
   )
 
   if len(states) == 1:

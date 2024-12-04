@@ -201,7 +201,7 @@ The dropout behavior:
     grads = nnx.grad(loss_fn)(model)
     _, params, rest = nnx.split(model, nnx.Param, ...)
     params = jax.tree.map(lambda p, g: p - 0.1 * g, params, grads)
-    nnx.update(model, nnx.GraphState.merge(params, rest))
+    nnx.update(model, nnx.merge_state(params, rest))
 
 .. testcode:: Haiku
   :hide:
@@ -378,7 +378,7 @@ The parameter structure is as follows:
       _, params, _ = nnx.split(model, nnx.Param, ...)
 
       params
-      State({
+      {
         'decoder': {
           'bias': VariableState(type=Param, value=(784,)),
           'kernel': VariableState(type=Param, value=(256, 784))
@@ -387,7 +387,7 @@ The parameter structure is as follows:
           'bias': VariableState(type=Param, value=(256,)),
           'kernel': VariableState(type=Param, value=(784, 256))
         }
-      })
+      }
 
 
 To call those custom methods:
@@ -634,14 +634,14 @@ Now inspect the variable pytree on both sides:
       _, params, _ = nnx.split(model, nnx.Param, ...)
 
       params
-      State({
+      {
         'blocks': {
           'linear': {
             'bias': VariableState(type=Param, value=(5, 64)),
             'kernel': VariableState(type=Param, value=(5, 64, 64))
           }
         }
-      })
+      }
 
 
 Top-level Haiku functions vs top-level Flax modules

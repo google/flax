@@ -245,7 +245,7 @@ class ToLinen(linen.Module):
         lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x).to_state(),
         variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
     states = [State(v) for v in states.values()]
-    nnx_state = nnx.GraphState.merge(*states) if states else nnx.GraphState({})
+    nnx_state = nnx.merge_state(*states) if states else nnx.GraphState({})
     module = nnx.merge(gdef, nnx_state)
     nnx.reseed(module, **linen_rngs_dict(self))  # reseed with keys from linen apply call.
     out = module(*args, **kwargs)
@@ -269,7 +269,7 @@ class ToLinen(linen.Module):
     for typ, state in zip(types, state_by_types):
       collection = bv.variable_type_name(typ)
       if self.is_mutable_collection(collection):
-        for k, v in state.raw_mapping.items():
+        for k, v in state.items():
           v = jax.tree.map(bv.to_linen_var, v,
                            is_leaf=lambda x: isinstance(x, nnx.VariableState))
           self.put_variable(collection, k, v)

@@ -201,25 +201,19 @@ class BatchNorm(Module):
     >>> layer = nnx.BatchNorm(num_features=6, momentum=0.9, epsilon=1e-5,
     ...                       dtype=jnp.float32, rngs=nnx.Rngs(0))
     >>> jax.tree.map(jnp.shape, nnx.state(layer))
-    State({
-      'bias': VariableState(
-        type=Param,
-        value=(6,)
-      ),
-      'mean': VariableState(
-        type=BatchStat,
-        value=(6,)
-      ),
-      'scale': VariableState(
-        type=Param,
-        value=(6,)
-      ),
-      'var': VariableState(
-        type=BatchStat,
-        value=(6,)
-      )
-    })
-
+    {'bias': VariableState(
+      type=Param,
+      value=(6,)
+    ), 'mean': VariableState(
+      type=BatchStat,
+      value=(6,)
+    ), 'scale': VariableState(
+      type=Param,
+      value=(6,)
+    ), 'var': VariableState(
+      type=BatchStat,
+      value=(6,)
+    )}
     >>> # calculate batch norm on input and update batch statistics
     >>> layer.train()
     >>> y = layer(x)
@@ -394,16 +388,13 @@ class LayerNorm(Module):
     >>> layer = nnx.LayerNorm(num_features=6, rngs=nnx.Rngs(0))
 
     >>> nnx.state(layer)
-    State({
-      'bias': VariableState(
-        type=Param,
-        value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
-      ),
-      'scale': VariableState(
-        type=Param,
-        value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
-      )
-    })
+    {'bias': VariableState(
+      type=Param,
+      value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
+    ), 'scale': VariableState(
+      type=Param,
+      value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
+    )}
 
     >>> y = layer(x)
 
@@ -530,12 +521,10 @@ class RMSNorm(Module):
     >>> layer = nnx.RMSNorm(num_features=6, rngs=nnx.Rngs(0))
 
     >>> nnx.state(layer)
-    State({
-      'scale': VariableState(
-        type=Param,
-        value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
-      )
-    })
+    {'scale': VariableState(
+      type=Param,
+      value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
+    )}
 
     >>> y = layer(x)
 
@@ -654,16 +643,13 @@ class GroupNorm(Module):
     >>> x = jax.random.normal(jax.random.key(0), (3, 4, 5, 6))
     >>> layer = nnx.GroupNorm(num_features=6, num_groups=3, rngs=nnx.Rngs(0))
     >>> nnx.state(layer)
-    State({
-      'bias': VariableState(
-        type=Param,
-        value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
-      ),
-      'scale': VariableState(
-        type=Param,
-        value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
-      )
-    })
+    {'bias': VariableState(
+      type=Param,
+      value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
+    ), 'scale': VariableState(
+      type=Param,
+      value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
+    )}
     >>> y = layer(x)
     ...
     >>> y = nnx.GroupNorm(num_features=6, num_groups=1, rngs=nnx.Rngs(0))(x)

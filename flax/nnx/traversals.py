@@ -167,20 +167,12 @@ def flatten_to_sequence(
 
 
 @overload
-def unflatten_mapping(xs: Mapping[tuple[Any, ...], Any],
-                      /,
-                      *,
-                      sep: None = None
-                      ) -> dict[Any, Any]:
+def unflatten_mapping(xs: Any, /, *, sep: None = None) -> dict[Any, Any]:
   ...
 
 
 @overload
-def unflatten_mapping(xs: Mapping[str, Any],
-                      /,
-                      *,
-                      sep: str
-                      ) -> dict[Any, Any]:
+def unflatten_mapping(xs: Any, /, *, sep: str) -> dict[Any, Any]:
   ...
 
 

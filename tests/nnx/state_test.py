@@ -26,69 +26,19 @@ class StateTest(absltest.TestCase):
     assert state['a'].value == 1
     assert state['b']['c'].value == 2
 
-  def test_get_attr(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
-
-    assert state.a.value == 1
-    assert state.b.c.value == 2
-
-  def test_set_attr(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
-
-    state.a.value = 3
-    state.b.c.value = 4
-
-    assert state['a'].value == 3
-    assert state['b']['c'].value == 4
-
-  def test_set_attr_variables(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
-
-    state.a.value = 3
-    state.b.c.value = 4
-
-    assert issubclass(state.a.type, nnx.Param)
-    assert state.a.value == 3
-    assert issubclass(state.b.c.type, nnx.Param)
-    assert state.b.c.value == 4
-
-  def test_add_nested_attr(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
-    state.b.d = nnx.Param.state(5)
-
-    assert state['b']['d'].value == 5
-
-  def test_delete_nested_attr(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
-    del state['b']['c']
-
-    assert 'c' not in state['b']
-
-  def test_integer_access(self):
-    class Foo(nnx.Module):
-      def __init__(self, *, rngs: nnx.Rngs):
-        self.layers = [nnx.Linear(1, 2, rngs=rngs), nnx.Linear(2, 3, rngs=rngs)]
-
-    module = Foo(rngs=nnx.Rngs(0))
-    state = nnx.state(module)
-
-    assert module.layers[0].kernel.value.shape == (1, 2)
-    assert state.layers[0].kernel.value.shape == (1, 2)
-    assert module.layers[1].kernel.value.shape == (2, 3)
-    assert state.layers[1].kernel.value.shape == (2, 3)
 
   def test_pure_dict(self):
     module = nnx.Linear(4, 5, rngs=nnx.Rngs(0))
     state = nnx.state(module)
-    pure_dict = state.to_pure_dict()
+    pure_dict = nnx.to_pure_dict(state)
     assert isinstance(pure_dict, dict)
     assert isinstance(pure_dict['kernel'], jax.Array)
     assert isinstance(pure_dict['bias'], jax.Array)
-    state.replace_by_pure_dict(jax.tree.map(jnp.zeros_like, pure_dict))
+    nnx.replace_by_pure_dict(state, jax.tree.map(jnp.zeros_like, pure_dict))
     assert isinstance(state, nnx.State)
-    assert isinstance(state.kernel, nnx.VariableState)
-    assert jnp.array_equal(state.kernel.value, jnp.zeros((4, 5)))
-    assert state.kernel.type == nnx.Param
+    assert isinstance(state['kernel'], nnx.VariableState)
+    assert jnp.array_equal(state['kernel'].value, jnp.zeros((4, 5)))
+    assert state['kernel'].type == nnx.Param
     nnx.update(module, state)
     assert jnp.array_equal(module(jnp.ones((3, 4))), jnp.zeros((3, 5)))
 

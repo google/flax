@@ -185,8 +185,8 @@ class TestPartitioning(absltest.TestCase):
     self.assertEqual(state['a']['0'].value, m.a['0'].value)
     self.assertEqual(state['a']['1'].value, m.a['1'].value)
     self.assertEqual(state['b'].value, m.b.value)
-    self.assertIsNot(state.b, state.a['0'])
-    self.assertLen(state.flat_state(), 3)
+    self.assertIsNot(state['b'], state['a']['0'])
+    self.assertLen(nnx.to_flat_state(state), 3)
 
 
 if __name__ == '__main__':

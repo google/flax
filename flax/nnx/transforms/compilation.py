@@ -46,9 +46,6 @@ class StateSharding(extract.PrefixMapping):
     | tp.Iterable[tuple[filterlib.Filter, tp.Any]],
     /,
   ):
-    if isinstance(filter_sharding, statelib.State):
-      filter_sharding = statelib.create_path_filters(filter_sharding)  # type: ignore
-
     iterable = tuple(
       filter_sharding.items()
       if isinstance(filter_sharding, tp.Mapping)
@@ -56,6 +53,11 @@ class StateSharding(extract.PrefixMapping):
     )
     self._filters = tuple(filter for filter, _ in iterable)
     self._shardings = tuple(axis for _, axis in iterable)
+
+  @staticmethod
+  def from_state(state: statelib.State):
+    filter_sharding = statelib.create_path_filters(state)
+    return StateSharding(filter_sharding)
 
   @property
   def filters(self) -> tuple[filterlib.Filter, ...]:

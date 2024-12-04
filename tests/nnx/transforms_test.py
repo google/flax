@@ -398,14 +398,14 @@ class TestGrad(parameterized.TestCase):
     assert m.a[0] is m.b
     assert isinstance(grads, nnx.State)
     assert grads['a']['0'].value == 2.0
-    assert issubclass(grads.a['0'].type, nnx.Variable)
+    assert issubclass(grads['a']['0'].type, nnx.Variable)
     assert grads['a']['1'].value == 1.0
-    assert issubclass(grads.a['1'].type, nnx.Variable)
-    assert len(grads.flat_state()) == 2
+    assert issubclass(grads['a']['1'].type, nnx.Variable)
+    assert len(nnx.to_flat_state(grads)) == 2
 
     nnx.update(m, grads)
 
-    assert m.a[0] is m.b
+    assert m['a'][0] is m.b
     assert m['a'][0].value == 2.0
     assert m['a'][1].value == 1.0
     assert m['b'].value == 2.0
@@ -429,7 +429,7 @@ class TestGrad(parameterized.TestCase):
 
     assert isinstance(grads, nnx.State)
     assert grads['a']['0'].value == 1.0
-    assert issubclass(grads.a['0'].type, nnx.Param)
+    assert issubclass(grads['a']['0'].type, nnx.Param)
     assert len(grads) == 2
 
     nnx.update(m, grads)
@@ -457,7 +457,7 @@ class TestGrad(parameterized.TestCase):
 
     assert isinstance(grads, nnx.State)
     assert grads['a']['1'].value == 1.0
-    assert issubclass(grads.a['1'].type, nnx.BatchStat)
+    assert issubclass(grads['a']['1'].type, nnx.BatchStat)
     assert len(grads) == 1
 
     nnx.update(m, grads)
@@ -478,9 +478,9 @@ class TestGrad(parameterized.TestCase):
     grads = grad_fn(m, x, y)
 
     assert 'kernel' in grads
-    assert grads.kernel.value.shape == (2, 3)
+    assert grads['kernel'].value.shape == (2, 3)
     assert 'bias' in grads
-    assert grads.bias.value.shape == (3,)
+    assert grads['bias'].value.shape == (3,)
 
   @parameterized.parameters(
     {
@@ -505,13 +505,13 @@ class TestGrad(parameterized.TestCase):
     grads_m1, grads_m2 = grad_fn(*inputs)
 
     assert 'kernel' in grads_m1
-    assert grads_m1.kernel.value.shape == (2, 3)
+    assert grads_m1['kernel'].value.shape == (2, 3)
     assert 'bias' in grads_m1
-    assert grads_m1.bias.value.shape == (3,)
+    assert grads_m1['bias'].value.shape == (3,)
     assert 'kernel' in grads_m2
-    assert grads_m2.kernel.value.shape == (3, 3)
+    assert grads_m2['kernel'].value.shape == (3, 3)
     assert 'bias' in grads_m2
-    assert grads_m2.bias.value.shape == (3,)
+    assert grads_m2['bias'].value.shape == (3,)
 
   def test_multiple_args(self):
     m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
@@ -653,8 +653,8 @@ class TestCustomVJP(parameterized.TestCase):
       self.assertIsInstance(m, Foo)
 
       # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g.x.value = cos_x * out_g * m.y
-      m_g.y.value = sin_x * out_g
+      m_g['x'].value = cos_x * out_g * m.y
+      m_g['y'].value = sin_x * out_g
       return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
@@ -695,7 +695,7 @@ class TestCustomVJP(parameterized.TestCase):
       self.assertEqual(out_g.shape, ())
       self.assertIsInstance(m, Foo)
 
-      m_g.x.value = cos_x * out_g * m.y
+      m_g['x'].value = cos_x * out_g * m.y
       del m_g['y']
       return (m_g,)
 
@@ -735,8 +735,8 @@ class TestCustomVJP(parameterized.TestCase):
       self.assertIsInstance(m, Foo)
 
       # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g.x.value = cos_x * out_g * m.y
-      m_g.y.value = sin_x * out_g
+      m_g['x'].value = cos_x * out_g * m.y
+      m_g['y'].value = sin_x * out_g
       return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
@@ -838,8 +838,8 @@ class TestCustomVJP(parameterized.TestCase):
       self.assertIsInstance(m, Foo)
 
       # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g.x.value = cos_x * out_g * m.y
-      m_g.y.value = sin_x * out_g
+      m_g['x'].value = cos_x * out_g * m.y
+      m_g['y'].value = sin_x * out_g
       return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
@@ -1661,10 +1661,10 @@ class TestScan(absltest.TestCase):
 
         # test sharding layer axes is not present inside scan
         state = nnx.state(self.linear)
-        assert state.kernel.value.shape == (3, 3)  # type: ignore
-        assert state.kernel.sharding == ('din', 'dout')  # type: ignore
-        assert state.bias.value.shape == (3,)  # type: ignore
-        assert state.bias.sharding == ('dout',)  # type: ignore
+        assert state['kernel'].value.shape == (3, 3)  # type: ignore
+        assert state['kernel'].sharding == ('din', 'dout')  # type: ignore
+        assert state['bias'].value.shape == (3,)  # type: ignore
+        assert state['bias'].sharding == ('dout',)  # type: ignore
 
         return x, None
 
@@ -1679,20 +1679,28 @@ class TestScan(absltest.TestCase):
 
     # test sharding layers axes is set
     state = nnx.state(m)
-    assert state.scan_module.linear.kernel.value.shape == (5, 3, 3)
-    assert state.scan_module.linear.kernel.sharding == ('layers', 'din', 'dout')
-    assert state.scan_module.linear.bias.value.shape == (5, 3)
-    assert state.scan_module.linear.bias.sharding == ('layers', 'dout')
+    assert state['scan_module']['linear']['kernel'].value.shape == (5, 3, 3)
+    assert state['scan_module']['linear']['kernel'].sharding == (
+      'layers',
+      'din',
+      'dout',
+    )
+    assert state['scan_module']['linear']['bias'].value.shape == (5, 3)
+    assert state['scan_module']['linear']['bias'].sharding == ('layers', 'dout')
 
     x = jnp.ones((1, 3))
     y, out = m(x, None)
 
     # test sharding axes is preserved
     state = nnx.state(m)
-    assert state.scan_module.linear.kernel.value.shape == (5, 3, 3)
-    assert state.scan_module.linear.kernel.sharding == ('layers', 'din', 'dout')
-    assert state.scan_module.linear.bias.value.shape == (5, 3)
-    assert state.scan_module.linear.bias.sharding == ('layers', 'dout')
+    assert state['scan_module']['linear']['kernel'].value.shape == (5, 3, 3)
+    assert state['scan_module']['linear']['kernel'].sharding == (
+      'layers',
+      'din',
+      'dout',
+    )
+    assert state['scan_module']['linear']['bias'].value.shape == (5, 3)
+    assert state['scan_module']['linear']['bias'].sharding == ('layers', 'dout')
 
   def test_type_error_less_than_one_args(self):
     class Block(nnx.Module):
@@ -2505,7 +2513,7 @@ class TestVmap(absltest.TestCase):
     state['bn']['var'] = 0
     state['bn']['bias'] = None
 
-    state_axes = nnx.StateAxes(state)
+    state_axes = nnx.StateAxes.from_state(state)
 
     self.assertEqual(state_axes.map_prefix(('linear', 'kernel'), None), 0)
     self.assertEqual(state_axes.map_prefix(('linear', 'bias'), None), 1)

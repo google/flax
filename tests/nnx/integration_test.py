@@ -205,7 +205,7 @@ class TestIntegration(absltest.TestCase):
       def loss_fn(params):
         y_pred, (_, updates) = graphdef.apply(params, counts)(x)
         loss = jax.numpy.mean((y_pred - y) ** 2)
-        return loss, updates.filter(Count)
+        return loss, nnx.filter_state(updates, Count)
 
       # compute gradient
       grads, counts = jax.grad(loss_fn, has_aux=True)(params)
@@ -257,7 +257,7 @@ class TestIntegration(absltest.TestCase):
 
     y, (_, state) = graphdef.apply(state)(jnp.ones((8, 12)))
 
-    intermediates, state = state.split(nnx.Intermediate, ...)
+    intermediates, state = nnx.split_state(state, nnx.Intermediate, ...)
 
     assert 'y' in intermediates
 
@@ -278,7 +278,7 @@ class TestIntegration(absltest.TestCase):
     assert model(x).shape == (3, 4)
 
     _, state = nnx.split(model)
-    pure_dict_state = state.to_pure_dict()
+    pure_dict_state = nnx.to_pure_dict(state)
     nnx.display(pure_dict_state)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -295,7 +295,7 @@ class TestIntegration(absltest.TestCase):
 
       abstract_model = nnx.eval_shape(lambda: MLPs(4, rngs=nnx.Rngs(0)))
       graphdef, abstract_state = nnx.split(abstract_model)
-      abstract_state.replace_by_pure_dict(restored_pure_dict)
+      nnx.replace_by_pure_dict(abstract_state, restored_pure_dict)
       model = nnx.merge(graphdef, abstract_state)
       assert model(x).shape == (3, 4)  # The model still works!
 
