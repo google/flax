@@ -150,6 +150,7 @@ def register_graph_node_type(
     clear=clear,
   )
 
+
 def register_pytree_node_type(
   type: type,
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[Key, Leaf]], AuxData]],
@@ -161,6 +162,7 @@ def register_pytree_node_type(
   PYTREE_REGISTRY[type] = PytreeNodeImpl(
     type=type, flatten=flatten, unflatten=unflatten
   )
+
 
 def is_node(x: tp.Any) -> bool:
   if type(x) in GRAPH_REGISTRY:
@@ -250,6 +252,7 @@ class NodeRef(GraphDef[Node], reprlib.Representable):
 
   def __treescope_repr__(self, path, subtree_renderer):
     import treescope  # type: ignore[import-not-found,import-untyped]
+
     return treescope.repr_lib.render_object_constructor(
       object_type=type(self),
       attributes={'type': self.type, 'index': self.index},
@@ -259,6 +262,7 @@ class NodeRef(GraphDef[Node], reprlib.Representable):
 
 
 jax.tree_util.register_static(NodeRef)
+
 
 @dataclasses.dataclass(frozen=True, repr=False)
 class VariableDef(reprlib.Representable):
@@ -355,6 +359,7 @@ class NodeDef(GraphDef[Node], reprlib.Representable):
 
   def __treescope_repr__(self, path, subtree_renderer):
     import treescope  # type: ignore[import-not-found,import-untyped]
+
     return treescope.repr_lib.render_object_constructor(
       object_type=type(self),
       attributes={
@@ -412,29 +417,38 @@ def _graph_flatten(
   flat_state: dict[PathParts, StateLeaf],
   node: Node,
 ) -> NodeDef[Node] | NodeRef:
-  if not is_node(node):
-    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
+  """
+  Recursively flattens a node into a dictionary of state leaves and a node definition.
 
+  Args:
+      path (PathParts): The current path in the node structure.
+      ref_index (RefMap[tp.Any, Index]): A mapping from nodes to their indices.
+      flat_state (dict[PathParts, StateLeaf]): A dictionary to store flattened state leaves.
+      node (Node): The node to flatten.
+
+  Returns:
+      NodeDef[Node] | NodeRef: The node definition or reference.
+  """
   if node in ref_index:
     return NodeRef(type(node), ref_index[node])
 
+  if not is_node(node):
+    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
+
   node_impl = get_node_impl(node)
 
-  # only cache graph nodes
-  if isinstance(node_impl, GraphNodeImpl):
-    index = len(ref_index)
+  # Only cache graph nodes
+  index = len(ref_index) if isinstance(node_impl, GraphNodeImpl) else -1
+  if index != -1:
     ref_index[node] = index
-  else:
-    index = -1
 
   attributes: list[SubGraphAttribute | StaticAttribute | LeafAttribute] = []
 
   values, metadata = node_impl.flatten(node)
   for key, value in values:
     if is_node(value):
-      nodedef = _graph_flatten((*path, key), ref_index, flat_state, value)
-      # subgraphs.append((key, nodedef))
-      attributes.append(SubGraphAttribute(key, nodedef))
+      sub_nodedef = _graph_flatten((*path, key), ref_index, flat_state, value)
+      attributes.append(SubGraphAttribute(key, sub_nodedef))
     elif isinstance(value, Variable):
       if value in ref_index:
         attributes.append(
@@ -442,7 +456,8 @@ def _graph_flatten(
         )
       else:
         flat_state[(*path, key)] = value.to_state()
-        variable_index = ref_index[value] = len(ref_index)
+        variable_index = len(ref_index)
+        ref_index[value] = variable_index
         variabledef = VariableDef(
           type(value), variable_index, HashableMapping(value.get_metadata())
         )
@@ -451,9 +466,8 @@ def _graph_flatten(
       if isinstance(value, (jax.Array, np.ndarray)):
         path_str = '/'.join(map(str, (*path, key)))
         raise ValueError(
-            f'Arrays leaves are not supported, at {path_str!r}: {value}'
+          f'Arrays leaves are not supported, at {path_str!r}: {value}'
         )
-      # static_fields.append((key, value))
       attributes.append(StaticAttribute(key, value))
 
   nodedef = NodeDef.create(
@@ -497,6 +511,7 @@ def unflatten(
   node = _graph_unflatten(graphdef, state, index_ref, index_ref_cache)
   return node
 
+
 def _graph_unflatten(
   nodedef: NodeDef[Node] | NodeRef[Node],
   state: tp.Mapping[KeyT, StateLeaf | tp.Mapping[Key, tp.Any]],
@@ -506,63 +521,50 @@ def _graph_unflatten(
   """Recursive helper for graph_unflatten.
 
   Args:
-    nodedef: A GraphDef instance or an index to a node in the cache.
-    state: A mapping from attribute names to variables or subgraphs.
-    index_to_ref: A mapping from indexes to nodes that have been traversed.
-      If a node is already in the cache, it won't be traversed again.
-    index_ref_cache: A mapping from indexes to existing nodes that can be reused.
-      When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
-      object in an empty state and then filled by the unflatten process, as a result
-      existing graph nodes are mutated to have the new content/topology
-      specified by the nodedef.
+      nodedef: A GraphDef instance or an index to a node in the cache.
+      state: A mapping from attribute names to variables or subgraphs.
+      index_to_ref: A mapping from indexes to nodes that have been traversed.
+          If a node is already in the cache, it won't be traversed again.
+      index_ref_cache: A mapping from indexes to existing nodes that can be reused.
+          When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
+          object in an empty state and then filled by the unflatten process, as a result
+          existing graph nodes are mutated to have the new content/topology
+          specified by the nodedef.
   """
   if isinstance(nodedef, NodeRef):
     return index_ref[nodedef.index]
 
-  if not is_node_type(nodedef.type):
-    raise RuntimeError(f'Unsupported type: {nodedef.type}, this is a bug.')
-
   if nodedef.index in index_ref:
     raise RuntimeError(f'GraphDef index {nodedef.index} already used.')
+
+  if not is_node_type(nodedef.type):
+    raise RuntimeError(f'Unsupported type: {nodedef.type}, this is a bug.')
 
   node_impl = get_node_impl_for_type(nodedef.type)
 
   def _get_children():
-    children: dict[Key, NodeLeaf | Node] = {}
-    state_keys: set = set(state.keys())
+    children = {}
+    state_keys = set(state.keys())
 
-    # for every key in attributes there are 6 possible cases:
-    #  - (2) the key can either be present in the state or not
-    #  - (3) the key can be a subgraph, a leaf, or a static attribute
     for attribute in nodedef.attributes:
       key = attribute.key
       if key not in state:
-        # if key is not present create an empty types
-        if type(attribute) is StaticAttribute:
+        if isinstance(attribute, StaticAttribute):
           children[key] = attribute.value
-        elif type(attribute) is SubGraphAttribute:
-          # if the key is a subgraph we create an empty node
+        elif isinstance(attribute, SubGraphAttribute):
           subgraphdef = attribute.value
-          assert not isinstance(subgraphdef, VariableDef)
           if isinstance(subgraphdef, NodeRef):
-            # subgraph exists, take it from the cache
             children[key] = index_ref[subgraphdef.index]
           else:
-            # create a node from an empty state, reasoning:
-            # * its a node with no state
-            # * its a node with state but only through references of already
-            #   created nodes
             substate = {}
             children[key] = _graph_unflatten(
               subgraphdef, substate, index_ref, index_ref_cache
             )
-        elif type(attribute) is LeafAttribute:
+        elif isinstance(attribute, LeafAttribute):
           variabledef = attribute.value
           if variabledef.index in index_ref:
-            # variable exists, take it from the cache
             children[key] = index_ref[variabledef.index]
           else:
-            # key for a variable is missing, raise an error
             raise ValueError(
               f'Expected key {key!r} in state while building node of type '
               f'{nodedef.type.__name__}.'
@@ -572,12 +574,11 @@ def _graph_unflatten(
       else:
         state_keys.remove(key)
         value = state[key]
-        # if key in nodedef.static_fields:
-        if type(attribute) is StaticAttribute:
+        if isinstance(attribute, StaticAttribute):
           raise ValueError(
             f'Got state for static field {key!r}, this is not supported.'
           )
-        elif type(attribute) is SubGraphAttribute:
+        elif isinstance(attribute, SubGraphAttribute):
           if is_state_leaf(value):
             raise ValueError(
               f'Expected value of type {attribute.value} for '
@@ -585,31 +586,21 @@ def _graph_unflatten(
             )
           assert isinstance(value, dict)
           subgraphdef = attribute.value
-
           if isinstance(subgraphdef, NodeRef):
             children[key] = index_ref[subgraphdef.index]
           else:
             children[key] = _graph_unflatten(
               subgraphdef, value, index_ref, index_ref_cache
             )
-
-        elif type(attribute) is LeafAttribute:
+        elif isinstance(attribute, LeafAttribute):
           variabledef = attribute.value
-
           if variabledef.index in index_ref:
-            # add an existing variable
-            assert isinstance(variabledef, NodeRef)
             children[key] = index_ref[variabledef.index]
           else:
-            # its a unseen variable, create a new one
-            assert isinstance(variabledef, VariableDef)
-            # when idxmap is present, check if the Varable exists there
-            # and update existing variables if it does
             if (
               index_ref_cache is not None
               and variabledef.index in index_ref_cache
             ):
-              # if variable exists, update it
               variable = index_ref_cache[variabledef.index]
               if not isinstance(variable, Variable):
                 raise ValueError(
@@ -619,7 +610,7 @@ def _graph_unflatten(
                 variable.update_from_state(value)
               else:
                 variable.raw_value = value
-            else:  # if it doesn't, create a new variable
+            else:
               if isinstance(value, VariableState):
                 variable = value.to_variable()
               else:
@@ -631,15 +622,12 @@ def _graph_unflatten(
         else:
           raise RuntimeError(f'Unknown key: {key!r}, this is a bug.')
 
-    # NOTE: we could allw adding new StateLeafs here
     if state_keys:
       raise ValueError(f'Unknown keys: {state_keys}')
 
     return children
 
   if isinstance(node_impl, GraphNodeImpl):
-    # we create an empty node first and add it to the index
-    # this avoids infinite recursion when there is a reference cycle
     if index_ref_cache is not None and nodedef.index in index_ref_cache:
       node = index_ref_cache[nodedef.index]
       if type(node) != nodedef.type:
@@ -654,8 +642,6 @@ def _graph_unflatten(
     children = _get_children()
     node_impl.init(node, tuple(children.items()))
   else:
-    # if the node type does not support the creation of an empty object it means
-    # that it cannot reference itself, so we can create its children first
     children = _get_children()
     node = node_impl.unflatten(tuple(children.items()), nodedef.metadata)
 
@@ -768,9 +754,11 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
         # updated from raw value
         current_value.raw_value = value
 
+
 # --------------------------------------------------------
 # UpdateContext
 # --------------------------------------------------------
+
 
 @dataclasses.dataclass
 class GraphContext(threading.local):
@@ -1066,7 +1054,7 @@ class UpdateContextManager:
   def __exit__(self, *args):
     if self.tag not in GRAPH_CONTEXT.update_context_stacks:
       raise RuntimeError(
-          f'No update context found for tag {self.tag!r}, this is a bug.'
+        f'No update context found for tag {self.tag!r}, this is a bug.'
       )
     stack = GRAPH_CONTEXT.update_context_stacks[self.tag]
 
@@ -1193,6 +1181,7 @@ def current_update_context(tag: str) -> UpdateContext:
 # Functional API
 # --------------------------------------------------------
 
+
 def _split_state(
   state: GraphState,
   filters: tuple[filterlib.Filter, ...],
@@ -1295,6 +1284,7 @@ def split(
   states = _split_state(state, filters)
   return graphdef, *states
 
+
 def merge(
   graphdef: GraphDef[A],
   state: tp.Mapping[KeyT, tp.Any],
@@ -1375,6 +1365,7 @@ def update(
     state = state.raw_mapping
   _graph_update_dynamic(node, state)
 
+
 def _variables_generator(node) -> tp.Iterable[tuple[PathParts, Variable]]:
   for path, value in iter_graph(node):
     if isinstance(value, Variable):
@@ -1430,6 +1421,7 @@ def variables(
   if num_filters < 2:
     return states[0]
   return states
+
 
 @tp.overload
 def state(node, /) -> GraphState: ...
@@ -1770,6 +1762,7 @@ class Static(tp.Generic[A]):
 
 
 jax.tree_util.register_static(Static)
+
 
 # ---------------------------------------------------------
 # Pytree
