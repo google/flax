@@ -102,7 +102,7 @@ Installation
    # or to install the latest version of Flax:
    pip install --upgrade git+https://github.com/google/flax.git
 
-Flax installs the vanilla CPU version of JAX, if you need a custom version please check out `JAX's installation page <https://github.com/google/jax#installation>`__.
+Flax installs the vanilla CPU version of JAX, if you need a custom version please check out `JAX's installation page <https://github.com/jax-ml/jax#installation>`__.
 
 Basic usage
 ^^^^^^^^^^^^

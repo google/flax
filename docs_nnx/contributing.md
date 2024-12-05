@@ -240,7 +240,7 @@ section above to keep the contents of both Markdown and Jupyter Notebook files i
 Some of the notebooks are built automatically as part of the pre-submit checks and
 as part of the [Read the Docs](https://flax.readthedocs.io/en/latest) build.
 The build will fail if cells raise errors. If the errors are intentional, you can either catch them,
-or tag the cell with `raises-exceptions` metadata ([example PR](https://github.com/google/jax/pull/2402/files)).
+or tag the cell with `raises-exceptions` metadata ([example PR](https://github.com/jax-ml/jax/pull/2402/files)).
 You have to add this metadata by hand in the `.ipynb` file. It will be preserved when somebody else
 re-saves the notebook.
 

@@ -16,7 +16,7 @@ jupytext:
 
 Welcome to Flax!
 
-Flax is an open source Python neural network library built on top of [JAX](https://github.com/google/jax). This tutorial demonstrates how to construct a simple convolutional neural
+Flax is an open source Python neural network library built on top of [JAX](https://github.com/jax-ml/jax). This tutorial demonstrates how to construct a simple convolutional neural
 network (CNN) using the [Flax](https://flax.readthedocs.io) Linen API and train
 the network for image classification on the MNIST dataset.
 

@@ -38,7 +38,7 @@ Depending on your task, some of the content in this guide may be suboptimal. For
 # Note that the Transformers library doesn't use the latest Flax version.
 ! pip install -q "transformers[flax]"
 # Install/upgrade Flax and JAX. For JAX installation with GPU/TPU support,
-# visit https://github.com/google/jax#installation.
+# visit https://github.com/jax-ml/jax#installation.
 ! pip install -U -q flax jax jaxlib
 ```
 

@@ -21,7 +21,7 @@ The current behavior is problematic and results in silent bugs, especially for d
 
 ### Dtypes in JAX
 
-JAX uses a NumPy-inspired [dtype promotion](https://github.com/google/jax/blob/main/jax/_src/dtypes.py) mechanism as explained [here](https://jax.readthedocs.io/en/latest/type_promotion.html?highlight=lattice#type-promotion-semantics). The type promotion rules are summarized by the following type lattice:
+JAX uses a NumPy-inspired [dtype promotion](https://github.com/jax-ml/jax/blob/main/jax/_src/dtypes.py) mechanism as explained [here](https://jax.readthedocs.io/en/latest/type_promotion.html?highlight=lattice#type-promotion-semantics). The type promotion rules are summarized by the following type lattice:
 
 ![JAX type promotion lattice](https://jax.readthedocs.io/en/latest/_images/type_lattice.svg)
 

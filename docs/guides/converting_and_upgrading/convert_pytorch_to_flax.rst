@@ -300,7 +300,7 @@ To load ``torch.nn.ConvTranspose2d`` parameters into Flax, we need to use the ``
   np.testing.assert_almost_equal(j_out, t_out, decimal=6)
 
 
-.. _`pull request`: https://github.com/google/jax/pull/5772
+.. _`pull request`: https://github.com/jax-ml/jax/pull/5772
 
 .. |nn.ConvTranspose| replace:: ``nn.ConvTranspose``
 .. _nn.ConvTranspose: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/layers.html#flax.linen.ConvTranspose
