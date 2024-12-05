@@ -19,6 +19,7 @@ import numpy as np
 import optax
 from time import time
 
+
 from flax import nnx
 
 from absl import flags

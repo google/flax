@@ -20,6 +20,7 @@ import functools
 import threading
 import typing as tp
 
+from flax import config
 import jax
 import numpy as np
 import typing_extensions as tpe
@@ -33,15 +34,14 @@ from flax.nnx.proxy_caller import (
 from flax.nnx.statelib import State
 from flax.nnx import variablelib
 from flax.nnx.variablelib import Variable, VariableState
-from flax.typing import Key, PathParts, is_key_like
+from flax.typing import HashableMapping, Key, PathParts, is_key_like
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
 C = tp.TypeVar('C')
 F = tp.TypeVar('F', bound=tp.Callable)
 
-HA = tp.TypeVar('HA', bound=tp.Hashable)
-HB = tp.TypeVar('HB', bound=tp.Hashable)
+
 KeyT = tp.TypeVar('KeyT', bound=Key)
 
 Index = int
@@ -66,9 +66,7 @@ def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
 class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin[A, B]):
   """A mapping that uses object id as the hash for the keys."""
 
-  def __init__(
-    self, mapping: tp.Mapping[A, B] | tp.Iterable[tuple[A, B]] = (), /
-  ):
+  def __init__(self, mapping: tp.Mapping[A, B], /):
     self._mapping: dict[int, tuple[A, B]] = {}
     self.update(mapping)
 
@@ -90,8 +88,15 @@ class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin[A, B]):
   def __len__(self) -> int:
     return len(self._mapping)
 
-  def __str__(self) -> str:
-    return repr(self)
+RefIndexMapping = RefMap[tp.Any, Index]
+IndexRefMapping = dict[Index, tp.Any]
+
+if not tp.TYPE_CHECKING:
+  if config.flax_use_flaxlib:
+    import flaxlib
+
+    RefIndexMapping = flaxlib.RefIndexMapping
+    IndexRefMapping = flaxlib.IndexRefMapping
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -200,32 +205,14 @@ def get_node_impl_for_type(x: type[Node]) -> NodeImpl[Node, tp.Any, tp.Any]:
     return GRAPH_REGISTRY[x]
 
 
-class HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
-  def __init__(self, mapping: tp.Mapping[HA, HB], copy: bool = True):
-    self._mapping = dict(mapping) if copy else mapping
 
-  def __contains__(self, key: object) -> bool:
-    return key in self._mapping
+IndexMapping = HashableMapping[int, int]
 
-  def __getitem__(self, key: HA) -> HB:
-    return self._mapping[key]
+if not tp.TYPE_CHECKING:
+  if config.flax_use_flaxlib:
+    import flaxlib
 
-  def __iter__(self) -> tp.Iterator[HA]:
-    return iter(self._mapping)
-
-  def __len__(self) -> int:
-    return len(self._mapping)
-
-  def __hash__(self) -> int:
-    return hash(tuple(sorted(self._mapping.items())))
-
-  def __eq__(self, other: tp.Any) -> bool:
-    return (
-      isinstance(other, HashableMapping) and self._mapping == other._mapping
-    )
-
-  def __repr__(self) -> str:
-    return repr(self._mapping)
+    IndexMapping = flaxlib.IndexMapping
 
 
 class GraphDef(tp.Generic[Node]):
@@ -317,7 +304,7 @@ class NodeDef(GraphDef[Node], reprlib.Representable):
   index: int
   attributes: tuple[SubGraphAttribute | StaticAttribute | LeafAttribute, ...]
   metadata: tp.Any
-  index_mapping: HashableMapping[Index, Index] | None
+  index_mapping: IndexMapping | None
 
   @classmethod
   def create(
@@ -326,14 +313,14 @@ class NodeDef(GraphDef[Node], reprlib.Representable):
     index: int,
     attributes: tuple[SubGraphAttribute | StaticAttribute | LeafAttribute, ...],
     metadata: tp.Any,
-    index_mapping: tp.Mapping[Index, Index] | None,
+    index_mapping: IndexMapping | None,
   ):
     return cls(
       type=type,
       index=index,
       attributes=attributes,
       metadata=metadata,
-      index_mapping=HashableMapping(index_mapping)
+      index_mapping=IndexMapping(index_mapping)  # type: ignore
       if index_mapping is not None
       else None,
     )
@@ -388,7 +375,7 @@ PureState = tuple[GraphDef[A], GraphState]
 
 
 def flatten(
-  node: Node, /, ref_index: RefMap[tp.Any, Index] | None = None
+  node: Node, /, ref_index: RefIndexMapping | None = None
 ) -> tuple[GraphDef[Node], GraphState]:
   """Flattens a graph node into a (graphdef, state) pair.
 
@@ -399,15 +386,22 @@ def flatten(
       nodes that share references.
   """
   if ref_index is None:
-    ref_index = RefMap()
-  flat_state: list[tuple[PathParts, StateLeaf]] = []
-  graphdef = _graph_flatten((), ref_index, flat_state, node)
+    ref_index = RefIndexMapping({})
+
+  flat_state: list[tuple[PathParts, StateLeaf]]
+  if config.flax_use_flaxlib:
+    import flaxlib  # type: ignore
+
+    graphdef, flat_state = flaxlib._graph_flatten_top(ref_index, node)
+  else:
+    flat_state = []
+    graphdef = _graph_flatten([], ref_index, flat_state, node)
   return graphdef, GraphState.from_flat_path(flat_state)
 
 
 def _graph_flatten(
-  path: PathParts,
-  ref_index: RefMap[tp.Any, Index],
+  path: list[Key],
+  ref_index: RefIndexMapping,
   flat_state: list[tuple[PathParts, StateLeaf]],
   node: Node,
 ) -> NodeDef[Node] | NodeRef:
@@ -430,8 +424,9 @@ def _graph_flatten(
 
   values, metadata = node_impl.flatten(node)
   for key, value in values:
+    path.append(key)
     if is_node(value):
-      nodedef = _graph_flatten((*path, key), ref_index, flat_state, value)
+      nodedef = _graph_flatten(path, ref_index, flat_state, value)
       # subgraphs.append((key, nodedef))
       attributes.append(SubGraphAttribute(key, nodedef))
     elif isinstance(value, Variable):
@@ -440,7 +435,7 @@ def _graph_flatten(
           LeafAttribute(key, NodeRef(type(value), ref_index[value]))
         )
       else:
-        flat_state.append(((*path, key), value.to_state()))
+        flat_state.append((tuple(path), value.to_state()))
         variable_index = ref_index[value] = len(ref_index)
         variabledef = VariableDef(
           type(value), variable_index, HashableMapping(value._var_metadata)
@@ -448,12 +443,13 @@ def _graph_flatten(
         attributes.append(LeafAttribute(key, variabledef))
     else:
       if isinstance(value, (jax.Array, np.ndarray)):
-        path_str = '/'.join(map(str, (*path, key)))
+        path_str = '/'.join(map(str, path))
         raise ValueError(
             f'Arrays leaves are not supported, at {path_str!r}: {value}'
         )
       # static_fields.append((key, value))
       attributes.append(StaticAttribute(key, value))
+    path.pop()
 
   nodedef = NodeDef.create(
     type=node_impl.type,
@@ -464,14 +460,20 @@ def _graph_flatten(
   )
   return nodedef
 
+if not tp.TYPE_CHECKING:
+  if config.flax_use_flaxlib:
+    import flaxlib
+
+    _graph_flatten = flaxlib._graph_flatten
+
 
 def unflatten(
   graphdef: GraphDef[Node],
   state: tp.Mapping[KeyT, StateLeaf | tp.Mapping[Key, tp.Any]],
   /,
   *,
-  index_ref: dict[Index, tp.Any] | None = None,
-  index_ref_cache: dict[Index, tp.Any] | None = None,
+  index_ref: IndexRefMapping | None = None,
+  index_ref_cache: IndexRefMapping | None = None,
 ) -> Node:
   """Unflattens a graphdef into a node with the given state.
 
@@ -491,7 +493,7 @@ def unflatten(
   if isinstance(state, State):
     state = state.raw_mapping  # type: ignore
   if index_ref is None:
-    index_ref = {}
+    index_ref = IndexRefMapping({})
   assert isinstance(graphdef, (NodeDef, NodeRef))
   node = _graph_unflatten(graphdef, state, index_ref, index_ref_cache)
   return node
@@ -499,8 +501,8 @@ def unflatten(
 def _graph_unflatten(
   nodedef: NodeDef[Node] | NodeRef[Node],
   state: tp.Mapping[KeyT, StateLeaf | tp.Mapping[Key, tp.Any]],
-  index_ref: dict[Index, tp.Any],
-  index_ref_cache: dict[Index, tp.Any] | None,
+  index_ref: IndexRefMapping,
+  index_ref_cache: IndexRefMapping | None,
 ) -> Node:
   """Recursive helper for graph_unflatten.
 
@@ -788,7 +790,7 @@ GRAPH_CONTEXT = GraphContext()
 @dataclasses.dataclass
 class SplitContext:
   ctxtag: str | None
-  ref_index: RefMap[tp.Any, Index]
+  ref_index: RefIndexMapping
 
   @tp.overload
   def split(self, graph_node: A, /) -> tuple[GraphDef[A], GraphState]: ...
@@ -815,17 +817,15 @@ class SplitContext:
     states = _split_state(state, filters)
     if ctx is not None:
       if ctx.index_ref is not None and isinstance(graphdef, NodeDef):
-        index_to_index = compose_mapping(ctx.index_ref, self.ref_index)
-        graphdef = dataclasses.replace(
-          graphdef, index_mapping=HashableMapping(index_to_index, copy=False)
-        )
+        index_to_index = create_index_mapping(ctx.index_ref, self.ref_index)
+        graphdef = dataclasses.replace(graphdef, index_mapping=index_to_index)
 
     return graphdef, *states
 
 
 @contextlib.contextmanager
 def split_context(ctxtag: str | None = None):
-  index_ref: RefMap[tp.Any, Index] = RefMap()
+  index_ref = RefIndexMapping({})
   flatten_ctx = SplitContext(ctxtag, index_ref)
   GRAPH_CONTEXT.ref_index_stack.append(flatten_ctx)
 
@@ -843,7 +843,7 @@ def split_context(ctxtag: str | None = None):
 @dataclasses.dataclass
 class MergeContext:
   ctxtag: str | None
-  index_ref: dict[Index, tp.Any]
+  index_ref: IndexRefMapping
 
   def merge(
     self, graphdef: GraphDef[A], state: GraphState, /, *states: GraphState
@@ -858,9 +858,7 @@ class MergeContext:
     ):
       # outer merge (4), create index_ref_cache
       assert ctx.ref_index is not None
-      index_ref_cache = compose_mapping_reversed(
-        ctx.ref_index, graphdef.index_mapping
-      )
+      index_ref_cache = create_index_ref(ctx.ref_index, graphdef.index_mapping)
     else:
       # inner merge (2)
       index_ref_cache = None
@@ -877,7 +875,7 @@ class MergeContext:
 
 @contextlib.contextmanager
 def merge_context(ctxtag: str | None = None):
-  index_ref: dict[Index, tp.Any] = {}
+  index_ref = IndexRefMapping({})
 
   unflatten_ctx = MergeContext(ctxtag, index_ref)
   GRAPH_CONTEXT.index_ref_stack.append(unflatten_ctx)
@@ -898,7 +896,7 @@ class UpdateContext:
   """A context manager for handling complex state updates."""
 
   tag: str
-  ref_index: RefMap[tp.Any, Index] | None
+  ref_index: RefIndexMapping | None
   index_ref: dict[Index, tp.Any] | None
 
   # define hash and eq to make this an opaque object
@@ -908,7 +906,7 @@ class UpdateContext:
   def __eq__(self, other):
     return isinstance(other, UpdateContext)
 
-  def flatten_end(self, ref_index: RefMap[tp.Any, Index]):
+  def flatten_end(self, ref_index: RefIndexMapping):
     if self.ref_index is None:
       # outer split (1), store the references
       self.ref_index = ref_index
@@ -1000,15 +998,13 @@ class UpdateContext:
       :class:`GraphDef` and one or more :class:`State`'s equal to the number of filters passed. If no
       filters are passed, a single :class:`State` is returned.
     """
-    ref_index: RefMap[tp.Any, Index] = RefMap()
+    ref_index = RefIndexMapping({})
     graphdef, state = flatten(node, ref_index)
     states = _split_state(state, filters)
 
     if self.index_ref is not None and isinstance(graphdef, NodeDef):
-      index_to_index = compose_mapping(self.index_ref, ref_index)
-      graphdef = dataclasses.replace(
-        graphdef, index_mapping=HashableMapping(index_to_index, copy=False)
-      )
+      index_to_index = create_index_mapping(self.index_ref, ref_index)
+      graphdef = dataclasses.replace(graphdef, index_mapping=index_to_index)
 
     self.flatten_end(ref_index)
 
@@ -1031,15 +1027,13 @@ class UpdateContext:
     if graphdef.index_mapping is not None:
       # outer merge (4), create index_ref_cache
       assert self.ref_index is not None
-      index_ref_cache = compose_mapping_reversed(
-        self.ref_index, graphdef.index_mapping
-      )
+      index_ref_cache = create_index_ref(self.ref_index, graphdef.index_mapping)
     else:
       # inner merge (2)
       index_ref_cache = None
 
     state = State.merge(state, *states)
-    index_ref: dict[Index, tp.Any] = {}
+    index_ref = IndexRefMapping({})
     node = unflatten(
       graphdef, state, index_ref=index_ref, index_ref_cache=index_ref_cache
     )
@@ -1751,16 +1745,30 @@ def _iter_graph(
   yield path_parts, node
 
 
-def compose_mapping(
-  map_ab: tp.Mapping[A, B], map_bc: tp.Mapping[B, C], /
-) -> dict[A, C]:
-  return {a: map_bc[b] for a, b in map_ab.items() if b in map_bc}
+def create_index_mapping(
+  index_ref: IndexRefMapping, ref_index: RefIndexMapping, /
+) -> IndexMapping:
+  return IndexMapping(
+    {a: ref_index[b] for a, b in index_ref.items() if b in ref_index},
+    copy=True,
+  )
 
 
-def compose_mapping_reversed(
-  map_ab: tp.Mapping[A, B], map_bc: tp.Mapping[B, C], /
-) -> dict[C, A]:
-  return {map_bc[b]: a for a, b in map_ab.items() if b in map_bc}
+def create_index_ref(
+  ref_index: RefIndexMapping, index_mapping: IndexMapping, /
+) -> IndexRefMapping:
+  return {
+    index_mapping[index]: ref
+    for ref, index in ref_index.items()
+    if index in index_mapping
+  }
+
+
+if not tp.TYPE_CHECKING:
+  if config.flax_use_flaxlib:
+    import flaxlib
+
+    create_index_ref = flaxlib.create_index_ref
 
 
 @dataclasses.dataclass(frozen=True)
