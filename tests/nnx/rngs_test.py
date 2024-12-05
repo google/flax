@@ -134,9 +134,9 @@ class TestRngs(absltest.TestCase):
 
     self.assertEqual(m.rngs.params.count.value, 2)
     self.assertEqual(m.rngs['dropout'].count.value, 0)
-    self.assertLen(dropout_keys.flat_state(), 1)
-    self.assertLen(param_keys.flat_state(), 1)
-    self.assertLen(rng_counts.flat_state(), 2)
+    self.assertLen(nnx.to_flat_state(dropout_keys), 1)
+    self.assertLen(nnx.to_flat_state(param_keys), 1)
+    self.assertLen(nnx.to_flat_state(rng_counts), 2)
 
     # split dropout keys
     split_dropout_keys = jax.tree.map(
@@ -184,10 +184,10 @@ class TestRngs(absltest.TestCase):
     self.assertLen(jax.tree.leaves(split_counts), 2)
     self.assertEmpty(jax.tree.leaves(broadcast_keys))
     self.assertEmpty(jax.tree.leaves(broadcast_counts))
-    self.assertEqual(split_keys.params.key.value.shape, (4,))
-    self.assertEqual(split_keys.dropout.key.value.shape, (4,))
-    self.assertEqual(split_counts.params.count.value, 0)
-    self.assertEqual(split_counts.dropout.count.value, 0)
+    self.assertEqual(split_keys['params']['key'].value.shape, (4,))
+    self.assertEqual(split_keys['dropout']['key'].value.shape, (4,))
+    self.assertEqual(split_counts['params']['count'].value, 0)
+    self.assertEqual(split_counts['dropout']['count'].value, 0)
 
   def test_state_fork_split_and_broadcast(self):
     rngs = nnx.Rngs(params=0, dropout=1)
@@ -200,10 +200,10 @@ class TestRngs(absltest.TestCase):
     self.assertLen(jax.tree.leaves(split_counts), 1)
     self.assertLen(jax.tree.leaves(broadcast_keys), 1)
     self.assertLen(jax.tree.leaves(broadcast_counts), 1)
-    self.assertEqual(split_keys.params.key.value.shape, (4,))
-    self.assertEqual(broadcast_keys.dropout.key.value.shape, ())
-    self.assertEqual(split_counts.params.count.value, 0)
-    self.assertEqual(broadcast_counts.dropout.count.value, 0)
+    self.assertEqual(split_keys['params']['key'].value.shape, (4,))
+    self.assertEqual(broadcast_keys['dropout']['key'].value.shape, ())
+    self.assertEqual(split_counts['params']['count'].value, 0)
+    self.assertEqual(broadcast_counts['dropout']['count'].value, 0)
 
   def test_state_fork_multidimensional_split(self):
     rngs = nnx.Rngs(params=0, dropout=1)
@@ -216,10 +216,10 @@ class TestRngs(absltest.TestCase):
     self.assertLen(jax.tree.leaves(split_counts), 2)
     self.assertEmpty(jax.tree.leaves(broadcast_keys))
     self.assertEmpty(jax.tree.leaves(broadcast_counts))
-    self.assertEqual(split_keys.params.key.value.shape, (4, 1, 3))
-    self.assertEqual(split_keys.dropout.key.value.shape, (4, 1, 3))
-    self.assertEqual(split_counts.params.count.value, 0)
-    self.assertEqual(split_counts.dropout.count.value, 0)
+    self.assertEqual(split_keys['params']['key'].value.shape, (4, 1, 3))
+    self.assertEqual(split_keys['dropout']['key'].value.shape, (4, 1, 3))
+    self.assertEqual(split_counts['params']['count'].value, 0)
+    self.assertEqual(split_counts['dropout']['count'].value, 0)
 
   def test_state_fork_multidimensional_split_mixed(self):
     rngs = nnx.Rngs(params=0, dropout=1)
@@ -232,10 +232,10 @@ class TestRngs(absltest.TestCase):
     self.assertLen(jax.tree.leaves(split_counts), 1)
     self.assertLen(jax.tree.leaves(broadcast_keys), 1)
     self.assertLen(jax.tree.leaves(broadcast_counts), 1)
-    self.assertEqual(split_keys.params.key.value.shape, (4, 1, 3))
-    self.assertEqual(broadcast_keys.dropout.key.value.shape, ())
-    self.assertEqual(split_counts.params.count.value, 0)
-    self.assertEqual(broadcast_counts.dropout.count.value, 0)
+    self.assertEqual(split_keys['params']['key'].value.shape, (4, 1, 3))
+    self.assertEqual(broadcast_keys['dropout']['key'].value.shape, ())
+    self.assertEqual(split_counts['params']['count'].value, 0)
+    self.assertEqual(broadcast_counts['dropout']['count'].value, 0)
 
   def test_reseed(self):
     class Model(nnx.Module):

@@ -214,22 +214,16 @@ class Optimizer(Object):
       ...     return self.linear(x) + self.custom_variable
       >>> model = Model(rngs=nnx.Rngs(0))
       >>> jax.tree.map(jnp.shape, nnx.state(model))
-      State({
-        'custom_variable': VariableState(
-          type=CustomVariable,
-          value=(1, 3)
-        ),
-        'linear': {
-          'bias': VariableState(
-            type=Param,
-            value=(3,)
-          ),
-          'kernel': VariableState(
-            type=Param,
-            value=(2, 3)
-          )
-        }
-      })
+      {'custom_variable': VariableState(
+        type=CustomVariable,
+        value=(1, 3)
+      ), 'linear': {'bias': VariableState(
+        type=Param,
+        value=(3,)
+      ), 'kernel': VariableState(
+        type=Param,
+        value=(2, 3)
+      )}}
 
       >>> # update:
       >>> # - only Linear layer parameters

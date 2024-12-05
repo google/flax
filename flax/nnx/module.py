@@ -425,7 +425,7 @@ class Module(Object, metaclass=ModuleMeta):
 # -------------------------
 def _module_flatten(module: Module, *, with_keys: bool):
   graphdef, state = graph.split(module)
-  key_values = sorted(state.raw_mapping.items())
+  key_values = sorted(state.items())
   keys = tuple(key for key, _ in key_values)
 
   children: tuple[tp.Any, ...]

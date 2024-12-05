@@ -290,16 +290,13 @@ class Linear(Module):
 
     >>> layer = nnx.Linear(in_features=3, out_features=4, rngs=nnx.Rngs(0))
     >>> jax.tree.map(jnp.shape, nnx.state(layer))
-    State({
-      'bias': VariableState(
-        type=Param,
-        value=(4,)
-      ),
-      'kernel': VariableState(
-        type=Param,
-        value=(3, 4)
-      )
-    })
+    {'bias': VariableState(
+      type=Param,
+      value=(4,)
+    ), 'kernel': VariableState(
+      type=Param,
+      value=(3, 4)
+    )}
 
   Attributes:
     in_features: the number of input features.
@@ -1062,16 +1059,14 @@ class Embed(Module):
 
     >>> layer = nnx.Embed(num_embeddings=5, features=3, rngs=nnx.Rngs(0))
     >>> nnx.state(layer)
-    State({
-      'embedding': VariableState(
-        type=Param,
-        value=Array([[-0.90411377, -0.3648777 , -1.1083648 ],
-               [ 0.01070483,  0.27923733,  1.7487359 ],
-               [ 0.59161806,  0.8660184 ,  1.2838588 ],
-               [-0.748139  , -0.15856352,  0.06061118],
-               [-0.4769059 , -0.6607095 ,  0.46697947]], dtype=float32)
-      )
-    })
+    {'embedding': VariableState(
+      type=Param,
+      value=Array([[-0.90411377, -0.3648777 , -1.1083648 ],
+             [ 0.01070483,  0.27923733,  1.7487359 ],
+             [ 0.59161806,  0.8660184 ,  1.2838588 ],
+             [-0.748139  , -0.15856352,  0.06061118],
+             [-0.4769059 , -0.6607095 ,  0.46697947]], dtype=float32)
+    )}
     >>> # get the first three and last three embeddings
     >>> indices_input = jnp.array([[0, 1, 2], [-1, -2, -3]])
     >>> layer(indices_input)

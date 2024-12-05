@@ -108,12 +108,12 @@ class TestLora(absltest.TestCase):
     _, lora_params, params = nnx.split(model, nnx.LoRAParam, nnx.Param)
     assert params == {}
     assert ('lora_a' in lora_params) and ('lora_b' in lora_params)
-    np.testing.assert_allclose(lora_params.lora_a.value, model.lora_a.value)
+    np.testing.assert_allclose(lora_params['lora_a'].value, model.lora_a.value)
 
     model = nnx.LoRA(3, 4, 2, lora_param_type=nnx.Param, rngs=rngs)
     _, params, lora_params = nnx.split(model, nnx.Param, nnx.LoRAParam)
     assert ('lora_a' in params) and ('lora_b' in params)
-    np.testing.assert_allclose(params.lora_a.value, model.lora_a.value)
+    np.testing.assert_allclose(params['lora_a'].value, model.lora_a.value)
     assert lora_params == {}
 
 

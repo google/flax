@@ -22,6 +22,7 @@ import jax.numpy as jnp
 
 from flax import struct
 from flax.nnx import graph
+from flax.nnx import statelib
 from flax.nnx.statelib import State
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
@@ -259,11 +260,14 @@ def fork(
   else:
     num_splits = tuple(x if x is not None else 1 for x in split_pattern)
 
-  split_keys, split_counts, broadcast_keys, broadcast_counts = state.split(
-    All(split_filter, RngKey),
-    All(split_filter, RngCount),
-    RngKey,
-    RngCount,
+  split_keys, split_counts, broadcast_keys, broadcast_counts = (
+    statelib.split_state(
+      state,
+      All(split_filter, RngKey),
+      All(split_filter, RngCount),
+      RngKey,
+      RngCount,
+    )
   )
 
   def split_key(key: tp.Any) -> jax.Array:

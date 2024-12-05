@@ -21,6 +21,7 @@ import typing as tp
 from flax import struct
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx import extract, filterlib, graph, rnglib, spmd, variablelib
+from flax.nnx import statelib
 from flax.nnx.module import GraphDef, Module
 from flax.nnx.proxy_caller import DelayedAccessor
 from flax.nnx.statelib import State
@@ -81,11 +82,14 @@ def _fork_vmap_keys(
   split_filter: filterlib.Filter,
   num_splits: int,
 ) -> _VmapForkStates:
-  split_keys, split_counts, broadcast_keys, broadcast_counts = state.split(
-    filterlib.All(split_filter, rnglib.RngKey),
-    filterlib.All(split_filter, rnglib.RngCount),
-    rnglib.RngKey,
-    rnglib.RngCount,
+  split_keys, split_counts, broadcast_keys, broadcast_counts = (
+    statelib.split_state(
+      state,
+      filterlib.All(split_filter, rnglib.RngKey),
+      filterlib.All(split_filter, rnglib.RngCount),
+      rnglib.RngKey,
+      rnglib.RngCount,
+    )
   )
 
   def split_key(key: tp.Any, count: tp.Any) -> jax.Array:
@@ -200,9 +204,13 @@ def vmap_fn(
     *filters,
   )
 
-  split_keys_out, broadcast_keys_out = rng_state_out.split(split_rngs, ...)
+  split_keys_out, broadcast_keys_out = statelib.split_state(
+    rng_state_out, split_rngs, ...
+  )
 
-  broadcast_state_out = State.merge(broadcast_state_out, broadcast_keys_out)
+  broadcast_state_out = statelib.merge_state(
+    broadcast_state_out, broadcast_keys_out
+  )
 
   # add metadata axis name to Variable.sharding
   if spmd.PARTITION_NAME in transform_metadata:
@@ -567,11 +575,11 @@ def pmap_fn(
     *filters,
   )
 
-  not_keys_out, split_keys_out, broadcast_keys_out = rng_state_out.split(
-    rnglib.NotKey, split_rngs, ...
+  not_keys_out, split_keys_out, broadcast_keys_out = statelib.split_state(
+    rng_state_out, rnglib.NotKey, split_rngs, ...
   )
 
-  broadcast_state_out = State.merge(
+  broadcast_state_out = statelib.merge_state(
     broadcast_state_out, broadcast_keys_out, not_keys_out
   )
 
@@ -1138,8 +1146,8 @@ def scan_fn(
     *filters,
   )
 
-  split_rng_state_out, broadcast_rng_state_out = rng_state_out.split(
-    broadcasts.split_rngs, ...
+  split_rng_state_out, broadcast_rng_state_out = statelib.split_state(
+    rng_state_out, broadcasts.split_rngs, ...
   )
 
   def _extract_carry_state(state: State, /):
@@ -1306,7 +1314,9 @@ def scan(
         )
 
     # split rng state
-    split_rng_state, broadcast_rng_state = rng_state.split(split_rngs, ...)
+    split_rng_state, broadcast_rng_state = statelib.split_state(
+      rng_state, split_rngs, ...
+    )
 
     broadcasts = ScanBroadcasts(
       flatdef,
@@ -1355,11 +1365,11 @@ def scan(
     )
 
     if carry_state_out:
-      carry_state_out = State({0: carry_state_out._mapping})
+      carry_state_out = State({0: carry_state_out})
     if split_rng_state_out:
-      split_rng_state_out = State({0: split_rng_state_out._mapping})
+      split_rng_state_out = State({0: split_rng_state_out})
     if broadcast_rng_state_out:
-      broadcast_rng_state_out = State({0: broadcast_rng_state_out._mapping})
+      broadcast_rng_state_out = State({0: broadcast_rng_state_out})
 
     _, output_graph_nodes = ctx.merge(
       graphdef_out,
@@ -1574,10 +1584,10 @@ def grad_fn(*args):
   *args, f, graphdef, non_diff_state, has_aux, diff_args = args
 
   # rebuild diff_state from substates in args
-  diff_state = State({})
+  diff_state = State()
   for i in diff_args:
     diff_state[i] = args[i]
-  diff_state: graph.GraphState = State({0: diff_state.raw_mapping})
+  diff_state = State({0: diff_state})
 
   diff_graph_nodes, input_nodes = ctx.merge(
     graphdef, diff_state, non_diff_state
@@ -1710,16 +1720,13 @@ def grad(
     ...
     >>> grads = grad_fn(m, x, y)
     >>> jax.tree.map(jnp.shape, grads)
-    State({
-      'bias': VariableState(
-        type=Param,
-        value=(3,)
-      ),
-      'kernel': VariableState(
-        type=Param,
-        value=(2, 3)
-      )
-    })
+    {'bias': VariableState(
+      type=Param,
+      value=(3,)
+    ), 'kernel': VariableState(
+      type=Param,
+      value=(2, 3)
+    )}
 
   Args:
     fun: Function to be differentiated. Its arguments at positions specified by

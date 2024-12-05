@@ -91,7 +91,7 @@ class TestGraphUtils(absltest.TestCase):
     g = List([a, 3, a, nnx.Param(4)])
 
     graphdef, state = nnx.split(g)
-    pure_state = state.to_pure_dict()
+    pure_state = nnx.to_pure_dict(state)
 
     g = nnx.merge(graphdef, pure_state)
 
@@ -132,7 +132,7 @@ class TestGraphUtils(absltest.TestCase):
     g = [a, 3, a, nnx.Param(4)]
 
     graphdef, state = nnx.split(g)
-    pure_state = state.to_pure_dict()
+    pure_state = nnx.to_pure_dict(state)
 
     pure_state[0]['b'] = 3
     nnx.update(g, pure_state)
@@ -163,7 +163,7 @@ class TestGraphUtils(absltest.TestCase):
 
     graphdef, state = nnx.split(g)
 
-    assert len(state.flat_state()) == 1
+    assert len(nnx.to_flat_state(state)) == 1
 
     g2 = nnx.merge(graphdef, state)
 
@@ -181,7 +181,7 @@ class TestGraphUtils(absltest.TestCase):
     node = Foo(rngs=nnx.Rngs(0))
     graphdef, state = nnx.split(node)
 
-    assert len(state.flat_state()) == 3  # 2 bias + 1 kernel
+    assert len(nnx.to_flat_state(state)) == 3  # 2 bias + 1 kernel
 
     node2 = nnx.merge(graphdef, state)
 
@@ -214,7 +214,7 @@ class TestGraphUtils(absltest.TestCase):
     model = Encoder(rngs=nnx.Rngs(0))
     graphdef, state = nnx.split(model)
 
-    assert len(state.flat_state()) == 1
+    assert len(nnx.to_flat_state(state)) == 1
 
     x = jax.random.randint(jax.random.key(0), (2,), 0, 10)
     y = model(x)
@@ -230,16 +230,16 @@ class TestGraphUtils(absltest.TestCase):
     graphdef, state = nnx.split(m)
 
     assert isinstance(m.a, nnx.Param)
-    assert issubclass(state.a.type, nnx.Param)
-    assert m.a is not state.a
-    assert m.a.value == state.a.value
+    assert issubclass(state['a'].type, nnx.Param)
+    assert m.a is not state['a']
+    assert m.a.value == state['a'].value
 
     m2 = nnx.merge(graphdef, state)
 
     assert isinstance(m2.a, nnx.Param)
-    assert issubclass(state.a.type, nnx.Param)
-    assert m2.a is not state.a
-    assert m2.a.value == state.a.value
+    assert issubclass(state['a'].type, nnx.Param)
+    assert m2.a is not state['a']
+    assert m2.a.value == state['a'].value
 
   def test_shared_state_variables_not_shared_with_graph(self):
     class Foo(nnx.Module):
@@ -253,22 +253,22 @@ class TestGraphUtils(absltest.TestCase):
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(m.b, nnx.Param)
-    assert issubclass(state.a.type, nnx.Param)
+    assert issubclass(state['a'].type, nnx.Param)
     assert 'b' not in state
-    assert m.a is not state.a
-    assert m.b is not state.a
-    assert m.a.value == state.a.value
-    assert m.b.value == state.a.value
+    assert m.a is not state['a']
+    assert m.b is not state['a']
+    assert m.a.value == state['a'].value
+    assert m.b.value == state['a'].value
 
     m2 = nnx.merge(graphdef, state)
 
     assert isinstance(m2.a, nnx.Param)
     assert isinstance(m2.b, nnx.Param)
-    assert issubclass(state.a.type, nnx.Param)
-    assert m2.a is not state.a
-    assert m2.b is not state.a
-    assert m2.a.value == state.a.value
-    assert m2.b.value == state.a.value
+    assert issubclass(state['a'].type, nnx.Param)
+    assert m2.a is not state['a']
+    assert m2.b is not state['a']
+    assert m2.a.value == state['a'].value
+    assert m2.b.value == state['a'].value
     assert m2.a is m2.b
 
   def test_pytree_flatten(self):
@@ -306,7 +306,7 @@ class TestGraphUtils(absltest.TestCase):
     graphdef, state = nnx.split(m)
 
     assert 'tree' in state
-    assert 'a' in state.tree
+    assert 'a' in state['tree']
     assert graphdef.attributes[0].value.type is nnx.graph.GenericPytree
 
     m2 = nnx.merge(graphdef, state)
@@ -531,8 +531,8 @@ class TestGraphUtils(absltest.TestCase):
     self.assertFalse(hasattr(ctx, 'ctxtag'))
     self.assertIsInstance(graphdef1, nnx.graph.NodeDef)
     self.assertIsInstance(graphdef2, nnx.graph.NodeRef)
-    self.assertLen(state1.flat_state(), 2)
-    self.assertLen(state2.flat_state(), 0)
+    self.assertLen(nnx.to_flat_state(state1), 2)
+    self.assertLen(nnx.to_flat_state(state2), 0)
 
     with nnx.graph.merge_context() as ctx:
       m1 = ctx.merge(graphdef1, state1)
@@ -551,8 +551,8 @@ class TestGraphUtils(absltest.TestCase):
 
     self.assertIsInstance(graphdef1, nnx.graph.NodeDef)
     self.assertIsInstance(graphdef2, nnx.graph.NodeRef)
-    self.assertLen(state1.flat_state(), 2)
-    self.assertLen(state2.flat_state(), 0)
+    self.assertLen(nnx.to_flat_state(state1), 2)
+    self.assertLen(nnx.to_flat_state(state2), 0)
 
     with nnx.graph.merge_context() as ctx:
       m1 = ctx.merge(graphdef1, state1)
@@ -581,8 +581,8 @@ class TestGraphUtils(absltest.TestCase):
       self.assertFalse(hasattr(ctx, 'ctxtag'))
       self.assertIsInstance(graphdef1, nnx.graph.NodeDef)
       self.assertIsInstance(graphdef2, nnx.graph.NodeRef)
-      self.assertLen(state1.flat_state(), 1)
-      self.assertLen(state2.flat_state(), 0)
+      self.assertLen(nnx.to_flat_state(state1), 1)
+      self.assertLen(nnx.to_flat_state(state2), 0)
 
       @jax.jit
       def f(graphdef1, state1, graphdef2, state2):
@@ -635,8 +635,8 @@ class TestGraphUtils(absltest.TestCase):
     assert isinstance(t2, nnx.NodeStates)
     self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
     self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
-    self.assertLen(t1.states[0].flat_state(), 2)
-    self.assertLen(t2.states[0].flat_state(), 0)
+    self.assertLen(nnx.to_flat_state(t1.states[0]), 2)
+    self.assertLen(nnx.to_flat_state(t2.states[0]), 0)
 
     impure_tree2 = nnx.from_tree(pure_tree)
 
@@ -670,8 +670,8 @@ class TestGraphUtils(absltest.TestCase):
       assert isinstance(t2, nnx.NodeStates)
       self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
       self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
-      self.assertLen(t1.states[0].flat_state(), 1)
-      self.assertLen(t2.states[0].flat_state(), 0)
+      self.assertLen(nnx.to_flat_state(t1.states[0]), 1)
+      self.assertLen(nnx.to_flat_state(t2.states[0]), 0)
 
       @jax.jit
       def f(pure_tree):
@@ -697,8 +697,8 @@ class TestGraphUtils(absltest.TestCase):
         assert isinstance(t2, nnx.NodeStates)
         self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
         self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
-        self.assertLen(t1.states[0].flat_state(), 1)
-        self.assertLen(t2.states[0].flat_state(), 0)
+        self.assertLen(nnx.to_flat_state(t1.states[0]), 1)
+        self.assertLen(nnx.to_flat_state(t2.states[0]), 0)
 
         return pure_tree2
 

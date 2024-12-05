@@ -235,8 +235,8 @@ abs_state = jax.tree.map(
 )
 loaded_sharded = checkpointer.restore(path / 'checkpoint_name',
                                       target=abs_state)
-jax.debug.visualize_array_sharding(loaded_sharded.dot1.kernel.value)
-jax.debug.visualize_array_sharding(loaded_sharded.w2.value)
+jax.debug.visualize_array_sharding(loaded_sharded['dot1']['kernel'].value)
+jax.debug.visualize_array_sharding(loaded_sharded['w2'].value)
 ```
 
 ## Compile the training loop

@@ -71,6 +71,6 @@ def module_from_linen_variables(
           f' exist (original path={path}).'
       )
     state[mapped_path].value = val
-  state = nnx.State.from_flat_path(state)
+  state = nnx.from_flat_state(state)
 
   return nnx.merge(graph_def, state)

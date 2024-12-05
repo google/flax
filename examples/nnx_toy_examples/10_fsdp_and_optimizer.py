@@ -84,7 +84,7 @@ class SGD(nnx.Object):
 
     self.lr = lr
     self.params = params
-    self.momentum = jax.tree.map(init_optimizer_state, self.params)
+    self.momentum: nnx.State = jax.tree.map(init_optimizer_state, self.params)
     self.decay = decay
 
   def update(self, grads: nnx.State):
@@ -117,7 +117,7 @@ def create_model():
     else:
       raise ValueError(f'Unknown path: {path}')
 
-  named_shardings = state.map(get_named_shardings)
+  named_shardings = nnx.map_state(get_named_shardings, state)
   sharded_state = jax.lax.with_sharding_constraint(state, named_shardings)
   nnx.update(optimizer, sharded_state)
   return model, optimizer
@@ -126,7 +126,7 @@ def create_model():
 model, optimizer = create_model()
 
 jax.debug.visualize_array_sharding(model.w1.value)
-jax.debug.visualize_array_sharding(optimizer.momentum.w1.value)
+jax.debug.visualize_array_sharding(optimizer.momentum['w1'].value)
 
 
 @nnx.jit
