@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Flax Module."""
+from __future__ import annotations
 
 import contextlib
 import dataclasses
@@ -23,14 +24,16 @@ import sys
 import threading
 import typing
 import weakref
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from types import MappingProxyType
 from typing import (
   Any,
+  Generic,
   Literal,
   Optional,
   TypeVar,
   Union,
-  overload,
+  overload
 )
 from collections.abc import Callable, Iterable, Iterator, Mapping
 
@@ -53,15 +56,18 @@ from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (
   CollectionFilter,
   DenyList,
+  PRNGSequenceFilter,
   Variable,
+  freeze_filter,
+  in_filter,
   union_filters,
 )
 from flax.ids import FlaxId, uuid
 from flax.linen import kw_only_dataclasses
 from flax.typing import (
-  RNGSequences,
-  PRNGKey,
   FrozenVariableDict,
+  PRNGKey,
+  RNGSequences,
   VariableDict,
 )
 
@@ -72,7 +78,9 @@ T = TypeVar('T')
 K = TypeVar('K')
 M = TypeVar('M', bound='Module')
 _CallableT = TypeVar('_CallableT', bound=Callable)
-
+AxesValue = Union[int, None]
+SplitPattern = Union[AxesValue, tuple[AxesValue, ...]]
+Path = tuple[str, ...]
 
 # Used for abstractly testing module behavior.
 TestScope = type(
@@ -108,7 +116,7 @@ def _attr_repr(value: Any):
   return value_rep
 
 
-def _module_repr(module: 'Module', num_spaces: int = 4):
+def _module_repr(module: Module, num_spaces: int = 4):
   """Returns a pretty printed representation of the module."""
   cls = type(module)
   try:
@@ -153,7 +161,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
 class _CallInfo:
   index: int
   path: tuple[str, ...]
-  module: 'Module'
+  module: Module
   rngs: dict[str, core.scope.PRNGKey | core.scope.LazyRng] | None
   mutable: bool
   method: str
@@ -289,7 +297,7 @@ class InterceptorContext:
       short circuit all other interceptors.
   """
 
-  module: 'Module'
+  module: Module
   method_name: str
   orig_method: Callable[..., Any]
 
@@ -394,7 +402,7 @@ def intercept_methods(interceptor: Interceptor):
 
 def run_interceptors(
   orig_method: Callable[..., Any],
-  module: 'Module',
+  module: Module,
   *args,
   **kwargs,
 ) -> Any:
@@ -430,7 +438,7 @@ def _sorted_items(x):
 
 def _get_suffix_value_pairs(
   tree_or_leaf: Any,
-) -> list[tuple[str, type['Module']]]:
+) -> list[tuple[str, type[Module]]]:
   """Helper for naming pytrees of submodules."""
   dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
   if not isinstance(dict_or_leaf, dict) or not dict_or_leaf:
@@ -704,7 +712,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
   return wrapped_module_method
 
 
-def wrap_descriptor_once(descriptor) -> 'DescriptorWrapper':
+def wrap_descriptor_once(descriptor) -> DescriptorWrapper:
   """Wraps a descriptor to give better error messages.
 
   Args:
@@ -769,7 +777,7 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
   return method_or_fn
 
 
-def _map_submodules(fn: Callable[['Module'], Any], tree):
+def _map_submodules(fn: Callable[[Module], Any], tree):
   """Map a function over all submodules in a tree."""
   g = lambda _, x: fn(x) if isinstance(x, Module) else x
   return _freeze_attr(_map_over_modules_in_tree(g, tree))
@@ -798,7 +806,7 @@ class _ModuleInternalState:
   setup_called: SetupState = SetupState.NEW
   is_initialized: bool = False
   autoname_cursor: dict[str, int] = dataclasses.field(default_factory=dict)
-  children: dict[str, Union[str, 'Module']] = dataclasses.field(
+  children: dict[str, str | Module] = dataclasses.field(
     default_factory=dict
   )
 
@@ -812,7 +820,7 @@ class _ModuleInternalState:
     self.in_setup = False
     self.autoname_cursor = dict()
 
-  def export(self) -> '_ModuleInternalState':
+  def export(self) -> _ModuleInternalState:
     """Exports transform-preserved state across transform boundary."""
     setup_state = (
       SetupState.TRANSFORMED if self.setup_called else SetupState.NEW
@@ -826,7 +834,7 @@ class _ModuleInternalState:
     )
     return cloned
 
-  def reimport(self, other: '_ModuleInternalState') -> None:
+  def reimport(self, other: _ModuleInternalState) -> None:
     """Re-imports transform-preserved state from across transform boundary."""
     self.in_compact_method = other.in_compact_method
     self.in_setup = other.in_setup
@@ -848,7 +856,7 @@ _UNDEFINED_COPY_PICKLE_METHODS = (
 )
 
 
-_caches: 'weakref.WeakKeyDictionary[Scope, weakref.WeakValueDictionary[FlaxId, Module]]' = weakref.WeakKeyDictionary()
+_caches: weakref.WeakKeyDictionary[Scope, weakref.WeakValueDictionary[FlaxId, Module]] = weakref.WeakKeyDictionary()
 
 
 tuple_reduce = lambda xs, x: xs + (x,)
@@ -976,8 +984,9 @@ class ModuleBase:
   if typing.TYPE_CHECKING:
     scope: Scope | None
     _state: _ModuleInternalState
-    _parent_ref: Union['Module', weakref.ReferenceType['Module'], None]
+    _parent_ref: Module | weakref.ReferenceType[Module] | None
     __dataclass_fields__: dict[str, dataclasses.Field]
+    _id: FlaxId
 
 
 class Module(ModuleBase):
@@ -1018,7 +1027,7 @@ class Module(ModuleBase):
 
   if typing.TYPE_CHECKING:
     name: str | None = module_field(kw_only=True, default=None)
-    parent: Union['Module', _Sentinel, None] = module_field(
+    parent: Module | _Sentinel | None = module_field(
       kw_only=True, default=None
     )
 
@@ -1569,7 +1578,7 @@ class Module(ModuleBase):
   def clone(
     self: M,
     *,
-    parent: Union[Scope, 'Module', _Sentinel] | None = None,
+    parent: Scope | Module | _Sentinel | None = None,
     _deep_clone: bool | weakref.WeakValueDictionary = False,
     _reset_names: bool = False,
     **updates,
@@ -1645,7 +1654,7 @@ class Module(ModuleBase):
   def copy(
     self: M,
     *,
-    parent: Union[Scope, 'Module', _Sentinel] | None = _unspecified_parent,
+    parent: Scope | Module | _Sentinel | None = _unspecified_parent,
     name: str | None = None,
     **updates,
   ) -> M:
@@ -2087,7 +2096,7 @@ class Module(ModuleBase):
     rngs: PRNGKey | RNGSequences | None = None,
     method: Callable[..., Any] | str | None = None,
     mutable: CollectionFilter = False,
-    capture_intermediates: bool | Callable[['Module', str], bool] = False,
+    capture_intermediates: bool | Callable[[Module, str], bool] = False,
     **kwargs,
   ) -> Any | tuple[Any, FrozenVariableDict | dict[str, Any]]:
     """Applies a module method to variables and returns output and modified variables.
@@ -2246,7 +2255,7 @@ class Module(ModuleBase):
     *args,
     method: Callable[..., Any] | str | None = None,
     mutable: CollectionFilter = DenyList('intermediates'),
-    capture_intermediates: bool | Callable[['Module', str], bool] = False,
+    capture_intermediates: bool | Callable[[Module, str], bool] = False,
     **kwargs,
   ) -> tuple[Any, FrozenVariableDict | dict[str, Any]]:
     """Initializes a module method with variables and returns output and modified variables.
@@ -2310,7 +2319,7 @@ class Module(ModuleBase):
     *args,
     method: Callable[..., Any] | str | None = None,
     mutable: CollectionFilter = DenyList('intermediates'),
-    capture_intermediates: bool | Callable[['Module', str], bool] = False,
+    capture_intermediates: bool | Callable[[Module, str], bool] = False,
     **kwargs,
   ) -> FrozenVariableDict | dict[str, Any]:
     """Initializes a module method with variables and returns modified variables.
@@ -2852,7 +2861,7 @@ class Module(ModuleBase):
     show_repeated: bool = False,
     mutable: CollectionFilter = DenyList('intermediates'),
     **kwargs,
-  ) -> dict[str, 'Module']:
+  ) -> dict[str, Module]:
     """Returns a dictionary mapping module paths to module instances.
 
     This method has the same signature and internally calls ``Module.init``,
@@ -2907,6 +2916,375 @@ class Module(ModuleBase):
 
     return {'/'.join(row.path): row.module_copy for row in table}
 
+  def split(
+    self,
+    filter_splits: Mapping[
+      PRNGSequenceFilter, int | tuple[int, ...] | None
+    ] = FrozenDict(),
+    /,
+    **str_filter_splits: int | tuple[int, ...] | None,
+  ):
+    Module._module_checks(self)
+    filter_splits = {**filter_splits, **str_filter_splits}
+
+    if self.scope is None:
+      raise errors.CallUnbindOnUnboundModuleError()
+
+    scopes: dict[Path, Scope] = {}
+    refs: dict[FlaxId, int] = {}
+    moduledef = _split_recursive((), self, scopes, refs)
+    assert isinstance(moduledef, ModuleDef)
+
+    unique_scopes = _dedup_scopes(scopes)
+
+    variables = _get_variables_from_scopes(unique_scopes)
+    rngs = _split_rngs(self.scope, filter_splits)
+
+    return moduledef, variables, rngs
+
+
+# ----------------------------------------------------------------
+# split / merge API
+# ----------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class InstanceIndex:
+  index: int
+
+
+@dataclasses.dataclass(frozen=True)
+class ScopeDef:
+  local_path: Path
+  name: str | None
+  mutable: CollectionFilter
+  path: Path
+  flags: FrozenDict[str, Any]
+  rng_names: Path
+  rng_counters: FrozenDict[str, Any]
+
+
+@dataclasses.dataclass(frozen=True)
+class ModuleInternalStateDef:
+  in_compact_method: bool
+  in_setup: bool
+  setup_called: SetupState
+  is_initialized: bool
+  autoname_cursor: FrozenDict[str, int]
+  children: FrozenDict[str, str | int]
+
+
+@dataclasses.dataclass(frozen=True)
+class VariableDef:
+  index: int
+  collection: str
+  name: str
+  unbox: bool
+
+@dataclasses.dataclass(frozen=True)
+class DataclassDef:
+  dataclass_type: type
+  fields: FrozenDict[str, Any]
+
+
+@dataclasses.dataclass(frozen=True)
+class ModuleDef(Generic[M]):
+  index: int
+  module_type: type[M]
+  state: ModuleInternalStateDef
+  scope: ScopeDef
+  fields: FrozenDict[str, Any]
+
+  def merge(self, variables: VariableDict, rngs: dict[str, PRNGKey]) -> M:
+    raise NotImplementedError
+
+@dataclasses.dataclass(frozen=True)
+class PytreeDef:
+  treedef: jax.tree_util.PyTreeDef
+  leaves: tuple[Any, ...]
+
+
+jax.tree_util.register_static(ModuleDef)
+
+def _dedup_scopes(scopes: dict[Path, Scope]):
+  """Deduplicated scopes."""
+  minimal_set = {scope: path for path, scope in scopes.items()}
+  for leaf in scopes.values():
+    scope = leaf.parent
+    max_parent = leaf
+    while scope is not None:
+      if scope in minimal_set:
+        max_parent = scope
+      scope = scope.parent
+    if max_parent is not leaf and leaf in minimal_set:
+      del minimal_set[leaf]
+  return minimal_set
+
+
+def _get_variables_from_scopes(scopes: dict[Scope, Path]):
+  flat_variables = {}
+
+  for scope, scope_path in scopes.items():
+    scope._validate_trace_level()
+    scope._populate_collections()
+    flat_scope_variables: dict[Path, Any] = traverse_util.flatten_dict(
+      scope._variables
+    )
+    flat_variables.update(
+      # insert scope path into the variable path
+      ((path[0], *scope_path, *path[1:]), value)
+      for path, value in flat_scope_variables.items()
+    )
+
+  variables: dict[str, Any] = traverse_util.unflatten_dict(flat_variables)
+  return variables
+
+def _split_rngs(
+  scope: Scope,
+  filter_splits: Mapping[PRNGSequenceFilter, int | tuple[int, ...] | None],
+):
+  filter_patterns: list[
+    tuple[PRNGSequenceFilter, int | tuple[int, ...] | None]
+  ] = [
+    *filter_splits.items(),
+    (True, None),  # broadcast all remaining
+  ]
+
+  splits: dict[str, jax.Array] = {}
+  broadcasts: dict[str, jax.Array] = {}
+
+  for name in scope.rngs:
+    for _filter, pattern in filter_patterns:
+      if in_filter(_filter, name):
+        fork = _fork_rng_key(scope, name, pattern)
+        if pattern is None:
+          broadcasts[name] = fork
+        else:
+          splits[name] = fork
+        break
+    else:
+      raise RuntimeError(
+        f'Stream {name!r} did not match any filters, this is a bug.'
+      )
+
+  return SplitRngs(broadcasts, splits)
+
+
+def _fork_rng_key(
+  scope: Scope, name: str, num_splits: int | tuple[int, ...] | None
+):
+  if num_splits is None:
+    # broadcast key
+    key = scope.make_rng(name)
+  else:
+    # if isinstance(pattern, int):
+    #   num_splits = pattern
+    # else:
+    #   num_splits = tuple(x if x is not None else 1 for x in pattern)
+    key = jax.random.split(scope.rngs[name].rng, num_splits)
+    scope.rng_counters[name] += 1
+  return key
+
+
+def _split_recursive(
+  path: Path,
+  obj: Any,
+  scopes: dict[Path, Scope],
+  refs: dict[FlaxId, int],
+):
+  if isinstance(obj, Variable):
+    if obj._id in refs:
+      return InstanceIndex(refs[obj._id])
+    variable_index = len(refs)
+    refs[obj._id] = variable_index
+
+    return VariableDef(
+      index=variable_index,
+      collection=obj.collection,
+      name=obj.name,
+      unbox=obj.unbox,
+    )
+
+  elif isinstance(obj, Module):
+    if obj._id in refs:
+      return InstanceIndex(refs[obj._id])
+
+    scope = obj.scope
+    assert scope is not None
+    scopes[path] = scope
+    scope_def = ScopeDef(
+      local_path=path,
+      name=scope.name,
+      mutable=freeze_filter(scope.mutable),
+      path=scope.path,
+      flags=scope.flags,
+      rng_names=tuple(scope.rngs.keys()),
+      rng_counters=_freeze_collections(scope.rng_counters),
+    )
+
+    module_index = len(refs)
+    refs[obj._id] = module_index
+    fields = []
+
+    for field in dataclasses.fields(obj):
+      if not hasattr(obj, field.name):
+        continue
+      value = getattr(obj, field.name)
+      field_def = _split_recursive((*path, field.name), value, scopes, refs)
+      fields.append((field.name, field_def))
+
+    return ModuleDef(
+      index=module_index,
+      module_type=type(obj),
+      state=ModuleInternalStateDef(
+        in_compact_method=obj._state.in_compact_method,
+        in_setup=obj._state.in_setup,
+        setup_called=obj._state.setup_called,
+        is_initialized=obj._state.is_initialized,
+        autoname_cursor=_freeze_collections(obj._state.autoname_cursor),
+        children=FrozenDict(
+          {
+            name: child if isinstance(child, str) else refs[child._id]
+            for name, child in obj._state.children.items()
+          }
+        ),
+      ),
+      scope=scope_def,
+      fields=FrozenDict(fields),
+    )
+  elif dataclasses.is_dataclass(obj):
+    fields = []
+
+    for field in dataclasses.fields(obj):
+      if not hasattr(obj, field.name) or not field.init:
+        continue
+      value = getattr(obj, field.name)
+      field_def = _split_recursive((*path, field.name), value, scopes, refs)
+      fields.append((field.name, field_def))
+
+    return DataclassDef(
+      dataclass_type=type(obj),
+      fields=FrozenDict(fields),
+    )
+  elif _is_pytree_node(obj):
+    # flatten one level
+    leaves, treedef = jax.tree_util.tree_flatten_with_path(
+      obj, is_leaf=lambda x: x is not obj
+    )
+    leaf_defs = tuple(
+      _split_recursive(
+        (*path, _key_path_to_str(leaf_path[0])),
+        leaf,
+        scopes,
+        refs,
+      )
+      for leaf_path, leaf in leaves
+    )
+    return PytreeDef(treedef, leaf_defs)
+  else:
+    return obj
+
+
+def _is_pytree_node(x: Any) -> bool:
+  return not jax.tree_util.all_leaves([x])
+
+def _key_path_to_str(key: Any) -> str:
+  if isinstance(key, jax.tree_util.SequenceKey):
+    return str(key.idx)
+  elif isinstance(
+    key, (jax.tree_util.DictKey, jax.tree_util.FlattenedIndexKey)
+  ):
+    return str(key.key)
+  elif isinstance(key, jax.tree_util.GetAttrKey):
+    return key.name
+  else:
+    return str(key)
+
+
+def _freeze_collections(x: Any) -> Any:
+  if isinstance(x, str):
+    return x
+  if isinstance(x, Mapping):
+    return FrozenDict((k, _freeze_collections(v)) for k, v in x.items())
+  elif isinstance(x, Iterable):
+    return tuple(_freeze_collections(v) for v in x)
+  else:
+    return x
+
+
+def _normalize_pattern(pattern: SplitPattern) -> SplitPattern:
+  if isinstance(pattern, tuple):
+    return tuple(1 if axis is None else axis for axis in pattern)
+  else:
+    return pattern
+
+
+class SplitRngs(Mapping[str, PRNGKey]):
+
+  def __init__(
+      self,
+      broadcast_rngs: dict[str, PRNGKey],
+      split_rngs: dict[str, PRNGKey],
+  ):
+    self.broadcast_rngs = broadcast_rngs
+    self.split_rngs = split_rngs
+
+  def __getitem__(self, key: str) -> PRNGKey:
+    if key in self.broadcast_rngs:
+      return self.broadcast_rngs[key]
+    elif key in self.split_rngs:
+      return self.split_rngs[key]
+    else:
+      raise KeyError(f'Key "{key}" not found in SplitRng.')
+
+  def __iter__(self) -> Iterator[str]:
+    yield from self.broadcast_rngs
+    yield from self.split_rngs
+
+  def __len__(self) -> int:
+    return len(self.broadcast_rngs) + len(self.split_rngs)
+
+
+def _split_rng_flatten(rngs: SplitRngs, *, with_keys: bool):
+  broadcast_names = sorted(rngs.broadcast_rngs.keys())
+  split_names = sorted(rngs.split_rngs.keys())
+
+  items = [(name, rngs.broadcast_rngs[name]) for name in broadcast_names]
+  items += [(name, rngs.split_rngs[name]) for name in split_names]
+
+  if with_keys:
+    nodes = tuple((jax.tree_util.DictKey(name), value) for name, value in items)
+  else:
+    nodes = tuple(value for _, value in items)
+
+  metadata = (broadcast_names, split_names)
+
+  return nodes, metadata
+
+
+def _split_rng_unflatten(
+    metadata: tuple[tuple[str, ...], tuple[str, ...]], nodes: list[Any]
+):
+  broadcast_names, split_names = metadata
+  num_broadcasts = len(broadcast_names)
+  rngs = SplitRngs(
+      dict(zip(broadcast_names, nodes[:num_broadcasts])),
+      dict(zip(split_names, nodes[num_broadcasts:])),
+  )
+  return rngs
+
+
+jax.tree_util.register_pytree_with_keys(
+    SplitRngs,
+    functools.partial(_split_rng_unflatten, with_keys=True),
+    _split_rng_unflatten,
+    flatten_func=functools.partial(_split_rng_flatten, with_keys=False),
+)
+
+
+# ----------------------------------------------------------------
+# functional APIs
+# ----------------------------------------------------------------
 
 _ParentType = Union[Module, Scope, _Sentinel, None]
 
