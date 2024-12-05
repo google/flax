@@ -14,10 +14,8 @@
 
 """RNN modules for Flax."""
 
-from typing import (
-    Any,
-    TypeVar
-)
+from typing import Any, TypeVar
+from collections.abc import Mapping
 from collections.abc import Callable
 from functools import partial
 from typing_extensions import Protocol
@@ -27,13 +25,13 @@ import jax
 import jax.numpy as jnp
 
 from flax import nnx
-from flax.nnx import rnglib
+from flax.nnx import filterlib, rnglib
 from flax.nnx.module import Module
 from flax.nnx.nn import initializers
 from flax.nnx.nn.linear import Linear
 from flax.nnx.nn.activations import sigmoid
 from flax.nnx.nn.activations import tanh
-from flax.nnx.transforms.iteration import Carry
+from flax.nnx.transforms.iteration import Carry, StateAxes
 from flax.typing import (
     Dtype,
     Initializer,
@@ -593,15 +591,19 @@ class RNN(Module):
   using :func:`flax.nnx.scan`.
   """
 
+  state_axes: Mapping[str, int | type[Carry] | None]
+
   def __init__(
-      self,
-      cell: RNNCellBase,
-      time_major: bool = False,
-      return_carry: bool = False,
-      reverse: bool = False,
-      keep_order: bool = False,
-      unroll: int = 1,
-      rngs: rnglib.Rngs | None = None,
+    self,
+    cell: RNNCellBase,
+    time_major: bool = False,
+    return_carry: bool = False,
+    reverse: bool = False,
+    keep_order: bool = False,
+    unroll: int = 1,
+    rngs: rnglib.Rngs | None = None,
+    state_axes: Mapping[str, int | type[Carry] | None] | None = None,
+    broadcast_rngs: filterlib.Filter = None,
   ):
     self.cell = cell
     self.time_major = time_major
@@ -612,19 +614,21 @@ class RNN(Module):
     if rngs is None:
       rngs = rnglib.Rngs(0)
     self.rngs = rngs
+    self.state_axes = state_axes or {...: Carry}  # type: ignore
+    self.broadcast_rngs = broadcast_rngs
 
   def __call__(
-        self,
-        inputs: Array,
-        *,
-        initial_carry: Carry | None = None,
-        seq_lengths: Array | None = None,
-        return_carry: bool | None = None,
-        time_major: bool | None = None,
-        reverse: bool | None = None,
-        keep_order: bool | None = None,
-        rngs: rnglib.Rngs | None = None,
-    ):
+    self,
+    inputs: Array,
+    *,
+    initial_carry: Carry | None = None,
+    seq_lengths: Array | None = None,
+    return_carry: bool | None = None,
+    time_major: bool | None = None,
+    reverse: bool | None = None,
+    keep_order: bool | None = None,
+    rngs: rnglib.Rngs | None = None,
+  ):
     if return_carry is None:
       return_carry = self.return_carry
     if time_major is None:
@@ -670,20 +674,26 @@ class RNN(Module):
         )
 
     slice_carry = seq_lengths is not None and return_carry
+    broadcast_rngs = nnx.All(nnx.RngState, self.broadcast_rngs)
+    state_axes = StateAxes({broadcast_rngs: None, **self.state_axes})  # type: ignore
 
-    def scan_fn(cell: RNNCellBase, carry: Carry, x: Array) -> tuple[Carry, Array] | tuple[Carry, tuple[Carry, Array]]:
+    # we use split_rngs with splits=1 and squeeze=True to get unique rngs
+    # every time RNN is called
+    @nnx.split_rngs(splits=1, only=self.broadcast_rngs, squeeze=True)
+    @nnx.scan(
+      in_axes=(state_axes, Carry, time_axis),
+      out_axes=(Carry, (0, time_axis)) if slice_carry else (Carry, time_axis),
+      unroll=self.unroll,
+    )
+    def scan_fn(
+      cell: RNNCellBase, carry: Carry, x: Array
+    ) -> tuple[Carry, Array] | tuple[Carry, tuple[Carry, Array]]:
       carry, y = cell(carry, x)
       if slice_carry:
         return carry, (carry, y)
       return carry, y
-    state_axes = nnx.StateAxes({...: Carry}) # type: ignore[arg-type]
-    scan = nnx.scan(
-            scan_fn,
-            in_axes=(state_axes, Carry, time_axis),
-            out_axes=(Carry, (0, time_axis)) if slice_carry else (Carry, time_axis),
-            unroll=self.unroll,
-        )
-    scan_output = scan(self.cell, carry, inputs)
+
+    scan_output = scan_fn(self.cell, carry, inputs)
 
     # Next we select the final carry. If a segmentation mask was provided and
     # return_carry is True we slice the carry history and select the last valid
