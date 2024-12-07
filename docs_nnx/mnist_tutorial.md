@@ -241,7 +241,7 @@ ax2.legend()
 plt.show()
 ```
 
-## 10. Perform inference on the test set
+## 8. Perform inference on the test set
 
 Create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
 
