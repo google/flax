@@ -11,7 +11,7 @@ You will learn how to migrate to Orbax through the following scenarios:
 *  Async checkpointing
 *  Saving/loading a single JAX or NumPy Array
 
-To learn more about Orbax, check out the `quick start introductory Colab notebook <http://colab.research.google.com/github/google/orbax/blob/main/checkpoint/orbax//checkpoint/orbax_checkpoint.ipynb>`__ and `the official Orbax documentation <https://github.com/google/orbax/blob/main/docs/checkpoint.md>`_.
+To learn more about Orbax, check out the `quick start introductory Colab notebook <http://colab.research.google.com/github/google/orbax/blob/main/docs/guides/checkpoint/orbax_checkpoint_101.ipynb>`__ and `the official Orbax documentation <https://orbax.readthedocs.io/en/latest/>`_.
 
 You can click on "Open in Colab" above to run the code from this guide.
 
