@@ -21,7 +21,7 @@ And some clear call time arguments:
 There is however one property that is ambiguous -- the `deterministic` property in a Dropout module.
 
 If `deterministic` is `True` no dropout mask is sampled. This is typically used during model evaluation.
-However, if we pass `eval=True` or `train=False` to a top-level Module. The `deterministic` argument needs
+However, if we pass `eval=True` or `train=False` to a top-level Module, the `deterministic` argument needs
 to be applied everywhere and the boolean argument needs to be passed down to all the layers that might use `Dropout`.
 If instead `deterministic` is a dataclass attribute, we might do the following:
 
