@@ -108,7 +108,6 @@ assert_error="flax is not running on editable mode."
 # env vars must be set after doctest
 export JAX_NUMPY_RANK_PROMOTION=raise
 export FLAX_PROFILE=1
-export FLAX_LAZY_RNG=1
 
 if $RUN_PYTEST; then
   echo "=== RUNNING PYTESTS ==="

@@ -23,6 +23,8 @@ A lifted transformation can be applied to a ``Module`` class or a
 function that takes a ``Module`` instance as its first argument.
 """
 
+from collections.abc import Callable, Iterable, Mapping, Sequence
+import contextlib
 import dataclasses
 import functools
 import inspect
@@ -32,7 +34,6 @@ from typing import (
   Union,
 )
 import weakref
-from collections.abc import Callable, Iterable, Mapping, Sequence
 
 from flax import core
 from flax import errors, struct, traceback_util
@@ -41,6 +42,7 @@ from flax.core import Scope, lift, meta
 from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (
   CollectionFilter,
+  LazyRng,
   PRNGSequenceFilter,
 )
 from flax.ids import FlaxId
@@ -579,58 +581,80 @@ def decorator_lift_transform_cached(transform, class_fn, **trafo_kwargs):
     nonlocal trafo_fn
     state = self._state.export()
 
-    # make a scope-function to transform
-    def core_fn(
-      prewrapped_fn,
-      class_fn,
-      scopes,
-      module_hash,
-      *args,
-      **kwargs,
-    ):
-      # self = hash_key.obj
-      self: Module = module_hash.module
+    # increment rng counters for all rngs in scope
+    with fork_rngs(self):
+      # make a scope-function to transform
+      def core_fn(
+          prewrapped_fn,
+          class_fn,
+          scopes,
+          module_hash,
+          *args,
+          **kwargs,
+      ):
+        # self = hash_key.obj
+        self: Module = module_hash.module
+        if not multi_scope:
+          scopes = [scopes]
+        cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
+        object.__setattr__(cloned, '_state', state.export())
+        res = prewrapped_fn(cloned, *args, **kwargs)
+        self._state.reimport(cloned._state)
+        _test_transformed_return_values(
+            res, getattr(class_fn, '__name__', None)
+        )
+        return res
+
+      core_fns = [
+          functools.wraps(class_fn)(
+              functools.partial(core_fn, prewrapped_fn, class_fn)
+          )
+          for prewrapped_fn, class_fn in zip(prewrapped_fns, class_fns)
+      ]
+
+      # here we apply the given lifting transform to the scope-ingesting fn
+      if trafo_fn is None:
+        trafo_fn = transform(*core_fns, **trafo_kwargs)
+
+      module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
+
       if not multi_scope:
-        scopes = [scopes]
-      cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
-      object.__setattr__(cloned, '_state', state.export())
-      res = prewrapped_fn(cloned, *args, **kwargs)
-      self._state.reimport(cloned._state)
-      _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
-      return res
+        if len(module_scopes) != 1:
+          # TODO(levskaya): transforms like jvp & vjp have args that follow the
+          # pytree structure of scopes. The user doesn't explicitly control shared
+          # modules passed as arguments to methods or as attributes to Module
+          # constructors. Therefore, there is no obvious API for specifying
+          # arguments per lifted Module.
+          raise NotImplementedError(
+              'This transform does not yet support'
+              ' Modules that include other Modules passed as arguments.'
+          )
+        module_scopes = module_scopes[0]
 
-    core_fns = [
-        functools.wraps(class_fn)(
-            functools.partial(core_fn, prewrapped_fn, class_fn)
-        )
-        for prewrapped_fn, class_fn in zip(prewrapped_fns, class_fns)
-    ]
+      # get a hashable proxy object for the Module
+      hash_key = _HashableProxy.from_module(self)
 
-    # here we apply the given lifting transform to the scope-ingesting fn
-    if trafo_fn is None:
-      trafo_fn = transform(*core_fns, **trafo_kwargs)
-
-    module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
-
-    if not multi_scope:
-      if len(module_scopes) != 1:
-        # TODO(levskaya): transforms like jvp & vjp have args that follow the
-        # pytree structure of scopes. The user doesn't explicitly control shared
-        # modules passed as arguments to methods or as attributes to Module
-        # constructors. Therefore, there is no obvious API for specifying
-        # arguments per lifted Module.
-        raise NotImplementedError(
-          'This transform does not yet support'
-          ' Modules that include other Modules passed as arguments.'
-        )
-      module_scopes = module_scopes[0]
-
-    # get a hashable proxy object for the Module
-    hash_key = _HashableProxy.from_module(self)
-
-    return trafo_fn(module_scopes, hash_key, *args, **kwargs)
+      return trafo_fn(module_scopes, hash_key, *args, **kwargs)
 
   return wrapped_fn
+
+
+@contextlib.contextmanager
+def fork_rngs(module: Module):
+  """Context manager to fork rngs in a module."""
+  if module.scope is None:
+    yield
+    return
+
+  current_rngs = module.scope.rngs.copy()
+  module.scope.rngs = {
+      name: LazyRng.create(module.make_rng(name)) for name in current_rngs
+  }
+
+  try:
+    yield
+  finally:
+    module.scope.rngs = current_rngs
 
 
 def module_class_lift_transform_cached(
@@ -674,36 +698,39 @@ def module_class_lift_transform_cached(
     # we need to create a scope-function from our class for the given method
     @functools.wraps(fn)
     def wrapped_fn(self: Module, *args, **kwargs):
+      assert self.scope is not None
       nonlocal trafo_fn
       state = self._state.export()
 
-      # make a scope-function to transform
-      def core_fn(scopes, module_hash, *args, **kwargs):
-        self: Module = module_hash.module
-        # make a clone of self using its arguments
-        attrs = {
-          f.name: getattr(self, f.name)
-          for f in dataclasses.fields(self)
-          if f.name != 'parent' and f.init
-        }
-        # we reference module_class, not self.__class__ to avoid infinite loop
-        cloned = module_class(parent=None, **attrs)
-        cloned, args, kwargs = set_module_scopes(cloned, args, kwargs, scopes)
-        object.__setattr__(cloned, '_state', state.export())
-        res = fn(cloned, *args, **kwargs)
-        self._state.reimport(cloned._state)
-        _test_transformed_return_values(res, fn_name)
-        return res
+      # increment rng counters for all rngs in scope
+      with fork_rngs(self):
+        # make a scope-function to transform
+        def core_fn(scopes, module_hash, *args, **kwargs):
+          self: Module = module_hash.module
+          # make a clone of self using its arguments
+          attrs = {
+              f.name: getattr(self, f.name)
+              for f in dataclasses.fields(self)
+              if f.name != 'parent' and f.init
+          }
+          # we reference module_class, not self.__class__ to avoid infinite loop
+          cloned = module_class(parent=None, **attrs)
+          cloned, args, kwargs = set_module_scopes(cloned, args, kwargs, scopes)
+          object.__setattr__(cloned, '_state', state.export())
+          res = fn(cloned, *args, **kwargs)
+          self._state.reimport(cloned._state)
+          _test_transformed_return_values(res, fn_name)
+          return res
 
-      # here we apply the given lifting transform to the scope-ingesting fn
-      trafo_fn = trafo_fn or transform(core_fn, *trafo_args, **trafo_kwargs)
-      module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
+        # here we apply the given lifting transform to the scope-ingesting fn
+        trafo_fn = trafo_fn or transform(core_fn, *trafo_args, **trafo_kwargs)
+        module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
 
-      # get a hash for the Module by using its repr as a proxy
-      hash_key = _HashableProxy.from_module(self)
+        # get a hash for the Module by using its repr as a proxy
+        hash_key = _HashableProxy.from_module(self)
 
-      ret = trafo_fn(module_scopes, hash_key, *args, **kwargs)
-      return ret
+        ret = trafo_fn(module_scopes, hash_key, *args, **kwargs)
+        return ret
 
     return wrapped_fn
 
@@ -2140,3 +2167,16 @@ def add_metadata_axis(
       mutable=True,
     )
   return target
+
+
+def fold_rngs(
+    target: Target,
+    variables: CollectionFilter = True,
+    rngs: PRNGSequenceFilter = True,
+) -> Target:
+  return lift_transform_cached(
+      lift.fold_rngs,
+      target,
+      variables=variables,
+      rngs=rngs,
+  )

@@ -16,7 +16,7 @@ jupytext:
 
 Welcome to Flax NNX! In this tutorial you will learn how to build and train a simple convolutional neural network (CNN) to classify handwritten digits on the MNIST dataset using the Flax NNX API.
 
-Flax NNX is a Python neural network library built upon [JAX](https://github.com/google/jax). If you have used the Flax Linen API before, check out [Why Flax NNX](https://flax.readthedocs.io/en/latest/why.html). You should have some knowledge of the main concepts of deep learning.
+Flax NNX is a Python neural network library built upon [JAX](https://github.com/jax-ml/jax). If you have used the Flax Linen API before, check out [Why Flax NNX](https://flax.readthedocs.io/en/latest/why.html). You should have some knowledge of the main concepts of deep learning.
 
 Let’s get started!
 
@@ -246,11 +246,15 @@ plt.show()
 Create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
 
 ```{code-cell} ipython3
+model.eval() # Switch to evaluation mode.
+
 @nnx.jit
 def pred_step(model: CNN, batch):
   logits = model(batch['image'])
   return logits.argmax(axis=1)
 ```
+
+Note that we use `.eval()` to ensure that the model is in evaluation mode, even though we are not using `Dropout` or `BatchNorm` in this model, `.eval()` ensure that the outputs are deterministic.
 
 ```{code-cell} ipython3
 :outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e

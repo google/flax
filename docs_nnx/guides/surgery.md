@@ -10,7 +10,7 @@ jupytext:
 
 # Model surgery
 
-In this guide, you will learn how to perform model surgery in Flax NNX using several real-world scenarios:
+Model surgery is an act of making modifications on an existing neural network's building blocks and parameters, such as layer replacement, parameter or state manipulation, or even "monkey patching". In this guide, you will learn how to perform model surgery in Flax NNX using several real-world scenarios:
 
 * __Pythonic `nnx.Module` manipulation__: Using Pythonic ways to manipulate sub-`Module`s given a model.
 

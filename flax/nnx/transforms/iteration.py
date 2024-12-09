@@ -40,6 +40,7 @@ G = tp.TypeVar('G', bound=tp.Callable[..., tp.Any])
 M = tp.TypeVar('M', bound=Module)
 MA = tp.TypeVar('MA', bound=Module)
 N = tp.TypeVar('N', bound=Module)
+T = tp.TypeVar('T')
 StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
 Leaves = tp.List[Leaf]
@@ -649,7 +650,7 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
 
 def _extract_index_mappings(
   pure_carry_arg_out,
-  carry_index_mappings: list[FrozenDict[int, int]],
+  carry_index_mappings: list[graph.HashableMapping[int, int]],
   /,
 ):
   def extract_index_mappings(x):
@@ -674,7 +675,7 @@ def _extract_index_mappings(
 
 def _insert_index_mappings(
   pure_carry_arg_out,
-  carry_index_mappings: deque[FrozenDict[int, int]],
+  carry_index_mappings: deque[graph.HashableMapping[int, int]],
   /,
 ):
   def insert_index_mappings(x):
@@ -1095,7 +1096,7 @@ class ScanFn:
 
     # next we have to remove all the index_mappings from the NodeDefs
     # in the carry outputs because they are not present in the inputs
-    carry_index_mappings: list[FrozenDict[int, int]] = []
+    carry_index_mappings: list[graph.HashableMapping[int, int]] = []
     pure_carry_arg_out = _extract_index_mappings(
       pure_carry_arg_out, carry_index_mappings
     )
@@ -1304,3 +1305,245 @@ def scan(
     return out
 
   return scan_wrapper  # type: ignore
+
+
+
+
+
+# -------------------------------
+# while_loop
+# -------------------------------
+
+
+@dataclasses.dataclass(eq=False)
+class WhileLoopCondFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f)
+
+  def __call__(self, pure_val):
+    val = extract.from_tree(pure_val)
+    out = self.f(val)
+    return out
+
+
+def _add_fake_index_mapping(tree: tp.Any):
+  global_index_mapping = {}  # for the whole context, over all inputs
+  def per_node_state(ns: extract.NodeStates | tp.Any):
+    if not isinstance(ns, extract.NodeStates) or not isinstance(
+      ns._graphdef, graph.NodeDef
+    ):
+      return ns
+
+    def per_node_def(nd: graph.NodeDef | graph.NodeRef):
+      if nd.index >= 0:
+        global_index_mapping[nd.index] = nd.index
+      if isinstance(nd, graph.NodeRef):
+        return
+
+      for attribute in nd.attributes:
+        if type(attribute) is graph.SubGraphAttribute:
+          per_node_def(attribute.value)
+        elif (
+          type(attribute) is graph.LeafAttribute
+          and isinstance(attribute.value, (graph.VariableDef, graph.NodeRef))
+          and attribute.value.index >= 0
+        ):
+          global_index_mapping[attribute.value.index] = attribute.value.index
+      return
+
+    per_node_def(ns._graphdef)
+    return dataclasses.replace(
+      ns,
+      _graphdef=dataclasses.replace(
+        ns._graphdef, index_mapping=graph.HashableMapping(global_index_mapping)
+      ),
+    )
+
+  return jax.tree.map(per_node_state, tree,
+                      is_leaf=lambda x: isinstance(x, extract.NodeStates))
+
+
+def _remove_index_mapping(tree: tp.Any):
+  '''Remove a fake index_mapping for the input to match that of the output.'''
+  def per_node_state(ns: extract.NodeStates | tp.Any):
+    if not isinstance(ns, extract.NodeStates) or not isinstance(
+      ns._graphdef, graph.NodeDef
+    ):
+      return ns
+    assert isinstance(ns._graphdef, graph.NodeDef)
+    return dataclasses.replace(ns, _graphdef=dataclasses.replace(
+      ns._graphdef, index_mapping=None
+    ))
+
+  return jax.tree.map(per_node_state, tree,
+                      is_leaf=lambda x: isinstance(x, extract.NodeStates))
+
+
+@dataclasses.dataclass(eq=False)
+class WhileLoopBodyFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f)
+
+  @graph.update_context('while_loop_body')
+  def __call__(self, pure_val):
+    # Removing the dummy index mapping being added outside of body function.
+    pure_val_in = _remove_index_mapping(pure_val)
+
+    val = extract.from_tree(pure_val_in, ctxtag='while_loop_body')
+    out = self.f(val)
+    pure_out = extract.to_tree(out, ctxtag='while_loop_body')
+
+    try:
+      jax.tree.map(lambda a, b: None, pure_val, pure_out)
+    except ValueError as e:
+      msg = ("nnx.while_loop requires body function's input and output to "
+             "have the same reference and pytree structure, but they differ. "
+             "If the mismatch comes from `index_mapping` field, you might "
+             "have modified reference structure within the body function, "
+             "which is not allowed."
+             f"Detail of the mismatch: \n {str(e)}")
+      raise ValueError(msg)
+
+    return pure_out
+
+
+@graph.update_context('while_loop')
+def while_loop(cond_fun: tp.Callable[[T], tp.Any],
+               body_fun: tp.Callable[[T], T],
+               init_val: T) -> T:
+  """A Flax NNX transformation of `jax.lax.while_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.while_loop.html>`_.
+
+  Caution: for the NNX internal reference tracing mechanism to work, you cannot
+  change the variable reference structure of ``init_val`` inside ``body_fun``.
+
+  Example::
+
+    >>> import jax
+    >>> from flax import nnx
+    >>> def fwd_fn(input):
+    ...   module, x, count = input
+    ...   return module, module(x), count - 1.0
+
+    >>> module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    >>> x = jax.random.normal(jax.random.key(0), (10,))
+    >>> # `module` will be called three times
+    >>> _, y, _ = nnx.while_loop(
+    ...   lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+
+
+  Args:
+    cond_fun: A function for the continue condition of the while loop, taking a
+      single input of type ``T`` and outputting a boolean.
+    body_fun: A function that takes an input of type ``T`` and outputs an ``T``.
+      Note that both data and modules of ``T`` must have the same reference
+      structure between inputs and outputs.
+    init_val: The initial input for ``cond_fun`` and ``body_fun``. Must be of type ``T``.
+
+  """
+
+  pure_init_val = extract.to_tree(init_val, ctxtag='while_loop')
+
+  # Adding the expected reference mapping to `pure_init_val` to match
+  # `body_fun`'s output pytree structure, to make JAX while_loop happy.
+  pure_init_val = _add_fake_index_mapping(pure_init_val)
+
+  pure_out = jax.lax.while_loop(
+    WhileLoopCondFn(cond_fun),
+    WhileLoopBodyFn(body_fun),
+    pure_init_val,
+  )
+  out = extract.from_tree(pure_out, ctxtag='while_loop')
+  return out
+
+
+@dataclasses.dataclass(eq=False)
+class ForiLoopBodyFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f)
+
+  @graph.update_context('fori_loop_body')
+  def __call__(self, i, pure_val):
+    # Removing the dummy index mapping being added outside of body function.
+    pure_val_in = _remove_index_mapping(pure_val)
+
+    val = extract.from_tree(pure_val_in, ctxtag='fori_loop_body')
+    out = self.f(i, val)
+    pure_out = extract.to_tree(out, ctxtag='fori_loop_body')
+
+    try:
+      jax.tree.map(lambda a, b: None, pure_val, pure_out)
+    except ValueError as e:
+      msg = ("nnx.fori_loop requires body function's input and output to "
+             "have the same reference and pytree structure, but they differ. "
+             "If the mismatch comes from `index_mapping` field, you might "
+             "have modified reference structure within the body function, "
+             "which is not allowed. "
+             f"Detail of the mismatch: \n {str(e)}")
+      raise ValueError(msg)
+
+    return pure_out
+
+
+@graph.update_context('fori_loop')
+def fori_loop(lower: int, upper: int,
+              body_fun: tp.Callable[[int, T], T],
+              init_val: T,
+              *,
+              unroll: int | bool | None = None) -> T:
+  """A Flax NNX transformation of `jax.lax.fori_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.fori_loop.html>`_.
+
+  Caution: for the NNX internal reference tracing mechanism to work, you cannot
+  change the variable reference structure of `init_val` inside `body_fun`.
+
+  Example::
+
+    >>> import jax
+    >>> from flax import nnx
+
+    >>> def fwd_fn(i, input):
+    ...   m, x = input
+    ...   m.kernel.value = jnp.identity(10) * i
+    ...   return m, m(x)
+
+    >>> module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    >>> x = jax.random.normal(jax.random.key(0), (10,))
+    >>> _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x))
+    >>> np.testing.assert_array_equal(y, x * 2 * 3)
+
+
+  Args:
+    lower: An integer representing the loop index lower bound (inclusive).
+    upper: An integer representing the loop index upper bound (exclusive).
+    body_fun: a function that takes an input of type ``T`` and outputs an ``T``.
+      Note that both data and modules of ``T`` must have the same reference
+      structure between inputs and outputs.
+    init_val: the initial input for body_fun. Must be of type ``T``.
+    unroll: An optional integer or boolean that determines how much to unroll
+      the loop. If an integer is provided, it determines how many unrolled
+      loop iterations to run within a single rolled iteration of the loop. If a
+      boolean is provided, it will determine if the loop is competely unrolled
+      (i.e. ``unroll=True``) or left completely unrolled (i.e. ``unroll=False``).
+      This argument is only applicable if the loop bounds are statically known.
+
+  Returns:
+    A loop value from the final iteration, of type ``T``.
+
+  """
+
+  pure_init_val = extract.to_tree(init_val, ctxtag='fori_loop')
+
+  # Adding the expected reference mapping to `pure_init_val` to match
+  # `body_fun`'s output pytree structure, to make JAX happy.
+  pure_init_val = _add_fake_index_mapping(pure_init_val)
+
+  pure_out = jax.lax.fori_loop(lower, upper,
+                               ForiLoopBodyFn(body_fun), pure_init_val,
+                               unroll=unroll)
+  out = extract.from_tree(pure_out, ctxtag='fori_loop')
+  return out

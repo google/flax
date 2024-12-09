@@ -38,7 +38,6 @@ from jax import numpy as jnp
 from jax import random, tree_util
 
 from flax import config as config
-from flax import configurations as legacy_config  # only for flax_lazy_rng
 from flax import errors, struct, traceback_util
 from flax.ids import uuid
 from flax.typing import (
@@ -98,35 +97,14 @@ class LazyRng(struct.PyTreeNode):
   def create(
     rng: Union['LazyRng', PRNGKey], *suffix: PRNGFoldable
   ) -> 'LazyRng':
-    if not legacy_config.flax_lazy_rng:
-      if isinstance(rng, LazyRng):
-        assert not rng.suffix
-        rng = rng.rng
-      return LazyRng(_legacy_rng_fold_in(rng, suffix), ())
     if isinstance(rng, LazyRng):
       return LazyRng(rng.rng, rng.suffix + suffix)
     else:
       return LazyRng(rng, suffix)
 
-  def fold(self):
-    key = self.as_jax_rng()
+  def clear_suffix(self):
+    key = self.rng
     return LazyRng(key, ())
-
-
-def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
-  """Legacy RNG folding."""
-  for x in data:
-    if isinstance(x, str):
-      m = hashlib.sha1()
-      m.update(x.encode('utf-8'))
-      d = m.digest()
-      hash_int = int.from_bytes(d[:4], byteorder='big')
-      rng = random.fold_in(rng, jnp.uint32(hash_int))  # type: ignore
-    elif isinstance(x, int):
-      rng = random.fold_in(rng, x)
-    else:
-      raise ValueError(f'Expected int or string, got: {x}')
-  return rng
 
 
 def _fold_in_static(
@@ -604,13 +582,6 @@ class Scope:
       if name not in self.reservations:
         return name
       i += 1
-
-  def fold_rngs(self):
-    """Folds the rngs of this scope into the parent scope."""
-    self._check_valid()
-    for name, rng in self.rngs.items():
-      assert isinstance(rng, LazyRng)
-      self.rngs[name] = rng.fold()
 
   def push(
     self, name: str | None = None, prefix: str = '', reuse=False
@@ -1218,12 +1189,8 @@ def _is_valid_rng(rng: Array):
     return False
 
   # Handle new-style typed PRNG keys
-  if hasattr(jax.dtypes, 'prng_key'):  # JAX 0.4.14 or newer
-    if jax.dtypes.issubdtype(rng.dtype, jax.dtypes.prng_key):
-      return rng.shape == ()
-  elif hasattr(jax.random, 'PRNGKeyArray'):  # Previous JAX versions
-    if isinstance(rng, jax.random.PRNGKeyArray):
-      return rng.shape == ()
+  if jax.dtypes.issubdtype(rng.dtype, jax.dtypes.prng_key):
+    return rng.shape == ()
 
   # Handle old-style raw PRNG keys
   expected_rng = jax.eval_shape(

@@ -31,8 +31,12 @@ from flax.core.meta import (
     unbox as unbox,
     with_partitioning as with_partitioning,
 )
+from flax.core.spmd import (
+    get_logical_axis_rules as get_logical_axis_rules,
+    logical_axis_rules as logical_axis_rules,
+    set_logical_axis_rules as set_logical_axis_rules,
+)
 from .activation import (
-    GeGLU as GeGLU,
     PReLU as PReLU,
     celu as celu,
     elu as elu,
@@ -73,8 +77,8 @@ from .attention import (
 from .batch_apply import BatchApply as BatchApply
 from .combinators import Sequential as Sequential
 from .fp8_ops import (
-    Fp8DotGeneralOp as Fp8DotGeneralOp,
     Fp8DirectDotGeneralOp as Fp8DirectDotGeneralOp,
+    Fp8DotGeneralOp as Fp8DotGeneralOp,
     NANOOFp8DotGeneralOp as NANOOFp8DotGeneralOp,
 )
 from .initializers import (
@@ -96,8 +100,8 @@ from .module import (
     Module as Module,
     Variable as Variable,
     apply as apply,
-    compact as compact,
     compact_name_scope as compact_name_scope,
+    compact as compact,
     disable_named_call as disable_named_call,
     enable_named_call as enable_named_call,
     init_with_output as init_with_output,
@@ -115,28 +119,25 @@ from .normalization import (
     LayerNorm as LayerNorm,
     RMSNorm as RMSNorm,
     SpectralNorm as SpectralNorm,
-    WeightNorm as WeightNorm
+    WeightNorm as WeightNorm,
 )
 from .pooling import (avg_pool as avg_pool, max_pool as max_pool, pool as pool)
 from .recurrent import (
     Bidirectional as Bidirectional,
     ConvLSTMCell as ConvLSTMCell,
-    SimpleCell as SimpleCell,
     GRUCell as GRUCell,
-    MGUCell as MGUCell,
     LSTMCell as LSTMCell,
+    MGUCell as MGUCell,
     OptimizedLSTMCell as OptimizedLSTMCell,
     RNNCellBase as RNNCellBase,
     RNN as RNN,
+    SimpleCell as SimpleCell,
 )
 from .spmd import (
     LogicallyPartitioned as LogicallyPartitioned,
-    get_logical_axis_rules as get_logical_axis_rules,
-    logical_axis_rules as logical_axis_rules,
     logical_to_mesh,
     logical_to_mesh_axes,
     logical_to_mesh_sharding,
-    set_logical_axis_rules as set_logical_axis_rules,
     with_logical_constraint,
     with_logical_partitioning as with_logical_partitioning,
 )
@@ -147,6 +148,8 @@ from .transforms import (
     checkpoint as checkpoint,
     cond as cond,
     custom_vjp as custom_vjp,
+    fold_rngs as fold_rngs,
+    grad as grad,
     jit as jit,
     jvp as jvp,
     map_variables as map_variables,
@@ -155,9 +158,8 @@ from .transforms import (
     remat as remat,
     scan as scan,
     switch as switch,
-    vjp as vjp,
-    grad as grad,
     value_and_grad as value_and_grad,
+    vjp as vjp,
     vmap as vmap,
     while_loop as while_loop,
 )

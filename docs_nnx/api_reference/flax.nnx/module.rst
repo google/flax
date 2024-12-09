@@ -6,6 +6,3 @@ module
 
 .. autoclass:: Module
    :members:
-
-   .. automethod:: sow
-   .. automethod:: iter_modules

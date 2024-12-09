@@ -309,7 +309,41 @@ print(jnp.allclose(y1, y2))
 nnx.display(weights)
 ```
 
-## Consistent aliasing
+## Rules and limitations
+In this section we will cover some rules and limitations apply when using Modules inside transformations.
+
+### Mutable Module cannot be passed by closure
+
+While Python allows for passing objects as closures to functions, this is generally not supported by Flax NNX transforms. The reason is that because Modules are mutable it is very easy to capture tracer into a Module created outside of the transform, this is silent error in JAX. To avoid this, Flax NNX checks that the Modules and Variables being mutated are passed as arguments to the transformed function.
+
+For example, if we a have stateful Module such as `Counter` that increments a counter every time it is called, and we try to pass it as a closure to a function decorated with `nnx.jit`, we would be leaking the tracer. However Flax NNX will raise an error instead to prevent this:
+
+```{code-cell} ipython3
+class Counter(nnx.Module):
+  def __init__(self):
+    self.count = nnx.Param(jnp.array(0))
+
+  def increment(self):
+    self.count += jnp.array(1)
+
+counter = Counter()
+
+@nnx.jit
+def f(x):
+  counter.increment()
+  return 2 * x
+
+try:
+  y = f(3)
+except Exception as e:
+  print(e)
+```
+
+To solve this issue pass all Module as arguments to the functions being transformed. In this case `f` should accept `counter` as an argument.
+
++++
+
+### Consistent aliasing
 
 The main issue with allowing for reference semantics in transforms is that references can be shared across inputs and outputs. This can be problematic if it is not taken care of because it would lead to ill-defined or inconsistent behavior. In the example below you have a single `Weights` `nnx.Module` - `m` ` whose reference appears in multiple places in `arg1` and `arg2`. The problem here is that you also specify that you want to vectorize `arg1` in axis `0` and `arg2` in axis `1`. This would be fine in JAX because of referential transparency of pytrees. But this would be problematic in Flax NNX because you are trying to vectorize `m` in two different ways. Flax NNX will enforce consistency by raising an error.
 

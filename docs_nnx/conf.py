@@ -148,6 +148,7 @@ nb_execution_excludepatterns = [
   'transfer_learning.ipynb',  # <-- transformers requires flax<=0.7.0
   'flax/nnx',  # exclude nnx
   'guides/demo.ipynb',  # TODO(cgarciae): broken, remove or update
+  'guides/gemma.ipynb',
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False

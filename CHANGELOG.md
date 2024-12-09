@@ -8,11 +8,11 @@ vNext
 -
 -
 -
+- removed GeGLU simplistic activation, it should be implemented manually.
 -
 -
 -
--
--
+- removed FLAX_LAZY_RNG flag support for old non-lazy PRNG derivation mode
 -
 -
 -
@@ -103,7 +103,7 @@ vNext
 to keyword arguments. See more details in [#3389](https://github.com/google/flax/discussions/3389).
 - Use new typed PRNG keys throughout flax: this essentially involved changing
   uses of `jax.random.PRNGKey` to `jax.random.key`.
-  (See [JEP 9263](https://github.com/google/jax/pull/17297) for details).
+  (See [JEP 9263](https://github.com/jax-ml/jax/pull/17297) for details).
   If you notice dispatch performance regressions after this change, be sure
   you update `jax` to version 0.4.16 or newer.
 - Added `has_improved` field to EarlyStopping and changed the return signature of

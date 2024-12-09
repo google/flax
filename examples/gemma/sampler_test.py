@@ -76,7 +76,7 @@ class SamplerTest(absltest.TestCase):
   def test_samples(self):
     vocab = MockVocab()
 
-    transformer_config = transformer_lib.TransformerConfig(
+    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
         num_layers=6,
         num_embed=vocab.GetPieceSize(),
         embed_dim=768,
@@ -104,7 +104,7 @@ class SamplerTest(absltest.TestCase):
 
   def test_forbidden_tokens(self):
     vocab = MockVocab()
-    transformer_config = transformer_lib.TransformerConfig(
+    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
         num_layers=0,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,
@@ -152,7 +152,7 @@ class SamplerTest(absltest.TestCase):
 
   def test_forward_equivalence(self):
     vocab = MockVocab()
-    transformer_config = transformer_lib.TransformerConfig(
+    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
         num_layers=2,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,
@@ -211,7 +211,7 @@ class SamplerTest(absltest.TestCase):
 
   def test_sampler_init_sample_state(self):
     vocab = MockVocab()
-    transformer_config = transformer_lib.TransformerConfig(
+    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
         num_layers=0,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,
@@ -247,7 +247,7 @@ class SamplerTest(absltest.TestCase):
 
   def test_sampler_mask_tokens_after_eos_ids(self):
     vocab = MockVocab()
-    transformer_config = transformer_lib.TransformerConfig(
+    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
         num_layers=0,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,

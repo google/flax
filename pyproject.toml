@@ -22,6 +22,7 @@ dependencies = [
     "rich>=11.1",
     "typing_extensions>=4.2",
     "PyYAML>=5.4.1",
+    "treescope>=0.1.2",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -76,11 +77,9 @@ docs = [
     "sphinx-design",
     "jupytext==1.13.8",
     "dm-haiku",
-
     # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
     # ReadTheDocs: https://stackoverflow.com/a/68008428
     "docutils==0.16",
-
     # The next packages are for notebooks.
     "matplotlib",
     "scikit-learn",
@@ -88,6 +87,8 @@ docs = [
     "ml_collections",
     # notebooks
     "einops",
+    "kagglehub>=0.3.3",
+    "ipywidgets>=8.1.5",
 ]
 dev = [
     "pre-commit>=3.8.0",
@@ -182,6 +183,8 @@ filterwarnings = [
     "ignore:.*invalid value encountered in cast.*:RuntimeWarning",
     # RuntimeWarning: divide by zero encountered in equal/not_equal
     "ignore:.*divide by zero encountered in.*:RuntimeWarning",
+    # DeprecationWarning: numpy.core is deprecated
+    "ignore:.*numpy.core is deprecated.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]

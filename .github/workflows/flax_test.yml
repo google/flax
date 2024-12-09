@@ -108,13 +108,10 @@ jobs:
       uses: astral-sh/setup-uv@v2
       with:
         version: "0.3.0"
-    - name: Setup Rust (flaxlib)
-      uses: actions-rust-lang/setup-rust-toolchain@v1
 
     - name: Install dependencies
       run: |
         uv sync --extra all --extra testing --extra docs
-        uv pip install ./flaxlib
     - name: Install JAX
       run: |
         if [[ "${{ matrix.jax-version }}" == "newest" ]]; then

@@ -17,9 +17,9 @@ Python objects. Flax NNX is an evolution of the previous `Flax Linen <https://fl
 API, and it took years of experience to bring a simpler and more user-friendly API.
 
 .. note::
-   Flax Linen API is not going to be deprecated in the near future as most of Flax users still
-   rely on this API. However, new users are encouraged to use Flax NNX.
-   For existing Flax Linen users planning to move to Flax NNX, check out the `evolution guide <guides/linen_to_nnx.html>`_ and `Why Flax NNX <why.html>`_.
+   Flax Linen API is not going to be deprecated in the near future as most of Flax users still rely on this API. However, new users are encouraged to use Flax NNX. Check out `Why Flax NNX <why.html>`_ for a comparison between Flax NNX and Linen, and our reasoning to make the new API.
+
+   To move your Flax Linen codebase to Flax NNX, get familiarized with the API in `NNX Basics <https://flax.readthedocs.io/en/latest/nnx_basics.html>`_ and then start your move following the `evolution guide <guides/linen_to_nnx.html>`_.
 
 Features
 ^^^^^^^^^
@@ -197,6 +197,6 @@ Learn more
    guides/index
    examples/index
    nnx_glossary
-   The Flax philosophy <philosophyhttps://flax.readthedocs.io/en/latest/philosophy.html>
+   The Flax philosophy <https://flax.readthedocs.io/en/latest/philosophy.html>
    How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
    api_reference/index

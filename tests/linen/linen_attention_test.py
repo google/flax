@@ -113,10 +113,7 @@ class AttentionTest(parameterized.TestCase):
 
   def test_multihead_self_attention_explicit_dropout(self):
     def clone(key):
-      if hasattr(jax.random, "clone"):
-        # JAX v0.4.26+
-        return jax.tree.map(jax.random.clone, key)
-      return key
+      return jax.tree.map(jax.random.clone, key)
 
     class Foo(nn.Module):
       attention_kwargs: dict

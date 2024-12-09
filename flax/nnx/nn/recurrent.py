@@ -588,32 +588,32 @@ class GRUCell(RNNCellBase):
 
 
 class RNN(Module):
-    """The ``RNN`` module takes any :class:`RNNCellBase` instance and applies it over a sequence
+  """The ``RNN`` module takes any :class:`RNNCellBase` instance and applies it over a sequence
 
-    using :func:`flax.linen.scan`.
-    """
+  using :func:`flax.nnx.scan`.
+  """
 
-    def __init__(
-        self,
-        cell: RNNCellBase,
-        time_major: bool = False,
-        return_carry: bool = False,
-        reverse: bool = False,
-        keep_order: bool = False,
-        unroll: int = 1,
-        rngs: rnglib.Rngs | None = None,
-    ):
-        self.cell = cell
-        self.time_major = time_major
-        self.return_carry = return_carry
-        self.reverse = reverse
-        self.keep_order = keep_order
-        self.unroll = unroll
-        if rngs is None:
-            rngs = rnglib.Rngs(0)
-        self.rngs = rngs
+  def __init__(
+      self,
+      cell: RNNCellBase,
+      time_major: bool = False,
+      return_carry: bool = False,
+      reverse: bool = False,
+      keep_order: bool = False,
+      unroll: int = 1,
+      rngs: rnglib.Rngs | None = None,
+  ):
+    self.cell = cell
+    self.time_major = time_major
+    self.return_carry = return_carry
+    self.reverse = reverse
+    self.keep_order = keep_order
+    self.unroll = unroll
+    if rngs is None:
+      rngs = rnglib.Rngs(0)
+    self.rngs = rngs
 
-    def __call__(
+  def __call__(
         self,
         inputs: Array,
         *,
@@ -625,32 +625,32 @@ class RNN(Module):
         keep_order: bool | None = None,
         rngs: rnglib.Rngs | None = None,
     ):
-        if return_carry is None:
-            return_carry = self.return_carry
-        if time_major is None:
-            time_major = self.time_major
-        if reverse is None:
-            reverse = self.reverse
-        if keep_order is None:
-            keep_order = self.keep_order
+    if return_carry is None:
+      return_carry = self.return_carry
+    if time_major is None:
+      time_major = self.time_major
+    if reverse is None:
+      reverse = self.reverse
+    if keep_order is None:
+      keep_order = self.keep_order
 
-        # Infer the number of batch dimensions from the input shape.
-        # Cells like ConvLSTM have additional spatial dimensions.
-        time_axis = 0 if time_major else inputs.ndim - (self.cell.num_feature_axes + 1)
+    # Infer the number of batch dimensions from the input shape.
+    # Cells like ConvLSTM have additional spatial dimensions.
+    time_axis = 0 if time_major else inputs.ndim - (self.cell.num_feature_axes + 1)
 
-        # make time_axis positive
-        if time_axis < 0:
-            time_axis += inputs.ndim
+    # make time_axis positive
+    if time_axis < 0:
+      time_axis += inputs.ndim
 
-        if time_major:
-            # we add +1 because we moved the time axis to the front
-            batch_dims = inputs.shape[1 : -self.cell.num_feature_axes]
-        else:
-            batch_dims = inputs.shape[:time_axis]
+    if time_major:
+      # we add +1 because we moved the time axis to the front
+      batch_dims = inputs.shape[1 : -self.cell.num_feature_axes]
+    else:
+      batch_dims = inputs.shape[:time_axis]
 
-        # maybe reverse the sequence
-        if reverse:
-            inputs = jax.tree_util.tree_map(
+    # maybe reverse the sequence
+    if reverse:
+      inputs = jax.tree_util.tree_map(
                 lambda x: flip_sequences(
                     x,
                     seq_lengths,
@@ -659,9 +659,9 @@ class RNN(Module):
                 ),
                 inputs,
             )
-        if rngs is None:
-            rngs = self.rngs
-        carry: Carry = (
+    if rngs is None:
+      rngs = self.rngs
+    carry: Carry = (
             self.cell.initialize_carry(
                 inputs.shape[:time_axis] + inputs.shape[time_axis + 1 :], rngs
             )
@@ -669,36 +669,36 @@ class RNN(Module):
             else initial_carry
         )
 
-        slice_carry = seq_lengths is not None and return_carry
+    slice_carry = seq_lengths is not None and return_carry
 
-        def scan_fn(cell: RNNCellBase, carry: Carry, x: Array) -> tuple[Carry, Array] | tuple[Carry, tuple[Carry, Array]]:
-            carry, y = cell(carry, x)
-            if slice_carry:
-                return carry, (carry, y)
-            return carry, y
-        state_axes = nnx.StateAxes({...: Carry}) # type: ignore[arg-type]
-        scan = nnx.scan(
+    def scan_fn(cell: RNNCellBase, carry: Carry, x: Array) -> tuple[Carry, Array] | tuple[Carry, tuple[Carry, Array]]:
+      carry, y = cell(carry, x)
+      if slice_carry:
+        return carry, (carry, y)
+      return carry, y
+    state_axes = nnx.StateAxes({...: Carry}) # type: ignore[arg-type]
+    scan = nnx.scan(
             scan_fn,
             in_axes=(state_axes, Carry, time_axis),
             out_axes=(Carry, (0, time_axis)) if slice_carry else (Carry, time_axis),
             unroll=self.unroll,
         )
-        scan_output = scan(self.cell, carry, inputs)
+    scan_output = scan(self.cell, carry, inputs)
 
-        # Next we select the final carry. If a segmentation mask was provided and
-        # return_carry is True we slice the carry history and select the last valid
-        # carry for each sequence. Otherwise we just use the last carry.
-        if slice_carry:
-            assert seq_lengths is not None
-            _, (carries, outputs) = scan_output
-            # seq_lengths[None] expands the shape of the mask to match the
-            # number of dimensions of the carry.
-            carry = _select_last_carry(carries, seq_lengths)
-        else:
-            carry, outputs = scan_output
+    # Next we select the final carry. If a segmentation mask was provided and
+    # return_carry is True we slice the carry history and select the last valid
+    # carry for each sequence. Otherwise we just use the last carry.
+    if slice_carry:
+      assert seq_lengths is not None
+      _, (carries, outputs) = scan_output
+      # seq_lengths[None] expands the shape of the mask to match the
+      # number of dimensions of the carry.
+      carry = _select_last_carry(carries, seq_lengths)
+    else:
+      carry, outputs = scan_output
 
-        if reverse and keep_order:
-            outputs = jax.tree_util.tree_map(
+    if reverse and keep_order:
+      outputs = jax.tree_util.tree_map(
                 lambda x: flip_sequences(
                     x,
                     seq_lengths,
@@ -708,10 +708,10 @@ class RNN(Module):
                 outputs,
             )
 
-        if return_carry:
-            return carry, outputs
-        else:
-            return outputs
+    if return_carry:
+      return carry, outputs
+    else:
+      return outputs
 
 
 def _select_last_carry(sequence: A, seq_lengths: jnp.ndarray) -> A:
@@ -742,16 +742,17 @@ def flip_sequences(
     values for those sequences that were padded. This function keeps the padding
     at the end, while flipping the rest of the elements.
 
-    Example:
-    ```python
-    inputs = [[1, 0, 0],
-              [2, 3, 0]
-              [4, 5, 6]]
-    lengths = [1, 2, 3]
-    flip_sequences(inputs, lengths) = [[1, 0, 0],
-                                       [3, 2, 0],
-                                       [6, 5, 4]]
-    ```
+    Example::
+
+      >>> from flax.nnx.nn.recurrent import flip_sequences
+      >>> from jax import numpy as jnp
+      >>> inputs = jnp.array([[1, 0, 0], [2, 3, 0], [4, 5, 6]])
+      >>> lengths = jnp.array([1, 2, 3])
+      >>> flip_sequences(inputs, lengths, 1, False)
+      Array([[1, 0, 0],
+             [3, 2, 0],
+             [6, 5, 4]], dtype=int32)
+
 
     Args:
       inputs: An array of input IDs <int>[batch_size, seq_length].
@@ -810,27 +811,27 @@ class RNNBase(Protocol):
 class Bidirectional(Module):
     """Processes the input in both directions and merges the results.
 
-    Example usage:
+    Example usage::
 
-    ```python
-    import nnx
-    import jax
-    import jax.numpy as jnp
+      >>> from flax import nnx
+      >>> import jax
+      >>> import jax.numpy as jnp
 
-    # Define forward and backward RNNs
-    forward_rnn = RNN(GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0)))
-    backward_rnn = RNN(GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0)))
+      >>> # Define forward and backward RNNs
+      >>> forward_rnn = RNN(GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0)))
+      >>> backward_rnn = RNN(GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0)))
 
-    # Create Bidirectional layer
-    layer = Bidirectional(forward_rnn=forward_rnn, backward_rnn=backward_rnn)
+      >>> # Create Bidirectional layer
+      >>> layer = Bidirectional(forward_rnn=forward_rnn, backward_rnn=backward_rnn)
 
-    # Input data
-    x = jnp.ones((2, 3, 3))
+      >>> # Input data
+      >>> x = jnp.ones((2, 3, 3))
 
-    # Apply the layer
-    out = layer(x)
-    print(out.shape)
-    ```
+      >>> # Apply the layer
+      >>> out = layer(x)
+      >>> print(out.shape)
+      (2, 3, 8)
+
     """
 
     forward_rnn: RNNBase

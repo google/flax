@@ -162,9 +162,6 @@ def temp_flip_flag(var_name: str, var_value: bool):
 
 # Flax Global Configuration Variables:
 
-# Whether to use the lazy rng implementation.
-flax_lazy_rng = static_bool_env('FLAX_LAZY_RNG', True)
-
 flax_filter_frames = bool_flag(
   name='flax_filter_frames',
   default=True,
