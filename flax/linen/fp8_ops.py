@@ -585,7 +585,7 @@ class Fp8DotGeneralBase(module.Module):
     scale_args = (
       initializers.ones_init(),
       random.PRNGKey(0),
-      (1,),
+      (),
       jnp.float32,
     )
     amax_history_args = (
