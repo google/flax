@@ -549,7 +549,7 @@ def compact_name_scope(fun: _CallableT) -> _CallableT:
   """Creates compact submodules from a method.
 
   This is a decorator that allows you to define compact submodules from a
-  method. It's intention is to make it easier to port code Haiku code to Flax
+  method. Its intention is to make it easier to port code Haiku code to Flax
   by providing the same functionality.
 
   Example::
@@ -1605,7 +1605,7 @@ class Module(ModuleBase):
     # relationships between submodules.
     if _deep_clone != False:
       # We use a weak value dictionary to cache cloned submodules. When a shared
-      # submodule is cloned, its only cloned once else its fetched from the cache.
+      # submodule is cloned, it's only cloned once, else it's fetched from the cache.
       cache = (
         weakref.WeakValueDictionary()
         if isinstance(_deep_clone, bool)
@@ -2794,7 +2794,7 @@ class Module(ModuleBase):
       rngs: The rngs for the variable collections as passed to ``Module.init``.
       *args: The arguments to the forward computation.
       depth: controls how many submodule deep the summary can go. By default,
-        its ``None`` which means no limit. If a submodule is not shown because of
+        it's ``None`` which means no limit. If a submodule is not shown because of
         the depth limit, its parameter count and bytes will be added to the row
         of its first shown ancestor such that the sum of all rows always adds
         up to the total number of parameters of the Module.
@@ -2893,7 +2893,7 @@ class Module(ModuleBase):
       **kwargs: keyword arguments to pass to the forward computation.
 
     Returns:
-      A dict`ionary mapping module paths to module instances.
+      A dictionary mapping module paths to module instances.
     """
     from flax.linen import summary
 
@@ -3161,7 +3161,7 @@ def init(
 
 # TODO(cgarciae): we are defining CompactNameScope just to
 # avoid a pytype bug with the Flax overlay. We should aim to
-# remove in the at some point as its not ergonomic.
+# remove in the at some point as it's not ergonomic.
 if not typing.TYPE_CHECKING:
 
   class CompactNameScope(Module):
