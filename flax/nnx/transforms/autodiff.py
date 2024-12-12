@@ -427,7 +427,7 @@ def _custom_vjp_split_fn(
   nondiff_argnums: tuple[int, ...] = struct.field(pytree_node=False)
   tangent_tree_node_args: tuple[tp.Any, ...] = struct.field(pytree_node=False)
 
-def _extract_index_mappings(x, *, index_mappings: deque[graph.HashableMapping]):
+def _extract_index_mappings(x, *, index_mappings: deque[graph.IndexMapping]):
   if isinstance(x, graph.NodeDef):
     assert x.index_mapping is not None
     index_mappings.append(x.index_mapping)
@@ -465,7 +465,7 @@ class CustomVjpFnWrapper:
       (args_out, out), ctxtag=self.ctxtag
     )
     # remove index_mapping from NodeDef's but store them in global context
-    index_mappings: deque[graph.HashableMapping] = extract.get_broadcast_state(
+    index_mappings: deque[graph.IndexMapping] = extract.get_broadcast_state(
       self.ctxtag
     )
 
@@ -664,7 +664,7 @@ class CustomVjp(tp.Generic[A]):
       # insert index_mappings
       def _insert_index_mappings(x):
         if isinstance(x, graph.NodeDef):
-          index_mapping: graph.HashableMapping = index_mappings.popleft()
+          index_mapping: tp.Mapping = index_mappings.popleft()
           return dataclasses.replace(x, index_mapping=index_mapping)
         return x
 
