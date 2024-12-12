@@ -3037,7 +3037,7 @@ def init_with_output(
   Unlike ``Module.init_with_output`` this function returns a new function with
   the signature ``(rngs, *args, **kwargs) -> (T, variables)`` where ``T`` is the
   return type of ``fn``. The rngs can be a dict of PRNGKeys or a single
-  ```PRNGKey`` which is equivalent to passing a dict with one PRNGKey with the
+  ``PRNGKey`` which is equivalent to passing a dict with one PRNGKey with the
   name "params".
 
   The init function that is returned can be directly composed with
@@ -3107,7 +3107,7 @@ def init(
 
   Unlike ``Module.init`` this function returns a new function with the signature
   ``(rngs, *args, **kwargs) -> variables``.
-  The rngs can be a dict of PRNGKeys or a single ```PRNGKey`` which is
+  The rngs can be a dict of PRNGKeys or a single ``PRNGKey`` which is
   equivalent to passing a dict with one PRNGKey with the name "params".
 
   The init function that is returned can be directly composed with
