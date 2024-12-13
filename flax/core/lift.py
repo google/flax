@@ -879,6 +879,7 @@ def scan(
   _split_transpose: bool = False,
   data_transform: Callable[..., Any] | None = None,
   metadata_params: dict[Any, Any] = {},
+  check_constancy_invariants: bool = True,
 ) -> Callable[..., Any]:
   """A lifted version of ``jax.lax.scan``.
 
@@ -946,6 +947,11 @@ def scan(
       intended for inline SPMD annotations.
     metadata_params: arguments dict passed to AxisMetadata instances in the
       variable tree.
+    check_constancy_invariants: If true, the scan will verify that the
+      broadcast constants are true loop invariants, and further supports
+      broadcast function (non-carry) outputs.  This requires an extra jax
+      tracing step however, so setting to false can reduce trace time on larger
+      models.
 
   Returns:
     The scan function with the signature
@@ -1000,7 +1006,8 @@ def scan(
         length=length,
         reverse=reverse,
         unroll=unroll,
-        _split_transpose=_split_transpose
+        _split_transpose=_split_transpose,
+        check_constancy_invariants=check_constancy_invariants,
     )
     def scanned(broadcast_vars, carry, scan_variable_groups, rng_groups, args):
       carry_vars, c = carry

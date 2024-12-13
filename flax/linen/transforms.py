@@ -1165,6 +1165,7 @@ def scan(
   metadata_params: Mapping[Any, Any] = {},
   methods=None,
   _split_transpose: bool = False,
+  check_constancy_invariants: bool = True,
 ) -> Target:
   """A lifted version of ``jax.lax.scan``.
 
@@ -1304,6 +1305,11 @@ def scan(
     methods: If ``target`` is a ``Module``, the methods of ``Module`` to scan over.
     _split_transpose: An experimental feature to split the transpose of a scan
        into a scan and a map, backed by an experimental Jax lax.scan() feature.
+    check_constancy_invariants: If true, the scan will verify that the
+      broadcast constants are true loop invariants, and further supports
+      broadcast function (non-carry) outputs.  This requires an extra jax
+      tracing step however, so setting to false can reduce trace time on larger
+      models.
 
   Returns:
     The scan function with the signature ``(module, carry, *xs) -> (carry,
@@ -1326,6 +1332,7 @@ def scan(
     data_transform=data_transform,
     metadata_params=metadata_params,
     methods=methods,
+    check_constancy_invariants=check_constancy_invariants,
   )
 
 

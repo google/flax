@@ -2715,6 +2715,53 @@ class TransformTest(parameterized.TestCase):
       params = foo.init(key, x)
       foo.apply(params, x)
 
+  @parameterized.named_parameters(
+      ('retracing scan', True), ('simple scan', False)
+  )
+  def test_jit_scan_retracing(self, retracing_scan: bool):
+    num_blocks = 4
+    num_patterns = 4
+    features = 4
+    trace_counts = [0, 0]
+
+    class Block(nn.Module):
+      def setup(self):
+        self.dense = nn.Dense(features, use_bias=False)
+      @nn.jit
+      def __call__(self, x):
+        nonlocal trace_counts
+        trace_counts[1] += 1
+        return self.dense(x)
+
+    class BlockSequence(nn.Module):
+      def setup(self):
+        self.blocks = [Block() for _ in range(num_blocks)]
+      @nn.jit
+      def __call__(self, carry, inputs):
+        nonlocal trace_counts
+        trace_counts[0] += 1
+        for block in self.blocks:
+          carry = block(carry)
+        return carry, inputs
+
+    class Transformer(nn.Module):
+      retracing_scan: bool = True
+      def setup(self):
+        self.scan = nn.scan(
+            BlockSequence,
+            variable_axes={'params': 0},
+            split_rngs={'params': False},
+            length=num_patterns,
+            check_constancy_invariants=retracing_scan,
+        )()
+      def __call__(self, inputs):
+        return self.scan(jnp.zeros_like(inputs), inputs)
+
+    model = Transformer(retracing_scan=retracing_scan)
+    _ = model.init(random.key(0), jnp.ones((num_patterns, features,)))
+    self.assertEqual(trace_counts[0], 2 if retracing_scan else 1)
+    self.assertEqual(trace_counts[1], 2 if retracing_scan else 1)
+
 
 if __name__ == '__main__':
   absltest.main()

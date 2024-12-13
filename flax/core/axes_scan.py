@@ -13,16 +13,17 @@
 # limitations under the License.
 
 """Wrapper around jax.lax.scan with in_axes/out_axes API."""
+from collections.abc import Callable
 import functools
 from typing import Any, Optional
-from collections.abc import Callable
 
 import jax
-import jax.numpy as jnp
-import numpy as np
-from jax import core, lax
+from jax import core
+from jax import lax
 from jax.extend import linear_util as lu
 from jax.interpreters import partial_eval as pe
+import jax.numpy as jnp
+import numpy as np
 
 ScanAxis = Optional[int]
 
@@ -35,13 +36,14 @@ broadcast = _Broadcast()
 
 
 def scan(
-  fn: Callable[..., Any],
-  in_axes: Any,
-  out_axes: Any,
-  length: int | None = None,
-  reverse: bool = False,
-  unroll: int = 1,
-  _split_transpose: bool = False
+    fn: Callable[..., Any],
+    in_axes: Any,
+    out_axes: Any,
+    length: int | None = None,
+    reverse: bool = False,
+    unroll: int = 1,
+    _split_transpose: bool = False,
+    check_constancy_invariants: bool = True,
 ):
   """A wrapper around `jax.lax.scan` with in_axes/out_axes api.
 
@@ -78,6 +80,11 @@ def scan(
       iteration of a loop (default: 1).
     _split_transpose: An experimental feature to split the transpose of scan
        into a scan and a map, backed by an experimental Jax lax.scan() feature.
+    check_constancy_invariants: If true, the scan will verify that the
+      broadcast constants are true loop invariants, and further supports
+      broadcast function (non-carry) outputs.  This requires an extra jax
+      tracing step however, so setting to false can reduce trace time on larger
+      models.
   Returns:
      the function that performs the scan of the form:
      (broadcast_in, carry_in, *args) -> (broadcast_out, carry_out, scan_out).
@@ -114,39 +121,43 @@ def scan(
     return jax.tree_util.tree_map(trans, xs)
 
   def scan_fn(broadcast_in, init, *args):
+    # Requires one extra tracing operation to test invariants:
+    # Verifies that broadcast constants are true loop invariants, and further
+    # supports broadcast function (non-carry) outputs.
+
     xs = jax.tree_util.tree_map(transpose_to_front, in_axes, args)
 
     def body_fn(c, xs, init_mode=False):
       # inject constants
       xs = jax.tree_util.tree_map(
-        lambda ax, arg, x: (arg if ax is broadcast else x), in_axes, args, xs
+          lambda ax, arg, x: (arg if ax is broadcast else x), in_axes, args, xs
       )
       broadcast_out, c, ys = fn(broadcast_in, c, *xs)
 
       if init_mode:
         ys = jax.tree_util.tree_map(
-          lambda ax, y: (y if ax is broadcast else ()), out_axes, ys
+            lambda ax, y: (y if ax is broadcast else ()), out_axes, ys
         )
         return broadcast_out, ys
       else:
         ys = jax.tree_util.tree_map(
-          lambda ax, y: (() if ax is broadcast else y), out_axes, ys
+            lambda ax, y: (() if ax is broadcast else y), out_axes, ys
         )
         return c, ys
 
     broadcast_body = functools.partial(body_fn, init_mode=True)
 
     carry_avals = jax.tree_util.tree_map(
-      lambda x: core.ShapedArray(jnp.shape(x), jnp.result_type(x)), init
+        lambda x: core.ShapedArray(jnp.shape(x), jnp.result_type(x)), init
     )
     scan_avals = jax.tree_util.tree_map(
-      lambda x: core.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x)), xs
+        lambda x: core.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x)), xs
     )
     input_avals = (carry_avals, scan_avals)
 
     in_avals, in_tree = jax.tree_util.tree_flatten(input_avals)
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
-      lu.wrap_init(broadcast_body), in_tree
+        lu.wrap_init(broadcast_body), in_tree
     )
     in_pvals = list(map(pe.PartialVal.unknown, in_avals))
     _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
@@ -155,29 +166,63 @@ def scan(
     for pv, const in out_pvals:
       if pv is not None:
         raise ValueError(
-          'broadcasted variable has a data dependency on the scan body.'
+            'broadcasted variable has a data dependency on the scan body.'
         )
       out_flat.append(const)
     broadcast_in, constants_out = jax.tree_util.tree_unflatten(
-      out_tree(), out_flat
+        out_tree(), out_flat
     )
 
     if jax.version.__version_info__ > (0, 4, 25):
       c, ys = lax.scan(
-        body_fn, init, xs, length=length, reverse=reverse, unroll=unroll,
-        _split_transpose=_split_transpose
+          body_fn, init, xs, length=length, reverse=reverse, unroll=unroll,
+          _split_transpose=_split_transpose
       )
     else:
       c, ys = lax.scan(
-        body_fn, init, xs, length=length, reverse=reverse, unroll=unroll
+          body_fn, init, xs, length=length, reverse=reverse, unroll=unroll
       )
     ys = jax.tree_util.tree_map(transpose_from_front, out_axes, ys)
     ys = jax.tree_util.tree_map(
-      lambda ax, const, y: (const if ax is broadcast else y),
-      out_axes,
-      constants_out,
-      ys,
+        lambda ax, const, y: (const if ax is broadcast else y),
+        out_axes,
+        constants_out,
+        ys,
     )
     return broadcast_in, c, ys
 
-  return scan_fn
+  def simple_scan_fn(broadcast_in, init, *args):
+    # Saves an extra tracing operation.
+    # No verification of constancy, and no support for non-carry broadcast
+    # function outputs.
+    xs = jax.tree_util.tree_map(transpose_to_front, in_axes, args)
+
+    if broadcast in jax.tree_util.tree_leaves(out_axes):
+      raise ValueError(f"nn.scan run with check_constancy_invariants=False "
+                       f"does not support broadcast non-carry function "
+                       f"outputs.  out_axes was given as {out_axes}")
+
+    def body_fn(c, xs):
+      # inject constants
+      xs = jax.tree_util.tree_map(
+          lambda ax, arg, x: (arg if ax is broadcast else x), in_axes, args, xs
+      )
+      _, c, ys = fn(broadcast_in, c, *xs)
+      return c, ys
+
+    if jax.version.__version_info__ > (0, 4, 25):
+      c, ys = lax.scan(
+          body_fn, init, xs, length=length, reverse=reverse, unroll=unroll,
+          _split_transpose=_split_transpose
+      )
+    else:
+      c, ys = lax.scan(
+          body_fn, init, xs, length=length, reverse=reverse, unroll=unroll
+      )
+    ys = jax.tree_util.tree_map(transpose_from_front, out_axes, ys)
+    return broadcast_in, c, ys
+
+  if check_constancy_invariants:
+    return scan_fn
+  else:
+    return simple_scan_fn
