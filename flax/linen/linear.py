@@ -145,7 +145,15 @@ class DenseGeneral(Module):
       flat_shape = jax.tree_util.tree_map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, meta.AxisMetadata):
-        return meta.replace_boxed(kernel, jnp.reshape(kernel.unbox(), shape))
+        if isinstance(kernel, meta.Partitioned):
+          # User may have written an nd sharding, but the value is 2D due to
+          # initialization above. Unbox and rebox without applying the
+          # constraint to the flattened array.
+          return kernel.replace_boxed(
+              jnp.reshape(kernel.unbox(apply_constraint=False), shape)
+          )
+        else:
+          return meta.replace_boxed(kernel, jnp.reshape(kernel.unbox(), shape))
       return jnp.reshape(kernel, shape)
 
     batch_shape = tuple(inputs.shape[ax] for ax in batch_dims)
