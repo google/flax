@@ -264,6 +264,7 @@ class SerializationTest(parameterized.TestCase):
       'float',
       'complex',
       'bool',
+      'void',
   ])
   def test_numpy_serialization(self, dtype):
     np.random.seed(0)
