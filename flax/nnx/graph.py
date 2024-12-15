@@ -1608,13 +1608,14 @@ def clone(node: Node) -> Node:
 def call(
   graphdef_state: tuple[GraphDef[A], GraphState], /
 ) -> ApplyCaller[tuple[GraphDef[A], GraphState]]:
-  """Calls a method underlying graph node defined by a (GraphDef, State) pair.
+  """Calls a method underlying graph node defined by a (``GraphDef, State``) pair.
+  (:class:`flax.nnx.GraphDef`, :class:`flax.nnx.State`)
 
-  ``call`` takes a ``(GraphDef, State)`` pair and creates a proxy object that can be
+  ``call`` takes an NNX ``(GraphDef, State)`` pair and creates a proxy object that can be
   used to call methods on the underlying graph node. When a method is called, the
-  output is returned along with a new (GraphDef, State) pair that represents the
-  updated state of the graph node. ``call`` is equivalent to :func:`merge` > ``method``
-  > :func:`split`` but is more convenient to use in pure JAX functions.
+  output is returned along with a new ``(GraphDef, State)`` pair that represents the
+  updated state of the graph node. ``call`` is equivalent to :func:`flax.nnx.merge` >
+  ``method`` > :func:`flax.nnx.split` but is more convenient to use in pure JAX functions.
 
   Example::
 
@@ -1652,8 +1653,8 @@ def call(
     Array(2, dtype=uint32)
 
   The proxy object returned by ``call`` supports indexing and attribute access
-  to access nested methods. In the example below, the ``increment`` method indexing
-  is used to call the ``increment`` method of the ``StatefulLinear`` module
+  to access nested methods. In the example below, the ``increment()`` method indexing
+  is used to call the ``increment()`` method of the ``StatefulLinear`` :class:`flax.nnx.Module`
   at the ``b`` key of a ``nodes`` dictionary.
 
     >>> class StatefulLinear(nnx.Module):
