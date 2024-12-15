@@ -911,7 +911,7 @@ def with_metadata(
 
 def split_flat_state(
   flat_state: tp.Iterable[tuple[PathParts, Variable | VariableState]],
-  filters: tuple[filterlib.Filter, ...],
+  filters: tp.Sequence[filterlib.Filter],
 ) -> tuple[list[tuple[PathParts, Variable | VariableState]], ...]:
   predicates = filterlib.filters_to_predicates(filters)
   # we have n + 1 states, where n is the number of predicates
