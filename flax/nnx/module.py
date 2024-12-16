@@ -322,12 +322,13 @@ class Module(Object, metaclass=ModuleMeta):
       )
 
   def train(self, **attributes):
-    """Sets the Module to training mode.
+    """Sets the :class:`flax.nnx.Module` to training mode.
 
-    ``train`` uses ``set_attributes`` to recursively set attributes ``deterministic=False``
-    and ``use_running_average=False`` of all nested Modules that have these attributes.
-    Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
-    Modules.
+    ``nnx.Module.train`` uses :func:`flax.nnx.Module.set_attributes`` to recursively set
+     attributes ``deterministic=False`` and ``use_running_average=False`` of all nested
+    ``nnx.Module``'s that have these attributes. It is primarily used to control the
+    runtime behavior of the :class:`flax.nnx.Dropout` and :class:`flax.nnx.BatchNorm`
+    ``nnx.Module``'s.
 
     Example::
 
@@ -348,7 +349,7 @@ class Module(Object, metaclass=ModuleMeta):
       (False, False)
 
     Args:
-      **attributes: additional attributes passed to ``set_attributes``.
+      **attributes: Additional attributes passed to ``set_attributes``.
     """
     return self.set_attributes(
       deterministic=False,
