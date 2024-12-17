@@ -184,12 +184,12 @@ class Module(Object, metaclass=ModuleMeta):
       setattr(self, name, variable_type(reduced_value))
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
-    """Recursively iterates over all nested :class:`Module`'s of the current Module, including
-    the current Module.
+    """Recursively iterates over all nested :class:`flax.nnx.Module`'s of the current
+    ``Module``, including the current ``Module``.
 
-    ``iter_modules`` creates a generator that yields the path and the Module instance, where
-    the path is a tuple of strings or integers representing the path to the Module from the
-    root Module.
+    ``nnx.Module.iter_modules`` creates a generator that yields the path and the ``nnx.Module``
+    instance, where the path is a tuple of strings or integers representing the path to the
+    ``nnx.Module`` from the root ``nnx.Module``.
 
     Example::
 
@@ -224,13 +224,14 @@ class Module(Object, metaclass=ModuleMeta):
         yield path, value
 
   def iter_children(self) -> tp.Iterator[tuple[Key, Module]]:
-    """Iterates over all children :class:`Module`'s of the current Module. This
-    method is similar to :func:`iter_modules`, except it only iterates over the
-    immediate children, and does not recurse further down.
+    """Iterates over all children :class:`flax.nnx.Module`'s of the current
+    ``Module``. This method is similar to :func:`flax.nnx.Module.iter_modules`,
+    except it only iterates over the immediate children, and does not recurse further
+    down.
 
-    ``iter_children`` creates a generator that yields the key and the Module instance,
-    where the key is a string representing the attribute name of the Module to access
-    the corresponding child Module.
+    ``nnx.Module.iter_children`` creates a generator that yields the key and the
+    ``nnx.Module`` instance, where the key is a string representing the attribute
+    name of the ``nnx.Module`` to access the corresponding child ``nnx.Module``.
 
     Example::
 
