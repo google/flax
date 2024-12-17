@@ -372,10 +372,10 @@ class State(MutableMapping[K, V], reprlib.Representable):
   def merge(
     state: tp.Mapping[K, V], /, *states: tp.Mapping[K, V]
   ) -> State[K, V]:
-    """The inverse of :meth:`split() <flax.nnx.State.state.split>`.
+    """The inverse of :func:`flax.nnx.State.state.split`.
 
-    ``merge`` takes one or more ``State``'s and creates
-    a new ``State``.
+    ``nnx.State.state.merge`` takes one or more :class:`flax.nnx.State`'s
+    and creates a new ``nnx.State``.
 
     Example usage::
 
@@ -398,10 +398,10 @@ class State(MutableMapping[K, V], reprlib.Representable):
       >>> assert (model.linear.bias.value == jnp.array([1, 1, 1])).all()
 
     Args:
-      state: A ``State`` object.
-      *states: Additional ``State`` objects.
+      state: A :class:`flax.nnx.State` object.
+      *states: Additional ``nnx.State`` objects.
     Returns:
-      The merged ``State``.
+      The merged ``nnx.State``.
     """
     if not states:
       if isinstance(state, State):
