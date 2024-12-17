@@ -105,9 +105,9 @@ jax.tree_util.register_pytree_node(
 
 
 class State(MutableMapping[K, V], reprlib.Representable):
-  """A pytree-like structure that contains a ``Mapping`` from hashable and
-  comparable keys to leaves. Leaves can be of any type but :class:`VariableState`
-  and :class:`Variable` are the most common.
+  """A JAX pytree-like structure that contains a ``Mapping`` from hashable
+  and comparable keys to pytree leaves. Pytree leaves can be of any type
+  but :class:`flax.nnx.VariableState` and :class:`flax.nnx.Variable` are the most common.
   """
 
   def __init__(
