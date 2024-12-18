@@ -793,6 +793,45 @@ class TestGraphUtils(absltest.TestCase):
     self.assertIs(m1, args_out[2]['b'])
     self.assertIs(m2, args_out[1])
 
+  def test_fingerprint_basic(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    fp1 = nnx.graph.fingerprint(m)
+    m1_hash = hash(fp1)
+    self.assertIsInstance(m1_hash, int)
+
+    fp2 = nnx.graph.fingerprint(m)
+    m2_hash = hash(fp2)
+
+    self.assertEqual(fp1, fp2)
+    self.assertEqual(m1_hash, m2_hash)
+
+  def test_fingerprint_variable_id_sensitive(self):
+    m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    fp1 = nnx.graph.fingerprint(m1)
+    m1_hash = hash(fp1)
+
+    m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    fp2 = nnx.graph.fingerprint(m2)
+    m2_hash = hash(fp2)
+
+    self.assertNotEqual(fp1, fp2)
+    self.assertNotEqual(m1_hash, m2_hash)
+
+  def test_fingerprint_module_id_insensitive(self):
+    m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    m1.kernel = m2.kernel
+    m1.bias = m2.bias
+
+    fp1 = nnx.graph.fingerprint(m1)
+    m1_hash = hash(fp1)
+    fp2 = nnx.graph.fingerprint(m2)
+    m2_hash = hash(fp2)
+
+    self.assertEqual(fp1, fp2)
+    self.assertEqual(m1_hash, m2_hash)
+
 
 class SimpleModule(nnx.Module):
   pass
