@@ -783,7 +783,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     )
 
   def replace(self, value: B) -> VariableState[B]:
-    return VariableState(self.type, value, **self.get_metadata())
+    return VariableState(self.type, value, **self._var_metadata)
 
   def to_variable(self) -> Variable[A]:
     # we use object.__new__ to avoid calling __init__ and bypass the
