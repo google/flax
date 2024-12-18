@@ -50,7 +50,7 @@ class Dict(nnx.Module):
 
   if tp.TYPE_CHECKING:
 
-    def __getattr__(self, key): ...
+    def __getattr__(self, key) -> tp.Any: ...
 
 
 class TestJIT(absltest.TestCase):
@@ -59,12 +59,16 @@ class TestJIT(absltest.TestCase):
 
     @nnx.jit
     def g(m: Dict):
-      m.a = 2
+      m.a.value += 1
       return 1.0
 
     out = g(m)
 
-    assert m.a == 2
+    assert m.a.value == 2
+    assert out == 1.0
+
+    out = g(m)
+    assert m.a.value == 3
     assert out == 1.0
 
   def test_jit_on_init(self):
@@ -714,6 +718,9 @@ class TestCustomVJP(parameterized.TestCase):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
+
+      def __hash__(self) -> int:
+        return id(self)
 
     @nnx.custom_vjp
     @nnx.remat
@@ -3080,6 +3087,9 @@ class TestCheckify(absltest.TestCase):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       a: nnx.Param
+
+      def __hash__(self):
+        return id(self)
 
     @nnx.jit
     def f(m):

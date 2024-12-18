@@ -80,7 +80,7 @@ RngDict = tp.Union[
 ]
 
 
-class Rngs(Object, tp.Mapping[str, tp.Callable[[], jax.Array]]):
+class Rngs(Object):
   """NNX rng container class. To instantiate the ``Rngs``, pass
   in an integer, specifying the starting seed. ``Rngs`` can have
   different "streams", allowing the user to generate different
@@ -236,6 +236,10 @@ class Rngs(Object, tp.Mapping[str, tp.Callable[[], jax.Array]]):
 
   def __setstate__(self, state):
     vars(self).update(state)
+
+  def items(self):
+    for name in self:
+      yield name, self[name]
 
 
 class ForkStates(tp.NamedTuple):
