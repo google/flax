@@ -1752,10 +1752,10 @@ class Module(ModuleBase):
         this variable. This function will only be called the first time this
         variable is used in this module. If None, the variable must already be
         initialized otherwise an error is raised.
-      *init_args: The positional arguments to pass to init_fn.
+      *init_args: The positional arguments to pass to `init_fn`.
       unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
         value, see ``flax.nn.meta.unbox`` (default: True).
-      **init_kwargs: The key-word arguments to pass to init_fn
+      **init_kwargs: The key-word arguments to pass to `init_fn`.
 
     Returns:
       A :class:`flax.core.variables.Variable` that can be read or set via
