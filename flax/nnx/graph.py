@@ -19,6 +19,7 @@ import dataclasses
 import functools
 import threading
 import typing as tp
+from weakref import WeakKeyDictionary
 
 import jax
 import numpy as np
@@ -50,7 +51,7 @@ Node = tp.TypeVar('Node')
 Leaf = tp.TypeVar('Leaf')
 AuxData = tp.TypeVar('AuxData')
 
-StateLeaf = VariableState[tp.Any]
+StateLeaf = tp.Union[VariableState[tp.Any], Variable[tp.Any]]
 NodeLeaf = Variable[tp.Any]
 GraphState = State[Key, StateLeaf]
 
@@ -71,6 +72,9 @@ class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin[A, B]):
   ):
     self._mapping: dict[int, tuple[A, B]] = {}
     self.update(mapping)
+
+  def copy(self) -> RefMap[A, B]:
+    return RefMap(self)
 
   def __getitem__(self, key: A) -> B:
     return self._mapping[id(key)][1]
@@ -388,7 +392,11 @@ PureState = tuple[GraphDef[A], GraphState]
 
 
 def flatten(
-  node: Node, /, ref_index: RefMap[tp.Any, Index] | None = None
+  node: Node,
+  /,
+  *,
+  ref_index: RefMap[tp.Any, Index] | None = None,
+  cache_context: WeakKeyDictionary[tp.Any, CacheContext] | None = None,
 ) -> tuple[GraphDef[Node], GraphState]:
   """Flattens a graph node into a (graphdef, state) pair.
 
@@ -400,15 +408,76 @@ def flatten(
   """
   if ref_index is None:
     ref_index = RefMap()
-  flat_state: list[tuple[PathParts, StateLeaf]] = []
-  graphdef = _graph_flatten((), ref_index, flat_state, node)
-  return graphdef, GraphState.from_flat_path(flat_state)
+
+  if node in ref_index:
+    return NodeRef(type(node), ref_index[node]), State({})
+
+  # main flatten function
+  def do_flatten(*, return_variables: bool):
+    assert ref_index is not None
+    flat_state: list[tuple[PathParts, StateLeaf]] = []
+    graphdef = _graph_flatten((), ref_index, flat_state, return_variables, node)
+    return graphdef, GraphState.from_flat_path(flat_state)
+
+  # cache logic
+  if cache_context is None:
+    graphdef, state = do_flatten(return_variables=False)
+  else:  # cache_context is not None
+    if node in cache_context:
+      node_cache = cache_context[node]
+      cache_fp = node_cache.fingerprint
+      prev_ref_index = ref_index.copy()
+      node_fp = fingerprint(node, ref_index=ref_index)
+      if cache_fp == node_fp:
+        graphdef = node_cache.graphdef
+        state = jax.tree.map(
+          lambda v: v.to_state(),
+          node_cache.variables,
+          is_leaf=lambda x: isinstance(x, Variable),
+        )
+      else:  # cache_fp != current_fp:
+        index_ref_diff = {
+          index: ref
+          for ref, index in ref_index.items()
+          if ref not in prev_ref_index
+        }
+        ref_index = prev_ref_index  # reset ref_index before calling do_flatten
+        graphdef, variables = do_flatten(return_variables=True)
+        state = jax.tree.map(
+          lambda v: v.to_state(),
+          variables,
+          is_leaf=lambda x: isinstance(x, Variable),
+        )
+        cache_context[node] = CacheContext(
+          node_fp, graphdef, variables, index_ref_diff
+        )
+    else:  # node not in cache_context
+      prev_ref_index = ref_index.copy()
+      node_fp = fingerprint(node, ref_index=ref_index)
+      index_ref_diff = {
+        index: ref
+        for ref, index in ref_index.items()
+        if ref not in prev_ref_index
+      }
+      ref_index = prev_ref_index  # reset ref_index before calling do_flatten
+      graphdef, variables = do_flatten(return_variables=True)
+      state = jax.tree.map(
+        lambda v: v.to_state(),
+        variables,
+        is_leaf=lambda x: isinstance(x, Variable),
+      )
+      cache_context[node] = CacheContext(
+        node_fp, graphdef, variables, index_ref_diff
+      )
+
+  return graphdef, state
 
 
 def _graph_flatten(
   path: PathParts,
   ref_index: RefMap[tp.Any, Index],
   flat_state: list[tuple[PathParts, StateLeaf]],
+  return_variable: bool,
   node: Node,
 ) -> NodeDef[Node] | NodeRef:
   if not is_node(node):
@@ -431,7 +500,9 @@ def _graph_flatten(
   values, metadata = node_impl.flatten(node)
   for key, value in values:
     if is_node(value):
-      nodedef = _graph_flatten((*path, key), ref_index, flat_state, value)
+      nodedef = _graph_flatten(
+        (*path, key), ref_index, flat_state, return_variable, value
+      )
       # subgraphs.append((key, nodedef))
       attributes.append(SubGraphAttribute(key, nodedef))
     elif isinstance(value, Variable):
@@ -440,7 +511,8 @@ def _graph_flatten(
           LeafAttribute(key, NodeRef(type(value), ref_index[value]))
         )
       else:
-        flat_state.append(((*path, key), value.to_state()))
+        state_leaf = value if return_variable else value.to_state()
+        flat_state.append(((*path, key), state_leaf))
         variable_index = ref_index[value] = len(ref_index)
         variabledef = VariableDef(
           type(value), variable_index, HashableMapping(value._var_metadata)
@@ -464,6 +536,70 @@ def _graph_flatten(
   )
   return nodedef
 
+def fingerprint(
+  node: Node, /, *, ref_index: RefMap[tp.Any, Index] | None = None
+) -> tuple[tp.Any, ...]:
+  """ """
+  if ref_index is None:
+    ref_index = RefMap()
+  fp = _graph_fingerprint(node, ref_index)
+  return fp
+
+
+def _graph_fingerprint(
+  node,
+  ref_index: RefMap[tp.Any, Index],
+) -> tuple[tp.Any, ...]:
+  if not is_node(node):
+    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
+
+  if node in ref_index:
+    return (type(node), ref_index[node])
+
+  node_impl = get_node_impl(node)
+
+  # only cache graph nodes
+  if isinstance(node_impl, GraphNodeImpl):
+    index = len(ref_index)
+    ref_index[node] = index
+  else:
+    index = -1
+
+  attributes: list[tuple[tp.Any, ...]] = []
+
+  values, metadata = node_impl.flatten(node)
+  for key, value in values:
+    if is_node(value):
+      node_fp = _graph_fingerprint(value, ref_index)
+      # subgraphs.append((key, nodedef))
+      attributes.append((key, node_fp))
+    elif isinstance(value, Variable):
+      if value in ref_index:
+        attributes.append((key, (type(value), ref_index[value])))
+      else:
+        variable_index = ref_index[value] = len(ref_index)
+        # the fingerprint must be sensitive to Variable identity
+        variable_fp = (
+          id(value),
+          type(value),
+          variable_index,
+          tuple(value._var_metadata.items()),
+        )
+        attributes.append((key, variable_fp))
+    else:
+      if isinstance(value, (jax.Array, np.ndarray)):
+        raise ValueError(f'Arrays leaves are not supported: {value}')
+      # static_fields.append((key, value))
+      attributes.append((key, value))
+
+  node_fp = (
+    node_impl.type,
+    index,
+    tuple(attributes),
+    metadata,
+  )
+  return node_fp
+
 
 def unflatten(
   graphdef: GraphDef[Node],
@@ -472,6 +608,7 @@ def unflatten(
   *,
   index_ref: dict[Index, tp.Any] | None = None,
   index_ref_cache: dict[Index, tp.Any] | None = None,
+  cache_context: WeakKeyDictionary[tp.Any, CacheContext] | None = None,
 ) -> Node:
   """Unflattens a graphdef into a node with the given state.
 
@@ -488,13 +625,59 @@ def unflatten(
       existing graph nodes are mutated to have the new content/topology
       specified by the graphdef.
   """
-  if isinstance(state, State):
-    state = state.raw_mapping  # type: ignore
+
   if index_ref is None:
     index_ref = {}
-  assert isinstance(graphdef, (NodeDef, NodeRef))
-  node = _graph_unflatten(graphdef, state, index_ref, index_ref_cache)
+
+  if isinstance(graphdef, NodeRef):
+    return index_ref[graphdef.index]
+
+  assert isinstance(graphdef, NodeDef)
+
+  def do_unflatten():
+    _state: tp.Mapping[KeyT, tp.Any] = state
+    if isinstance(_state, State):
+      _state = _state.raw_mapping  # type: ignore
+    node = _graph_unflatten(graphdef, _state, index_ref, index_ref_cache)
+    return node
+
+  if cache_context is None:
+    node = do_unflatten()
+  else:  # cache_context is not None
+    if index_ref_cache is None:
+      raise ValueError(
+        'index_ref_cache must be provided when cache_context is used.'
+      )
+    if graphdef.index in index_ref_cache:
+      node = index_ref_cache[graphdef.index]
+      if node in cache_context:
+        # node is in cache_context, retrieve its cache
+        cache = cache_context[node]
+        assert graphdef.index_mapping is not None
+
+        # check if the graphdef is the same
+        graphdef_fp = dataclasses.replace(graphdef, index_mapping=None)
+        if cache.graphdef == graphdef_fp and all(
+          a == b for a, b in graphdef.index_mapping.items()
+        ):
+          # graphdefs match, update variables from state
+          def _update_variables(variable: Variable, state: VariableState):
+            variable.raw_value = state.value
+
+          jax.tree.map(_update_variables, cache.variables, state)
+          index_ref.update(cache.index_ref_diff)
+        else:  # cache.graphdef != graphdef_fp
+          # graphdef changed, re-create the node
+          node = do_unflatten()
+      else:  # node not in cache_context
+        # all nodes in index_ref_cache must be in cache_context
+        raise RuntimeError(f'Node not found in cache_context, node: {node}')
+    else:  # graphdef.index not in index_ref_cache
+      # its a new node, create it
+      node = do_unflatten()
+
   return node
+
 
 def _graph_unflatten(
   nodedef: NodeDef[Node] | NodeRef[Node],
@@ -773,6 +956,13 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
 # UpdateContext
 # --------------------------------------------------------
 
+class CacheContext(tp.NamedTuple):
+  fingerprint: tuple
+  graphdef: GraphDef
+  variables: State
+  index_ref_diff: dict[Index, tp.Any]
+
+
 @dataclasses.dataclass
 class GraphContext(threading.local):
   update_context_stacks: dict[str, list[UpdateContext]] = dataclasses.field(
@@ -780,6 +970,9 @@ class GraphContext(threading.local):
   )
   ref_index_stack: list[SplitContext] = dataclasses.field(default_factory=list)
   index_ref_stack: list[MergeContext] = dataclasses.field(default_factory=list)
+  cache_context: WeakKeyDictionary[
+    tp.Callable, WeakKeyDictionary[tp.Any, CacheContext]
+  ] = dataclasses.field(default_factory=WeakKeyDictionary)
 
 
 GRAPH_CONTEXT = GraphContext()
@@ -791,10 +984,19 @@ class SplitContext:
   ref_index: RefMap[tp.Any, Index]
 
   @tp.overload
-  def split(self, graph_node: A, /) -> tuple[GraphDef[A], GraphState]: ...
+  def split(
+    self,
+    graph_node: A,
+    /,
+    cache_context: WeakKeyDictionary[tp.Any, CacheContext] | None = None,
+  ) -> tuple[GraphDef[A], GraphState]: ...
   @tp.overload
   def split(
-    self, graph_node: A, first: filterlib.Filter, /
+    self,
+    graph_node: A,
+    first: filterlib.Filter,
+    /,
+    cache_context: WeakKeyDictionary[tp.Any, CacheContext] | None = None,
   ) -> tuple[GraphDef[A], GraphState]: ...
   @tp.overload
   def split(
@@ -804,14 +1006,20 @@ class SplitContext:
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
+    cache_context: WeakKeyDictionary[tp.Any, CacheContext] | None = None,
   ) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]: ...
   def split(
-    self, node: A, *filters: filterlib.Filter
+    self,
+    node: A,
+    *filters: filterlib.Filter,
+    cache_context: WeakKeyDictionary[tp.Any, CacheContext] | None = None,
   ) -> tuple[GraphDef[A], tpe.Unpack[tuple[GraphState, ...]]]:
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
     )
-    graphdef, state = flatten(node, self.ref_index)
+    graphdef, state = flatten(
+      node, ref_index=self.ref_index, cache_context=cache_context
+    )
     states = _split_state(state, filters)
     if ctx is not None:
       if ctx.index_ref is not None and isinstance(graphdef, NodeDef):
@@ -846,7 +1054,12 @@ class MergeContext:
   index_ref: dict[Index, tp.Any]
 
   def merge(
-    self, graphdef: GraphDef[A], state: GraphState, /, *states: GraphState
+    self,
+    graphdef: GraphDef[A],
+    state: GraphState,
+    /,
+    *states: GraphState,
+    cache_context: WeakKeyDictionary[tp.Any, CacheContext] | None = None,
   ) -> A:
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
@@ -871,6 +1084,7 @@ class MergeContext:
       state,
       index_ref=self.index_ref,
       index_ref_cache=index_ref_cache,
+      cache_context=cache_context,
     )
     return node
 
@@ -1001,7 +1215,7 @@ class UpdateContext:
       filters are passed, a single :class:`State` is returned.
     """
     ref_index: RefMap[tp.Any, Index] = RefMap()
-    graphdef, state = flatten(node, ref_index)
+    graphdef, state = flatten(node, ref_index=ref_index)
     states = _split_state(state, filters)
 
     if self.index_ref is not None and isinstance(graphdef, NodeDef):
