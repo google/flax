@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import dataclasses
+import functools
 import threading
 import typing as tp
 from abc import ABCMeta
@@ -29,10 +30,11 @@ from flax.nnx import (
   tracers,
 )
 from flax.nnx import graph
-from flax.nnx.variablelib import Variable, VariableState
+from flax.nnx.variablelib import Variable
 from flax import errors
 
 G = tp.TypeVar('G', bound='Object')
+F = tp.TypeVar('F', bound=tp.Callable)
 
 
 @dataclasses.dataclass
@@ -98,21 +100,101 @@ class Array:
     return f'Array(shape={self.shape}, dtype={self.dtype.name})'
 
 
+def field(
+  default=dataclasses.MISSING,
+  default_factory=dataclasses.MISSING,
+  init=True,
+  repr=True,
+  hash=None,
+  compare=True,
+  metadata=None,
+  kw_only=dataclasses.MISSING,
+  node: bool = False,
+):
+  metadata = dict(metadata or ())
+  if 'node' in metadata:
+    raise ValueError('"node" is a reserved metadata key')
+  metadata['node'] = node
+  return dataclasses.field(
+    default=default,
+    default_factory=default_factory,
+    init=init,
+    repr=repr,
+    hash=hash,
+    compare=compare,
+    metadata=metadata,
+    kw_only=kw_only,
+  )  # type: ignore
+
+
+def node_field(
+  default=dataclasses.MISSING,
+  default_factory=dataclasses.MISSING,
+  init=True,
+  repr=True,
+  hash=None,
+  compare=True,
+  metadata=None,
+  kw_only=dataclasses.MISSING,
+):
+  return field(
+    default=default,
+    default_factory=default_factory,
+    init=init,
+    repr=repr,
+    hash=hash,
+    compare=compare,
+    metadata=metadata,
+    kw_only=kw_only,
+    node=True,
+  )
+
+
+def static_field(
+  default=dataclasses.MISSING,
+  default_factory=dataclasses.MISSING,
+  init=True,
+  repr=True,
+  hash=None,
+  compare=True,
+  metadata=None,
+  kw_only=dataclasses.MISSING,
+):
+  return field(
+    default=default,
+    default_factory=default_factory,
+    init=init,
+    repr=repr,
+    hash=hash,
+    compare=compare,
+    metadata=metadata,
+    kw_only=kw_only,
+    node=False,
+  )
+
+
 class Object(reprlib.Representable, metaclass=ObjectMeta):
   if tp.TYPE_CHECKING:
     _object__state: ObjectState
+    _object__node_attributes: set[str]
 
   def __init_subclass__(cls) -> None:
     super().__init_subclass__()
+    node_attributes: set[str] = set()
+    for name in dir(cls):
+      if not name.startswith('__'):
+        value = getattr(cls, name)
+        if isinstance(value, dataclasses.Field):
+          if value.metadata.get('node', False):
+            node_attributes.add(name)
 
-    graph.register_graph_node_type(
-      type=cls,
-      flatten=cls._graph_node_flatten,
-      set_key=cls._graph_node_set_key,  # type: ignore
-      pop_key=cls._graph_node_pop_key,  # type: ignore
-      create_empty=cls._graph_node_create_empty,
-      clear=cls._graph_node_clear,
-      init=cls._graph_node_init,  # type: ignore
+    cls._object__node_attributes = node_attributes
+
+    jax.tree_util.register_pytree_with_keys(
+      cls,
+      lambda node: _object_flatten(node, with_paths=True),
+      _object_unflatten,  # type: ignore
+      flatten_func=lambda node: _object_flatten(node, with_paths=False),
     )
 
   if not tp.TYPE_CHECKING:
@@ -187,42 +269,196 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
         subtree_renderer=subtree_renderer,
     )
 
-  # Graph Definition
-  def _graph_node_flatten(self):
-    nodes = vars(self).copy()
-    del nodes['_object__state']
-    nodes = sorted(nodes.items())
-    return nodes, (type(self), self._object__state._initializing)
+class BiMap(tp.Mapping[tp.Any, int]):
+  def __init__(self):
+    self._forward: graph.RefMap[tp.Any, int] = graph.RefMap()
+    self._backward: dict[int, tp.Any] = {}
 
-  def _graph_node_set_key(self, key: str, value: tp.Any):
-    if not isinstance(key, str):
-      raise KeyError(f'Invalid key: {key!r}')
-    elif (
-      hasattr(self, key)
-      and isinstance(variable := getattr(self, key), Variable)
-      and isinstance(value, VariableState)
-    ):
-      variable.update_from_state(value)
-    else:
-      setattr(self, key, value)
+  def __setitem__(self, obj: tp.Any, index: int):
+    self._forward[obj] = index
+    self._backward[index] = obj
 
-  def _graph_node_pop_key(self, key: str):
-    if not isinstance(key, str):
-      raise KeyError(f'Invalid key: {key!r}')
-    return vars(self).pop(key)
+  def __getitem__(self, obj):
+    return self._forward[obj]
 
-  @staticmethod
-  def _graph_node_create_empty(static: tuple[tp.Type[G], bool]) -> G:
-    node_type, initializing = static
-    node = object.__new__(node_type)
-    vars(node).update(_object__state=ObjectState(initializing))
-    return node
+  def get_obj(self, index: int):
+    return self._backward[index]
 
-  def _graph_node_clear(self):
-    module_state = self._object__state
-    module_vars = vars(self)
-    module_vars.clear()
-    module_vars['_object__state'] = module_state
+  def __delitem__(self, key):
+    value = self._forward.pop(key)
+    del self._backward[value]
 
-  def _graph_node_init(self, attributes: tp.Iterable[tuple[str, tp.Any]]):
-    vars(self).update(attributes)
+  def __contains__(self, obj):
+    return obj in self._forward
+
+  def contains_index(self, index: int):
+    return index in self._backward
+
+  def __len__(self):
+    return len(self._forward)
+
+  def __repr__(self):
+    return f'BiMap({self._forward})'
+
+
+@dataclasses.dataclass(slots=True)
+class UpdateContext:
+  outer_ref_index: BiMap
+  inner_ref_index: BiMap | None
+  tmp_ref_index: graph.RefMap[tp.Any, int] | None
+  tmp_index_ref: dict[int, tp.Any] | None
+
+  # [1]
+  def __enter__(self):
+    if OBJECT_CONTEXT.update_context is not None:
+      raise RuntimeError('Traversal context already set, this is a bug.')
+
+    OBJECT_CONTEXT.update_context = self
+    return self
+
+  def __exit__(self, *args):
+    ctx = OBJECT_CONTEXT.update_context
+    if ctx is None:
+      raise RuntimeError('Traversal context not set, this is a bug.')
+    # clear references
+    del ctx.outer_ref_index
+    del ctx.inner_ref_index
+
+    OBJECT_CONTEXT.update_context = None
+
+  def __call__(self, f: F) -> F:
+    @functools.wraps(f)
+    def update_context_manager_wrapper(*args, **kwargs):
+      with self:
+        return f(*args, **kwargs)
+
+    return update_context_manager_wrapper  # type: ignore
+
+
+def update_context():
+  """
+
+                        idxmap
+  (2) merge ─────────────────────────────► split (3)
+        ▲                                    │
+        │               inside               │
+        │. . . . . . . . . . . . . . . . . . │ index_mapping
+        │               outside              │
+        │                                    ▼
+  (1) split──────────────────────────────► merge (4)
+                        refmap
+
+  """
+  return UpdateContext(BiMap(), BiMap(), None, None)
+
+
+def current_update_context() -> UpdateContext:
+  if OBJECT_CONTEXT.update_context is None:
+    raise ValueError('Traversal context not set')
+  return OBJECT_CONTEXT.update_context
+
+
+@dataclasses.dataclass(slots=True)
+class ObjectContext(threading.local):
+  update_context: UpdateContext | None = None
+
+
+OBJECT_CONTEXT = ObjectContext()
+
+
+@jax.tree_util.register_static
+@dataclasses.dataclass(frozen=True, slots=True)
+class StaticAttribute:
+  value: tp.Any
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ObjectMetadata:
+  type: type[Object]
+  index: int
+  index_cache: int | None
+
+
+# Graph Definition
+def _object_flatten(node: Object, *, with_paths: bool):
+  context = OBJECT_CONTEXT.update_context
+  if context is None:
+    raise ValueError('Traversal context not set')
+
+  if context.tmp_ref_index is not None:
+    ref_index = context.tmp_ref_index
+  else:
+    ref_index = context.outer_ref_index
+
+  children = []
+  if node in ref_index:
+    index = ref_index[node]
+  else:
+    index = ref_index[node] = len(context.outer_ref_index)
+
+    for name, value in sorted(vars(node).items()):
+      if name.startswith('_object__'):
+        continue
+      if name not in node._object__node_attributes:
+        value = StaticAttribute(value)
+      if with_paths:
+        children.append((jax.tree_util.GetAttrKey(name), value))
+      else:
+        children.append(value)
+
+  if context.inner_ref_index is not None:
+    index_cache = context.inner_ref_index[node]
+  else:
+    index_cache = None
+
+  metadata = ObjectMetadata(
+    type=type(node), index=index, index_cache=index_cache
+  )
+  return children, metadata
+
+
+def _object_unflatten(metadata: ObjectMetadata, children: tp.Sequence[tp.Any]):
+  context = OBJECT_CONTEXT.update_context
+  if context is None:
+    raise ValueError('Traversal context not set')
+
+  if (
+    context.tmp_index_ref is not None
+    and metadata.index in context.tmp_index_ref
+  ):
+    return context.tmp_index_ref[metadata.index]
+  if (
+    context.inner_ref_index is not None
+    and context.inner_ref_index.contains_index(metadata.index)
+  ):
+    return context.inner_ref_index.get_obj(metadata.index)
+
+  if (
+    metadata.index_cache is not None
+    and context.outer_ref_index.contains_index(metadata.index_cache)
+  ):
+    obj: Object = context.outer_ref_index.get_obj(metadata.index_cache)
+    object_state = obj._object__state
+    vars(obj).clear()
+  else:
+    # [2]
+    obj = object.__new__(metadata.type)
+    object_state = ObjectState()
+
+  if context.inner_ref_index is not None:
+    context.inner_ref_index[obj] = metadata.index
+  elif context.tmp_index_ref is not None:
+    context.tmp_index_ref[metadata.index] = obj
+  else:
+    raise RuntimeError(
+      f'Either inner_ref_index or tmp_index_ref must be set, got {context}'
+    )
+
+  vars(obj).update(
+    {
+      name: value.value if type(value) is StaticAttribute else value
+      for name, value in children
+    },
+    _object__state=object_state,
+  )
+  return obj
