@@ -1274,6 +1274,11 @@ class Module(ModuleBase):
         object.__setattr__(self, name, val)
         return
       else:
+        # If the attribute is a python special method, we allow setting it (this
+        # is useful e.g. for IPython auto-reload).
+        if name.startswith('__'):
+          object.__setattr__(self, name, val)
+          return
         # We're past all initialization and setup logic:
         # Raises a TypeError just like frozen python dataclasses.
         raise errors.SetAttributeFrozenModuleError(
