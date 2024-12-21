@@ -111,6 +111,14 @@ class MappingReprMixin(tp.Mapping[A, B]):
     for key, value in self.items():
       yield Attr(repr(key), value)
 
+class SequenceReprMixin(tp.Sequence[A], Representable):
+  def __nnx_repr__(self):
+    yield Object(type='', value_sep='', start='[', end=']')
+
+    for value in self:
+      yield Attr('', value)
+
+
 @dataclasses.dataclass(repr=False)
 class PrettyMapping(Representable):
   mapping: tp.Mapping

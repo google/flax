@@ -54,7 +54,7 @@ class NestedStateRepr(reprlib.Representable):
     # Render as the dictionary itself at the same path.
     return subtree_renderer(children, path=path)
 
-class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.PrettySequence):
+class FlatState(reprlib.SequenceReprMixin[tuple[PathParts, V]]):
   _keys: tuple[PathParts, ...]
   _values: list[V]
 
@@ -82,6 +82,85 @@ class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.PrettySequence):
 
   def __iter__(self) -> tp.Iterator[tuple[PathParts, V]]:
     return iter(zip(self._keys, self._values))
+
+  def to_nested_state(self) -> State[PathParts, V]:
+    return State.from_flat_path(self)
+
+  @tp.overload
+  def split(self, first: filterlib.Filter, /) -> FlatState[V]: ...
+
+  @tp.overload
+  def split(
+    self,
+    first: filterlib.Filter,
+    second: filterlib.Filter,
+    /,
+    *filters: filterlib.Filter,
+  ) -> tuple[FlatState[V], ...]: ...
+
+  @tp.overload
+  def split(
+    self, /, *filters: filterlib.Filter
+  ) -> tp.Union[FlatState[V], tuple[FlatState[V], ...]]: ...
+
+  def split(  # type: ignore[misc]
+    self, first: filterlib.Filter, /, *filters: filterlib.Filter
+  ) -> tp.Union[FlatState[V], tuple[FlatState[V], ...]]:
+    filters = (first, *filters)
+    *flat_states_, rest = _split_state(self, *filters)
+
+    if rest:
+      raise ValueError(
+        'Non-exhaustive filters, got a non-empty remainder: '
+        f'{rest}.\nUse `...` to match all remaining elements.'
+      )
+
+    flat_states: FlatState[V] | tuple[FlatState[V], ...]
+    if len(flat_states_) == 1:
+      flat_states = flat_states_[0]
+    else:
+      flat_states = tuple(flat_states_)
+    return flat_states  # type: ignore
+
+  @tp.overload
+  def filter(self, first: filterlib.Filter, /) -> FlatState[V]: ...
+
+  @tp.overload
+  def filter(
+    self,
+    first: filterlib.Filter,
+    second: filterlib.Filter,
+    /,
+    *filters: filterlib.Filter,
+  ) -> tuple[FlatState[V], ...]: ...
+
+  def filter(
+    self,
+    first: filterlib.Filter,
+    /,
+    *filters: filterlib.Filter,
+  ) -> tp.Union[FlatState[V], tuple[FlatState[V], ...]]:
+    *flat_states_, _rest = _split_state(self, first, *filters)
+
+    assert len(flat_states_) == len(filters) + 1
+
+    flat_states: FlatState[V] | tuple[FlatState[V], ...]
+    if len(flat_states_) == 1:
+      flat_states = flat_states_[0]
+    else:
+      flat_states = tuple(flat_states_)
+
+    return flat_states  # type: ignore
+
+  @staticmethod
+  def merge(
+    flat_state: tp.Iterable[tuple[PathParts, V]],
+    /,
+    *flat_states: tp.Iterable[tuple[PathParts, V]],
+  ) -> FlatState[V]:
+    flat_states = (flat_state, *flat_states)
+
+    return FlatState(elem for flat_state in flat_states for elem in flat_state)
 
 
 def _flat_state_pytree_flatten(x: FlatState[V]):
@@ -291,7 +370,8 @@ class State(MutableMapping[K, V], reprlib.Representable):
       One or more ``States`` equal to the number of filters passed.
     """
     filters = (first, *filters)
-    *states_, rest = _split_state(self.flat_state(), *filters)
+    flat_states = _split_state(self.flat_state(), *filters)
+    *states_, rest = (state.to_nested_state() for state in flat_states)
 
     if rest:
       raise ValueError(
@@ -356,7 +436,8 @@ class State(MutableMapping[K, V], reprlib.Representable):
     Returns:
       One or more ``States`` equal to the number of filters passed.
     """
-    *states_, _rest = _split_state(self.flat_state(), first, *filters)
+    flat_states = _split_state(self.flat_state(), first, *filters)
+    *states_, _rest = (state.to_nested_state() for state in flat_states)
 
     assert len(states_) == len(filters) + 1
 
@@ -456,7 +537,7 @@ jax.tree_util.register_pytree_with_keys(
 def _split_state(
   flat_state: FlatState[V],
   *filters: filterlib.Filter,
-) -> tuple[State[PathParts, V], ...]:
+) -> tuple[FlatState[V], ...]:
   for i, filter_ in enumerate(filters):
     if filter_ in (..., True) and i != len(filters) - 1:
       remaining_filters = filters[i + 1 :]
@@ -482,7 +563,7 @@ def _split_state(
       # if we didn't break, set leaf to last state
       flat_states[-1].append((path, value))  # type: ignore[index] # mypy is wrong here?
 
-  return tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
+  return tuple(FlatState(flat_state) for flat_state in flat_states)
 
 
 def create_path_filters(state: State):
