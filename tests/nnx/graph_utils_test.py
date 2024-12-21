@@ -64,7 +64,8 @@ class TestGraphUtils(absltest.TestCase):
     g = [a, 3, a, nnx.Param(4)]
 
     refmap = nnx.graph.RefMap()
-    graphdef, state = nnx.graph.flatten(g, ref_index=refmap)
+    graphdef, flat_state = nnx.graph.flatten(g, ref_index=refmap)
+    state = flat_state.to_nested_state()
 
     state[0]['b'].raw_value = 2
     state[3].raw_value = 4
@@ -329,6 +330,7 @@ class TestGraphUtils(absltest.TestCase):
     ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
+    state = state.to_nested_state()
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
@@ -337,6 +339,7 @@ class TestGraphUtils(absltest.TestCase):
       f(m)
       ref_in_idx_in = nnx.graph.RefMap[Any, int]()
       graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
+      state = state.to_nested_state()
       idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
@@ -369,6 +372,7 @@ class TestGraphUtils(absltest.TestCase):
     ref_out_idx_out = nnx.graph.RefMap[Any, int]()
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
+    state = state.to_nested_state()
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
@@ -377,6 +381,7 @@ class TestGraphUtils(absltest.TestCase):
       f(m)
       ref_in_idx_in = nnx.graph.RefMap[Any, int]()
       graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
+      state = state.to_nested_state()
       idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
@@ -406,6 +411,7 @@ class TestGraphUtils(absltest.TestCase):
     ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
+    state = state.to_nested_state()
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
@@ -414,6 +420,7 @@ class TestGraphUtils(absltest.TestCase):
       f(m)
       ref_in_idx_in = nnx.graph.RefMap[Any, int]()
       graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
+      state = state.to_nested_state()
       idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
       static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
       return state, static_out
