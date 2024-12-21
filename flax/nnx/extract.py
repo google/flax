@@ -254,7 +254,7 @@ class GraphDefState(struct.PyTreeNode):
 
 class NodeStates(struct.PyTreeNode):
   _graphdef: graph.GraphDef[tp.Any] | None
-  states: tuple[graph.GraphState, ...]
+  states: tuple[graph.GraphState | graph.GraphFlatState, ...]
   metadata: tp.Any = struct.field(pytree_node=False)
 
   @property
@@ -264,7 +264,7 @@ class NodeStates(struct.PyTreeNode):
     return self._graphdef
 
   @property
-  def state(self) -> graph.GraphState:
+  def state(self) -> graph.GraphState | graph.GraphFlatState:
     if len(self.states) != 1:
       raise ValueError(
         f'Expected exactly one GraphDefState, got {len(self.states)}'
@@ -275,15 +275,19 @@ class NodeStates(struct.PyTreeNode):
   def from_split(
     cls,
     graphdef: graph.GraphDef[tp.Any],
-    state: graph.GraphState,
+    state: graph.GraphState | graph.GraphFlatState,
     /,
-    *states: graph.GraphState,
+    *states: graph.GraphState | graph.GraphFlatState,
     metadata: tp.Any = None,
   ):
     return cls(_graphdef=graphdef, states=(state, *states), metadata=metadata)
 
   @classmethod
-  def from_states(cls, state: graph.GraphState, *states: graph.GraphState):
+  def from_states(
+    cls,
+    state: graph.GraphState | graph.GraphFlatState,
+    *states: graph.GraphState | graph.GraphFlatState,
+  ):
     return cls(_graphdef=None, states=(state, *states), metadata=None)
 
   @classmethod

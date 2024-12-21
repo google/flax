@@ -30,7 +30,7 @@ from flax.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
 )
-from flax.nnx.statelib import State
+from flax.nnx.statelib import FlatState, State
 from flax.nnx import variablelib
 from flax.nnx.variablelib import Variable, VariableState
 from flax.typing import Key, PathParts, is_key_like
@@ -53,6 +53,7 @@ AuxData = tp.TypeVar('AuxData')
 StateLeaf = VariableState[tp.Any]
 NodeLeaf = Variable[tp.Any]
 GraphState = State[Key, StateLeaf]
+GraphFlatState = FlatState[StateLeaf]
 
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
@@ -377,7 +378,9 @@ class NodeDef(GraphDef[Node], reprlib.Representable):
       module = merge(self, state, *states)
       fn = accessor(module)
       out = fn(*args, **kwargs)
-      return out, flatten(module)
+      graphdef, flat_state = flatten(module)
+      state_ = State.from_flat_path(flat_state)
+      return out, (graphdef, state_)
 
     return CallableProxy(_apply, accessor)  # type: ignore
 
@@ -389,7 +392,7 @@ PureState = tuple[GraphDef[A], GraphState]
 
 def flatten(
   node: Node, /, ref_index: RefMap[tp.Any, Index] | None = None
-) -> tuple[GraphDef[Node], GraphState]:
+) -> tuple[GraphDef[Node], FlatState[tp.Any]]:
   """Flattens a graph node into a (graphdef, state) pair.
 
   Args:
@@ -402,7 +405,7 @@ def flatten(
     ref_index = RefMap()
   flat_state: list[tuple[PathParts, StateLeaf]] = []
   graphdef = _graph_flatten((), ref_index, flat_state, node)
-  return graphdef, GraphState.from_flat_path(flat_state)
+  return graphdef, FlatState(flat_state)
 
 
 def _graph_flatten(
@@ -811,8 +814,11 @@ class SplitContext:
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
     )
-    graphdef, state = flatten(node, self.ref_index)
-    states = _split_state(state, filters)
+    graphdef, flat_state = flatten(node, self.ref_index)
+    flat_states = _split_state(flat_state, filters)
+    states = tuple(
+      State.from_flat_path(flat_state) for flat_state in flat_states
+    )
     if ctx is not None:
       if ctx.index_ref is not None and isinstance(graphdef, NodeDef):
         index_to_index = compose_mapping(ctx.index_ref, self.ref_index)
@@ -821,6 +827,47 @@ class SplitContext:
         )
 
     return graphdef, *states
+
+  @tp.overload
+  def flatten(
+    self, graph_node: A, /
+  ) -> tuple[GraphDef[A], FlatState[VariableState[tp.Any]]]: ...
+  @tp.overload
+  def flatten(
+    self, graph_node: A, first: filterlib.Filter, /
+  ) -> tuple[GraphDef[A], FlatState[VariableState[tp.Any]]]: ...
+  @tp.overload
+  def flatten(
+    self,
+    graph_node: A,
+    first: filterlib.Filter,
+    second: filterlib.Filter,
+    /,
+    *filters: filterlib.Filter,
+  ) -> tuple[
+    GraphDef[A],
+    FlatState[VariableState[tp.Any]],
+    tpe.Unpack[tuple[FlatState[VariableState[tp.Any]], ...]],
+  ]: ...
+  def flatten(
+    self, node: A, *filters: filterlib.Filter
+  ) -> tuple[
+    GraphDef[A], tpe.Unpack[tuple[FlatState[VariableState[tp.Any]], ...]]
+  ]:
+    ctx = (
+      current_update_context(self.ctxtag) if self.ctxtag is not None else None
+    )
+    graphdef, flat_state = flatten(node, self.ref_index)
+    flat_states = _split_state(flat_state, filters)
+
+    if ctx is not None:
+      if ctx.index_ref is not None and isinstance(graphdef, NodeDef):
+        index_to_index = compose_mapping(ctx.index_ref, self.ref_index)
+        graphdef = dataclasses.replace(
+          graphdef, index_mapping=HashableMapping(index_to_index, copy=False)
+        )
+
+    return graphdef, *flat_states
 
 
 @contextlib.contextmanager
@@ -866,6 +913,39 @@ class MergeContext:
       index_ref_cache = None
 
     state = State.merge(state, *states)
+    node = unflatten(
+      graphdef,
+      state,
+      index_ref=self.index_ref,
+      index_ref_cache=index_ref_cache,
+    )
+    return node
+
+  def unflatten(
+    self,
+    graphdef: GraphDef[A],
+    flat_state: GraphFlatState,
+    /,
+    *flat_states: GraphFlatState,
+  ) -> A:
+    ctx = (
+      current_update_context(self.ctxtag) if self.ctxtag is not None else None
+    )
+    if (
+      ctx is not None
+      and isinstance(graphdef, NodeDef)
+      and graphdef.index_mapping is not None
+    ):
+      # outer merge (4), create index_ref_cache
+      assert ctx.ref_index is not None
+      index_ref_cache = compose_mapping_reversed(
+        ctx.ref_index, graphdef.index_mapping
+      )
+    else:
+      # inner merge (2)
+      index_ref_cache = None
+
+    state = FlatState.merge(flat_state, *flat_states).to_nested_state()
     node = unflatten(
       graphdef,
       state,
@@ -1001,9 +1081,11 @@ class UpdateContext:
       filters are passed, a single :class:`State` is returned.
     """
     ref_index: RefMap[tp.Any, Index] = RefMap()
-    graphdef, state = flatten(node, ref_index)
-    states = _split_state(state, filters)
-
+    graphdef, flat_state = flatten(node, ref_index)
+    states = tuple(
+      State.from_flat_path(flat_state)
+      for flat_state in _split_state(flat_state, filters)
+    )
     if self.index_ref is not None and isinstance(graphdef, NodeDef):
       index_to_index = compose_mapping(self.index_ref, ref_index)
       graphdef = dataclasses.replace(
@@ -1195,13 +1277,13 @@ def current_update_context(tag: str) -> UpdateContext:
 # --------------------------------------------------------
 
 def _split_state(
-  state: GraphState,
+  state: FlatState[tp.Any],
   filters: tuple[filterlib.Filter, ...],
-) -> tuple[GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
+) -> tuple[FlatState[tp.Any], tpe.Unpack[tuple[FlatState[tp.Any], ...]]]:
   if not filters:
     return (state,)
   states = state.split(*filters)
-  if isinstance(states, State):
+  if not isinstance(states, tuple):
     return (states,)
   assert len(states) > 0
   return states  # type: ignore[return-value]
@@ -1292,9 +1374,11 @@ def split(
     ``GraphDef`` and one or more ``States`` equal to the number of filters passed. If no
     filters are passed, a single ``State`` is returned.
   """
-  graphdef, state = flatten(node)
-  states = _split_state(state, filters)
-  return graphdef, *states
+  graphdef, flat_state = flatten(node)
+  flat_states = _split_state(flat_state, filters)
+  states = tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
+  return graphdef, *states  # type: ignore[return-value]
+
 
 def merge(
   graphdef: GraphDef[A],
@@ -1486,6 +1570,7 @@ def state(
     One or more :class:`State` mappings.
   """
   _, state = flatten(node)
+  state = state.to_nested_state()
 
   states: GraphState | tuple[GraphState, ...]
   if len(filters) == 0:

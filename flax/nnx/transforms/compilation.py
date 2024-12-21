@@ -91,9 +91,15 @@ class StateSharding(extract.PrefixMapping):
 def _jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
   if isinstance(prefix, StateSharding):
     return extract.NodeStates.from_split(
-      *ctx.split(x, *prefix.filters), metadata=prefix
+      *ctx.flatten(x, *prefix.filters), metadata=prefix
     )
-  return extract.NodeStates.from_split(*ctx.split(x))
+  return extract.NodeStates.from_split(*ctx.flatten(x))
+
+
+def _jit_merge_fn(ctx: graph.MergeContext, path, prefix, leaf) -> tp.Any:
+  if not isinstance(leaf, extract.NodeStates):
+    raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
+  return ctx.unflatten(leaf.graphdef, *leaf.states)  # type: ignore
 
 
 @dataclasses.dataclass(eq=False)
@@ -107,7 +113,9 @@ class JitFn:
     functools.update_wrapper(self, self.f)
 
   def __call__(self, *pure_args, **pure_kwargs):
-    args, kwargs = extract.from_tree((pure_args, pure_kwargs), ctxtag='jit')
+    args, kwargs = extract.from_tree(
+      (pure_args, pure_kwargs), merge_fn=_jit_merge_fn, ctxtag='jit'
+    )
 
     out = self.f(*args, **kwargs)
 
@@ -346,7 +354,9 @@ def jit(
       *pure_args, **pure_kwargs
     )
     _args_out, _kwargs_out, out = extract.from_tree(
-      (pure_args_out, pure_kwargs_out, pure_out), ctxtag='jit'
+      (pure_args_out, pure_kwargs_out, pure_out),
+      merge_fn=_jit_merge_fn,
+      ctxtag='jit',
     )
     return out
 
