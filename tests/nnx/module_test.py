@@ -676,7 +676,7 @@ class TestModuleDef:
 
     graphdef, state = nnx.split(foo)
 
-    assert isinstance(graphdef, nnx.GraphDef)
+    assert isinstance(graphdef, nnx.graph.NodeDef | nnx.graph.NodeRef)
     assert isinstance(state, nnx.State)
     assert issubclass(state.w.type, nnx.Param)
     assert issubclass(state.c.type, nnx.Variable)

@@ -55,16 +55,35 @@ class NestedStateRepr(reprlib.Representable):
     return subtree_renderer(children, path=path)
 
 class FlatState(reprlib.SequenceReprMixin[tuple[PathParts, V]]):
+  __slots__ = ('_keys', '_values')
+
   _keys: tuple[PathParts, ...]
   _values: list[V]
 
-  def __init__(self, items: tp.Iterable[tuple[PathParts, V]]):
+  def __init__(self, items: tp.Iterable[tuple[PathParts, V]], /, *, sort: bool):
     keys, values = [], []
+    if sort:
+      items = sorted(items)
     for key, value in items:
       keys.append(key)
       values.append(value)
     self._keys = tuple(keys)
     self._values = values
+
+  @staticmethod
+  def from_sorted_keys_values(
+    keys: list[PathParts], values: list[V], /
+  ) -> FlatState[V]:
+    flat_state = object.__new__(FlatState)
+    flat_state._keys = tuple(keys)
+    flat_state._values = values
+    return flat_state
+
+  def get_keys(self) -> tp.Tuple[PathParts, ...]:
+    return self._keys
+
+  def get_values(self) -> tp.List[V]:
+    return self._values
 
   @tp.overload
   def __getitem__(self, index: int) -> tuple[PathParts, V]: ...
@@ -75,7 +94,7 @@ class FlatState(reprlib.SequenceReprMixin[tuple[PathParts, V]]):
   ) -> tuple[PathParts, V] | FlatState[V]:
     if isinstance(index, int):
       return self._keys[index], self._values[index]
-    return FlatState(zip(self._keys[index], self._values[index]))
+    return FlatState(zip(self._keys[index], self._values[index]), sort=False)
 
   def __len__(self) -> int:
     return len(self._keys)
@@ -158,9 +177,15 @@ class FlatState(reprlib.SequenceReprMixin[tuple[PathParts, V]]):
     /,
     *flat_states: tp.Iterable[tuple[PathParts, V]],
   ) -> FlatState[V]:
+    if not flat_states:
+      if isinstance(flat_state, FlatState):
+        return flat_state
+      return FlatState(flat_state, sort=True)
     flat_states = (flat_state, *flat_states)
 
-    return FlatState(elem for flat_state in flat_states for elem in flat_state)
+    return FlatState(
+      (elem for flat_state in flat_states for elem in flat_state), sort=True
+    )
 
 
 def _flat_state_pytree_flatten(x: FlatState[V]):
@@ -282,7 +307,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     return State.from_flat_path(result)
 
   def flat_state(self) -> FlatState[V]:
-    return FlatState(traversals.flatten_to_sequence(self._mapping))
+    return FlatState(traversals.flatten_to_sequence(self._mapping), sort=True)
 
   @classmethod
   def from_flat_path(
@@ -563,7 +588,7 @@ def _split_state(
       # if we didn't break, set leaf to last state
       flat_states[-1].append((path, value))  # type: ignore[index] # mypy is wrong here?
 
-  return tuple(FlatState(flat_state) for flat_state in flat_states)
+  return tuple(FlatState(flat_state, sort=False) for flat_state in flat_states)
 
 
 def create_path_filters(state: State):

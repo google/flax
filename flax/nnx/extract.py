@@ -251,10 +251,13 @@ class GraphDefState(struct.PyTreeNode):
   graphdef: graph.GraphDef[tp.Any] = struct.field(pytree_node=False)
   state: graph.GraphState = struct.field(pytree_node=True)
 
+S = tp.TypeVar(
+  'S', bound=graph.GraphState | graph.GraphFlatState | list[tp.Any]
+)
 
-class NodeStates(struct.PyTreeNode):
+class NodeStates(struct.PyTreeNode, tp.Generic[S]):
   _graphdef: graph.GraphDef[tp.Any] | None
-  states: tuple[graph.GraphState | graph.GraphFlatState, ...]
+  states: tuple[S, ...]
   metadata: tp.Any = struct.field(pytree_node=False)
 
   @property
@@ -264,7 +267,7 @@ class NodeStates(struct.PyTreeNode):
     return self._graphdef
 
   @property
-  def state(self) -> graph.GraphState | graph.GraphFlatState:
+  def state(self) -> S:
     if len(self.states) != 1:
       raise ValueError(
         f'Expected exactly one GraphDefState, got {len(self.states)}'
@@ -275,9 +278,9 @@ class NodeStates(struct.PyTreeNode):
   def from_split(
     cls,
     graphdef: graph.GraphDef[tp.Any],
-    state: graph.GraphState | graph.GraphFlatState,
+    state: S,
     /,
-    *states: graph.GraphState | graph.GraphFlatState,
+    *states: S,
     metadata: tp.Any = None,
   ):
     return cls(_graphdef=graphdef, states=(state, *states), metadata=metadata)
@@ -285,8 +288,8 @@ class NodeStates(struct.PyTreeNode):
   @classmethod
   def from_states(
     cls,
-    state: graph.GraphState | graph.GraphFlatState,
-    *states: graph.GraphState | graph.GraphFlatState,
+    state: S,
+    *states: S,
   ):
     return cls(_graphdef=None, states=(state, *states), metadata=None)
 
@@ -319,6 +322,15 @@ def to_tree(
   ctxtag: str | None = None,
   check_aliasing: bool = True,
 ) -> tp.Any:
+  if prefix is Missing or prefix is None:
+    # fast path, no need for prefix broadcasting or consistent aliasing checks
+    with graph.split_context(ctxtag) as split_ctx:
+      return jax.tree.map(
+        lambda x: split_fn(split_ctx, (), prefix, x)
+        if map_non_graph_nodes or graph.is_graph_node(x)
+        else x,
+        tree,
+      )
   leaf_prefixes = broadcast_prefix(
     prefix,
     tree,
@@ -373,6 +385,16 @@ def from_tree(
   map_non_graph_nodes: bool = False,
   ctxtag: str | None = None,
 ) -> tp.Any:
+  if prefix is Missing or prefix is None:
+    # fast path, no need for prefix broadcasting or consistent aliasing checks
+    with graph.merge_context(ctxtag) as merge_ctx:
+      return jax.tree.map(
+        lambda x: merge_fn(merge_ctx, (), prefix, x)
+        if map_non_graph_nodes or is_node_leaf(x)
+        else x,
+        tree,
+        is_leaf=is_leaf,
+      )
   leaf_prefixes = broadcast_prefix(
     prefix,
     tree,
@@ -387,13 +409,9 @@ def from_tree(
 
   with graph.merge_context(ctxtag) as merge_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
-      if is_node_leaf(leaf):
-        leaf_out = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)
-        leaves_out.append(leaf_out)
-      else:
-        if map_non_graph_nodes:
-          leaf = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)
-        leaves_out.append(leaf)
+      if map_non_graph_nodes or is_node_leaf(leaf):
+        leaf = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)
+      leaves_out.append(leaf)
 
   pytree_out = jax.tree.unflatten(treedef, leaves_out)
   return pytree_out

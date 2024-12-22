@@ -93,13 +93,13 @@ def _jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
     return extract.NodeStates.from_split(
       *ctx.flatten(x, *prefix.filters), metadata=prefix
     )
-  return extract.NodeStates.from_split(*ctx.flatten(x))
+  return extract.NodeStates.from_split(*ctx.flatten(x, with_paths=False))
 
 
 def _jit_merge_fn(ctx: graph.MergeContext, path, prefix, leaf) -> tp.Any:
   if not isinstance(leaf, extract.NodeStates):
     raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
-  return ctx.unflatten(leaf.graphdef, *leaf.states)  # type: ignore
+  return ctx.unflatten(leaf.graphdef, *leaf.states)
 
 
 @dataclasses.dataclass(eq=False)
