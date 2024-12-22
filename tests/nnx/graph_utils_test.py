@@ -109,7 +109,9 @@ class TestGraphUtils(absltest.TestCase):
 
     graphdef, state = nnx.split(g)
 
-    with self.assertRaisesRegex(ValueError, 'Expected key'):
+    with self.assertRaisesRegex(
+      ValueError, 'Not enough leaves to unflatten the graph'
+    ):
       nnx.graph.unflatten(graphdef, nnx.State({}))
 
   def test_update_dynamic(self):

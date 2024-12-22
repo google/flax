@@ -55,6 +55,8 @@ class NestedStateRepr(reprlib.Representable):
     return subtree_renderer(children, path=path)
 
 class FlatState(reprlib.SequenceReprMixin[tuple[PathParts, V]]):
+  __slots__ = ('_keys', '_values')
+
   _keys: tuple[PathParts, ...]
   _values: list[V]
 
@@ -65,6 +67,12 @@ class FlatState(reprlib.SequenceReprMixin[tuple[PathParts, V]]):
       values.append(value)
     self._keys = tuple(keys)
     self._values = values
+
+  def get_keys(self) -> tp.Tuple[PathParts, ...]:
+    return self._keys
+
+  def get_values(self) -> tp.List[V]:
+    return self._values
 
   @tp.overload
   def __getitem__(self, index: int) -> tuple[PathParts, V]: ...
