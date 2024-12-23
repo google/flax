@@ -62,6 +62,10 @@ class Dict(Module, tp.Mapping[str, A]):
   def __len__(self) -> int:
     return len(vars(self))
 
+  def __hash__(self) -> int:
+    return id(self)
+
+
 class Sequential(Module):
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
     self.layers = list(fns)

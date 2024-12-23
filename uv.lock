@@ -2262,7 +2262,7 @@ wheels = [
 
 [[package]]
 name = "orbax-checkpoint"
-version = "0.10.3"
+version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
@@ -2280,9 +2280,9 @@ dependencies = [
     { name = "tensorstore" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/fd/36b22046aecf155e50494fd7901ecd3e97e0db3ac103d3a0ffd0cafd2d9e/orbax_checkpoint-0.10.3.tar.gz", hash = "sha256:71e3ea47e38d571f27146ee55c8727d7e7c242cf3df31dc499f9b2cb1d67ac8a", size = 252556 }
+sdist = { url = "https://files.pythonhosted.org/packages/de/b3/a9a8a6bc08ded7634a9d85ba440400172f0a11f9341897b8fd3389fad245/orbax_checkpoint-0.11.0.tar.gz", hash = "sha256:d4a0dcc81edd29191cf5a4feb9cf2a4edd31fc5da79d7be616a04f11f2a4d484", size = 253035 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/45/12a80b3704ec7d46fb0f79d193f4a089aa4a8297a61e6db183d97d108a4b/orbax_checkpoint-0.10.3-py3-none-any.whl", hash = "sha256:df7fd5f327dfe9c477533f33c20076ae11ba6a15767c5117881b328dece14c7d", size = 359825 },
+    { url = "https://files.pythonhosted.org/packages/87/32/3779fa524a2272f408ab51d869fde9ff1c0ca731eedd01e40436bcf7ba2c/orbax_checkpoint-0.11.0-py3-none-any.whl", hash = "sha256:892a124fce71f3e7c71451a2b2090c0251db1097803a119a00baa377113bc9ba", size = 360423 },
 ]
 
 [[package]]

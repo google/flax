@@ -160,7 +160,7 @@ class CheckifyFn:
 
   def __call__(self, *pure_args, **pure_kwargs):
     args, kwargs = extract.from_tree(
-      (pure_args, pure_kwargs), ctxtag='checkify'
+      (pure_args, pure_kwargs), ctxtag='checkify', is_inner=True
     )
     out = self.f(*args, **kwargs)
 
@@ -216,6 +216,7 @@ def checkify(
     args_out, kwargs_out, out = extract.from_tree(
       (pure_args_out, pure_kwargs_out, pure_out),
       ctxtag='checkify',
+      is_inner=False,
     )
 
     return error, out

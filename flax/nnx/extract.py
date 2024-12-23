@@ -383,11 +383,12 @@ def from_tree(
   is_node_leaf: tp.Callable[[Leaf], bool] = is_tree_node,
   is_leaf: tp.Callable[[Leaf], bool] = is_tree_node,
   map_non_graph_nodes: bool = False,
+  is_inner: bool | None = None,
   ctxtag: str | None = None,
 ) -> tp.Any:
   if prefix is Missing or prefix is None:
     # fast path, no need for prefix broadcasting or consistent aliasing checks
-    with graph.merge_context(ctxtag) as merge_ctx:
+    with graph.merge_context(is_inner, ctxtag) as merge_ctx:
       return jax.tree.map(
         lambda x: merge_fn(merge_ctx, (), prefix, x)
         if map_non_graph_nodes or is_node_leaf(x)
@@ -407,7 +408,7 @@ def from_tree(
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
 
-  with graph.merge_context(ctxtag) as merge_ctx:
+  with graph.merge_context(is_inner, ctxtag) as merge_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
       if map_non_graph_nodes or is_node_leaf(leaf):
         leaf = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)

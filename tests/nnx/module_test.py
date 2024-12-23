@@ -598,6 +598,9 @@ class TestModuleDataclass:
       e: nnx.Variable[int]
       f: int
 
+      def __hash__(self):
+        return id(self)
+
     m = Foo(
       a=1,  # graphdef
       b=nnx.Variable(2),  # node

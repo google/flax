@@ -125,3 +125,6 @@ class Dropout(Module):
     mask = random.bernoulli(rng, p=keep_prob, shape=broadcast_shape)
     mask = jnp.broadcast_to(mask, inputs.shape)
     return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
+
+  def __hash__(self):
+    return id(self)
