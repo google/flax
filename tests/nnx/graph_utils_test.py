@@ -65,10 +65,25 @@ class TestGraphUtils(absltest.TestCase):
 
     refmap = nnx.graph.RefMap()
     graphdef, flat_state = nnx.graph.flatten(g, ref_index=refmap)
-    state = flat_state.to_nested_state()
 
-    state[0]['b'].raw_value = 2
-    state[3].raw_value = 4
+    assert flat_state[0][1].value == 2
+    assert flat_state[1][1].value == 4
+
+    assert len(refmap) == 2
+    assert a['b'] in refmap
+    assert g[3] in refmap
+
+  def test_flatten_no_paths(self):
+    a = {'a': 1, 'b': nnx.Param(2)}
+    g = [a, 3, a, nnx.Param(4)]
+
+    refmap = nnx.graph.RefMap()
+    graphdef, flat_state = nnx.graph.flatten(
+      g, ref_index=refmap, with_paths=False
+    )
+
+    assert flat_state[0] == 2
+    assert flat_state[1] == 4
 
     assert len(refmap) == 2
     assert a['b'] in refmap
@@ -109,7 +124,9 @@ class TestGraphUtils(absltest.TestCase):
 
     graphdef, state = nnx.split(g)
 
-    with self.assertRaisesRegex(ValueError, 'Expected key'):
+    with self.assertRaisesRegex(
+      ValueError, 'Not enough leaves to unflatten the graph'
+    ):
       nnx.graph.unflatten(graphdef, nnx.State({}))
 
   def test_update_dynamic(self):

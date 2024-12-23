@@ -660,9 +660,7 @@ def _extract_index_mappings(
       index_mapping = x._graphdef.index_mapping
       assert index_mapping is not None
       carry_index_mappings.append(index_mapping)
-      x = x.replace(
-        _graphdef=dataclasses.replace(x._graphdef, index_mapping=None)
-      )
+      x = x.replace(_graphdef=x._graphdef.replace(index_mapping=None))
     return x
 
   pure_carry_arg_out = jax.tree.map(
@@ -683,9 +681,7 @@ def _insert_index_mappings(
       x._graphdef, graph.NodeDef
     ):
       index_mapping = carry_index_mappings.popleft()
-      x = x.replace(
-        _graphdef=dataclasses.replace(x._graphdef, index_mapping=index_mapping)
-      )
+      x = x.replace(_graphdef=x._graphdef.replace(index_mapping=index_mapping))
     return x
 
   pure_carry_arg_out = jax.tree.map(
@@ -1342,22 +1338,21 @@ def _add_fake_index_mapping(tree: tp.Any):
       if isinstance(nd, graph.NodeRef):
         return
 
-      for attribute in nd.attributes:
-        if type(attribute) is graph.SubGraphAttribute:
-          per_node_def(attribute.value)
+      for _, value in nd.attributes:
+        if type(value) is graph.NodeDef:
+          per_node_def(value)
         elif (
-          type(attribute) is graph.LeafAttribute
-          and isinstance(attribute.value, (graph.VariableDef, graph.NodeRef))
-          and attribute.value.index >= 0
+          isinstance(value, (graph.VariableDef, graph.NodeRef))
+          and value.index >= 0
         ):
-          global_index_mapping[attribute.value.index] = attribute.value.index
+          global_index_mapping[value.index] = value.index
       return
 
     per_node_def(ns._graphdef)
     return dataclasses.replace(
       ns,
-      _graphdef=dataclasses.replace(
-        ns._graphdef, index_mapping=graph.HashableMapping(global_index_mapping)
+      _graphdef=ns._graphdef.replace(
+        index_mapping=graph.HashableMapping(global_index_mapping)
       ),
     )
 
@@ -1373,9 +1368,9 @@ def _remove_index_mapping(tree: tp.Any):
     ):
       return ns
     assert isinstance(ns._graphdef, graph.NodeDef)
-    return dataclasses.replace(ns, _graphdef=dataclasses.replace(
-      ns._graphdef, index_mapping=None
-    ))
+    return dataclasses.replace(
+      ns, _graphdef=ns._graphdef.replace(index_mapping=None)
+    )
 
   return jax.tree.map(per_node_state, tree,
                       is_leaf=lambda x: isinstance(x, extract.NodeStates))

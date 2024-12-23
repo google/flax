@@ -18,10 +18,9 @@ from typing import Any, TypeVar
 import jax
 from flax import struct
 from flax.core import meta
-from flax.nnx import spmd
+from flax.nnx import graph, spmd
 from flax.nnx import traversals
 from flax.nnx import variablelib as variableslib
-from flax.nnx.module import GraphDef
 import typing as tp
 
 
@@ -192,9 +191,11 @@ def linen_vars_to_nnx_attrs(variables: tp.Mapping[str, Any]) -> dict[str, Any]:
 def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
   linen_structured = {}
   for kp, v in traversals.flatten_mapping(
-      nnx_attrs,
-      is_leaf=lambda _, x: isinstance(x, variableslib.Variable | GraphDef),
-      ).items():
+    nnx_attrs,
+    is_leaf=lambda _, x: isinstance(
+      x, variableslib.Variable | graph.NodeDef | graph.NodeRef
+    ),
+  ).items():
     if isinstance(v, variableslib.Variable):
       col_name = variable_type_name(type(v))
     else:

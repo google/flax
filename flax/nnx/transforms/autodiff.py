@@ -431,7 +431,7 @@ def _extract_index_mappings(x, *, index_mappings: deque[graph.HashableMapping]):
   if isinstance(x, graph.NodeDef):
     assert x.index_mapping is not None
     index_mappings.append(x.index_mapping)
-    return dataclasses.replace(x, index_mapping=None)
+    return x.replace(index_mapping=None)
   return x
 
 @dataclasses.dataclass(eq=False)
@@ -665,7 +665,7 @@ class CustomVjp(tp.Generic[A]):
       def _insert_index_mappings(x):
         if isinstance(x, graph.NodeDef):
           index_mapping: graph.HashableMapping = index_mappings.popleft()
-          return dataclasses.replace(x, index_mapping=index_mapping)
+          return x.replace(index_mapping=index_mapping)
         return x
 
       pure_args_out, pure_out = jax.tree_util.tree_map(
