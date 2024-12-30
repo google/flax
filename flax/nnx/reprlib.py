@@ -104,14 +104,14 @@ def get_repr(obj: Representable) -> str:
 
   return f'{type_repr}{config.start}{elems}{config.end}'
 
-class MappingReprMixin(tp.Mapping[A, B]):
+class MappingReprMixin(Representable):
   def __nnx_repr__(self):
     yield Object(type='', value_sep=': ', start='{', end='}')
 
     for key, value in self.items():
       yield Attr(repr(key), value)
 
-class SequenceReprMixin(tp.Sequence[A], Representable):
+class SequenceReprMixin(Representable):
   def __nnx_repr__(self):
     yield Object(type='', value_sep='', start='[', end=']')
 

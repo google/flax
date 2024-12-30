@@ -16,6 +16,7 @@
 import dataclasses
 import functools
 import typing as tp
+from weakref import WeakKeyDictionary
 
 from flax.nnx import (
   extract,
@@ -88,7 +89,7 @@ class StateSharding(extract.PrefixMapping):
     return hash((self.filters, self.shardings))
 
 
-def _jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
+def _inner_jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
   if isinstance(prefix, StateSharding):
     return extract.NodeStates.from_split(
       *ctx.flatten(x, *prefix.filters), metadata=prefix
@@ -96,7 +97,7 @@ def _jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
   return extract.NodeStates.from_split(*ctx.flatten(x, with_paths=False))
 
 
-def _jit_merge_fn(ctx: graph.MergeContext, path, prefix, leaf) -> tp.Any:
+def _inner_jit_merge_fn(ctx: graph.MergeContext, path, prefix, leaf) -> tp.Any:
   if not isinstance(leaf, extract.NodeStates):
     raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
   return ctx.unflatten(leaf.graphdef, *leaf.states)
@@ -114,7 +115,10 @@ class JitFn:
 
   def __call__(self, *pure_args, **pure_kwargs):
     args, kwargs = extract.from_tree(
-      (pure_args, pure_kwargs), merge_fn=_jit_merge_fn, ctxtag='jit'
+      (pure_args, pure_kwargs),
+      merge_fn=_inner_jit_merge_fn,
+      ctxtag='jit',
+      is_inner=True,
     )
 
     out = self.f(*args, **kwargs)
@@ -124,7 +128,7 @@ class JitFn:
       (args_out, kwargs_out, out),
       prefix=(self.in_shardings, self.kwarg_shardings, self.out_shardings),
       ctxtag='jit',
-      split_fn=_jit_split_fn,
+      split_fn=_inner_jit_split_fn,
     )
 
     return pure_args_out, pure_kwargs_out, pure_out
@@ -343,10 +347,31 @@ def jit(
   @functools.wraps(fun)
   @graph.update_context('jit')
   def jit_wrapper(*args, **kwargs):
+    if jit_wrapper not in graph.GRAPH_CONTEXT.cache_context:
+      graph.GRAPH_CONTEXT.cache_context[jit_wrapper] = WeakKeyDictionary()
+    jit_cache = graph.GRAPH_CONTEXT.cache_context[jit_wrapper]
+
+    def _outer_jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
+      if isinstance(prefix, StateSharding):
+        return extract.NodeStates.from_split(
+          *ctx.flatten(x, *prefix.filters, cache_context=jit_cache),
+          metadata=prefix,
+        )
+      return extract.NodeStates.from_split(
+        *ctx.flatten(x, cache_context=jit_cache, with_paths=False)
+      )
+
+    def _outer_jit_merge_fn(
+      ctx: graph.MergeContext, path, prefix, leaf
+    ) -> tp.Any:
+      if not isinstance(leaf, extract.NodeStates):
+        raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
+      return ctx.unflatten(leaf.graphdef, *leaf.states, cache_context=jit_cache)
+
     pure_args, pure_kwargs = extract.to_tree(
       (args, kwargs),
       prefix=(in_shardings, kwarg_shardings),
-      split_fn=_jit_split_fn,
+      split_fn=_outer_jit_split_fn,
       check_aliasing=in_shardings is not None,
       ctxtag='jit',
     )
@@ -355,7 +380,8 @@ def jit(
     )
     _args_out, _kwargs_out, out = extract.from_tree(
       (pure_args_out, pure_kwargs_out, pure_out),
-      merge_fn=_jit_merge_fn,
+      merge_fn=_outer_jit_merge_fn,
+      is_inner=False,
       ctxtag='jit',
     )
     return out

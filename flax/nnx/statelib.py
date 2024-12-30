@@ -54,7 +54,7 @@ class NestedStateRepr(reprlib.Representable):
     # Render as the dictionary itself at the same path.
     return subtree_renderer(children, path=path)
 
-class FlatState(reprlib.SequenceReprMixin[tuple[PathParts, V]]):
+class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.Representable):
   __slots__ = ('_keys', '_values')
 
   _keys: tuple[PathParts, ...]
@@ -72,18 +72,24 @@ class FlatState(reprlib.SequenceReprMixin[tuple[PathParts, V]]):
 
   @staticmethod
   def from_sorted_keys_values(
-    keys: list[PathParts], values: list[V], /
+    keys: tuple[PathParts, ...], values: list[V], /
   ) -> FlatState[V]:
     flat_state = object.__new__(FlatState)
-    flat_state._keys = tuple(keys)
+    flat_state._keys = keys
     flat_state._values = values
     return flat_state
 
-  def get_keys(self) -> tp.Tuple[PathParts, ...]:
+  def get_keys(self) -> tuple[PathParts, ...]:
     return self._keys
 
   def get_values(self) -> tp.List[V]:
     return self._values
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type='FlatState', value_sep='', start='([', end='])')
+
+    for value in self:
+      yield reprlib.Attr('', value)
 
   @tp.overload
   def __getitem__(self, index: int) -> tuple[PathParts, V]: ...

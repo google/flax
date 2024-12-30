@@ -24,7 +24,9 @@ from absl import flags
 from absl import app
 
 FLAGS = flags.FLAGS
-flags.DEFINE_enum('mode', 'all', ['all', 'nnx', 'jax'], 'Mode to run the script in')
+flags.DEFINE_enum(
+  'mode', 'nnx', ['all', 'nnx', 'jax'], 'Mode to run the script in'
+)
 flags.DEFINE_integer('total_steps', 100, 'Total number of training steps')
 flags.DEFINE_integer('width', 32, 'Hidden layer size')
 flags.DEFINE_integer('depth', 5, 'Depth of the model')

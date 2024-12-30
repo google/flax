@@ -67,6 +67,27 @@ class TestJIT(absltest.TestCase):
     assert m.a == 2
     assert out == 1.0
 
+  def test_simple_double_call(self):
+    n = 0
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit
+    def f(m: nnx.Linear, x: jnp.ndarray) -> jnp.ndarray:
+      nonlocal n
+      n += 1
+      return m(x)
+
+    x = jnp.ones((1, 2))
+    y = f(m, x)
+
+    self.assertEqual(n, 1)
+    self.assertEqual(y.shape, (1, 3))
+
+    y = f(m, x)
+
+    self.assertEqual(n, 1)
+    self.assertEqual(y.shape, (1, 3))
+
   def test_jit_on_init(self):
     n = 0
 
@@ -634,6 +655,9 @@ class TestCustomVJP(parameterized.TestCase):
       y: nnx.Param[jax.Array]
       z: int
 
+      def __hash__(self):
+        return id(self)
+
     @nnx.custom_vjp
     def f(m: Foo):
       m.z += 1
@@ -673,6 +697,9 @@ class TestCustomVJP(parameterized.TestCase):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
+
+      def __hash__(self):
+        return id(self)
 
     x_in_path = nnx.PathContains('x')
     diff_state = nnx.DiffState(0, x_in_path)
@@ -714,6 +741,9 @@ class TestCustomVJP(parameterized.TestCase):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
+
+      def __hash__(self):
+        return id(self)
 
     @nnx.custom_vjp
     @nnx.remat
@@ -759,6 +789,9 @@ class TestCustomVJP(parameterized.TestCase):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
+
+      def __hash__(self):
+        return id(self)
 
     @nnx.custom_vjp
     def f(m1: Foo, m2: Foo):
@@ -812,6 +845,9 @@ class TestCustomVJP(parameterized.TestCase):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
+
+      def __hash__(self):
+        return id(self)
 
     @nnx.custom_vjp(nondiff_argnums=(0, 2))
     def f(a, m: Foo, b):
@@ -1006,6 +1042,9 @@ class TestScan(absltest.TestCase):
     class Foo(nnx.Module):
       n: nnx.BatchStat[int]
 
+      def __hash__(self):
+        return id(self)
+
     foo = Foo(n=nnx.BatchStat(0))
 
     @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
@@ -1036,9 +1075,9 @@ class TestScan(absltest.TestCase):
       loop(foo, 0)
 
   def test_all_carry_new_reference_error(self):
-    @dataclasses.dataclass(repr=False)
     class Foo(nnx.Module):
-      n: nnx.BatchStat[int]
+      def __init__(self, n: nnx.BatchStat[int]):
+        self.n = n
 
     xs = jnp.arange(3)
     foo = Foo(n=nnx.BatchStat(0))
@@ -1056,9 +1095,9 @@ class TestScan(absltest.TestCase):
       loop(foo, xs)
 
   def test_all_scan(self):
-    @dataclasses.dataclass(repr=False)
     class Foo(nnx.Module):
-      n: nnx.BatchStat[jax.Array]
+      def __init__(self, n: nnx.BatchStat[jax.Array]):
+        self.n = n
 
     xs = jnp.arange(3)
     foo = Foo(n=nnx.BatchStat(jnp.arange(3)))
@@ -1075,9 +1114,9 @@ class TestScan(absltest.TestCase):
     np.testing.assert_allclose(foo.n.value, jnp.arange(1, 4))
 
   def test_all_broadcast(self):
-    @dataclasses.dataclass(repr=False)
     class Foo(nnx.Module):
-      n: nnx.BatchStat[int]
+      def __init__(self, n: nnx.BatchStat[int]):
+        self.n = n
 
     xs = jnp.array(1)
     foo = Foo(n=nnx.BatchStat(2))
@@ -1740,7 +1779,6 @@ class TestScan(absltest.TestCase):
     x = jnp.arange(5)
     count = jnp.array(0)
 
-    @dataclasses.dataclass
     class Foo(nnx.Object):
 
       @nnx.split_rngs(splits=5)
@@ -2696,6 +2734,9 @@ class TestCond(absltest.TestCase):
     class Foo(nnx.Object):
       timestep: TimeStep
 
+      def __hash__(self):
+        return id(self)
+
       def update(self):
         def reward_2(self: Foo):
           self.timestep = TimeStep(
@@ -3080,6 +3121,9 @@ class TestCheckify(absltest.TestCase):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       a: nnx.Param
+
+      def __hash__(self):
+        return id(self)
 
     @nnx.jit
     def f(m):
