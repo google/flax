@@ -354,10 +354,10 @@ class TestGraphUtils(absltest.TestCase):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       ref_in_idx_out = nnx.graph.RefMap(
-        (v, k) for k, v in idx_out_ref_in.items()
+        {v: k for k, v in idx_out_ref_in.items()}
       )
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      ref_in_idx_in = nnx.graph.RefMap()
       graphdef, state = nnx.graph.flatten(
         m, ref_index=ref_in_idx_in, ref_outer_index=ref_in_idx_out
       )
@@ -386,7 +386,7 @@ class TestGraphUtils(absltest.TestCase):
     a = m.a
     b = m.b
 
-    ref_out_idx_out = nnx.graph.RefMap[Any, int]()
+    ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
     idx_out_ref_out = {v: k for k, v in ref_out_idx_out.items()}
@@ -397,10 +397,10 @@ class TestGraphUtils(absltest.TestCase):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       ref_in_idx_out = nnx.graph.RefMap(
-        (v, k) for k, v in idx_out_ref_in.items()
+        {v: k for k, v in idx_out_ref_in.items()}
       )
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      ref_in_idx_in = nnx.graph.RefMap()
       graphdef, state = nnx.graph.flatten(
         m, ref_index=ref_in_idx_in, ref_outer_index=ref_in_idx_out
       )
@@ -436,10 +436,10 @@ class TestGraphUtils(absltest.TestCase):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
       ref_in_idx_out = nnx.graph.RefMap(
-        (v, k) for k, v in idx_out_ref_in.items()
+        {v: k for k, v in idx_out_ref_in.items()}
       )
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
+      ref_in_idx_in = nnx.graph.RefMap()
       graphdef, state = nnx.graph.flatten(
         m, ref_index=ref_in_idx_in, ref_outer_index=ref_in_idx_out
       )
@@ -822,26 +822,24 @@ class TestGraphUtils(absltest.TestCase):
   def test_fingerprint_basic(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     fp1 = nnx.graph.fingerprint(m)
-    m1_hash = hash(fp1)
-    self.assertIsInstance(m1_hash, int)
-
     fp2 = nnx.graph.fingerprint(m)
-    m2_hash = hash(fp2)
 
     self.assertEqual(fp1, fp2)
-    self.assertEqual(m1_hash, m2_hash)
+    self.assertTrue(nnx.graph.check_fingerprint(m, fp1))
+    self.assertTrue(nnx.graph.check_fingerprint(m, fp2))
 
   def test_fingerprint_variable_id_sensitive(self):
     m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     fp1 = nnx.graph.fingerprint(m1)
-    m1_hash = hash(fp1)
 
     m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     fp2 = nnx.graph.fingerprint(m2)
-    m2_hash = hash(fp2)
 
     self.assertNotEqual(fp1, fp2)
-    self.assertNotEqual(m1_hash, m2_hash)
+    self.assertTrue(nnx.graph.check_fingerprint(m1, fp1))
+    self.assertTrue(nnx.graph.check_fingerprint(m2, fp2))
+    self.assertFalse(nnx.graph.check_fingerprint(m1, fp2))
+    self.assertFalse(nnx.graph.check_fingerprint(m2, fp1))
 
   def test_fingerprint_module_id_insensitive(self):
     m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
@@ -851,12 +849,13 @@ class TestGraphUtils(absltest.TestCase):
     m1.bias = m2.bias
 
     fp1 = nnx.graph.fingerprint(m1)
-    m1_hash = hash(fp1)
     fp2 = nnx.graph.fingerprint(m2)
-    m2_hash = hash(fp2)
 
     self.assertNotEqual(fp1, fp2)
-    self.assertNotEqual(m1_hash, m2_hash)
+    self.assertTrue(nnx.graph.check_fingerprint(m1, fp1))
+    self.assertTrue(nnx.graph.check_fingerprint(m2, fp2))
+    self.assertFalse(nnx.graph.check_fingerprint(m1, fp2))
+    self.assertFalse(nnx.graph.check_fingerprint(m2, fp1))
 
 
 class SimpleModule(nnx.Module):

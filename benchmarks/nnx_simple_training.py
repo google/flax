@@ -13,6 +13,7 @@
 # limitations under the License.
 
 # %%
+from functools import partial
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -97,7 +98,7 @@ def main(argv):
     optimizer = nnx.Optimizer(model, tx)
     t0 = time()
 
-    @nnx.jit
+    @nnx.jit(donate_argnums=(0, 1))
     def train_step_nnx(model: MLP, optimizer: nnx.Optimizer, batch):
       x, y = batch
 
@@ -108,7 +109,7 @@ def main(argv):
       grads: nnx.State = nnx.grad(loss_fn)(model)
       optimizer.update(grads)
 
-    @nnx.jit
+    @nnx.jit(donate_argnums=0)
     def test_step_nnx(model: MLP, batch):
       x, y = batch
       y_pred = model(x)
@@ -137,8 +138,8 @@ def main(argv):
     optimizer = nnx.Optimizer(model, tx)
     t0 = time()
 
-    @jax.jit
-    def train_step_jax(graphdef, state, batch):
+    @partial(jax.jit, donate_argnums=0)
+    def train_step_jax(state, batch):
       model, optimizer = nnx.merge(graphdef, state)
       x, y = batch
 
@@ -151,8 +152,8 @@ def main(argv):
 
       return nnx.state((model, optimizer))
 
-    @jax.jit
-    def test_step_jax(graphdef, state, batch):
+    @partial(jax.jit, donate_argnums=0)
+    def test_step_jax(state, batch):
       model, optimizer = nnx.merge(graphdef, state)
       x, y = batch
       y_pred = model(x)
@@ -163,10 +164,10 @@ def main(argv):
     graphdef, state = nnx.split((model, optimizer))
 
     for step, batch in enumerate(dataset(X, Y, batch_size)):
-      state = train_step_jax(graphdef, state, batch)
+      state = train_step_jax(state, batch)
 
       if step % 1000 == 0:
-        state, logs = test_step_jax(graphdef, state, (X, Y))
+        state, logs = test_step_jax(state, (X, Y))
 
       if step >= total_steps - 1:
         break

@@ -370,9 +370,11 @@ def jit(
 
     pure_args, pure_kwargs = extract.to_tree(
       (args, kwargs),
-      prefix=(in_shardings, kwarg_shardings),
+      prefix=(in_shardings, kwarg_shardings)
+      if in_shardings is not None and kwarg_shardings is not None
+      else None,
       split_fn=_outer_jit_split_fn,
-      check_aliasing=in_shardings is not None,
+      check_aliasing=in_shardings is not None or kwarg_shardings is not None,
       ctxtag='jit',
     )
     pure_args_out, pure_kwargs_out, pure_out = jitted_fn(

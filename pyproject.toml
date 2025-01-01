@@ -229,3 +229,9 @@ quote-style = "single"
 [tool.uv]
 # Ignore uv.lock and always upgrade the package to the latest
 upgrade-package = ["jax", "jaxlib", "orbax-checkpoint"]
+
+[dependency-groups]
+dev = [
+    "nanobind>=2.4.0",
+    "scikit-build-core[pyproject]>=0.10.7",
+]

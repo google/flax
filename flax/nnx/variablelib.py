@@ -158,8 +158,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     # run create_value hooks
     object.__setattr__(self, 'raw_value', self.create_value(self.raw_value))
 
-  def __hash__(self) -> int:
-    return id(self)
+  # def __hash__(self) -> int:
+  #   return id(self)
 
   def __getattr__(self, name: str) -> tp.Any:
     if name in object.__getattribute__(self, '_var_metadata'):
@@ -252,13 +252,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def remove_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
     if 'on_remove_axis' in self._var_metadata:
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
-
-  def __eq__(self, other: object) -> bool:
-    return (
-      type(self) is type(other)
-      and self.raw_value == other.raw_value
-      and (self._var_metadata == other._var_metadata)
-    )
 
   @tp.overload
   def replace(self, value: B, **kwargs) -> Variable[B]: ...

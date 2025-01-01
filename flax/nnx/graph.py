@@ -21,6 +21,7 @@ import functools
 import threading
 import typing as tp
 from weakref import WeakKeyDictionary
+from flax import config
 
 import jax
 import numpy as np
@@ -65,50 +66,12 @@ def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
 def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
   return isinstance(x, Variable)
 
-
-# class RefMap(reprlib.MappingReprMixin, tp.Generic[A, B]):
-#   """A mapping that uses object id as the hash for the keys."""
-
-#   def __init__(self, mapping: dict[A, B] | tp.Iterable[tuple[A, B]] = (), /):
-#     items = tp.cast(
-#       tp.Iterable[tuple[A, B]],
-#       mapping.items() if isinstance(mapping, dict) else mapping,
-#     )
-#     self._mapping = {id(key): (key, value) for key, value in items}
-
-#   def copy(self) -> RefMap[A, B]:
-#     return RefMap(self.items())
-
-#   def update(self, mapping: tp.Mapping[A, B]):
-#     self._mapping.update(
-#       (id(key), (key, value)) for key, value in mapping.items()
-#     )
-
-#   def items(self) -> tp.Iterator[tuple[A, B]]:
-#     return iter((key, value) for idx, (key, value) in self._mapping.items())
-
-#   def __getitem__(self, key: A) -> B:
-#     return self._mapping[id(key)][1]
-
-#   def __contains__(self, key: object) -> bool:
-#     return id(key) in self._mapping
-
-#   def __setitem__(self, key: A, value: B):
-#     self._mapping[id(key)] = (key, value)
-
-#   def __delitem__(self, key: A):
-#     del self._mapping[id(key)]
-
-#   def __iter__(self) -> tp.Iterator[A]:
-#     return (key for key, _ in self._mapping.values())
-
-#   def __len__(self) -> int:
-#     return len(self._mapping)
-
-#   def __str__(self) -> str:
-#     return repr(self)
-
 RefMap = dict
+
+if not tp.TYPE_CHECKING and config.flax_use_flaxlib:
+  import flaxlib
+
+  RefMap = flaxlib.RefMap
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class NodeImplBase(tp.Generic[Node, Leaf, AuxData]):
@@ -423,8 +386,8 @@ def flatten(
   node: Node,
   /,
   *,
-  ref_index: RefMap[tp.Any, Index] | None = None,
-  ref_outer_index: RefMap[tp.Any, Index] | None = None,
+  ref_index: RefMap | None = None,
+  ref_outer_index: RefMap | None = None,
 ) -> tuple[GraphDef[Node], FlatState[VariableState[tp.Any]]]: ...
 @tp.overload
 def flatten(
@@ -433,8 +396,8 @@ def flatten(
   *,
   with_paths: tp.Literal[True],
   return_variables: tp.Literal[True],
-  ref_index: RefMap[tp.Any, Index] | None = None,
-  ref_outer_index: RefMap[tp.Any, Index] | None = None,
+  ref_index: RefMap | None = None,
+  ref_outer_index: RefMap | None = None,
 ) -> tuple[
   GraphDef[Node],
   FlatState[Variable[tp.Any]],
@@ -445,8 +408,8 @@ def flatten(
   /,
   *,
   with_paths: bool,
-  ref_index: RefMap[tp.Any, Index] | None = None,
-  ref_outer_index: RefMap[tp.Any, Index] | None = None,
+  ref_index: RefMap | None = None,
+  ref_outer_index: RefMap | None = None,
 ) -> tuple[
   GraphDef[Node],
   FlatState[VariableState[tp.Any]] | list[tp.Any],
@@ -457,8 +420,8 @@ def flatten(
   *,
   with_paths: bool = True,
   return_variables: bool = False,
-  ref_index: RefMap[tp.Any, Index] | None = None,
-  ref_outer_index: RefMap[tp.Any, Index] | None = None,
+  ref_index: RefMap | None = None,
+  ref_outer_index: RefMap | None = None,
 ) -> tuple[
   GraphDef[Node],
   FlatState[VariableState[tp.Any]] | FlatState[Variable[tp.Any]] | list[tp.Any],
@@ -503,8 +466,8 @@ def _graph_flatten(
   node: Node,
   node_impl: NodeImpl[Node, Leaf, AuxData],
   path: list[Key] | None,
-  ref_index: RefMap[tp.Any, Index],
-  ref_outer_index: RefMap[tp.Any, Index] | None,
+  ref_index: RefMap,
+  ref_outer_index: RefMap | None,
   leaves: list[StateLeaf | Variable[tp.Any]],
   paths: list[PathParts] | None,
   return_variables: bool,
@@ -593,95 +556,203 @@ def _graph_flatten(
   )
   return nodedef
 
+@dataclasses.dataclass(slots=True)
+class FingerprintContext:
+  next_index: int
 
 def fingerprint(
   node,
   /,
   *,
-  ref_index: RefMap[tp.Any, Index] | None = None,
-  new_ref_index: RefMap[tp.Any, Index] | None = None,
-) -> tuple[tp.Any, ...]:
+  ref_index: RefMap | None = None,
+  new_ref_index: RefMap | None = None,
+) -> list[tp.Hashable]:
   """ """
   if ref_index is None:
     ref_index = RefMap()
 
   if new_ref_index is None:
     new_ref_index = RefMap()
-  next_index = len(ref_index) + len(new_ref_index)
   node_impl = get_node_impl(node)
   if node_impl is None:
     raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
-  fp, next_index = _graph_fingerprint(
-    node, node_impl, ref_index, new_ref_index, next_index
-  )
+  ctx = FingerprintContext(len(ref_index) + len(new_ref_index))
+  fp: list[tp.Hashable] = []
+  _graph_fingerprint(ctx, fp.append, node, node_impl, ref_index, new_ref_index)
   return fp
 
 
 def _graph_fingerprint(
+  ctx: FingerprintContext,
+  append_fn: tp.Callable[[tp.Hashable], None],
   node,
   node_impl: NodeImpl[Node, Leaf, AuxData],
-  ref_index: RefMap[tp.Any, Index],
-  new_ref_index: RefMap[tp.Any, Index],
-  next_index: int,
-) -> tuple[tuple[tp.Any, ...], int]:
+  ref_index: RefMap,
+  new_ref_index: RefMap,
+):
   is_pytree_node_ = type(node_impl) is PytreeNodeImpl
   is_graph_node_ = type(node_impl) is GraphNodeImpl
 
-  if is_pytree_node_:
-    pass
-  elif node in ref_index:
-    return (id(node), type(node), ref_index[node]), next_index
-  elif node in new_ref_index:
-    return (id(node), type(node), new_ref_index[node]), next_index
+  append_fn(type(node))
 
-  # only cache graph nodes
   if is_graph_node_:
-    index = new_ref_index[node] = next_index
-    next_index += 1
+    append_fn(id(node))
+    if node in ref_index:
+      append_fn(ref_index[node])
+      return
+    elif node in new_ref_index:
+      append_fn(new_ref_index[node])
+      return
+    index = new_ref_index[node] = ctx.next_index
+    ctx.next_index += 1
   else:
     index = -1
 
-  attributes: list[tuple[tp.Any, ...]] = []
-
   values, metadata = node_impl.flatten(node)
+
+  append_fn(index)
+  append_fn(metadata)
+
   for key, value in values:
     value_node_impl = get_node_impl(value)
+    append_fn(key)
     if value_node_impl is not None:
-      node_fp, next_index = _graph_fingerprint(
-        value, value_node_impl, ref_index, new_ref_index, next_index
+      _graph_fingerprint(
+        ctx,
+        append_fn,
+        value,
+        value_node_impl,
+        ref_index,
+        new_ref_index,
       )
-      attributes.append((key, node_fp))
     elif isinstance(value, Variable):
+      append_fn(id(value))
+      append_fn(type(value))
       if value in ref_index:
-        attributes.append((key, id(value), type(value), ref_index[value]))
+        append_fn(ref_index[value])
       elif value in new_ref_index:
-        attributes.append((key, id(value), type(value), new_ref_index[value]))
+        append_fn(new_ref_index[value])
       else:
-        variable_index = new_ref_index[value] = next_index
-        next_index += 1
-        # the fingerprint must be sensitive to Variable identity
-        attributes.append(
-          (
-            key,
-            id(value),
-            type(value),
-            variable_index,
-            tuple(value._var_metadata.items()),
-          )
-        )
+        variable_index = new_ref_index[value] = ctx.next_index
+        ctx.next_index += 1
+        append_fn(variable_index)
+        for key_value in value._var_metadata.items():
+          append_fn(key_value)
     else:
       if isinstance(value, (jax.Array, np.ndarray)):
         raise ValueError(f'Arrays leaves are not supported: {value}')
-      attributes.append((key, value))
+      append_fn(value)
 
-  node_fp = (
-    id(node) if is_graph_node_ else None,
-    node_impl.type,
-    index,
-    tuple(attributes),
-    metadata,
+def check_fingerprint(
+  node,
+  fp: list[tp.Hashable],
+  /,
+  *,
+  ref_index: RefMap | None = None,
+  new_ref_index: RefMap | None = None,
+) -> bool:
+  """ """
+  if ref_index is None:
+    ref_index = RefMap()
+
+  if new_ref_index is None:
+    new_ref_index = RefMap()
+  node_impl = get_node_impl(node)
+  if node_impl is None:
+    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
+  ctx = FingerprintContext(len(ref_index) + len(new_ref_index))
+  fp_matches = _check_graph_fingerprint(
+    ctx, iter(fp), node, node_impl, ref_index, new_ref_index
   )
-  return node_fp, next_index
+  return fp_matches
+
+
+def _check_graph_fingerprint(
+  ctx: FingerprintContext,
+  fp_iterator: tp.Iterator[tp.Hashable],
+  node,
+  node_impl: NodeImpl[Node, Leaf, AuxData],
+  ref_index: RefMap,
+  new_ref_index: RefMap,
+) -> bool:
+  is_pytree_node_ = type(node_impl) is PytreeNodeImpl
+  is_graph_node_ = type(node_impl) is GraphNodeImpl
+
+  if type(node) != next(fp_iterator):
+    return False
+
+  if is_graph_node_:
+    # append_fn(id(node))
+    if id(node) != next(fp_iterator):
+      return False
+    if node in ref_index:
+      # append_fn(ref_index[node])
+      return ref_index[node] == next(fp_iterator)
+    elif node in new_ref_index:
+      # append_fn(new_ref_index[node])
+      return new_ref_index[node] == next(fp_iterator)
+    index = new_ref_index[node] = ctx.next_index
+    ctx.next_index += 1
+  else:
+    index = -1
+
+  values, metadata = node_impl.flatten(node)
+
+  # append_fn(index)
+  if index != next(fp_iterator):
+    return False
+  # append_fn(metadata)
+  if metadata != next(fp_iterator):
+    return False
+
+  for key, value in values:
+    value_node_impl = get_node_impl(value)
+    # append_fn(key)
+    if key != next(fp_iterator):
+      return False
+    if value_node_impl is not None:
+      if not _check_graph_fingerprint(
+        ctx,
+        fp_iterator,
+        value,
+        value_node_impl,
+        ref_index,
+        new_ref_index,
+      ):
+        return False
+    elif isinstance(value, Variable):
+      # append_fn(id(value))
+      if id(value) != next(fp_iterator):
+        return False
+      # append_fn(type(value))
+      if type(value) != next(fp_iterator):
+        return False
+      if value in ref_index:
+        # append_fn(ref_index[value])
+        if ref_index[value] != next(fp_iterator):
+          return False
+      elif value in new_ref_index:
+        # append_fn(new_ref_index[value])
+        if new_ref_index[value] != next(fp_iterator):
+          return False
+      else:
+        variable_index = new_ref_index[value] = ctx.next_index
+        ctx.next_index += 1
+        # append_fn(variable_index)
+        if variable_index != next(fp_iterator):
+          return False
+        for key_value in value._var_metadata.items():
+          # append_fn(key_value)
+          if key_value != next(fp_iterator):
+            return False
+    else:
+      if isinstance(value, (jax.Array, np.ndarray)):
+        raise ValueError(f'Arrays leaves are not supported: {value}')
+      # append_fn(value)
+      if value != next(fp_iterator):
+        return False
+
+  return True
 
 
 def _get_sorted_leaves(
@@ -978,21 +1049,21 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
 
 
 class CacheContext(tp.NamedTuple):
-  fingerprint: tuple[tp.Any, ...]
+  fingerprint: list[tp.Hashable]
   graphdef: GraphDef[tp.Any]
   final_graphdef: GraphDef[tp.Any]
   paths: tuple[PathParts, ...]
   variables: list[Variable[tp.Any]]
-  new_ref_index: RefMap[tp.Any, Index]
+  new_ref_index: RefMap
   new_index_ref: dict[Index, tp.Any]
 
   @staticmethod
   def create(
-    fingerprint: tuple[tp.Any, ...],
+    fingerprint: list[tp.Hashable],
     graphdef: GraphDef[tp.Any],
     paths: tuple[PathParts, ...],
     variables: list[Variable[tp.Any]],
-    new_ref_index: RefMap[tp.Any, Index],
+    new_ref_index: RefMap,
   ) -> CacheContext:
     new_index_ref = {index: obj for obj, index in new_ref_index.items()}
     if type(graphdef) is NodeDef:
@@ -1028,7 +1099,7 @@ GRAPH_CONTEXT = GraphContext()
 @dataclasses.dataclass
 class SplitContext:
   ctxtag: str | None
-  ref_index: RefMap[tp.Any, Index]
+  ref_index: RefMap
 
   @tp.overload
   def split(self, graph_node: A, /) -> tuple[GraphDef[A], GraphState]: ...
@@ -1119,7 +1190,12 @@ class SplitContext:
     ref_outer_index = ctx and ctx.inner_ref_outer_index
 
     def maybe_flatten() -> tuple[GraphDef[A], FlatState[tp.Any] | list[tp.Any]]:
-      if cache_context is None:
+      if node in self.ref_index:
+        # node is already in the ref_index, call flatten which will return a NodeRef
+        return flatten(
+          node, ref_index=self.ref_index, ref_outer_index=ref_outer_index
+        )
+      elif cache_context is None:
         return flatten(
           node,
           ref_index=self.ref_index,
@@ -1130,10 +1206,10 @@ class SplitContext:
         node_cache = cache_context[node]
         cache_fp = node_cache.fingerprint
         new_ref_index = RefMap()
-        node_fp = fingerprint(
-          node, ref_index=self.ref_index, new_ref_index=new_ref_index
+        fp_matches = check_fingerprint(
+          node, cache_fp, ref_index=self.ref_index, new_ref_index=new_ref_index
         )
-        if cache_fp == node_fp:
+        if fp_matches:
           graphdef = node_cache.graphdef
 
           if with_paths:
@@ -1146,6 +1222,12 @@ class SplitContext:
           # add the new references to the ref_index
           self.ref_index.update(new_ref_index)
         else:
+          del cache_fp
+          del node_cache
+          new_ref_index = RefMap()
+          node_fp = fingerprint(
+            node, ref_index=self.ref_index, new_ref_index=new_ref_index
+          )
           graphdef, flat_states = flatten(
             node,
             ref_index=self.ref_index,
@@ -1361,11 +1443,11 @@ class UpdateContext:
   """A context manager for handling complex state updates."""
 
   tag: str
-  outer_ref_outer_index: RefMap[tp.Any, Index] | None
+  outer_ref_outer_index: RefMap | None
   outer_index_inner_ref: dict[Index, tp.Any] | None
   # reverse caches
   outer_index_outer_ref: dict[Index, tp.Any] | None
-  inner_ref_outer_index: RefMap[tp.Any, Index] | None
+  inner_ref_outer_index: RefMap | None
 
   # define hash and eq to make this an opaque object
   def __hash__(self):
@@ -1374,7 +1456,7 @@ class UpdateContext:
   def __eq__(self, other):
     return isinstance(other, UpdateContext)
 
-  def flatten_end(self, ref_index: RefMap[tp.Any, Index]):
+  def flatten_end(self, ref_index: RefMap):
     if self.outer_ref_outer_index is None:
       # outer split (1), store the references
       self.outer_ref_outer_index = ref_index
@@ -1391,7 +1473,7 @@ class UpdateContext:
       # inner merge (2)
       self.outer_index_inner_ref = index_ref
       self.inner_ref_outer_index = RefMap(
-        (obj, index) for index, obj in index_ref.items()
+        {obj: index for index, obj in index_ref.items()}
       )
 
   @tp.overload
@@ -1475,7 +1557,7 @@ class UpdateContext:
       :class:`GraphDef` and one or more :class:`State`'s equal to the number of filters passed. If no
       filters are passed, a single :class:`State` is returned.
     """
-    ref_index: RefMap[tp.Any, Index] = RefMap()
+    ref_index: RefMap = RefMap()
     graphdef, flat_state = flatten(
       node, ref_index=ref_index, ref_outer_index=self.inner_ref_outer_index
     )
