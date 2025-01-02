@@ -16,8 +16,8 @@
 import dataclasses
 import functools
 import typing as tp
-from weakref import WeakKeyDictionary
 
+from flax import debugging
 from flax.nnx import (
   extract,
   filterlib,
@@ -102,6 +102,75 @@ def _inner_jit_merge_fn(ctx: graph.MergeContext, path, prefix, leaf) -> tp.Any:
     raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
   return ctx.unflatten(leaf.graphdef, *leaf.states)
 
+@dataclasses.dataclass(eq=False, repr=False)
+class JitWrapper:
+  f: tp.Callable[..., tp.Any]
+  in_shardings: tp.Any
+  out_shardings: tp.Any
+  kwarg_shardings: tp.Any
+  jitted_fn: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f)
+
+  def __call__(self, *args, **kwargs):
+    with graph.update_context('jit'):
+      # if jit_wrapper not in graph.GRAPH_CONTEXT.cache_context:
+      #   graph.GRAPH_CONTEXT.cache_context[jit_wrapper] = WeakKeyDictionary()
+
+      jit_cache = None
+
+      def _outer_jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
+        if isinstance(prefix, StateSharding):
+          return extract.NodeStates.from_split(
+            *ctx.flatten(x, *prefix.filters, cache_context=jit_cache),
+            metadata=prefix,
+          )
+        return extract.NodeStates.from_split(
+          *ctx.flatten(x, cache_context=jit_cache, with_paths=False)
+        )
+
+      def _outer_jit_merge_fn(
+        ctx: graph.MergeContext, path, prefix, leaf
+      ) -> tp.Any:
+        if not isinstance(leaf, extract.NodeStates):
+          raise ValueError(
+            f'Expected TreeNode, got {type(leaf)} at path {path}'
+          )
+        return ctx.unflatten(
+          leaf.graphdef, *leaf.states, cache_context=jit_cache
+        )
+
+      pure_args, pure_kwargs = extract.to_tree(
+        (args, kwargs),
+        prefix=(self.in_shardings, self.kwarg_shardings)
+        if self.in_shardings is not None and self.kwarg_shardings is not None
+        else None,
+        split_fn=_outer_jit_split_fn,
+        check_aliasing=self.in_shardings is not None or self.kwarg_shardings is not None,
+        ctxtag='jit',
+      )
+      pure_args_out, pure_kwargs_out, pure_out = self.jitted_fn(
+        *pure_args, **pure_kwargs
+      )
+      _args_out, _kwargs_out, out = extract.from_tree(
+        (pure_args_out, pure_kwargs_out, pure_out),
+        merge_fn=_outer_jit_merge_fn,
+        is_inner=False,
+        ctxtag='jit',
+      )
+    del _args_out
+    del _kwargs_out
+    del pure_args_out
+    del pure_kwargs_out
+    del pure_out
+    del args
+    del kwargs
+    print(pure_args)
+    del pure_args
+    del pure_kwargs
+    debugging.time_to(f'{self} end')
+    return out
 
 @dataclasses.dataclass(eq=False)
 class JitFn:
@@ -344,49 +413,9 @@ def jit(
     abstracted_axes=abstracted_axes,
   )
 
-  @functools.wraps(fun)
-  @graph.update_context('jit')
-  def jit_wrapper(*args, **kwargs):
-    if jit_wrapper not in graph.GRAPH_CONTEXT.cache_context:
-      graph.GRAPH_CONTEXT.cache_context[jit_wrapper] = WeakKeyDictionary()
-    jit_cache = graph.GRAPH_CONTEXT.cache_context[jit_wrapper]
-
-    def _outer_jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
-      if isinstance(prefix, StateSharding):
-        return extract.NodeStates.from_split(
-          *ctx.flatten(x, *prefix.filters, cache_context=jit_cache),
-          metadata=prefix,
-        )
-      return extract.NodeStates.from_split(
-        *ctx.flatten(x, cache_context=jit_cache, with_paths=False)
-      )
-
-    def _outer_jit_merge_fn(
-      ctx: graph.MergeContext, path, prefix, leaf
-    ) -> tp.Any:
-      if not isinstance(leaf, extract.NodeStates):
-        raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
-      return ctx.unflatten(leaf.graphdef, *leaf.states, cache_context=jit_cache)
-
-    pure_args, pure_kwargs = extract.to_tree(
-      (args, kwargs),
-      prefix=(in_shardings, kwarg_shardings)
-      if in_shardings is not None and kwarg_shardings is not None
-      else None,
-      split_fn=_outer_jit_split_fn,
-      check_aliasing=in_shardings is not None or kwarg_shardings is not None,
-      ctxtag='jit',
-    )
-    pure_args_out, pure_kwargs_out, pure_out = jitted_fn(
-      *pure_args, **pure_kwargs
-    )
-    _args_out, _kwargs_out, out = extract.from_tree(
-      (pure_args_out, pure_kwargs_out, pure_out),
-      merge_fn=_outer_jit_merge_fn,
-      is_inner=False,
-      ctxtag='jit',
-    )
-    return out
+  jit_wrapper = JitWrapper(
+    fun, in_shardings, out_shardings, kwarg_shardings, jitted_fn
+  )
 
   jit_wrapper.inner = jitted_fn  # type: ignore
 

@@ -13,10 +13,13 @@
 # limitations under the License.
 
 # %%
+import dataclasses
 from functools import partial
+import gc
+from typing import Any
 import jax
 import jax.numpy as jnp
-from flax import nnx
+from flax import debugging, nnx
 import optax
 import numpy as np
 from einop import einop
@@ -30,12 +33,14 @@ from absl import app
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum(
-  'mode', 'all', ['all', 'nnx', 'jax'], 'Mode to run the script in'
+  'mode', 'nnx', ['all', 'nnx', 'jax'], 'Mode to run the script in'
 )
 flags.DEFINE_integer('total_steps', 10_000, 'Total number of training steps')
 flags.DEFINE_integer('batch_size', 32, 'Batch size')
 flags.DEFINE_integer('width', 32, 'Hidden layer size')
 flags.DEFINE_integer('depth', 4, 'Depth of the model')
+
+gc.disable()
 
 
 class MlpBlock(nnx.Module):
@@ -125,6 +130,9 @@ class MlpMixer(nnx.Module):
     x = self.conv_t(x)
     return x
 
+@dataclasses.dataclass
+class OutRef:
+  data: Any
 
 def main(argv):
   print(argv)
@@ -168,12 +176,15 @@ def main(argv):
         lambda flow: mse(flow(x=x_t, t=t), dx_t)
       )(flow)
       optimizer.update(grads)
-      return loss
+      return None
 
     losses = []
     t0 = time()
-    for step in tqdm(range(total_steps), desc='NNX'):
-      loss = train_step_nnx(flow, optimizer, rngs, X)
+    for step in range(total_steps):
+      with debugging.time_context():
+        out_ref = OutRef(None)
+        loss = train_step_nnx(flow, optimizer, rngs, X)
+        debugging.time_to(f'after {train_step_nnx}')
       losses.append(loss)
 
     total_time = time() - t0
