@@ -78,14 +78,19 @@ class TrainState(struct.PyTreeNode):
   tx: optax.GradientTransformation = struct.field(pytree_node=False)
   opt_state: optax.OptState = struct.field(pytree_node=True)
 
-  def apply_gradients(self, *, grads, **kwargs):
+  def apply_gradients(self, *, grads, value=None, value_fn=None, **kwargs):
     """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
 
     Note that internally this function calls ``.tx.update()`` followed by a call
     to ``optax.apply_updates()`` to update ``params`` and ``opt_state``.
 
+    For  ``optax.GradientTransformationExtraArgs``, the optional ``value`` and 
+    ``value_fn`` are passed to ``.tx.update()``.
+
     Args:
       grads: Gradients that have the same pytree structure as ``.params``.
+      value (optional): value of the objective associated with the current grads update.
+      value_fn (optional): function to evaluate the objective given the model.
       **kwargs: Additional dataclass attributes that should be ``.replace()``-ed.
 
     Returns:
@@ -100,9 +105,20 @@ class TrainState(struct.PyTreeNode):
       grads_with_opt = grads
       params_with_opt = self.params
 
-    updates, new_opt_state = self.tx.update(
-      grads_with_opt, self.opt_state, params_with_opt
-    )
+    if value is None or value_fn is None:
+      updates, new_opt_state = self.tx.update(
+        grads_with_opt, self.opt_state, params_with_opt
+      )
+    else:
+      updates, new_opt_state = self.tx.update(
+          grads, self.opt_state,
+          params_with_opt,
+          grad=grads,
+          value=value,
+          value_fn=value_fn,
+          **kwargs,
+      )
+
     new_params_with_opt = optax.apply_updates(params_with_opt, updates)
 
     # As implied by the OWG name, the gradients are used directly to update the
