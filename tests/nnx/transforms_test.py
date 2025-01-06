@@ -2985,6 +2985,18 @@ class TestWhileLoop(absltest.TestCase):
     nnx.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2))
     nnx.fori_loop(0, 2, fori_loop_fn, (a, b))
 
+  def test_fori_output(self):
+    model = nnx.Linear(2, 2, rngs=nnx.Rngs(jax.random.PRNGKey(0)))
+    model2 = nnx.Linear(2, 2, rngs=nnx.Rngs(jax.random.PRNGKey(1)))
+
+    def f(i, x):
+      return x
+
+    model_out, model2_out = nnx.fori_loop(0, 10, f, (model, model2))
+
+    self.assertIs(model, model_out)
+    self.assertIs(model2, model2_out)
+
 
 class TestSplitMergeInputs(absltest.TestCase):
   def test_split_inputs(self):
