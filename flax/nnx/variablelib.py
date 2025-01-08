@@ -808,6 +808,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     if 'on_remove_axis' in self._var_metadata:
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
 
+GraphVariableState = VariableState[VariableState[tp.Any]]
 
 def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):
   metadata = tuple(x.get_metadata().items())
