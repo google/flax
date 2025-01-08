@@ -115,8 +115,8 @@ class TrainState(struct.PyTreeNode):
     update_kwargs = {k: v for k, v in update_kwargs.items() if v is not None}
 
     updates, new_opt_state = self.tx.update(
-      grads_with_opt, 
-      self.opt_state, 
+      grads_with_opt,
+      self.opt_state,
       params_with_opt,
       **update_kwargs
     )
