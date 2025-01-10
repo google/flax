@@ -19,12 +19,12 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-13, macos-14]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
 
     - name: Setup Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1
+      uses: actions-rust-lang/setup-rust-toolchain@11df97af8e8102fd60b60a77dfbf58d40cd843b8 # v1.10.1
 
     - name: Install cibuildwheel
       run: python -m pip install cibuildwheel==2.21.0
@@ -41,7 +41,7 @@ jobs:
           curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable --profile=minimal -y &&
           rustup show
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
       with:
         name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
         path: ./flaxlib/wheelhouse/*.whl
@@ -51,15 +51,15 @@ jobs:
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
     - name: Setup Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1
+      uses: actions-rust-lang/setup-rust-toolchain@11df97af8e8102fd60b60a77dfbf58d40cd843b8 # v1.10.1
 
     - name: Build sdist
       run: pipx run build --sdist flaxlib
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
       with:
         name: cibw-sdist
         path: ./flaxlib/dist/*.tar.gz
@@ -72,14 +72,14 @@ jobs:
     permissions:
       id-token: write
     steps:
-    - uses: actions/setup-python@v1
+    - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
       with:
         python-version: '3.x'
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install setuptools build wheel twine
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
       with:
         # unpacks all CIBW artifacts into dist/
         pattern: cibw-*
