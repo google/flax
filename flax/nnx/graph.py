@@ -24,7 +24,7 @@ import jax
 import numpy as np
 import typing_extensions as tpe
 
-from flax.nnx import filterlib, reprlib
+from flax.nnx import filterlib, reprlib, visualization
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -63,7 +63,7 @@ def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
   return isinstance(x, Variable)
 
 
-class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin[A, B]):
+class RefMap(tp.MutableMapping[A, B], reprlib.MappingReprMixin):
   """A mapping that uses object id as the hash for the keys."""
 
   def __init__(
@@ -248,8 +248,7 @@ class NodeRef(GraphDef[Node], reprlib.Representable):
     yield reprlib.Attr('index', self.index)
 
   def __treescope_repr__(self, path, subtree_renderer):
-    import treescope  # type: ignore[import-not-found,import-untyped]
-    return treescope.repr_lib.render_object_constructor(
+    return visualization.render_object_constructor(
       object_type=type(self),
       attributes={'type': self.type, 'index': self.index},
       path=path,
@@ -272,9 +271,7 @@ class VariableDef(reprlib.Representable):
     yield reprlib.Attr('metadata', reprlib.PrettyMapping(self.metadata))
 
   def __treescope_repr__(self, path, subtree_renderer):
-    import treescope  # type: ignore[import-not-found,import-untyped]
-
-    return treescope.repr_lib.render_object_constructor(
+    return visualization.render_object_constructor(
       object_type=type(self),
       attributes={
         'type': self.type,
@@ -353,8 +350,7 @@ class NodeDef(GraphDef[Node], reprlib.Representable):
     )
 
   def __treescope_repr__(self, path, subtree_renderer):
-    import treescope  # type: ignore[import-not-found,import-untyped]
-    return treescope.repr_lib.render_object_constructor(
+    return visualization.render_object_constructor(
       object_type=type(self),
       attributes={
         'type': self.type,

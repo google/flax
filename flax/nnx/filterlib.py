@@ -54,7 +54,9 @@ def to_predicate(filter: Filter) -> Predicate:
   else:
     raise TypeError(f'Invalid collection filter: {filter:!r}. ')
 
-def filters_to_predicates(filters: tuple[Filter, ...]) -> tuple[Predicate, ...]:
+def filters_to_predicates(
+  filters: tp.Sequence[Filter],
+) -> tuple[Predicate, ...]:
   for i, filter_ in enumerate(filters):
     if filter_ in (..., True) and i != len(filters) - 1:
       remaining_filters = filters[i + 1 :]

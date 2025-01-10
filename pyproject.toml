@@ -22,7 +22,7 @@ dependencies = [
     "rich>=11.1",
     "typing_extensions>=4.2",
     "PyYAML>=5.4.1",
-    "treescope>=0.1.2",
+    "treescope>=0.1.7",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

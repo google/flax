@@ -21,10 +21,15 @@ import typing as tp
 from typing import Any
 
 import jax
+import treescope  # type: ignore[import-untyped]
 
 from flax import errors
-from flax.nnx import filterlib, reprlib, tracers
-from flax.typing import Missing, PathParts
+from flax.nnx import filterlib, reprlib, tracers, visualization
+from flax.typing import (
+  Missing,
+  PathParts,
+  value_stats,
+)
 import jax.tree_util as jtu
 
 A = tp.TypeVar('A')
@@ -40,6 +45,7 @@ AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
 VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
+
 
 
 @dataclasses.dataclass
@@ -311,20 +317,34 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return VariableState(type(self), self.raw_value, **self._var_metadata)
 
   def __nnx_repr__(self):
-    yield reprlib.Object(type=type(self))
+    stats = value_stats(self.value)
+    if stats:
+      comment = f' # {stats}'
+    else:
+      comment = ''
+
+    yield reprlib.Object(type=type(self).__name__, comment=comment)
     yield reprlib.Attr('value', self.raw_value)
     for name, value in self._var_metadata.items():
       yield reprlib.Attr(name, repr(value))
 
   def __treescope_repr__(self, path, subtree_renderer):
-    import treescope  # type: ignore[import-not-found,import-untyped]
+    size_bytes = value_stats(self.value)
+    if size_bytes:
+      stats_repr = f' # {size_bytes}'
+      first_line_annotation = treescope.rendering_parts.comment_color(
+        treescope.rendering_parts.text(f'{stats_repr}')
+      )
+    else:
+      first_line_annotation = None
 
     children = {'value': self.raw_value, **self._var_metadata}
-    return treescope.repr_lib.render_object_constructor(
+    return visualization.render_object_constructor(
       object_type=type(self),
       attributes=children,
       path=path,
       subtree_renderer=subtree_renderer,
+      first_line_annotation=first_line_annotation,
     )
 
   # hooks API
@@ -764,22 +784,35 @@ class VariableState(tp.Generic[A], reprlib.Representable):
       del self._var_metadata[name]
 
   def __nnx_repr__(self):
-    yield reprlib.Object(type=type(self))
-    yield reprlib.Attr('type', self.type.__name__)
+    stats = value_stats(self.value)
+    if stats:
+      comment = f' # {stats}'
+    else:
+      comment = ''
+
+    yield reprlib.Object(type=type(self), comment=comment)
+    yield reprlib.Attr('type', self.type)
     yield reprlib.Attr('value', self.value)
 
     for name, value in self._var_metadata.items():
-      yield reprlib.Attr(name, repr(value))
+      yield reprlib.Attr(name, value)
 
   def __treescope_repr__(self, path, subtree_renderer):
-    import treescope  # type: ignore[import-not-found,import-untyped]
-
+    size_bytes = value_stats(self.value)
+    if size_bytes:
+      stats_repr = f' # {size_bytes}'
+      first_line_annotation = treescope.rendering_parts.comment_color(
+        treescope.rendering_parts.text(f'{stats_repr}')
+      )
+    else:
+      first_line_annotation = None
     children = {'type': self.type, 'value': self.value, **self._var_metadata}
-    return treescope.repr_lib.render_object_constructor(
+    return visualization.render_object_constructor(
       object_type=type(self),
       attributes=children,
       path=path,
       subtree_renderer=subtree_renderer,
+      first_line_annotation=first_line_annotation,
     )
 
   def replace(self, value: B) -> VariableState[B]:
@@ -911,7 +944,7 @@ def with_metadata(
 
 def split_flat_state(
   flat_state: tp.Iterable[tuple[PathParts, Variable | VariableState]],
-  filters: tuple[filterlib.Filter, ...],
+  filters: tp.Sequence[filterlib.Filter],
 ) -> tuple[list[tuple[PathParts, Variable | VariableState]], ...]:
   predicates = filterlib.filters_to_predicates(filters)
   # we have n + 1 states, where n is the number of predicates
