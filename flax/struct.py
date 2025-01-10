@@ -123,7 +123,7 @@ def dataclass(
   """
   # Support passing arguments to the decorator (e.g. @dataclass(kw_only=True))
   if clz is None:
-    return functools.partial(dataclass, **kwargs)
+    return functools.partial(dataclass, **kwargs)  # type: ignore[bad-return-type]
 
   # check if already a flax dataclass
   if '_flax_dataclass' in clz.__dict__:

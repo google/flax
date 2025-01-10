@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
 from collections import deque
 from functools import partial
@@ -26,6 +27,8 @@ from typing import (
 from collections.abc import Callable, Hashable, Mapping, Sequence
 
 import jax
+import jax.numpy as jnp
+import numpy as np
 from flax.core import FrozenDict
 
 import dataclasses
@@ -161,3 +164,63 @@ class Missing:
 
 
 MISSING = Missing()
+
+
+def _bytes_repr(num_bytes):
+  count, units = (
+    (f'{num_bytes / 1e9 :,.1f}', 'GB')
+    if num_bytes > 1e9
+    else (f'{num_bytes / 1e6 :,.1f}', 'MB')
+    if num_bytes > 1e6
+    else (f'{num_bytes / 1e3 :,.1f}', 'KB')
+    if num_bytes > 1e3
+    else (f'{num_bytes:,}', 'B')
+  )
+
+  return f'{count} {units}'
+
+
+class ShapeDtype(Protocol):
+  shape: Shape
+  dtype: Dtype
+
+
+def has_shape_dtype(x: Any) -> TypeGuard[ShapeDtype]:
+  return hasattr(x, 'shape') and hasattr(x, 'dtype')
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class SizeBytes:  # type: ignore[misc]
+  size: int
+  bytes: int
+
+  @staticmethod
+  def from_array(x: ShapeDtype) -> SizeBytes:
+    size = int(np.prod(x.shape))
+    dtype: jnp.dtype
+    if isinstance(x.dtype, str):
+      dtype = jnp.dtype(x.dtype)
+    else:
+      dtype = x.dtype  # type: ignore
+    bytes = size * dtype.itemsize  # type: ignore
+    return SizeBytes(size, bytes)
+
+  def __add__(self, other: SizeBytes) -> SizeBytes:
+    return SizeBytes(self.size + other.size, self.bytes + other.bytes)
+
+  def __bool__(self) -> bool:
+    return bool(self.size)
+
+  def __repr__(self) -> str:
+    bytes_repr = _bytes_repr(self.bytes)
+    return f'{self.size:,} ({bytes_repr})'
+
+
+def value_stats(x):
+  leaves = jax.tree.leaves(x)
+  size_bytes = SizeBytes(0, 0)
+  for leaf in leaves:
+    if has_shape_dtype(leaf):
+      size_bytes += SizeBytes.from_array(leaf)
+
+  return size_bytes
