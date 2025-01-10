@@ -395,11 +395,11 @@ class LayerNorm(Module):
 
     >>> nnx.state(layer)
     State({
-      'bias': VariableState( # 6 (24 B)
+      'bias': VariableState(
         type=Param,
         value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
       ),
-      'scale': VariableState( # 6 (24 B)
+      'scale': VariableState(
         type=Param,
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )
@@ -531,7 +531,7 @@ class RMSNorm(Module):
 
     >>> nnx.state(layer)
     State({
-      'scale': VariableState( # 6 (24 B)
+      'scale': VariableState(
         type=Param,
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )
@@ -655,11 +655,11 @@ class GroupNorm(Module):
     >>> layer = nnx.GroupNorm(num_features=6, num_groups=3, rngs=nnx.Rngs(0))
     >>> nnx.state(layer)
     State({
-      'bias': VariableState( # 6 (24 B)
+      'bias': VariableState(
         type=Param,
         value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
       ),
-      'scale': VariableState( # 6 (24 B)
+      'scale': VariableState(
         type=Param,
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )

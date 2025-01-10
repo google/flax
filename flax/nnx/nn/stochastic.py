@@ -24,7 +24,7 @@ from flax.nnx import rnglib
 from flax.nnx.module import Module, first_from
 
 
-@dataclasses.dataclass(repr=False)
+@dataclasses.dataclass
 class Dropout(Module):
   """Create a dropout layer.
 

@@ -25,7 +25,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-
 A = TypeVar('A')
 
 class List(nnx.Module):
@@ -550,46 +549,6 @@ class TestModule(absltest.TestCase):
     self.assertIsInstance(model, Model)
     y2 = model(jnp.ones((5, 2)))
     np.testing.assert_allclose(y1, y2)
-
-  def test_repr(self):
-    class Block(nnx.Module):
-      def __init__(self, din, dout, rngs: nnx.Rngs):
-        self.linear = nnx.Linear(din, dout, rngs=rngs)
-        self.bn = nnx.BatchNorm(dout, rngs=rngs)
-        self.dropout = nnx.Dropout(0.2, rngs=rngs)
-
-      def __call__(self, x):
-        return nnx.relu(self.dropout(self.bn(self.linear(x))))
-
-    class Foo(nnx.Module):
-      def __init__(self, rngs: nnx.Rngs):
-        self.block1 = Block(32, 128, rngs=rngs)
-        self.block2 = Block(128, 10, rngs=rngs)
-
-      def __call__(self, x):
-        return self.block2(self.block1(x))
-
-    obj = Foo(nnx.Rngs(0))
-
-    leaves = nnx.state(obj).flat_state().leaves
-
-    expected_total = sum(int(np.prod(x.value.shape)) for x in leaves)
-    expected_total_params = sum(
-      int(np.prod(x.value.shape)) for x in leaves if x.type is nnx.Param
-    )
-    expected_total_batch_stats = sum(
-      int(np.prod(x.value.shape)) for x in leaves if x.type is nnx.BatchStat
-    )
-    expected_total_rng_states = sum(
-      int(np.prod(x.value.shape)) for x in leaves if x.type is nnx.RngState
-    )
-
-    foo_repr = repr(obj).replace(',', '').splitlines()
-
-    self.assertIn(str(expected_total), foo_repr[0])
-    self.assertIn(str(expected_total_params), foo_repr[0])
-    self.assertIn(str(expected_total_batch_stats), foo_repr[0])
-    self.assertIn(str(expected_total_rng_states), foo_repr[0])
 
 
 class TestModulePytree:

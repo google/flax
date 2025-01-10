@@ -20,67 +20,27 @@ import typing as tp
 from abc import ABCMeta
 from copy import deepcopy
 
+
 import jax
 import numpy as np
-import treescope  # type: ignore[import-untyped]
-from treescope import rendering_parts
-from flax.nnx import visualization
 
-from flax import errors
 from flax.nnx import (
-  graph,
   reprlib,
   tracers,
 )
-from flax import nnx
+from flax.nnx import graph
 from flax.nnx.variablelib import Variable, VariableState
-from flax.typing import SizeBytes, value_stats
+from flax import errors
 
 G = tp.TypeVar('G', bound='Object')
 
 
-def _collect_stats(
-  node: tp.Any, node_stats: dict[int, dict[type[Variable], SizeBytes]]
-):
-  if not graph.is_node(node) and not isinstance(node, Variable):
-    raise ValueError(f'Expected a graph node or Variable, got {type(node)!r}.')
-
-  if id(node) in node_stats:
-    return
-
-  stats: dict[type[Variable], SizeBytes] = {}
-  node_stats[id(node)] = stats
-
-  if isinstance(node, Variable):
-    var_type = type(node)
-    if issubclass(var_type, nnx.RngState):
-      var_type = nnx.RngState
-    size_bytes = value_stats(node.value)
-    if size_bytes:
-      stats[var_type] = size_bytes
-
-  else:
-    node_dict = graph.get_node_impl(node).node_dict(node)
-    for key, value in node_dict.items():
-      if id(value) in node_stats:
-        continue
-      if graph.is_node(value) or isinstance(value, Variable):
-        _collect_stats(value, node_stats)
-        child_stats = node_stats[id(value)]
-        for var_type, size_bytes in child_stats.items():
-          if var_type in stats:
-            stats[var_type] += size_bytes
-          else:
-            stats[var_type] = size_bytes
-
-
 @dataclasses.dataclass
-class ObjectContext(threading.local):
+class GraphUtilsContext(threading.local):
   seen_modules_repr: set[int] | None = None
-  node_stats: dict[int, dict[type[Variable], SizeBytes]] | None = None
 
 
-OBJECT_CONTEXT = ObjectContext()
+CONTEXT = GraphUtilsContext()
 
 
 class ObjectState(reprlib.Representable):
@@ -103,13 +63,13 @@ class ObjectState(reprlib.Representable):
     yield reprlib.Attr('trace_state', self._trace_state)
 
   def __treescope_repr__(self, path, subtree_renderer):
-    return visualization.render_object_constructor(
-      object_type=type(self),
-      attributes={'trace_state': self._trace_state},
-      path=path,
-      subtree_renderer=subtree_renderer,
+    import treescope  # type: ignore[import-not-found,import-untyped]
+    return treescope.repr_lib.render_object_constructor(
+        object_type=type(self),
+        attributes={'trace_state': self._trace_state},
+        path=path,
+        subtree_renderer=subtree_renderer,
     )
-
 
 class ObjectMeta(ABCMeta):
   if not tp.TYPE_CHECKING:
@@ -130,14 +90,12 @@ def _graph_node_meta_call(cls: tp.Type[G], *args, **kwargs) -> G:
 
 
 @dataclasses.dataclass(frozen=True, repr=False)
-class Array(reprlib.Representable):
+class Array:
   shape: tp.Tuple[int, ...]
   dtype: tp.Any
 
-  def __nnx_repr__(self):
-    yield reprlib.Object(type='Array', same_line=True)
-    yield reprlib.Attr('shape', self.shape)
-    yield reprlib.Attr('dtype', self.dtype)
+  def __repr__(self):
+    return f'Array(shape={self.shape}, dtype={self.dtype.name})'
 
 
 class Object(reprlib.Representable, metaclass=ObjectMeta):
@@ -179,41 +137,20 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     return graph.merge(graphdef, state)
 
   def __nnx_repr__(self):
-    if OBJECT_CONTEXT.node_stats is None:
-      node_stats: dict[int, dict[type[Variable], SizeBytes]] = {}
-      _collect_stats(self, node_stats)
-      OBJECT_CONTEXT.node_stats = node_stats
-      stats = node_stats[id(self)]
-      clear_node_stats = True
-    else:
-      stats = OBJECT_CONTEXT.node_stats[id(self)]
-      clear_node_stats = False
-
-    if OBJECT_CONTEXT.seen_modules_repr is None:
-      OBJECT_CONTEXT.seen_modules_repr = set()
+    if CONTEXT.seen_modules_repr is None:
+      CONTEXT.seen_modules_repr = set()
       clear_seen = True
     else:
       clear_seen = False
 
-    if id(self) in OBJECT_CONTEXT.seen_modules_repr:
+    if id(self) in CONTEXT.seen_modules_repr:
       yield reprlib.Object(type=type(self), empty_repr='...')
       return
 
+    yield reprlib.Object(type=type(self))
+    CONTEXT.seen_modules_repr.add(id(self))
+
     try:
-      if stats:
-        stats_repr = ' # ' + ', '.join(
-          f'{var_type.__name__}: {size_bytes}'
-          for var_type, size_bytes in stats.items()
-        )
-        if len(stats) > 1:
-          total_bytes = sum(stats.values(), SizeBytes(0, 0))
-          stats_repr += f', Total: {total_bytes}'
-      else:
-        stats_repr = ''
-
-      yield reprlib.Object(type=type(self), comment=stats_repr)
-      OBJECT_CONTEXT.seen_modules_repr.add(id(self))
-
       for name, value in vars(self).items():
         if name.startswith('_'):
           continue
@@ -231,64 +168,24 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
           return value
 
         value = jax.tree.map(to_shape_dtype, value)
-        yield reprlib.Attr(name, value)
+        yield reprlib.Attr(name, repr(value))
     finally:
       if clear_seen:
-        OBJECT_CONTEXT.seen_modules_repr = None
-      if clear_node_stats:
-        OBJECT_CONTEXT.node_stats = None
+        CONTEXT.seen_modules_repr = None
 
   def __treescope_repr__(self, path, subtree_renderer):
-    from flax import nnx
-
-    if OBJECT_CONTEXT.node_stats is None:
-      node_stats: dict[int, dict[type[Variable], SizeBytes]] = {}
-      _collect_stats(self, node_stats)
-      OBJECT_CONTEXT.node_stats = node_stats
-      stats = node_stats[id(self)]
-      clear_node_stats = True
-    else:
-      stats = OBJECT_CONTEXT.node_stats[id(self)]
-      clear_node_stats = False
-
-    try:
-      if stats:
-        stats_repr = ' # ' + ', '.join(
-          f'{var_type.__name__}: {size_bytes}'
-          for var_type, size_bytes in stats.items()
-        )
-        if len(stats) > 1:
-          total_bytes = sum(stats.values(), SizeBytes(0, 0))
-          stats_repr += f', Total: {total_bytes}'
-
-        first_line_annotation = rendering_parts.comment_color(
-          rendering_parts.text(f'{stats_repr}')
-        )
-      else:
-        first_line_annotation = None
-      children = {}
-      for name, value in vars(self).items():
-        if name.startswith('_'):
-          continue
-        children[name] = value
-
-      if isinstance(self, nnx.Module):
-        color = treescope.formatting_util.color_from_string(
-          type(self).__qualname__
-        )
-      else:
-        color = None
-      return visualization.render_object_constructor(
+    import treescope  # type: ignore[import-not-found,import-untyped]
+    children = {}
+    for name, value in vars(self).items():
+      if name.startswith('_'):
+        continue
+      children[name] = value
+    return treescope.repr_lib.render_object_constructor(
         object_type=type(self),
         attributes=children,
         path=path,
         subtree_renderer=subtree_renderer,
-        first_line_annotation=first_line_annotation,
-        color=color,
-      )
-    finally:
-      if clear_node_stats:
-        OBJECT_CONTEXT.node_stats = None
+    )
 
   # Graph Definition
   def _graph_node_flatten(self):

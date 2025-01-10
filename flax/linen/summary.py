@@ -48,13 +48,6 @@ from flax.typing import (
   LogicalNames,
 )
 
-try:
-  from IPython import get_ipython
-
-  in_ipython = get_ipython() is not None
-except ImportError:
-  in_ipython = False
-
 
 class _ValueRepresentation(ABC):
   """A class that represents a value in the summary table."""
@@ -249,6 +242,11 @@ def tabulate(
 
                                    Total Parameters: 50 (200 B)
 
+
+  **Note**: rows order in the table does not represent execution order,
+  instead it aligns with the order of keys in `variables` which are sorted
+  alphabetically.
+
   **Note**: `vjp_flops` returns `0` if the module is not differentiable.
 
   Args:
@@ -269,9 +267,7 @@ def tabulate(
       mutable.
     console_kwargs: An optional dictionary with additional keyword arguments
       that are passed to `rich.console.Console` when rendering the table.
-      Default arguments are  ``'force_terminal': True``, and ``'force_jupyter'``
-      is set to ``True`` if the code is running in a Jupyter notebook, otherwise
-      it is set to ``False``.
+      Default arguments are `{'force_terminal': True, 'force_jupyter': False}`.
     table_kwargs: An optional dictionary with additional keyword arguments that
       are passed to `rich.table.Table` constructor.
     column_kwargs: An optional dictionary with additional keyword arguments that
@@ -568,7 +564,7 @@ def _render_table(
   non_params_cols: list[str],
 ) -> str:
   """A function that renders a Table to a string representation using rich."""
-  console_kwargs = {'force_terminal': True, 'force_jupyter': in_ipython}
+  console_kwargs = {'force_terminal': True, 'force_jupyter': False}
   if console_extras is not None:
     console_kwargs.update(console_extras)
 

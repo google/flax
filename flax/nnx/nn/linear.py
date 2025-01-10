@@ -1063,7 +1063,7 @@ class Embed(Module):
     >>> layer = nnx.Embed(num_embeddings=5, features=3, rngs=nnx.Rngs(0))
     >>> nnx.state(layer)
     State({
-      'embedding': VariableState( # 15 (60 B)
+      'embedding': VariableState(
         type=Param,
         value=Array([[-0.90411377, -0.3648777 , -1.1083648 ],
                [ 0.01070483,  0.27923733,  1.7487359 ],

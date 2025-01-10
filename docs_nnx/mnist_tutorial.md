@@ -112,7 +112,7 @@ Let's put the CNN model to the test!  Here, you’ll perform a forward pass with
 import jax.numpy as jnp  # JAX NumPy
 
 y = model(jnp.ones((1, 28, 28, 1)))
-y
+nnx.display(y)
 ```
 
 ## 4. Create the optimizer and define some metrics
@@ -179,9 +179,6 @@ the accuracy) during the process. Typically this leads to the model achieving ar
 ```{code-cell} ipython3
 :outputId: 258a2c76-2c8f-4a9e-d48b-dde57c342a87
 
-from IPython.display import clear_output
-import matplotlib.pyplot as plt
-
 metrics_history = {
   'train_loss': [],
   'train_accuracy': [],
@@ -211,20 +208,40 @@ for step, batch in enumerate(train_ds.as_numpy_iterator()):
       metrics_history[f'test_{metric}'].append(value)
     metrics.reset()  # Reset the metrics for the next training epoch.
 
-    clear_output(wait=True)
-    # Plot loss and accuracy in subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-    ax1.set_title('Loss')
-    ax2.set_title('Accuracy')
-    for dataset in ('train', 'test'):
-      ax1.plot(metrics_history[f'{dataset}_loss'], label=f'{dataset}_loss')
-      ax2.plot(metrics_history[f'{dataset}_accuracy'], label=f'{dataset}_accuracy')
-    ax1.legend()
-    ax2.legend()
-    plt.show()
+    print(
+      f"[train] step: {step}, "
+      f"loss: {metrics_history['train_loss'][-1]}, "
+      f"accuracy: {metrics_history['train_accuracy'][-1] * 100}"
+    )
+    print(
+      f"[test] step: {step}, "
+      f"loss: {metrics_history['test_loss'][-1]}, "
+      f"accuracy: {metrics_history['test_accuracy'][-1] * 100}"
+    )
 ```
 
-## 7. Perform inference on the test set
+## 7. Visualize the metrics
+
+With Matplotlib, you can create plots for the loss and the accuracy:
+
+```{code-cell} ipython3
+:outputId: 431a2fcd-44fa-4202-f55a-906555f060ac
+
+import matplotlib.pyplot as plt  # Visualization
+
+# Plot loss and accuracy in subplots
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+ax1.set_title('Loss')
+ax2.set_title('Accuracy')
+for dataset in ('train', 'test'):
+  ax1.plot(metrics_history[f'{dataset}_loss'], label=f'{dataset}_loss')
+  ax2.plot(metrics_history[f'{dataset}_accuracy'], label=f'{dataset}_accuracy')
+ax1.legend()
+ax2.legend()
+plt.show()
+```
+
+## 10. Perform inference on the test set
 
 Create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
 

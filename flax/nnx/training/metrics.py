@@ -276,45 +276,45 @@ class MultiMetric(Metric):
     ... )
 
     >>> metrics
-    MultiMetric( # MetricState: 4 (16 B)
-      accuracy=Accuracy( # MetricState: 2 (8 B)
+    MultiMetric(
+      accuracy=Accuracy(
         argname='values',
-        total=MetricState( # 1 (4 B)
+        total=MetricState(
           value=Array(0., dtype=float32)
         ),
-        count=MetricState( # 1 (4 B)
+        count=MetricState(
           value=Array(0, dtype=int32)
         )
       ),
-      loss=Average( # MetricState: 2 (8 B)
+      loss=Average(
         argname='values',
-        total=MetricState( # 1 (4 B)
+        total=MetricState(
           value=Array(0., dtype=float32)
         ),
-        count=MetricState( # 1 (4 B)
+        count=MetricState(
           value=Array(0, dtype=int32)
         )
       )
     )
 
     >>> metrics.accuracy
-    Accuracy( # MetricState: 2 (8 B)
+    Accuracy(
       argname='values',
-      total=MetricState( # 1 (4 B)
+      total=MetricState(
         value=Array(0., dtype=float32)
       ),
-      count=MetricState( # 1 (4 B)
+      count=MetricState(
         value=Array(0, dtype=int32)
       )
     )
 
     >>> metrics.loss
-    Average( # MetricState: 2 (8 B)
+    Average(
       argname='values',
-      total=MetricState( # 1 (4 B)
+      total=MetricState(
         value=Array(0., dtype=float32)
       ),
-      count=MetricState( # 1 (4 B)
+      count=MetricState(
         value=Array(0, dtype=int32)
       )
     )

@@ -38,7 +38,7 @@ class NestedStateRepr(reprlib.Representable):
     self.state = state
 
   def __nnx_repr__(self):
-    yield reprlib.Object('', kv_sep=': ', start='{', end='}')
+    yield reprlib.Object('', value_sep=': ', start='{', end='}')
 
     for r in self.state.__nnx_repr__():
       if isinstance(r, reprlib.Object):
@@ -54,7 +54,7 @@ class NestedStateRepr(reprlib.Representable):
     # Render as the dictionary itself at the same path.
     return subtree_renderer(children, path=path)
 
-class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.SequenceReprMixin):
+class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.PrettySequence):
   _keys: tuple[PathParts, ...]
   _values: list[V]
 
@@ -65,14 +65,6 @@ class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.SequenceReprMixin):
       values.append(value)
     self._keys = tuple(keys)
     self._values = values
-
-  @property
-  def paths(self) -> tp.Sequence[PathParts]:
-    return self._keys
-
-  @property
-  def leaves(self) -> tp.Sequence[V]:
-    return self._values
 
   @tp.overload
   def __getitem__(self, index: int) -> tuple[PathParts, V]: ...
@@ -181,7 +173,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     return len(self._mapping)
 
   def __nnx_repr__(self):
-    yield reprlib.Object(type(self), kv_sep=': ', start='({', end='})')
+    yield reprlib.Object(type(self), value_sep=': ', start='({', end='})')
 
     for k, v in self.items():
       if isinstance(v, State):

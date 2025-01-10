@@ -403,6 +403,23 @@ class Module(Object, metaclass=ModuleMeta):
         flatten_func=partial(_module_flatten, with_keys=False),
       )
 
+  def __treescope_repr__(self, path, subtree_renderer):
+    import treescope  # type: ignore[import-not-found,import-untyped]
+    children = {}
+    for name, value in vars(self).items():
+      if name.startswith('_'):
+        continue
+      children[name] = value
+    return treescope.repr_lib.render_object_constructor(
+        object_type=type(self),
+        attributes=children,
+        path=path,
+        subtree_renderer=subtree_renderer,
+        color=treescope.formatting_util.color_from_string(
+            type(self).__qualname__
+        )
+    )
+
 # -------------------------
 # Pytree Definition
 # -------------------------
