@@ -235,6 +235,7 @@ class PrettyMapping(Representable):
     for key, value in self.mapping.items():
       yield Attr(colorized(key), value, use_raw_key=True)
 
+
 @dataclasses.dataclass(repr=False)
 class SequenceReprMixin(Representable):
   def __nnx_repr__(self):

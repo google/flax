@@ -13,7 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-import dataclasses
 import functools
 import typing as tp
 
@@ -48,7 +47,6 @@ class RngKey(RngState): ...
 NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
 
 
-@dataclasses.dataclass(repr=False)
 class RngStream(Object):
   def __init__(
     self,
@@ -56,12 +54,11 @@ class RngStream(Object):
     key: jax.Array,
     count: jax.Array,
   ):
+    if not isinstance(key, jax.Array):
+      raise TypeError(f'key must be a jax.Array, got {type(key)}')
+
     self.key = RngKey(key, tag=tag)
     self.count = RngCount(count, tag=tag)
-
-  def __post_init__(self):
-    if not isinstance(self.key, jax.Array):
-      raise TypeError(f'key must be a jax.Array, got {type(self.key)}')
 
   def __call__(self) -> jax.Array:
     self.check_valid_context(
@@ -80,7 +77,7 @@ RngDict = tp.Union[
 ]
 
 
-class Rngs(Object, tp.Mapping[str, RngStream]):
+class Rngs(Object):
   """NNX rng container class. To instantiate the ``Rngs``, pass
   in an integer, specifying the starting seed. ``Rngs`` can have
   different "streams", allowing the user to generate different
@@ -236,6 +233,10 @@ class Rngs(Object, tp.Mapping[str, RngStream]):
 
   def __setstate__(self, state):
     vars(self).update(state)
+
+  def items(self):
+    for name in self:
+      yield name, self[name]
 
 
 class ForkStates(tp.NamedTuple):

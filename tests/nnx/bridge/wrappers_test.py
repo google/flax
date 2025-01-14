@@ -250,7 +250,9 @@ class TestCompatibility(absltest.TestCase):
     assert y.shape == (1, 64)
     np.testing.assert_allclose(y, x @ variables['params']['kernel'])
     assert 'nnx' in variables
-    assert isinstance(variables['nnx']['graphdef'], nnx.GraphDef)
+    assert isinstance(
+      variables['nnx']['graphdef'], nnx.graph.NodeDef | nnx.graph.NodeRef
+    )
 
   def test_nnx_to_linen_multiple_rngs(self):
     class NNXInner(nnx.Module):

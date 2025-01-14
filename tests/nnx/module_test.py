@@ -25,7 +25,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-
 A = TypeVar('A')
 
 class List(nnx.Module):
@@ -262,13 +261,13 @@ class TestModule(absltest.TestCase):
     m2 = nnx.clone(m)
 
     assert m is not m2
-    assert m2.a[0] == m2.b.c
-    assert m2.a[1] == m2.b.d
+    assert m2.a[0].value == m2.b.c.value
+    assert m2.a[1].value == m2.b.d.value
 
-    assert m.a[0] == m2.a[0]
-    assert m.a[1] == m2.a[1]
-    assert m.b.c == m2.b.c
-    assert m.b.d == m2.b.d
+    assert m.a[0].value == m2.a[0].value
+    assert m.a[1].value == m2.a[1].value
+    assert m.b.c.value == m2.b.c.value
+    assert m.b.d.value == m2.b.d.value
 
   def test_sow_basic(self):
     class Foo(nnx.Module):
@@ -502,7 +501,7 @@ class TestModule(absltest.TestCase):
     m1 = Foo()
     m2 = deepcopy(m1)
 
-    assert m1.a == m2.a
+    assert m1.a.value == m2.a.value
     assert vars(m1)['a'] is not vars(m2)['a']
     assert m1.b is not m2.b
     assert m1.c is not m2.c
@@ -676,6 +675,9 @@ class TestModuleDataclass:
       e: nnx.Variable[int]
       f: int
 
+      def __hash__(self):
+        return id(self)
+
     m = Foo(
       a=1,  # graphdef
       b=nnx.Variable(2),  # node
@@ -754,7 +756,7 @@ class TestModuleDef:
 
     graphdef, state = nnx.split(foo)
 
-    assert isinstance(graphdef, nnx.GraphDef)
+    assert isinstance(graphdef, nnx.graph.NodeDef | nnx.graph.NodeRef)
     assert isinstance(state, nnx.State)
     assert issubclass(state.w.type, nnx.Param)
     assert issubclass(state.c.type, nnx.Variable)

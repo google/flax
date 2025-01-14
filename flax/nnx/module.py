@@ -331,7 +331,10 @@ class Module(Object, metaclass=ModuleMeta):
       linear Linear
       submodule SubModule
     """
-    node_dict = graph.get_node_impl(self).node_dict(self)
+    node_impl = graph.get_node_impl(self)
+    if node_impl is None:
+      raise RuntimeError(f'Unsupported type: {type(self)}, this is a bug.')
+    node_dict = node_impl.node_dict(self)
     for key, value in node_dict.items():
       if isinstance(value, Module):
         yield key, value
