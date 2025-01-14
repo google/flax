@@ -13,9 +13,6 @@
 # limitations under the License.
 
 import abc
-import contextlib
-import dataclasses
-import threading
 import typing as tp
 
 import jax
@@ -67,7 +64,7 @@ def extract_graph_nodes(
   | tuple[A, tuple[tp.Any, ...], tuple[tp.Any, ...]]
 ):
   """Extracts all graph nodes from a pytree."""
-  nodes = graph.RefMap[tp.Any, Index]()
+  nodes: dict[tp.Any, Index] = {}
   node_prefixes = []
   leaves = []
 
@@ -134,11 +131,10 @@ def check_consistent_aliasing(
   prefix: tuple[tp.Any, ...],
   /,
   *,
-  node_prefixes: graph.RefMap[tp.Any, list[tuple[PathParts, tp.Any]]]
-  | None = None,
+  node_prefixes: dict[tp.Any, list[tuple[PathParts, tp.Any]]] | None = None,
 ):
   if node_prefixes is None:
-    node_prefixes = graph.RefMap()
+    node_prefixes = {}
 
   # collect all paths and prefixes for each node
   for path, value in graph.iter_graph(node):
@@ -181,50 +177,6 @@ def check_consistent_aliasing(
       + '\n'.join(node_msgs)
     )
 
-
-# -----------------------------
-# broadcast
-# -----------------------------
-
-
-@dataclasses.dataclass
-class BroadcastContext(threading.local):
-  broadcast_state_stacks: dict[str, list[tp.Any]] = dataclasses.field(
-    default_factory=dict
-  )
-
-
-BROADCAST_CONTEXT = BroadcastContext()
-
-
-@contextlib.contextmanager
-def broadcast_state(tag: str, state: tp.Any):
-  if tag in BROADCAST_CONTEXT.broadcast_state_stacks:
-    stack = BROADCAST_CONTEXT.broadcast_state_stacks[tag]
-  else:
-    stack = BROADCAST_CONTEXT.broadcast_state_stacks[tag] = []
-  stack.append(state)
-  try:
-    yield
-  finally:
-    stack.pop()
-    if not stack:
-      del BROADCAST_CONTEXT.broadcast_state_stacks[tag]
-
-
-def get_broadcast_state(tag: str) -> tp.Any:
-  if tag not in BROADCAST_CONTEXT.broadcast_state_stacks:
-    raise ValueError(f'No broadcast state found for {tag!r}')
-
-  stack = BROADCAST_CONTEXT.broadcast_state_stacks[tag]
-
-  if not stack:
-    raise RuntimeError(
-      f'Empty broadcast state stack for {tag!r}, this is a bug'
-    )
-
-  return stack[-1]
-
 # -----------------------------
 # to_tree/from_tree
 # -----------------------------
@@ -251,10 +203,13 @@ class GraphDefState(struct.PyTreeNode):
   graphdef: graph.GraphDef[tp.Any] = struct.field(pytree_node=False)
   state: graph.GraphState = struct.field(pytree_node=True)
 
+S = tp.TypeVar(
+  'S', bound=graph.GraphState | graph.GraphFlatState | list[tp.Any]
+)
 
-class NodeStates(struct.PyTreeNode):
+class NodeStates(struct.PyTreeNode, tp.Generic[S]):
   _graphdef: graph.GraphDef[tp.Any] | None
-  states: tuple[graph.GraphState, ...]
+  states: tuple[S, ...]
   metadata: tp.Any = struct.field(pytree_node=False)
 
   @property
@@ -264,7 +219,7 @@ class NodeStates(struct.PyTreeNode):
     return self._graphdef
 
   @property
-  def state(self) -> graph.GraphState:
+  def state(self) -> S:
     if len(self.states) != 1:
       raise ValueError(
         f'Expected exactly one GraphDefState, got {len(self.states)}'
@@ -275,15 +230,19 @@ class NodeStates(struct.PyTreeNode):
   def from_split(
     cls,
     graphdef: graph.GraphDef[tp.Any],
-    state: graph.GraphState,
+    state: S,
     /,
-    *states: graph.GraphState,
+    *states: S,
     metadata: tp.Any = None,
   ):
     return cls(_graphdef=graphdef, states=(state, *states), metadata=metadata)
 
   @classmethod
-  def from_states(cls, state: graph.GraphState, *states: graph.GraphState):
+  def from_states(
+    cls,
+    state: S,
+    *states: S,
+  ):
     return cls(_graphdef=None, states=(state, *states), metadata=None)
 
   @classmethod
@@ -312,9 +271,18 @@ def to_tree(
     [graph.SplitContext, KeyPath, Prefix, Leaf], tp.Any
   ] = default_split_fn,
   map_non_graph_nodes: bool = False,
-  ctxtag: str | None = None,
+  ctxtag: tp.Hashable | None = None,
   check_aliasing: bool = True,
 ) -> tp.Any:
+  if prefix is Missing or prefix is None:
+    # fast path, no need for prefix broadcasting or consistent aliasing checks
+    with graph.split_context(ctxtag) as split_ctx:
+      return jax.tree.map(
+        lambda x: split_fn(split_ctx, (), prefix, x)
+        if map_non_graph_nodes or graph.is_graph_node(x)
+        else x,
+        tree,
+      )
   leaf_prefixes = broadcast_prefix(
     prefix,
     tree,
@@ -324,7 +292,7 @@ def to_tree(
 
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
-  node_prefixes = graph.RefMap[tp.Any, list[tuple[PathParts, tp.Any]]]()
+  node_prefixes: dict[tp.Any, list[tuple[PathParts, tp.Any]]] = {}
 
   with graph.split_context(ctxtag) as split_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
@@ -367,8 +335,19 @@ def from_tree(
   is_node_leaf: tp.Callable[[Leaf], bool] = is_tree_node,
   is_leaf: tp.Callable[[Leaf], bool] = is_tree_node,
   map_non_graph_nodes: bool = False,
-  ctxtag: str | None = None,
+  is_inner: bool | None = None,
+  ctxtag: tp.Hashable | None = None,
 ) -> tp.Any:
+  if prefix is Missing or prefix is None:
+    # fast path, no need for prefix broadcasting or consistent aliasing checks
+    with graph.merge_context(is_inner, ctxtag) as merge_ctx:
+      return jax.tree.map(
+        lambda x: merge_fn(merge_ctx, (), prefix, x)
+        if map_non_graph_nodes or is_node_leaf(x)
+        else x,
+        tree,
+        is_leaf=is_leaf,
+      )
   leaf_prefixes = broadcast_prefix(
     prefix,
     tree,
@@ -381,15 +360,11 @@ def from_tree(
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
 
-  with graph.merge_context(ctxtag) as merge_ctx:
+  with graph.merge_context(is_inner, ctxtag) as merge_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
-      if is_node_leaf(leaf):
-        leaf_out = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)
-        leaves_out.append(leaf_out)
-      else:
-        if map_non_graph_nodes:
-          leaf = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)
-        leaves_out.append(leaf)
+      if map_non_graph_nodes or is_node_leaf(leaf):
+        leaf = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)
+      leaves_out.append(leaf)
 
   pytree_out = jax.tree.unflatten(treedef, leaves_out)
   return pytree_out

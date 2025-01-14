@@ -151,7 +151,9 @@ def split_inputs(
   def split_inputs_wrapper(*args):
     pure_args = extract.to_tree(args, ctxtag=ctxtag)
     pure_args_out, pure_out = f(*pure_args)
-    args_out, out = extract.from_tree((pure_args_out, pure_out), ctxtag=ctxtag)
+    args_out, out = extract.from_tree(
+      (pure_args_out, pure_out), ctxtag=ctxtag, is_inner=False
+    )
     return out
 
   return split_inputs_wrapper  # type: ignore
@@ -192,7 +194,7 @@ def merge_inputs(
 
   @functools.wraps(f)
   def merge_inputs_wrapper(*pure_args):
-    args = extract.from_tree(pure_args, ctxtag=ctxtag)
+    args = extract.from_tree(pure_args, ctxtag=ctxtag, is_inner=True)
     out = f(*args)
     args_out = extract.clear_non_graph_nodes(args)
     pure_args_out, pure_out = extract.to_tree((args_out, out), ctxtag=ctxtag)

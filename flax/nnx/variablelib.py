@@ -45,7 +45,6 @@ AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
 
-
 @dataclasses.dataclass
 class VariableMetadata(tp.Generic[A]):
   raw_value: A
@@ -123,6 +122,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     })
   """
 
+  __slots__ = ('raw_value', '_trace_state', '_var_metadata')
+
   raw_value: A
   _trace_state: tracers.TraceState
   _var_metadata: dict[str, tp.Any]
@@ -132,9 +133,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     value: tp.Union[A, VariableMetadata[A]],
     **metadata: tp.Any,
   ):
-    type_vars = vars(type(self))
-    vars_self = vars(self)
-    vars_self['_trace_state'] = tracers.TraceState()
+    var_t = type(self)
+    object.__setattr__(self, '_trace_state', tracers.TraceState())
 
     if isinstance(value, VariableMetadata):
       metadata.update(value.metadata)
@@ -142,27 +142,28 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
     object.__setattr__(self, 'raw_value', value)
 
-    if 'on_get_value' in type_vars and 'on_get_value' not in metadata:
-      metadata['get_value'] = getattr(type(self), 'on_get_value')
+    if hasattr(var_t, 'on_get_value') and 'on_get_value' not in metadata:
+      metadata['get_value'] = var_t.on_get_value
 
-    if 'on_set_value' in type_vars and 'on_set_value' not in metadata:
-      metadata['set_value'] = getattr(type(self), 'on_set_value')
+    if hasattr(var_t, 'on_set_value') and 'on_set_value' not in metadata:
+      metadata['set_value'] = var_t.on_set_value
 
-    if 'on_create_value' in type_vars and 'on_create_value' not in metadata:
-      metadata['create_value'] = getattr(type(self), 'on_create_value')
+    if hasattr(var_t, 'on_create_value') and 'on_create_value' not in metadata:
+      metadata['create_value'] = var_t.on_create_value
 
-    if 'on_add_axis' in type_vars and 'on_add_axis' not in metadata:
-      metadata['add_axis'] = getattr(type(self), 'on_add_axis')
+    if hasattr(var_t, 'on_add_axis') and 'on_add_axis' not in metadata:
+      metadata['add_axis'] = var_t.on_add_axis
 
-    if 'on_remove_axis' in type_vars and 'on_remove_axis' not in metadata:
-      metadata['remove_axis'] = getattr(type(self), 'on_remove_axis')
+    if hasattr(var_t, 'on_remove_axis') and 'on_remove_axis' not in metadata:
+      metadata['remove_axis'] = var_t.on_remove_axis
 
-    vars_self['_var_metadata'] = metadata
+    object.__setattr__(self, '_var_metadata', metadata)
     # run create_value hooks
-    vars_self['raw_value'] = self.create_value(self.raw_value)
+    object.__setattr__(self, 'raw_value', self.create_value(self.raw_value))
+
 
   def __getattr__(self, name: str) -> tp.Any:
-    if name in vars(self)['_var_metadata']:
+    if name in object.__getattribute__(self, '_var_metadata'):
       return self._var_metadata[name]
     return getattr(self.value, name)
 
@@ -218,9 +219,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
     self._var_metadata.update(other.get_metadata())
 
   def update_from_state(self, variable_state: VariableState[A]):
-    vars_self = vars(self)
-    vars_self['raw_value'] = variable_state.value
-    vars_self['_var_metadata'] = variable_state._var_metadata.copy()
+    object.__setattr__(self, 'raw_value', variable_state.value)
+    object.__setattr__(
+      self, '_var_metadata', variable_state._var_metadata.copy()
+    )
 
   @property
   def value(self) -> A:
@@ -237,7 +239,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       )
     if 'on_set_value' in self._var_metadata:
       value = self._var_metadata['on_set_value'](self, value)
-    vars(self)['raw_value'] = value
+    object.__setattr__(self, 'raw_value', value)
 
   def create_value(self, value: A):
     if 'on_create_value' in self._var_metadata:
@@ -251,9 +253,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def remove_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
     if 'on_remove_axis' in self._var_metadata:
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
-
-  def __eq__(self, other: object) -> bool:
-    return type(self) is type(other) and vars(other) == vars(self)
 
   @tp.overload
   def replace(self, value: B, **kwargs) -> Variable[B]: ...
@@ -367,10 +366,16 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
   # pickle support
   def __getstate__(self):
-    return vars(self).copy()
+    return {
+      'raw_value': self.raw_value,
+      '_trace_state': self._trace_state,
+      '_var_metadata': self._var_metadata,
+    }
 
   def __setstate__(self, state):
-    vars(self).update(state)
+    object.__setattr__(self, 'raw_value', state['raw_value'])
+    object.__setattr__(self, '_trace_state', state['_trace_state'])
+    object.__setattr__(self, '_var_metadata', state['_var_metadata'])
 
   # --------------------------------------------
   # proxy methods
@@ -871,6 +876,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     if 'on_remove_axis' in self._var_metadata:
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
 
+GraphVariableState = VariableState[VariableState[tp.Any]]
 
 def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):
   metadata = tuple(x.get_metadata().items())
@@ -974,7 +980,7 @@ def with_metadata(
 
 def split_flat_state(
   flat_state: tp.Iterable[tuple[PathParts, Variable | VariableState]],
-  filters: tp.Sequence[filterlib.Filter],
+  filters: tuple[filterlib.Filter, ...],
 ) -> tuple[list[tuple[PathParts, Variable | VariableState]], ...]:
   predicates = filterlib.filters_to_predicates(filters)
   # we have n + 1 states, where n is the number of predicates

@@ -64,10 +64,26 @@ class TestGraphUtils(absltest.TestCase):
     g = [a, 3, a, nnx.Param(4)]
 
     refmap = nnx.graph.RefMap()
-    graphdef, state = nnx.graph.flatten(g, ref_index=refmap)
+    graphdef, flat_state = nnx.graph.flatten(g, ref_index=refmap)
 
-    state[0]['b'].raw_value = 2
-    state[3].raw_value = 4
+    assert flat_state[0][1].value == 2
+    assert flat_state[1][1].value == 4
+
+    assert len(refmap) == 2
+    assert a['b'] in refmap
+    assert g[3] in refmap
+
+  def test_flatten_no_paths(self):
+    a = {'a': 1, 'b': nnx.Param(2)}
+    g = [a, 3, a, nnx.Param(4)]
+
+    refmap = nnx.graph.RefMap()
+    graphdef, flat_state = nnx.graph.flatten(
+      g, ref_index=refmap, with_paths=False
+    )
+
+    assert flat_state[0] == 2
+    assert flat_state[1] == 4
 
     assert len(refmap) == 2
     assert a['b'] in refmap
@@ -108,8 +124,39 @@ class TestGraphUtils(absltest.TestCase):
 
     graphdef, state = nnx.split(g)
 
-    with self.assertRaisesRegex(ValueError, 'Expected key'):
+    with self.assertRaisesRegex(
+      ValueError, 'Not enough leaves to unflatten the graph'
+    ):
       nnx.graph.unflatten(graphdef, nnx.State({}))
+
+  def test_unflatten_return_variables(self):
+    a = Dict({'a': 1, 'b': nnx.Param(2)})
+    g = List([a, 3, a, nnx.Param(4)])
+
+    graphdef, state = nnx.graph.flatten(
+      g, with_paths=False, return_variables=True
+    )
+
+    self.assertLen(state, 2)
+    self.assertIsInstance(state, list)
+    self.assertIsInstance(state[0], nnx.Param)
+    self.assertIsInstance(state[1], nnx.Param)
+
+  def test_clone_with_same_variables(self):
+    a = Dict({'a': 1, 'b': nnx.Param(2)})
+    g = List([a, 3, a, nnx.Param(4)])
+
+    graphdef, state = nnx.graph.flatten(
+      g, with_paths=False, return_variables=True
+    )
+
+    g2 = nnx.graph.unflatten(graphdef, state)
+
+    self.assertIsNot(g, g2)
+    self.assertIsNot(g[0], g2[0])
+    self.assertIsNot(g[2], g2[2])
+    self.assertIs(g[0]['b'], g2[0]['b'])
+    self.assertIs(g[3], g2[3])
 
   def test_update_dynamic(self):
     a = {'a': 1, 'b': nnx.Param(2)}
@@ -303,7 +350,7 @@ class TestGraphUtils(absltest.TestCase):
 
     assert 'tree' in state
     assert 'a' in state.tree
-    assert graphdef.attributes[0].value.type is nnx.graph.GenericPytree
+    assert graphdef.attributes[0][1].type is nnx.graph.GenericPytree
 
     m2 = nnx.merge(graphdef, state)
 
@@ -329,26 +376,28 @@ class TestGraphUtils(absltest.TestCase):
     ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
+    state = state.to_nested_state()
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
+      ref_in_idx_out = nnx.graph.RefMap(
+        {v: k for k, v in idx_out_ref_in.items()}
+      )
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
-      graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
-      idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
-      static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
-      return state, static_out
+      ref_in_idx_in = nnx.graph.RefMap()
+      graphdef, state = nnx.graph.flatten(
+        m, ref_index=ref_in_idx_in, ref_outer_index=ref_in_idx_out
+      )
+      state = state.to_nested_state()
+      return state, graphdef
 
-    static_out: nnx.graph.Static
-    state, static_out = f_pure(graphdef, state)
-    idx_out_idx_in: dict[int, int]
-    graphdef, idx_out_idx_in = static_out.value
-    idx_in_ref_out = nnx.graph.compose_mapping_reversed(
-      ref_out_idx_out, idx_out_idx_in
+    state, graphdef_out = f_pure(graphdef, state)
+    idx_out_ref_out = {v: k for k, v in ref_out_idx_out.items()}
+    m2 = nnx.graph.unflatten(
+      graphdef_out, state, outer_index_outer_ref=idx_out_ref_out
     )
-    m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.a is b
     assert m2.b is a
@@ -366,29 +415,31 @@ class TestGraphUtils(absltest.TestCase):
     a = m.a
     b = m.b
 
-    ref_out_idx_out = nnx.graph.RefMap[Any, int]()
+    ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
+    idx_out_ref_out = {v: k for k, v in ref_out_idx_out.items()}
+    state = state.to_nested_state()
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
+      ref_in_idx_out = nnx.graph.RefMap(
+        {v: k for k, v in idx_out_ref_in.items()}
+      )
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
-      graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
-      idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
-      static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
-      return state, static_out
+      ref_in_idx_in = nnx.graph.RefMap()
+      graphdef, state = nnx.graph.flatten(
+        m, ref_index=ref_in_idx_in, ref_outer_index=ref_in_idx_out
+      )
+      state = state.to_nested_state()
+      return state, graphdef
 
-    static_out: nnx.graph.Static
-    state, static_out = f_pure(graphdef, state)
-    idx_out_idx_in: dict[int, int]
-    graphdef, idx_out_idx_in = static_out.value
-    idx_in_ref_out = nnx.graph.compose_mapping_reversed(
-      ref_out_idx_out, idx_out_idx_in
+    state, graphdef = f_pure(graphdef, state)
+    m2 = nnx.graph.unflatten(
+      graphdef, state, outer_index_outer_ref=idx_out_ref_out
     )
-    m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.a is b
     assert m2.b is a
@@ -406,26 +457,28 @@ class TestGraphUtils(absltest.TestCase):
     ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
+    idx_out_ref_out = {v: k for k, v in ref_out_idx_out.items()}
+    state = state.to_nested_state()
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
       idx_out_ref_in: dict[int, Any] = {}
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
+      ref_in_idx_out = nnx.graph.RefMap(
+        {v: k for k, v in idx_out_ref_in.items()}
+      )
       f(m)
-      ref_in_idx_in = nnx.graph.RefMap[Any, int]()
-      graphdef, state = nnx.graph.flatten(m, ref_index=ref_in_idx_in)
-      idx_out_idx_in = nnx.graph.compose_mapping(idx_out_ref_in, ref_in_idx_in)
-      static_out = nnx.graph.Static((graphdef, idx_out_idx_in))
-      return state, static_out
+      ref_in_idx_in = nnx.graph.RefMap()
+      graphdef, state = nnx.graph.flatten(
+        m, ref_index=ref_in_idx_in, ref_outer_index=ref_in_idx_out
+      )
+      state = state.to_nested_state()
+      return state, graphdef
 
-    static_out: nnx.graph.Static
-    state, static_out = f_pure(graphdef, state)
-    idx_out_idx_in: dict[int, int]
-    graphdef, idx_out_idx_in = static_out.value
-    idx_in_ref_out = nnx.graph.compose_mapping_reversed(
-      ref_out_idx_out, idx_out_idx_in
+    state, graphdef_out = f_pure(graphdef, state)
+    m2 = nnx.graph.unflatten(
+      graphdef_out, state, outer_index_outer_ref=idx_out_ref_out
     )
-    m2 = nnx.graph.unflatten(graphdef, state, index_ref_cache=idx_in_ref_out)
     assert m2 is m
     assert m2.ref is m2
 
@@ -582,7 +635,7 @@ class TestGraphUtils(absltest.TestCase):
 
       @jax.jit
       def f(graphdef1, state1, graphdef2, state2):
-        with nnx.graph.merge_context(ctxtag) as ctx:
+        with nnx.graph.merge_context(True, ctxtag) as ctx:
           m1 = ctx.merge(graphdef1, state1)
           m2 = ctx.merge(graphdef2, state2)
 
@@ -603,7 +656,7 @@ class TestGraphUtils(absltest.TestCase):
           graphdef1, state1, graphdef2, state2
       )
 
-      with nnx.graph.merge_context(ctxtag) as ctx:
+      with nnx.graph.merge_context(False, ctxtag) as ctx:
         m1_out = ctx.merge(graphdef1, state1)
         m2_out = ctx.merge(graphdef2, state2)
 
@@ -671,7 +724,7 @@ class TestGraphUtils(absltest.TestCase):
 
       @jax.jit
       def f(pure_tree):
-        impure_tree2 = nnx.from_tree(pure_tree, ctxtag=ctxtag)
+        impure_tree2 = nnx.from_tree(pure_tree, ctxtag=ctxtag, is_inner=True)
         m1_out = impure_tree2[0]
         m2_out = impure_tree2[2]['b']
 
@@ -700,7 +753,7 @@ class TestGraphUtils(absltest.TestCase):
 
       pure_tree2 = f(pure_tree)
 
-      impure_tree2 = nnx.from_tree(pure_tree2, ctxtag=ctxtag)
+      impure_tree2 = nnx.from_tree(pure_tree2, ctxtag=ctxtag, is_inner=False)
 
       m1_out = impure_tree2[0]
       m2_out = impure_tree2[2]['b']
@@ -762,7 +815,7 @@ class TestGraphUtils(absltest.TestCase):
 
       @partial(jax.vmap, in_axes=jax_in_axes, out_axes=(jax_in_axes, out_axes))
       def f(*pure_args):
-        args = nnx.from_tree(pure_args, ctxtag=ctxtag)
+        args = nnx.from_tree(pure_args, ctxtag=ctxtag, is_inner=True)
 
         y = 0
 
@@ -785,13 +838,53 @@ class TestGraphUtils(absltest.TestCase):
 
       pure_args_out, y = f(*pure_args)
 
-      args_out, y = nnx.from_tree((pure_args_out, y), ctxtag=ctxtag)
+      args_out, y = nnx.from_tree(
+        (pure_args_out, y), ctxtag=ctxtag, is_inner=False
+      )
 
     self.assertEqual(y.shape, (5,))
     self.assertGreater(y.sum(), 5)
     self.assertIs(m1, args_out[0])
     self.assertIs(m1, args_out[2]['b'])
     self.assertIs(m2, args_out[1])
+
+  def test_fingerprint_basic(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    fp1 = nnx.graph.fingerprint(m)
+    fp2 = nnx.graph.fingerprint(m)
+
+    self.assertEqual(fp1, fp2)
+    self.assertTrue(nnx.graph.check_fingerprint(m, fp1))
+    self.assertTrue(nnx.graph.check_fingerprint(m, fp2))
+
+  def test_fingerprint_variable_id_sensitive(self):
+    m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    fp1 = nnx.graph.fingerprint(m1)
+
+    m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    fp2 = nnx.graph.fingerprint(m2)
+
+    self.assertNotEqual(fp1, fp2)
+    self.assertTrue(nnx.graph.check_fingerprint(m1, fp1))
+    self.assertTrue(nnx.graph.check_fingerprint(m2, fp2))
+    self.assertFalse(nnx.graph.check_fingerprint(m1, fp2))
+    self.assertFalse(nnx.graph.check_fingerprint(m2, fp1))
+
+  def test_fingerprint_module_id_insensitive(self):
+    m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    m1.kernel = m2.kernel
+    m1.bias = m2.bias
+
+    fp1 = nnx.graph.fingerprint(m1)
+    fp2 = nnx.graph.fingerprint(m2)
+
+    self.assertNotEqual(fp1, fp2)
+    self.assertTrue(nnx.graph.check_fingerprint(m1, fp1))
+    self.assertTrue(nnx.graph.check_fingerprint(m2, fp2))
+    self.assertFalse(nnx.graph.check_fingerprint(m1, fp2))
+    self.assertFalse(nnx.graph.check_fingerprint(m2, fp1))
 
 
 class SimpleModule(nnx.Module):

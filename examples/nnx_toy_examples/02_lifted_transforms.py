@@ -82,13 +82,15 @@ def test_step(model: MLP, batch):
   loss = jnp.mean((y - y_pred) ** 2)
   return {'loss': loss}
 
+cached_train_step = nnx.cached_partial(train_step, model, optimizer)
+cached_test_step = nnx.cached_partial(test_step, model)
 
 total_steps = 10_000
 for step, batch in enumerate(dataset(32)):
-  train_step(model, optimizer, batch)
+  cached_train_step(batch)
 
   if step % 1000 == 0:
-    logs = test_step(model, (X, Y))
+    logs = cached_test_step((X, Y))
     print(f"step: {step}, loss: {logs['loss']}")
 
   if step >= total_steps - 1:

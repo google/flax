@@ -165,7 +165,7 @@ class VmapFn:
       pure_args = _update_variable_sharding_metadata(
           pure_args, self.transform_metadata, spmd.remove_axis
       )
-    args = extract.from_tree(pure_args, ctxtag='vmap')
+    args = extract.from_tree(pure_args, ctxtag='vmap', is_inner=True)
 
     out = self.f(*args)
 
@@ -343,7 +343,9 @@ def vmap(
         args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='vmap'
     )
     pure_args_out, pure_out = vmapped_fn(*pure_args)
-    _args_out, out = extract.from_tree((pure_args_out, pure_out), ctxtag='vmap')
+    _args_out, out = extract.from_tree(
+      (pure_args_out, pure_out), ctxtag='vmap', is_inner=False
+    )
     return out
 
   return vmap_wrapper  # type: ignore
@@ -369,7 +371,7 @@ class PmapFn:
       pure_args = _update_variable_sharding_metadata(
           pure_args, self.transform_metadata, spmd.remove_axis
       )
-    args = extract.from_tree(pure_args, ctxtag='pmap')
+    args = extract.from_tree(pure_args, ctxtag='pmap', is_inner=True)
 
     out = self.f(*args)
 
@@ -566,7 +568,9 @@ def pmap(
         args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='pmap'
     )
     pure_args_out, pure_out = pmapped_fn(*pure_args)
-    _args_out, out = extract.from_tree((pure_args_out, pure_out), ctxtag='pmap')
+    _args_out, out = extract.from_tree(
+      (pure_args_out, pure_out), ctxtag='pmap', is_inner=False
+    )
     return out
 
   return vmap_wrapper  # type: ignore
@@ -648,21 +652,17 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
     check_carry_same_references, carry_arg, carry_arg_out
   )
 
-def _extract_index_mappings(
-  pure_carry_arg_out,
-  carry_index_mappings: list[graph.HashableMapping[int, int]],
-  /,
+def _extract_nodedefs(
+  pure_carry_arg_out, carry_nodedefs: list[graph.NodeDef], /
 ):
   def extract_index_mappings(x):
     if isinstance(x, extract.NodeStates) and isinstance(
       x._graphdef, graph.NodeDef
     ):
-      index_mapping = x._graphdef.index_mapping
-      assert index_mapping is not None
-      carry_index_mappings.append(index_mapping)
-      x = x.replace(
-        _graphdef=dataclasses.replace(x._graphdef, index_mapping=None)
-      )
+      nodedef = x._graphdef
+      assert nodedef.outer_index is not None
+      carry_nodedefs.append(nodedef)
+      x = x.replace(_graphdef=nodedef.with_no_outer_index())
     return x
 
   pure_carry_arg_out = jax.tree.map(
@@ -673,19 +673,17 @@ def _extract_index_mappings(
 
   return pure_carry_arg_out
 
-def _insert_index_mappings(
+def _insert_nodedefs(
   pure_carry_arg_out,
-  carry_index_mappings: deque[graph.HashableMapping[int, int]],
+  carry_nodedefs: deque[graph.NodeDef],
   /,
 ):
   def insert_index_mappings(x):
     if isinstance(x, extract.NodeStates) and isinstance(
       x._graphdef, graph.NodeDef
     ):
-      index_mapping = carry_index_mappings.popleft()
-      x = x.replace(
-        _graphdef=dataclasses.replace(x._graphdef, index_mapping=index_mapping)
-      )
+      nodedef = carry_nodedefs.popleft()
+      x = x.replace(_graphdef=nodedef)
     return x
 
   pure_carry_arg_out = jax.tree.map(
@@ -1017,6 +1015,7 @@ class ScanFn:
       is_leaf=lambda x: isinstance(x, (extract.NodeStates, Broadcasted)),
       map_non_graph_nodes=True,
       ctxtag='scan',
+      is_inner=True,
     )
     assert not carry_deque and not broadcast_deque and not broadcast_arrays
 
@@ -1096,10 +1095,8 @@ class ScanFn:
 
     # next we have to remove all the index_mappings from the NodeDefs
     # in the carry outputs because they are not present in the inputs
-    carry_index_mappings: list[graph.HashableMapping[int, int]] = []
-    pure_carry_arg_out = _extract_index_mappings(
-      pure_carry_arg_out, carry_index_mappings
-    )
+    carry_nodedefs: list[graph.NodeDef] = []
+    pure_carry_arg_out = _extract_nodedefs(pure_carry_arg_out, carry_nodedefs)
 
     carry_arg_out = (
       pure_carry_arg_out,
@@ -1108,7 +1105,7 @@ class ScanFn:
       broadcast_arrays_out,
     )
     scan_out = (
-      graph.Static(tuple(carry_index_mappings)),
+      carry_nodedefs,
       pure_args_out,
       pure_out,
     )
@@ -1248,16 +1245,15 @@ def scan(
         broadcast_arrays_out,
     ) = carry_out
     (
-      static_carry_index_mappings,
+      carry_nodedefs,
       pure_args_out,
       pure_out,
     ) = scan_out
 
     # next we have to insert all the index_mappings back into the NodeDefs
     # in the carry outputs
-    carry_index_mappings = deque(static_carry_index_mappings.value)
-    pure_carry_arg_out = _insert_index_mappings(
-      pure_carry_arg_out, carry_index_mappings
+    pure_carry_arg_out = _insert_nodedefs(
+      pure_carry_arg_out, deque(carry_nodedefs)
     )
 
     # insert pure carry into pure_args_out
@@ -1280,6 +1276,7 @@ def scan(
       is_leaf=lambda x: isinstance(x, (extract.NodeStates, Broadcasted)),
       map_non_graph_nodes=True,
       ctxtag='scan',
+      is_inner=False,
     )
 
     # extract the carry from args_out
@@ -1329,36 +1326,14 @@ class WhileLoopCondFn:
 
 
 def _add_fake_index_mapping(tree: tp.Any):
-  global_index_mapping = {}  # for the whole context, over all inputs
-  def per_node_state(ns: extract.NodeStates | tp.Any):
-    if not isinstance(ns, extract.NodeStates) or not isinstance(
-      ns._graphdef, graph.NodeDef
+  def per_node_state(node_state: extract.NodeStates | tp.Any):
+    if not isinstance(node_state, extract.NodeStates) or not isinstance(
+      node_state._graphdef, graph.NodeDef
     ):
-      return ns
+      return node_state
 
-    def per_node_def(nd: graph.NodeDef | graph.NodeRef):
-      if nd.index >= 0:
-        global_index_mapping[nd.index] = nd.index
-      if isinstance(nd, graph.NodeRef):
-        return
-
-      for attribute in nd.attributes:
-        if type(attribute) is graph.SubGraphAttribute:
-          per_node_def(attribute.value)
-        elif (
-          type(attribute) is graph.LeafAttribute
-          and isinstance(attribute.value, (graph.VariableDef, graph.NodeRef))
-          and attribute.value.index >= 0
-        ):
-          global_index_mapping[attribute.value.index] = attribute.value.index
-      return
-
-    per_node_def(ns._graphdef)
     return dataclasses.replace(
-      ns,
-      _graphdef=dataclasses.replace(
-        ns._graphdef, index_mapping=graph.HashableMapping(global_index_mapping)
-      ),
+      node_state, _graphdef=node_state._graphdef.with_same_outer_index()
     )
 
   return jax.tree.map(per_node_state, tree,
@@ -1366,16 +1341,18 @@ def _add_fake_index_mapping(tree: tp.Any):
 
 
 def _remove_index_mapping(tree: tp.Any):
-  '''Remove a fake index_mapping for the input to match that of the output.'''
-  def per_node_state(ns: extract.NodeStates | tp.Any):
-    if not isinstance(ns, extract.NodeStates) or not isinstance(
-      ns._graphdef, graph.NodeDef
+  """Remove a fake outer_index for the input to match that of the output."""
+
+  def per_node_state(node_state: extract.NodeStates | tp.Any):
+    if not isinstance(node_state, extract.NodeStates) or not isinstance(
+      node_state._graphdef, graph.NodeDef
     ):
-      return ns
-    assert isinstance(ns._graphdef, graph.NodeDef)
-    return dataclasses.replace(ns, _graphdef=dataclasses.replace(
-      ns._graphdef, index_mapping=None
-    ))
+      return node_state
+    assert isinstance(node_state._graphdef, graph.NodeDef)
+    node_state = dataclasses.replace(
+      node_state, _graphdef=node_state._graphdef.with_no_outer_index()
+    )
+    return node_state
 
   return jax.tree.map(per_node_state, tree,
                       is_leaf=lambda x: isinstance(x, extract.NodeStates))
@@ -1393,19 +1370,23 @@ class WhileLoopBodyFn:
     # Removing the dummy index mapping being added outside of body function.
     pure_val_in = _remove_index_mapping(pure_val)
 
-    val = extract.from_tree(pure_val_in, ctxtag='while_loop_body')
+    val = extract.from_tree(
+      pure_val_in, ctxtag='while_loop_body', is_inner=True
+    )
     out = self.f(val)
     pure_out = extract.to_tree(out, ctxtag='while_loop_body')
 
     try:
       jax.tree.map(lambda a, b: None, pure_val, pure_out)
     except ValueError as e:
-      msg = ("nnx.while_loop requires body function's input and output to "
-             "have the same reference and pytree structure, but they differ. "
-             "If the mismatch comes from `index_mapping` field, you might "
-             "have modified reference structure within the body function, "
-             "which is not allowed."
-             f"Detail of the mismatch: \n {str(e)}")
+      msg = (
+        "nnx.while_loop requires body function's input and output to "
+        'have the same reference and pytree structure, but they differ. '
+        'If the mismatch comes from `outer_index` field, you might '
+        'have modified reference structure within the body function, '
+        'which is not allowed.'
+        f'Detail of the mismatch: \n {str(e)}'
+      )
       raise ValueError(msg)
 
     return pure_out
@@ -1456,7 +1437,7 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
     WhileLoopBodyFn(body_fun),
     pure_init_val,
   )
-  out = extract.from_tree(pure_out, ctxtag='while_loop')
+  out = extract.from_tree(pure_out, ctxtag='while_loop', is_inner=False)
   return out
 
 
@@ -1472,19 +1453,21 @@ class ForiLoopBodyFn:
     # Removing the dummy index mapping being added outside of body function.
     pure_val_in = _remove_index_mapping(pure_val)
 
-    val = extract.from_tree(pure_val_in, ctxtag='fori_loop_body')
+    val = extract.from_tree(pure_val_in, ctxtag='fori_loop_body', is_inner=True)
     out = self.f(i, val)
     pure_out = extract.to_tree(out, ctxtag='fori_loop_body')
 
     try:
       jax.tree.map(lambda a, b: None, pure_val, pure_out)
     except ValueError as e:
-      msg = ("nnx.fori_loop requires body function's input and output to "
-             "have the same reference and pytree structure, but they differ. "
-             "If the mismatch comes from `index_mapping` field, you might "
-             "have modified reference structure within the body function, "
-             "which is not allowed. "
-             f"Detail of the mismatch: \n {str(e)}")
+      msg = (
+        "nnx.fori_loop requires body function's input and output to "
+        'have the same reference and pytree structure, but they differ. '
+        'If the mismatch comes from `outer_index` field, you might '
+        'have modified reference structure within the body function, '
+        'which is not allowed. '
+        f'Detail of the mismatch: \n {str(e)}'
+      )
       raise ValueError(msg)
 
     return pure_out
@@ -1545,5 +1528,5 @@ def fori_loop(lower: int, upper: int,
   pure_out = jax.lax.fori_loop(lower, upper,
                                ForiLoopBodyFn(body_fun), pure_init_val,
                                unroll=unroll)
-  out = extract.from_tree(pure_out, ctxtag='fori_loop')
+  out = extract.from_tree(pure_out, ctxtag='fori_loop', is_inner=False)
   return out

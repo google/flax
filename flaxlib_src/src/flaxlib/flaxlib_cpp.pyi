@@ -12,4 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-def sum_as_string(a: int, b: int) -> str: ...
+import typing as tp
+
+RefMap = tp.MutableMapping[tp.Any, int]
+
+def _graph_fingerprint(
+  node,
+  node_impl,
+  ref_index: RefMap,
+  new_ref_index: RefMap,
+  next_index: int,
+) -> tuple[tuple[tp.Any, ...], int]: ...
