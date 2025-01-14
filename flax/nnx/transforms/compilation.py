@@ -90,10 +90,15 @@ class StateSharding(extract.PrefixMapping):
 
 def _jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
   if isinstance(prefix, StateSharding):
-    return extract.NodeStates.from_split(
-      *ctx.split(x, *prefix.filters), metadata=prefix
-    )
-  return extract.NodeStates.from_split(*ctx.split(x))
+    graphdef, *states = ctx.flatten(x, *prefix.filters)
+    return extract.NodeStates.from_split(graphdef, *states, metadata=prefix)
+  return extract.NodeStates.from_split(*ctx.flatten(x, with_paths=False))
+
+
+def _jit_merge_fn(ctx: graph.MergeContext, path, prefix, leaf) -> tp.Any:
+  if not isinstance(leaf, extract.NodeStates):
+    raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
+  return ctx.unflatten(leaf.graphdef, *leaf.states)
 
 
 @dataclasses.dataclass(eq=False)
@@ -102,12 +107,18 @@ class JitFn:
   in_shardings: tp.Any
   out_shardings: tp.Any
   kwarg_shardings: tp.Any
+  ctxtag: tp.Hashable
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
 
   def __call__(self, *pure_args, **pure_kwargs):
-    args, kwargs = extract.from_tree((pure_args, pure_kwargs), ctxtag='jit')
+    args, kwargs = extract.from_tree(
+      (pure_args, pure_kwargs),
+      merge_fn=_jit_merge_fn,
+      ctxtag=self.ctxtag,
+      is_inner=True,
+    )
 
     out = self.f(*args, **kwargs)
 
@@ -115,7 +126,7 @@ class JitFn:
     pure_args_out, pure_kwargs_out, pure_out = extract.to_tree(
       (args_out, kwargs_out, out),
       prefix=(self.in_shardings, self.kwarg_shardings, self.out_shardings),
-      ctxtag='jit',
+      ctxtag=self.ctxtag,
       split_fn=_jit_split_fn,
     )
 
@@ -317,8 +328,33 @@ def jit(
     out_shardings,
   )
 
+  @functools.wraps(fun)
+  def jit_wrapper(*args, **kwargs):
+    # run dynamic_cache_context before update_context
+    with graph.update_context(jit_wrapper, use_dynamic_cache=True):
+      pure_args, pure_kwargs = extract.to_tree(
+        (args, kwargs),
+        prefix=(in_shardings, kwarg_shardings)
+        if in_shardings is not None or kwarg_shardings is not None
+        else None,
+        split_fn=_jit_split_fn,
+        check_aliasing=in_shardings is not None or kwarg_shardings is not None,
+        ctxtag=jit_wrapper,
+      )
+      jax_in_shardings, kwarg_shardings, jax_out_shardings
+      pure_args_out, pure_kwargs_out, pure_out = jitted_fn(
+        *pure_args, **pure_kwargs
+      )
+      _args_out, _kwargs_out, out = extract.from_tree(
+        (pure_args_out, pure_kwargs_out, pure_out),
+        merge_fn=_jit_merge_fn,
+        is_inner=False,
+        ctxtag=jit_wrapper,
+      )
+    return out
+
   jitted_fn = jax.jit(
-    JitFn(fun, in_shardings, out_shardings, kwarg_shardings),
+    JitFn(fun, in_shardings, out_shardings, kwarg_shardings, jit_wrapper),
     in_shardings=jax_in_shardings,
     out_shardings=(jax_in_shardings, kwarg_shardings, jax_out_shardings),  # type: ignore
     static_argnums=static_argnums,
@@ -331,24 +367,6 @@ def jit(
     inline=inline,
     abstracted_axes=abstracted_axes,
   )
-
-  @functools.wraps(fun)
-  @graph.update_context('jit')
-  def jit_wrapper(*args, **kwargs):
-    pure_args, pure_kwargs = extract.to_tree(
-      (args, kwargs),
-      prefix=(in_shardings, kwarg_shardings),
-      split_fn=_jit_split_fn,
-      check_aliasing=in_shardings is not None,
-      ctxtag='jit',
-    )
-    pure_args_out, pure_kwargs_out, pure_out = jitted_fn(
-      *pure_args, **pure_kwargs
-    )
-    _args_out, _kwargs_out, out = extract.from_tree(
-      (pure_args_out, pure_kwargs_out, pure_out), ctxtag='jit'
-    )
-    return out
 
   jit_wrapper.inner = jitted_fn  # type: ignore
 
