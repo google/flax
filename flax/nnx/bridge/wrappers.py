@@ -148,7 +148,7 @@ class ToNNX(Module):
       out, variables = self.module.init_with_output(_rngs, *args, method=method, **kwargs)
 
       nnx_attrs = bv.linen_vars_to_nnx_attrs(variables)
-      linen_attributes = set()
+      linen_attributes = set(self.linen_attributes)
       for attr_name, value in nnx_attrs.items():
         setattr(self, attr_name, value)
         linen_attributes.add(attr_name)
@@ -167,12 +167,16 @@ class ToNNX(Module):
     if kwargs.get('mutable', False) != False:
       out, updates = out
       nnx_attrs = bv.linen_vars_to_nnx_attrs(updates)
+      linen_attributes = set(self.linen_attributes)
       for attr_name, value in nnx_attrs.items():
+        linen_attributes.add(attr_name)
         if hasattr(self, attr_name) and isinstance(value, dict):
           original_tree = getattr(self, attr_name)
           setattr(self, attr_name, original_tree | value)
         else:
           setattr(self, attr_name, value)
+
+      self.linen_attributes = tuple(linen_attributes)  # make it hashable
 
     return out
 

@@ -80,7 +80,7 @@ RngDict = tp.Union[
 ]
 
 
-class Rngs(Object, tp.Mapping[str, tp.Callable[[], jax.Array]]):
+class Rngs(Object, tp.Mapping[str, RngStream]):
   """NNX rng container class. To instantiate the ``Rngs``, pass
   in an integer, specifying the starting seed. ``Rngs`` can have
   different "streams", allowing the user to generate different

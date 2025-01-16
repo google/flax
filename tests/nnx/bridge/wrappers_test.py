@@ -217,6 +217,28 @@ class TestCompatibility(absltest.TestCase):
     self.assertEqual(jax.tree.structure(from_top_weights),
                      jax.tree.structure(from_middle_weights))
 
+  def test_adding_new_attributes(self):
+    class LinenModule(nn.Module):
+      @nn.compact
+      def __call__(self):
+        if not self.is_initializing() and self.is_mutable_collection('cache'):
+          self.put_variable('cache', 'x', 0)
+        res = self.get_variable('cache', 'x')
+        return res
+
+    class NNXModule(nnx.Module):
+      def __init__(self):
+        self.module = nnx.bridge.ToNNX(LinenModule()).lazy_init()
+
+      def __call__(self):
+        result1 = self.module(mutable=['cache'])
+        assert result1 == 0
+        result2 = self.module()
+        assert result2 == 0, result2  # fails: result2 is None
+
+    module = NNXModule()
+    module()
+
   ##################
   ### NNXToLinen ###
   ##################
