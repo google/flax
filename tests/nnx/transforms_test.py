@@ -689,8 +689,7 @@ class TestCustomVJP(parameterized.TestCase):
       res = (jnp.cos(m.x), jnp.sin(m.x), m)  # type: ignore
       return y, res
 
-    def f_bwd(res, g):
-      (m_g,), out_g = g
+    def f_bwd(m_g, res, out_g):
       cos_x, sin_x, m = res
 
       self.assertIsInstance(m_g, nnx.State)
@@ -735,8 +734,7 @@ class TestCustomVJP(parameterized.TestCase):
       res = (jnp.cos(m.x), m)  # type: ignore
       return y, res
 
-    def f_bwd(res, g):
-      (m_g,), out_g = g
+    def f_bwd(m_g, res, out_g):
       cos_x, m = res
 
       self.assertIsInstance(m_g, nnx.State)
@@ -777,8 +775,7 @@ class TestCustomVJP(parameterized.TestCase):
       res = (jnp.cos(m.x.value), jnp.sin(m.x.value), m)  # type: ignore
       return y, res
 
-    def f_bwd(res, g):
-      (m_g,), out_g = g
+    def f_bwd(m_g, res, out_g):
       cos_x, sin_x, m = res
 
       self.assertIsInstance(m_g, nnx.State)
@@ -825,8 +822,8 @@ class TestCustomVJP(parameterized.TestCase):
       res = (jnp.cos(m1.x), jnp.sin(m1.x), m1)  # type: ignore
       return (y, m2), res
 
-    def f_bwd(res, g):
-      (m1_g, m2_g), (y_g, _) = g
+    def f_bwd(m1_g, m2_g, res, g):
+      y_g, _ = g
       cos_x, sin_x, m = res
 
       self.assertIsInstance(m1_g, nnx.State)
@@ -884,8 +881,7 @@ class TestCustomVJP(parameterized.TestCase):
       res = (jnp.cos(m.x), jnp.sin(m.x), m)  # type: ignore
       return y, res
 
-    def f_bwd(a, b, res, g):
-      (m_g,), out_g = g
+    def f_bwd(a, m_g, b, res, out_g):
       cos_x, sin_x, m = res
 
       self.assertEqual(a, 1)
@@ -931,11 +927,10 @@ class TestCustomVJP(parameterized.TestCase):
     def f_fwd(m: Foo):
       return f(m), (jnp.cos(m.x), jnp.sin(m.x), m)  # type: ignore
 
-    def f_bwd(res, g):
-      ins_g, out_g = g
+    def f_bwd(m_g, res, out_g):
       cos_x, sin_x, m = res
-      tangent_m = nnx.State(dict(x=cos_x * out_g * m.y, y=sin_x * out_g))
-      return (tangent_m,)
+      m_t = nnx.State(dict(x=cos_x * out_g * m.y, y=sin_x * out_g))
+      return (m_t,)
 
     f.defvjp(f_fwd, f_bwd)
 
@@ -966,9 +961,8 @@ class TestCustomVJP(parameterized.TestCase):
     def linear_fwd(m: MyLinear, x: jax.Array):
       return linear(m, x), (m, x)
 
-    def linear_bwd(res, g):
+    def linear_bwd(m_g, _, res, outputs_g):
       m, x = res
-      (m_g, _x_grad), outputs_g = g
       kernel_grad = outputs_g[None, :] * x[:, None]
       bias_grad = outputs_g
       x_grad = m.kernel @ outputs_g
