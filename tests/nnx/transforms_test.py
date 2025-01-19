@@ -417,6 +417,68 @@ class TestJIT(absltest.TestCase):
     cached_m2 = cached_f(m)
     self.assertIs(cached_m, cached_m2)
 
+class TestShardMap(absltest.TestCase):
+  def test_basic_shardmap(self):
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('a',))
+    PS = jax.sharding.PartitionSpec
+
+    state_sharding = nnx.StateSharding(
+      {
+        nnx.PathContains('kernel'): PS(None, 'a'),
+        nnx.PathContains('bias'): PS(),
+      }
+    )
+
+    m = nnx.Linear(16, 32, rngs=nnx.Rngs(0))
+
+    self.assertNotIsInstance(
+      m.kernel.value.sharding, jax.sharding.NamedSharding
+    )
+
+    @nnx.shard_map(mesh=mesh, in_specs=(state_sharding,), out_specs=None)
+    def f(m: nnx.Linear):
+      self.assertEqual(
+        m.kernel.value.shape, (m.in_features, m.out_features // n_devices)
+      )
+      self.assertEqual(m.bias.shape, (m.out_features,))
+
+    f(m)
+
+    self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
+
+  def test_from_state(self):
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('a',))
+    PS = jax.sharding.PartitionSpec
+
+    state_spec = nnx.State(
+      {
+        'kernel': PS(None, 'a'),
+        'bias': PS(),
+      }
+    )
+    state_sharding = nnx.StateSharding(state_spec)
+
+    m = nnx.Linear(16, 32, rngs=nnx.Rngs(0))
+
+    self.assertNotIsInstance(
+      m.kernel.value.sharding, jax.sharding.NamedSharding
+    )
+
+    @nnx.shard_map(mesh=mesh, in_specs=(state_sharding,), out_specs=None)
+    def f(m: nnx.Linear):
+      self.assertEqual(
+        m.kernel.value.shape, (m.in_features, m.out_features // n_devices)
+      )
+      self.assertEqual(m.bias.shape, (m.out_features,))
+
+    f(m)
+
+    self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
+    self.assertIsInstance(m.bias.value.sharding, jax.sharding.NamedSharding)
 
 class TestGrad(parameterized.TestCase):
   def test_grad(self):

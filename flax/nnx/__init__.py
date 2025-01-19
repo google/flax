@@ -144,6 +144,7 @@ from .transforms.autodiff import value_and_grad as value_and_grad
 from .transforms.autodiff import custom_vjp as custom_vjp
 from .transforms.autodiff import remat as remat
 from .transforms.compilation import jit as jit
+from .transforms.compilation import shard_map as shard_map
 from .transforms.compilation import StateSharding as StateSharding
 from .transforms.iteration import Carry as Carry
 from .transforms.iteration import scan as scan
