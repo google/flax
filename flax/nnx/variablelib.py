@@ -25,11 +25,7 @@ import treescope  # type: ignore[import-untyped]
 
 from flax import errors
 from flax.nnx import filterlib, reprlib, tracers, visualization
-from flax.typing import (
-  Missing,
-  PathParts,
-  value_stats,
-)
+from flax.typing import Missing, PathParts, SizeBytes
 import jax.tree_util as jtu
 
 A = tp.TypeVar('A')
@@ -317,7 +313,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return VariableState(type(self), self.raw_value, **self._var_metadata)
 
   def __nnx_repr__(self):
-    stats = value_stats(self.value)
+    stats = SizeBytes.from_any(self.value)
     if stats:
       comment = f' # {stats}'
     else:
@@ -329,7 +325,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       yield reprlib.Attr(name, repr(value))
 
   def __treescope_repr__(self, path, subtree_renderer):
-    size_bytes = value_stats(self.value)
+    size_bytes = SizeBytes.from_any(self.value)
     if size_bytes:
       stats_repr = f' # {size_bytes}'
       first_line_annotation = treescope.rendering_parts.comment_color(
@@ -784,7 +780,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
       del self._var_metadata[name]
 
   def __nnx_repr__(self):
-    stats = value_stats(self.value)
+    stats = SizeBytes.from_any(self.value)
     if stats:
       comment = f' # {stats}'
     else:
@@ -798,7 +794,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
       yield reprlib.Attr(name, value)
 
   def __treescope_repr__(self, path, subtree_renderer):
-    size_bytes = value_stats(self.value)
+    size_bytes = SizeBytes.from_any(self.value)
     if size_bytes:
       stats_repr = f' # {size_bytes}'
       first_line_annotation = treescope.rendering_parts.comment_color(

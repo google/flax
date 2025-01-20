@@ -34,7 +34,7 @@ from flax.nnx import (
   visualization,
 )
 from flax.nnx.variablelib import Variable, VariableState
-from flax.typing import SizeBytes, value_stats
+from flax.typing import SizeBytes
 
 G = tp.TypeVar('G', bound='Object')
 
@@ -55,7 +55,7 @@ def _collect_stats(
     var_type = type(node)
     if issubclass(var_type, nnx.RngState):
       var_type = nnx.RngState
-    size_bytes = value_stats(node.value)
+    size_bytes = SizeBytes.from_any(node.value)
     if size_bytes:
       stats[var_type] = size_bytes
 
@@ -134,6 +134,10 @@ class Array(reprlib.Representable):
   shape: tp.Tuple[int, ...]
   dtype: tp.Any
 
+  @staticmethod
+  def from_array(array: jax.Array | np.ndarray) -> Array:
+    return Array(array.shape, array.dtype)
+
   def __nnx_repr__(self):
     yield reprlib.Object(type='Array', same_line=True)
     yield reprlib.Attr('shape', self.shape)
@@ -165,12 +169,12 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       self._setattr(name, value)
 
   def _setattr(self, name: str, value: tp.Any) -> None:
-    self.check_valid_context(
+    self._check_valid_context(
       lambda: f"Cannot mutate '{type(self).__name__}' from different trace level"
     )
     object.__setattr__(self, name, value)
 
-  def check_valid_context(self, error_msg: tp.Callable[[], str]) -> None:
+  def _check_valid_context(self, error_msg: tp.Callable[[], str]) -> None:
     if not self._object__state.trace_state.is_valid():
       raise errors.TraceContextError(error_msg())
 
