@@ -48,12 +48,12 @@ class TrainState(struct.PyTreeNode):
     ...   loss = optax.l2_loss(predictions=predictions, targets=y).mean()
     ...   return loss
     >>> loss_fn(state.params, x, y)
-    Array(3.3514676, dtype=float32)
+    Array(1.8136346, dtype=float32)
 
     >>> grads = jax.grad(loss_fn)(state.params, x, y)
     >>> state = state.apply_gradients(grads=grads)
     >>> loss_fn(state.params, x, y)
-    Array(3.343844, dtype=float32)
+    Array(1.8079796, dtype=float32)
 
   Note that you can easily extend this dataclass by subclassing it for storing
   additional data (e.g. additional variable collections).

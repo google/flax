@@ -119,7 +119,7 @@ class LinearGeneral(Module):
     >>> y.shape
     (16, 4, 5)
 
-  Attributes:
+  Args:
     in_features: int or tuple with number of input features.
     out_features: int or tuple with number of output features.
     axis: int or tuple with axes to apply the transformation on. For instance,
@@ -301,7 +301,7 @@ class Linear(Module):
       )
     })
 
-  Attributes:
+  Args:
     in_features: the number of input features.
     out_features: the number of output features.
     use_bias: whether to add a bias to the output (default: True).
@@ -393,7 +393,7 @@ class Einsum(Module):
     >>> y.shape
     (16, 11, 8, 4)
 
-  Attributes:
+  Args:
     einsum_str: a string to denote the einsum equation. The equation must
       have exactly two operands, the lhs being the input passed in, and
       the rhs being the learnable kernel. Exactly one of ``einsum_str``
@@ -572,7 +572,7 @@ class Conv(Module):
     ...                  mask=mask, padding='VALID', rngs=rngs)
     >>> out = layer(x)
 
-  Attributes:
+  Args:
     in_features: int or tuple with number of input features.
     out_features: int or tuple with number of output features.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
@@ -823,7 +823,7 @@ class ConvTranspose(Module):
     ...                  mask=mask, padding='VALID', rngs=rngs)
     >>> out = layer(x)
 
-  Attributes:
+  Args:
     in_features: int or tuple with number of input features.
     out_features: int or tuple with number of output features.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
@@ -1065,23 +1065,23 @@ class Embed(Module):
     State({
       'embedding': VariableState( # 15 (60 B)
         type=Param,
-        value=Array([[-0.90411377, -0.3648777 , -1.1083648 ],
-               [ 0.01070483,  0.27923733,  1.7487359 ],
-               [ 0.59161806,  0.8660184 ,  1.2838588 ],
-               [-0.748139  , -0.15856352,  0.06061118],
-               [-0.4769059 , -0.6607095 ,  0.46697947]], dtype=float32)
+        value=Array([[ 0.57966787, -0.523274  , -0.43195742],
+               [-0.676289  , -0.50300646,  0.33996582],
+               [ 0.41796115, -0.59212935,  0.95934135],
+               [-1.0917838 , -0.7441663 ,  0.07713798],
+               [-0.66570747,  0.13815777,  1.007365  ]], dtype=float32)
       )
     })
     >>> # get the first three and last three embeddings
     >>> indices_input = jnp.array([[0, 1, 2], [-1, -2, -3]])
     >>> layer(indices_input)
-    Array([[[-0.90411377, -0.3648777 , -1.1083648 ],
-            [ 0.01070483,  0.27923733,  1.7487359 ],
-            [ 0.59161806,  0.8660184 ,  1.2838588 ]],
+    Array([[[ 0.57966787, -0.523274  , -0.43195742],
+            [-0.676289  , -0.50300646,  0.33996582],
+            [ 0.41796115, -0.59212935,  0.95934135]],
     <BLANKLINE>
-           [[-0.4769059 , -0.6607095 ,  0.46697947],
-            [-0.748139  , -0.15856352,  0.06061118],
-            [ 0.59161806,  0.8660184 ,  1.2838588 ]]], dtype=float32)
+           [[-0.66570747,  0.13815777,  1.007365  ],
+            [-1.0917838 , -0.7441663 ,  0.07713798],
+            [ 0.41796115, -0.59212935,  0.95934135]]], dtype=float32)
 
   A parameterized function from integers [0, ``num_embeddings``) to
   ``features``-dimensional vectors. This ``Module`` will create an ``embedding``
@@ -1092,7 +1092,7 @@ class Embed(Module):
   broadcast the ``embedding`` matrix to input shape with ``features``
   dimension appended.
 
-  Attributes:
+  Args:
     num_embeddings: number of embeddings / vocab size.
     features: number of feature dimensions for each embedding.
     dtype: the dtype of the embedding vectors (default: same as embedding).

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import threading
 import typing as tp
 from abc import ABCMeta
@@ -24,15 +25,14 @@ import jax
 import numpy as np
 import treescope  # type: ignore[import-untyped]
 from treescope import rendering_parts
-from flax.nnx import visualization
 
-from flax import errors
+from flax import errors, nnx
 from flax.nnx import (
   graph,
   reprlib,
   tracers,
+  visualization,
 )
-from flax import nnx
 from flax.nnx.variablelib import Variable, VariableState
 from flax.typing import SizeBytes, value_stats
 
@@ -156,6 +156,8 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       clear=cls._graph_node_clear,
       init=cls._graph_node_init,  # type: ignore
     )
+
+    cls.__signature__ = inspect.signature(cls.__init__)
 
   if not tp.TYPE_CHECKING:
 
