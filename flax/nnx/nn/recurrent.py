@@ -31,7 +31,7 @@ from flax.nnx.nn import initializers
 from flax.nnx.nn.linear import Linear
 from flax.nnx.nn.activations import sigmoid
 from flax.nnx.nn.activations import tanh
-from flax.nnx.transforms.iteration import Carry, StateAxes
+from flax.nnx.transforms import iteration
 from flax.typing import (
     Dtype,
     Initializer,
@@ -44,7 +44,7 @@ default_bias_init = initializers.zeros_init()
 A = TypeVar("A")
 Array = jax.Array
 Output = Any
-
+Carry = Any
 
 class RNNCellBase(Module):
     """RNN cell base class."""
@@ -213,7 +213,7 @@ class LSTMCell(RNNCellBase):
 
 
 class OptimizedLSTMCell(RNNCellBase):
-    r"""More efficient LSTM Cell that concatenates state components before matmul.
+  r"""More efficient LSTM Cell that concatenates state components before matmul.
 
     The parameters are compatible with ``LSTMCell``. Note that this cell is often
     faster than ``LSTMCell`` as long as the hidden size is roughly <= 2048 units.
@@ -235,7 +235,7 @@ class OptimizedLSTMCell(RNNCellBase):
     where x is the input, h is the output of the previous time step, and c is
     the memory.
 
-    Attributes:
+    Args:
         gate_fn: activation function used for gates (default: sigmoid).
         activation_fn: activation function used for output and memory update
           (default: tanh).
@@ -248,107 +248,111 @@ class OptimizedLSTMCell(RNNCellBase):
         param_dtype: the dtype passed to parameter initializers (default: float32).
     """
 
-    def __init__(
-        self,
-        in_features: int,
-        hidden_features: int,
-        *,
-        gate_fn: Callable[..., Any] = sigmoid,
-        activation_fn: Callable[..., Any] = tanh,
-        kernel_init: Initializer = default_kernel_init,
-        recurrent_kernel_init: Initializer = initializers.orthogonal(),
-        bias_init: Initializer = initializers.zeros_init(),
-        dtype: Dtype | None = None,
-        param_dtype: Dtype = jnp.float32,
-        carry_init: Initializer = initializers.zeros_init(),
-        rngs: rnglib.Rngs,
-    ):
-        self.in_features = in_features
-        self.hidden_features = hidden_features
-        self.gate_fn = gate_fn
-        self.activation_fn = activation_fn
-        self.kernel_init = kernel_init
-        self.recurrent_kernel_init = recurrent_kernel_init
-        self.bias_init = bias_init
-        self.dtype = dtype
-        self.param_dtype = param_dtype
-        self.carry_init = carry_init
-        self.rngs = rngs
+  def __init__(
+    self,
+    in_features: int,
+    hidden_features: int,
+    *,
+    gate_fn: Callable[..., Any] = sigmoid,
+    activation_fn: Callable[..., Any] = tanh,
+    kernel_init: Initializer = default_kernel_init,
+    recurrent_kernel_init: Initializer = initializers.orthogonal(),
+    bias_init: Initializer = initializers.zeros_init(),
+    dtype: Dtype | None = None,
+    param_dtype: Dtype = jnp.float32,
+    carry_init: Initializer = initializers.zeros_init(),
+    rngs: rnglib.Rngs,
+  ):
+    self.in_features = in_features
+    self.hidden_features = hidden_features
+    self.gate_fn = gate_fn
+    self.activation_fn = activation_fn
+    self.kernel_init = kernel_init
+    self.recurrent_kernel_init = recurrent_kernel_init
+    self.bias_init = bias_init
+    self.dtype = dtype
+    self.param_dtype = param_dtype
+    self.carry_init = carry_init
+    self.rngs = rngs
 
-        # input and recurrent layers are summed so only one needs a bias.
-        self.dense_i = Linear(
-            in_features=in_features,
-            out_features=4 * hidden_features,
-            use_bias=False,
-            kernel_init=self.kernel_init,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            rngs=rngs,
-        )
+    # input and recurrent layers are summed so only one needs a bias.
+    self.dense_i = Linear(
+      in_features=in_features,
+      out_features=4 * hidden_features,
+      use_bias=False,
+      kernel_init=self.kernel_init,
+      dtype=self.dtype,
+      param_dtype=self.param_dtype,
+      rngs=rngs,
+    )
 
-        self.dense_h = Linear(
-            in_features=hidden_features,
-            out_features=4 * hidden_features,
-            use_bias=True,
-            kernel_init=self.recurrent_kernel_init,
-            bias_init=self.bias_init,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            rngs=rngs,
-        )
+    self.dense_h = Linear(
+      in_features=hidden_features,
+      out_features=4 * hidden_features,
+      use_bias=True,
+      kernel_init=self.recurrent_kernel_init,
+      bias_init=self.bias_init,
+      dtype=self.dtype,
+      param_dtype=self.param_dtype,
+      rngs=rngs,
+    )
 
-    def __call__(self, carry: tuple[Array, Array], inputs: Array) -> tuple[tuple[Array, Array], Array]: # type: ignore[override]
-        r"""An optimized long short-term memory (LSTM) cell.
+  def __call__(
+    self, carry: tuple[Array, Array], inputs: Array
+  ) -> tuple[tuple[Array, Array], Array]:  # type: ignore[override]
+    r"""An optimized long short-term memory (LSTM) cell.
 
-        Args:
-          carry: the hidden state of the LSTM cell, initialized using
-            ``LSTMCell.initialize_carry``.
-          inputs: an ndarray with the input for the current time step.
-            All dimensions except the final are considered batch dimensions.
+    Args:
+      carry: the hidden state of the LSTM cell, initialized using
+        ``LSTMCell.initialize_carry``.
+      inputs: an ndarray with the input for the current time step.
+        All dimensions except the final are considered batch dimensions.
 
-        Returns:
-          A tuple with the new carry and the output.
-        """
-        c, h = carry
+    Returns:
+      A tuple with the new carry and the output.
+    """
+    c, h = carry
 
-        # Compute combined transformations for inputs and hidden state
-        y = self.dense_i(inputs) + self.dense_h(h)
+    # Compute combined transformations for inputs and hidden state
+    y = self.dense_i(inputs) + self.dense_h(h)
 
-        # Split the combined transformations into individual gates
-        i, f, g, o = jnp.split(y, indices_or_sections=4, axis=-1)
+    # Split the combined transformations into individual gates
+    i, f, g, o = jnp.split(y, indices_or_sections=4, axis=-1)
 
-        # Apply gate activations
-        i = self.gate_fn(i)
-        f = self.gate_fn(f)
-        g = self.activation_fn(g)
-        o = self.gate_fn(o)
+    # Apply gate activations
+    i = self.gate_fn(i)
+    f = self.gate_fn(f)
+    g = self.activation_fn(g)
+    o = self.gate_fn(o)
 
-        # Update cell state and hidden state
-        new_c = f * c + i * g
-        new_h = o * self.activation_fn(new_c)
-        return (new_c, new_h), new_h
+    # Update cell state and hidden state
+    new_c = f * c + i * g
+    new_h = o * self.activation_fn(new_c)
+    return (new_c, new_h), new_h
 
-    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> tuple[Array, Array]: # type: ignore[override]
-        """Initialize the RNN cell carry.
+  def initialize_carry(
+    self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
+  ) -> tuple[Array, Array]:  # type: ignore[override]
+    """Initialize the RNN cell carry.
 
-        Args:
-          rngs: random number generator passed to the init_fn.
-          input_shape: a tuple providing the shape of the input to the cell.
+    Args:
+      rngs: random number generator passed to the init_fn.
+      input_shape: a tuple providing the shape of the input to the cell.
 
-        Returns:
-          An initialized carry for the given RNN cell.
-        """
-        batch_dims = input_shape[:-1]
-        if rngs is None:
-            rngs = self.rngs
-        mem_shape = batch_dims + (self.hidden_features,)
-        c = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
-        h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
-        return (c, h)
+    Returns:
+      An initialized carry for the given RNN cell.
+    """
+    batch_dims = input_shape[:-1]
+    if rngs is None:
+      rngs = self.rngs
+    mem_shape = batch_dims + (self.hidden_features,)
+    c = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
+    h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
+    return (c, h)
 
-    @property
-    def num_feature_axes(self) -> int:
-        return 1
+  @property
+  def num_feature_axes(self) -> int:
+    return 1
 
 
 class SimpleCell(RNNCellBase):
@@ -451,7 +455,7 @@ class SimpleCell(RNNCellBase):
 
 
 class GRUCell(RNNCellBase):
-    r"""GRU cell.
+  r"""GRU cell.
 
     The mathematical definition of the cell is as follows
 
@@ -466,7 +470,7 @@ class GRUCell(RNNCellBase):
 
     where x is the input and h is the output of the previous time step.
 
-    Attributes:
+    Args:
         in_features: number of input features.
         hidden_features: number of output features.
         gate_fn: activation function used for gates (default: sigmoid).
@@ -481,108 +485,110 @@ class GRUCell(RNNCellBase):
         param_dtype: the dtype passed to parameter initializers (default: float32).
     """
 
-    def __init__(
-        self,
-        in_features: int,
-        hidden_features: int,
-        *,
-        gate_fn: Callable[..., Any] = sigmoid,
-        activation_fn: Callable[..., Any] = tanh,
-        kernel_init: Initializer = default_kernel_init,
-        recurrent_kernel_init: Initializer = initializers.orthogonal(),
-        bias_init: Initializer = initializers.zeros_init(),
-        dtype: Dtype | None = None,
-        param_dtype: Dtype = jnp.float32,
-        carry_init: Initializer = initializers.zeros_init(),
-        rngs: rnglib.Rngs,
-    ):
-        self.in_features = in_features
-        self.hidden_features = hidden_features
-        self.gate_fn = gate_fn
-        self.activation_fn = activation_fn
-        self.kernel_init = kernel_init
-        self.recurrent_kernel_init = recurrent_kernel_init
-        self.bias_init = bias_init
-        self.dtype = dtype
-        self.param_dtype = param_dtype
-        self.carry_init = carry_init
-        self.rngs = rngs
+  def __init__(
+    self,
+    in_features: int,
+    hidden_features: int,
+    *,
+    gate_fn: Callable[..., Any] = sigmoid,
+    activation_fn: Callable[..., Any] = tanh,
+    kernel_init: Initializer = default_kernel_init,
+    recurrent_kernel_init: Initializer = initializers.orthogonal(),
+    bias_init: Initializer = initializers.zeros_init(),
+    dtype: Dtype | None = None,
+    param_dtype: Dtype = jnp.float32,
+    carry_init: Initializer = initializers.zeros_init(),
+    rngs: rnglib.Rngs,
+  ):
+    self.in_features = in_features
+    self.hidden_features = hidden_features
+    self.gate_fn = gate_fn
+    self.activation_fn = activation_fn
+    self.kernel_init = kernel_init
+    self.recurrent_kernel_init = recurrent_kernel_init
+    self.bias_init = bias_init
+    self.dtype = dtype
+    self.param_dtype = param_dtype
+    self.carry_init = carry_init
+    self.rngs = rngs
 
-        # Combine input transformations into a single linear layer
-        self.dense_i = Linear(
-            in_features=in_features,
-            out_features=3 * hidden_features,  # r, z, n
-            use_bias=True,
-            kernel_init=self.kernel_init,
-            bias_init=self.bias_init,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            rngs=rngs,
-        )
+    # Combine input transformations into a single linear layer
+    self.dense_i = Linear(
+      in_features=in_features,
+      out_features=3 * hidden_features,  # r, z, n
+      use_bias=True,
+      kernel_init=self.kernel_init,
+      bias_init=self.bias_init,
+      dtype=self.dtype,
+      param_dtype=self.param_dtype,
+      rngs=rngs,
+    )
 
-        self.dense_h = Linear(
-            in_features=hidden_features,
-            out_features=3 * hidden_features,  # r, z, n
-            use_bias=False,
-            kernel_init=self.recurrent_kernel_init,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            rngs=rngs,
-        )
+    self.dense_h = Linear(
+      in_features=hidden_features,
+      out_features=3 * hidden_features,  # r, z, n
+      use_bias=False,
+      kernel_init=self.recurrent_kernel_init,
+      dtype=self.dtype,
+      param_dtype=self.param_dtype,
+      rngs=rngs,
+    )
 
-    def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]: # type: ignore[override]
-        """Gated recurrent unit (GRU) cell.
+  def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]:  # type: ignore[override]
+    """Gated recurrent unit (GRU) cell.
 
-        Args:
-            carry: the hidden state of the GRU cell,
-              initialized using ``GRUCell.initialize_carry``.
-            inputs: an ndarray with the input for the current time step.
-              All dimensions except the final are considered batch dimensions.
+    Args:
+        carry: the hidden state of the GRU cell,
+          initialized using ``GRUCell.initialize_carry``.
+        inputs: an ndarray with the input for the current time step.
+          All dimensions except the final are considered batch dimensions.
 
-        Returns:
-            A tuple with the new carry and the output.
-        """
-        h = carry
+    Returns:
+        A tuple with the new carry and the output.
+    """
+    h = carry
 
-        # Compute combined transformations for inputs and hidden state
-        x_transformed = self.dense_i(inputs)
-        h_transformed = self.dense_h(h)
+    # Compute combined transformations for inputs and hidden state
+    x_transformed = self.dense_i(inputs)
+    h_transformed = self.dense_h(h)
 
-        # Split the combined transformations into individual components
-        xi_r, xi_z, xi_n = jnp.split(x_transformed, 3, axis=-1)
-        hh_r, hh_z, hh_n = jnp.split(h_transformed, 3, axis=-1)
+    # Split the combined transformations into individual components
+    xi_r, xi_z, xi_n = jnp.split(x_transformed, 3, axis=-1)
+    hh_r, hh_z, hh_n = jnp.split(h_transformed, 3, axis=-1)
 
-        # Compute gates
-        r = self.gate_fn(xi_r + hh_r)
-        z = self.gate_fn(xi_z + hh_z)
+    # Compute gates
+    r = self.gate_fn(xi_r + hh_r)
+    z = self.gate_fn(xi_z + hh_z)
 
-        # Compute n with an additional linear transformation on h
-        n = self.activation_fn(xi_n + r * hh_n)
+    # Compute n with an additional linear transformation on h
+    n = self.activation_fn(xi_n + r * hh_n)
 
-        # Update hidden state
-        new_h = (1.0 - z) * n + z * h
-        return new_h, new_h
+    # Update hidden state
+    new_h = (1.0 - z) * n + z * h
+    return new_h, new_h
 
-    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> Array: # type: ignore[override]
-        """Initialize the RNN cell carry.
+  def initialize_carry(
+    self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
+  ) -> Array:  # type: ignore[override]
+    """Initialize the RNN cell carry.
 
-        Args:
-            rngs: random number generator passed to the init_fn.
-            input_shape: a tuple providing the shape of the input to the cell.
+    Args:
+        rngs: random number generator passed to the init_fn.
+        input_shape: a tuple providing the shape of the input to the cell.
 
-        Returns:
-            An initialized carry for the given RNN cell.
-        """
-        batch_dims = input_shape[:-1]
-        if rngs is None:
-            rngs = self.rngs
-        mem_shape = batch_dims + (self.hidden_features,)
-        h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
-        return h
+    Returns:
+        An initialized carry for the given RNN cell.
+    """
+    batch_dims = input_shape[:-1]
+    if rngs is None:
+      rngs = self.rngs
+    mem_shape = batch_dims + (self.hidden_features,)
+    h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
+    return h
 
-    @property
-    def num_feature_axes(self) -> int:
-        return 1
+  @property
+  def num_feature_axes(self) -> int:
+    return 1
 
 
 class RNN(Module):
@@ -591,7 +597,7 @@ class RNN(Module):
   using :func:`flax.nnx.scan`.
   """
 
-  state_axes: Mapping[str, int | type[Carry] | None]
+  state_axes: dict[str, int | type[iteration.Carry] | None]
 
   def __init__(
     self,
@@ -602,7 +608,7 @@ class RNN(Module):
     keep_order: bool = False,
     unroll: int = 1,
     rngs: rnglib.Rngs | None = None,
-    state_axes: Mapping[str, int | type[Carry] | None] | None = None,
+    state_axes: Mapping[str, int | type[iteration.Carry] | None] | None = None,
     broadcast_rngs: filterlib.Filter = None,
   ):
     self.cell = cell
@@ -614,7 +620,7 @@ class RNN(Module):
     if rngs is None:
       rngs = rnglib.Rngs(0)
     self.rngs = rngs
-    self.state_axes = state_axes or {...: Carry}  # type: ignore
+    self.state_axes = state_axes or {...: iteration.Carry}  # type: ignore
     self.broadcast_rngs = broadcast_rngs
 
   def __call__(
@@ -675,14 +681,16 @@ class RNN(Module):
 
     slice_carry = seq_lengths is not None and return_carry
     broadcast_rngs = nnx.All(nnx.RngState, self.broadcast_rngs)
-    state_axes = StateAxes({broadcast_rngs: None, **self.state_axes})  # type: ignore
+    state_axes = iteration.StateAxes({broadcast_rngs: None, **self.state_axes})  # type: ignore[misc]
 
     # we use split_rngs with splits=1 and squeeze=True to get unique rngs
     # every time RNN is called
     @nnx.split_rngs(splits=1, only=self.broadcast_rngs, squeeze=True)
     @nnx.scan(
-      in_axes=(state_axes, Carry, time_axis),
-      out_axes=(Carry, (0, time_axis)) if slice_carry else (Carry, time_axis),
+      in_axes=(state_axes, iteration.Carry, time_axis),
+      out_axes=(iteration.Carry, (0, time_axis))
+      if slice_carry
+      else (iteration.Carry, time_axis),
       unroll=self.unroll,
     )
     def scan_fn(

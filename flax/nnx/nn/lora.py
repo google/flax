@@ -61,7 +61,7 @@ class LoRA(Module):
     >>> y.shape
     (16, 4)
 
-  Attributes:
+  Args:
     in_features: the number of input features.
     lora_rank: the rank of the LoRA dimension.
     out_features: the number of output features.
@@ -133,7 +133,7 @@ class LoRALinear(Linear):
     >>> y.shape
     (16, 4)
 
-  Attributes:
+  Args:
     in_features: the number of input features.
     out_features: the number of output features.
     lora_rank: the rank of the LoRA dimension.

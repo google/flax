@@ -47,9 +47,9 @@ class Dropout(Module):
     >>> x = jnp.ones((1, 3))
     >>> variables = model.init(jax.random.key(0), x, train=False) # don't use dropout
     >>> model.apply(variables, x, train=False) # don't use dropout
-    Array([[-0.88686204, -0.5928178 , -0.5184689 , -0.4345976 ]], dtype=float32)
+    Array([[-0.17875527,  1.6255447 , -1.2431065 , -0.02554005]], dtype=float32)
     >>> model.apply(variables, x, train=True, rngs={'dropout': jax.random.key(1)}) # use dropout
-    Array([[ 0.       , -1.1856356, -1.0369378,  0.       ]], dtype=float32)
+    Array([[-0.35751054,  3.2510893 ,  0.        ,  0.        ]], dtype=float32)
 
   Attributes:
     rate: the dropout probability.  (_not_ the keep rate!)

@@ -2578,8 +2578,8 @@ class TestPmap(absltest.TestCase):
   def test_basic_demo_single(self):
     class Block(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
-        self.linear = nnx.Linear(3, 3, rngs=rngs)
-        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+        self.linear = nnx.Linear(20, 20, rngs=rngs)
+        self.dropout = nnx.Dropout(0.2, deterministic=False, rngs=rngs)
 
       def __call__(self, x: jax.Array) -> jax.Array:
         return self.dropout(nnx.relu(self.linear(x)))
@@ -2598,14 +2598,14 @@ class TestPmap(absltest.TestCase):
     module = create_block(rngs)
 
     assert rngs.default.count.value == 1
-    assert module.linear.kernel.value.shape == (1, 3, 3)
-    assert module.linear.bias.value.shape == (1, 3)
+    assert module.linear.kernel.value.shape == (1, 20, 20)
+    assert module.linear.bias.value.shape == (1, 20)
 
-    x = jnp.ones((1, 10, 3))
+    x = jnp.ones((1, 10, 20))
 
     y = forward_block(module, x)
 
-    assert y.shape == (1, 10, 3)
+    assert y.shape == (1, 10, 20)
     assert rngs.default.count.value == 2
 
     y2 = forward_block(module, x)

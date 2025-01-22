@@ -126,11 +126,11 @@ class Optimizer(Object):
     ...
     >>> loss_fn = lambda model: ((model(x) - y) ** 2).mean()
     >>> loss_fn(model)
-    Array(1.7055722, dtype=float32)
+    Array(2.3359995, dtype=float32)
     >>> grads = nnx.grad(loss_fn)(state.model)
     >>> state.update(grads)
     >>> loss_fn(model)
-    Array(1.6925814, dtype=float32)
+    Array(2.310461, dtype=float32)
 
   Note that you can easily extend this class by subclassing it for storing
   additional data (e.g. adding metrics).
@@ -151,15 +151,15 @@ class Optimizer(Object):
     >>> grads = nnx.grad(loss_fn)(state.model)
     >>> state.update(grads=grads, values=loss_fn(state.model))
     >>> state.metrics.compute()
-    Array(1.6925814, dtype=float32)
+    Array(2.310461, dtype=float32)
     >>> state.update(grads=grads, values=loss_fn(state.model))
     >>> state.metrics.compute()
-    Array(1.68612, dtype=float32)
+    Array(2.2978127, dtype=float32)
 
   For more exotic usecases (e.g. multiple optimizers) it's probably best to
   fork the class and modify it.
 
-  Attributes:
+  Args:
     step: An ``OptState`` :class:`Variable` that tracks the step count.
     model: The wrapped :class:`Module`.
     tx: An Optax gradient transformation.

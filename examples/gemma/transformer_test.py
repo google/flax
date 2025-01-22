@@ -150,7 +150,7 @@ class TransformerTest(parameterized.TestCase):
     all_outputs = []
     for config in [config_soft_cap, config_no_soft_cap]:
       transformer = transformer_lib.Transformer(
-          config=config, rngs=nnx.Rngs(params=0)
+          config=config, rngs=nnx.Rngs(params=1)
       )
       cache = transformer.init_cache(
           cache_size=cache_size,

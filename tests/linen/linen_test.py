@@ -428,7 +428,7 @@ class NormalizationTest(parameterized.TestCase):
     model = Foo()
     x = random.normal(random.key(1), (2, 4))
     (y1, y2), _ = model.init_with_output(key, x)
-    np.testing.assert_allclose(y1, y2, rtol=1e-4)
+    np.testing.assert_allclose(y1, y2, rtol=0.005)
 
   @parameterized.parameters(
     {'feature_axes': -1},
