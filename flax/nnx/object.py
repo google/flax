@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
+import os
 import threading
 import typing as tp
 from abc import ABCMeta
@@ -38,6 +39,7 @@ from flax.typing import SizeBytes, value_stats
 
 G = tp.TypeVar('G', bound='Object')
 
+BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
 
 def _collect_stats(
   node: tp.Any, node_stats: dict[int, dict[type[Variable], SizeBytes]]
@@ -157,7 +159,9 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       init=cls._graph_node_init,  # type: ignore
     )
 
-    cls.__signature__ = inspect.signature(cls.__init__)
+    if BUILDING_DOCS:
+      # set correct signature for sphinx
+      cls.__signature__ = inspect.signature(cls.__init__)
 
   if not tp.TYPE_CHECKING:
 
