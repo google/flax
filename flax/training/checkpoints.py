@@ -690,9 +690,8 @@ def save_checkpoint(
         ' https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#if-you-don-t-save-pytrees'
       )
 
-    save_args = orbax_utils.save_args_from_target(target)
     orbax_checkpointer.save(
-      ckpt_path, target, save_args=save_args, force=overwrite
+      ckpt_path, target, force=overwrite
     )
     # Do a process check here in case people call this for multihost.
     if process_index() == 0:
@@ -843,9 +842,8 @@ def save_checkpoint_multiprocess(
       _remove_invalid_ckpts(
         ckpt_path, base_path, keep, overwrite, keep_every_n_steps, True
       )
-    save_args = orbax_utils.save_args_from_target(target)
     orbax_checkpointer.save(
-      ckpt_path, target, save_args=save_args, force=overwrite
+      ckpt_path, target, force=overwrite
     )
     end_time = time.time()
     monitoring.record_event_duration_secs(
