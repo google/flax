@@ -16,14 +16,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import enum
 from typing import Any, Union
-from collections.abc import Sequence
 
 from flax import nnx
-import flax.linen as nn
 import layers
 import positional_embeddings
+import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, ArrayLike  # pylint: disable=g-importing-member,g-multiple-import
@@ -94,21 +94,25 @@ class Attention(nnx.Module):
     self.sliding_window_size = sliding_window_size
     self.attn_logits_soft_cap = attn_logits_soft_cap
     self.attn_vec_einsum = layers.Einsum(
+        einsum_str='BTNH,NHD->BTD',
         shape=(num_heads, head_dim, features),
         rngs=rngs,
     )
 
     if num_heads == num_kv_heads:
       self.qkv_einsum = layers.Einsum(
+          einsum_str='BTD,SNDH->SBTNH',
           shape=(3, num_heads, features, head_dim),
           rngs=rngs,
       )
     else:
       self.q_einsum = layers.Einsum(
+          einsum_str='BTD,NDH->BTNH',
           shape=(num_heads, features, head_dim),
           rngs=rngs,
       )
       self.kv_einsum = layers.Einsum(
+          einsum_str='BSD,CKDH->CBSKH',
           shape=(2, num_kv_heads, features, head_dim),
           rngs=rngs,
       )
@@ -123,10 +127,10 @@ class Attention(nnx.Module):
     seq_len = x.shape[1]
 
     if self.use_qkv_einsum:
-      query_proj, key_proj, value_proj = self.qkv_einsum('BTD,SNDH->SBTNH', x)
+      query_proj, key_proj, value_proj = self.qkv_einsum(x)
     else:
-      query_proj = self.q_einsum('BTD,NDH->BTNH', x)
-      key_proj, value_proj = self.kv_einsum('BSD,CKDH->CBSKH', x)
+      query_proj = self.q_einsum(x)
+      key_proj, value_proj = self.kv_einsum(x)
 
     query_proj = positional_embeddings.apply_rope(
         query_proj,
@@ -173,7 +177,7 @@ class Attention(nnx.Module):
     padded_logits = jnp.where((jnp.expand_dims(attn_mask, -2)), logits, K_MASK)
     probs = jax.nn.softmax(padded_logits, axis=-1).astype(key_proj.dtype)
     encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
-    attn_output = self.attn_vec_einsum('BTNH,NHD->BTD', encoded)
+    attn_output = self.attn_vec_einsum(encoded)
 
     if cache is not None:
       new_cache = {

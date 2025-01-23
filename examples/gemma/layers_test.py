@@ -38,9 +38,8 @@ class EinsumTest(parameterized.TestCase):
       ),
   )
   def test_einsum(self, inputs_shape, params_shape, eqn, expected_shape):
-    einsum = layers.Einsum(params_shape, rngs=nnx.Rngs(params=0))
+    einsum = layers.Einsum(eqn, params_shape, rngs=nnx.Rngs(params=0))
     output = einsum(
-        eqn,
         jnp.ones(inputs_shape),
     )
     self.assertEqual(output.shape, expected_shape)
@@ -54,7 +53,7 @@ class EinsumTest(parameterized.TestCase):
       ),
   )
   def test_shape(self, shape):
-    einsum = layers.Einsum(shape, rngs=nnx.Rngs(params=0))
+    einsum = layers.Einsum('ij->ji', shape, rngs=nnx.Rngs(params=0))
     self.assertEqual(einsum.shape, shape)
 
 
