@@ -35,6 +35,8 @@ import sys
 sys.path.insert(0, os.path.abspath('..'))
 # Include local extension.
 sys.path.append(os.path.abspath('./_ext'))
+# Set environment variable to indicate that we are building the docs.
+os.environ['FLAX_DOC_BUILD'] = 'true'
 
 # patch sphinx
 # -- Project information -----------------------------------------------------
