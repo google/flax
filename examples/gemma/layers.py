@@ -16,8 +16,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Union
 from collections.abc import Sequence
+from typing import Any, Union
 
 from flax import nnx
 import flax.linen as nn
@@ -31,11 +31,12 @@ Shape = Sequence[Union[int, Any]]
 class Einsum(nnx.Module):
   """Einsum is a convenience module for parameterized tensor multiplication."""
 
-  def __init__(self, shape: Shape, *, rngs: nnx.Rngs):
+  def __init__(self, einsum_str: str, shape: Shape, *, rngs: nnx.Rngs):
+    self.einsum_str = einsum_str
     self.w = nnx.Param(nn.initializers.normal()(rngs.params(), shape))
 
-  def __call__(self, eqn: str, x: ArrayLike) -> Array:
-    return jnp.einsum(eqn, x, self.w.value)
+  def __call__(self, x: ArrayLike) -> Array:
+    return jnp.einsum(self.einsum_str, x, self.w.value)
 
   @property
   def shape(self) -> Shape:
@@ -48,7 +49,7 @@ class RMSNorm(nnx.Module):
   def __init__(self, dim: int, *, rngs: nnx.Rngs):
     self.scale = nnx.Param(nn.initializers.zeros_init()(rngs.params(), dim))
 
-  def __call__(self, x):
+  def __call__(self, x: Array) -> Array:
     var = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
     normed_inputs = jnp.asarray(x * jnp.reciprocal(jnp.sqrt(var + 1e-06)))
     # normed_inputs is a rank-K tensor, K > 1 (K is typically 2 or 3). scale is
