@@ -12,6 +12,7 @@ and highlight the differences between the two libraries.
   from jax import random
   import optax
   import flax.linen as nn
+  import haiku as hk
 
 Basic Example
 -----------------

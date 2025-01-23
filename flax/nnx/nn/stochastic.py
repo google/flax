@@ -53,13 +53,13 @@ class Dropout(Module):
 
     >>> model.train() # use dropout
     >>> model(x)
-    Array([[-0.9353421,  0.       ,  1.434417 ,  0.       ]], dtype=float32)
+    Array([[ 0.       ,  0.       , -1.592019 , -2.5238838]], dtype=float32)
 
     >>> model.eval() # don't use dropout
     >>> model(x)
-    Array([[-0.46767104, -0.7213411 ,  0.7172085 , -0.31562346]], dtype=float32)
+    Array([[ 1.0533503, -1.2679932, -0.7960095, -1.2619419]], dtype=float32)
 
-  Attributes:
+  Args:
     rate: the dropout probability.  (_not_ the keep rate!)
     broadcast_dims: dimensions that will share the same dropout mask
     deterministic: if false the inputs are scaled by ``1 / (1 - rate)`` and

@@ -2684,18 +2684,18 @@ class Module(ModuleBase):
       >>> variables = model.init(jax.random.key(0), x)
       >>> intm_grads = jax.grad(loss, argnums=0)(variables, x, y)
       >>> print(intm_grads['perturbations']['dense3'])
-      [[-1.456924   -0.44332537  0.02422847]
-       [-1.456924   -0.44332537  0.02422847]]
+      [[-0.04684732  0.06573904 -0.3194327 ]
+       [-0.04684732  0.06573904 -0.3194327 ]]
 
     If perturbations are not passed to ``apply``, ``perturb`` behaves like a no-op
     so you can easily disable the behavior when not needed::
 
       >>> model.apply(variables, x) # works as expected
-      Array([[-1.0980128 , -0.67961735],
-             [-1.0980128 , -0.67961735]], dtype=float32)
+      Array([[-0.04579116,  0.50412744],
+             [-0.04579116,  0.50412744]], dtype=float32)
       >>> model.apply({'params': variables['params']}, x) # behaves like a no-op
-      Array([[-1.0980128 , -0.67961735],
-             [-1.0980128 , -0.67961735]], dtype=float32)
+      Array([[-0.04579116,  0.50412744],
+             [-0.04579116,  0.50412744]], dtype=float32)
       >>> intm_grads = jax.grad(loss, argnums=0)({'params': variables['params']}, x, y)
       >>> 'perturbations' not in intm_grads
       True

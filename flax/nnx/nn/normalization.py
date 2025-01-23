@@ -236,7 +236,7 @@ class BatchNorm(Module):
     >>> assert (batch_stats2['mean'].value == batch_stats3['mean'].value).all()
     >>> assert (batch_stats2['var'].value == batch_stats3['var'].value).all()
 
-  Attributes:
+  Args:
     num_features: the number of input features.
     use_running_average: if True, the stored batch statistics will be
       used instead of computing the batch statistics on the input.
@@ -407,7 +407,7 @@ class LayerNorm(Module):
 
     >>> y = layer(x)
 
-  Attributes:
+  Args:
     num_features: the number of input features.
     epsilon: A small float added to variance to avoid dividing by zero.
     dtype: the dtype of the result (default: infer from input and params).
@@ -539,7 +539,7 @@ class RMSNorm(Module):
 
     >>> y = layer(x)
 
-  Attributes:
+  Args:
     num_features: the number of input features.
     epsilon: A small float added to variance to avoid dividing by zero.
     dtype: the dtype of the result (default: infer from input and params).
@@ -670,7 +670,7 @@ class GroupNorm(Module):
     >>> y2 = nnx.LayerNorm(num_features=6, reduction_axes=(1, 2, 3), rngs=nnx.Rngs(0))(x)
     >>> np.testing.assert_allclose(y, y2)
 
-  Attributes:
+  Args:
     num_features: the number of input features/channels.
     num_groups: the total number of channel groups. The default value of 32 is
       proposed by the original group normalization paper.

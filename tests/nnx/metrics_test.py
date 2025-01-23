@@ -22,10 +22,14 @@ import jax.numpy as jnp
 class TestMetrics(parameterized.TestCase):
 
   def test_split_merge(self):
-    logits = jax.random.normal(jax.random.key(0), (5, 2))
-    labels = jnp.array([1, 1, 0, 1, 0])
-    logits2 = jax.random.normal(jax.random.key(1), (5, 2))
-    labels2 = jnp.array([0, 1, 1, 1, 1])
+    logits = jnp.array(
+      [[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, -1.0]]
+    )
+    labels = jnp.array([1, 1, 1, 1, 1])
+    logits2 = jnp.array(
+      [[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, -1.0]]
+    )
+    labels2 = jnp.array([1, 1, 1, 1, 0])
 
     accuracy = nnx.metrics.Accuracy()
     accuracy.update(logits=logits, labels=labels)
@@ -87,9 +91,13 @@ class TestMetrics(parameterized.TestCase):
     self.assertAlmostEqual(computed.standard_deviation, 1.0, places=2)
 
   def test_multimetric(self):
-    logits = jax.random.normal(jax.random.key(0), (5, 2))
+    logits = jnp.array(
+      [[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, -1.0]]
+    )
     labels = jnp.array([1, 1, 0, 1, 0])
-    logits2 = jax.random.normal(jax.random.key(1), (5, 2))
+    logits2 = jnp.array(
+      [[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, -1.0]]
+    )
     labels2 = jnp.array([0, 1, 1, 1, 1])
     batch_loss = jnp.array([1, 2, 3, 4])
     batch_loss2 = jnp.array([3, 2, 1, 0])
@@ -108,7 +116,7 @@ class TestMetrics(parameterized.TestCase):
 
     metrics.update(logits=logits2, labels=labels2, values=batch_loss2)
     values = metrics.compute()
-    self.assertEqual(values['accuracy'], 0.7)
+    self.assertEqual(values['accuracy'], 0.5)
     self.assertEqual(values['loss'], 2.0)
 
     metrics.reset()

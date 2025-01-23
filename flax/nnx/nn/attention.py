@@ -244,7 +244,7 @@ class MultiHeadAttention(Module):
     >>> assert (layer(q) == layer(q, q)).all()
     >>> assert (layer(q) == layer(q, q, q)).all()
 
-  Attributes:
+  Args:
     num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
       should be divisible by the number of heads.
     in_features: int or tuple with number of input features.

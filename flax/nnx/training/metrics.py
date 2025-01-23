@@ -224,7 +224,7 @@ class Accuracy(Average):
     >>> import jax, jax.numpy as jnp
 
     >>> logits = jax.random.normal(jax.random.key(0), (5, 2))
-    >>> labels = jnp.array([1, 1, 0, 1, 0])
+    >>> labels = jnp.array([0, 1, 1, 1, 0])
     >>> logits2 = jax.random.normal(jax.random.key(1), (5, 2))
     >>> labels2 = jnp.array([0, 1, 1, 1, 1])
 
@@ -236,7 +236,7 @@ class Accuracy(Average):
     Array(0.6, dtype=float32)
     >>> metrics.update(logits=logits2, labels=labels2)
     >>> metrics.compute()
-    Array(0.7, dtype=float32)
+    Array(0.4, dtype=float32)
     >>> metrics.reset()
     >>> metrics.compute()
     Array(nan, dtype=float32)
@@ -320,7 +320,7 @@ class MultiMetric(Metric):
     )
 
     >>> logits = jax.random.normal(jax.random.key(0), (5, 2))
-    >>> labels = jnp.array([1, 1, 0, 1, 0])
+    >>> labels = jnp.array([0, 1, 1, 1, 0])
     >>> logits2 = jax.random.normal(jax.random.key(1), (5, 2))
     >>> labels2 = jnp.array([0, 1, 1, 1, 1])
 
@@ -334,7 +334,7 @@ class MultiMetric(Metric):
     {'accuracy': Array(0.6, dtype=float32), 'loss': Array(2.5, dtype=float32)}
     >>> metrics.update(logits=logits2, labels=labels2, values=batch_loss2)
     >>> metrics.compute()
-    {'accuracy': Array(0.7, dtype=float32), 'loss': Array(2., dtype=float32)}
+    {'accuracy': Array(0.4, dtype=float32), 'loss': Array(2., dtype=float32)}
     >>> metrics.reset()
     >>> metrics.compute()
     {'accuracy': Array(nan, dtype=float32), 'loss': Array(nan, dtype=float32)}
