@@ -19,9 +19,6 @@ from flax.linen.pooling import pool as pool
 from flax.typing import Initializer as Initializer
 
 from .bridge import wrappers as wrappers
-from .bridge.variables import (
-  register_variable_name_type_pair as register_variable_name_type_pair,
-)
 from .filterlib import WithTag as WithTag
 from .filterlib import PathContains as PathContains
 from .filterlib import OfType as OfType
@@ -163,6 +160,9 @@ from .variablelib import Variable as Variable
 from .variablelib import VariableState as VariableState
 from .variablelib import VariableMetadata as VariableMetadata
 from .variablelib import with_metadata as with_metadata
+from .variablelib import variable_type_from_name as variable_type_from_name
+from .variablelib import variable_name_from_type as variable_name_from_type
+from .variablelib import register_variable_name_type_pair as register_variable_name_type_pair
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree

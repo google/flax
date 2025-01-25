@@ -20,7 +20,7 @@ from flax import struct
 from flax.core import meta
 from flax.nnx import spmd
 from flax.nnx import traversals
-from flax.nnx import variablelib as variableslib
+from flax.nnx import variablelib
 from flax.nnx.module import GraphDef
 import typing as tp
 
@@ -29,56 +29,9 @@ A = TypeVar('A')
 B = TypeVar('B')
 
 
-#######################################################
-### Variable type <-> Linen collection name mapping ###
-#######################################################
-# Assumption: the mapping is 1-1 and unique.
-
-VariableTypeCache: dict[str, tp.Type[variableslib.Variable[tp.Any]]] = {}
-
-
-def variable_type(name: str) -> tp.Type[variableslib.Variable[tp.Any]]:
-  """Given a Linen-style collection name, get or create its corresponding NNX Variable type."""
-  if name not in VariableTypeCache:
-    VariableTypeCache[name] = type(name, (variableslib.Variable,), {})
-  return VariableTypeCache[name]
-
-
-def variable_type_name(typ: tp.Type[variableslib.Variable[tp.Any]]) -> str:
-  """Given an NNX Variable type, get or create its Linen-style collection name.
-
-  Should output the exact inversed result of `variable_type()`."""
-  for name, t in VariableTypeCache.items():
-    if typ == t:
-      return name
-  name = typ.__name__
-  if name in VariableTypeCache:
-    raise ValueError(
-      'Name {name} is already registered in the registry as {VariableTypeCache[name]}. '
-      'It cannot be linked with this type {typ}.'
-    )
-  register_variable_name_type_pair(name, typ)
-  return name
-
-
-def register_variable_name_type_pair(name, typ, overwrite = False):
-  """Register a pair of Linen collection name and its NNX type."""
-  if not overwrite and name in VariableTypeCache:
-    raise ValueError(f'Name {name} already mapped to type {VariableTypeCache[name]}. '
-                     'To overwrite, call register_variable_name_type_pair() with `overwrite=True`.')
-  VariableTypeCache[name] = typ
-
-
-# add known variable type names
-register_variable_name_type_pair('params', variableslib.Param)
-register_variable_name_type_pair('batch_stats', variableslib.BatchStat)
-register_variable_name_type_pair('cache', variableslib.Cache)
-register_variable_name_type_pair('intermediates', variableslib.Intermediate)
-
-
 def sort_variable_types(types: tp.Iterable[type]):
   def _variable_parents_count(t: type):
-    return sum(1 for p in t.mro() if issubclass(p, variableslib.Variable))
+    return sum(1 for p in t.mro() if issubclass(p, variablelib.Variable))
   parent_count = {t: _variable_parents_count(t) for t in types}
   return sorted(types, key=lambda t: -parent_count[t])
 
@@ -91,7 +44,7 @@ def sort_variable_types(types: tp.Iterable[type]):
 class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
   """Default Flax metadata class for `nnx.VariableState`."""
 
-  var_type: type[variableslib.Variable[tp.Any]] = struct.field(pytree_node=False)
+  var_type: type[variablelib.Variable[tp.Any]] = struct.field(pytree_node=False)
   value: Any = struct.field(pytree_node=True)
   metadata: dict[str, tp.Any] = struct.field(pytree_node=False)
 
@@ -114,11 +67,11 @@ class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
     nnx_var = self.to_nnx_variable().to_state()
     return spmd.get_partition_spec(nnx_var).value
 
-  def to_nnx_variable(self) -> variableslib.Variable:
+  def to_nnx_variable(self) -> variablelib.Variable:
     return self.var_type(self.value, **self.metadata)
 
 
-def is_vanilla_variable(vs: variableslib.VariableState) -> bool:
+def is_vanilla_variable(vs: variablelib.VariableState) -> bool:
   """A variables state is vanilla if its metadata is essentially blank.
 
   Returns False only if it has non-empty hooks or any non-built-in attribute.
@@ -132,7 +85,7 @@ def is_vanilla_variable(vs: variableslib.VariableState) -> bool:
   return True
 
 
-def to_linen_var(vs: variableslib.VariableState) -> meta.AxisMetadata:
+def to_linen_var(vs: variablelib.VariableState) -> meta.AxisMetadata:
   metadata = vs.get_metadata()
   if 'linen_meta_type' in metadata:
     linen_type = metadata['linen_meta_type']
@@ -151,9 +104,9 @@ def get_col_name(keypath: tp.Sequence[Any]) -> str:
   return str(keypath[0].key)
 
 
-def to_nnx_var(col: str, x: meta.AxisMetadata | Any) -> variableslib.Variable:
+def to_nnx_var(col: str, x: meta.AxisMetadata | Any) -> variablelib.Variable:
   """Convert a Linen variable to an NNX variable."""
-  vtype = variable_type(col)
+  vtype = variablelib.variable_type_from_name(col)
   if isinstance(x, NNXMeta):
     assert vtype == x.var_type, f'Type stored in NNXMeta {x.var_type} != type inferred from collection name {vtype}'
     return x.to_nnx_variable()
@@ -196,14 +149,14 @@ def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
   for kp, v in traversals.flatten_mapping(
       nnx_attrs,
       is_leaf=lambda _, x: isinstance(
-          x, variableslib.Variable | variableslib.VariableState | GraphDef
+          x, variablelib.Variable | variablelib.VariableState | GraphDef
       ),
   ).items():
-    if isinstance(v, variableslib.Variable):
-      col_name = variable_type_name(type(v))
+    if isinstance(v, variablelib.Variable):
+      col_name = variablelib.variable_name_from_type(type(v))
       v = to_linen_var(v.to_state())
-    elif isinstance(v, variableslib.VariableState):
-      col_name = variable_type_name(v.type)
+    elif isinstance(v, variablelib.VariableState):
+      col_name = variablelib.variable_name_from_type(v.type)
       v = to_linen_var(v)
     else:
       col_name = 'nnx'  # it must be an nnx.GraphDef, for some ToLinen submodule

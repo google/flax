@@ -20,4 +20,3 @@ from .wrappers import lazy_init as lazy_init
 from .wrappers import ToLinen as ToLinen
 from .wrappers import to_linen as to_linen
 from .variables import NNXMeta as NNXMeta
-from .variables import register_variable_name_type_pair as register_variable_name_type_pair
