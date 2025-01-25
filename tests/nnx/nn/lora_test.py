@@ -41,7 +41,7 @@ class TestLora(absltest.TestCase):
     assert y.shape == (1, 4)
     assert module.base_module == linear
     assert module.base_module.kernel.value.shape == (3, 4)
-    assert module.base_module.bias.value == None
+    assert module.base_module.bias == None
     assert module.lora_a.value.shape == (3, 2)
     assert module.lora_b.value.shape == (2, 4)
     np.testing.assert_allclose(
