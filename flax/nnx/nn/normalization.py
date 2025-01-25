@@ -287,17 +287,19 @@ class BatchNorm(Module):
     self.mean = nnx.BatchStat(jnp.zeros(feature_shape, jnp.float32))
     self.var = nnx.BatchStat(jnp.ones(feature_shape, jnp.float32))
 
+    self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
       self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
     else:
-      self.scale = nnx.Param(None)
+      self.scale = None
 
+    self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
       self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
     else:
-      self.bias = nnx.Param(None)
+      self.bias = None
 
     self.num_features = num_features
     self.use_running_average = use_running_average
@@ -368,8 +370,8 @@ class BatchNorm(Module):
       x,
       mean,
       var,
-      self.scale.value,
-      self.bias.value,
+      self.scale.value if self.scale else None,
+      self.bias.value if self.bias else None,
       reduction_axes,
       feature_axes,
       self.dtype,
@@ -454,17 +456,19 @@ class LayerNorm(Module):
   ):
     feature_shape = (num_features,)
 
+    self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
       self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
     else:
-      self.scale = nnx.Param(None)
+      self.scale = None
 
+    self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
       self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
     else:
-      self.bias = nnx.Param(None)
+      self.bias = None
 
     self.num_features = num_features
     self.epsilon = epsilon
@@ -503,8 +507,8 @@ class LayerNorm(Module):
       x,
       mean,
       var,
-      self.scale.value,
-      self.bias.value,
+      self.scale.value if self.scale else None,
+      self.bias.value if self.bias else None,
       self.reduction_axes,
       self.feature_axes,
       self.dtype,
@@ -582,11 +586,12 @@ class RMSNorm(Module):
   ):
     feature_shape = (num_features,)
 
+    self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
       self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
     else:
-      self.scale = nnx.Param(None)
+      self.scale = None
 
     self.num_features = num_features
     self.epsilon = epsilon
@@ -624,7 +629,7 @@ class RMSNorm(Module):
       x,
       mean,
       var,
-      self.scale.value,
+      self.scale.value if self.scale else None,
       None,
       self.reduction_axes,
       self.feature_axes,
@@ -757,17 +762,19 @@ class GroupNorm(Module):
       self.group_size = num_features // num_groups
 
     feature_shape = (num_features,)
+    self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
       self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
     else:
-      self.scale = nnx.Param(None)
+      self.scale = None
 
+    self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
       self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
     else:
-      self.bias = nnx.Param(None)
+      self.bias = None
 
     self.epsilon = epsilon
     self.dtype = dtype
@@ -822,8 +829,8 @@ class GroupNorm(Module):
       x,
       mean,
       var,
-      self.scale.value,
-      self.bias.value,
+      self.scale.value if self.scale else None,
+      self.bias.value if self.bias else None,
       reduction_axes[:-1],
       (self.feature_axis,),
       self.dtype,
