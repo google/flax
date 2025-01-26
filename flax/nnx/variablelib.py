@@ -44,8 +44,6 @@ AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
-VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
-
 
 
 @dataclasses.dataclass
@@ -966,3 +964,51 @@ def split_flat_state(
       )
 
   return flat_states
+
+
+
+###################################################
+### Variable type/class <-> string name mapping ###
+###################################################
+# Assumption: the mapping is 1-1 and unique.
+
+VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
+
+
+def variable_type_from_name(name: str) -> tp.Type[Variable[tp.Any]]:
+  """Given a Linen-style collection name, get or create its NNX Variable class."""
+  if name not in VariableTypeCache:
+    VariableTypeCache[name] = type(name, (Variable,), {})
+  return VariableTypeCache[name]
+
+
+def variable_name_from_type(typ: tp.Type[Variable[tp.Any]]) -> str:
+  """Given an NNX Variable type, get its Linen-style collection name.
+
+  Should output the exact inversed result of `variable_type_from_name()`."""
+  for name, t in VariableTypeCache.items():
+    if typ == t:
+      return name
+  name = typ.__name__
+  if name in VariableTypeCache:
+    raise ValueError(
+      'Name {name} is already registered in the registry as {VariableTypeCache[name]}. '
+      'It cannot be linked with this type {typ}.'
+    )
+  register_variable_name_type_pair(name, typ)
+  return name
+
+
+def register_variable_name_type_pair(name, typ, overwrite = False):
+  """Register a pair of Linen collection name and its NNX type."""
+  if not overwrite and name in VariableTypeCache:
+    raise ValueError(f'Name {name} already mapped to type {VariableTypeCache[name]}. '
+                     'To overwrite, call register_variable_name_type_pair() with `overwrite=True`.')
+  VariableTypeCache[name] = typ
+
+
+# add known variable type names
+register_variable_name_type_pair('params', Param)
+register_variable_name_type_pair('batch_stats', BatchStat)
+register_variable_name_type_pair('cache', Cache)
+register_variable_name_type_pair('intermediates', Intermediate)
