@@ -210,6 +210,7 @@ class LinearGeneral(Module):
       kernel_init_wrap(rngs.params(), kernel_shape, self.param_dtype)
     )
 
+    self.bias: nnx.Param[jax.Array] | None
     if self.use_bias:
 
       def bias_init_wrap(rng, shape, dtype):
@@ -226,7 +227,7 @@ class LinearGeneral(Module):
         bias_init_wrap(rngs.params(), bias_shape, self.param_dtype)
       )
     else:
-      self.bias = nnx.Param(None)
+      self.bias = None
 
   def __call__(self, inputs: Array) -> Array:
     """Applies a linear transformation to the inputs along multiple dimensions.
@@ -251,7 +252,7 @@ class LinearGeneral(Module):
       if ax not in axis
     )
     kernel = self.kernel.value
-    bias = self.bias.value
+    bias = self.bias.value if self.bias is not None else None
 
     batch_ind = tuple(range(n_batch_dims))
     contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
@@ -333,11 +334,12 @@ class Linear(Module):
     self.kernel = nnx.Param(
       kernel_init(kernel_key, (in_features, out_features), param_dtype)
     )
+    self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       bias_key = rngs.params()
       self.bias = nnx.Param(bias_init(bias_key, (out_features,), param_dtype))
     else:
-      self.bias = nnx.Param(None)
+      self.bias = None
 
     self.in_features = in_features
     self.out_features = out_features
@@ -359,7 +361,7 @@ class Linear(Module):
       The transformed input.
     """
     kernel = self.kernel.value
-    bias = self.bias.value
+    bias = self.bias.value if self.bias is not None else None
 
     inputs, kernel, bias = dtypes.promote_dtype(
       (inputs, kernel, bias), dtype=self.dtype
@@ -644,12 +646,13 @@ class Conv(Module):
     self.kernel_shape = kernel_shape
     self.kernel = nnx.Param(kernel_init(kernel_key, kernel_shape, param_dtype))
 
+    self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       bias_shape = (out_features,)
       bias_key = rngs.params()
       self.bias = nnx.Param(bias_init(bias_key, bias_shape, param_dtype))
     else:
-      self.bias = nnx.Param(None)
+      self.bias = None
 
     self.in_features = in_features
     self.out_features = out_features
@@ -755,7 +758,7 @@ class Conv(Module):
     if self.mask is not None:
       kernel *= self.mask
 
-    bias = self.bias.value
+    bias = self.bias.value if self.bias is not None else None
 
     inputs, kernel, bias = dtypes.promote_dtype(
       (inputs, kernel, bias), dtype=self.dtype
