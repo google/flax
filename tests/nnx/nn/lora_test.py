@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import jax
-import jax.numpy as jnp
 from absl.testing import absltest
 import numpy as np
 
@@ -69,7 +68,7 @@ class TestLora(absltest.TestCase):
 
     assert y.shape == (1, 3)
     assert lora_y.shape == (1, 3)
-    assert not jnp.allclose(y, lora_y)
+    np.testing.assert_allclose(y, lora_y)
     a, b = model.linear2.lora_a.value, model.linear2.lora_b.value
     np.testing.assert_allclose(y + model.linear1(x) @ a @ b, lora_y)
 
@@ -98,7 +97,7 @@ class TestLora(absltest.TestCase):
 
     assert y.shape == (1, 3)
     assert lora_y.shape == (1, 3)
-    assert not jnp.allclose(y, lora_y)
+    np.testing.assert_allclose(y, lora_y)
     a, b = model.linear2.lora.lora_a.value, model.linear2.lora.lora_b.value
     np.testing.assert_allclose(y + model.linear1(x) @ a @ b, lora_y)
 
