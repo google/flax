@@ -14,13 +14,12 @@
 # ============================================================================å
 """Tests for the DeepSeek model."""
 
-from typing import Literal
 
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
 import model as model_lib
-import model_pytorch as model_lib_pytorch
+import model_pytorch as model_lib_pt
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -32,92 +31,170 @@ def bf16_pt_to_jax(pt_tensor: torch.Tensor) -> jax.Array:
       pt_tensor.detach().to(torch.float32).numpy().astype(jnp.bfloat16)
   )
 
+def to_jax(pt_tensor: torch.Tensor, /) -> jax.Array:
+  return jnp.asarray(pt_tensor.detach().numpy())
+
 
 class ModelTest(parameterized.TestCase):
+  def _copy_rs_norm_weights(
+    self, model_jax: model_lib.RMSNorm, model_pt: model_lib_pt.DeepseekV3RMSNorm
+  ):
+    model_jax.weight.value = to_jax(model_pt.weight)
 
-  def test_parallel_embedding_parity(self):
-    vocab_size = 100
-    dim = 64
-    batch_size = 2
-    seq_len = 10
-    config = model_lib.ModelArgs(vocab_size=vocab_size, dim=dim)
-
-    # Create PyTorch embedding
-    embedding_pytorch = model_lib_pytorch.ParallelEmbedding(vocab_size, dim)
-    input_pytorch = torch.randint(0, vocab_size, (batch_size, seq_len))
-    output_pytorch = embedding_pytorch(input_pytorch)
-
-    # Create Flax embedding
-    embedding_flax = model_lib.ParallelEmbedding(config, dim)
-    input_flax = jnp.array(input_pytorch.detach().numpy())
-
-    # Copy weights from PyTorch to Flax
-    embedding_flax.weight.value = jnp.array(
-        embedding_pytorch.weight.detach().numpy()
-    )
-
-    # Run Flax embedding
-    output_flax = embedding_flax(input_flax)
-
-    # Compare outputs
-    self.assertTrue(
-        jnp.allclose(output_flax, jnp.array(output_pytorch.detach().numpy()))
-    )
-
-  def test_linear_parity_bf16(self):
-    gemm_impl = "bf16"
-    in_features = 6
-    out_features = 7
-    config = model_lib.ModelArgs(gemm_impl=gemm_impl)
-
-    x_pytorch = torch.rand(in_features).to(torch.bfloat16)
-    linear_pytorch = model_lib_pytorch.ColumnParallelLinear(
-        in_features=in_features, out_features=out_features, bias=True
-    )
-    linear_pytorch.weight.data = torch.rand(out_features, in_features).to(
-        torch.bfloat16
-    )
-    linear_pytorch.bias.data = torch.rand(out_features).to(torch.bfloat16)
-    y_pytorch = linear_pytorch(x_pytorch)
-
-    # jax
-    x_jax = bf16_pt_to_jax(x_pytorch)
-    linear_jax = model_lib.ColumnParallelLinear(
-        in_features=in_features,
-        out_features=out_features,
-        bias=True,
-        config=config,
-    )
-    linear_jax.weight.value = bf16_pt_to_jax(linear_pytorch.weight).T
-    linear_jax.bias.value = bf16_pt_to_jax(linear_pytorch.bias)
-    y_jax = linear_jax(x_jax)
-
-    np.testing.assert_allclose(
-        y_jax,
-        bf16_pt_to_jax(y_pytorch),
-        rtol=0.0072,
-    )
-
-  def test_linear_parity_bf16_fp8(self):
-    gemm_impl = "fp8"
-    in_features = 6
-    out_features = 7
-    config = model_lib.ModelArgs(gemm_impl=gemm_impl)
+  def test_rsnorm_parity(self):
+    """Tests that the RSNorm layer is implemented correctly."""
+    hidden_size = 16
 
     # pytorch
-    dtype_pytorch = torch.float8_e4m3fn
-    x_pytorch = torch.rand(in_features).to(torch.bfloat16)
-    linear_pytorch = model_lib_pytorch.ColumnParallelLinear(
-        in_features=in_features,
-        out_features=out_features,
-        dtype=dtype_pytorch,
-        bias=True,
+    model_pt = model_lib_pt.DeepseekV3RMSNorm(hidden_size)
+    x_pt = torch.randn(1, 5, hidden_size)
+    y_pt = model_pt(x_pt)
+
+    # jax
+    model_jax = model_lib.RMSNorm(hidden_size)
+    self._copy_rs_norm_weights(model_jax, model_pt)
+    x_jax = to_jax(x_pt)
+    y_jax = model_jax(x_jax)
+
+    np.testing.assert_allclose(to_jax(y_pt), y_jax, atol=1e-3)
+
+  def _copy_embedding_weights(
+    self,
+    model_jax: model_lib.YarnRotaryEmbedding,
+    model_pt: model_lib_pt.DeepseekV3YarnRotaryEmbedding,
+  ):
+    model_jax.inv_freq.value = to_jax(model_pt.inv_freq)
+    model_jax.cos_cached.value = to_jax(model_pt.cos_cached)
+    model_jax.sin_cached.value = to_jax(model_pt.sin_cached)
+
+  def test_rotary_embedding(self):
+    hidden_dim = 32
+    seq_len = 8
+
+    # pytorch
+    model_pt = model_lib_pt.DeepseekV3YarnRotaryEmbedding(
+      dim=hidden_dim, max_position_embeddings=128, base=10000
     )
-    linear_pytorch.weight.data = torch.rand(out_features, in_features).to(
-        dtype_pytorch
+    x_pt = torch.randn(2, seq_len, hidden_dim)
+    cos_pt, sin_pt = model_pt(x_pt, seq_len=seq_len)
+
+    # jax
+    model_jax = model_lib.YarnRotaryEmbedding(hidden_dim, 128, 10000)
+    self._copy_embedding_weights(model_jax, model_pt)
+    x_jax = to_jax(x_pt)
+    cos_jax, sin_jax = model_jax(x_jax, seq_len=seq_len)
+
+    np.testing.assert_allclose(to_jax(cos_pt), cos_jax, atol=1e-3)
+    np.testing.assert_allclose(to_jax(sin_pt), sin_jax, atol=1e-3)
+
+  def _copy_mlp_weights(
+    self, model_jax: model_lib.MLP, model_pt: model_lib_pt.DeepseekV3MLP
+  ):
+    model_jax.gate_proj.kernel.value = to_jax(model_pt.gate_proj.weight).T
+    model_jax.up_proj.kernel.value = to_jax(model_pt.up_proj.weight).T
+    model_jax.down_proj.kernel.value = to_jax(model_pt.down_proj.weight).T
+
+  def test_mlp_parity(self):
+    """Tests that the MLP layer is implemented correctly."""
+    hidden_size = 16
+    mlp_dim = 32
+    config = model_lib.Config()
+
+    # pytorch
+    model_pt = model_lib_pt.DeepseekV3MLP(config, hidden_size, mlp_dim)
+    x_pt = torch.randn(1, 5, hidden_size)
+    y_pt = model_pt(x_pt)
+
+    # jax
+    model_jax = model_lib.MLP(config, hidden_size, mlp_dim, rngs=nnx.Rngs(0))
+    self._copy_mlp_weights(model_jax, model_pt)
+    x_jax = to_jax(x_pt)
+    y_jax = model_jax(x_jax)
+
+    np.testing.assert_allclose(to_jax(y_pt), y_jax, atol=1e-3)
+
+  def _copy_moe_gate_weights(
+    self, model_jax: model_lib.MoEGate, model_pt: model_lib_pt.MoEGate
+  ):
+    model_jax.weight.value = to_jax(model_pt.weight).T
+    if model_jax.e_score_correction_bias is not None:
+      model_jax.e_score_correction_bias.value = to_jax(
+        model_pt.e_score_correction_bias
+      )
+
+  def test_moe_gate_parity(self):
+    """Tests that the MoEGate layer is implemented correctly."""
+
+    config = model_lib.Config(
+      n_routed_experts=8,
+      hidden_size=16,
+      n_group=4,
+      topk_group=2,
     )
-    linear_pytorch.bias.data = torch.rand(out_features).to(dtype_pytorch)
-    y_pytorch = linear_pytorch(x_pytorch)
+    # pytorch
+    model_pt = model_lib_pt.MoEGate(config)
+    model_pt.eval()
+    x_pt = torch.randn(1, 12, 16)
+    topk_idx_pt, topk_weight_pt = model_pt(x_pt)
+    topk_idx_pt, topk_weight_pt = to_jax(topk_idx_pt), to_jax(topk_weight_pt)
+
+    # sort pytorch output
+    idxs_pt = jnp.argsort(topk_idx_pt, axis=-1)
+    topk_idx_pt = jnp.take_along_axis(topk_idx_pt, idxs_pt, axis=-1)
+    topk_weight_pt = jnp.take_along_axis(topk_weight_pt, idxs_pt, axis=-1)
+
+    # jax
+    model_jax = model_lib.MoEGate(config, rngs=nnx.Rngs(0))
+    self._copy_moe_gate_weights(model_jax, model_pt)
+    x_jax = to_jax(x_pt)
+    topk_idx_jax, topk_weight_jax = model_jax(x_jax)
+
+    # sort jax output
+    idxs_jax = jnp.argsort(topk_idx_jax, axis=-1)
+    topk_idx_jax = jnp.take_along_axis(topk_idx_jax, idxs_jax, axis=-1)
+    topk_weight_jax = jnp.take_along_axis(topk_weight_jax, idxs_jax, axis=-1)
+
+    np.testing.assert_allclose(topk_idx_pt, topk_idx_jax, atol=1e-3)
+    np.testing.assert_allclose(topk_weight_pt, topk_weight_jax, atol=1e-3)
+
+  def _copy_moe_weights(
+    self, jax_model: model_lib.MoE, pt_model: model_lib_pt.DeepseekV3MoE
+  ):
+    for expert_jax, expert_pt in zip(jax_model.experts, pt_model.experts):
+      assert isinstance(expert_pt, model_lib_pt.DeepseekV3MLP)
+      self._copy_mlp_weights(expert_jax, expert_pt)
+
+    if jax_model.shared_experts is not None:
+      self._copy_mlp_weights(jax_model.shared_experts, pt_model.shared_experts)
+
+    self._copy_moe_gate_weights(jax_model.gate, pt_model.gate)
+
+  def test_moe_parity(self):
+    """Tests that the Moe layer is implemented correctly."""
+
+    batch_size = 4
+    seq_len = 10
+    config = model_lib.Config(
+      n_routed_experts=12,
+      hidden_size=16,
+      n_group=4,
+      topk_group=2,
+      num_experts_per_tok=3,
+    )
+    # pytorch
+    model_pt = model_lib_pt.DeepseekV3MoE(config)
+    model_pt.eval()
+    x_pt = torch.randn(batch_size, seq_len, config.hidden_size)
+    y_pt = model_pt(x_pt)
+
+    # jax
+    model_jax = model_lib.MoE(config, rngs=nnx.Rngs(0))
+
+    self._copy_moe_weights(model_jax, model_pt)
+    x_jax = to_jax(x_pt)
+    y_jax = model_jax(x_jax)
+
+    np.testing.assert_allclose(to_jax(y_pt), y_jax, atol=1e-3)
 
 
 if __name__ == "__main__":

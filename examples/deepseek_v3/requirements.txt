@@ -1,0 +1,3 @@
+transformers==4.46.3
+einop
+einx

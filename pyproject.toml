@@ -185,6 +185,8 @@ filterwarnings = [
     "ignore:.*divide by zero encountered in.*:RuntimeWarning",
     # DeprecationWarning: numpy.core is deprecated
     "ignore:.*numpy.core is deprecated.*:DeprecationWarning",
+    # MatplotlibDeprecationWarning:
+    "ignore:.*The non_interactive_bk attribute was deprecated.*:Warning",
 ]
 
 [tool.coverage.report]
@@ -206,7 +208,7 @@ exclude = [
   "activation.py",
   "partitioning.py",
   "flax/core/variables.py",
-  "examples/",
+#   "examples/",
 ]
 
 line-length = 80
