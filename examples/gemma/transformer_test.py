@@ -14,6 +14,7 @@
 # ============================================================================
 """Tests for the Gemma transformer."""
 
+from collections import defaultdict
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
@@ -21,6 +22,64 @@ import modules
 import transformer as transformer_lib
 import jax.numpy as jnp
 import numpy as np
+
+
+def create_fake_params(config: transformer_lib.TransformerConfig):
+  def nested_defaultdict():
+    return defaultdict(nested_defaultdict)
+
+  res = nested_defaultdict()
+  res['transformer'] = nested_defaultdict()
+  params = res['transformer']
+  # 1. embedding params
+  params['embedder']['input_embedding'] = jnp.ones(
+      (config.num_embed, config.embed_dim)
+  )
+  # 2. final norm params
+  params['final_norm'] = {'scale': jnp.ones((config.embed_dim,))}
+
+  # 3. attention block params
+  for layer_idx in range(config.num_layers):
+    params[f'layer_{layer_idx}']['attn']['attn_vec_einsum']['w'] = jnp.ones(
+        (config.num_heads, config.head_dim, config.embed_dim)
+    )
+    if config.num_heads == config.num_kv_heads:
+      params[f'layer_{layer_idx}']['attn']['qkv_einsum']['w'] = jnp.ones(
+          (3, config.num_heads, config.embed_dim, config.head_dim)
+      )
+    else:
+      params[f'layer_{layer_idx}']['attn']['q_einsum']['w'] = jnp.ones(
+          (config.num_heads, config.embed_dim, config.head_dim)
+      )
+      params[f'layer_{layer_idx}']['attn']['kv_einsum']['w'] = jnp.ones(
+          (config.num_kv_heads, config.embed_dim, config.head_dim)
+      )
+
+    # 4. feedforward block params
+    params[f'layer_{layer_idx}']['mlp']['gating_einsum'] = jnp.ones(
+        (2, config.embed_dim, config.hidden_dim)
+    )
+    params[f'layer_{layer_idx}']['mlp']['linear'] = jnp.ones(
+        (config.hidden_dim, config.embed_dim)
+    )
+
+    # 5. layer norm params
+    params[f'layer_{layer_idx}']['pre_attention_norm']['scale'] = jnp.ones((
+        config.embed_dim,
+    ))
+    params[f'layer_{layer_idx}']['pre_ffw_norm']['scale'] = jnp.ones((
+        config.embed_dim,
+    ))
+
+    if config.use_post_attn_norm:
+      params[f'layer_{layer_idx}']['post_attn_norm']['scale'] = jnp.ones((
+          config.embed_dim,
+      ))
+    if config.use_post_ffw_norm:
+      params[f'layer_{layer_idx}']['post_ffw_norm']['scale'] = jnp.ones((
+          config.embed_dim,
+      ))
+  return res
 
 
 class TransformerTest(parameterized.TestCase):
@@ -289,6 +348,49 @@ class TransformerTest(parameterized.TestCase):
         dtype=jnp.float32,
     )
     self.assertTrue(cache)
+
+  @parameterized.parameters(
+      dict(
+          config=transformer_lib.TransformerConfig(
+              num_layers=2,
+              num_embed=4,
+              embed_dim=2,
+              hidden_dim=12,
+              num_heads=3,
+              head_dim=4,
+              num_kv_heads=3,
+              final_logit_softcap=None,
+              attention_types=[modules.AttentionType.GLOBAL] * 2,
+              use_post_attn_norm=False,
+              use_post_ffw_norm=False,
+          ),
+      ),
+      dict(
+          config=transformer_lib.TransformerConfig(
+              num_layers=2,
+              num_embed=4,
+              embed_dim=2,
+              hidden_dim=12,
+              num_heads=3,
+              head_dim=4,
+              num_kv_heads=3,
+              final_logit_softcap=None,
+              attention_types=[modules.AttentionType.GLOBAL] * 2,
+              use_post_attn_norm=True,
+              use_post_ffw_norm=True,
+          ),
+      ),
+  )
+  def test_load_from_params(self, config):
+    params = create_fake_params(config)
+    transformer = transformer_lib.Transformer.from_params(params, config)
+    logits, _ = transformer(
+        last_tokens=jnp.tile(jnp.arange(3), (2, 1)),
+        positions=jnp.tile(jnp.arange(3), (2, 1)),
+        cache=None,
+        attention_mask=jnp.ones((2, 1, 3), dtype=jnp.bool),
+    )
+    self.assertEqual(logits.shape, (2, 3, 4))
 
 
 if __name__ == '__main__':

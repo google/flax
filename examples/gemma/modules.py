@@ -243,27 +243,36 @@ class FeedForward(nnx.Module):
       *,
       rngs: nnx.Rngs,
   ):
-    self.gating_einsum = nnx.Param(
-        nn.initializers.zeros_init()(
-            rngs.params(),
-            ((2, features, hidden_dim)),
-        )
+    self.gate_proj = nnx.Linear(
+        in_features=features,
+        out_features=hidden_dim,
+        use_bias=False,
+        rngs=rngs,
+        kernel_init=nn.initializers.zeros_init(),
     )
-    self.linear = nnx.Param(
-        nn.initializers.zeros_init()(
-            rngs.params(),
-            (hidden_dim, features),
-        )
+    self.up_proj = nnx.Linear(
+        in_features=features,
+        out_features=hidden_dim,
+        use_bias=False,
+        rngs=rngs,
+        kernel_init=nn.initializers.zeros_init(),
+    )
+    self.down_proj = nnx.Linear(
+        in_features=hidden_dim,
+        out_features=features,
+        use_bias=False,
+        rngs=rngs,
+        kernel_init=nn.initializers.zeros_init(),
     )
 
   def __call__(self, x: ArrayLike) -> Array:
-    ff_gate = jnp.dot(x, self.gating_einsum.value[0])
+    ff_gate = self.gate_proj(x)
     gate_value = nnx.gelu(ff_gate)
 
-    ff1 = jnp.dot(x, self.gating_einsum.value[1])
+    ff1 = self.up_proj(x)
     activations = gate_value * ff1
 
-    outputs = jnp.dot(activations, self.linear.value)
+    outputs = self.down_proj(activations)
     return outputs
 
 

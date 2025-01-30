@@ -16,8 +16,9 @@
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Iterable
+import dataclasses
+from typing import Any
 
 from flax import nnx
 import helpers
@@ -180,22 +181,45 @@ def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
       assert not prefix, prefix
       new_key.append('layers')
       new_key.append(int(suffix))
+    elif k == 'gating_einsum':
+      new_key.append('gate_proj')
+      new_key.append('kernel')
+    elif k == 'linear':
+      new_key.append('down_proj')
+      new_key.append('kernel')
     else:
       new_key.append(k)
 
   return tuple(new_key)
 
 
+def _assign_linen_params_to_nnx_state(
+    state: dict[tuple[str, ...], Any],
+    mapped_path: tuple[str | int, ...],
+    val: Any,
+) -> dict[tuple[str, ...], Any]:
+  if 'gate_proj' in mapped_path:
+    state[mapped_path].value = val[0]
+    state[mapped_path[:-2] + ('up_proj', 'kernel')].value = val[1]
+  else:
+    state[mapped_path].value = val
+  return state
+
+
 class Transformer(nnx.Module):
   """Gemma transformer."""
 
   @classmethod
-  def from_params(cls, params: params_lib.Params) -> Transformer:
-    config = TransformerConfig.from_params(params)
+  def from_params(
+      cls, params: params_lib.Params, config: None | TransformerConfig = None
+  ) -> Transformer:
+    if config is None:
+      config = TransformerConfig.from_params(params)
     return helpers.module_from_linen_variables(
         module_factory=lambda: cls(config, rngs=nnx.Rngs(params=0)),
         variables=params['transformer'],
         map_key_fn=_map_linen_var_names,
+        assign_val_fn=_assign_linen_params_to_nnx_state,
     )
 
   def __init__(self, config: TransformerConfig, *, rngs: nnx.Rngs):
