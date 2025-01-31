@@ -156,6 +156,7 @@ from .variablelib import A as A
 from .variablelib import BatchStat as BatchStat
 from .variablelib import Cache as Cache
 from .variablelib import Intermediate as Intermediate
+from .variablelib import Perturbation as Perturbation
 from .variablelib import Variable as Variable
 from .variablelib import VariableState as VariableState
 from .variablelib import VariableMetadata as VariableMetadata

@@ -140,7 +140,7 @@ def linen_vars_to_nnx_attrs(variables: tp.Mapping[str, Any]) -> dict[str, Any]:
         nnx_attrs[attr_name] = _recursive_merge(nnx_attrs[attr_name], value)
       else:
         nnx_attrs[attr_name] = value     # it's a variable on this layer
-  return nnx_attrs
+  return dict(nnx_attrs)
 
 
 def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:

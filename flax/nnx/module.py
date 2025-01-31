@@ -17,6 +17,8 @@ from __future__ import annotations
 import typing as tp
 from functools import partial
 
+import jax
+import jax.numpy as jnp
 import jax.tree_util as jtu
 
 from flax.nnx import (
@@ -182,6 +184,78 @@ class Module(Object, metaclass=ModuleMeta):
     else:
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
+
+  def perturb(
+    self,
+    name: str,
+    value: tp.Any,
+    variable_type: tp.Type[variableslib.Variable[tp.Any]] = variableslib.Perturbation,
+  ):
+    """Add an zero-value variable ("perturbation") to the intermediate value.
+
+    The gradient of ``value`` would be the same as the gradient of this
+    perturbation variable. Therefore, if you define your loss function with
+    both params and perturbations as standalone arguments, you can get the
+    intermediate gradients of ``value`` by running ``jax.grad`` on the
+    perturbation variable.
+
+    Since the shape of the perturbation value depends on the shape of the input,
+    a perturbation variable is only created after you run a sample input through
+    the model once.
+
+    .. note::
+      This creates extra dummy variables of the same size as ``value``, thus
+      occupies more memory. Use it only to debug gradients in training.
+
+    Example usage::
+
+      >>> from flax import nnx
+      >>> import jax.numpy as jnp
+
+      >>> class Model(nnx.Module):
+      ...   def __init__(self, rngs):
+      ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+      ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+      ...   def __call__(self, x):
+      ...     x = self.linear1(x)
+      ...     x = self.perturb('xgrad', x)
+      ...     x = self.linear2(x)
+      ...     return x
+
+      >>> x = jnp.ones((1, 2))
+      >>> y = jnp.ones((1, 4))
+      >>> model = Model(rngs=nnx.Rngs(0))
+      >>> assert not hasattr(model, 'xgrad')  # perturbation requires a sample input run
+      >>> _ = model(x)
+      >>> assert model.xgrad.value.shape == (1, 3)   # same as the intermediate value
+
+      >>> # Take gradients on the Param and Perturbation variables
+      >>> @nnx.grad(argnums=nnx.DiffState(argnum=0, filter=nnx.Any(nnx.Param, nnx.Perturbation)))
+      ... def grad_loss(model, inputs, targets):
+      ...   preds = model(inputs)
+      ...   return jnp.square(preds - targets).mean()
+
+      >>> intm_grads = grad_loss(model, x, y)
+      >>> # `intm_grads.xgrad.value` is the intermediate gradient
+      >>> assert not jnp.array_equal(intm_grads.xgrad.value, jnp.zeros((1, 3)))
+
+    Args:
+      name: A string denoting the ``Module`` attribute name for the
+        perturbation value.
+      value: The value to take intermediate gradient.
+      variable_type: The :class:`Variable` type for the stored perturbation.
+        Defaulted at :class:`nnx.Perturbation`.
+    """
+    if not hasattr(self, name):
+      zeros = jax.tree.map(jnp.zeros_like, value)
+      setattr(self, name, variable_type(zeros))
+    old_value = getattr(self, name)
+    if not isinstance(old_value, variable_type):
+      raise ValueError(
+        f"Expected '{name}' to be of type '{variable_type.__name__}', "
+        f"got '{type(old_value).__name__}'"
+      )
+    return old_value.value + value
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
     """Recursively iterates over all nested :class:`Module`'s of the current Module, including
