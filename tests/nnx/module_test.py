@@ -322,6 +322,43 @@ class TestModule(absltest.TestCase):
     with self.assertRaisesRegex(ValueError, 'to be of type'):
       m(2)
 
+  def test_perturb_basic(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(10, 10, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.perturb('before_multiply', x)
+        x = 4 * x
+        x = self.perturb('after_multiply', x)
+        return x
+
+    model = Foo(rngs=nnx.Rngs(0))
+    # Perturbations are not created in init time. It needs some sample input.
+    self.assertFalse(hasattr(model, 'before_multiply'))
+    self.assertFalse(hasattr(model, 'after_multiply'))
+
+    x = jax.random.uniform(jax.random.key(1), shape=(10,))
+    y = jax.random.uniform(jax.random.key(2), shape=(10,))
+    model(x)
+    np.testing.assert_array_equal(model.before_multiply, jnp.zeros_like(x))
+    np.testing.assert_array_equal(model.after_multiply, jnp.zeros_like(x))
+
+    take_gradient_filter = nnx.Any(nnx.Param, nnx.Perturbation)
+    @nnx.grad(argnums=nnx.DiffState(argnum=0, filter=take_gradient_filter))
+    def grad_loss(model, inputs, targets):
+      preds = model(inputs)
+      return jnp.square(preds - targets).mean()
+    intm_grads = grad_loss(model, x, y)
+
+    # Gradient should not be zero
+    self.assertFalse(jnp.array_equal(
+      intm_grads.before_multiply.value, jnp.zeros_like(x)))
+    # activation * 4 so reverse gradient also * 4
+    np.testing.assert_allclose(intm_grads.after_multiply.value * 4,
+                               intm_grads.before_multiply.value)
+
   def test_update_static_state_submodules(self):
     class Bar(nnx.Module):
       def __init__(self) -> None:

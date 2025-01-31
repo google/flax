@@ -747,6 +747,38 @@ class Intermediate(Variable[A]):
   pass
 
 
+class Perturbation(Intermediate[A]):
+  """:class:`Variable` type that is typically used for
+  :func:`Module.perturb`::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     x = self.linear1(x)
+    ...     x = self.perturb('i', x)
+    ...     x = self.linear2(x)
+    ...     return x
+    >>> model = Model(rngs=nnx.Rngs(0))
+
+    >>> x = jnp.ones((1, 2))
+    >>> y = model(x)
+    >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Perturbation))
+    State({
+      'i': VariableState(
+        type=Perturbation,
+        value=(1, 3)
+      )
+    })
+  """
+
+  pass
+
+
 class VariableState(tp.Generic[A], reprlib.Representable):
   __slots__ = ('type', 'value', '_var_metadata')
   type: type[Variable[A]]
@@ -1012,3 +1044,4 @@ register_variable_name_type_pair('params', Param)
 register_variable_name_type_pair('batch_stats', BatchStat)
 register_variable_name_type_pair('cache', Cache)
 register_variable_name_type_pair('intermediates', Intermediate)
+register_variable_name_type_pair('perturbations', Perturbation)
