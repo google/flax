@@ -141,8 +141,8 @@ collection.
 Modifying ``flax.linen.apply``
 ******************************
 
-When using :meth:`flax.linen.apply <flax.linen.apply>` to run your model with the ``train==True``
-argument (that is, you have ``use_running_average==False`` in the call to ``BatchNorm``), you
+When using :meth:`flax.linen.apply <flax.linen.apply>` to run your model with the ``train=True``
+argument (that is, you have ``use_running_average=False`` in the call to ``BatchNorm``), you
 need to consider the following:
 
 * ``batch_stats`` must be passed as an input variable.
