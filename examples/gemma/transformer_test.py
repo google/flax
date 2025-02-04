@@ -19,6 +19,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
 import modules
+import sow_lib
 import transformer as transformer_lib
 import jax.numpy as jnp
 import numpy as np
@@ -391,6 +392,129 @@ class TransformerTest(parameterized.TestCase):
         attention_mask=jnp.ones((2, 1, 3), dtype=jnp.bool),
     )
     self.assertEqual(logits.shape, (2, 3, 4))
+
+  @parameterized.parameters([
+      sow_lib.SowConfig(embeddings=True),
+      sow_lib.SowConfig(rs_after_attention=True),
+      sow_lib.SowConfig(rs_after_ffw=True),
+      sow_lib.SowConfig(attn_logits_topk=5),
+      sow_lib.SowConfig(mlp_hidden_topk=11),
+  ])
+  def test_sow_intermediates(self, sow_config):
+    batch_size = 3
+    sequence_length = 7
+    num_layers = 2
+    config = transformer_lib.TransformerConfig(
+        num_layers=num_layers,
+        num_embed=4,
+        embed_dim=48,
+        hidden_dim=12,
+        num_heads=1,
+        head_dim=4,
+        num_kv_heads=1,
+        final_logit_softcap=None,
+        use_post_attn_norm=False,
+        use_post_ffw_norm=False,
+        attention_types=[modules.AttentionType.GLOBAL] * num_layers,
+    )
+    attention_mask = jnp.ones(
+        (batch_size, sequence_length, sequence_length), dtype=jnp.bool
+    )
+    transformer = transformer_lib.Transformer(
+        config=config, rngs=nnx.Rngs(params=0), sow_config=sow_config
+    )
+    transformer(
+        jnp.tile(jnp.arange(sequence_length), (batch_size, 1)),
+        jnp.tile(jnp.arange(sequence_length), (batch_size, 1)),
+        None,
+        attention_mask,
+    )
+
+    if sow_config.embeddings:
+      self.assertTrue(hasattr(transformer, 'embeddings'))
+      embeddings = transformer.embeddings.value[0]
+      self.assertEqual(
+          embeddings.shape,
+          (batch_size, sequence_length, config.embed_dim),
+      )
+    else:
+      self.assertFalse(hasattr(transformer, 'embeddings'))
+
+    for layer in transformer.layers:
+      if sow_config.rs_after_attention:
+        self.assertTrue(hasattr(layer, 'rs_after_attention'))
+        rs_after_attention = layer.rs_after_attention.value[0]
+        self.assertIsNotNone(rs_after_attention)
+        self.assertEqual(
+            rs_after_attention.shape,
+            (batch_size, sequence_length, config.embed_dim),
+        )
+      else:
+        self.assertFalse(hasattr(layer, 'rs_after_attention'))
+      if sow_config.rs_after_ffw:
+        self.assertTrue(hasattr(layer, 'rs_after_ffw'))
+        rs_after_ffw = layer.rs_after_ffw.value[0]
+        self.assertIsNotNone(rs_after_ffw)
+        self.assertEqual(
+            rs_after_ffw.shape,
+            (batch_size, sequence_length, config.embed_dim),
+        )
+      else:
+        self.assertFalse(hasattr(layer, 'rs_after_ffw'))
+      if sow_config.attn_logits_topk:
+        self.assertTrue(hasattr(layer.attn, 'logits_topk_values'))
+        attn_logits_topk_values = layer.attn.logits_topk_values.value[0]
+        self.assertIsNotNone(attn_logits_topk_values)
+        self.assertEqual(
+            attn_logits_topk_values.shape,
+            (
+                batch_size,
+                sequence_length,
+                config.num_heads,
+                sow_config.attn_logits_topk,
+            ),
+        )
+        self.assertTrue(hasattr(layer.attn, 'logits_topk_indices'))
+        attn_logits_topk_indices = layer.attn.logits_topk_indices.value[0]
+        self.assertIsNotNone(attn_logits_topk_indices)
+        self.assertEqual(
+            attn_logits_topk_indices.shape,
+            (
+                batch_size,
+                sequence_length,
+                config.num_heads,
+                sow_config.attn_logits_topk,
+            ),
+        )
+      else:
+        self.assertFalse(hasattr(layer.attn, 'logits_topk_values'))
+        self.assertFalse(hasattr(layer.attn, 'logits_topk_indices'))
+      if sow_config.mlp_hidden_topk:
+        self.assertTrue(hasattr(layer.mlp, 'hidden_topk_values'))
+        ffw_hidden_topk_values = layer.mlp.hidden_topk_values.value[0]
+        self.assertIsNotNone(ffw_hidden_topk_values)
+        self.assertEqual(
+            ffw_hidden_topk_values.shape,
+            (
+                batch_size,
+                sequence_length,
+                sow_config.mlp_hidden_topk,
+            ),
+        )
+        self.assertTrue(hasattr(layer.mlp, 'hidden_topk_indices'))
+        ffw_hidden_topk_indices = layer.mlp.hidden_topk_indices.value[0]
+        self.assertIsNotNone(ffw_hidden_topk_indices)
+        self.assertEqual(
+            ffw_hidden_topk_indices.shape,
+            (
+                batch_size,
+                sequence_length,
+                sow_config.mlp_hidden_topk,
+            ),
+        )
+      else:
+        self.assertFalse(hasattr(layer.mlp, 'hidden_topk_values'))
+        self.assertFalse(hasattr(layer.mlp, 'hidden_topk_indices'))
 
 
 if __name__ == '__main__':

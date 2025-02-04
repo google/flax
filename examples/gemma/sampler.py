@@ -25,6 +25,7 @@ import dataclasses
 import chex
 from flax import nnx
 import modules
+import sow_lib
 import transformer as transformer_lib
 import jax
 import jax.numpy as jnp
@@ -90,9 +91,13 @@ class _SamplingState:
   # List of tokens that are forbidden to be generated.
   forbidden_token_ids: Sequence[int] | None = None
 
+  # Intermediate activations from the model if requested.
+  intermediates: sow_lib.TransformerIntermediates | None = None
+
 
 @dataclasses.dataclass
 class SamplerOutput:
+  """Output of the sampler."""
 
   # Decoded samples from the model.
   text: list[str]
@@ -102,6 +107,9 @@ class SamplerOutput:
 
   # Tokens corresponding to the generated samples.
   tokens: list[list[int]]
+
+  # Intermediate activations from the model if requested.
+  intermediates: sow_lib.TransformerIntermediates | None = None
 
 
 class Sampler:
@@ -118,7 +126,6 @@ class Sampler:
     Args:
       transformer: an instance of the Gemma transformer.
       vocab: vocabulary of the given model.
-      params: weights of the model.
       cache_size: size of the cache for the transformer.
     """
     self.transformer = transformer
@@ -175,6 +182,9 @@ class Sampler:
     else:
       logits_buffer = sampler_state.logits_buffer
 
+    if sampler_state.intermediates is not None:
+      sampler_state.intermediates.merge(decoding_step, self.transformer)
+
     done = sampler_state.done | jnp.equal(
         token_buffer[:, decoding_step + 1], self.vocab.eos_id()
     )
@@ -189,6 +199,7 @@ class Sampler:
         done=done,
         total_sampling_steps=sampler_state.total_sampling_steps,
         forbidden_token_ids=sampler_state.forbidden_token_ids,
+        intermediates=sampler_state.intermediates,
     )
 
   def init_sample_state(
@@ -245,6 +256,9 @@ class Sampler:
         done=done,
         total_sampling_steps=total_sampling_steps,
         forbidden_token_ids=forbidden_token_ids,
+        intermediates=self.transformer.init_intermediates(
+            batch_size, buffer_size, self.transformer.sow_config
+        ),
     )
 
   def tokenize(self, input_string: str) -> jax.Array:
@@ -356,9 +370,13 @@ class Sampler:
 
     decoded_outputs = [self.vocab.DecodeIds(tokens) for tokens in out_tokens]
 
+    if sampling_state.intermediates is not None:
+      sampling_state.intermediates.trim(total_sampling_steps)
+
     result = SamplerOutput(
         text=decoded_outputs,
         logits=out_logits,
         tokens=out_tokens,
+        intermediates=sampling_state.intermediates,
     )
     return result

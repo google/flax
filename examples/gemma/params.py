@@ -14,9 +14,9 @@
 # ============================================================================
 """Utils for loading Gemma params."""
 
+from collections.abc import Mapping
 import functools
 from typing import Any
-from collections.abc import Mapping
 
 import jax
 import jax.numpy as jnp
