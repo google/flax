@@ -64,7 +64,7 @@ class RngStream(Object):
       raise TypeError(f'key must be a jax.Array, got {type(self.key)}')
 
   def __call__(self) -> jax.Array:
-    self.check_valid_context(
+    self._check_valid_context(
       lambda: 'Cannot call RngStream from a different trace level'
     )
     key = jax.random.fold_in(self.key.value, self.count.value)

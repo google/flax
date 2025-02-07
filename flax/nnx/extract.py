@@ -144,7 +144,7 @@ def check_consistent_aliasing(
   for path, value in graph.iter_graph(node):
     if graph.is_graph_node(value) or isinstance(value, graph.Variable):
       if isinstance(value, Object):
-        value.check_valid_context(
+        value._check_valid_context(
           lambda: f'Trying to extract graph node from different trace level, got {value!r}'
         )
       if isinstance(value, graph.Variable):
