@@ -169,12 +169,14 @@ def jit(
   abstracted_axes: tp.Optional[tp.Any] = None,
 ) -> F | tp.Callable[[F], F]:
   """
-  Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
+  A reference-aware version of `jax.jit <https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html>`_ that can handle :class:`flax.nnx.Module`'s / graph nodes as
   arguments.
 
+  Learn more in `Flax NNX vs JAX Transformations <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`_.
+
   Args:
-    fun: Function to be jitted. ``fun`` should be a pure function, as
-      side-effects may only be executed once.
+    fun: A function to be `JIT-compiled <https://jax.readthedocs.io/en/latest/jit-compilation.html>`_.
+      ``fun`` should be a pure function, as side-effects may only be executed once.
 
       The arguments and return value of ``fun`` should be arrays,
       scalars, or (nested) standard Python containers (tuple/list/dict) thereof.
@@ -186,18 +188,18 @@ def jit(
       JAX keeps a weak reference to ``fun`` for use as a compilation cache key,
       so the object ``fun`` must be weakly-referenceable. Most :class:`Callable`
       objects will already satisfy this requirement.
-    in_shardings: Pytree of structure matching that of arguments to ``fun``,
+    in_shardings: A JAX pytree of structure matching that of arguments to ``fun``,
       with all actual arguments replaced by resource assignment specifications.
       It is also valid to specify a pytree prefix (e.g. one value in place of a
       whole subtree), in which case the leaves get broadcast to all values in
       that subtree.
 
       The ``in_shardings`` argument is optional. JAX will infer the shardings
-      from the input :py:class:`jax.Array`'s and defaults to replicating the input
-      if the sharding cannot be inferred.
+      from the input JAX arrays (``jax.Array``) and defaults to replicating the
+      input if the sharding cannot be inferred.
 
       The valid resource assignment specifications are:
-        - :py:class:`Sharding`, which will decide how the value
+        - JAX :py:class:`Sharding`, which will decide how the value
             will be partitioned. With this, using a mesh context manager is not
             required.
         - :py:obj:`None`, will give JAX the freedom to choose whatever sharding
@@ -208,12 +210,14 @@ def jit(
           determine the output shardings.
 
       The size of every dimension has to be a multiple of the total number of
-      resources assigned to it. This is similar to pjit's in_shardings.
-    out_shardings: Like ``in_shardings``, but specifies resource
-      assignment for function outputs. This is similar to pjit's
-      out_shardings.
+      resources assigned to it. This is similar to `pjit <https://jax.readthedocs.io/en/latest/jax.experimental.pjit.html>`_
+      ``in_shardings``.
+    out_shardings: Similar to ``in_shardings``, but specifies resource
+      assignment for function outputs. This is similar to JAX ``pjit``
+      ``out_shardings``.
 
-      The ``out_shardings`` argument is optional. If not specified, :py:func:`jax.jit`
+      The ``out_shardings`` argument is optional. If not specified,
+      `jax.jit <https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html#jax.jit>`_
       will use GSPMD's sharding propagation to figure out what the sharding of the
       output(s) should be.
     static_argnums: An optional int or collection of ints that specify which
@@ -223,7 +227,7 @@ def jit(
       any Python object.
 
       Static arguments should be hashable, meaning both ``__hash__`` and
-      ``__eq__`` are implemented, and immutable. Calling the jitted function
+      ``__eq__`` are implemented, and immutable. Calling the JIT-compiled function
       with different values for these constants will trigger recompilation.
       Arguments that are not arrays or containers thereof must be marked as
       static.
@@ -253,7 +257,7 @@ def jit(
 
       If neither ``donate_argnums`` nor ``donate_argnames`` is provided, no
       arguments are donated. If ``donate_argnums`` is not provided but
-      ``donate_argnames`` is, or vice versa, JAX uses
+      ``donate_argnames`` is - or vice versa - JAX uses
       :code:`inspect.signature(fun)` to find any positional arguments that
       correspond to ``donate_argnames``
       (or vice versa). If both ``donate_argnums`` and ``donate_argnames`` are
@@ -261,28 +265,28 @@ def jit(
       parameters listed in either ``donate_argnums`` or ``donate_argnames`` will
       be donated.
 
-      For more details on buffer donation see the
-      `FAQ <https://jax.readthedocs.io/en/latest/faq.html#buffer-donation>`_.
+      For more details on buffer donation, refer to the
+      `JAX F.A.Q. <https://jax.readthedocs.io/en/latest/faq.html#buffer-donation>`_.
     donate_argnames: An optional string or collection of strings specifying
       which named arguments are donated to the computation. See the
       comment on ``donate_argnums`` for details. If not
       provided but ``donate_argnums`` is set, the default is based on calling
       ``inspect.signature(fun)`` to find corresponding named arguments.
-    keep_unused: If `False` (the default), arguments that JAX determines to be
-      unused by `fun` *may* be dropped from resulting compiled XLA executables.
+    keep_unused: If ``False`` (the default value), arguments that JAX determines to be
+      unused by ``fun`` *may* be dropped from resulting compiled XLA executables.
       Such arguments will not be transferred to the device nor provided to the
-      underlying executable. If `True`, unused arguments will not be pruned.
+      underlying executable. If ``True``, unused arguments will not be pruned.
     device: This is an experimental feature and the API is likely to change.
-      Optional, the Device the jitted function will run on. (Available devices
-      can be retrieved via :py:func:`jax.devices`.) The default is inherited
-      from XLA's DeviceAssignment logic and is usually to use
+      Optional, the device the JIT-compiled function will run on. (Available devices
+      can be retrieved via JAX's :py:func:`jax.devices`.) The default is inherited
+      from XLA's ``DeviceAssignment`` logic and it usually will use
       ``jax.devices()[0]``.
     backend: This is an experimental feature and the API is likely to change.
       Optional, a string representing the XLA backend: ``'cpu'``, ``'gpu'``, or
       ``'tpu'``.
-    inline: Specify whether this function should be inlined into enclosing
-      jaxprs (rather than being represented as an application of the xla_call
-      primitive with its own subjaxpr). Default False.
+    inline: Specifies whether this function should be inlined into enclosing
+      JAX jaxprs (rather than being represented as an application of the ``xla_call``
+      primitive with its own sub-jaxpr). Default ``False``.
 
   Returns:
     A wrapped version of ``fun``, set up for just-in-time compilation.
