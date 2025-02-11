@@ -41,7 +41,6 @@ AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
 
-
 @dataclasses.dataclass
 class VariableMetadata(tp.Generic[A]):
   raw_value: A
@@ -986,13 +985,12 @@ def split_flat_state(
         break
     else:
       raise ValueError(
-        'Non-exhaustive filters, got a non-empty remainder: '
-        f'{path} -> {value}.'
-        '\nUse `...` to match all remaining elements.'
+          'Non-exhaustive filters, got a non-empty remainder: '
+          f'{path} -> {value}.'
+          '\nUse `...` to match all remaining elements.'
       )
 
   return flat_states
-
 
 
 ###################################################
@@ -1003,10 +1001,14 @@ def split_flat_state(
 VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
 
 
-def variable_type_from_name(name: str) -> tp.Type[Variable[tp.Any]]:
+def variable_type_from_name(
+    name: str,
+    *,
+    base: type[Variable[tp.Any]] = Variable,
+) -> tp.Type[Variable[tp.Any]]:
   """Given a Linen-style collection name, get or create its NNX Variable class."""
   if name not in VariableTypeCache:
-    VariableTypeCache[name] = type(name, (Variable,), {})
+    VariableTypeCache[name] = type(name, (base,), {})
   return VariableTypeCache[name]
 
 
@@ -1023,21 +1025,56 @@ def variable_name_from_type(typ: tp.Type[Variable[tp.Any]]) -> str:
       'Name {name} is already registered in the registry as {VariableTypeCache[name]}. '
       'It cannot be linked with this type {typ}.'
     )
-  register_variable_name_type_pair(name, typ)
+  register_variable_name(name, typ)
   return name
 
 
-def register_variable_name_type_pair(name, typ, overwrite = False):
+class _Missing:
+  pass
+
+
+_MISSING = _Missing()
+
+
+@tp.overload
+def register_variable_name(
+    name: str,
+    typ: type[Variable[tp.Any]],
+    *,
+    overwrite: bool = False,
+) -> type[Variable[tp.Any]]:
+  ...
+
+
+@tp.overload
+def register_variable_name(
+    name: str,
+    *,
+    overwrite: bool = False,
+) -> tp.Callable[[type[Variable[tp.Any]]], type[Variable[tp.Any]]]:
+  ...
+
+
+def register_variable_name(
+    name: str,
+    typ: type[Variable[A]] | _Missing = _MISSING,
+    *,
+    overwrite=False,
+) -> type[Variable[A]] | tp.Callable[[type[Variable[A]]], type[Variable[A]]]:
   """Register a pair of Linen collection name and its NNX type."""
+  if typ is _MISSING:
+    return partial(register_variable_name, name, overwrite=overwrite)
+  typ = tp.cast(type[Variable[A]], typ)
   if not overwrite and name in VariableTypeCache:
     raise ValueError(f'Name {name} already mapped to type {VariableTypeCache[name]}. '
-                     'To overwrite, call register_variable_name_type_pair() with `overwrite=True`.')
+                     'To overwrite, call set_variable_name() with `overwrite=True`.')
   VariableTypeCache[name] = typ
+  return typ
 
 
 # add known variable type names
-register_variable_name_type_pair('params', Param)
-register_variable_name_type_pair('batch_stats', BatchStat)
-register_variable_name_type_pair('cache', Cache)
-register_variable_name_type_pair('intermediates', Intermediate)
-register_variable_name_type_pair('perturbations', Perturbation)
+register_variable_name('params', Param)
+register_variable_name('batch_stats', BatchStat)
+register_variable_name('cache', Cache)
+register_variable_name('intermediates', Intermediate)
+register_variable_name('perturbations', Perturbation)

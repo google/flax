@@ -121,9 +121,7 @@ from .spmd import with_partitioning as with_partitioning
 from .spmd import with_sharding_constraint as with_sharding_constraint
 from .statelib import State as State
 from .training import metrics as metrics
-from .variablelib import (
-  Param as Param,
-)
+from .variablelib import Param as Param
 # this needs to be imported before optimizer to prevent circular import
 from .training import optimizer as optimizer
 from .training.metrics import Metric as Metric
@@ -163,7 +161,7 @@ from .variablelib import VariableMetadata as VariableMetadata
 from .variablelib import with_metadata as with_metadata
 from .variablelib import variable_type_from_name as variable_type_from_name
 from .variablelib import variable_name_from_type as variable_name_from_type
-from .variablelib import register_variable_name_type_pair as register_variable_name_type_pair
+from .variablelib import register_variable_name as register_variable_name
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree

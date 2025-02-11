@@ -249,7 +249,7 @@ class Module(Object, metaclass=ModuleMeta):
     if not hasattr(self, name):
       zeros = jax.tree.map(jnp.zeros_like, value)
       setattr(self, name, variable_type(zeros))
-    old_value = getattr(self, name)
+    old_value: variableslib.Variable[tp.Any] = getattr(self, name)
     if not isinstance(old_value, variable_type):
       raise ValueError(
         f"Expected '{name}' to be of type '{variable_type.__name__}', "

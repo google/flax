@@ -174,7 +174,6 @@ class TestCompatibility(absltest.TestCase):
     assert nnx_model.bias.value.sharding.is_equivalent_to(
       jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('out',)), ndim=1)
 
-
   def test_linen_to_nnx_state_structure_consistency(self):
     class LinenInner(nn.Module):
       dout: int
@@ -191,8 +190,10 @@ class TestCompatibility(absltest.TestCase):
         b = self.variable('bias', 'b', nn.initializers.zeros_init(), None, (1, self.dout))
         return dot(x) + b.value
 
-    class Bias(nnx.Variable): pass
-    nnx.register_variable_name_type_pair('bias', Bias)
+    @nnx.register_variable_name('bias')
+    class Bias(nnx.Variable):
+      pass
+
     class NNXMiddle(nnx.Module):
       def __init__(self, dout: int, *, rngs: nnx.Rngs):
         self.dot = bridge.ToNNX(LinenInner(dout), rngs=rngs)
@@ -292,8 +293,10 @@ class TestCompatibility(absltest.TestCase):
     assert y.shape == (2, 3)
 
   def test_nnx_to_linen_mutable(self):
-    class Count(nnx.Variable): pass
-    nnx.register_variable_name_type_pair('Count', Count, overwrite=True)
+
+    @nnx.register_variable_name('Count', overwrite=True)
+    class Count(nnx.Variable):
+      pass
 
     class Counter(nnx.Module):
       def __init__(self):
@@ -310,8 +313,10 @@ class TestCompatibility(absltest.TestCase):
     _ = model.apply(variables | updates)
 
   def test_nnx_to_linen_mutated_static_data(self):
-    class Count(nnx.Variable): pass
-    nnx.register_variable_name_type_pair('Count', Count, overwrite=True)
+
+    @nnx.register_variable_name('Count', overwrite=True)
+    class Count(nnx.Variable):
+      pass
 
     class Counter(nnx.Module):
       def __init__(self):
@@ -383,8 +388,10 @@ class TestCompatibility(absltest.TestCase):
       def __call__(self, x):
         return self.dropout(x @ self.w)
 
-    class Bias(nnx.Variable): pass
-    nnx.register_variable_name_type_pair('bias', Bias, overwrite=True)
+    @nnx.register_variable_name('bias', overwrite=True)
+    class Bias(nnx.Variable):
+      pass
+
     class NNXMiddle(nnx.Module):
       def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
         self.dot = NNXInner(din, dout, rngs=rngs)
@@ -419,7 +426,6 @@ class TestCompatibility(absltest.TestCase):
     # Confirm the rest of the state has the same structure.
     self.assertEqual(jax.tree.structure(from_top_weights),
                      jax.tree.structure(from_middle_weights))
-
 
   ############################
   ### Hybrid mix-and-match ###
