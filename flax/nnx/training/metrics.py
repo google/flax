@@ -240,26 +240,64 @@ class Accuracy(Average):
     >>> metrics.reset()
     >>> metrics.compute()
     Array(nan, dtype=float32)
+
+    >>> logits3 = jax.random.normal(jax.random.key(2), (5,))
+    >>> labels3 = jnp.array([0, 1, 0, 1, 1])
+    >>> accuracy = nnx.metrics.Accuracy(threshold=0.5)
+    >>> accuracy.update(logits=logits3, labels=labels3)
+    >>> accuracy.compute()
+    Array(0.8, dtype=float32)
   """
+
+  def __init__(self, threshold: float | None = None, *args, **kwargs):
+    """For binary classification, pass in a float denoting a threshold to determine if a
+    prediction is positive. For example, constructing the metric as
+    ``acc = Accuracy(threshold=0.5)`` would cause any logit greater than or equal to 0.5
+    to be interpreted as a positive classification. For multi-class classification, do
+    not pass in a threshold.
+
+    Args:
+      threshold: for binary classification, determines if a prediction is
+        positive. Defaults to None.
+    """
+    if (threshold is not None) and (not isinstance(threshold, float)):
+      raise TypeError(f'Expected threshold to be a float, got {type(threshold)}')
+
+    self.threshold = threshold
+    super().__init__(*args, **kwargs)
 
   def update(self, *, logits: jax.Array, labels: jax.Array, **_) -> None:  # type: ignore[override]
     """In-place update this ``Metric``.
 
     Args:
-      logits: the outputted predicted activations. These values are
-        argmax-ed (on the trailing dimension), before comparing them
-        to the labels.
+      logits: the outputted predicted activations. For multi-class
+        classification, these values are argmax-ed (on the trailing
+        dimension), before comparing them to the labels. For binary
+        classification, these values are compared to the labels directly.
       labels: the ground truth integer labels.
     """
-    if logits.ndim != labels.ndim + 1:
+    if self.threshold is not None:  # Binary classification case
+      if logits.ndim != labels.ndim:
+        raise ValueError(
+          'For binary classification, expected logits.ndim==labels.ndim, got '
+          f'{logits.ndim} and {labels.ndim}'
+        )
+    elif logits.ndim != labels.ndim + 1:  # Multi-class classification case
       raise ValueError(
-        f'Expected logits.ndim==labels.ndim+1, got {logits.ndim} and {labels.ndim}'
+        'For multi-class classification, expected logits.ndim==labels.ndim+1, '
+        f'got {logits.ndim} and {labels.ndim}'
       )
-    elif labels.dtype in (jnp.int64, np.int32, np.int64):
+
+    if labels.dtype in (jnp.int64, np.int32, np.int64):
       labels = jnp.astype(labels, jnp.int32)
     elif labels.dtype != jnp.int32:
       raise ValueError(f'Expected labels.dtype==jnp.int32, got {labels.dtype}')
 
+    if self.threshold is not None:  # Binary classification case
+      super().update(values=((logits >= self.threshold) == (labels > 0)))
+      return
+
+    # Multi-class classification case
     super().update(values=(logits.argmax(axis=-1) == labels))
 
 
@@ -278,6 +316,7 @@ class MultiMetric(Metric):
     >>> metrics
     MultiMetric( # MetricState: 4 (16 B)
       accuracy=Accuracy( # MetricState: 2 (8 B)
+        threshold=None,
         argname='values',
         total=MetricState( # 1 (4 B)
           value=Array(0., dtype=float32)
@@ -299,6 +338,7 @@ class MultiMetric(Metric):
 
     >>> metrics.accuracy
     Accuracy( # MetricState: 2 (8 B)
+      threshold=None,
       argname='values',
       total=MetricState( # 1 (4 B)
         value=Array(0., dtype=float32)
