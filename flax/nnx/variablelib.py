@@ -138,19 +138,19 @@ class Variable(tp.Generic[A], reprlib.Representable):
     object.__setattr__(self, 'raw_value', value)
 
     if 'on_get_value' in type_vars and 'on_get_value' not in metadata:
-      metadata['get_value'] = getattr(type(self), 'on_get_value')
+      metadata['on_get_value'] = getattr(type(self), 'on_get_value')
 
     if 'on_set_value' in type_vars and 'on_set_value' not in metadata:
-      metadata['set_value'] = getattr(type(self), 'on_set_value')
+      metadata['on_set_value'] = getattr(type(self), 'on_set_value')
 
     if 'on_create_value' in type_vars and 'on_create_value' not in metadata:
-      metadata['create_value'] = getattr(type(self), 'on_create_value')
+      metadata['on_create_value'] = getattr(type(self), 'on_create_value')
 
     if 'on_add_axis' in type_vars and 'on_add_axis' not in metadata:
-      metadata['add_axis'] = getattr(type(self), 'on_add_axis')
+      metadata['on_add_axis'] = getattr(type(self), 'on_add_axis')
 
     if 'on_remove_axis' in type_vars and 'on_remove_axis' not in metadata:
-      metadata['remove_axis'] = getattr(type(self), 'on_remove_axis')
+      metadata['on_remove_axis'] = getattr(type(self), 'on_remove_axis')
 
     vars_self['_var_metadata'] = metadata
     # run create_value hooks
@@ -251,10 +251,12 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return type(self) is type(other) and vars(other) == vars(self)
 
   @tp.overload
-  def replace(self, value: B, **kwargs) -> Variable[B]: ...
+  def replace(self, value: B, **kwargs) -> Variable[B]:
+    ...
 
   @tp.overload
-  def replace(self, **kwargs) -> Variable[A]: ...
+  def replace(self, **kwargs) -> Variable[A]:
+    ...
 
   def replace(self, value: tp.Any = Missing, **kwargs) -> Variable[tp.Any]:
     if value is not Missing:
