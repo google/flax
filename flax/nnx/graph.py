@@ -2127,9 +2127,10 @@ def update(
     *states: Additional :class:`State` objects.
   """
   if states:
-    state = State.merge(state, *states)
-  if isinstance(state, State):
-    state = state.raw_mapping
+    if isinstance(state, State):
+      state = type(state).merge(state, *states)
+    else:
+      state = State.merge(state, *states)
   _graph_update_dynamic(node, state)
 
 
@@ -2484,6 +2485,7 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
     >>> for path, value in nnx.iter_graph(graph):
     ...   print(path, type(value).__name__)
     ...
+    (0, '_object__state') ObjectState
     (0, 'b') Param
     (0, 'din') int
     (0, 'dout') int

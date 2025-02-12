@@ -88,11 +88,12 @@ OBJECT_CONTEXT = ObjectContext()
 
 
 class ObjectState(reprlib.Representable):
-  __slots__ = ('_trace_state', '_initializing')
+  __slots__ = ('_trace_state', '_initializing', '_is_setup')
 
-  def __init__(self, initializing: bool = False):
+  def __init__(self, initializing: bool = False, is_setup: bool = False):
     self._trace_state = tracers.TraceState()
     self._initializing = initializing
+    self._is_setup = is_setup
 
   @property
   def trace_state(self) -> tracers.TraceState:
@@ -101,6 +102,10 @@ class ObjectState(reprlib.Representable):
   @property
   def initializing(self) -> bool:
     return self._initializing
+
+  @property
+  def is_setup(self) -> bool:
+    return self._is_setup
 
   def __nnx_repr__(self):
     yield reprlib.Object(type(self))
@@ -114,6 +119,20 @@ class ObjectState(reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
+def _flatten_object_state(state: ObjectState):
+  return (), (state.initializing, state.is_setup)
+
+
+def _unflatten_object_state(static: tuple[bool, bool], _):
+  initializing, setup = static
+  return ObjectState(initializing, setup)
+
+
+jax.tree_util.register_pytree_node(
+  ObjectState,
+  _flatten_object_state,
+  _unflatten_object_state,
+)
 
 class ObjectMeta(ABCMeta):
   if not tp.TYPE_CHECKING:
@@ -305,9 +324,8 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
   # Graph Definition
   def _graph_node_flatten(self):
     nodes = vars(self).copy()
-    del nodes['_object__state']
     nodes = sorted(nodes.items())
-    return nodes, (type(self), self._object__state._initializing)
+    return nodes, type(self)
 
   def _graph_node_set_key(self, key: str, value: tp.Any):
     if not isinstance(key, str):
@@ -327,17 +345,12 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     return vars(self).pop(key)
 
   @staticmethod
-  def _graph_node_create_empty(static: tuple[tp.Type[G], bool]) -> G:
-    node_type, initializing = static
+  def _graph_node_create_empty(node_type: tp.Type[G]) -> G:
     node = object.__new__(node_type)
-    vars(node).update(_object__state=ObjectState(initializing))
     return node
 
   def _graph_node_clear(self):
-    module_state = self._object__state
-    module_vars = vars(self)
-    module_vars.clear()
-    module_vars['_object__state'] = module_state
+    vars(self).clear()
 
   def _graph_node_init(self, attributes: tp.Iterable[tuple[str, tp.Any]]):
     vars(self).update(attributes)

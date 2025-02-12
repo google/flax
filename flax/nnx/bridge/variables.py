@@ -105,7 +105,7 @@ def get_col_name(keypath: tp.Sequence[Any]) -> str:
 
 def to_nnx_var(col: str, x: meta.AxisMetadata | Any) -> variablelib.Variable:
   """Convert a Linen variable to an NNX variable."""
-  vtype = variablelib.variable_type_from_name(col)
+  vtype = variablelib.variable_type_from_name(col, allow_register=True)
   if isinstance(x, NNXMeta):
     assert vtype == x.var_type, f'Type stored in NNXMeta {x.var_type} != type inferred from collection name {vtype}'
     return x.to_nnx_variable()
