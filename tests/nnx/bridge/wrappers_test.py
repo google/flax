@@ -485,6 +485,135 @@ class TestCompatibility(absltest.TestCase):
     # messing up the stateful part of the NNX module.
     pass
 
+class TestCompatModule(absltest.TestCase):
+  def test_update(self):
+    class Foo(bridge.Module):
+      a: int
+
+    foo = Foo(1)
+    state = {'b': {'c': nnx.Param(jnp.array(2))}}
+    nnx.update(foo, state)
+
+  def test_compact_basic(self):
+    class Linear(bridge.Module):
+      dout: int
+
+      @bridge.compact
+      def __call__(self, x):
+        w = self.param(
+          'w', nnx.initializers.uniform(), (x.shape[-1], self.dout)
+        )
+        b = self.param('b', nn.initializers.zeros_init(), (self.dout,))
+        return x @ w + b[None]
+
+    class Foo(bridge.Module):
+      dout: int
+
+      @bridge.compact
+      def __call__(self, x):
+        din = x.shape[-1]
+        self.linear = Linear(self.dout)
+        x = self.linear(x)
+        return x
+
+    foo = Foo(5)
+    x = jnp.ones((3, 2))
+
+    variables = foo.init(0, x)
+    params = variables['params']
+
+    self.assertIn('Linear_0', params)
+    self.assertIn('w', params['Linear_0'])
+    self.assertIn('b', params['Linear_0'])
+    self.assertEqual(params['Linear_0']['w'].shape, (2, 5))
+    self.assertEqual(params['Linear_0']['b'].shape, (5,))
+
+    y: jax.Array = foo.apply(variables, x)
+
+    self.assertEqual(y.shape, (3, 5))
+
+  def test_mutable_state(self):
+    class FooLinen(nn.Module):
+      @nn.compact
+      def __call__(self):
+        count = self.variable(
+          'counts', 'count', lambda: jnp.zeros((), jnp.int32)
+        )
+        count.value += 1
+
+    model_linen = FooLinen()
+    initial_vars_linen = model_linen.init({})
+    _, vars_linen = model_linen.apply(initial_vars_linen, mutable='counts')
+
+    class FooNNX(bridge.Module):
+      @bridge.compact
+      def __call__(self):
+        count = self.variable(
+          'counts', 'count', lambda: jnp.zeros((), jnp.int32)
+        )
+        count.value += 1
+
+    model_nnx = FooNNX()
+
+    initial_vars_nnx = model_nnx.init({})
+    _, vars_nnx = model_nnx.apply(initial_vars_nnx, mutable='counts')
+
+    self.assertEqual(
+      initial_vars_linen['counts']['count'], initial_vars_nnx['counts']['count']
+    )
+    self.assertEqual(vars_linen['counts']['count'], vars_nnx['counts']['count'])
+
+  def test_compact_parent_none(self):
+    class Foo(bridge.Module):
+      pass
+
+    class Bar(bridge.Module):
+      @bridge.compact
+      def __call__(self):
+        return Foo().scope
+
+    bar = Bar()
+    scope = bar.apply({}, rngs=1)
+    self.assertIsNone(bar.scope)
+
+    self.assertEqual(scope.rngs.default.key.value, jax.random.key(1))
+    self.assertEqual(scope.rngs.default.count.value, 0)
+
+    class Baz(bridge.Module):
+      @bridge.compact
+      def __call__(self):
+        return Foo(parent=None).scope
+
+    baz = Baz()
+    scope = baz.apply({}, rngs=1)
+    self.assertIsNone(scope)
+
+  def test_name(self):
+    class Foo(bridge.Module):
+      dout: int
+
+      def __call__(self, x):
+        w = self.param(
+          'w', nnx.initializers.uniform(), (x.shape[-1], self.dout)
+        )
+        return x @ w
+
+    class Bar(bridge.Module):
+      @bridge.compact
+      def __call__(self, x):
+        return Foo(5, name='xyz')(x)
+
+    bar = Bar()
+    x = jnp.ones((1, 2))
+    y, variables = bar.init_with_output(0, x)
+
+    self.assertIn('xyz', variables['params'])
+    self.assertEqual(variables['params']['xyz']['w'].shape, (2, 5))
+    self.assertEqual(y.shape, (1, 5))
+
+    y = bar.apply(variables, x)
+    self.assertEqual(y.shape, (1, 5))
+
 
 if __name__ == '__main__':
   absltest.main()
