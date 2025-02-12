@@ -53,6 +53,7 @@ from .graph import split_context as split_context
 from .graph import MergeContext as MergeContext
 from .graph import merge_context as merge_context
 from .graph import variables as variables
+from .graph import cached_partial as cached_partial
 from .nn import initializers as initializers
 from .nn.activations import celu as celu
 from .nn.activations import elu as elu

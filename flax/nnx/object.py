@@ -62,7 +62,9 @@ def _collect_stats(
       stats[var_type] = size_bytes
 
   else:
-    node_dict = graph.get_node_impl(node).node_dict(node)
+    node_impl = graph.get_node_impl(node)
+    assert node_impl is not None
+    node_dict = node_impl.node_dict(node)
     for key, value in node_dict.items():
       if id(value) in node_stats:
         continue
