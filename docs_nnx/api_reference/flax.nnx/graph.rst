@@ -16,6 +16,7 @@ graph
 .. autofunction:: iter_graph
 .. autofunction:: clone
 .. autofunction:: call
+.. autofunction:: cached_partial
 
 .. autoclass:: GraphDef
   :members:

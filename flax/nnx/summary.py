@@ -76,7 +76,9 @@ def _collect_stats(
     node._nnx_tabulate_id = id(node)  # type: ignore
     object_types.add(type(node))
 
-  node_dict = graph.get_node_impl(node).node_dict(node)
+  node_impl = graph.get_node_impl(node)
+  assert node_impl is not None
+  node_dict = node_impl.node_dict(node)
   for key, value in node_dict.items():
     if id(value) in node_stats:
       continue

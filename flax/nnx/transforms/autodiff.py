@@ -64,24 +64,26 @@ class DiffState:
 class GradFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
+  nondiff_states: deque[State | None]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
 
   def __call__(self, *pure_args):
     # rebuild diff_state from substates in args
-    nondiff_states: deque[State | None] = extract.get_broadcast_state('grad')
 
     def _grad_merge_fn(
       ctx: graph.MergeContext, path, prefix, value: extract.NodeStates
     ):
-      nondiff = nondiff_states.popleft()
+      nondiff = self.nondiff_states.popleft()
       if nondiff is None:
         return ctx.merge(value.graphdef, value.state)
       else:
         return ctx.merge(value.graphdef, value.state, nondiff)
 
-    args = extract.from_tree(pure_args, merge_fn=_grad_merge_fn, ctxtag='grad')
+    args = extract.from_tree(
+      pure_args, merge_fn=_grad_merge_fn, ctxtag='grad', is_inner=True
+    )
 
     out = self.f(*args)
 
@@ -129,15 +131,6 @@ def _grad_general(
       else DiffState(-1, variablelib.Param)
     )
 
-  gradded_fn = transform(
-    GradFn(f, has_aux),
-    argnums=jax_argnums,
-    has_aux=True,
-    holomorphic=holomorphic,
-    allow_int=allow_int,
-    reduce_axes=reduce_axes,
-  )
-
   @graph.update_context('grad')
   def grad_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
@@ -152,7 +145,7 @@ def _grad_general(
         return extract.NodeStates.from_split(*ctx.split(value))
       else:
         graphdef, diff, nondiff = ctx.split(value, prefix.filter, ...)  # type: ignore[misc]
-        nondiff_states.append(nondiff)
+        nondiff_states.append(nondiff)  # type: ignore[container-type-mismatch]
         return extract.NodeStates.from_split(graphdef, diff)
 
     arg_filters = tuple(index_filter.get(i) for i in range(len(args)))
@@ -160,8 +153,16 @@ def _grad_general(
       args, prefix=arg_filters, split_fn=_grad_split_fn, ctxtag='grad'
     )
 
-    with extract.broadcast_state('grad', nondiff_states):
-      fn_out = gradded_fn(*pure_args)
+    gradded_fn = transform(
+      GradFn(f, has_aux, nondiff_states),
+      argnums=jax_argnums,
+      has_aux=True,
+      holomorphic=holomorphic,
+      allow_int=allow_int,
+      reduce_axes=reduce_axes,
+    )
+
+    fn_out = gradded_fn(*pure_args)
 
     def process_grads(grads):
       return jax.tree.map(
@@ -171,7 +172,7 @@ def _grad_general(
       )
 
     def process_out(pure_out: A, /) -> A:
-      return extract.from_tree(pure_out, ctxtag='grad')
+      return extract.from_tree(pure_out, ctxtag='grad', is_inner=False)
 
     if return_value:
       # unpack value_and_grad output
@@ -427,11 +428,11 @@ def _custom_vjp_split_fn(
   nondiff_argnums: tuple[int, ...] = struct.field(pytree_node=False)
   tangent_tree_node_args: tuple[tp.Any, ...] = struct.field(pytree_node=False)
 
-def _extract_index_mappings(x, *, index_mappings: deque[graph.HashableMapping]):
+def _extract_nodedefs(x, *, nodedefs: deque[graph.NodeDef]):
   if isinstance(x, graph.NodeDef):
-    assert x.index_mapping is not None
-    index_mappings.append(x.index_mapping)
-    return dataclasses.replace(x, index_mapping=None)
+    assert x.outer_index is not None
+    nodedefs.append(x)
+    return x.with_no_outer_index()
   return x
 
 @dataclasses.dataclass(eq=False)
@@ -440,6 +441,7 @@ class CustomVjpFnWrapper:
   jax_nondiff_argnums: tuple[int, ...]
   ctxtag: str
   nondiff_states: list[extract.GraphDefState]
+  nodedefs: deque[graph.NodeDef]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
@@ -452,6 +454,7 @@ class CustomVjpFnWrapper:
         _custom_vjp_merge_fn, nondiff_states=nondiff_states
       ),
       ctxtag=self.ctxtag,
+      is_inner=True,
     )
 
     out = self.f(*args)
@@ -464,13 +467,10 @@ class CustomVjpFnWrapper:
     pure_args_out, pure_out = extract.to_tree(
       (args_out, out), ctxtag=self.ctxtag
     )
-    # remove index_mapping from NodeDef's but store them in global context
-    index_mappings: deque[graph.HashableMapping] = extract.get_broadcast_state(
-      self.ctxtag
-    )
+    # remove outer_index from NodeDef's but store them in global context
 
     pure_args_out, pure_out = jax.tree.map(
-      functools.partial(_extract_index_mappings, index_mappings=index_mappings),
+      functools.partial(_extract_nodedefs, nodedefs=self.nodedefs),
       (pure_args_out, pure_out),
       is_leaf=lambda x: isinstance(x, graph.NodeDef),
     )
@@ -484,6 +484,7 @@ class FwdFn:
   nondiff_argnums: tuple[int, ...]
   ctxtag: str
   nondiff_states: list[extract.GraphDefState]
+  nodedefs: deque[graph.NodeDef]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.fwd)
@@ -503,6 +504,7 @@ class FwdFn:
         _custom_vjp_merge_fn, nondiff_states=nondiff_states
       ),
       ctxtag=self.ctxtag if update_context_active else None,
+      is_inner=True,
     )
 
     out, residual = self.fwd(*args)
@@ -519,14 +521,9 @@ class FwdFn:
     pure_residual = extract.to_tree(residual)
 
     if update_context_active:
-      # remove index_mapping from NodeDef's but store them in global context
-      index_mappings: deque[graph.HashableMapping] = (
-        extract.get_broadcast_state(self.ctxtag)
-      )
+      # remove outer_index from NodeDef's but store them in global context
       pure_args_out, pure_out = jax.tree.map(
-        functools.partial(
-          _extract_index_mappings, index_mappings=index_mappings
-        ),
+        functools.partial(_extract_nodedefs, nodedefs=self.nodedefs),
         (pure_args_out, pure_out),
         is_leaf=lambda x: isinstance(x, graph.NodeDef),
       )
@@ -544,7 +541,7 @@ class BwdFn:
 
   def __call__(self, *args):
     *nondiff, pure_residual, (pure_args_out_g, pure_out_g) = args
-    residual = extract.from_tree(pure_residual)
+    residual = extract.from_tree(pure_residual, is_inner=True)
     (pure_args_out_g, pure_out_g) = jax.tree.map(
       lambda x: x.state if isinstance(x, extract.NodeStates) else x,
       (pure_args_out_g, pure_out_g),
@@ -632,40 +629,41 @@ class CustomVjp(tp.Generic[A]):
         for i, x in enumerate(tree_node_args)
         if i not in self.jax_nondiff_argnums
       )
-      index_mappings: deque[graph.HashableMapping] = deque()
-      with extract.broadcast_state(self.ctxtag, index_mappings):
-        if self.fwd is None or self.bwd is None or self.symbolic_zeros is None:
-          raise ValueError()
+      nodedefs: deque[graph.NodeDef] = deque()
+      if self.fwd is None or self.bwd is None or self.symbolic_zeros is None:
+        raise ValueError()
 
-        custom_vjp_fn = jax.custom_vjp(
-          fun=CustomVjpFnWrapper(
-            f=self.fun,
-            jax_nondiff_argnums=self.jax_nondiff_argnums,
-            ctxtag=self.ctxtag,
-            nondiff_states=nondiff_states,
-          ),
+      custom_vjp_fn = jax.custom_vjp(
+        fun=CustomVjpFnWrapper(
+          f=self.fun,
+          jax_nondiff_argnums=self.jax_nondiff_argnums,
+          ctxtag=self.ctxtag,
+          nondiff_states=nondiff_states,
+          nodedefs=nodedefs,
+        ),
+        nondiff_argnums=self.jax_nondiff_argnums,
+      )
+      custom_vjp_fn.defvjp(
+        fwd=FwdFn(
+          fwd=self.fwd,
           nondiff_argnums=self.jax_nondiff_argnums,
-        )
-        custom_vjp_fn.defvjp(
-          fwd=FwdFn(
-            fwd=self.fwd,
-            nondiff_argnums=self.jax_nondiff_argnums,
-            ctxtag=self.ctxtag,
-            nondiff_states=nondiff_states,
-          ),
-          bwd=BwdFn(
-            bwd=self.bwd,
-            tree_node_args=tree_node_args,
-          ),
-          symbolic_zeros=self.symbolic_zeros,
-        )
-        pure_args_out, pure_out = custom_vjp_fn(*pure_args)
+          ctxtag=self.ctxtag,
+          nondiff_states=nondiff_states,
+          nodedefs=nodedefs,
+        ),
+        bwd=BwdFn(
+          bwd=self.bwd,
+          tree_node_args=tree_node_args,
+        ),
+        symbolic_zeros=self.symbolic_zeros,
+      )
+      pure_args_out, pure_out = custom_vjp_fn(*pure_args)
 
       # insert index_mappings
       def _insert_index_mappings(x):
         if isinstance(x, graph.NodeDef):
-          index_mapping: graph.HashableMapping = index_mappings.popleft()
-          return dataclasses.replace(x, index_mapping=index_mapping)
+          nodedef: graph.NodeDef = nodedefs.popleft()
+          return nodedef
         return x
 
       pure_args_out, pure_out = jax.tree_util.tree_map(
@@ -675,7 +673,7 @@ class CustomVjp(tp.Generic[A]):
       )
 
       args_out, out = extract.from_tree(
-        (pure_args_out, pure_out), ctxtag=self.ctxtag
+        (pure_args_out, pure_out), ctxtag=self.ctxtag, is_inner=False
       )
 
       return out

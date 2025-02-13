@@ -20,6 +20,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from flax.nnx import graph
 from flax.nnx.module import GraphDef, Module
 from flax.nnx.proxy_caller import ApplyCaller
 from flax.nnx.rnglib import Rngs
@@ -62,6 +63,10 @@ class Dict(Module, tp.Mapping[str, A]):
   def __len__(self) -> int:
     return len(vars(self))
 
+  def __hash__(self) -> int:
+    return id(self)
+
+
 class Sequential(Module):
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
     self.layers = list(fns)
@@ -97,7 +102,7 @@ class ModuleDefApply(tp.Protocol, tp.Generic[M]):
 
 
 class TrainState(tp.Generic[M], struct.PyTreeNode):
-  graphdef: GraphDef[M]
+  graphdef: graph.NodeDef[M]
   params: State
   opt_state: optax.OptState
   step: jax.Array
@@ -106,7 +111,7 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
   @classmethod
   def create(
     cls,
-    graphdef: GraphDef[M],
+    graphdef: graph.NodeDef[M],
     *,
     params: State,
     tx: optax.GradientTransformation,

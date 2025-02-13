@@ -160,7 +160,7 @@ class CheckifyFn:
 
   def __call__(self, *pure_args, **pure_kwargs):
     args, kwargs = extract.from_tree(
-      (pure_args, pure_kwargs), ctxtag='checkify'
+      (pure_args, pure_kwargs), ctxtag='checkify', is_inner=True
     )
     out = self.f(*args, **kwargs)
 
@@ -185,16 +185,16 @@ def checkify(
     >>> import dataclasses
     >>> from flax import nnx
     ...
-    >>> @dataclasses.dataclass
-    ... class Foo(nnx.Module):
-    ...   a: nnx.Param
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self, a):
+    ...     self.a = nnx.Param(a)
     ...
     >>> @nnx.jit
     ... def f(m):
     ...   y = jnp.sin(m.a.value) # error
     ...   return m.a + y
     ...
-    >>> m = Foo(a=nnx.Param(jnp.inf))
+    >>> m = Foo(a=jnp.inf)
     >>> err, out = nnx.checkify(f, errors=checkify.float_checks)(m)
     >>> # err.throw()
     >>> print(err)
@@ -216,6 +216,7 @@ def checkify(
     args_out, kwargs_out, out = extract.from_tree(
       (pure_args_out, pure_kwargs_out, pure_out),
       ctxtag='checkify',
+      is_inner=False,
     )
 
     return error, out

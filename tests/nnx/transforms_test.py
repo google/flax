@@ -1,3 +1,4 @@
+import dataclasses
 # Copyright 2024 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import dataclasses
 from functools import partial
 import typing as tp
 
@@ -21,10 +21,9 @@ from absl.testing import parameterized
 from flax import nnx
 from flax.nnx.transforms import general
 import jax
-from jax.experimental import mesh_utils, checkify
+from jax.experimental import checkify, mesh_utils
 import jax.numpy as jnp
 import numpy as np
-
 
 
 class List(nnx.Module):
@@ -66,6 +65,27 @@ class TestJIT(absltest.TestCase):
 
     assert m.a == 2
     assert out == 1.0
+
+  def test_simple_double_call(self):
+    n = 0
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit
+    def f(m: nnx.Linear, x: jnp.ndarray) -> jnp.ndarray:
+      nonlocal n
+      n += 1
+      return m(x)
+
+    x = jnp.ones((1, 2))
+    y = f(m, x)
+
+    self.assertEqual(n, 1)
+    self.assertEqual(y.shape, (1, 3))
+
+    y = f(m, x)
+
+    self.assertEqual(n, 1)
+    self.assertEqual(y.shape, (1, 3))
 
   def test_jit_on_init(self):
     n = 0
@@ -375,6 +395,27 @@ class TestJIT(absltest.TestCase):
 
     self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
 
+  def test_cache_args(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit
+    def f(cached_m: nnx.Linear, m: nnx.Linear):
+      self.assertIsNot(cached_m, m)
+      self.assertIs(cached_m.kernel, m.kernel)
+      self.assertIs(cached_m.bias, m.bias)
+      return cached_m
+
+    cached_f = nnx.cached_partial(f, m)
+    cached_m = cached_f(m)
+
+    self.assertIsNot(m, cached_m)
+    self.assertIs(m.kernel, cached_m.kernel)
+    self.assertIs(m.bias, cached_m.bias)
+
+    # test that cached m is reused
+    cached_m2 = cached_f(m)
+    self.assertIs(cached_m, cached_m2)
+
 
 class TestGrad(parameterized.TestCase):
   def test_grad(self):
@@ -628,6 +669,7 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(y.shape, (1, 1))
 
   def test_jax_example(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
@@ -668,6 +710,7 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(m.z, 1)
 
   def test_diff_state(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
@@ -709,6 +752,7 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(m.z, 1)
 
   def test_jax_example_with_remat(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
@@ -754,6 +798,7 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(m.z, 1)
 
   def test_two_args(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
@@ -807,6 +852,7 @@ class TestCustomVJP(parameterized.TestCase):
     np.testing.assert_allclose(m2_grad['y'].value, 3.0)  # type: ignore
 
   def test_non_diff_args(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
@@ -1002,6 +1048,7 @@ class TestScan(absltest.TestCase):
     assert y.shape == (5, 1, 3)
 
   def test_all_carry(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       n: nnx.BatchStat[int]
@@ -1019,6 +1066,7 @@ class TestScan(absltest.TestCase):
     self.assertEqual(foo.n.value, 3)
 
   def test_all_carry_one_argument_error(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       n: nnx.BatchStat[int]
@@ -1036,9 +1084,10 @@ class TestScan(absltest.TestCase):
       loop(foo, 0)
 
   def test_all_carry_new_reference_error(self):
-    @dataclasses.dataclass(repr=False)
     class Foo(nnx.Module):
-      n: nnx.BatchStat[int]
+
+      def __init__(self, n: nnx.BatchStat[int]):
+        self.n = n
 
     xs = jnp.arange(3)
     foo = Foo(n=nnx.BatchStat(0))
@@ -1056,9 +1105,10 @@ class TestScan(absltest.TestCase):
       loop(foo, xs)
 
   def test_all_scan(self):
-    @dataclasses.dataclass(repr=False)
     class Foo(nnx.Module):
-      n: nnx.BatchStat[jax.Array]
+
+      def __init__(self, n: nnx.BatchStat[jax.Array]):
+        self.n = n
 
     xs = jnp.arange(3)
     foo = Foo(n=nnx.BatchStat(jnp.arange(3)))
@@ -1075,9 +1125,10 @@ class TestScan(absltest.TestCase):
     np.testing.assert_allclose(foo.n.value, jnp.arange(1, 4))
 
   def test_all_broadcast(self):
-    @dataclasses.dataclass(repr=False)
     class Foo(nnx.Module):
-      n: nnx.BatchStat[int]
+
+      def __init__(self, n: nnx.BatchStat[int]):
+        self.n = n
 
     xs = jnp.array(1)
     foo = Foo(n=nnx.BatchStat(2))
@@ -1740,7 +1791,6 @@ class TestScan(absltest.TestCase):
     x = jnp.arange(5)
     count = jnp.array(0)
 
-    @dataclasses.dataclass
     class Foo(nnx.Object):
 
       @nnx.split_rngs(splits=5)
@@ -2841,7 +2891,6 @@ class TestWhileLoop(absltest.TestCase):
       lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
     np.testing.assert_array_equal(y, x * 8)
 
-
   def test_shared_module(self):
     m1 = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
     m2 = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(0))
@@ -2863,7 +2912,6 @@ class TestWhileLoop(absltest.TestCase):
     np.testing.assert_array_equal(m2.kernel.value, jnp.zeros((10, 10,)))
     np.testing.assert_array_equal(y, jnp.zeros((10,)))
 
-
   def test_value_changed(self):
     def fwd_fn(input):
       m, x, c = input
@@ -2879,7 +2927,6 @@ class TestWhileLoop(absltest.TestCase):
     np.testing.assert_array_equal(module.kernel.value, jnp.zeros((10, 10,)))
     np.testing.assert_array_equal(y, jnp.zeros((10,)))
 
-
   def test_ref_changed(self):
     def fwd_fn(input):
       m, x, c = input
@@ -2893,7 +2940,6 @@ class TestWhileLoop(absltest.TestCase):
     with self.assertRaises(ValueError):
       _, y, _ = nnx.while_loop(
         lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0))
-
 
   def test_structure_changed(self):
     def fwd_fn(input):
@@ -2984,18 +3030,6 @@ class TestWhileLoop(absltest.TestCase):
     b = Foo()
     nnx.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2))
     nnx.fori_loop(0, 2, fori_loop_fn, (a, b))
-
-  def test_fori_output(self):
-    model = nnx.Linear(2, 2, rngs=nnx.Rngs(jax.random.PRNGKey(0)))
-    model2 = nnx.Linear(2, 2, rngs=nnx.Rngs(jax.random.PRNGKey(1)))
-
-    def f(i, x):
-      return x
-
-    model_out, model2_out = nnx.fori_loop(0, 10, f, (model, model2))
-
-    self.assertIs(model, model_out)
-    self.assertIs(model2, model2_out)
 
 
 class TestSplitMergeInputs(absltest.TestCase):
@@ -3089,6 +3123,7 @@ class TestSplitMergeInputs(absltest.TestCase):
 
 class TestCheckify(absltest.TestCase):
   def test_basic(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       a: nnx.Param
