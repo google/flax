@@ -1010,23 +1010,40 @@ VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
 
 
 def variable_type_from_name(
-    name: str,
-    *,
-    base: type[Variable[tp.Any]] = Variable,
+  name: str,
+  /,
+  *,
+  base: type[Variable[tp.Any]] = Variable,
+  allow_register: bool = False,
 ) -> tp.Type[Variable[tp.Any]]:
   """Given a Linen-style collection name, get or create its NNX Variable class."""
   if name not in VariableTypeCache:
+    if not allow_register:
+      raise ValueError(
+        f'Name {name} is not registered in the registry. '
+        'To register a new name, use register_variable_name() '
+        'or set allow_register=True.'
+      )
     VariableTypeCache[name] = type(name, (base,), {})
   return VariableTypeCache[name]
 
 
-def variable_name_from_type(typ: tp.Type[Variable[tp.Any]]) -> str:
+def variable_name_from_type(
+  typ: tp.Type[Variable[tp.Any]], /, *, allow_register: bool = False
+) -> str:
   """Given an NNX Variable type, get its Linen-style collection name.
 
   Should output the exact inversed result of `variable_type_from_name()`."""
   for name, t in VariableTypeCache.items():
     if typ == t:
       return name
+
+  if not allow_register:
+    raise ValueError(
+      f'Type {typ} is not registered in the registry. '
+      'To register a new type, use register_variable_name() '
+      'or set allow_register=True.'
+    )
   name = typ.__name__
   if name in VariableTypeCache:
     raise ValueError(

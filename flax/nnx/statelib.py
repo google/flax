@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import typing as tp
 from collections.abc import MutableMapping
+from functools import partial
 
 import jax
 import jax.tree_util as jtu
@@ -26,6 +27,7 @@ from flax.typing import Key, PathParts
 
 A = tp.TypeVar('A')
 K = tp.TypeVar('K', bound=tp.Hashable)
+S = tp.TypeVar('S', bound='State')
 V = tp.TypeVar('V')
 
 ExtractValueFn = tp.Callable[[tp.Any], tp.Any]
@@ -256,7 +258,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
   def __getitem__(self, key: K) -> State | V:  # type: ignore
     value = self._mapping[key]
     if isinstance(value, tp.Mapping):
-      return State(value, _copy=False)
+      return type(self)(value, _copy=False)
     return value
 
   def __getattr__(self, key: K) -> State | V:  # type: ignore[misc]
@@ -319,7 +321,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     cls,
     flat_state: tp.Mapping[PathParts, V] | tp.Iterable[tuple[PathParts, V]],
     /,
-  ) -> State:
+  ):
     if not isinstance(flat_state, tp.Mapping):
       flat_state = dict(flat_state)
     nested_state = traversals.unflatten_mapping(flat_state)
@@ -479,10 +481,8 @@ class State(MutableMapping[K, V], reprlib.Representable):
 
     return states  # type: ignore
 
-  @staticmethod
-  def merge(
-    state: tp.Mapping[K, V], /, *states: tp.Mapping[K, V]
-  ) -> State[K, V]:
+  @classmethod
+  def merge(cls, state: tp.Mapping[K, V], /, *states: tp.Mapping[K, V]):
     """The inverse of :meth:`split() <flax.nnx.State.state.split>`.
 
     ``merge`` takes one or more ``State``'s and creates
@@ -515,9 +515,9 @@ class State(MutableMapping[K, V], reprlib.Representable):
       The merged ``State``.
     """
     if not states:
-      if isinstance(state, State):
+      if isinstance(state, cls):
         return state
-      return State(state)
+      return cls(state)
 
     states = (state, *states)
 
@@ -526,7 +526,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     for state in states:
       new_state.update(traversals.flatten_mapping(state))  # type: ignore[attribute-error] # pytype is wrong here
 
-    return State.from_flat_path(new_state)
+    return cls.from_flat_path(new_state)
 
   def __or__(self, other: State[K, V]) -> State[K, V]:
     if not other:
@@ -543,6 +543,15 @@ class State(MutableMapping[K, V], reprlib.Representable):
 
     return State.from_flat_path(diff)
 
+  def __init_subclass__(cls) -> None:
+    super().__init_subclass__()
+
+    jax.tree_util.register_pytree_with_keys(
+      cls,
+      _state_flatten_with_keys,
+      partial(_state_unflatten, cls),  # type: ignore[arg-type]
+    )
+
 
 def _state_flatten_with_keys(x: State):
   items = sorted(x._mapping.items())
@@ -551,16 +560,17 @@ def _state_flatten_with_keys(x: State):
 
 
 def _state_unflatten(
+  cls: type[S],
   static: tuple[K, ...],
   leaves: tuple[V, ...] | tuple[dict[K, V]],
 ):
-  return State(zip(static, leaves))
+  return cls(zip(static, leaves))
 
 
 jax.tree_util.register_pytree_with_keys(
   State,
   _state_flatten_with_keys,
-  _state_unflatten,  # type: ignore[arg-type]
+  partial(_state_unflatten, State),  # type: ignore[arg-type]
 )
 
 

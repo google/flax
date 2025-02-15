@@ -273,7 +273,7 @@ class ToLinen(linen.Module):
     # Each variable type goes to its own linen collection, and
     # each attribute goes to its own linen variable
     for typ, state in zip(types, state_by_types):
-      collection = variablelib.variable_name_from_type(typ)
+      collection = variablelib.variable_name_from_type(typ, allow_register=True)
       if self.is_mutable_collection(collection):
         for k, v in state.raw_mapping.items():
           v = jax.tree.map(bv.to_linen_var, v,

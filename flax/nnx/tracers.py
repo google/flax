@@ -67,3 +67,17 @@ class TraceState(reprlib.Representable):
 
   def __setstate__(self, state):
     self._jax_trace = current_jax_trace()
+
+def _flatten_trace_state(trace_state: TraceState):
+  return (), None
+
+
+def _unflatten_trace_state(_1, _2):
+  return TraceState()
+
+
+jax.tree_util.register_pytree_node(
+  TraceState,
+  _flatten_trace_state,
+  _unflatten_trace_state,
+)
