@@ -69,7 +69,7 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0][1].value == 2
     assert flat_state[1][1].value == 4
 
-    assert len(refmap) == 2
+    assert len(refmap) == 4
     assert a['b'] in refmap
     assert g[3] in refmap
 
@@ -85,7 +85,7 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0] == 2
     assert flat_state[1] == 4
 
-    assert len(refmap) == 2
+    assert len(refmap) == 4
     assert a['b'] in refmap
     assert g[3] in refmap
 
@@ -116,7 +116,7 @@ class TestGraphUtils(absltest.TestCase):
     graphdef, state = nnx.split(g)
     g = nnx.merge(graphdef, state)
 
-    assert g[0] is not g[2]
+    assert g[0] is g[2]
 
   def test_unflatten_empty(self):
     a = Dict({'a': 1, 'b': nnx.Param(2)})

@@ -525,18 +525,11 @@ def _graph_flatten(
   paths: list[PathParts] | None,
   return_variables: bool,
 ) -> NodeDef[tp.Any] | NodeRef:
-  is_pytree_node_ = isinstance(node_impl, PytreeNodeImpl)
-  is_graph_node_ = isinstance(node_impl, GraphNodeImpl)
-
-  if not is_pytree_node_ and node in ref_index:
+  if node in ref_index:
     return NodeRef(type(node), ref_index[node])
 
-  # only cache graph nodes
-  if is_graph_node_:
-    index = len(ref_index)
-    ref_index[node] = index
-  else:
-    index = -1
+  # assign index
+  ref_index[node] = index = len(ref_index)
 
   attributes: list[
     tuple[Key, Static[tp.Any] | NodeDef[tp.Any] | VariableDef | NodeRef[tp.Any]]
@@ -602,7 +595,7 @@ def _graph_flatten(
     type=node_impl.type,  # type: ignore[arg-type]
     index=index,
     outer_index=ref_outer_index[node]
-    if is_graph_node_ and ref_outer_index and node in ref_outer_index
+    if ref_outer_index and node in ref_outer_index
     else None,
     attributes=tuple(attributes),
     metadata=metadata,
@@ -645,23 +638,18 @@ def _graph_fingerprint(
   ref_index: RefMap,
   new_ref_index: RefMap,
 ):
-  is_pytree_node_ = type(node_impl) is PytreeNodeImpl
-  is_graph_node_ = type(node_impl) is GraphNodeImpl
 
   append_fn(type(node))
 
-  if is_graph_node_:
-    append_fn(id(node))
-    if node in ref_index:
-      append_fn(ref_index[node])
-      return
-    elif node in new_ref_index:
-      append_fn(new_ref_index[node])
-      return
-    index = new_ref_index[node] = ctx.next_index
-    ctx.next_index += 1
-  else:
-    index = -1
+  append_fn(id(node))
+  if node in ref_index:
+    append_fn(ref_index[node])
+    return
+  elif node in new_ref_index:
+    append_fn(new_ref_index[node])
+    return
+  index = new_ref_index[node] = ctx.next_index
+  ctx.next_index += 1
 
   values, metadata = node_impl.flatten(node)
 
@@ -731,26 +719,20 @@ def _check_graph_fingerprint(
   ref_index: RefMap,
   new_ref_index: RefMap,
 ) -> bool:
-  is_pytree_node_ = type(node_impl) is PytreeNodeImpl
-  is_graph_node_ = type(node_impl) is GraphNodeImpl
-
   if type(node) != next(fp_iterator):
     return False
 
-  if is_graph_node_:
-    # append_fn(id(node))
-    if id(node) != next(fp_iterator):
-      return False
-    if node in ref_index:
-      # append_fn(ref_index[node])
-      return ref_index[node] == next(fp_iterator)
-    elif node in new_ref_index:
-      # append_fn(new_ref_index[node])
-      return new_ref_index[node] == next(fp_iterator)
-    index = new_ref_index[node] = ctx.next_index
-    ctx.next_index += 1
-  else:
-    index = -1
+  # append_fn(id(node))
+  if id(node) != next(fp_iterator):
+    return False
+  if node in ref_index:
+    # append_fn(ref_index[node])
+    return ref_index[node] == next(fp_iterator)
+  elif node in new_ref_index:
+    # append_fn(new_ref_index[node])
+    return new_ref_index[node] == next(fp_iterator)
+  index = new_ref_index[node] = ctx.next_index
+  ctx.next_index += 1
 
   values, metadata = node_impl.flatten(node)
 
@@ -992,6 +974,7 @@ def _graph_unflatten(
     # if the node type does not support the creation of an empty object it means
     # that it cannot reference itself, so we can create its children first
     node = node_impl.unflatten(_get_children(), nodedef.metadata)
+    index_ref[nodedef.index] = node
 
   return node
 
