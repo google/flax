@@ -589,12 +589,14 @@ def _graph_flatten(
           path_str = '/'.join(map(str, path))
           raise ValueError(
             f'The variable at the path {path_str!r} with value = {value} is of type:' \
-            f'{type(value)}. Leaf values of this type are not supported for nnx.Modules.'
+            f'{type(value)}. Leaf values of this type are not supported for nnx.Modules'\
+            f' or nnx.Object in general.'
           )
         else:
           raise ValueError(
             f'The variable with path "None" and with value = {value} is of type:' \
-            f'{type(value)}. Leaf values of this type are not supported for nnx.Modules.'
+            f'{type(value)}. Leaf values of this type are not supported for nnx.Modules'\
+            f' or nnx.Object in general.'
           )
       # static_fields.append((key, value))
       attributes.append((key, Static(value)))
