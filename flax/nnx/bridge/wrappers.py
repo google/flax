@@ -21,8 +21,9 @@ from flax import nnx
 from flax.core import FrozenDict
 from flax.core import meta
 from flax.nnx import graph
+from flax.nnx import variablelib
 from flax.nnx.bridge import variables as bv
-from flax.nnx.module import GraphDef, Module
+from flax.nnx.module import Module
 from flax.nnx.object import Object
 from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
@@ -36,7 +37,7 @@ M = tp.TypeVar('M', bound=Module)
 @dataclasses.dataclass
 class Functional(tp.Generic[M]):
   module_type: tp.Type[M]
-  graphdef: tp.Optional[GraphDef[M]]
+  graphdef: tp.Optional[graph.NodeDef[M]]
   args: tuple[tp.Any, ...]
   kwargs: dict[str, tp.Any]
 
@@ -46,6 +47,7 @@ class Functional(tp.Generic[M]):
       kwargs['rngs'] = rngs
     module = self.module_type(*self.args, **self.kwargs, **kwargs)
     graphdef, state = nnx.split(module)
+    assert type(graphdef) is graph.NodeDef
     self.graphdef = graphdef
     return state
 
@@ -271,7 +273,7 @@ class ToLinen(linen.Module):
     # Each variable type goes to its own linen collection, and
     # each attribute goes to its own linen variable
     for typ, state in zip(types, state_by_types):
-      collection = bv.variable_type_name(typ)
+      collection = variablelib.variable_name_from_type(typ, allow_register=True)
       if self.is_mutable_collection(collection):
         for k, v in state.raw_mapping.items():
           v = jax.tree.map(bv.to_linen_var, v,

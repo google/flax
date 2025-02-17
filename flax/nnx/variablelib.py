@@ -25,11 +25,7 @@ import treescope  # type: ignore[import-untyped]
 
 from flax import errors
 from flax.nnx import filterlib, reprlib, tracers, visualization
-from flax.typing import (
-  Missing,
-  PathParts,
-  value_stats,
-)
+from flax.typing import Missing, PathParts, SizeBytes
 import jax.tree_util as jtu
 
 A = tp.TypeVar('A')
@@ -43,9 +39,6 @@ AxisName = str
 AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
-
-VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
-
 
 
 @dataclasses.dataclass
@@ -125,6 +118,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     })
   """
 
+  __slots__ = ('raw_value', '_trace_state', '_var_metadata')
+
   raw_value: A
   _trace_state: tracers.TraceState
   _var_metadata: dict[str, tp.Any]
@@ -134,9 +129,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     value: tp.Union[A, VariableMetadata[A]],
     **metadata: tp.Any,
   ):
-    type_vars = vars(type(self))
-    vars_self = vars(self)
-    vars_self['_trace_state'] = tracers.TraceState()
+    var_t = type(self)
+    object.__setattr__(self, '_trace_state', tracers.TraceState())
 
     if isinstance(value, VariableMetadata):
       metadata.update(value.metadata)
@@ -144,27 +138,27 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
     object.__setattr__(self, 'raw_value', value)
 
-    if 'on_get_value' in type_vars and 'on_get_value' not in metadata:
-      metadata['get_value'] = getattr(type(self), 'on_get_value')
+    if hasattr(var_t, 'on_get_value') and 'on_get_value' not in metadata:
+      metadata['on_get_value'] = var_t.on_get_value
 
-    if 'on_set_value' in type_vars and 'on_set_value' not in metadata:
-      metadata['set_value'] = getattr(type(self), 'on_set_value')
+    if hasattr(var_t, 'on_set_value') and 'on_set_value' not in metadata:
+      metadata['on_set_value'] = var_t.on_set_value
 
-    if 'on_create_value' in type_vars and 'on_create_value' not in metadata:
-      metadata['create_value'] = getattr(type(self), 'on_create_value')
+    if hasattr(var_t, 'on_create_value') and 'on_create_value' not in metadata:
+      metadata['on_create_value'] = var_t.on_create_value
 
-    if 'on_add_axis' in type_vars and 'on_add_axis' not in metadata:
-      metadata['add_axis'] = getattr(type(self), 'on_add_axis')
+    if hasattr(var_t, 'on_add_axis') and 'on_add_axis' not in metadata:
+      metadata['on_add_axis'] = var_t.on_add_axis
 
-    if 'on_remove_axis' in type_vars and 'on_remove_axis' not in metadata:
-      metadata['remove_axis'] = getattr(type(self), 'on_remove_axis')
+    if hasattr(var_t, 'on_remove_axis') and 'on_remove_axis' not in metadata:
+      metadata['on_remove_axis'] = var_t.on_remove_axis
 
-    vars_self['_var_metadata'] = metadata
+    object.__setattr__(self, '_var_metadata', metadata)
     # run create_value hooks
-    vars_self['raw_value'] = self.create_value(self.raw_value)
+    object.__setattr__(self, 'raw_value', self.create_value(self.raw_value))
 
   def __getattr__(self, name: str) -> tp.Any:
-    if name in vars(self)['_var_metadata']:
+    if name in object.__getattribute__(self, '_var_metadata'):
       return self._var_metadata[name]
     return getattr(self.value, name)
 
@@ -220,9 +214,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
     self._var_metadata.update(other.get_metadata())
 
   def update_from_state(self, variable_state: VariableState[A]):
-    vars_self = vars(self)
-    vars_self['raw_value'] = variable_state.value
-    vars_self['_var_metadata'] = variable_state._var_metadata.copy()
+    object.__setattr__(self, 'raw_value', variable_state.value)
+    object.__setattr__(
+        self, '_var_metadata', variable_state._var_metadata.copy()
+    )
 
   @property
   def value(self) -> A:
@@ -239,7 +234,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       )
     if 'on_set_value' in self._var_metadata:
       value = self._var_metadata['on_set_value'](self, value)
-    vars(self)['raw_value'] = value
+    object.__setattr__(self, 'raw_value', value)
 
   def create_value(self, value: A):
     if 'on_create_value' in self._var_metadata:
@@ -254,14 +249,13 @@ class Variable(tp.Generic[A], reprlib.Representable):
     if 'on_remove_axis' in self._var_metadata:
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
 
-  def __eq__(self, other: object) -> bool:
-    return type(self) is type(other) and vars(other) == vars(self)
+  @tp.overload
+  def replace(self, value: B, **kwargs) -> Variable[B]:
+    ...
 
   @tp.overload
-  def replace(self, value: B, **kwargs) -> Variable[B]: ...
-
-  @tp.overload
-  def replace(self, **kwargs) -> Variable[A]: ...
+  def replace(self, **kwargs) -> Variable[A]:
+    ...
 
   def replace(self, value: tp.Any = Missing, **kwargs) -> Variable[tp.Any]:
     if value is not Missing:
@@ -317,7 +311,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return VariableState(type(self), self.raw_value, **self._var_metadata)
 
   def __nnx_repr__(self):
-    stats = value_stats(self.value)
+    stats = SizeBytes.from_any(self.value)
     if stats:
       comment = f' # {stats}'
     else:
@@ -329,7 +323,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       yield reprlib.Attr(name, repr(value))
 
   def __treescope_repr__(self, path, subtree_renderer):
-    size_bytes = value_stats(self.value)
+    size_bytes = SizeBytes.from_any(self.value)
     if size_bytes:
       stats_repr = f' # {size_bytes}'
       first_line_annotation = treescope.rendering_parts.comment_color(
@@ -369,10 +363,16 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
   # pickle support
   def __getstate__(self):
-    return vars(self).copy()
+    return {
+        'raw_value': self.raw_value,
+        '_trace_state': self._trace_state,
+        '_var_metadata': self._var_metadata,
+    }
 
   def __setstate__(self, state):
-    vars(self).update(state)
+    object.__setattr__(self, 'raw_value', state['raw_value'])
+    object.__setattr__(self, '_trace_state', state['_trace_state'])
+    object.__setattr__(self, '_var_metadata', state['_var_metadata'])
 
   # --------------------------------------------
   # proxy methods
@@ -749,6 +749,38 @@ class Intermediate(Variable[A]):
   pass
 
 
+class Perturbation(Intermediate[A]):
+  """:class:`Variable` type that is typically used for
+  :func:`Module.perturb`::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     x = self.linear1(x)
+    ...     x = self.perturb('i', x)
+    ...     x = self.linear2(x)
+    ...     return x
+    >>> model = Model(rngs=nnx.Rngs(0))
+
+    >>> x = jnp.ones((1, 2))
+    >>> y = model(x)
+    >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Perturbation))
+    State({
+      'i': VariableState(
+        type=Perturbation,
+        value=(1, 3)
+      )
+    })
+  """
+
+  pass
+
+
 class VariableState(tp.Generic[A], reprlib.Representable):
   __slots__ = ('type', 'value', '_var_metadata')
   type: type[Variable[A]]
@@ -784,7 +816,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
       del self._var_metadata[name]
 
   def __nnx_repr__(self):
-    stats = value_stats(self.value)
+    stats = SizeBytes.from_any(self.value)
     if stats:
       comment = f' # {stats}'
     else:
@@ -798,7 +830,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
       yield reprlib.Attr(name, value)
 
   def __treescope_repr__(self, path, subtree_renderer):
-    size_bytes = value_stats(self.value)
+    size_bytes = SizeBytes.from_any(self.value)
     if size_bytes:
       stats_repr = f' # {size_bytes}'
       first_line_annotation = treescope.rendering_parts.comment_color(
@@ -841,6 +873,7 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     if 'on_remove_axis' in self._var_metadata:
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
 
+GraphVariableState = VariableState[VariableState[tp.Any]]
 
 def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):
   metadata = tuple(x.get_metadata().items())
@@ -943,8 +976,8 @@ def with_metadata(
 
 
 def split_flat_state(
-  flat_state: tp.Iterable[tuple[PathParts, Variable | VariableState]],
-  filters: tp.Sequence[filterlib.Filter],
+    flat_state: tp.Iterable[tuple[PathParts, Variable | VariableState]],
+    filters: tuple[filterlib.Filter, ...],
 ) -> tuple[list[tuple[PathParts, Variable | VariableState]], ...]:
   predicates = filterlib.filters_to_predicates(filters)
   # we have n + 1 states, where n is the number of predicates
@@ -960,9 +993,113 @@ def split_flat_state(
         break
     else:
       raise ValueError(
-        'Non-exhaustive filters, got a non-empty remainder: '
-        f'{path} -> {value}.'
-        '\nUse `...` to match all remaining elements.'
+          'Non-exhaustive filters, got a non-empty remainder: '
+          f'{path} -> {value}.'
+          '\nUse `...` to match all remaining elements.'
       )
 
   return flat_states
+
+
+###################################################
+### Variable type/class <-> string name mapping ###
+###################################################
+# Assumption: the mapping is 1-1 and unique.
+
+VariableTypeCache: dict[str, tp.Type[Variable[tp.Any]]] = {}
+
+
+def variable_type_from_name(
+  name: str,
+  /,
+  *,
+  base: type[Variable[tp.Any]] = Variable,
+  allow_register: bool = False,
+) -> tp.Type[Variable[tp.Any]]:
+  """Given a Linen-style collection name, get or create its NNX Variable class."""
+  if name not in VariableTypeCache:
+    if not allow_register:
+      raise ValueError(
+        f'Name {name} is not registered in the registry. '
+        'To register a new name, use register_variable_name() '
+        'or set allow_register=True.'
+      )
+    VariableTypeCache[name] = type(name, (base,), {})
+  return VariableTypeCache[name]
+
+
+def variable_name_from_type(
+  typ: tp.Type[Variable[tp.Any]], /, *, allow_register: bool = False
+) -> str:
+  """Given an NNX Variable type, get its Linen-style collection name.
+
+  Should output the exact inversed result of `variable_type_from_name()`."""
+  for name, t in VariableTypeCache.items():
+    if typ == t:
+      return name
+
+  if not allow_register:
+    raise ValueError(
+      f'Type {typ} is not registered in the registry. '
+      'To register a new type, use register_variable_name() '
+      'or set allow_register=True.'
+    )
+  name = typ.__name__
+  if name in VariableTypeCache:
+    raise ValueError(
+      'Name {name} is already registered in the registry as {VariableTypeCache[name]}. '
+      'It cannot be linked with this type {typ}.'
+    )
+  register_variable_name(name, typ)
+  return name
+
+
+class _Missing:
+  pass
+
+
+_MISSING = _Missing()
+
+
+@tp.overload
+def register_variable_name(
+    name: str,
+    typ: type[Variable[tp.Any]],
+    *,
+    overwrite: bool = False,
+) -> type[Variable[tp.Any]]:
+  ...
+
+
+@tp.overload
+def register_variable_name(
+    name: str,
+    *,
+    overwrite: bool = False,
+) -> tp.Callable[[type[Variable[tp.Any]]], type[Variable[tp.Any]]]:
+  ...
+
+
+def register_variable_name(
+    name: str,
+    typ: type[Variable[A]] | _Missing = _MISSING,
+    *,
+    overwrite=False,
+) -> type[Variable[A]] | tp.Callable[[type[Variable[A]]], type[Variable[A]]]:
+  """Register a pair of Linen collection name and its NNX type."""
+  if typ is _MISSING:
+    return partial(register_variable_name, name, overwrite=overwrite)
+  typ = tp.cast(type[Variable[A]], typ)
+  if not overwrite and name in VariableTypeCache:
+    raise ValueError(f'Name {name} already mapped to type {VariableTypeCache[name]}. '
+                     'To overwrite, call set_variable_name() with `overwrite=True`.')
+  VariableTypeCache[name] = typ
+  return typ
+
+
+# add known variable type names
+register_variable_name('params', Param)
+register_variable_name('batch_stats', BatchStat)
+register_variable_name('cache', Cache)
+register_variable_name('intermediates', Intermediate)
+register_variable_name('perturbations', Perturbation)

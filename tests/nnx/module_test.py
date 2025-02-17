@@ -20,11 +20,10 @@ from typing import TypeVar
 
 from absl.testing import absltest
 import cloudpickle
-from flax import nnx, errors
+from flax import errors, nnx
 import jax
 import jax.numpy as jnp
 import numpy as np
-
 
 A = TypeVar('A')
 
@@ -262,13 +261,13 @@ class TestModule(absltest.TestCase):
     m2 = nnx.clone(m)
 
     assert m is not m2
-    assert m2.a[0] == m2.b.c
-    assert m2.a[1] == m2.b.d
+    assert m2.a[0].value == m2.b.c.value
+    assert m2.a[1].value == m2.b.d.value
 
-    assert m.a[0] == m2.a[0]
-    assert m.a[1] == m2.a[1]
-    assert m.b.c == m2.b.c
-    assert m.b.d == m2.b.d
+    assert m.a[0].value == m2.a[0].value
+    assert m.a[1].value == m2.a[1].value
+    assert m.b.c.value == m2.b.c.value
+    assert m.b.d.value == m2.b.d.value
 
   def test_sow_basic(self):
     class Foo(nnx.Module):
@@ -321,6 +320,43 @@ class TestModule(absltest.TestCase):
 
     with self.assertRaisesRegex(ValueError, 'to be of type'):
       m(2)
+
+  def test_perturb_basic(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(10, 10, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.perturb('before_multiply', x)
+        x = 4 * x
+        x = self.perturb('after_multiply', x)
+        return x
+
+    model = Foo(rngs=nnx.Rngs(0))
+    # Perturbations are not created in init time. It needs some sample input.
+    self.assertFalse(hasattr(model, 'before_multiply'))
+    self.assertFalse(hasattr(model, 'after_multiply'))
+
+    x = jax.random.uniform(jax.random.key(1), shape=(10,))
+    y = jax.random.uniform(jax.random.key(2), shape=(10,))
+    model(x)
+    np.testing.assert_array_equal(model.before_multiply, jnp.zeros_like(x))
+    np.testing.assert_array_equal(model.after_multiply, jnp.zeros_like(x))
+
+    take_gradient_filter = nnx.Any(nnx.Param, nnx.Perturbation)
+    @nnx.grad(argnums=nnx.DiffState(argnum=0, filter=take_gradient_filter))
+    def grad_loss(model, inputs, targets):
+      preds = model(inputs)
+      return jnp.square(preds - targets).mean()
+    intm_grads = grad_loss(model, x, y)
+
+    # Gradient should not be zero
+    self.assertFalse(jnp.array_equal(
+      intm_grads.before_multiply.value, jnp.zeros_like(x)))
+    # activation * 4 so reverse gradient also * 4
+    np.testing.assert_allclose(intm_grads.after_multiply.value * 4,
+                               intm_grads.before_multiply.value)
 
   def test_update_static_state_submodules(self):
     class Bar(nnx.Module):
@@ -465,7 +501,7 @@ class TestModule(absltest.TestCase):
     m1 = Foo()
     m2 = deepcopy(m1)
 
-    assert m1.a == m2.a
+    assert m1.a.value == m2.a.value
     assert vars(m1)['a'] is not vars(m2)['a']
     assert m1.b is not m2.b
     assert m1.c is not m2.c
@@ -630,6 +666,7 @@ class TestModulePytree:
 
 class TestModuleDataclass:
   def test_basic(self):
+
     @dataclasses.dataclass
     class Foo(nnx.Module):
       a: int
@@ -661,6 +698,7 @@ class TestModuleDataclass:
     assert state.e.type == nnx.BatchStat
 
   def test_post_init(self):
+
     @dataclasses.dataclass
     class DFoo(nnx.Module):
       din: int
@@ -717,7 +755,7 @@ class TestModuleDef:
 
     graphdef, state = nnx.split(foo)
 
-    assert isinstance(graphdef, nnx.GraphDef)
+    assert isinstance(graphdef, nnx.graph.NodeDef | nnx.graph.NodeRef)
     assert isinstance(state, nnx.State)
     assert issubclass(state.w.type, nnx.Param)
     assert issubclass(state.c.type, nnx.Variable)

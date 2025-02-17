@@ -22,6 +22,7 @@ _T = TypeVar('_T')
 
 
 class Config:
+  flax_use_flaxlib: bool
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
 
@@ -61,6 +62,10 @@ class Config:
     if name not in self._values:
       raise LookupError(f'Unrecognized config option: {name}')
     self._values[name] = value
+
+  def __repr__(self):
+    values_repr = ', '.join(f'\n  {k}={v!r}' for k, v in self._values.items())
+    return f'Config({values_repr}\n)'
 
 
 config = Config()
@@ -200,4 +205,10 @@ flax_fix_rng = bool_flag(
     'Whether to add separator characters when folding in static data into'
     ' PRNG keys.'
   ),
+)
+
+flax_use_flaxlib = bool_flag(
+  name='flax_use_flaxlib',
+  default=False,
+  help='Whether to use flaxlib for C++ acceleration.',
 )

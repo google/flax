@@ -16,8 +16,9 @@
 
 from __future__ import annotations
 
-from typing import TypeVar
 from collections.abc import Callable
+from typing import Any, TypeVar
+
 import flax
 from flax import nnx
 from flax.typing import VariableDict  # pylint: disable=g-importing-member,g-multiple-import
@@ -43,6 +44,12 @@ def module_from_linen_variables(
     map_key_fn: None | (
         Callable[[tuple[str, ...]], tuple[str | int, ...]]
     ) = None,
+    assign_val_fn: None | (
+        Callable[
+            [dict[tuple[str, ...], Any], tuple[str | int, ...], VariableDict],
+            dict[tuple[str, ...], Any],
+        ]
+    ) = None,
 ) -> M:
   """Returns an `nnx.Module` initialized with the `variables` of a linen module.
 
@@ -60,6 +67,16 @@ def module_from_linen_variables(
     def map_key_fn(path: tuple[str, ...]) -> tuple[str | int, ...]:
       return path[1:] if 'params' in variables else path
 
+  if assign_val_fn is None:
+
+    def assign_val_fn(
+        state: dict[tuple[str, ...], Any],
+        mapped_path: tuple[str | int, ...],
+        val: Any,
+    ) -> dict[tuple[str, ...], Any]:
+      state[mapped_path].value = val
+      return state
+
   mdl: M = nnx.eval_shape(module_factory)
   graph_def, state = nnx.split(mdl)
   state = dict(state.flat_state())
@@ -70,7 +87,7 @@ def module_from_linen_variables(
           f"'{mdl.__class__.__name__}.{_flatten_path(mapped_path)}' doesn't "
           f' exist (original path={path}).'
       )
-    state[mapped_path].value = val
+    state = assign_val_fn(state, mapped_path, val)
   state = nnx.State.from_flat_path(state)
 
   return nnx.merge(graph_def, state)

@@ -12,5 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Current Flax version at head on Github."""
-__version__ = '0.10.3'
+from .flaxlib_cpp import RefMap as RefMap
+from .flaxlib_cpp import _graph_fingerprint as _graph_fingerprint

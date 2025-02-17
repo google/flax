@@ -35,7 +35,7 @@ from flax.nnx import (
   visualization,
 )
 from flax.nnx.variablelib import Variable, VariableState
-from flax.typing import SizeBytes, value_stats
+from flax.typing import SizeBytes
 
 G = tp.TypeVar('G', bound='Object')
 
@@ -57,12 +57,14 @@ def _collect_stats(
     var_type = type(node)
     if issubclass(var_type, nnx.RngState):
       var_type = nnx.RngState
-    size_bytes = value_stats(node.value)
+    size_bytes = SizeBytes.from_any(node.value)
     if size_bytes:
       stats[var_type] = size_bytes
 
   else:
-    node_dict = graph.get_node_impl(node).node_dict(node)
+    node_impl = graph.get_node_impl(node)
+    assert node_impl is not None
+    node_dict = node_impl.node_dict(node)
     for key, value in node_dict.items():
       if id(value) in node_stats:
         continue
@@ -86,11 +88,12 @@ OBJECT_CONTEXT = ObjectContext()
 
 
 class ObjectState(reprlib.Representable):
-  __slots__ = ('_trace_state', '_initializing')
+  __slots__ = ('_trace_state', '_initializing', '_is_setup')
 
-  def __init__(self, initializing: bool = False):
+  def __init__(self, initializing: bool = False, is_setup: bool = False):
     self._trace_state = tracers.TraceState()
     self._initializing = initializing
+    self._is_setup = is_setup
 
   @property
   def trace_state(self) -> tracers.TraceState:
@@ -99,6 +102,10 @@ class ObjectState(reprlib.Representable):
   @property
   def initializing(self) -> bool:
     return self._initializing
+
+  @property
+  def is_setup(self) -> bool:
+    return self._is_setup
 
   def __nnx_repr__(self):
     yield reprlib.Object(type(self))
@@ -112,6 +119,20 @@ class ObjectState(reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
+def _flatten_object_state(state: ObjectState):
+  return (), (state.initializing, state.is_setup)
+
+
+def _unflatten_object_state(static: tuple[bool, bool], _):
+  initializing, setup = static
+  return ObjectState(initializing, setup)
+
+
+jax.tree_util.register_pytree_node(
+  ObjectState,
+  _flatten_object_state,
+  _unflatten_object_state,
+)
 
 class ObjectMeta(ABCMeta):
   if not tp.TYPE_CHECKING:
@@ -135,6 +156,10 @@ def _graph_node_meta_call(cls: tp.Type[G], *args, **kwargs) -> G:
 class Array(reprlib.Representable):
   shape: tp.Tuple[int, ...]
   dtype: tp.Any
+
+  @staticmethod
+  def from_array(array: jax.Array | np.ndarray) -> Array:
+    return Array(array.shape, array.dtype)
 
   def __nnx_repr__(self):
     yield reprlib.Object(type='Array', same_line=True)
@@ -169,12 +194,12 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       self._setattr(name, value)
 
   def _setattr(self, name: str, value: tp.Any) -> None:
-    self.check_valid_context(
+    self._check_valid_context(
       lambda: f"Cannot mutate '{type(self).__name__}' from different trace level"
     )
     object.__setattr__(self, name, value)
 
-  def check_valid_context(self, error_msg: tp.Callable[[], str]) -> None:
+  def _check_valid_context(self, error_msg: tp.Callable[[], str]) -> None:
     if not self._object__state.trace_state.is_valid():
       raise errors.TraceContextError(error_msg())
 
@@ -299,9 +324,8 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
   # Graph Definition
   def _graph_node_flatten(self):
     nodes = vars(self).copy()
-    del nodes['_object__state']
     nodes = sorted(nodes.items())
-    return nodes, (type(self), self._object__state._initializing)
+    return nodes, type(self)
 
   def _graph_node_set_key(self, key: str, value: tp.Any):
     if not isinstance(key, str):
@@ -321,17 +345,12 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     return vars(self).pop(key)
 
   @staticmethod
-  def _graph_node_create_empty(static: tuple[tp.Type[G], bool]) -> G:
-    node_type, initializing = static
+  def _graph_node_create_empty(node_type: tp.Type[G]) -> G:
     node = object.__new__(node_type)
-    vars(node).update(_object__state=ObjectState(initializing))
     return node
 
   def _graph_node_clear(self):
-    module_state = self._object__state
-    module_vars = vars(self)
-    module_vars.clear()
-    module_vars['_object__state'] = module_state
+    vars(self).clear()
 
   def _graph_node_init(self, attributes: tp.Iterable[tuple[str, tp.Any]]):
     vars(self).update(attributes)

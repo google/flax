@@ -13,6 +13,9 @@
 # limitations under the License.
 
 import os
+from typing import Any
+
+from flax.linen.dtypes import promote_dtype
 os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=4'
 
 from absl.testing import absltest
@@ -174,7 +177,6 @@ class TestCompatibility(absltest.TestCase):
     assert nnx_model.bias.value.sharding.is_equivalent_to(
       jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('out',)), ndim=1)
 
-
   def test_linen_to_nnx_state_structure_consistency(self):
     class LinenInner(nn.Module):
       dout: int
@@ -191,8 +193,10 @@ class TestCompatibility(absltest.TestCase):
         b = self.variable('bias', 'b', nn.initializers.zeros_init(), None, (1, self.dout))
         return dot(x) + b.value
 
-    class Bias(nnx.Variable): pass
-    nnx.register_variable_name_type_pair('bias', Bias)
+    @nnx.register_variable_name('bias')
+    class Bias(nnx.Variable):
+      pass
+
     class NNXMiddle(nnx.Module):
       def __init__(self, dout: int, *, rngs: nnx.Rngs):
         self.dot = bridge.ToNNX(LinenInner(dout), rngs=rngs)
@@ -250,7 +254,9 @@ class TestCompatibility(absltest.TestCase):
     assert y.shape == (1, 64)
     np.testing.assert_allclose(y, x @ variables['params']['kernel'])
     assert 'nnx' in variables
-    assert isinstance(variables['nnx']['graphdef'], nnx.GraphDef)
+    assert isinstance(
+      variables['nnx']['graphdef'], nnx.graph.NodeDef | nnx.graph.NodeRef
+    )
 
   def test_nnx_to_linen_multiple_rngs(self):
     class NNXInner(nnx.Module):
@@ -292,8 +298,10 @@ class TestCompatibility(absltest.TestCase):
     assert y.shape == (2, 3)
 
   def test_nnx_to_linen_mutable(self):
-    class Count(nnx.Variable): pass
-    nnx.register_variable_name_type_pair('Count', Count, overwrite=True)
+
+    @nnx.register_variable_name('Count', overwrite=True)
+    class Count(nnx.Variable):
+      pass
 
     class Counter(nnx.Module):
       def __init__(self):
@@ -310,8 +318,10 @@ class TestCompatibility(absltest.TestCase):
     _ = model.apply(variables | updates)
 
   def test_nnx_to_linen_mutated_static_data(self):
-    class Count(nnx.Variable): pass
-    nnx.register_variable_name_type_pair('Count', Count, overwrite=True)
+
+    @nnx.register_variable_name('Count', overwrite=True)
+    class Count(nnx.Variable):
+      pass
 
     class Counter(nnx.Module):
       def __init__(self):
@@ -383,8 +393,10 @@ class TestCompatibility(absltest.TestCase):
       def __call__(self, x):
         return self.dropout(x @ self.w)
 
-    class Bias(nnx.Variable): pass
-    nnx.register_variable_name_type_pair('bias', Bias, overwrite=True)
+    @nnx.register_variable_name('bias', overwrite=True)
+    class Bias(nnx.Variable):
+      pass
+
     class NNXMiddle(nnx.Module):
       def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
         self.dot = NNXInner(din, dout, rngs=rngs)
@@ -419,7 +431,6 @@ class TestCompatibility(absltest.TestCase):
     # Confirm the rest of the state has the same structure.
     self.assertEqual(jax.tree.structure(from_top_weights),
                      jax.tree.structure(from_middle_weights))
-
 
   ############################
   ### Hybrid mix-and-match ###
@@ -478,6 +489,214 @@ class TestCompatibility(absltest.TestCase):
     # TODO: add when we can safely `lazy_init` the NNX module inside `ToLinen` without
     # messing up the stateful part of the NNX module.
     pass
+
+class TestCompatModule(absltest.TestCase):
+  def test_update(self):
+    class Foo(bridge.Module):
+      a: int
+
+    foo = Foo(1)
+    state = {'b': {'c': nnx.Param(jnp.array(2))}}
+    nnx.update(foo, state)
+
+  def test_compact_basic(self):
+    class Linear(bridge.Module):
+      dout: int
+
+      @bridge.compact
+      def __call__(self, x):
+        w = self.param(
+          'w', nnx.initializers.uniform(), (x.shape[-1], self.dout)
+        )
+        b = self.param('b', nn.initializers.zeros_init(), (self.dout,))
+        return x @ w + b[None]
+
+    class Foo(bridge.Module):
+      dout: int
+
+      @bridge.compact
+      def __call__(self, x):
+        din = x.shape[-1]
+        self.linear = Linear(self.dout)
+        x = self.linear(x)
+        return x
+
+    foo = Foo(5)
+    x = jnp.ones((3, 2))
+
+    variables = foo.init(0, x)
+    params = variables['params']
+
+    self.assertIn('Linear_0', params)
+    self.assertIn('w', params['Linear_0'])
+    self.assertIn('b', params['Linear_0'])
+    self.assertEqual(params['Linear_0']['w'].shape, (2, 5))
+    self.assertEqual(params['Linear_0']['b'].shape, (5,))
+
+    y: jax.Array = foo.apply(variables, x)
+
+    self.assertEqual(y.shape, (3, 5))
+
+  def test_mutable_state(self):
+    class FooLinen(nn.Module):
+      @nn.compact
+      def __call__(self):
+        count = self.variable(
+          'counts', 'count', lambda: jnp.zeros((), jnp.int32)
+        )
+        count.value += 1
+
+    model_linen = FooLinen()
+    initial_vars_linen = model_linen.init({})
+    _, vars_linen = model_linen.apply(initial_vars_linen, mutable='counts')
+
+    class FooNNX(bridge.Module):
+      @bridge.compact
+      def __call__(self):
+        count = self.variable(
+          'counts', 'count', lambda: jnp.zeros((), jnp.int32)
+        )
+        count.value += 1
+
+    model_nnx = FooNNX()
+
+    initial_vars_nnx = model_nnx.init({})
+    _, vars_nnx = model_nnx.apply(initial_vars_nnx, mutable='counts')
+
+    self.assertEqual(
+      initial_vars_linen['counts']['count'], initial_vars_nnx['counts']['count']
+    )
+    self.assertEqual(vars_linen['counts']['count'], vars_nnx['counts']['count'])
+
+  def test_compact_parent_none(self):
+    class Foo(bridge.Module):
+      pass
+
+    class Bar(bridge.Module):
+      @bridge.compact
+      def __call__(self):
+        return Foo().scope
+
+    bar = Bar()
+    scope = bar.apply({}, rngs=1)
+    self.assertIsNone(bar.scope)
+
+    self.assertEqual(scope.rngs.default.key.value, jax.random.key(1))
+    self.assertEqual(scope.rngs.default.count.value, 0)
+
+    class Baz(bridge.Module):
+      @bridge.compact
+      def __call__(self):
+        return Foo(parent=None).scope
+
+    baz = Baz()
+    scope = baz.apply({}, rngs=1)
+    self.assertIsNone(scope)
+
+  def test_name(self):
+    class Foo(bridge.Module):
+      dout: int
+
+      def __call__(self, x):
+        w = self.param(
+          'w', nnx.initializers.uniform(), (x.shape[-1], self.dout)
+        )
+        return x @ w
+
+    class Bar(bridge.Module):
+      @bridge.compact
+      def __call__(self, x):
+        return Foo(5, name='xyz')(x)
+
+    bar = Bar()
+    x = jnp.ones((1, 2))
+    y, variables = bar.init_with_output(0, x)
+
+    self.assertIn('xyz', variables['params'])
+    self.assertEqual(variables['params']['xyz']['w'].shape, (2, 5))
+    self.assertEqual(y.shape, (1, 5))
+
+    y = bar.apply(variables, x)
+    self.assertEqual(y.shape, (1, 5))
+
+  def test_dense_port(self):
+    class Dense(bridge.Module):
+      features: int
+      use_bias: bool = True
+      dtype: Any = None
+      param_dtype: Any = jnp.float32
+      precision: Any = None
+      kernel_init: Any = nnx.initializers.lecun_normal()
+      bias_init: Any = nnx.initializers.zeros_init()
+      # Deprecated. Will be removed.
+      dot_general: Any | None = None
+      dot_general_cls: Any = None
+
+      @bridge.compact
+      def __call__(self, inputs: jax.Array) -> jax.Array:
+        kernel = self.param(
+          'kernel',
+          self.kernel_init,
+          (jnp.shape(inputs)[-1], self.features),
+          self.param_dtype,
+        )
+        if self.use_bias:
+          bias = self.param(
+            'bias', self.bias_init, (self.features,), self.param_dtype
+          )
+        else:
+          bias = None
+        inputs, kernel, bias = promote_dtype(
+          inputs, kernel, bias, dtype=self.dtype
+        )
+
+        if self.dot_general_cls is not None:
+          dot_general = self.dot_general_cls()
+        elif self.dot_general is not None:
+          dot_general = self.dot_general
+        else:
+          dot_general = jax.lax.dot_general
+        y = dot_general(
+          inputs,
+          kernel,
+          (((inputs.ndim - 1,), (0,)), ((), ())),
+          precision=self.precision,
+        )
+        if bias is not None:
+          y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
+        return y
+
+    m = Dense(3)
+    x = jnp.ones((1, 10, 2))
+    y, variables = m.init_with_output(0, x)
+
+    self.assertEqual(y.shape, (1, 10, 3))
+    self.assertEqual(variables['params']['kernel'].shape, (2, 3))
+    self.assertEqual(variables['params']['bias'].shape, (3,))
+
+    y = m.apply(variables, x)
+
+    self.assertEqual(y.shape, (1, 10, 3))
+    self.assertEqual(variables['params']['kernel'].shape, (2, 3))
+    self.assertEqual(variables['params']['bias'].shape, (3,))
+
+    @jax.jit
+    def train_step(params, x, y):
+      def loss_fn(params):
+        y_pred = m.apply({'params': params}, x)
+        return jnp.mean((y - y_pred) ** 2)
+
+      grads = jax.grad(loss_fn)(params)
+
+      params = jax.tree.map(lambda p, g: p - 0.01 * g, params, grads)
+
+      return params
+
+    params = variables['params']
+    x = jnp.ones((1, 10, 2))
+    y = jnp.ones((1, 10, 3))
+
+    params = train_step(params, x, y)
 
 
 if __name__ == '__main__':

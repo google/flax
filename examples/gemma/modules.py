@@ -23,6 +23,7 @@ from typing import Any, Union
 from flax import nnx
 import layers
 import positional_embeddings
+import sow_lib
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -84,6 +85,7 @@ class Attention(nnx.Module):
       rngs: nnx.Rngs,
       attn_logits_soft_cap: float | None = None,
       sliding_window_size: int | None = None,
+      sow_config: sow_lib.SowConfig = sow_lib.SowConfig()
   ):
     if attn_type == AttentionType.LOCAL_SLIDING and sliding_window_size is None:
       raise ValueError(
@@ -98,6 +100,7 @@ class Attention(nnx.Module):
         shape=(num_heads, head_dim, features),
         rngs=rngs,
     )
+    self.sow_config = sow_config
 
     if num_heads == num_kv_heads:
       self.qkv_einsum = layers.Einsum(
@@ -175,6 +178,7 @@ class Attention(nnx.Module):
       attn_mask = sliding_mask * attn_mask
 
     padded_logits = jnp.where((jnp.expand_dims(attn_mask, -2)), logits, K_MASK)
+    self.sow_config.maybe_sow_attn_logits_topk(padded_logits, self)
     probs = jax.nn.softmax(padded_logits, axis=-1).astype(key_proj.dtype)
     encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
     attn_output = self.attn_vec_einsum(encoded)
@@ -242,28 +246,40 @@ class FeedForward(nnx.Module):
       hidden_dim: int,
       *,
       rngs: nnx.Rngs,
+      sow_config: sow_lib.SowConfig = sow_lib.SowConfig()
   ):
-    self.gating_einsum = nnx.Param(
-        nn.initializers.zeros_init()(
-            rngs.params(),
-            ((2, features, hidden_dim)),
-        )
+    self.gate_proj = nnx.Linear(
+        in_features=features,
+        out_features=hidden_dim,
+        use_bias=False,
+        rngs=rngs,
+        kernel_init=nn.initializers.zeros_init(),
     )
-    self.linear = nnx.Param(
-        nn.initializers.zeros_init()(
-            rngs.params(),
-            (hidden_dim, features),
-        )
+    self.up_proj = nnx.Linear(
+        in_features=features,
+        out_features=hidden_dim,
+        use_bias=False,
+        rngs=rngs,
+        kernel_init=nn.initializers.zeros_init(),
     )
+    self.down_proj = nnx.Linear(
+        in_features=hidden_dim,
+        out_features=features,
+        use_bias=False,
+        rngs=rngs,
+        kernel_init=nn.initializers.zeros_init(),
+    )
+    self.sow_config = sow_config
 
   def __call__(self, x: ArrayLike) -> Array:
-    ff_gate = jnp.dot(x, self.gating_einsum.value[0])
+    ff_gate = self.gate_proj(x)
     gate_value = nnx.gelu(ff_gate)
 
-    ff1 = jnp.dot(x, self.gating_einsum.value[1])
+    ff1 = self.up_proj(x)
     activations = gate_value * ff1
+    self.sow_config.maybe_sow_mlp_hidden_topk(activations, self)
 
-    outputs = jnp.dot(activations, self.linear.value)
+    outputs = self.down_proj(activations)
     return outputs
 
 
@@ -284,6 +300,7 @@ class Block(nnx.Module):
       rngs: nnx.Rngs,
       attn_logits_soft_cap: float | None = None,
       sliding_window_size: int | None = None,
+      sow_config: sow_lib.SowConfig = sow_lib.SowConfig()
   ):
     self.pre_attention_norm = layers.RMSNorm(embed_dim, rngs=rngs)
     self.attn = Attention(
@@ -295,6 +312,7 @@ class Block(nnx.Module):
         attn_logits_soft_cap=attn_logits_soft_cap,
         sliding_window_size=sliding_window_size,
         rngs=rngs,
+        sow_config=sow_config,
     )
     if use_post_attn_norm:
       self.post_attn_norm = layers.RMSNorm(embed_dim, rngs=rngs)
@@ -304,9 +322,11 @@ class Block(nnx.Module):
         features=embed_dim,
         hidden_dim=hidden_dim,
         rngs=rngs,
+        sow_config=sow_config,
     )
     if use_post_ffw_norm:
       self.post_ffw_norm = layers.RMSNorm(embed_dim, rngs=rngs)
+    self.sow_config = sow_config
 
   def __call__(
       self,
@@ -328,11 +348,13 @@ class Block(nnx.Module):
 
     if self.use_post_attn_norm:
       attn_output = self.post_attn_norm(attn_output)
+    self.sow_config.maybe_sow_rs_after_attention(attn_output, self)
 
     outputs = self.mlp(attn_output)
     if self.use_post_ffw_norm:
       outputs = self.post_ffw_norm(outputs)
     outputs = residual + outputs
+    self.sow_config.maybe_sow_rs_after_ffw(outputs, self)
     return cache, outputs
 
   @property

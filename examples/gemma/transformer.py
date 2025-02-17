@@ -16,14 +16,16 @@
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Iterable
+import dataclasses
+from typing import Any
 
 from flax import nnx
 import helpers
 import layers
 import modules
 import params as params_lib
+import sow_lib
 import jax.numpy as jnp
 from jaxtyping import Array  # pylint: disable=g-importing-member,g-multiple-import
 
@@ -120,7 +122,7 @@ class TransformerConfig:
         head_dim=256,
         num_kv_heads=16,
         final_logit_softcap=None,
-        attention_types=(modules.AttentionType.GLOBAL,) * 28,
+        attention_types=(modules.AttentionType.GLOBAL,) * num_layers,
         use_post_attn_norm=False,
         use_post_ffw_norm=False,
     )
@@ -180,25 +182,54 @@ def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
       assert not prefix, prefix
       new_key.append('layers')
       new_key.append(int(suffix))
+    elif k == 'gating_einsum':
+      new_key.append('gate_proj')
+      new_key.append('kernel')
+    elif k == 'linear':
+      new_key.append('down_proj')
+      new_key.append('kernel')
     else:
       new_key.append(k)
 
   return tuple(new_key)
 
 
+def _assign_linen_params_to_nnx_state(
+    state: dict[tuple[str, ...], Any],
+    mapped_path: tuple[str | int, ...],
+    val: Any,
+) -> dict[tuple[str, ...], Any]:
+  if 'gate_proj' in mapped_path:
+    state[mapped_path].value = val[0]
+    state[mapped_path[:-2] + ('up_proj', 'kernel')].value = val[1]
+  else:
+    state[mapped_path].value = val
+  return state
+
+
 class Transformer(nnx.Module):
   """Gemma transformer."""
 
   @classmethod
-  def from_params(cls, params: params_lib.Params) -> Transformer:
-    config = TransformerConfig.from_params(params)
+  def from_params(
+      cls, params: params_lib.Params, config: None | TransformerConfig = None
+  ) -> Transformer:
+    if config is None:
+      config = TransformerConfig.from_params(params)
     return helpers.module_from_linen_variables(
         module_factory=lambda: cls(config, rngs=nnx.Rngs(params=0)),
         variables=params['transformer'],
         map_key_fn=_map_linen_var_names,
+        assign_val_fn=_assign_linen_params_to_nnx_state,
     )
 
-  def __init__(self, config: TransformerConfig, *, rngs: nnx.Rngs):
+  def __init__(
+      self,
+      config: TransformerConfig,
+      *,
+      rngs: nnx.Rngs,
+      sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
+  ):
     self.embedder = modules.Embedder(
         vocab_size=config.num_embed,
         embed_dim=config.embed_dim,
@@ -217,6 +248,7 @@ class Transformer(nnx.Module):
             attn_logits_soft_cap=config.attn_logits_soft_cap,
             attn_type=attn_type,
             rngs=rngs,
+            sow_config=sow_config,
         )
         for _, attn_type in zip(
             range(config.num_layers), config.attention_types
@@ -224,6 +256,7 @@ class Transformer(nnx.Module):
     ]
     self.final_norm = layers.RMSNorm(config.embed_dim, rngs=rngs)
     self.final_logits_softcap = config.final_logit_softcap
+    self.sow_config = sow_config
 
   def __call__(
       self,
@@ -251,6 +284,7 @@ class Transformer(nnx.Module):
     """
     new_cache = None if cache is None else {}
     x = self.embedder.encode(last_tokens)
+    self.sow_config.maybe_sow_embeddings(x, self)
     for i, layer in enumerate(self.layers):
       layer_name = f'layer_{i}'
       layer_cache = cache[layer_name] if cache else None
@@ -299,6 +333,59 @@ class Transformer(nnx.Module):
         )
         for i in range(self.num_layers)
     }
+
+  def init_intermediates(
+      self,
+      batch_size: int,
+      buffer_size: int,
+      sow_config: sow_lib.SowConfig,
+      dtype: jnp.dtype = jnp.float32,
+  ) -> sow_lib.TransformerIntermediates:
+    """Initializes the intermediate activations that will be filled."""
+    intermediates = sow_lib.TransformerIntermediates()
+    residual_stream_dummy = jnp.zeros(
+        (batch_size, buffer_size, self.embed_dim),
+        dtype=dtype,
+    )
+    if sow_config.embeddings:
+      intermediates.embeddings = residual_stream_dummy
+    for layer in self.layers:
+      layer_intermediates = sow_lib.LayerIntermediates()
+      if sow_config.rs_after_attention:
+        layer_intermediates.rs_after_attention = residual_stream_dummy
+      if sow_config.rs_after_ffw:
+        layer_intermediates.rs_after_ffw = residual_stream_dummy
+      if sow_config.attn_logits_topk:
+        shape = (
+            batch_size,
+            buffer_size,
+            layer.attn.num_heads,
+            sow_config.attn_logits_topk,
+        )
+        layer_intermediates.attn_logits_topk_values = jnp.zeros(
+            shape,
+            dtype=dtype,
+        )
+        layer_intermediates.attn_logits_topk_indices = jnp.zeros(
+            shape,
+            dtype=jnp.int32,
+        )
+      if sow_config.mlp_hidden_topk:
+        shape = (
+            batch_size,
+            buffer_size,
+            sow_config.mlp_hidden_topk,
+        )
+        layer_intermediates.mlp_hidden_topk_values = jnp.zeros(
+            shape,
+            dtype=dtype,
+        )
+        layer_intermediates.mlp_hidden_topk_indices = jnp.zeros(
+            shape,
+            dtype=jnp.int32,
+        )
+      intermediates.layers.append(layer_intermediates)
+    return intermediates
 
 
 def make_causal_attn_mask(

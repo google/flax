@@ -168,11 +168,11 @@ MISSING = Missing()
 
 def _bytes_repr(num_bytes):
   count, units = (
-    (f'{num_bytes / 1e9 :,.1f}', 'GB')
+    (f'{num_bytes / 1e9:,.1f}', 'GB')
     if num_bytes > 1e9
-    else (f'{num_bytes / 1e6 :,.1f}', 'MB')
+    else (f'{num_bytes / 1e6:,.1f}', 'MB')
     if num_bytes > 1e6
-    else (f'{num_bytes / 1e3 :,.1f}', 'KB')
+    else (f'{num_bytes / 1e3:,.1f}', 'KB')
     if num_bytes > 1e3
     else (f'{num_bytes:,}', 'B')
   )
@@ -194,8 +194,8 @@ class SizeBytes:  # type: ignore[misc]
   size: int
   bytes: int
 
-  @staticmethod
-  def from_array(x: ShapeDtype) -> SizeBytes:
+  @classmethod
+  def from_array(cls, x: ShapeDtype):
     size = int(np.prod(x.shape))
     dtype: jnp.dtype
     if isinstance(x.dtype, str):
@@ -203,10 +203,10 @@ class SizeBytes:  # type: ignore[misc]
     else:
       dtype = x.dtype  # type: ignore
     bytes = size * dtype.itemsize  # type: ignore
-    return SizeBytes(size, bytes)
+    return cls(size, bytes)
 
-  def __add__(self, other: SizeBytes) -> SizeBytes:
-    return SizeBytes(self.size + other.size, self.bytes + other.bytes)
+  def __add__(self, other: SizeBytes):
+    return type(self)(self.size + other.size, self.bytes + other.bytes)
 
   def __bool__(self) -> bool:
     return bool(self.size)
@@ -215,12 +215,12 @@ class SizeBytes:  # type: ignore[misc]
     bytes_repr = _bytes_repr(self.bytes)
     return f'{self.size:,} ({bytes_repr})'
 
+  @classmethod
+  def from_any(cls, x):
+    leaves = jax.tree.leaves(x)
+    size_bytes = cls(0, 0)
+    for leaf in leaves:
+      if has_shape_dtype(leaf):
+        size_bytes += cls.from_array(leaf)
 
-def value_stats(x):
-  leaves = jax.tree.leaves(x)
-  size_bytes = SizeBytes(0, 0)
-  for leaf in leaves:
-    if has_shape_dtype(leaf):
-      size_bytes += SizeBytes.from_array(leaf)
-
-  return size_bytes
+    return size_bytes

@@ -17,6 +17,7 @@ from absl.testing import parameterized
 from flax import nnx
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 
 class TestMetrics(parameterized.TestCase):
@@ -123,6 +124,36 @@ class TestMetrics(parameterized.TestCase):
     values = metrics.compute()
     self.assertTrue(jnp.isnan(values['accuracy']))
     self.assertTrue(jnp.isnan(values['loss']))
+
+  def test_binary_classification_accuracy(self):
+    logits = jnp.array([0.4, 0.7, 0.2, 0.6])
+    labels = jnp.array([0, 1, 1, 1])
+    logits2 = jnp.array([0.1, 0.9, 0.8, 0.3])
+    labels2 = jnp.array([0, 1, 1, 0])
+    accuracy = nnx.metrics.Accuracy(threshold=0.5)
+    accuracy.update(logits=logits, labels=labels)
+    self.assertEqual(accuracy.compute(), 0.75)
+    accuracy.update(logits=logits2, labels=labels2)
+    self.assertEqual(accuracy.compute(), 0.875)
+
+  @parameterized.parameters(
+    {
+      'logits': np.array([[[0.0, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]]),
+      'labels': np.array([0, 0, 0, 0]),
+      'threshold': None,
+      'error_msg': 'For multi-class classification'
+    },
+    {
+      'logits': np.array([0.0, 0.0, 0.0, 0.0]),
+      'labels': np.array([[0, 0], [0, 0]]),
+      'threshold': 0.5,
+      'error_msg': 'For binary classification'
+    }
+  )
+  def test_accuracy_dims(self, logits, labels, threshold, error_msg):
+    accuracy = nnx.metrics.Accuracy(threshold=threshold)
+    with self.assertRaisesRegex(ValueError, error_msg):
+      accuracy.update(logits=logits, labels=labels)
 
 
 if __name__ == '__main__':

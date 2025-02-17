@@ -15,26 +15,25 @@ from __future__ import annotations
 
 import typing as tp
 
-import jax
-import jax.numpy as jnp
-
 from flax.nnx import rnglib, variablelib
 from flax.nnx.module import Module
 from flax.nnx.nn import initializers
 from flax.nnx.nn.linear import Linear
 from flax.typing import Dtype, Initializer
+import jax
+import jax.numpy as jnp
 
 Array = jax.Array
 Axis = int
 Size = int
 A = tp.TypeVar('A')
 
-default_kernel_init = initializers.lecun_normal()
+default_a_initializer = initializers.he_uniform()
+default_b_initializer = initializers.zeros
 
 
 class LoRAParam(variablelib.Param[A]):
   pass
-
 
 
 class LoRA(Module):
@@ -70,22 +69,26 @@ class LoRA(Module):
     param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
-    kernel_init: initializer function for the weight matrices.
+    a_initializer: initializer function for the fan-in matrices. Default to
+      `he_uniform`.
+    b_initializer: initializer function for the fan-out matrices. Default to
+      `zero initializer`.
     lora_param_type: the type of the LoRA params.
   """
 
   def __init__(
-    self,
-    in_features: int,
-    lora_rank: int,
-    out_features: int,
-    *,
-    base_module: tp.Optional[Module] = None,
-    dtype: tp.Optional[Dtype] = None,
-    param_dtype: Dtype = jnp.float32,
-    kernel_init: Initializer = default_kernel_init,
-    lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
-    rngs: rnglib.Rngs,
+      self,
+      in_features: int,
+      lora_rank: int,
+      out_features: int,
+      *,
+      base_module: tp.Optional[Module] = None,
+      dtype: tp.Optional[Dtype] = None,
+      param_dtype: Dtype = jnp.float32,
+      a_initializer: Initializer = default_a_initializer,
+      b_initializer: Initializer = default_b_initializer,
+      lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
+      rngs: rnglib.Rngs,
   ):
     self.in_features = in_features
     self.out_features = out_features
@@ -95,10 +98,10 @@ class LoRA(Module):
     self.base_module = base_module
 
     self.lora_a = lora_param_type(
-      kernel_init(rngs.params(), (in_features, lora_rank), param_dtype)
+        a_initializer(rngs.params(), (in_features, lora_rank), param_dtype)
     )
     self.lora_b = lora_param_type(
-      kernel_init(rngs.params(), (lora_rank, out_features), param_dtype)
+        b_initializer(rngs.params(), (lora_rank, out_features), param_dtype)
     )
 
   def __call__(self, x: jax.Array):
@@ -142,33 +145,38 @@ class LoRALinear(Linear):
     param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
-    kernel_init: initializer function for the weight matrices.
+    a_initializer: initializer function for the fan-in matrices. Default to
+      `he_uniform`.
+    b_initializer: initializer function for the fan-out matrices. Default to
+      `zero initializer`.
     lora_param_type: the type of the LoRA params.
   """
 
   def __init__(
-    self,
-    in_features: int,
-    out_features: int,
-    *,
-    lora_rank: int,
-    lora_dtype: tp.Optional[Dtype] = None,
-    lora_param_dtype: Dtype = jnp.float32,
-    lora_kernel_init: Initializer = default_kernel_init,
-    lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
-    rngs: rnglib.Rngs,
-    **kwargs,
+      self,
+      in_features: int,
+      out_features: int,
+      *,
+      lora_rank: int,
+      lora_dtype: tp.Optional[Dtype] = None,
+      lora_param_dtype: Dtype = jnp.float32,
+      a_initializer: Initializer = default_a_initializer,
+      b_initializer: Initializer = default_b_initializer,
+      lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
+      rngs: rnglib.Rngs,
+      **kwargs,
   ):
     super().__init__(in_features, out_features, rngs=rngs, **kwargs)
     self.lora = LoRA(
-      in_features,
-      lora_rank,
-      out_features,
-      dtype=lora_dtype,
-      param_dtype=lora_param_dtype,
-      kernel_init=lora_kernel_init,
-      lora_param_type=lora_param_type,
-      rngs=rngs,
+        in_features,
+        lora_rank,
+        out_features,
+        dtype=lora_dtype,
+        param_dtype=lora_param_dtype,
+        a_initializer=a_initializer,
+        b_initializer=b_initializer,
+        lora_param_type=lora_param_type,
+        rngs=rngs,
     )
 
   def __call__(self, x: jax.Array):

@@ -223,8 +223,9 @@ class FeedForwardTest(parameterized.TestCase):
         hidden_dim=hidden_dim,
         rngs=nnx.Rngs(params=0),
     )
-    ffw.gating_einsum.value = jnp.ones((2, features, hidden_dim))
-    ffw.linear.value = jnp.ones((hidden_dim, features))
+    ffw.gate_proj.kernel.value = jnp.ones((features, hidden_dim))
+    ffw.up_proj.kernel.value = jnp.ones((features, hidden_dim))
+    ffw.down_proj.kernel.value = jnp.ones((hidden_dim, features))
 
     with jax.default_matmul_precision('float32'):
       outputs = ffw(inputs)

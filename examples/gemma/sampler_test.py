@@ -20,6 +20,7 @@ from absl.testing import absltest
 from flax import nnx
 import modules
 import sampler as sampler_lib
+import sow_lib
 import transformer as transformer_lib
 import jax.numpy as jnp
 import numpy as np
@@ -73,11 +74,16 @@ class MockVocab(spm.SentencePieceProcessor):
 
 class SamplerTest(absltest.TestCase):
 
+  def assertReasonableTensor(self, array, expected_shape=None):
+    self.assertIsNotNone(array)
+    if expected_shape is not None:
+      self.assertEqual(array.shape, expected_shape)
+
   def test_samples(self):
     vocab = MockVocab()
-
+    num_layers = 6
     transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
-        num_layers=6,
+        num_layers=num_layers,
         num_embed=vocab.GetPieceSize(),
         embed_dim=768,
         hidden_dim=6144,
@@ -85,7 +91,7 @@ class SamplerTest(absltest.TestCase):
         num_kv_heads=4,
         head_dim=256,
         final_logit_softcap=None,
-        attention_types=[modules.AttentionType.GLOBAL],
+        attention_types=[modules.AttentionType.GLOBAL] * num_layers,
         attn_logits_soft_cap=None,
         use_post_attn_norm=None,
         use_post_ffw_norm=None,
@@ -113,7 +119,7 @@ class SamplerTest(absltest.TestCase):
         num_kv_heads=1,
         head_dim=64,
         final_logit_softcap=None,
-        attention_types=[modules.AttentionType.GLOBAL],
+        attention_types=[],
         use_post_attn_norm=None,
         use_post_ffw_norm=None,
     )
@@ -152,8 +158,9 @@ class SamplerTest(absltest.TestCase):
 
   def test_forward_equivalence(self):
     vocab = MockVocab()
+    num_layers = 2
     transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
-        num_layers=2,
+        num_layers=num_layers,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,
         hidden_dim=64,
@@ -161,7 +168,7 @@ class SamplerTest(absltest.TestCase):
         num_kv_heads=1,
         head_dim=64,
         final_logit_softcap=None,
-        attention_types=[modules.AttentionType.GLOBAL],
+        attention_types=[modules.AttentionType.GLOBAL] * num_layers,
         use_post_attn_norm=None,
         use_post_ffw_norm=None,
     )
@@ -220,7 +227,7 @@ class SamplerTest(absltest.TestCase):
         num_kv_heads=1,
         head_dim=64,
         final_logit_softcap=None,
-        attention_types=[modules.AttentionType.GLOBAL],
+        attention_types=[],
         use_post_attn_norm=None,
         use_post_ffw_norm=None,
     )
@@ -256,7 +263,7 @@ class SamplerTest(absltest.TestCase):
         num_kv_heads=1,
         head_dim=64,
         final_logit_softcap=None,
-        attention_types=[modules.AttentionType.GLOBAL],
+        attention_types=[],
         use_post_attn_norm=None,
         use_post_ffw_norm=None,
     )
@@ -282,7 +289,95 @@ class SamplerTest(absltest.TestCase):
     )
 
     self.assertListEqual(list(masked_token_buffer[0]), [1, 5, 6, 2, 0, 0])
-    self.assertListEqual(list(masked_token_buffer[0]), [1, 5, 6, 2, 0, 0])
+    self.assertListEqual(list(masked_token_buffer[1]), [1, 3, 4, 2, 0, 0])
+
+  def test_sampler_sows_intermediates(self):
+    vocab = MockVocab()
+    num_layers = 3
+    config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+        num_layers=num_layers,
+        num_embed=vocab.GetPieceSize(),
+        embed_dim=64,
+        hidden_dim=128,
+        num_heads=2,
+        num_kv_heads=1,
+        head_dim=64,
+        final_logit_softcap=None,
+        attention_types=[modules.AttentionType.GLOBAL] * num_layers,
+        use_post_attn_norm=None,
+        attn_logits_soft_cap=None,
+        use_post_ffw_norm=None,
+    )
+    sow_config = sow_lib.SowConfig(
+        embeddings=True,
+        rs_after_attention=False,  # This should results in a None value.
+        rs_after_ffw=True,
+        attn_logits_topk=5,
+        mlp_hidden_topk=11,
+    )
+    transformer = transformer_lib.Transformer(
+        config, rngs=nnx.Rngs(params=0), sow_config=sow_config
+    )
+    sampler = sampler_lib.Sampler(
+        transformer=transformer,
+        vocab=vocab,
+    )
+    raw_input = ['input string', 'hello world']
+
+    result = sampler(raw_input, total_generation_steps=10)
+    input_length = max([len(vocab.EncodeAsIds(i)) for i in raw_input])
+    input_length += 1  # +1 for BOS token
+    output_length = max(len(tokens) for tokens in result.tokens)
+    length = input_length + output_length
+    self.assertIsNotNone(result)
+    intermediates = result.intermediates
+    self.assertIsNotNone(intermediates)
+    self.assertReasonableTensor(
+        intermediates.embeddings,
+        expected_shape=(2, length, config.embed_dim),
+    )
+    # Verify that the intermediates are different for two different steps.
+    self.assertNotAlmostEqual(
+        jnp.sum(intermediates.embeddings[:, 1, ...]),
+        jnp.sum(intermediates.embeddings[:, 2, ...]),
+    )
+    # Verify that the intermediates are filled in for each layer.
+    self.assertLen(intermediates.layers, config.num_layers)
+    for layer in intermediates.layers:
+      # For the requested intermediates we check the shape and that values are
+      # not all zeros, which was the initial value.
+      self.assertReasonableTensor(
+          layer.rs_after_ffw,
+          expected_shape=(2, length, config.embed_dim),
+      )
+      self.assertReasonableTensor(
+          layer.attn_logits_topk_values,
+          expected_shape=(
+              2,
+              length,
+              config.num_heads,
+              sow_config.attn_logits_topk,
+          ),
+      )
+      self.assertReasonableTensor(
+          layer.attn_logits_topk_indices,
+          expected_shape=(
+              2,
+              length,
+              config.num_heads,
+              sow_config.attn_logits_topk,
+          ),
+      )
+      self.assertReasonableTensor(
+          layer.mlp_hidden_topk_values,
+          expected_shape=(2, length, sow_config.mlp_hidden_topk),
+      )
+      self.assertReasonableTensor(
+          layer.mlp_hidden_topk_indices,
+          expected_shape=(2, length, sow_config.mlp_hidden_topk),
+      )
+      # For the none requested intermediates we want to have None values.
+      self.assertIsNone(layer.rs_after_attention)
 
   def test_compute_attention_mask(self):
     # Check that the input mask is correctly applied when total sampling steps

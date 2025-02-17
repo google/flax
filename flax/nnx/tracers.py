@@ -17,8 +17,9 @@
 
 import jax
 import jax.core
+import treescope  # type: ignore[import-not-found,import-untyped]
 
-from flax.nnx import reprlib, visualization
+from flax.nnx import reprlib
 
 
 def current_jax_trace():
@@ -47,11 +48,11 @@ class TraceState(reprlib.Representable):
     yield reprlib.Attr('jax_trace', self._jax_trace)
 
   def __treescope_repr__(self, path, subtree_renderer):
-    return visualization.render_object_constructor(
-      object_type=type(self),
-      attributes={'jax_trace': self._jax_trace},
-      path=path,
-      subtree_renderer=subtree_renderer,
+    return treescope.repr_lib.render_object_constructor(
+        object_type=type(self),
+        attributes={'jax_trace': self._jax_trace},
+        path=path,
+        subtree_renderer=subtree_renderer,
     )
 
   def __eq__(self, other):
@@ -66,3 +67,17 @@ class TraceState(reprlib.Representable):
 
   def __setstate__(self, state):
     self._jax_trace = current_jax_trace()
+
+def _flatten_trace_state(trace_state: TraceState):
+  return (), None
+
+
+def _unflatten_trace_state(_1, _2):
+  return TraceState()
+
+
+jax.tree_util.register_pytree_node(
+  TraceState,
+  _flatten_trace_state,
+  _unflatten_trace_state,
+)

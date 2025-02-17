@@ -389,12 +389,13 @@ y = model(x, mutable=True)  # still works!
 
 ### NNX to Linen
 
-If you define custom NNX variable types, you should register their names with `nnx.register_variable_name_type_pair` so that they go to the desired collections.
+If you define custom NNX variable types, you should register their names with `nnx.register_variable_name` so that they go to the desired collections.
 
 
 ```python
+@nnx.register_variable_name('counts', overwrite=True)
 class Count(nnx.Variable): pass
-nnx.register_variable_name_type_pair('counts', Count, overwrite=True)
+
 
 class NNXMultiCollections(nnx.Module):
   def __init__(self, din, dout, rngs):
