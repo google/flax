@@ -500,6 +500,7 @@ class TestCompatModule(absltest.TestCase):
     nnx.update(foo, state)
 
   def test_compact_basic(self):
+    test = self
     class Linear(bridge.Module):
       dout: int
 
@@ -519,10 +520,19 @@ class TestCompatModule(absltest.TestCase):
         din = x.shape[-1]
         self.linear = Linear(self.dout)
         x = self.linear(x)
+
+        # NNX
+        graphdef, state = nnx.split(self)
+        test.assertIn('Linear_0', state)
+        test.assertIn('w', state['Linear_0'])
+        test.assertIn('b', state['Linear_0'])
+
         return x
 
     foo = Foo(5)
     x = jnp.ones((3, 2))
+
+    self.assertIsInstance(foo, nnx.Module)
 
     variables = foo.init(0, x)
     params = variables['params']
