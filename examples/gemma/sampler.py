@@ -135,7 +135,7 @@ class Sampler:
 
   @property
   def dtype(self) -> jnp.dtype:
-    _, params_state = nnx.split(self.transformer, nnx.Param)
+    params_state = nnx.state(self.transformer, nnx.Param)
     return jax.tree_util.tree_leaves(params_state.flat_state())[0].dtype
 
   def _sample_step(self, sampler_state: _SamplingState) -> _SamplingState:
