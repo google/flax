@@ -171,8 +171,8 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
   if tp.TYPE_CHECKING:
     _object__state: ObjectState
 
-  def __init_subclass__(cls) -> None:
-    super().__init_subclass__()
+  def __init_subclass__(cls, **kwargs) -> None:
+    super().__init_subclass__(**kwargs)
 
     graph.register_graph_node_type(
       type=cls,
