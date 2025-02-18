@@ -293,7 +293,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return obj
 
   @classmethod
-  def from_metadata(cls, value: A, attributes: tp.Mapping[str, tp.Any]):
+  def from_metadata(cls, value: A, attributes: dict[str, tp.Any]):
     obj = object.__new__(cls)
     object.__setattr__(obj, '_trace_state', tracers.TraceState())
     object.__setattr__(obj, 'raw_value', value)

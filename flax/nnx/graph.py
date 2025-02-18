@@ -960,7 +960,7 @@ def _graph_unflatten(
             variable = value.to_variable()
           else:
             variable = variabledef.type.from_metadata(
-              value, variabledef.metadata
+              value, dict(variabledef.metadata)
             )
         children.append((key, variable))
         index_ref[variabledef.index] = variable
