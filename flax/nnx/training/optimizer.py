@@ -13,6 +13,8 @@
 # limitations under the License.
 from __future__ import annotations
 
+import typing as tp
+
 import jax
 import jax.numpy as jnp
 import optax
@@ -22,6 +24,8 @@ from flax.nnx import filterlib
 from flax.nnx import variablelib
 from flax.nnx.object import Object
 from flax.nnx.variablelib import Variable, VariableState
+
+M = tp.TypeVar('M', bound=nnx.Module)
 
 # TODO: add tests and docstrings
 
@@ -101,7 +105,7 @@ def _update_opt_state(opt_state, updates):
   return jax.tree.map(optimizer_update_variables, opt_state, updates)
 
 
-class Optimizer(Object):
+class Optimizer(Object, tp.Generic[M]):
   """Simple train state for the common case with a single Optax optimizer.
 
   Example usage::
@@ -168,7 +172,7 @@ class Optimizer(Object):
 
   def __init__(
     self,
-    model: nnx.Module,
+    model: M,
     tx: optax.GradientTransformation,
     wrt: filterlib.Filter = nnx.Param,
   ):
