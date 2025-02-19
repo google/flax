@@ -698,6 +698,35 @@ class TestCompatModule(absltest.TestCase):
 
     params = train_step(params, x, y)
 
+  def test_metadata(self):
+    class Linear(bridge.Module):
+      dout: int
+
+      @bridge.compact
+      def __call__(self, x):
+        w = self.param(
+          'w', bridge.with_partitioning(nnx.initializers.uniform(), ('in', 'out')),
+          (x.shape[-1], self.dout)
+        )
+        b = self.param('b', nnx.initializers.zeros_init(), (self.dout,))
+        return x @ w + b[None]
+
+    foo = Linear(5)
+    x = jnp.ones((3, 2))
+
+    variables = foo.init(0, x)
+    params = variables['params']
+    self.assertIsInstance(params['w'], nn.Partitioned)
+    self.assertEqual(params['w'].value.shape, (2, 5))
+    self.assertEqual(params['w'].names, ('in', 'out'))
+    self.assertEqual(nn.get_partition_spec(variables)['params']['w'],
+                     jax.sharding.PartitionSpec('in', 'out'))
+    self.assertIsInstance(params['b'], jax.Array)
+    self.assertEqual(params['b'].shape, (5,))
+
+    y: jax.Array = foo.apply(variables, x)
+    self.assertEqual(y.shape, (3, 5))
+
 
 if __name__ == '__main__':
   absltest.main()
