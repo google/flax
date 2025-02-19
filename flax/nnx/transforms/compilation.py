@@ -17,6 +17,10 @@ import dataclasses
 import functools
 import typing as tp
 
+import jax.experimental
+import jax.experimental.shard_map
+from jax.sharding import PartitionSpec
+
 from flax.nnx import (
   extract,
   filterlib,
@@ -27,11 +31,13 @@ from flax.nnx import (
 import jax
 import jax.core
 import jax.stages
+from jax._src.mesh import Mesh, AbstractMesh
 
 from flax.typing import Missing
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
-
+Specs = tp.Any
+AxisName = tp.Hashable
 
 # -------------------------------
 # jit
@@ -341,7 +347,6 @@ def jit(
         check_aliasing=in_shardings is not None or kwarg_shardings is not None,
         ctxtag=jit_wrapper,
       )
-      jax_in_shardings, kwarg_shardings, jax_out_shardings
       pure_args_out, pure_kwargs_out, pure_out = jitted_fn(
         *pure_args, **pure_kwargs
       )
@@ -371,3 +376,201 @@ def jit(
   jit_wrapper.inner = jitted_fn  # type: ignore
 
   return jit_wrapper  # type: ignore
+
+# -------------------------------
+# shard_map
+# -------------------------------
+
+# TODO: create StateSpec and consider enabling a mode that does
+# not use filters during split for performance. Overall there might
+# be performance limitations for using shard_map at a top-level
+
+@dataclasses.dataclass(eq=False)
+class ShardMapFn:
+  f: tp.Callable[..., tp.Any]
+  in_specs: tp.Any
+  out_specs: tp.Any
+  kwarg_specs: tp.Any
+  ctxtag: tp.Hashable
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f)
+
+  def __call__(self, *pure_args, **pure_kwargs):
+    args, kwargs = extract.from_tree(
+      (pure_args, pure_kwargs),
+      merge_fn=_jit_merge_fn,
+      ctxtag=self.ctxtag,
+      is_inner=True,
+    )
+
+    out = self.f(*args, **kwargs)
+
+    args_out, kwargs_out = extract.clear_non_graph_nodes((args, kwargs))
+    pure_args_out, pure_kwargs_out, pure_out = extract.to_tree(
+      (args_out, kwargs_out, out),
+      prefix=(self.in_specs, self.kwarg_specs, self.out_specs),
+      ctxtag=self.ctxtag,
+      split_fn=_jit_split_fn,
+    )
+
+    return pure_args_out, pure_kwargs_out, pure_out
+
+
+@tp.overload
+def shard_map(
+  f: F,
+  *,
+  mesh: Mesh | AbstractMesh,
+  in_specs: Specs,
+  out_specs: Specs,
+  check_rep: bool = True,
+  auto: frozenset[AxisName] = frozenset(),
+) -> F: ...
+@tp.overload
+def shard_map(
+  *,
+  mesh: Mesh | AbstractMesh,
+  in_specs: Specs,
+  out_specs: Specs,
+  check_rep: bool = True,
+  auto: frozenset[AxisName] = frozenset(),
+) -> tp.Callable[[F], F]: ...
+def shard_map(
+  f: F | type[Missing] = Missing,
+  *,
+  mesh: Mesh | AbstractMesh,
+  in_specs: Specs,
+  out_specs: Specs,
+  check_rep: bool = True,
+  auto: frozenset[AxisName] = frozenset(),
+) -> F | tp.Callable[[F], F]:
+  """
+  Lifted version of ``jax.experimental.shard_map.shard_map`` that can handle
+  Modules / graph nodes as arguments.
+
+  Simple data parallel example::
+
+    import jax
+    import jax.numpy as jnp
+    from flax import nnx
+    from jax.sharding import PartitionSpec as P
+
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
+
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    x = jnp.ones((32, 2))
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P(None), P('data')), out_specs=P('data')
+    )
+    def f(m, x):
+      return m(x)
+
+    y = f(m, x)
+
+    jax.debug.visualize_array_sharding(y)
+
+  Model parallel example::
+
+    import jax
+    import jax.numpy as jnp
+    from flax import nnx
+    from jax.sharding import PartitionSpec as PS
+
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('model',))
+
+    class MLP(nnx.Module):
+      def __init__(self, din, dhidden, dout, *, rngs: nnx.Rngs):
+        self.linear1 = nnx.Linear(din, dhidden, use_bias=False, rngs=rngs)
+        self.linear2 = nnx.Linear(dhidden, dout, use_bias=False, rngs=rngs)
+
+      def __call__(self, x):
+        return self.linear2(jax.nn.relu(self.linear1(x)))
+
+    m = MLP(2, 64, 3, rngs=nnx.Rngs(0))
+    x = jnp.ones((32, 2))
+
+    def path_ends_with(path_suffix):
+      return lambda path, value: path[-len(path_suffix):] == path_suffix
+
+    model_sharding = nnx.StateSharding({
+      path_ends_with(('linear1', 'kernel')): PS(None, 'model'),
+      path_ends_with(('linear2', 'kernel')): PS('model', None),
+    })
+
+    @nnx.shard_map(mesh=mesh, in_specs=(model_sharding, PS(None)), out_specs=PS(None))
+    def f(m, x):
+      y = m(x)
+      return jax.lax.psum(y, 'model')
+
+    y = f(m, x)
+
+    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
+
+  """
+  if f is Missing:
+    return functools.partial(
+      shard_map,
+      mesh=mesh,
+      in_specs=in_specs,
+      out_specs=out_specs,
+      check_rep=check_rep,
+      auto=auto,
+    )  # type: ignore[return-value]
+  assert not isinstance(f, type)
+
+  kwarg_specs = PartitionSpec()
+  jax_in_specs = jax.tree.map(
+    lambda x: extract.NodeStates(
+      _graphdef=PartitionSpec(), states=x.shardings, metadata=x
+    )
+    if isinstance(x, StateSharding)
+    else x,
+    in_specs,
+  )
+  jax_out_specs = jax.tree.map(
+    lambda x: extract.NodeStates(
+      _graphdef=PartitionSpec(), states=x.shardings, metadata=x
+    )
+    if isinstance(x, StateSharding)
+    else x,
+    out_specs,
+  )
+
+  @functools.wraps(f)
+  def shard_map_wrapper(*args, **kwargs):
+    # run dynamic_cache_context before update_context
+    with graph.update_context(shard_map_wrapper):
+      pure_args, pure_kwargs = extract.to_tree(
+        (args, kwargs),
+        prefix=(in_specs, kwarg_specs)
+        if in_specs is not None or kwarg_specs is not None
+        else None,
+        split_fn=_jit_split_fn,
+        check_aliasing=in_specs is not None or kwarg_specs is not None,
+        ctxtag=shard_map_wrapper,
+      )
+      pure_args_out, pure_kwargs_out, pure_out = shard_map_fn(
+        *pure_args, **pure_kwargs
+      )
+      _args_out, _kwargs_out, out = extract.from_tree(
+        (pure_args_out, pure_kwargs_out, pure_out),
+        merge_fn=_jit_merge_fn,
+        is_inner=False,
+        ctxtag=shard_map_wrapper,
+      )
+    return out
+
+  shard_map_fn = jax.experimental.shard_map.shard_map(
+    ShardMapFn(f, in_specs, out_specs, kwarg_specs, shard_map_wrapper),
+    mesh=mesh,
+    in_specs=jax_in_specs,
+    out_specs=(jax_in_specs, kwarg_specs, jax_out_specs),  # type: ignore
+    check_rep=check_rep,
+    auto=auto,
+  )
+
+  shard_map_wrapper.inner = shard_map_fn  # type: ignore
+
+  return shard_map_wrapper  # type: ignore
