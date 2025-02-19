@@ -16,16 +16,19 @@ import os
 from typing import Any
 
 from flax.linen.dtypes import promote_dtype
-os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=4'
 
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
+
+import jax
+import jax.numpy as jnp
+import numpy as np
 from absl.testing import absltest
+
 import flax
 from flax import linen as nn
 from flax import nnx
 from flax.nnx import bridge
-import jax
-import jax.numpy as jnp
-import numpy as np
+from flax.nnx.bridge.module import MODULE_CONTEXT
 
 
 class TestCompatibility(absltest.TestCase):
@@ -498,6 +501,24 @@ class TestCompatModule(absltest.TestCase):
     foo = Foo(1)
     state = {'b': {'c': nnx.Param(jnp.array(2))}}
     nnx.update(foo, state)
+
+  def test_module_stack(self):
+    """Test that apply set the module stack correctly."""
+    test = self
+
+    class Foo(bridge.Module):
+      def setup(self):
+        current_ctx = MODULE_CONTEXT.module_stack[-1]
+        test.assertIs(current_ctx.module, self)
+        test.assertFalse(current_ctx.in_compact)
+
+      def __call__(self):
+        current_ctx = MODULE_CONTEXT.module_stack[-1]
+        test.assertIs(current_ctx.module, self)
+        test.assertFalse(current_ctx.in_compact)
+
+    foo = Foo()
+    foo.apply({})
 
   def test_compact_basic(self):
     class Linear(bridge.Module):
