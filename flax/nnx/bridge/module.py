@@ -24,13 +24,14 @@ import jax
 import typing_extensions as tpe
 
 from flax import errors
+from flax.core import meta
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx import graph, rnglib, statelib, traversals
 from flax.nnx import variablelib
 import flax.nnx.module as nnx_module
 from flax.nnx.object import Object
 from flax.nnx import variablelib
-from flax import errors
+from flax.nnx.bridge import variables as bridge_variables
 import jax.numpy as jnp
 
 A = tp.TypeVar('A')
@@ -316,8 +317,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       ):
         leaf = variable_state.value
       else:
-        # TODO: convert to linen box
-        leaf = variable_state
+        leaf = bridge_variables.to_linen_var(variable_state)
 
       _variables[collection][path] = leaf
 
@@ -347,23 +347,15 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
 
     # create variables
     real_variables = dict(variables)
-    for collection, state in variables.items():
-      variable_type = variablelib.variable_type_from_name(
-        collection, allow_register=True
-      )
+    for col_name, linen_collection in variables.items():
 
       def to_variable(value):
-        if isinstance(value, variablelib.VariableState):
-          variable = value.to_variable()
-          if not isinstance(variable, variable_type):
-            raise ValueError(
-              f'Expected variable to be of type {variable_type}, got {type(variable).__name__}'
-            )
-          return variable
-        return variable_type(value)
+        return bridge_variables.to_nnx_var(col_name, value)
 
-      state = jax.tree.map(to_variable, state)
-      real_variables[collection] = state
+      linen_collection = jax.tree.map(
+        to_variable, linen_collection,
+        is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
+      real_variables[col_name] = linen_collection
 
     states = ({},) if not real_variables else real_variables.values()
     state = ModuleState.merge(*states)

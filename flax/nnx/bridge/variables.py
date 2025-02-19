@@ -14,14 +14,16 @@
 
 from collections import defaultdict
 from typing import Any, TypeVar
+import typing as tp
 
 import jax
 from flax import struct
 from flax.core import meta
+from flax.nnx import graph
 from flax.nnx import spmd
 from flax.nnx import traversals
 from flax.nnx import variablelib
-import typing as tp
+from flax.typing import LogicalNames
 
 
 A = TypeVar('A')
@@ -152,8 +154,21 @@ def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
     elif isinstance(v, variablelib.VariableState):
       col_name = variablelib.variable_name_from_type(v.type)
       v = to_linen_var(v)
+    elif isinstance(v, graph.NodeDef) or isinstance(v, graph.NodeRef):
+      col_name = 'nnx'  # an nnx.GraphDef for some ToLinen submodule
     else:
-      col_name = 'nnx'  # it must be an nnx.GraphDef, for some ToLinen submodule
+      raise ValueError(f'Cannot infer collection name from value: {v}')
     linen_structured[(col_name, *kp)] = v
   variables = traversals.unflatten_mapping(linen_structured)
   return variables
+
+
+
+def with_partitioning(
+    fn: tp.Callable[..., tp.Any],
+    names: LogicalNames,
+    mesh: jax.sharding.Mesh | None = None,
+) -> tp.Callable[..., meta.Partitioned[tp.Any]]:
+  """Same interface as Linen, but calls NNX `with_partitioning` within."""
+  return spmd.with_partitioning(fn, names, mesh,
+                                linen_meta_type=meta.Partitioned)
