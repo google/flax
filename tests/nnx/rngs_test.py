@@ -53,7 +53,6 @@ class TestRngs(absltest.TestCase):
     self.assertIs(rngs.params.key.value, key0)
     self.assertFalse(jnp.allclose(key1, key2))
 
-  @absltest.skip("Context checking doesn't work yet with stackless")
   def test_rng_trace_level_constraints(self):
     rngs = nnx.Rngs(0)
 
@@ -128,7 +127,7 @@ class TestRngs(absltest.TestCase):
 
     rngs = nnx.Rngs(params=0, dropout=1)
     m = Foo(rngs)
-    _, params, rng_counts, dropout_keys, param_keys = nnx.split(
+    graphdef, params, rng_counts, dropout_keys, param_keys = nnx.split(
       m, nnx.Param, nnx.RngCount, 'dropout', 'params'
     )
 
@@ -151,10 +150,10 @@ class TestRngs(absltest.TestCase):
       out_axes=(0, 0, None),
     )
     def f(params, dropout_keys, param_keys, rng_counts, x):
-      nnx.update(m, params, dropout_keys, param_keys, rng_counts)
+      m = nnx.merge(graphdef, params, dropout_keys, param_keys, rng_counts)
       y = m(x)
-      _, params, dropout_keys, param_keys, rng_counts = nnx.split(
-        m, nnx.Param, 'dropout', 'params', nnx.RngCount
+      _, params, rng_counts, dropout_keys, param_keys = nnx.split(
+        m, nnx.Param, nnx.RngCount, 'dropout', 'params'
       )
       return y, params, rng_counts
 
