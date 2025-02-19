@@ -75,14 +75,6 @@ def has_setup(x: tp.Any) -> tp.TypeGuard[_HasSetup]:
   return hasattr(x, 'setup')
 
 
-class _HasUnbox(tp.Protocol):
-  unbox: bool
-
-
-def has_unbox(x: tp.Any) -> tp.TypeGuard[_HasUnbox]:
-  return hasattr(x, 'unbox')
-
-
 def _maybe_call_setup(module: Module):
   if (
     has_setup(module)
@@ -242,16 +234,10 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         abs_value.raw_value = value
         value = abs_value
 
-      variable = variablelib.Param(
-        value,
-        unbox=unbox,
-      )
+      variable = variablelib.Param(value)
     else:
       value = init_fn(self.make_rng('params'), *init_args, **init_kwargs)
-      variable = variablelib.Param(
-        value,
-        unbox=unbox,
-      )
+      variable = variablelib.Param(value)
 
     setattr(self, name, variable)
     return variable
@@ -299,13 +285,13 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         abs_value.raw_value = value
         value = abs_value
 
-      variable = variable_type(value, unbox=unbox)
+      variable = variable_type(value)
     else:
       if init_fn is None:
         raise ValueError(f"Expected 'init_fn' to be a callable, got None")
 
       value = init_fn(*init_args, **init_kwargs)
-      variable = variable_type(value, unbox=unbox)
+      variable = variable_type(value)
 
     setattr(self, name, variable)
     return variable
@@ -324,15 +310,14 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       if collection not in _variables:
         _variables[collection] = {}
 
-      if has_unbox(variable_state):
-        assert isinstance(variable_state, variablelib.VariableState)
-        if variable_state.unbox:
-          leaf = variable_state.value
-        else:
-          # TODO: convert to linen box
-          leaf = variable_state
-      else:
+      if (
+          isinstance(variable_state, variablelib.VariableState)
+          and not variable_state._var_metadata
+      ):
         leaf = variable_state.value
+      else:
+        # TODO: convert to linen box
+        leaf = variable_state
 
       _variables[collection][path] = leaf
 
