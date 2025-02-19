@@ -40,8 +40,9 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
 
 @dataclasses.dataclass
-class CompactContext:
+class ModuleStackEntry:
   module: Module
+  in_compact: bool
   type_counter: defaultdict[type, int] = dataclasses.field(
     default_factory=lambda: defaultdict(int)
   )
@@ -49,12 +50,13 @@ class CompactContext:
 
 @dataclasses.dataclass
 class ModuleContext(threading.local):
-  parent_stack: list[tp.Optional[CompactContext]] = dataclasses.field(
+  module_stack: list[ModuleStackEntry | None] = dataclasses.field(
     default_factory=lambda: [None]
   )
 
 
 MODULE_CONTEXT = ModuleContext()
+
 
 class ModuleState(statelib.State):
   pass
@@ -79,16 +81,18 @@ def has_setup(x: tp.Any) -> tp.TypeGuard[_HasSetup]:
 def _maybe_call_setup(module: Module):
   if (
     has_setup(module)
-    and isinstance(module, Object)
+    and isinstance(module, Module)
     and not module._object__state.is_setup
   ):
     # void parent context
-    MODULE_CONTEXT.parent_stack.append(None)
+    MODULE_CONTEXT.module_stack.append(
+      ModuleStackEntry(module, in_compact=False)
+    )
     try:
       module.setup()  # type: ignore[attribute-error]
       module._object__state._is_setup = True
     finally:
-      MODULE_CONTEXT.parent_stack.pop()
+      MODULE_CONTEXT.module_stack.pop()
 
 
 def _bind_module(parent: Module, module: Module) -> Module:
@@ -115,11 +119,11 @@ class ModuleMeta(nnx_module.ModuleMeta):
 
 def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
   # compact behavior
-  parent_ctx = MODULE_CONTEXT.parent_stack[-1]
+  parent_ctx = MODULE_CONTEXT.module_stack[-1]
   parent = None
   module: M
 
-  if parent_ctx is not None:
+  if parent_ctx is not None and parent_ctx.in_compact:
     if 'parent' in kwargs:
       parent = kwargs.pop('parent')
       if parent is not None:
@@ -312,8 +316,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         _variables[collection] = {}
 
       if (
-          isinstance(variable_state, variablelib.VariableState)
-          and not variable_state._var_metadata
+        isinstance(variable_state, variablelib.VariableState)
+        and not variable_state._var_metadata
       ):
         leaf = variable_state.value
       else:
@@ -353,8 +357,10 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         return bridge_variables.to_nnx_var(col_name, value)
 
       linen_collection = jax.tree.map(
-        to_variable, linen_collection,
-        is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
+        to_variable,
+        linen_collection,
+        is_leaf=lambda x: isinstance(x, meta.AxisMetadata),
+      )
       real_variables[col_name] = linen_collection
 
     states = ({},) if not real_variables else real_variables.values()
@@ -395,12 +401,15 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         value._object__state._initializing = _initialize
       if isinstance(value, Module):
         value.scope = Scope(rngs)
-        if has_setup(value):
-          value.setup()
+        _maybe_call_setup(value)
 
+    MODULE_CONTEXT.module_stack.append(
+      ModuleStackEntry(module, in_compact=False)
+    )
     try:
       out = _method(module, *args, **kwargs)
     finally:
+      MODULE_CONTEXT.module_stack.pop()
       # reset temporary state
       for _, value in graph.iter_graph(module):
         if isinstance(value, Object):
@@ -464,12 +473,12 @@ def compact(f: F) -> F:
         f"Expected 'self' to be a nnx.bridge.Module, got {type(self).__name__}"
       )
 
-    MODULE_CONTEXT.parent_stack.append(CompactContext(self))
+    MODULE_CONTEXT.module_stack.append(ModuleStackEntry(self, in_compact=True))
 
     try:
       return f(self, *args, **kwargs)
     finally:
-      MODULE_CONTEXT.parent_stack.pop()
+      MODULE_CONTEXT.module_stack.pop()
 
   return compact_wrapper  # type: ignore
 
