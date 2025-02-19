@@ -460,13 +460,16 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       **kwargs,
     )
 
+  def is_initializing(self) -> bool:
+    return self._object__state._initializing
+
 
 def compact(f: F) -> F:
   @functools.wraps(f)
   def compact_wrapper(self, *args, **kwargs):
     if not isinstance(self, Module):
       raise ValueError(
-        f"Expected 'self' to be a nnx.compat.Module, got {type(self).__name__}"
+        f"Expected 'self' to be a nnx.bridge.Module, got {type(self).__name__}"
       )
 
     MODULE_CONTEXT.parent_stack.append(CompactContext(self))
