@@ -123,28 +123,31 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
   parent = None
   module: M
 
-  if parent_ctx is not None and parent_ctx.in_compact:
-    if 'parent' in kwargs:
-      parent = kwargs.pop('parent')
-      if parent is not None:
-        raise ValueError(
-          f"'parent' can only be set to None, got {type(parent).__name__}"
-        )
-      name = None
-    else:
-      type_index = parent_ctx.type_counter[cls]
-      parent_ctx.type_counter[cls] += 1
+  name = None
+  if parent_ctx is not None:
+    if not parent_ctx.in_compact and 'name' in kwargs:
+      raise ValueError(
+        f"'name' can only be set in @compact functions. If in setup(), "
+          "use parent's `self.<attr_name> to set the submodule name.")
 
-      if 'name' in kwargs:
-        name = kwargs.pop('name')
-        if not isinstance(name, str):
-          raise ValueError(f"'name' must be a 'str', got {type(name).__name__}")
+    if parent_ctx.in_compact:
+      if 'parent' in kwargs:
+        parent = kwargs.pop('parent')
+        if parent is not None:
+          raise ValueError(
+            f"'parent' can only be set to None, got {type(parent).__name__}"
+          )
       else:
-        name = f'{cls.__name__}_{type_index}'
+        type_index = parent_ctx.type_counter[cls]
+        parent_ctx.type_counter[cls] += 1
 
-      parent = parent_ctx.module
-  else:
-    name = None
+        if 'name' in kwargs:
+          name = kwargs.pop('name')
+          if not isinstance(name, str):
+            raise ValueError(f"'name' must be a 'str', got {type(name).__name__}")
+        else:
+          name = f'{cls.__name__}_{type_index}'
+        parent = parent_ctx.module
 
   module = nnx_module.ModuleMeta.__call__(cls, *args, **kwargs)
   module.scope = None

@@ -640,6 +640,14 @@ class TestCompatModule(absltest.TestCase):
     y = bar.apply(variables, x)
     self.assertEqual(y.shape, (1, 5))
 
+    with self.assertRaises(ValueError):
+      class SetupBar(bridge.Module):
+        def setup(self):
+          self.xyz = Foo(5, name='xyz')
+        def __call__(self, x):
+          return self.xyz(x)
+      SetupBar().init(0, x)
+
   def test_dense_port(self):
     class Dense(bridge.Module):
       features: int
