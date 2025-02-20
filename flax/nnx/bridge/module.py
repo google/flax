@@ -170,10 +170,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     cls = dataclasses.dataclass(repr=False)(cls)
     cls.__hash__ = object.__hash__  # type: ignore[method-assign]
 
-  if not tp.TYPE_CHECKING:
-
-    def __getattribute__(self, name: str):
-      return type(self)._getattr(self, name)
+  def __getattribute__(self, name: str):
+    return type(self)._getattr(self, name)
 
   def _getattr(self, name: str) -> tp.Any:
     value = super().__getattribute__(name)
