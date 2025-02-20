@@ -493,7 +493,7 @@ class TestCompatibility(absltest.TestCase):
     # messing up the stateful part of the NNX module.
     pass
 
-class TestCompatModule(absltest.TestCase):
+class TestBridgeModule(absltest.TestCase):
   def test_update(self):
     class Foo(bridge.Module):
       a: int
@@ -747,6 +747,23 @@ class TestCompatModule(absltest.TestCase):
 
     y: jax.Array = foo.apply(variables, x)
     self.assertEqual(y.shape, (3, 5))
+
+  def test_dropout(self):
+    class Linear(bridge.Module):
+      dout: int
+      def setup(self):
+        self.w = self.param('w', nnx.initializers.lecun_normal(), (2, self.dout))
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=self.scope.rngs)
+
+      def __call__(self, x):
+        return self.dropout(x @ self.w)
+
+    model = Linear(5)
+    x = jnp.ones((3, 2))
+    variables = model.init(0, x)
+    y1 = model.apply(variables, x, rngs=1)
+    y2 = model.apply(variables, x, rngs=2)
+    assert not jnp.allclose(y1, y2)
 
 
 if __name__ == '__main__':

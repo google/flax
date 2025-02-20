@@ -305,6 +305,11 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
 
     variable_state: variablelib.VariableState
     for path, variable_state in state.flat_state():
+
+      if issubclass(variable_state.type, rnglib.RngState):
+        # Don't return RNG states, since Linen doesn't have them.
+        continue
+
       try:
         collection = variablelib.variable_name_from_type(variable_state.type)
       except ValueError:
