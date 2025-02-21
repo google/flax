@@ -846,6 +846,59 @@ class LinearTest(parameterized.TestCase):
     correct_ans = np.expand_dims(correct_ans, (0, 3))
     np.testing.assert_allclose(y, correct_ans)
 
+  def test_reflect_conv_1d_custom(self):
+    """Test 1d convolution with reflection padding and a stride."""
+    rng = dict(params=random.key(0))
+    x = np.arange(1, 6)
+    x = np.expand_dims(x, (0, 2))
+    kernel = np.array((1, 2, 1))
+    kernel = np.expand_dims(kernel, (1, 2))
+
+    conv_module = nn.Conv(
+      features=1,
+      kernel_size=(3,),
+      strides=(2,),
+      padding='REFLECT',
+      kernel_init=lambda *_: kernel,
+      bias_init=initializers.zeros,
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+
+    self.assertEqual(initial_params['params']['kernel'].shape, (3, 1, 1))
+    # Compare with manually computed convolution
+    correct_ans = np.array((2 + 2 * 1 + 2, 2 + 2 * 3 + 4, 4 + 2 * 5 + 4))
+    correct_ans = np.expand_dims(correct_ans, (0, 2))
+    np.testing.assert_allclose(y, correct_ans)
+
+  def test_reflect_conv_2d_custom(self):
+    """Test 2d convolution with reflect padding on a 3x3 example."""
+    rng = dict(params=random.key(0))
+    x = np.array(((1, 2, 3), (4, 5, 6), (7, 8, 9)))
+    x = np.expand_dims(x, (0, 3))
+    kernel = np.array(((0, 1, 0), (1, 2, 1), (0, 1, 0)))
+    kernel = np.expand_dims(kernel, (2, 3))
+
+    conv_module = nn.Conv(
+      features=1,
+      kernel_size=(3, 3),
+      padding='REFLECT',
+      kernel_init=lambda *_: kernel,
+      bias_init=initializers.zeros,
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+
+    self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 1, 1))
+    # Compare with manually computed convolution
+    correct_ans = np.array(
+      (
+        (2 * 1 + 4 + 2 + 4 + 2, 2 * 2 + 5 + 3 + 5 + 1, 2 * 3 + 6 + 2 + 6 + 2),
+        (2 * 4 + 1 + 5 + 7 + 5, 2 * 5 + 2 + 6 + 8 + 4, 2 * 6 + 3 + 5 + 9 + 5),
+        (2 * 7 + 4 + 8 + 8 + 4, 2 * 8 + 5 + 9 + 5 + 7, 2 * 9 + 6 + 8 + 6 + 8),
+      )
+    )
+    correct_ans = np.expand_dims(correct_ans, (0, 3))
+    np.testing.assert_allclose(y, correct_ans)
+
   def test_causal_conv1d(self):
     rng = dict(params=random.key(0))
     x = jnp.ones((1, 8, 4))
