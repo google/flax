@@ -63,6 +63,17 @@ class _UnassignedAxis:
 _unassigned_axis = _UnassignedAxis()
 
 
+def is_cpu_platform(mesh: jax.sharding.Mesh | None):
+  if mesh is None:
+    if _global_mesh_defined():
+      device = pxla.thread_resources.env.physical_mesh.devices.reshape(-1)[0]
+    else:
+      device = jax.devices()[0]
+  else:
+    device = mesh.devices.reshape(-1)[0]
+  return device.platform == 'cpu'
+
+
 def _mesh_assignment_free(new_assignment, existing_assignments):
   """Determines if a given mesh axis has already been assigned."""
   new = set(jax.tree_util.tree_leaves(new_assignment))
@@ -197,9 +208,7 @@ def _with_sharding_constraint(
   mesh: jax.sharding.Mesh | None = None,
 ):
   """Wrapper for lax.with_sharding_constraint, no-op on cpu or outside jit."""
-  if jax.devices()[0].platform == 'cpu' or (
-    not _global_mesh_defined() and mesh is None
-  ):
+  if is_cpu_platform(mesh) or (not _global_mesh_defined() and mesh is None):
     return x
   else:
     if mesh is not None and axis_resources is not None:
