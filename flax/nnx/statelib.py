@@ -17,6 +17,7 @@ from __future__ import annotations
 import typing as tp
 from collections.abc import MutableMapping
 from functools import partial
+import warnings
 
 import jax
 import jax.tree_util as jtu
@@ -112,7 +113,7 @@ class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.Representable):
     return iter(zip(self._keys, self._values))
 
   def to_nested_state(self) -> State[Key, V]:
-    return State.from_flat_path(self)
+    return from_flat_state(self)
 
   @tp.overload
   def split(self, first: filterlib.Filter, /) -> FlatState[V]: ...
@@ -307,14 +308,20 @@ class State(MutableMapping[K, V], reprlib.Representable):
     )
 
   def map(self, f: tp.Callable[[tuple, V], V]) -> State[K, V]:
-    flat_state = self.flat_state()
-    result = [
-      (path, f(path, variable_state)) for path, variable_state in flat_state
-    ]
-    return State.from_flat_path(result)
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.map_state` instead.',
+      DeprecationWarning,
+    )
+    return map_state(f, self)
 
   def flat_state(self) -> FlatState[V]:
-    return FlatState(traversals.flatten_to_sequence(self._mapping), sort=True)
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.to_flat_state` instead.',
+      DeprecationWarning,
+    )
+    return to_flat_state(self)
 
   @classmethod
   def from_flat_path(
@@ -322,38 +329,33 @@ class State(MutableMapping[K, V], reprlib.Representable):
     flat_state: tp.Mapping[PathParts, V] | tp.Iterable[tuple[PathParts, V]],
     /,
   ):
-    if not isinstance(flat_state, tp.Mapping):
-      flat_state = dict(flat_state)
-    nested_state = traversals.unflatten_mapping(flat_state)
-    return cls(nested_state)
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.from_flat_state` instead.',
+      DeprecationWarning,
+    )
+    return from_flat_state(flat_state)
 
   def to_pure_dict(self,
                    extract_fn: ExtractValueFn | None = None
                    ) -> dict[str, tp.Any]:
-    # Works for nnx.Variable and nnx.VariableState
-    if extract_fn is None:
-      extract_fn = lambda x: x.value if hasattr(x, 'value') else x
-    flat_values = {k: extract_fn(x) for k, x in self.flat_state()}
-    return traversals.unflatten_mapping(flat_values)
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.to_pure_dict` instead.',
+      DeprecationWarning,
+    )
+    return to_pure_dict(self, extract_fn)
 
   def replace_by_pure_dict(self,
                            pure_dict: dict[str, tp.Any],
                            replace_fn: SetValueFn | None = None):
-    def try_convert_int(x):
-      try:
-        return int(x)
-      except ValueError:
-        return x
-    # Works for nnx.Variable and nnx.VariableState
-    if replace_fn is None:
-      replace_fn = lambda x, v: x.replace(v) if hasattr(x, 'replace') else v
-    current_flat = dict(self.flat_state())
-    for kp, v in traversals.flatten_mapping(pure_dict).items():
-      kp = tuple(map(try_convert_int, kp))
-      if kp not in current_flat:
-        raise ValueError(f'key in pure_dict not available in state: {kp}')
-      current_flat[kp] = replace_fn(current_flat[kp], v)
-    self.update(traversals.unflatten_mapping(current_flat))
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.replace_by_pure_dict` '
+      'instead.',
+      DeprecationWarning,
+    )
+    return replace_by_pure_dict(self, pure_dict, replace_fn)
 
   @tp.overload
   def split(self, first: filterlib.Filter, /) -> State[K, V]: ...
@@ -375,48 +377,12 @@ class State(MutableMapping[K, V], reprlib.Representable):
   def split(  # type: ignore[misc]
     self, first: filterlib.Filter, /, *filters: filterlib.Filter
   ) -> tp.Union[State[K, V], tuple[State[K, V], ...]]:
-    """Split a ``State`` into one or more ``State``'s. The
-    user must pass at least one ``Filter`` (i.e. :class:`Variable`),
-    and the filters must be exhaustive (i.e. they must cover all
-    :class:`Variable` types in the ``State``).
-
-    Example usage::
-
-      >>> from flax import nnx
-
-      >>> class Model(nnx.Module):
-      ...   def __init__(self, rngs):
-      ...     self.batchnorm = nnx.BatchNorm(2, rngs=rngs)
-      ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
-      ...   def __call__(self, x):
-      ...     return self.linear(self.batchnorm(x))
-
-      >>> model = Model(rngs=nnx.Rngs(0))
-      >>> state = nnx.state(model)
-      >>> param, batch_stats = state.split(nnx.Param, nnx.BatchStat)
-
-    Arguments:
-      first: The first filter
-      *filters: The optional, additional filters to group the state into mutually exclusive substates.
-    Returns:
-      One or more ``States`` equal to the number of filters passed.
-    """
-    filters = (first, *filters)
-    flat_states = _split_state(self.flat_state(), *filters)
-    *states_, rest = (state.to_nested_state() for state in flat_states)
-
-    if rest:
-      raise ValueError(
-        'Non-exhaustive filters, got a non-empty remainder: '
-        f'{rest}.\nUse `...` to match all remaining elements.'
-      )
-
-    states: State | tuple[State, ...]
-    if len(states_) == 1:
-      states = states_[0]
-    else:
-      states = tuple(states_)
-    return states  # type: ignore
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.split_state` instead.',
+      DeprecationWarning,
+    )
+    return split_state(self, first, **filters)
 
   @tp.overload
   def filter(
@@ -440,93 +406,21 @@ class State(MutableMapping[K, V], reprlib.Representable):
     /,
     *filters: filterlib.Filter,
   ) -> tp.Union[State[K, V], tuple[State[K, V], ...]]:
-    """Filter a ``State`` into one or more ``State``'s. The
-    user must pass at least one ``Filter`` (i.e. :class:`Variable`).
-    This method is similar to :meth:`split() <flax.nnx.State.state.split>`,
-    except the filters can be non-exhaustive.
-
-    Example usage::
-
-      >>> from flax import nnx
-
-      >>> class Model(nnx.Module):
-      ...   def __init__(self, rngs):
-      ...     self.batchnorm = nnx.BatchNorm(2, rngs=rngs)
-      ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
-      ...   def __call__(self, x):
-      ...     return self.linear(self.batchnorm(x))
-
-      >>> model = Model(rngs=nnx.Rngs(0))
-      >>> state = nnx.state(model)
-      >>> param = state.filter(nnx.Param)
-      >>> batch_stats = state.filter(nnx.BatchStat)
-      >>> param, batch_stats = state.filter(nnx.Param, nnx.BatchStat)
-
-    Arguments:
-      first: The first filter
-      *filters: The optional, additional filters to group the state into mutually exclusive substates.
-    Returns:
-      One or more ``States`` equal to the number of filters passed.
-    """
-    flat_states = _split_state(self.flat_state(), first, *filters)
-    *states_, _rest = (state.to_nested_state() for state in flat_states)
-
-    assert len(states_) == len(filters) + 1
-
-    states: State | tuple[State, ...]
-    if len(states_) == 1:
-      states = states_[0]
-    else:
-      states = tuple(states_)
-
-    return states  # type: ignore
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.filter_state` instead.',
+      DeprecationWarning,
+    )
+    return filter_state(self, first, *filters)
 
   @classmethod
   def merge(cls, state: tp.Mapping[K, V], /, *states: tp.Mapping[K, V]):
-    """The inverse of :meth:`split() <flax.nnx.State.state.split>`.
-
-    ``merge`` takes one or more ``State``'s and creates
-    a new ``State``.
-
-    Example usage::
-
-      >>> from flax import nnx
-      >>> import jax.numpy as jnp
-
-      >>> class Model(nnx.Module):
-      ...   def __init__(self, rngs):
-      ...     self.batchnorm = nnx.BatchNorm(2, rngs=rngs)
-      ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
-      ...   def __call__(self, x):
-      ...     return self.linear(self.batchnorm(x))
-
-      >>> model = Model(rngs=nnx.Rngs(0))
-      >>> params, batch_stats = nnx.state(model, nnx.Param, nnx.BatchStat)
-      >>> params.linear.bias.value += 1
-
-      >>> state = nnx.State.merge(params, batch_stats)
-      >>> nnx.update(model, state)
-      >>> assert (model.linear.bias.value == jnp.array([1, 1, 1])).all()
-
-    Args:
-      state: A ``State`` object.
-      *states: Additional ``State`` objects.
-    Returns:
-      The merged ``State``.
-    """
-    if not states:
-      if isinstance(state, cls):
-        return state
-      return cls(state)
-
-    states = (state, *states)
-
-    new_state: dict[PathParts, V] = {}
-
-    for state in states:
-      new_state.update(traversals.flatten_mapping(state))  # type: ignore[attribute-error] # pytype is wrong here
-
-    return cls.from_flat_path(new_state)
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.merge_state` instead.',
+      DeprecationWarning,
+    )
+    return merge_state(state, *states)
 
   def __or__(self, other: State[K, V]) -> State[K, V]:
     if not other:
@@ -534,14 +428,12 @@ class State(MutableMapping[K, V], reprlib.Representable):
     return State.merge(self, other)
 
   def __sub__(self, other: State[K, V]) -> State[K, V]:
-    if not other:
-      return self
-
-    self_flat = dict(self.flat_state())
-    other_flat = dict(other.flat_state())
-    diff = {k: v for k, v in self_flat.items() if k not in other_flat}
-
-    return State.from_flat_path(diff)
+    warnings.warn(
+      '`flax.nnx.State` will be deprecated and be replaced by the built-in '
+      'Python dict. Please use the equivalent `nnx.diff` instead.',
+      DeprecationWarning,
+    )
+    return diff(self, other)
 
   def __init_subclass__(cls) -> None:
     super().__init_subclass__()
@@ -572,6 +464,251 @@ jax.tree_util.register_pytree_with_keys(
   _state_flatten_with_keys,
   partial(_state_unflatten, State),  # type: ignore[arg-type]
 )
+
+
+def map_state(f: tp.Callable[[tuple, tp.Any], tp.Any], state: State) -> State:
+  flat_state = to_flat_state(state)
+  result = [
+    (path, f(path, variable_state)) for path, variable_state in flat_state
+  ]
+  return traversals.unflatten_mapping(result)
+
+
+def to_flat_state(state: State) -> FlatState:
+  return FlatState(traversals.flatten_to_sequence(state._mapping), sort=True)
+
+
+def from_flat_state(
+  flat_state: tp.Mapping[PathParts, V] | tp.Iterable[tuple[PathParts, V]],
+  /,
+) -> State:
+  if not isinstance(flat_state, tp.Mapping):
+    flat_state = dict(flat_state)
+  nested_state = traversals.unflatten_mapping(flat_state)
+  return State(nested_state)
+
+
+def to_pure_dict(
+  state, extract_fn: ExtractValueFn | None = None
+) -> dict[str, tp.Any]:
+  # Works for nnx.Variable and nnx.VariableState
+  if extract_fn is None:
+    extract_fn = lambda x: x.value if hasattr(x, 'value') else x
+  flat_values = {k: extract_fn(x) for k, x in to_flat_state(state)}
+  return traversals.unflatten_mapping(flat_values)
+
+
+def replace_by_pure_dict(
+  state, pure_dict: dict[str, tp.Any], replace_fn: SetValueFn | None = None
+):
+  def try_convert_int(x):
+    try:
+      return int(x)
+    except ValueError:
+      return x
+
+  # Works for nnx.Variable and nnx.VariableState
+  if replace_fn is None:
+    replace_fn = lambda x, v: x.replace(v) if hasattr(x, 'replace') else v
+  current_flat = dict(to_flat_state(state))
+  for kp, v in traversals.flatten_mapping(pure_dict).items():
+    kp = tuple(map(try_convert_int, kp))
+    if kp not in current_flat:
+      raise ValueError(f'key in pure_dict not available in state: {kp}')
+    current_flat[kp] = replace_fn(current_flat[kp], v)
+  state.update(traversals.unflatten_mapping(current_flat))
+
+
+@tp.overload
+def split_state(state: State, first: filterlib.Filter, /) -> State: ...
+
+
+@tp.overload
+def split_state(
+  state: State,
+  first: filterlib.Filter,
+  second: filterlib.Filter,
+  /,
+  *filters: filterlib.Filter,
+) -> tuple[State, ...]: ...
+
+
+@tp.overload
+def split_state(
+  state: State, /, *filters: filterlib.Filter
+) -> tp.Union[State, tuple[State, ...]]: ...
+
+
+def split_state(  # type: ignore[misc]
+  state: State, first: filterlib.Filter, /, *filters: filterlib.Filter
+) -> tp.Union[State, tuple[State, ...]]:
+  """Split a ``State`` into one or more ``State``'s. The
+  user must pass at least one ``Filter`` (i.e. :class:`Variable`),
+  and the filters must be exhaustive (i.e. they must cover all
+  :class:`Variable` types in the ``State``).
+
+  Example usage::
+
+    >>> from flax import nnx
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.batchnorm = nnx.BatchNorm(2, rngs=rngs)
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     return self.linear(self.batchnorm(x))
+
+    >>> model = Model(rngs=nnx.Rngs(0))
+    >>> state = nnx.state(model)
+    >>> param, batch_stats = nnx.split_state(state, nnx.Param, nnx.BatchStat)
+
+  Arguments:
+    first: The first filter
+    *filters: The optional, additional filters to group the state into mutually exclusive substates.
+  Returns:
+    One or more ``States`` equal to the number of filters passed.
+  """
+  filters = (first, *filters)
+  flat_states = _split_state(to_flat_state(state), *filters)
+  *states_, rest = (state.to_nested_state() for state in flat_states)
+
+  if rest:
+    raise ValueError(
+      'Non-exhaustive filters, got a non-empty remainder: '
+      f'{rest}.\nUse `...` to match all remaining elements.'
+    )
+
+  states: State | tuple[State, ...]
+  if len(states_) == 1:
+    states = states_[0]
+  else:
+    states = tuple(states_)
+  return states  # type: ignore
+
+
+
+@tp.overload
+def filter_state(
+  state: State,
+  first: filterlib.Filter,
+  /,
+) -> State: ...
+
+
+@tp.overload
+def filter_state(
+  state: State,
+  first: filterlib.Filter,
+  second: filterlib.Filter,
+  /,
+  *filters: filterlib.Filter,
+) -> tuple[State, ...]: ...
+
+
+def filter_state(
+  state: State,
+  first: filterlib.Filter,
+  /,
+  *filters: filterlib.Filter,
+) -> tp.Union[State, tuple[State, ...]]:
+  """Filter a ``State`` into one or more ``State``'s. The
+  user must pass at least one ``Filter`` (i.e. :class:`Variable`).
+  This method is similar to :meth:`split() <flax.nnx.State.state.split>`,
+  except the filters can be non-exhaustive.
+
+  Example usage::
+
+    >>> from flax import nnx
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.batchnorm = nnx.BatchNorm(2, rngs=rngs)
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     return self.linear(self.batchnorm(x))
+
+    >>> model = Model(rngs=nnx.Rngs(0))
+    >>> state = nnx.state(model)
+    >>> param = nnx.filter_state(state, nnx.Param)
+    >>> batch_stats = nnx.filter_state(state, nnx.BatchStat)
+    >>> param, batch_stats = nnx.filter_state(state, nnx.Param, nnx.BatchStat)
+
+  Arguments:
+    first: The first filter
+    *filters: The optional, additional filters to group the state into mutually exclusive substates.
+  Returns:
+    One or more ``States`` equal to the number of filters passed.
+  """
+  flat_states = _split_state(to_flat_state(state), first, *filters)
+  *states_, _rest = (state.to_nested_state() for state in flat_states)
+
+  assert len(states_) == len(filters) + 1
+
+  states: State | tuple[State, ...]
+  if len(states_) == 1:
+    states = states_[0]
+  else:
+    states = tuple(states_)
+
+  return states  # type: ignore
+
+
+def merge_state(state: tp.Mapping, /, *states: tp.Mapping) -> State:
+  """The inverse of :meth:`split() <flax.nnx.State.state.split>`.
+
+  ``merge`` takes one or more ``State``'s and creates
+  a new ``State``.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.batchnorm = nnx.BatchNorm(2, rngs=rngs)
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     return self.linear(self.batchnorm(x))
+
+    >>> model = Model(rngs=nnx.Rngs(0))
+    >>> params, batch_stats = nnx.state(model, nnx.Param, nnx.BatchStat)
+    >>> params['linear']['bias'].value += 1
+
+    >>> state = nnx.merge_state(params, batch_stats)
+    >>> nnx.update(model, state)
+    >>> assert (model.linear.bias.value == jnp.array([1, 1, 1])).all()
+
+  Args:
+    state: A ``State`` object.
+    *states: Additional ``State`` objects.
+  Returns:
+    The merged ``State``.
+  """
+  if not states:
+    if isinstance(state, dict):
+      return state
+    return dict(state)
+
+  states = (state, *states)
+
+  new_state: dict[PathParts, tp.Any] = {}
+
+  for state in states:
+    new_state.update(traversals.flatten_mapping(state))  # type: ignore[attribute-error] # pytype is wrong here
+
+  return from_flat_state(new_state)
+
+
+def diff(state: State, other: State) -> State:
+  if not other:
+    return state
+
+  self_flat = to_flat_state(state)
+  other_flat = to_flat_state(other)
+  diff = {k: v for k, v in self_flat.items() if k not in other_flat}
+
+  return from_flat_state(diff)
 
 
 def _split_state(

@@ -121,6 +121,14 @@ from .spmd import get_named_sharding as get_named_sharding
 from .spmd import with_partitioning as with_partitioning
 from .spmd import with_sharding_constraint as with_sharding_constraint
 from .statelib import State as State
+from .statelib import to_flat_state as to_flat_state
+from .statelib import from_flat_state as from_flat_state
+from .statelib import to_pure_dict as to_pure_dict
+from .statelib import replace_by_pure_dict as replace_by_pure_dict
+from .statelib import filter_state as filter_state
+from .statelib import merge_state as merge_state
+from .statelib import split_state as split_state
+from .statelib import map_state as map_state
 from .training import metrics as metrics
 from .variablelib import Param as Param
 # this needs to be imported before optimizer to prevent circular import
