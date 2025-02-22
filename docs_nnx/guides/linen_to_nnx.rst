@@ -184,7 +184,7 @@ Dropout behavior:
     grads = nnx.grad(loss_fn)(model)
     _, params, rest = nnx.split(model, nnx.Param, ...)
     params = jax.tree.map(lambda p, g: p - 0.1 * g, params, grads)
-    nnx.update(model, nnx.GraphState.merge(params, rest))
+    nnx.update(model, nnx.merge_state(params, rest))
 
 .. testcode:: Linen
   :hide:
@@ -389,7 +389,7 @@ The variable structure is as follows:
 
       # _, params, _ = nnx.split(model, nnx.Param, ...)
       # params
-      State({
+      {
         'decoder': {
           'bias': VariableState(type=Param, value=(784,)),
           'kernel': VariableState(type=Param, value=(256, 784))
@@ -398,7 +398,7 @@ The variable structure is as follows:
           'bias': VariableState(type=Param, value=(256,)),
           'kernel': VariableState(type=Param, value=(784, 256))
         }
-      })
+      }
 
 To call methods other than ``__call__``:
 
@@ -531,7 +531,7 @@ Scan-over-layers is a technique where you run an input through a sequence of N r
 * Up close, in the logic of this model there actually is no need for the ``jax.lax.scan`` operation at initialization time. What happens there is more like a ``jax.vmap`` operation - you are given a ``Block`` sub-``Module`` that accepts ``(in_dim, out_dim)``, and you "vmap" it over ``num_layers`` of times to create a larger array.
 * In Flax NNX, you take advantage of the fact that model initialization and running code are completely decoupled, and instead use the :func:`nnx.vmap<flax.nnx.vmap>` transform to initialize the underlying ``Block`` parameters, and the :func:`nnx.scan<flax.nnx.scan>` transform to run the model input through them.
 
-For more information on Flax NNX transforms, check out the `Transforms guide <https://flax.readthedocs.io/en/latest/guides/transforms.html>`__.
+For more information on Flax NNX transforms, check out the `Transforms guide <https://flax.readthedocs.build/en/guides/transforms.html>`__.
 
 .. codediff::
   :title: Linen, NNX
@@ -644,14 +644,14 @@ Now inspect the variable pytree on both sides:
 
       # _, params, _ = nnx.split(model, nnx.Param, ...)
       # params
-      State({
+      {
         'blocks': {
           'linear': {
             'bias': VariableState(type=Param, value=(5, 64)),
             'kernel': VariableState(type=Param, value=(5, 64, 64))
           }
         }
-      })
+      }
 
 
 Using ``TrainState`` in Flax NNX

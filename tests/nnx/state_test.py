@@ -80,15 +80,15 @@ class StateTest(absltest.TestCase):
   def test_pure_dict(self):
     module = nnx.Linear(4, 5, rngs=nnx.Rngs(0))
     state = nnx.state(module)
-    pure_dict = state.to_pure_dict()
+    pure_dict = nnx.to_pure_dict(state)
     assert isinstance(pure_dict, dict)
     assert isinstance(pure_dict['kernel'], jax.Array)
     assert isinstance(pure_dict['bias'], jax.Array)
-    state.replace_by_pure_dict(jax.tree.map(jnp.zeros_like, pure_dict))
+    nnx.replace_by_pure_dict(state, jax.tree.map(jnp.zeros_like, pure_dict))
     assert isinstance(state, nnx.State)
-    assert isinstance(state.kernel, nnx.VariableState)
-    assert jnp.array_equal(state.kernel.value, jnp.zeros((4, 5)))
-    assert state.kernel.type == nnx.Param
+    assert isinstance(state['kernel'], nnx.VariableState)
+    assert jnp.array_equal(state['kernel'].value, jnp.zeros((4, 5)))
+    assert state['kernel'].type == nnx.Param
     nnx.update(module, state)
     assert jnp.array_equal(module(jnp.ones((3, 4))), jnp.zeros((3, 5)))
 

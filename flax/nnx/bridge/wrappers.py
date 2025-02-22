@@ -251,7 +251,7 @@ class ToLinen(linen.Module):
         lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x).to_state(),
         variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
     states = [State(v) for v in states.values()]
-    nnx_state = nnx.GraphState.merge(*states) if states else nnx.GraphState({})
+    nnx_state = nnx.merge_state(*states) if states else nnx.GraphState({})
     module = nnx.merge(gdef, nnx_state)
     nnx.reseed(module, **linen_rngs_dict(self))  # reseed with keys from linen apply call.
     out = module(*args, **kwargs)

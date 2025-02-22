@@ -22,6 +22,7 @@ import threading
 import typing as tp
 
 from flax.nnx import filterlib, reprlib, variablelib
+from flax.nnx import statelib
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -397,7 +398,7 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       fn = accessor(module)
       out = fn(*args, **kwargs)
       graphdef, flat_state = flatten(module)
-      state_ = State.from_flat_path(flat_state)
+      state_ = statelib.from_flat_state(flat_state)
       return out, (graphdef, state_)
 
     return CallableProxy(_apply, accessor)  # type: ignore
@@ -1008,7 +1009,7 @@ def graph_pop(
   )
   _graph_pop(node, id_to_index, path_parts, flat_states, predicates)
   return tuple(
-    GraphState.from_flat_path(flat_state) for flat_state in flat_states
+    statelib.from_flat_state(flat_state) for flat_state in flat_states
   )
 
 
@@ -1310,7 +1311,7 @@ class SplitContext:
     )
     flat_states = _split_state(flat_state, filters)
     states = tuple(
-      State.from_flat_path(flat_state) for flat_state in flat_states
+      statelib.from_flat_state(flat_state) for flat_state in flat_states
     )
 
     return graphdef, *states
@@ -1479,7 +1480,7 @@ class MergeContext:
       ctx.outer_index_outer_ref if ctx and ctx.outer_index_outer_ref else None
     )
 
-    _state = State.merge(state, *states)
+    _state = statelib.merge_state(state, *states)
     node = unflatten(
       graphdef,
       _state,
@@ -1735,7 +1736,7 @@ class UpdateContext:
       node, ref_index=ref_index, ref_outer_index=self.inner_ref_outer_index
     )
     states = tuple(
-      State.from_flat_path(flat_state)
+      statelib.from_flat_state(flat_state)
       for flat_state in _split_state(flat_state, filters)
     )
     assert len(states) >= 1
@@ -1764,7 +1765,7 @@ class UpdateContext:
       # inner merge (2)
       index_ref_cache = None
 
-    state = State.merge(state, *states)
+    state = statelib.merge_state(state, *states)
     index_ref: dict[Index, tp.Any] = {}
     node = unflatten(
       graphdef,
@@ -2040,7 +2041,7 @@ def split(
   """
   graphdef, flat_state = flatten(node)
   flat_states = _split_state(flat_state, filters)
-  states = tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
+  states = tuple(statelib.from_flat_state(flat_state) for flat_state in flat_states)
   return graphdef, *states  # type: ignore[return-value]
 
 
@@ -2093,7 +2094,7 @@ def merge(
   Returns:
     The merged :class:`flax.nnx.Module`.
   """
-  _state = State.merge(state, *states)
+  _state = statelib.merge_state(state, *states)
   node = unflatten(graphdef, _state)
   return node
 
@@ -2127,10 +2128,7 @@ def update(
     *states: Additional :class:`State` objects.
   """
   if states:
-    if isinstance(state, State):
-      state = type(state).merge(state, *states)
-    else:
-      state = State.merge(state, *states)
+    state = statelib.merge_state(state, *states)
   _graph_update_dynamic(node, state)
 
 
@@ -2185,7 +2183,7 @@ def variables(
   flat_states = variablelib.split_flat_state(
     variables_iterable, (*filters, ...)
   )
-  states = tuple(State.from_flat_path(flat_state) for flat_state in flat_states)
+  states = tuple(statelib.from_flat_state(flat_state) for flat_state in flat_states)
   if num_filters < 2:
     return states[0]
   return states
@@ -2243,9 +2241,9 @@ def state(
   if len(filters) == 0:
     states = state
   elif len(filters) == 1:
-    states = state.filter(filters[0])
+    states = statelib.filter_state(state, filters[0])
   else:
-    states = state.filter(filters[0], filters[1], *filters[2:])
+    states = statelib.filter_state(state, filters[0], filters[1], *filters[2:])
 
   return states
 
@@ -2342,7 +2340,7 @@ def pop(
     predicates=predicates,
   )
   states = tuple(
-    GraphState.from_flat_path(flat_state) for flat_state in flat_states
+    statelib.from_flat_state(flat_state) for flat_state in flat_states
   )
 
   if len(states) == 1:
