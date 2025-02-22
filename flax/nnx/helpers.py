@@ -85,7 +85,6 @@ class Sequential(Module):
   def __add__(self, other:'Sequential') -> 'Sequential':
     if isinstance(other, Sequential):
       result = Sequential()
-
       for module in self.layers:
           result.layers.append(module)
       for module in other.layers:
