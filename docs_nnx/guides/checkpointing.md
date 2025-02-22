@@ -133,7 +133,7 @@ When interacting with checkpoint libraries (like Orbax), you may prefer to work 
 
 ```{code-cell} ipython3
 # Save as pure dict
-pure_dict_state = state.to_pure_dict()
+pure_dict_state = nnx.to_pure_dict(state)
 nnx.display(pure_dict_state)
 checkpointer.save(ckpt_dir / 'pure_dict', pure_dict_state)
 
@@ -141,7 +141,7 @@ checkpointer.save(ckpt_dir / 'pure_dict', pure_dict_state)
 restored_pure_dict = checkpointer.restore(ckpt_dir / 'pure_dict')
 abstract_model = nnx.eval_shape(lambda: TwoLayerMLP(4, rngs=nnx.Rngs(0)))
 graphdef, abstract_state = nnx.split(abstract_model)
-abstract_state.replace_by_pure_dict(restored_pure_dict)
+nnx.replace_by_pure_dict(abstract_state, restored_pure_dict)
 model = nnx.merge(graphdef, abstract_state)
 assert model(x).shape == (3, 4)  # The model still works!
 ```
@@ -181,7 +181,7 @@ restored_pure_dict['linear2']['bias'] = jnp.zeros((4,))
 # Same restore code as above.
 abstract_model = nnx.eval_shape(lambda: ModifiedTwoLayerMLP(4, rngs=nnx.Rngs(0)))
 graphdef, abstract_state = nnx.split(abstract_model)
-abstract_state.replace_by_pure_dict(restored_pure_dict)
+nnx.replace_by_pure_dict(abstract_state, restored_pure_dict)
 model = nnx.merge(graphdef, abstract_state)
 assert model(x).shape == (3, 4)  # The new model works!
 

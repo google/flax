@@ -82,7 +82,7 @@ class TestCompatibility(absltest.TestCase):
     assert gdef_before_lazy_init != gdef_full
     assert 'nn_dense1' in state
     assert 'batchnorm' in state
-    assert 'kernel' in state.nn_dense1
+    assert 'kernel' in state['nn_dense1']
     y = model(x)
     k, b = state['nn_dense1']['kernel'].value, state['b'].value
     np.testing.assert_allclose(y, x @ k + b, rtol=1e-5)
@@ -104,7 +104,7 @@ class TestCompatibility(absltest.TestCase):
     model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0))
     bridge.lazy_init(model, x, method=model.module.dot)
     y = model(x, method=model.module.dot)
-    np.testing.assert_allclose(y, x @ nnx.state(model).w.value)
+    np.testing.assert_allclose(y, x @ nnx.state(model)['w'].value)
     # lazy_init only initialized param w inside dot(), so calling __call__ should fail
     with self.assertRaises(flax.errors.ScopeParamNotFoundError):
       y = model(x)
@@ -121,9 +121,9 @@ class TestCompatibility(absltest.TestCase):
 
     x = lambda: jnp.zeros((), jnp.int32)
     model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0)).lazy_init(x)
-    self.assertEqual(nnx.state(model).count.value, 0)
+    self.assertEqual(nnx.state(model)['count'].value, 0)
     y = model(x, mutable=True)
-    self.assertEqual(nnx.state(model).count.value, 1)
+    self.assertEqual(nnx.state(model)['count'].value, 1)
 
   def test_linen_to_nnx_transform(self):
     class NNXOuter(nnx.Module):

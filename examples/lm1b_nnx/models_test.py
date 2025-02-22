@@ -79,7 +79,7 @@ class ModelTest(absltest.TestCase):
     params_linen: dict[str, Any],
   ):
     rules = dataclasses.asdict(config.axis_rules)
-    flat_params_nnx = dict(params_nnx.flat_state())
+    flat_params_nnx = dict(nnx.to_flat_state(params_nnx))
     flat_params_linen = nnx.traversals.flatten_mapping(params_linen, sep='/')
 
     def apply_rules(names: tuple[str, ...]):
@@ -163,7 +163,7 @@ class ModelTest(absltest.TestCase):
     cache_nnx: nnx.State,
     cache_linen: dict[str, Any],
   ):
-    flat_cache_nnx = dict(cache_nnx.flat_state())
+    flat_cache_nnx = dict(nnx.to_flat_state(cache_nnx))
     flat_cache_linen = nnx.traversals.flatten_mapping(cache_linen, sep='/')
 
     def copy_var(nnx_name: str, linen_name: str):

@@ -334,7 +334,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
       'Python dict. Please use the equivalent `nnx.from_flat_state` instead.',
       DeprecationWarning,
     )
-    return from_flat_state(flat_state)
+    return from_flat_state(flat_state, cls=cls)
 
   def to_pure_dict(self,
                    extract_fn: ExtractValueFn | None = None
@@ -382,7 +382,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
       'Python dict. Please use the equivalent `nnx.split_state` instead.',
       DeprecationWarning,
     )
-    return split_state(self, first, **filters)
+    return split_state(self, first, *filters)
 
   @tp.overload
   def filter(
@@ -425,7 +425,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
   def __or__(self, other: State[K, V]) -> State[K, V]:
     if not other:
       return self
-    return State.merge(self, other)
+    return merge_state(self, other)
 
   def __sub__(self, other: State[K, V]) -> State[K, V]:
     warnings.warn(
@@ -471,7 +471,7 @@ def map_state(f: tp.Callable[[tuple, tp.Any], tp.Any], state: State) -> State:
   result = [
     (path, f(path, variable_state)) for path, variable_state in flat_state
   ]
-  return traversals.unflatten_mapping(result)
+  return from_flat_state(result)
 
 
 def to_flat_state(state: State) -> FlatState:
@@ -480,12 +480,12 @@ def to_flat_state(state: State) -> FlatState:
 
 def from_flat_state(
   flat_state: tp.Mapping[PathParts, V] | tp.Iterable[tuple[PathParts, V]],
-  /,
+  *, cls = State,  # for compatibility with State subclasses
 ) -> State:
   if not isinstance(flat_state, tp.Mapping):
     flat_state = dict(flat_state)
   nested_state = traversals.unflatten_mapping(flat_state)
-  return State(nested_state)
+  return cls(nested_state)
 
 
 def to_pure_dict(
@@ -653,7 +653,9 @@ def filter_state(
   return states  # type: ignore
 
 
-def merge_state(state: tp.Mapping, /, *states: tp.Mapping) -> State:
+def merge_state(state: tp.Mapping, /, *states: tp.Mapping,
+  cls = State  # for compatibility with State subclasses
+  ) -> State:
   """The inverse of :meth:`split() <flax.nnx.State.state.split>`.
 
   ``merge`` takes one or more ``State``'s and creates
@@ -686,9 +688,9 @@ def merge_state(state: tp.Mapping, /, *states: tp.Mapping) -> State:
     The merged ``State``.
   """
   if not states:
-    if isinstance(state, dict):
+    if isinstance(state, cls):
       return state
-    return dict(state)
+    return cls(state)
 
   states = (state, *states)
 
@@ -697,7 +699,7 @@ def merge_state(state: tp.Mapping, /, *states: tp.Mapping) -> State:
   for state in states:
     new_state.update(traversals.flatten_mapping(state))  # type: ignore[attribute-error] # pytype is wrong here
 
-  return from_flat_state(new_state)
+  return from_flat_state(new_state, cls=cls)
 
 
 def diff(state: State, other: State) -> State:
@@ -744,7 +746,7 @@ def _split_state(
 
 
 def create_path_filters(state: State):
-  flat_state = state.flat_state()
+  flat_state = to_flat_state(state)
   value_paths: dict[tp.Any, set[PathParts]] = {}
   for path, value in flat_state:
     if isinstance(value, (variablelib.Variable, variablelib.VariableState)):

@@ -85,16 +85,16 @@ class TestOptimizer(parameterized.TestCase):
     state = nnx.state(optimizer)
     partition_spec = nnx.get_partition_spec(state)
 
-    self.assertEqual(state.opt_state[0].mu.kernel.sharding, ('a', 'b'))
+    self.assertEqual(state['opt_state'][0]['mu']['kernel'].sharding, ('a', 'b'))
     self.assertEqual(
-        partition_spec.opt_state[0].mu.kernel.value,
-        jax.sharding.PartitionSpec('a', 'b'),
+      partition_spec['opt_state'][0]['mu']['kernel'].value,
+      jax.sharding.PartitionSpec('a', 'b'),
     )
 
   @parameterized.product(
-      module_cls=[nnx.Linear, Model],
-      jit_decorator=[lambda f: f, nnx.jit, jax.jit],
-      optimizer=[optax.sgd, optax.adam],
+    module_cls=[nnx.Linear, Model],
+    jit_decorator=[lambda f: f, nnx.jit, jax.jit],
+    optimizer=[optax.sgd, optax.adam],
   )
   def test_jit(self, module_cls, jit_decorator, optimizer):
     x = jax.random.normal(jax.random.key(0), (1, 2))

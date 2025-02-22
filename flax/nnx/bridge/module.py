@@ -307,7 +307,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     _variables: dict = {}
 
     variable_state: variablelib.VariableState
-    for path, variable_state in state.flat_state():
+    for path, variable_state in statelib.to_flat_state(state):
       try:
         collection = variablelib.variable_name_from_type(variable_state.type)
       except ValueError:
@@ -365,7 +365,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       real_variables[col_name] = linen_collection
 
     states = ({},) if not real_variables else real_variables.values()
-    state = ModuleState.merge(*states)
+    state = statelib.merge_state(*states, cls=ModuleState)
     graph.update(module, state)
 
     if rngs is None:
