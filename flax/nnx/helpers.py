@@ -68,8 +68,140 @@ class Dict(Module, tp.Mapping[str, A]):
 
 
 class Sequential(Module):
+  
+  @tp.overload
+  def __init__(self, fns: tp.List[tp.Any]): ...
+  
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
+    """A sequential container for modules.
+    
+    Args:
+        fns (Callable[nnx.Module]): A list of Modules.
+    """
+    if len(fns) == 1 and isinstance(fns[0], (list, tuple)):
+      fns = fns[0] 
     self.layers = list(fns)
+  
+  def __add__(self, other:'Sequential') -> 'Sequential':
+    if isinstance(other, Sequential):
+      result = Sequential()
+
+      for module in self.layers:
+          result.layers.append(module)
+      for module in other.layers:
+          result.layers.append(module)
+      return result
+    else:
+      raise ValueError(
+        "The add operator only supports objects of the Sequential class, "
+        f"but {type(other)} is given."
+      )
+      
+  def __iadd__(self, other:'Sequential') -> tp.Self:
+    if isinstance(other, Sequential):
+      for module in other.layers:
+        self.layers.append(module)
+      return self
+    else:
+      raise ValueError(
+        "The add operator only supports objects of the Sequential class, "
+        f"but {type(other)} is given."
+      )
+  
+  def __mul__(self, other:int) -> 'Sequential':
+    if not isinstance(other, int):
+      raise ValueError(
+        "The multiply operator only supports integers, "
+        f"but {type(other)} is given."
+      )
+      
+    elif other < 0:
+      raise ValueError(
+        "The multiply operator only supports positive integers, "
+        f"but {other} is given."
+      )
+      
+    else:
+      result = Sequential()
+      for _ in range(other):
+        for module in self.layers:
+          result.layers.append(module)
+      return result
+  
+  def __rmul__(self, other:int) -> 'Sequential':
+    return self.__mul__(other)
+  
+  def __imul__(self, other: int) -> tp.Self:
+    if not isinstance(other, int):
+        raise ValueError(
+            "The multiply operator only supports integers, "
+            f"but {type(other)} is given."
+        )
+    elif other < 0:
+        raise ValueError(
+            "The multiply operator only supports positive integers, "
+            f"but {other} is given."
+        )
+    else:
+        original = self.layers.copy()
+        self.layers = original * other
+        del original
+        return self
+      
+  def __iter__(self) -> tp.Iterable[Module]:
+    return iter(self.layers)
+  
+  def __getitem__(self, indx: tp.Union[int, slice]) -> tp.Union[Module, 'Sequential']:
+    if isinstance(indx, slice):
+      return Sequential(*self.layers[indx])
+    return self.layers[indx]
+    
+  def __setitem__(self, indx:int, module:Module) -> None:
+    
+    if indx > len(self.layers):
+      raise IndexError("Index out of range")
+    
+    if not isinstance(module, Module):
+      raise TypeError(f"Expected a Module, but got {type(module)}")
+
+    self.layers[indx] = module
+    
+  def __delitem__(self, indx:int) -> None:
+    if indx > len(self.layers):
+      raise IndexError("Index out of range")
+    del self.layers[indx]
+  
+  def __len__(self) -> int:
+    return len(self.layers)
+  
+  def pop(self, indx:int) -> Module:
+    """Remove and return the module at the given index in the Sequential."""
+    return self.layers.pop(indx)
+  
+  def append(self, module:Module) -> 'Sequential':
+    """Append a module to the end of the Sequential."""
+    if not isinstance(module, Module):
+      raise TypeError(f"Expected a Module, but got {type(module)}")
+    return self.layers.append(module)
+  
+  def extend(self, modules:tp.List[Module] | 'Sequential') -> 'Sequential':
+    """Extend the Sequential by appending modules from the list or Sequential."""
+    if not isinstance(modules, (list, Sequential)):
+      raise TypeError(f"Expected a list or Sequential, but got {type(modules)}")
+    self.layers.extend(modules)
+    return self
+    
+  def insert(self, indx: int, module: Module) -> None:
+    """Insert a module at the given index in the Sequential."""
+    if not isinstance(module, Module):
+        raise TypeError(f"Expected a Module, but got {type(module)}")
+    
+    n = len(self.layers)
+    if not (-n <= indx <= n):
+        raise IndexError("Index out of range")
+        
+    self.layers.insert(indx, module)
+    return self
 
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
     output: tp.Any = None
