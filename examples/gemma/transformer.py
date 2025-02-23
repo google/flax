@@ -188,6 +188,8 @@ def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
     elif k == 'linear':
       new_key.append('down_proj')
       new_key.append('kernel')
+    elif k == 'post_attention_norm':   # gemma2-2b has misnamed key
+      new_key.append('post_attn_norm')
     else:
       new_key.append(k)
 

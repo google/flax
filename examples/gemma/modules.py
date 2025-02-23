@@ -160,7 +160,24 @@ class Attention(nnx.Module):
           cache['k'], key_proj, slice_indices
       )
 
-    logits = jnp.einsum('BTNH,BSNH->BTNS', query_scaled, key_proj)
+    # Cope with num_kv_heads!=num_heads == GroupedQueryAttention
+    #print(f"{query_scaled.shape=} {key_proj.shape=}")  # query_scaled.shape=(1, 1, 8, 256) key_proj.shape=(1, 1024, 4, 256)
+    num_kv_heads = key_proj.shape[2]
+    num_heads = query_scaled.shape[2]
+    use_gqa = (num_kv_heads != num_heads and num_kv_heads>1)
+    # Gemma2 needs GQA branch like https://github.com/google-deepmind/gemma/blob/main/gemma/modules.py#L176 mdda
+    if use_gqa:  # mdda section
+      # Reshape matrices to enable einsums over groups.
+      #print(f"Reshape matrices to enable einsums over groups : logits")
+      b, t, kg, h = query_scaled.shape
+      query_scaled = query_scaled.reshape(
+          (b, t, num_kv_heads, int(kg / num_kv_heads), h)
+      )
+      logits = jnp.einsum('BTKGH,BSKH->BTKGS', query_scaled, key_proj)
+      b, t, k, g, s = logits.shape
+      logits = logits.reshape((b, t, k * g, s))
+    else: # mdda section_end
+      logits = jnp.einsum('BTNH,BSNH->BTNS', query_scaled, key_proj)
 
     if self.attn_logits_soft_cap is not None:
       logits = jnp.tanh(logits / self.attn_logits_soft_cap)
@@ -180,7 +197,20 @@ class Attention(nnx.Module):
     padded_logits = jnp.where((jnp.expand_dims(attn_mask, -2)), logits, K_MASK)
     self.sow_config.maybe_sow_attn_logits_topk(padded_logits, self)
     probs = jax.nn.softmax(padded_logits, axis=-1).astype(key_proj.dtype)
-    encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
+
+    # Gemma2 needs GQA branch like https://github.com/google-deepmind/gemma/blob/main/gemma/modules.py#L208 mdda
+    if use_gqa:  # mdda section
+      # Reshape matrices to enable einsums over groups.
+      #print(f"Reshape matrices to enable einsums over groups : encoded")
+      b, t, kg, h = probs.shape
+      probs = probs.reshape(
+          (b, t, num_kv_heads, int(kg / num_kv_heads), h)
+      )
+      encoded = jnp.einsum('BTKGS,BSKH->BTKGH', probs, value_proj)
+      b, t, k, g, h = encoded.shape
+      encoded = encoded.reshape((b, t, k * g, h))      
+    else: # mdda section_end
+      encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
     attn_output = self.attn_vec_einsum(encoded)
 
     if cache is not None:
