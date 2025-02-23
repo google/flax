@@ -59,10 +59,10 @@ class TransformerConfig:
     try:
       model = metadata['somewhere in orbax checkpoint']
 
-      if model in ('gemma-2-27-pt', 'gemma-2-27-it'):
-        return cls.gemma_27b()
-      elif model in ('gemma-2-9-pt', 'gemma-2-9-it'):
-        return cls.gemma_9b()
+      if model in ('gemma-2-9-pt', 'gemma-2-9-it'):
+        return cls.gemma2_9b()
+      elif model in ('gemma-2-27-pt', 'gemma-2-27-it'):
+        return cls.gemma2_27b()
     except KeyError:
       # V1 model that does not include model metadata.
       # Fall back to previous method
@@ -128,30 +128,31 @@ class TransformerConfig:
     )
 
   @classmethod
-  def gemma_27b(cls):
-    num_layers = 46
+  def gemma2_2b(cls):
+    num_layers = 26
     return cls(
         num_layers=num_layers,
         num_embed=256128,
-        embed_dim=4608,
-        hidden_dim=72728,
-        num_heads=32,
-        head_dim=128,
-        num_kv_heads=16,
+        embed_dim=2304,
+        hidden_dim=9216,
+        num_heads=8,
+        head_dim=256,
+        num_kv_heads=4,
         final_logit_softcap=30.0,
-        use_post_attn_norm=True,
-        use_post_ffw_norm=True,
         attention_types=(
             modules.AttentionType.LOCAL_SLIDING,
             modules.AttentionType.GLOBAL,
         )
         * int(num_layers / 2),
+        use_post_attn_norm=True,
+        use_post_ffw_norm=True,
+        #query_pre_attn_norm=transformer_lib.QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
         attn_logits_soft_cap=50.0,
         sliding_window_size=4096,
     )
 
   @classmethod
-  def gemma_9b(cls):
+  def gemma2_9b(cls):
     num_layers = 42
     return cls(
         num_layers=num_layers,
@@ -172,7 +173,29 @@ class TransformerConfig:
         attn_logits_soft_cap=50.0,
         sliding_window_size=4096,
     )
-
+    
+  @classmethod
+  def gemma2_27b(cls):
+    num_layers = 46
+    return cls(
+        num_layers=num_layers,
+        num_embed=256128,
+        embed_dim=4608,
+        hidden_dim=72728,
+        num_heads=32,
+        head_dim=128,
+        num_kv_heads=16,
+        final_logit_softcap=30.0,
+        attention_types=(
+            modules.AttentionType.LOCAL_SLIDING,
+            modules.AttentionType.GLOBAL,
+        )
+        * int(num_layers / 2),
+        use_post_attn_norm=True,
+        use_post_ffw_norm=True,
+        attn_logits_soft_cap=50.0,
+        sliding_window_size=4096,
+    )
 
 def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
   new_key = []
