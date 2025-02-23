@@ -447,6 +447,30 @@ class TransformerConfig:
       config[key] = value
     return cls(**config)
 
+  @classmethod
+  def gemma2_27b(cls):
+    print("Note : BY_ONE_OVER_SQRT_EMBED_DIM_DIV_NUM_HEADS is not implemented as a QueryPreAttentionNormalisation type in Attention")
+    num_layers = 46
+    return cls(
+        num_layers=num_layers,
+        num_embed=256128,
+        embed_dim=4608,
+        hidden_dim=72728,
+        num_heads=32,
+        head_dim=128,
+        num_kv_heads=16,
+        final_logit_softcap=30.0,
+        attention_types=(
+            modules.AttentionType.LOCAL_SLIDING,
+            modules.AttentionType.GLOBAL,
+        )
+        * int(num_layers / 2),
+        use_post_attn_norm=True,
+        use_post_ffw_norm=True,
+        #query_pre_attn_norm=transformer_lib.QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_EMBED_DIM_DIV_NUM_HEADS, # in 'real gemma'
+        attn_logits_soft_cap=50.0,
+        sliding_window_size=4096,
+    )
 
 def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
   """Maps linen variable names to nnx variable names."""
@@ -463,6 +487,8 @@ def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
     elif k == 'linear':
       new_key.append('down_proj')
       new_key.append('kernel')
+    elif k == 'post_attention_norm':   # gemma2-2b has misnamed key
+      new_key.append('post_attn_norm')
     else:
       new_key.append(k)
 
@@ -579,6 +605,7 @@ class Transformer(nnx.Module):
     new_cache = None if cache is None else {}
     x = self.embedder.encode(last_tokens)
     self.sow_config.maybe_sow_embeddings(x, self)
+
     for i, layer in enumerate(self.layers):
       layer_name = f'layer_{i}'
       layer_cache = cache[layer_name] if cache else None
@@ -588,6 +615,7 @@ class Transformer(nnx.Module):
           layer_cache,
           attention_mask,
       )
+
       if cache is not None:
         new_cache[layer_name] = layer_cache  # pytype: disable=container-type-mismatch
 

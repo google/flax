@@ -211,7 +211,20 @@ class Attention(nnx.Module):
           cache['k'], key_proj, slice_indices
       )
 
-    logits = jnp.einsum('BTNH,BSNH->BTNS', query_scaled, key_proj)
+    use_gqa = self.num_heads > self.num_kv_heads and self.num_kv_heads > 1
+    if use_gqa:
+      # Reshape matrices to enable einsums over groups.
+      num_groups = self.num_heads // self.num_kv_heads
+      batch_size, seq_size, _, head_dim = query_scaled.shape
+      query_scaled = query_scaled.reshape(
+        (batch_size, seq_size, self.num_kv_heads, num_groups, head_dim)
+      )
+      logits = jnp.einsum('BTKGH,BSKH->BTKGS', query_scaled, key_proj)
+      logits = logits.reshape(
+        (batch_size, seq_size, self.num_heads, head_dim)
+      )
+    else:
+      logits = jnp.einsum('BTNH,BSNH->BTNS', query_scaled, key_proj)
 
     if self.attn_logits_soft_cap is not None:
       logits = jnp.tanh(logits / self.attn_logits_soft_cap)
@@ -231,7 +244,20 @@ class Attention(nnx.Module):
     padded_logits = jnp.where((jnp.expand_dims(attn_mask, -2)), logits, K_MASK)
     self.sow_config.maybe_sow_attn_logits_topk(padded_logits, self)
     probs = jax.nn.softmax(padded_logits, axis=-1).astype(key_proj.dtype)
-    encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
+
+    if use_gqa:
+      # Reshape matrices to enable einsums over groups.
+      num_groups = self.num_heads // self.num_kv_heads
+      batch_size, seq_size, _, head_dim = probs.shape
+      probs = probs.reshape(
+        (batch_size, seq_size, self.num_kv_heads, num_groups, head_dim)
+      )
+      encoded = jnp.einsum('BTKGS,BSKH->BTKGH', probs, value_proj)
+      encoded = encoded.reshape(
+        (batch_size, seq_size, self.num_heads, head_dim)
+      )
+    else:
+      encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
     attn_output = self.attn_vec_einsum(encoded)
 
     if cache is not None:
