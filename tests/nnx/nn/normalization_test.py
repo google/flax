@@ -364,12 +364,12 @@ class TestLinenConsistency(parameterized.TestCase):
         self.dense = linen.Dense(
           4, dtype=self.dtype, param_dtype=self.param_dtype
         )
-        self.wn = linen.WeightNorm(
+        self.weight_norm = linen.WeightNorm(
           self.dense, variable_filter={'kernel'}, scale_init=scale_init
         )
 
       def __call__(self, x, *, mask=None):
-        return self.wn(x)
+        return self.weight_norm(x)
 
     rngs = nnx.Rngs(42)
 
