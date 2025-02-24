@@ -884,7 +884,7 @@ class WeightNorm(nnx.Module):
     >>> rng = jax.random.PRNGKey(42)
     >>> model = Foo(rngs=nnx.Rngs(rng))
 
-    >>> x = jax.random.normal(rng, (5, 8))  # batch_size=5, in_features=8
+    >>> x = jax.random.normal(rng, (5, 8))
     >>> y = model(x)
     >>> y.shape
     (5, 4)
