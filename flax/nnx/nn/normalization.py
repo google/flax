@@ -883,45 +883,15 @@ class WeightNorm(nnx.Module):
 
     >>> rng = jax.random.PRNGKey(42)
     >>> model = Foo(rngs=nnx.Rngs(rng))
-    >>> nnx.state(model)
-    State({
-      'normed_linear'': {
-        'layer_instance': {
-          'bias': VariableState( # 4 (16 B)
-            type=Param,
-            value=Array([0., 0., 0., 0.], dtype=float32)
-          ),
-          'kernel': VariableState( # 32 (128 B)
-            type=Param,
-            value=Param( # 32 (128 B)
-              value=Array([[ 2.3220643e-02, -2.3882329e-01,  5.1496571e-01,  2.5660884e-01],
-                    [ 9.1757134e-02,  1.5273584e-01,  2.3645997e-01, -3.9611939e-01],
-                    [-5.4302502e-01,  3.1314960e-01,  8.9721136e-02,  1.2270048e-03],
-                    [ 4.7635514e-01,  1.0005519e-01, -8.8212891e-03, -3.3801734e-01],
-                    [ 5.8799735e-03,  2.3163129e-01, -3.4278083e-01,  4.9687979e-01],
-                    [-5.6177741e-01,  2.1181269e-01, -2.8278649e-01,  5.2568799e-01],
-                    [ 6.0051646e-02,  4.1422963e-01,  6.8796957e-01,  3.5102764e-01],
-                    [ 3.8731962e-01, -7.3583806e-01,  6.0134270e-04, -1.2855455e-01]],      dtype=float32)
-            )
-          )
-        },
-        'rngs': {
-          'default': {
-            'count': VariableState( # 1 (4 B)
-              type=RngCount,
-              value=Array(3, dtype=uint32),
-              tag='default'
-            ),
-            'key': VariableState( # 1 (8 B)
-              type=RngKey,
-              value=Array((), dtype=key<fry>) overlaying:
-              [ 0 42],
-              tag='default'
-            )
-          }
-        }
-      }
-    })'
+
+    >>> x = jax.random.normal(rng, (5, 8))  # batch_size=5, in_features=8
+    >>> y = model(x)
+    >>> y.shape
+    (5, 4)
+
+    >>> w = model.normed_linear.layer_instance.kernel.value
+    >>> col_norms = np.linalg.norm(np.array(w), axis=0)
+    >>> np.testing.assert_allclose(col_norms, np.ones(4), rtol=1e-5, atol=1e-5)
 
   Args:
     layer_instance: The layer instance to wrap.
