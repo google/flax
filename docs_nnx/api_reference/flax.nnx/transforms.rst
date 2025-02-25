@@ -15,6 +15,7 @@ transforms
 
 .. autofunction:: grad
 .. autofunction:: jit
+.. autofunction:: shard_map
 .. autofunction:: remat
 .. autofunction:: scan
 .. autofunction:: value_and_grad
