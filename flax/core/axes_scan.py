@@ -156,8 +156,10 @@ def scan(
     input_avals = (carry_avals, scan_avals)
 
     in_avals, in_tree = jax.tree_util.tree_flatten(input_avals)
+    debug_info = jax.api_util.debug_info("flax scan", broadcast_body,
+                                         (in_tree,), {})
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
-        lu.wrap_init(broadcast_body), in_tree
+        lu.wrap_init(broadcast_body, debug_info=debug_info), in_tree
     )
     in_pvals = list(map(pe.PartialVal.unknown, in_avals))
     _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
