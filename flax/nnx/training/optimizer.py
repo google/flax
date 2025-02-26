@@ -130,7 +130,7 @@ class Optimizer(Object, tp.Generic[M]):
     ...
     >>> loss_fn = lambda model: ((model(x) - y) ** 2).mean()
     >>> loss_fn(model)
-    Array(2.3359995, dtype=float32)
+    Array(2.3359997, dtype=float32)
     >>> grads = nnx.grad(loss_fn)(state.model)
     >>> state.update(grads)
     >>> loss_fn(model)
