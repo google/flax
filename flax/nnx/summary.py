@@ -519,7 +519,12 @@ def _unflatten_to_simple_structure(xs: list[tuple[tuple[tp.Any, ...], tp.Any]]):
           else:
             cursor[key] = {}
       cursor = cursor[key]
-    cursor[path[-1]] = value
+    if isinstance(cursor, list):
+      assert path[-1] == len(cursor)
+      cursor.append(value)
+    else:
+      assert isinstance(cursor, dict)
+      cursor[path[-1]] = value
   return result
 
 def _as_yaml_str(value) -> str:
