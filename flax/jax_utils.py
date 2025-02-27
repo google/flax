@@ -79,7 +79,11 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   f = lambda *inputs: fn(*inputs, *args, **kwargs)
   input_structs = [_parse_spec(spec) for spec in input_spec]
   inputs_flat, in_tree = jax.tree_util.tree_flatten(input_structs)
-  f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(f), in_tree)
+
+  debug_info = jax.api_util.debug_info("flax partial_eval_by_shape", f,
+                                        (in_tree,), {})
+  f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
+    lu.wrap_init(f, debug_info=debug_info), in_tree)
   in_pvals = [
     pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
     for x in inputs_flat
