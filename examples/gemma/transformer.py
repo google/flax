@@ -170,12 +170,14 @@ class TransformerConfig:
         * int(num_layers / 2),
         use_post_attn_norm=True,
         use_post_ffw_norm=True,
+        #query_pre_attn_norm=transformer_lib.QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
         attn_logits_soft_cap=50.0,
         sliding_window_size=4096,
     )
     
   @classmethod
   def gemma2_27b(cls):
+    print("Note : BY_ONE_OVER_SQRT_EMBED_DIM_DIV_NUM_HEADS is not implemented as a QueryPreAttentionNormalisation type in Attention")
     num_layers = 46
     return cls(
         num_layers=num_layers,
@@ -193,6 +195,7 @@ class TransformerConfig:
         * int(num_layers / 2),
         use_post_attn_norm=True,
         use_post_ffw_norm=True,
+        #query_pre_attn_norm=transformer_lib.QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_EMBED_DIM_DIV_NUM_HEADS, # in 'real gemma'
         attn_logits_soft_cap=50.0,
         sliding_window_size=4096,
     )
@@ -310,6 +313,7 @@ class Transformer(nnx.Module):
     new_cache = None if cache is None else {}
     x = self.embedder.encode(last_tokens)
     self.sow_config.maybe_sow_embeddings(x, self)
+    
     for i, layer in enumerate(self.layers):
       layer_name = f'layer_{i}'
       layer_cache = cache[layer_name] if cache else None
@@ -319,6 +323,7 @@ class Transformer(nnx.Module):
           layer_cache,
           attention_mask,
       )
+      
       if cache is not None:
         new_cache[layer_name] = layer_cache  # pytype: disable=container-type-mismatch
 
@@ -328,7 +333,7 @@ class Transformer(nnx.Module):
     if self.final_logits_softcap is not None:
       logits /= self.final_logits_softcap
       logits = jnp.tanh(logits) * self.final_logits_softcap
-
+      
     return logits, new_cache  # pytype: disable=bad-return-type
 
   @property

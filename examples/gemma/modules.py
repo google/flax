@@ -135,6 +135,8 @@ class Attention(nnx.Module):
       query_proj = self.q_einsum(x)
       key_proj, value_proj = self.kv_einsum(x)
 
+    # mdda : Where is qk_norm? : Apparently self.use_qk_norm not used in deep-mind gemma
+    
     query_proj = positional_embeddings.apply_rope(
         query_proj,
         segment_pos,
@@ -160,15 +162,11 @@ class Attention(nnx.Module):
           cache['k'], key_proj, slice_indices
       )
 
-    # Cope with num_kv_heads!=num_heads == GroupedQueryAttention
-    #print(f"{query_scaled.shape=} {key_proj.shape=}")  # query_scaled.shape=(1, 1, 8, 256) key_proj.shape=(1, 1024, 4, 256)
-    num_kv_heads = key_proj.shape[2]
-    num_heads = query_scaled.shape[2]
-    use_gqa = (num_kv_heads != num_heads and num_kv_heads>1)
-    # Gemma2 needs GQA branch like https://github.com/google-deepmind/gemma/blob/main/gemma/modules.py#L176 mdda
-    if use_gqa:  # mdda section
+    # mdda: Gemma2 needs GQA branch like https://github.com/google-deepmind/gemma/blob/main/gemma/modules.py#L176 mdda
+    num_kv_heads = self.num_kv_heads
+    use_gqa = (num_kv_heads != self.num_heads and num_kv_heads>1)
+    if use_gqa:  
       # Reshape matrices to enable einsums over groups.
-      #print(f"Reshape matrices to enable einsums over groups : logits")
       b, t, kg, h = query_scaled.shape
       query_scaled = query_scaled.reshape(
           (b, t, num_kv_heads, int(kg / num_kv_heads), h)
@@ -176,7 +174,7 @@ class Attention(nnx.Module):
       logits = jnp.einsum('BTKGH,BSKH->BTKGS', query_scaled, key_proj)
       b, t, k, g, s = logits.shape
       logits = logits.reshape((b, t, k * g, s))
-    else: # mdda section_end
+    else:
       logits = jnp.einsum('BTNH,BSNH->BTNS', query_scaled, key_proj)
 
     if self.attn_logits_soft_cap is not None:
@@ -198,10 +196,9 @@ class Attention(nnx.Module):
     self.sow_config.maybe_sow_attn_logits_topk(padded_logits, self)
     probs = jax.nn.softmax(padded_logits, axis=-1).astype(key_proj.dtype)
 
-    # Gemma2 needs GQA branch like https://github.com/google-deepmind/gemma/blob/main/gemma/modules.py#L208 mdda
-    if use_gqa:  # mdda section
+    # mdda : Gemma2 needs GQA branch like https://github.com/google-deepmind/gemma/blob/main/gemma/modules.py#L208
+    if use_gqa:
       # Reshape matrices to enable einsums over groups.
-      #print(f"Reshape matrices to enable einsums over groups : encoded")
       b, t, kg, h = probs.shape
       probs = probs.reshape(
           (b, t, num_kv_heads, int(kg / num_kv_heads), h)
@@ -209,7 +206,7 @@ class Attention(nnx.Module):
       encoded = jnp.einsum('BTKGS,BSKH->BTKGH', probs, value_proj)
       b, t, k, g, h = encoded.shape
       encoded = encoded.reshape((b, t, k * g, h))      
-    else: # mdda section_end
+    else:
       encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
     attn_output = self.attn_vec_einsum(encoded)
 
@@ -372,19 +369,19 @@ class Block(nnx.Module):
         cache,
         attn_mask,
     )
-    attn_output += x
-    residual = attn_output
-    attn_output = self.pre_ffw_norm(attn_output)
-
     if self.use_post_attn_norm:
       attn_output = self.post_attn_norm(attn_output)
+    attn_output += x
     self.sow_config.maybe_sow_rs_after_attention(attn_output, self)
-
+    residual = attn_output
+    
+    attn_output = self.pre_ffw_norm(attn_output)
     outputs = self.mlp(attn_output)
     if self.use_post_ffw_norm:
       outputs = self.post_ffw_norm(outputs)
     outputs = residual + outputs
     self.sow_config.maybe_sow_rs_after_ffw(outputs, self)
+    
     return cache, outputs
 
   @property
