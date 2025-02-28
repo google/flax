@@ -254,7 +254,7 @@ Run it to get the `initialized_state`, in which parameters are sharded exactly a
 
 ```{code-cell} ipython3
 jit_init_fn = jax.jit(init_fn, static_argnums=(2, 3),
-                      in_shardings=(mesh_sharding(()), x_sharding),  # PRNG key and x
+                      in_shardings=(mesh_sharding(PartitionSpec()), x_sharding),  # PRNG key and x
                       out_shardings=state_sharding)
 
 initialized_state = jit_init_fn(k, x, model, optimizer)
@@ -453,7 +453,7 @@ state_sharding.params['DotReluDot_0'] == logical_state_sharding.params['LogicalD
 
 ```{code-cell} ipython3
 logical_jit_init_fn = jax.jit(init_fn, static_argnums=(2, 3),
-                      in_shardings=(mesh_sharding(()), x_sharding),  # PRNG key and x
+                      in_shardings=(mesh_sharding(PartitionSpec()), x_sharding),  # PRNG key and x
                       out_shardings=logical_state_sharding)
 
 logical_initialized_state = logical_jit_init_fn(k, x, logical_model, optimizer)

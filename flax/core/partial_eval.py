@@ -53,7 +53,9 @@ def lazy_init(fn):
     # TODO(mattjj,jheek): use a public JAX API
     # flatten fn and prepare for internal JAX transform
     inputs_flat, in_tree = jax.tree_util.tree_flatten((args, kwargs))
-    f_flat, out_tree = jax.api_util.flatten_fun(lu.wrap_init(fn), in_tree)
+    debug_info = jax.api_util.debug_info("lazy_init", fn, (in_tree,), {})
+    f_flat, out_tree = jax.api_util.flatten_fun(
+      lu.wrap_init(fn, debug_info=debug_info), in_tree)
     # map inputs to PartialVal known/unknown
     # only the computations depending on knowns will be executed
     in_pvals = [_maybe_unknown(x) for x in inputs_flat]

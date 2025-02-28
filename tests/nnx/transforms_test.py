@@ -416,6 +416,129 @@ class TestJIT(absltest.TestCase):
     cached_m2 = cached_f(m)
     self.assertIs(cached_m, cached_m2)
 
+class TestShardMap(absltest.TestCase):
+  def test_basic_shardmap(self):
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('a',))
+    PS = jax.sharding.PartitionSpec
+
+    state_sharding = nnx.StateSharding(
+      {
+        nnx.PathContains('kernel'): PS(None, 'a'),
+        nnx.PathContains('bias'): PS(),
+      }
+    )
+
+    m = nnx.Linear(16, 32, rngs=nnx.Rngs(0))
+
+    self.assertNotIsInstance(
+      m.kernel.value.sharding, jax.sharding.NamedSharding
+    )
+
+    @nnx.shard_map(mesh=mesh, in_specs=(state_sharding,), out_specs=None)
+    def f(m: nnx.Linear):
+      self.assertEqual(
+        m.kernel.value.shape, (m.in_features, m.out_features // n_devices)
+      )
+      self.assertEqual(m.bias.shape, (m.out_features,))
+
+    f(m)
+
+    self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
+
+  def test_from_state(self):
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('a',))
+    PS = jax.sharding.PartitionSpec
+
+    state_spec = nnx.State(
+      {
+        'kernel': PS(None, 'a'),
+        'bias': PS(),
+      }
+    )
+    state_sharding = nnx.StateSharding(state_spec)
+
+    m = nnx.Linear(16, 32, rngs=nnx.Rngs(0))
+
+    self.assertNotIsInstance(
+      m.kernel.value.sharding, jax.sharding.NamedSharding
+    )
+
+    @nnx.shard_map(mesh=mesh, in_specs=(state_sharding,), out_specs=None)
+    def f(m: nnx.Linear):
+      self.assertEqual(
+        m.kernel.value.shape, (m.in_features, m.out_features // n_devices)
+      )
+      self.assertEqual(m.bias.shape, (m.out_features,))
+
+    f(m)
+
+    self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
+    self.assertIsInstance(m.bias.value.sharding, jax.sharding.NamedSharding)
+
+  def test_simple_data_parallel(self):
+    P = jax.sharding.PartitionSpec
+    n_devices = jax.local_device_count()
+
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
+
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    x = jnp.ones((32, 2))
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P(None), P('data')), out_specs=P('data')
+    )
+    def f(m, x):
+      self.assertEqual(x.shape, (32 // n_devices, 2))
+      return m(x)
+
+    y = f(m, x)
+
+    self.assertEqual(y.shape, (32, 3))
+    self.assertIsInstance(y.sharding, jax.sharding.NamedSharding)
+    self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
+    self.assertIsInstance(m.bias.value.sharding, jax.sharding.NamedSharding)
+
+  def test_simple_tensor_parallel(self):
+    P = jax.sharding.PartitionSpec
+
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('model',))
+
+    class MLP(nnx.Module):
+      def __init__(self, din, dhidden, dout, *, rngs: nnx.Rngs):
+        self.linear1 = nnx.Linear(din, dhidden, use_bias=False, rngs=rngs)
+        self.linear2 = nnx.Linear(dhidden, dout, use_bias=False, rngs=rngs)
+
+      def __call__(self, x):
+        return self.linear2(jax.nn.relu(self.linear1(x)))
+
+    m = MLP(2, 64, 3, rngs=nnx.Rngs(0))
+    x = jnp.ones((32, 2))
+
+    def path_ends_with(path_suffix):
+      return lambda path, value: path[-len(path_suffix) :] == path_suffix
+
+    model_sharding = nnx.StateSharding(
+      {
+        path_ends_with(('linear1', 'kernel')): P(None, 'model'),
+        path_ends_with(('linear2', 'kernel')): P('model', None),
+      }
+    )
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(model_sharding, P(None)), out_specs=P(None)
+    )
+    def f(m, x):
+      y = m(x)
+      return jax.lax.psum(y, 'model')
+
+    y = f(m, x)
+
+    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
+
 
 class TestGrad(parameterized.TestCase):
   def test_grad(self):
