@@ -107,10 +107,6 @@ def _bind_module(parent: Module, module: Module) -> Module:
 
 
 class ModuleMeta(nnx_module.ModuleMeta):
-  if not tp.TYPE_CHECKING:
-
-    def __call__(cls, *args, **kwargs):
-      return _module_meta_call(cls, *args, **kwargs)
 
   def _object_meta_construct(cls, self, *args, **kwargs):
     vars(self)['scope'] = None
@@ -159,6 +155,9 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
 
   return module  # type: ignore
 
+# set ModuleMeta.__call__ like this because pytype doesn't understand
+# the use of TYPE_CHECKING conditionals for metaclass methods
+ModuleMeta.__call__ = _module_meta_call  # type: ignore
 
 class ModuleBase:
   if tp.TYPE_CHECKING:

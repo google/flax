@@ -82,13 +82,13 @@ class Module(Object, metaclass=ModuleMeta):
   """
 
   def sow(
-    self,
-    variable_type: tp.Type[variableslib.Variable[tp.Any]],
-    name: str,
-    value: A,
-    reduce_fn: tp.Callable[[B, A], B] = tuple_reduce,
-    init_fn: tp.Callable[[], B] = tuple_init,  # type: ignore
-  ) -> None:
+      self,
+      variable_type: type[variableslib.Variable[B]] | str,
+      name: str,
+      value: A,
+      reduce_fn: tp.Callable[[B, A], B] = tuple_reduce,
+      init_fn: tp.Callable[[], B] = tuple_init,  # type: ignore
+  ) -> bool:
     """``sow()`` can be used to collect intermediate values without
     the overhead of explicitly passing a container through each Module call.
     ``sow()`` stores a value in a new ``Module`` attribute, denoted by ``name``.
@@ -169,6 +169,11 @@ class Module(Object, metaclass=ModuleMeta):
         of ``init_fn`` together with the value to be stored. The default is an
         empty tuple.
     """
+    if isinstance(variable_type, str):
+      variable_type = variableslib.variable_type_from_name(
+          variable_type, allow_register=True
+      )
+
     if hasattr(self, name):
       variable = getattr(self, name)
       if not isinstance(variable, variableslib.Variable):
@@ -185,11 +190,15 @@ class Module(Object, metaclass=ModuleMeta):
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
 
+    return True
+
   def perturb(
-    self,
-    name: str,
-    value: tp.Any,
-    variable_type: tp.Type[variableslib.Variable[tp.Any]] = variableslib.Perturbation,
+      self,
+      name: str,
+      value: tp.Any,
+      variable_type: (
+          str | type[variableslib.Variable[tp.Any]]
+      ) = variableslib.Perturbation,
   ):
     """Add an zero-value variable ("perturbation") to the intermediate value.
 
@@ -246,6 +255,10 @@ class Module(Object, metaclass=ModuleMeta):
       variable_type: The :class:`Variable` type for the stored perturbation.
         Defaulted at :class:`nnx.Perturbation`.
     """
+    if isinstance(variable_type, str):
+      variable_type = variableslib.variable_type_from_name(
+          variable_type, allow_register=True
+      )
     if not hasattr(self, name):
       zeros = jax.tree.map(jnp.zeros_like, value)
       setattr(self, name, variable_type(zeros))
