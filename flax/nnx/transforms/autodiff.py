@@ -233,14 +233,8 @@ def grad(
   tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
-  """Lifted version of ``jax.grad`` that can handle Modules / graph nodes as
+  """Object-aware version of ``jax.grad`` that can handle Modules / graph nodes as
   arguments.
-
-  The differentiable state of each graph node is defined by the `wrt` filter,
-  which by default is set to `nnx.Param`. Internally the ``State`` of
-  graph nodes is extracted, filtered according to `wrt` filter, and
-  passed to the underlying ``jax.grad`` function. The gradients
-  of graph nodes are of type ``State``.
 
   Example::
 
@@ -266,6 +260,32 @@ def grad(
         value=(2, 3)
       )
     })
+
+  By default, NNX objects are differentiated with respect to all their ``nnx.Param``
+  Variables. You can specify which substates are differentiable by passing a ``DiffState``
+  object to the ``argnums`` argument. For example, if you want to differentiate only the
+  ``kernel`` attribute of the ``Linear`` class, you can use the ``PathContains`` filter::
+
+    >>> m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    ...
+    >>> kernel_attribute = nnx.PathContains('kernel')
+    >>> diff_state = nnx.DiffState(0, kernel_attribute)
+    ...
+    >>> loss_fn = lambda m, x, y: jnp.mean((m(x) - y) ** 2)
+    >>> grad_fn = nnx.grad(loss_fn, argnums=diff_state)
+    ...
+    >>> grads = grad_fn(m, x, y)
+    >>> jax.tree.map(jnp.shape, grads)
+    State({
+      'kernel': VariableState(
+        type=Param,
+        value=(2, 3)
+      )
+    })
+
+  For more information on how to create custom filters, see
+  `Using Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
+  guide.
 
   Args:
     fun: Function to be differentiated. Its arguments at positions specified by
