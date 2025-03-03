@@ -32,7 +32,7 @@ import flax.nnx.module as nnx_module
 from flax.nnx.object import Object
 from flax.nnx import variablelib
 from flax.nnx.bridge import variables as bridge_variables
-import jax.numpy as jnp
+import numpy as np
 
 A = tp.TypeVar('A')
 M = tp.TypeVar('M', bound='Module')
@@ -231,9 +231,9 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       abs_value_flat = jax.tree_util.tree_leaves(abs_value)
       value_flat = jax.tree_util.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
-        if jnp.shape(val) != jnp.shape(abs_val):
+        if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
-            name, '', jnp.shape(abs_val), jnp.shape(val)
+            name, '', np.shape(abs_val), np.shape(val)
           )
 
       if isinstance(abs_value, variablelib.VariableMetadata):
@@ -282,9 +282,9 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       abs_value_flat = jax.tree_util.tree_leaves(abs_value)
       value_flat = jax.tree_util.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
-        if jnp.shape(val) != jnp.shape(abs_val):
+        if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
-            name, '', jnp.shape(abs_val), jnp.shape(val)
+            name, '', np.shape(abs_val), np.shape(val)
           )
 
       if isinstance(abs_value, variablelib.VariableMetadata):
