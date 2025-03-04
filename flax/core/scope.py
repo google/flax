@@ -956,9 +956,9 @@ class Scope:
         # NOTE: We could check dtype consistency here as well but it's
         # usefuleness is less obvious. We might intentionally change the dtype
         # for inference to a half float type for example.
-        if jnp.shape(val) != jnp.shape(abs_val):
+        if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
-            name, self.path_text, jnp.shape(abs_val), jnp.shape(val)
+            name, self.path_text, np.shape(abs_val), np.shape(val)
           )
     else:
       if not self.is_mutable_collection('params'):
