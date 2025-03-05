@@ -48,6 +48,7 @@ class TransformerConfig:
   use_post_ffw_norm: bool
   attention_types: Iterable[modules.AttentionType]
   attn_logits_soft_cap: float | None = None
+  use_qk_norm: bool = False
   sliding_window_size: int | None = None
 
   @classmethod
@@ -248,6 +249,7 @@ class Transformer(nnx.Module):
             attn_logits_soft_cap=config.attn_logits_soft_cap,
             attn_type=attn_type,
             rngs=rngs,
+            use_qk_norm=config.use_qk_norm,
             sow_config=sow_config,
         )
         for _, attn_type in zip(

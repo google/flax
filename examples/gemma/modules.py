@@ -85,6 +85,7 @@ class Attention(nnx.Module):
       rngs: nnx.Rngs,
       attn_logits_soft_cap: float | None = None,
       sliding_window_size: int | None = None,
+      use_qk_norm: bool = False,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig()
   ):
     if attn_type == AttentionType.LOCAL_SLIDING and sliding_window_size is None:
@@ -100,6 +101,7 @@ class Attention(nnx.Module):
         shape=(num_heads, head_dim, features),
         rngs=rngs,
     )
+    self.use_qk_norm = use_qk_norm
     self.sow_config = sow_config
 
     if num_heads == num_kv_heads:
@@ -119,6 +121,9 @@ class Attention(nnx.Module):
           shape=(2, num_kv_heads, features, head_dim),
           rngs=rngs,
       )
+    if self.use_qk_norm:
+      self._query_norm = layers.RMSNorm(head_dim, rngs=rngs)
+      self._key_norm = layers.RMSNorm(head_dim, rngs=rngs)
 
   def __call__(
       self,
@@ -134,6 +139,10 @@ class Attention(nnx.Module):
     else:
       query_proj = self.q_einsum(x)
       key_proj, value_proj = self.kv_einsum(x)
+
+    if self.use_qk_norm:
+      query_proj = self._query_norm(query_proj)
+      key_proj = self._key_norm(key_proj)
 
     query_proj = positional_embeddings.apply_rope(
         query_proj,
@@ -300,6 +309,7 @@ class Block(nnx.Module):
       rngs: nnx.Rngs,
       attn_logits_soft_cap: float | None = None,
       sliding_window_size: int | None = None,
+      use_qk_norm: bool = False,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig()
   ):
     self.pre_attention_norm = layers.RMSNorm(embed_dim, rngs=rngs)
@@ -312,6 +322,7 @@ class Block(nnx.Module):
         attn_logits_soft_cap=attn_logits_soft_cap,
         sliding_window_size=sliding_window_size,
         rngs=rngs,
+        use_qk_norm=use_qk_norm,
         sow_config=sow_config,
     )
     if use_post_attn_norm:
