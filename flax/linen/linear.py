@@ -1124,12 +1124,7 @@ class Embed(Module):
       self.embedding, dtype=self.dtype, inexact=False
     )
     if self.num_embeddings == 1:
-      return jnp.where(
-        jnp.broadcast_to(inputs[..., None], inputs.shape + (self.features,))
-        == 0,
-        embedding,
-        jnp.nan,
-      )
+      return jnp.broadcast_to(embedding, inputs.shape + (self.features,))
     return jnp.take(embedding, inputs, axis=0)
 
   def attend(self, query: Array) -> Array:
