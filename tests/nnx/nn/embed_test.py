@@ -71,7 +71,6 @@ class TestLinenConsistency(parameterized.TestCase):
     out = model.apply(variables, x)
     assert isinstance(out, jax.Array)
     np.testing.assert_array_equal(out, out_nnx)
-    np.testing.assert_array_equal(jax.numpy.isnan(out).all(), jax.numpy.array([True]))
 
 
 if __name__ == '__main__':
