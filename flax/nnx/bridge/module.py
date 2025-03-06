@@ -106,6 +106,25 @@ def _bind_module(parent: Module, module: Module) -> Module:
   return module
 
 
+def current_context() -> ModuleStackEntry | None:
+  return MODULE_CONTEXT.module_stack[-1]
+
+
+def current_module() -> Module | None:
+  """A quick util to get the current bridge module."""
+  ctx = current_context()
+  if ctx is None:
+    return None
+  return ctx.module
+
+
+def _auto_submodule_name(parent_ctx, cls):
+  """Increment type count and generate a new submodule name."""
+  type_index = parent_ctx.type_counter[cls]
+  parent_ctx.type_counter[cls] += 1
+  return f'{cls.__name__}_{type_index}'
+
+
 class ModuleMeta(nnx_module.ModuleMeta):
 
   def _object_meta_construct(cls, self, *args, **kwargs):
@@ -134,15 +153,12 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
             f"'parent' can only be set to None, got {type(parent).__name__}"
           )
       else:
-        type_index = parent_ctx.type_counter[cls]
-        parent_ctx.type_counter[cls] += 1
-
         if 'name' in kwargs:
           name = kwargs.pop('name')
           if not isinstance(name, str):
             raise ValueError(f"'name' must be a 'str', got {type(name).__name__}")
         else:
-          name = f'{cls.__name__}_{type_index}'
+          name = _auto_submodule_name(parent_ctx, cls)
         parent = parent_ctx.module
 
   module = nnx_module.ModuleMeta.__call__(cls, *args, **kwargs)

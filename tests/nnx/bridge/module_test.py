@@ -302,6 +302,81 @@ class TestBridgeModule(absltest.TestCase):
     y: jax.Array = foo.apply(variables, x)
     self.assertEqual(y.shape, (3, 5))
 
+  def test_pure_nnx_submodule(self):
+    class NNXLayer(nnx.Module):
+      def __init__(self, dim, dropout, rngs):
+        self.linear = nnx.Linear(dim, dim, use_bias=False, rngs=rngs)
+        self.dropout = nnx.Dropout(dropout, rngs=rngs)
+        self.count = nnx.Intermediate(jnp.array([0.]))
+      def __call__(self, x):
+        # Required check to avoid state update in `init()`. Can this be avoided?
+        if not bridge.current_module().is_initializing():
+          self.count.value = self.count.value + 1
+        x = self.linear(x)
+        x = self.dropout(x)
+        return x
+
+    class BridgeMLP(bridge.Module):
+      @bridge.compact
+      def __call__(self, x):
+        x = nnx.bridge.wrap_nnx_mdl(lambda r: NNXLayer(8, 0.3, rngs=r))(x)
+        x = nnx.bridge.wrap_nnx_mdl(
+          lambda r: NNXLayer(8, 0.3, rngs=r), name='another')(x)
+        return x
+
+    model = BridgeMLP()
+    x = jax.random.normal(jax.random.key(0), (4, 8))
+    variables = model.init(jax.random.key(1), x)
+    self.assertSameElements(variables['params'].keys(),
+                            ['NNXLayer_0', 'another'])
+    self.assertFalse(jnp.array_equal(
+      variables['params']['NNXLayer_0']['linear']['kernel'],
+      variables['params']['another']['linear']['kernel'], ))
+    self.assertEqual(variables['intermediates']['NNXLayer_0']['count'], 0)
+
+    k1, k2, k3 = jax.random.split(jax.random.key(0), 3)
+    y1 = model.apply(variables, x, rngs={'params': k1, 'dropout': k2})
+    y2 = model.apply(variables, x, rngs={'params': k1, 'dropout': k3})
+    assert not jnp.array_equal(y1, y2)
+
+    _, updates = model.apply(variables, x, rngs={'params': k1, 'dropout': k3},
+                             mutable=True)
+    self.assertEqual(updates['intermediates']['NNXLayer_0']['count'], 1)
+
+    class BridgeMLPSetup(bridge.Module):
+      def setup(self):
+        self.layer = nnx.bridge.wrap_nnx_mdl(lambda r: NNXLayer(8, 0.3, rngs=r))
+      def __call__(self, x):
+        return self.layer(x)
+
+    model = BridgeMLPSetup()
+    variables = model.init(jax.random.key(1), x)
+    self.assertSameElements(variables['params'].keys(), ['layer'])
+    y1 = model.apply(variables, x, rngs={'params': k1, 'dropout': k2})
+    y2 = model.apply(variables, x, rngs={'params': k1, 'dropout': k3})
+    assert not jnp.array_equal(y1, y2)
+
+  def test_pure_nnx_submodule_modified_rng(self):
+    class FooStack(nnx.Module):
+      def __init__(self, in_dim, key):
+        keys = jax.random.split(key, in_dim)
+        self.rngs = nnx.Rngs(keys)
+      def __call__(self, x):
+        @nnx.vmap
+        def generate_weights(r):
+          return jax.random.normal(r.default(), (2,))
+        w = generate_weights(self.rngs)
+        return x @ w
+
+    class BridgeFoo(bridge.Module):
+      @bridge.compact
+      def __call__(self, x):
+        x = nnx.bridge.wrap_nnx_mdl(lambda r: FooStack(4, r.default()))(x)
+        return x
+
+    model = BridgeFoo()
+    v = model.init(jax.random.key(1), jnp.ones((1, 4)))
+    y = model.apply(v, jnp.ones((1, 4)), rngs=jax.random.key(1))
 
 if __name__ == '__main__':
   absltest.main()
