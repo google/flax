@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 import dataclasses
 import enum
+import functools
 from typing import Any
 
 from flax import nnx
@@ -65,6 +66,7 @@ class TransformerConfig:
       QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM
   )
   attn_logits_soft_cap: float | None = None
+  transpose_gating_einsum: bool = False
   local_base_frequency: int = modules.DEFAULT_ROPE_BASE_FREQUENCY
   global_base_frequency: int = modules.DEFAULT_ROPE_BASE_FREQUENCY
   use_qk_norm: bool = False
@@ -205,6 +207,7 @@ class TransformerConfig:
 
 
 def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
+  """Maps linen variable names to nnx variable names."""
   new_key = []
   for k in key:
     if k.startswith('layer_'):
@@ -228,8 +231,12 @@ def _assign_linen_params_to_nnx_state(
     state: dict[tuple[str, ...], Any],
     mapped_path: tuple[str | int, ...],
     val: Any,
+    transpose_gating_einsum: bool,
 ) -> dict[tuple[str, ...], Any]:
+  """Splits and maybe transposes gate_proj."""
   if 'gate_proj' in mapped_path:
+    if transpose_gating_einsum:
+      val = jnp.swapaxes(val, 1, 2)
     state[mapped_path].value = val[0]
     state[mapped_path[:-2] + ('up_proj', 'kernel')].value = val[1]
   else:
@@ -246,11 +253,15 @@ class Transformer(nnx.Module):
   ) -> Transformer:
     if config is None:
       config = TransformerConfig.from_params(params)
+    assign_val_fn = functools.partial(
+        _assign_linen_params_to_nnx_state,
+        transpose_gating_einsum=config.transpose_gating_einsum,
+    )
     return helpers.module_from_linen_variables(
         module_factory=lambda: cls(config, rngs=nnx.Rngs(params=0)),
         variables=params['transformer'],
         map_key_fn=_map_linen_var_names,
-        assign_val_fn=_assign_linen_params_to_nnx_state,
+        assign_val_fn=assign_val_fn,
     )
 
   def __init__(
