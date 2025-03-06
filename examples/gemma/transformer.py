@@ -65,6 +65,8 @@ class TransformerConfig:
       QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM
   )
   attn_logits_soft_cap: float | None = None
+  local_base_frequency: int = modules.DEFAULT_ROPE_BASE_FREQUENCY
+  global_base_frequency: int = modules.DEFAULT_ROPE_BASE_FREQUENCY
   use_qk_norm: bool = False
   sliding_window_size: int | None = None
 
@@ -277,6 +279,9 @@ class Transformer(nnx.Module):
             attn_type=attn_type,
             query_pre_attn_scalar=config.query_pre_attn_scalar(),
             rngs=rngs,
+            rope_base_frequency=config.local_base_frequency
+            if attn_type == modules.AttentionType.LOCAL_SLIDING
+            else config.global_base_frequency,
             use_qk_norm=config.use_qk_norm,
             sow_config=sow_config,
         )
