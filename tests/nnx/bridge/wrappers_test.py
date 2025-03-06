@@ -54,9 +54,10 @@ class TestCompatibility(absltest.TestCase):
     assert y.shape == (1, 64)
     self.assertIsInstance(model.kernel, nnx.Variable)
     # NNX automatically adds metadata box regardless of original Linen module.
-    linen_vars = linen_module.init(jax.random.key(0), x)
-    np.testing.assert_array_equal(linen_vars['params']['kernel'],
-                                  model.kernel.value)
+    linen_vars = {'params': {'kernel': model.kernel.value,
+                             'bias': model.bias.value}}
+    linen_y = linen_module.apply(linen_vars, x)
+    np.testing.assert_array_equal(y, linen_y)
 
   def test_linen_to_nnx_submodule(self):
     class NNXOuter(nnx.Module):
@@ -468,10 +469,11 @@ class TestCompatibility(absltest.TestCase):
     # Test the RNG
     model = bridge.lazy_init(NNXOuter(dout=3, dropout_rate=0.5,
                                       rngs=nnx.Rngs(default=1, dropout=2)), x)
+    nnx.reseed(model, dropout=2)
     y1, y2 = model(x), model(x)
     # The dropout key of lowest NNX level still changes over stateful calls
     assert not jnp.allclose(y1, y2)
-    # Reseed resets the RNG key back
+    # Another reseed resets the RNG key back
     nnx.reseed(model, dropout=2)
     np.testing.assert_array_equal(y1, model(x))
 

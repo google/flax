@@ -319,8 +319,8 @@ class TestBridgeModule(absltest.TestCase):
     class BridgeMLP(bridge.Module):
       @bridge.compact
       def __call__(self, x):
-        x = nnx.bridge.wrap_nnx_mdl(lambda r: NNXLayer(8, 0.3, rngs=r))(x)
-        x = nnx.bridge.wrap_nnx_mdl(
+        x = bridge.nnx_in_bridge_mdl(lambda r: NNXLayer(8, 0.3, rngs=r))(x)
+        x = bridge.nnx_in_bridge_mdl(
           lambda r: NNXLayer(8, 0.3, rngs=r), name='another')(x)
         return x
 
@@ -345,7 +345,8 @@ class TestBridgeModule(absltest.TestCase):
 
     class BridgeMLPSetup(bridge.Module):
       def setup(self):
-        self.layer = nnx.bridge.wrap_nnx_mdl(lambda r: NNXLayer(8, 0.3, rngs=r))
+        self.layer = bridge.nnx_in_bridge_mdl(
+          lambda r: NNXLayer(8, 0.3, rngs=r))
       def __call__(self, x):
         return self.layer(x)
 
@@ -371,12 +372,66 @@ class TestBridgeModule(absltest.TestCase):
     class BridgeFoo(bridge.Module):
       @bridge.compact
       def __call__(self, x):
-        x = nnx.bridge.wrap_nnx_mdl(lambda r: FooStack(4, r.default()))(x)
+        x = bridge.nnx_in_bridge_mdl(lambda r: FooStack(4, r.default()))(x)
         return x
 
     model = BridgeFoo()
     v = model.init(jax.random.key(1), jnp.ones((1, 4)))
     y = model.apply(v, jnp.ones((1, 4)), rngs=jax.random.key(1))
+
+  def test_linen_submodule(self):
+    class LinenLayer(nn.Module):
+      dim: int
+      dropout_rate: float
+      def setup(self):
+        self.linear = nn.Dense(self.dim, use_bias=False)
+        self.dropout = nn.Dropout(self.dropout_rate, deterministic=False)
+
+      def __call__(self, x):
+        if not self.is_initializing():
+          self.sow('intermediates', 'count', 1,
+                    init_fn=lambda: 0, reduce_fn=lambda a, b: a + b)
+        x = self.linear(x)
+        x = self.dropout(x)
+        return x
+
+    class BridgeMLP(bridge.Module):
+      @bridge.compact
+      def __call__(self, x):
+        x = bridge.linen_in_bridge_mdl(LinenLayer(8, 0.3))(x)
+        x = bridge.linen_in_bridge_mdl(LinenLayer(8, 0.3), name='another')(x)
+        return x
+
+    model = BridgeMLP()
+    x = jax.random.normal(jax.random.key(0), (4, 8))
+    variables = model.init(jax.random.key(1), x)
+    self.assertFalse(jnp.array_equal(
+      variables['params']['LinenLayer_0']['linear']['kernel'],
+      variables['params']['another']['linear']['kernel'], ))
+
+    k1, k2, k3 = jax.random.split(jax.random.key(0), 3)
+    y1 = model.apply(variables, x, rngs={'params': k1, 'dropout': k2})
+    y2 = model.apply(variables, x, rngs={'params': k1, 'dropout': k3})
+    assert not jnp.array_equal(y1, y2)
+
+    _, updates = model.apply(variables, x, rngs={'params': k1, 'dropout': k3},
+                             mutable=True)
+    self.assertEqual(updates['intermediates']['LinenLayer_0']['count'], 1)
+
+    class BridgeMLPSetup(bridge.Module):
+      def setup(self):
+        self.layer = bridge.linen_in_bridge_mdl(LinenLayer(8, 0.3))
+      def __call__(self, x):
+        return self.layer(x)
+
+    model = BridgeMLPSetup()
+    variables = model.init(jax.random.key(1), x)
+    self.assertSameElements(variables['params'].keys(), ['layer'])
+    y1 = model.apply(variables, x, rngs={'params': k1, 'dropout': k2})
+    y2 = model.apply(variables, x, rngs={'params': k1, 'dropout': k3})
+    assert not jnp.array_equal(y1, y2)
+
+
 
 if __name__ == '__main__':
   absltest.main()

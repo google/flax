@@ -25,6 +25,7 @@ import typing_extensions as tpe
 
 from flax import errors
 from flax.core import meta
+from flax.core.scope import CollectionFilter
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx import graph, rnglib, statelib, traversals
 from flax.nnx import variablelib
@@ -63,11 +64,12 @@ class ModuleState(statelib.State):
 
 
 class Scope(Object):
-  def __init__(self, rngs: rnglib.Rngs):
+  def __init__(self, rngs: rnglib.Rngs, mutable: CollectionFilter):
     self.rngs = rngs
+    self.mutable = mutable
 
   def copy(self):
-    return Scope(self.rngs)
+    return Scope(self.rngs, self.mutable)
 
 
 class _HasSetup(tp.Protocol):
@@ -365,7 +367,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     *args,
     rngs: int | jax.Array | dict[str, jax.Array] | rnglib.Rngs | None = None,
     method: tp.Callable[..., tp.Any] | str = '__call__',
-    mutable: tp.Any = False,
+    mutable: CollectionFilter = False,
     _initialize: bool = False,
     **kwargs,
   ) -> tp.Any:
@@ -422,7 +424,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       if isinstance(value, Object):
         value._object__state._initializing = _initialize
       if isinstance(value, Module):
-        value.scope = Scope(rngs)
+        value.scope = Scope(rngs, mutable)
         _maybe_call_setup(value)
 
     MODULE_CONTEXT.module_stack.append(
@@ -517,3 +519,4 @@ def _get_unbound_fn(method_or_fn: tp.Callable) -> tp.Callable:
     raise errors.ApplyModuleInvalidMethodError(method_or_fn)
 
   return method_or_fn
+
