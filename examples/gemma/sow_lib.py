@@ -41,7 +41,7 @@ class LayerIntermediates:
       value = getattr(self, field.name)
       if value is None:
         continue
-      # We but mlp and attn intermediates into this class without any further
+      # We put mlp and attn intermediates into this class without any further
       # nesting. So we have to retrieve the intermediates from the correct
       # sub-module.
       try:

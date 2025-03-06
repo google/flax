@@ -249,7 +249,10 @@ class Transformer(nnx.Module):
 
   @classmethod
   def from_params(
-      cls, params: params_lib.Params, config: None | TransformerConfig = None
+      cls,
+      params: params_lib.Params,
+      config: None | TransformerConfig = None,
+      sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
   ) -> Transformer:
     if config is None:
       config = TransformerConfig.from_params(params)
@@ -258,7 +261,9 @@ class Transformer(nnx.Module):
         transpose_gating_einsum=config.transpose_gating_einsum,
     )
     return helpers.module_from_linen_variables(
-        module_factory=lambda: cls(config, rngs=nnx.Rngs(params=0)),
+        module_factory=lambda: cls(
+            config, rngs=nnx.Rngs(params=0), sow_config=sow_config
+        ),
         variables=params['transformer'],
         map_key_fn=_map_linen_var_names,
         assign_val_fn=assign_val_fn,
