@@ -24,4 +24,7 @@ from .variables import with_partitioning as with_partitioning
 from .module import Module as Module
 from .module import Scope as Scope
 from .module import compact as compact
+from .module import current_context as current_context
+from .module import current_module as current_module
+from .interop import wrap_nnx_mdl as wrap_nnx_mdl
 from flax.nnx.nn import initializers as initializers
