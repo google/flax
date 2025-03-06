@@ -269,21 +269,21 @@ class FeedForward(nnx.Module):
         out_features=hidden_dim,
         use_bias=False,
         rngs=rngs,
-        kernel_init=nn.initializers.zeros_init(),
+        kernel_init=nn.initializers.normal(),
     )
     self.up_proj = nnx.Linear(
         in_features=features,
         out_features=hidden_dim,
         use_bias=False,
         rngs=rngs,
-        kernel_init=nn.initializers.zeros_init(),
+        kernel_init=nn.initializers.normal(),
     )
     self.down_proj = nnx.Linear(
         in_features=hidden_dim,
         out_features=features,
         use_bias=False,
         rngs=rngs,
-        kernel_init=nn.initializers.zeros_init(),
+        kernel_init=nn.initializers.normal(),
     )
     self.sow_config = sow_config
 
@@ -337,7 +337,9 @@ class Block(nnx.Module):
         sow_config=sow_config,
     )
     if use_post_attn_norm:
-      self.post_attn_norm = layers.RMSNorm(embed_dim, rngs=rngs)
+      self.post_attention_norm = layers.RMSNorm(embed_dim, rngs=rngs)
+    else:
+      self.post_attention_norm = None
 
     self.pre_ffw_norm = layers.RMSNorm(embed_dim, rngs=rngs)
     self.mlp = FeedForward(
@@ -348,6 +350,8 @@ class Block(nnx.Module):
     )
     if use_post_ffw_norm:
       self.post_ffw_norm = layers.RMSNorm(embed_dim, rngs=rngs)
+    else:
+      self.post_ffw_norm = None
     self.sow_config = sow_config
 
   def __call__(
@@ -357,35 +361,29 @@ class Block(nnx.Module):
       cache: LayerCache | None,
       attn_mask: jax.Array,
   ) -> tuple[LayerCache | None, jax.Array]:
-    inputs_normalized = self.pre_attention_norm(x)
+
+    # Attention.
+    attn_inputs = self.pre_attention_norm(x)
     cache, attn_output = self.attn(
-        inputs_normalized,
+        attn_inputs,
         segment_pos,
         cache,
         attn_mask,
     )
-    attn_output += x
-    residual = attn_output
-    attn_output = self.pre_ffw_norm(attn_output)
+    if self.post_attention_norm is not None:
+      attn_output = self.post_attention_norm(attn_output)
+    x += attn_output
+    self.sow_config.maybe_sow_rs_after_attention(x, self)
 
-    if self.use_post_attn_norm:
-      attn_output = self.post_attn_norm(attn_output)
-    self.sow_config.maybe_sow_rs_after_attention(attn_output, self)
+    # Feed forward.
+    ffw_inputs = self.pre_ffw_norm(x)
+    ffw_outputs = self.mlp(ffw_inputs)
+    if self.post_ffw_norm is not None:
+      ffw_outputs = self.post_ffw_norm(ffw_outputs)
+    x += ffw_outputs
+    self.sow_config.maybe_sow_rs_after_ffw(x, self)
 
-    outputs = self.mlp(attn_output)
-    if self.use_post_ffw_norm:
-      outputs = self.post_ffw_norm(outputs)
-    outputs = residual + outputs
-    self.sow_config.maybe_sow_rs_after_ffw(outputs, self)
-    return cache, outputs
-
-  @property
-  def use_post_attn_norm(self):
-    return hasattr(self, 'post_attn_norm') and self.post_attn_norm is not None
-
-  @property
-  def use_post_ffw_norm(self):
-    return hasattr(self, 'post_ffw_norm') and self.post_ffw_norm is not None
+    return cache, x
 
   def init_cache(
       self,

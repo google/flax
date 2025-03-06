@@ -73,7 +73,7 @@ def create_fake_params(config: transformer_lib.TransformerConfig):
     ))
 
     if config.use_post_attn_norm:
-      params[f'layer_{layer_idx}']['post_attn_norm']['scale'] = jnp.ones((
+      params[f'layer_{layer_idx}']['post_attention_norm']['scale'] = jnp.ones((
           config.embed_dim,
       ))
     if config.use_post_ffw_norm:

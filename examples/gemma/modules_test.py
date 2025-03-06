@@ -289,7 +289,7 @@ class BlockTest(parameterized.TestCase):
 
     new_cache, outputs = block(inputs, jnp.array([[0]]), cache, attn_mask)
 
-    self.assertEqual(block.use_post_attn_norm, use_post_attn_norm)
+    self.assertEqual(block.post_attention_norm is not None, use_post_attn_norm)
     self.assertEqual(new_cache['k'].shape, expected_cache_shape)
     self.assertEqual(outputs.shape, expected_output_shape)
 
@@ -319,10 +319,10 @@ class BlockTest(parameterized.TestCase):
         embed_dim,
         head_dim,
         1,
-        True,
-        False,  # use_post_ffw_norm
-        1.0,
-        modules.AttentionType.GLOBAL,
+        use_post_attn_norm=True,
+        use_post_ffw_norm=False,
+        query_pre_attn_scalar=1.0,
+        attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
     unnormed_block = modules.Block(
@@ -331,10 +331,10 @@ class BlockTest(parameterized.TestCase):
         embed_dim,
         head_dim,
         1,
-        False,
-        False,  # use_post_ffw_norm
-        1.0,
-        modules.AttentionType.GLOBAL,
+        use_post_attn_norm=False,
+        use_post_ffw_norm=False,
+        query_pre_attn_scalar=1.0,
+        attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
 
@@ -351,7 +351,7 @@ class BlockTest(parameterized.TestCase):
       all_outputs.append(outputs)
 
     normed_output, unnormed_output = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
-    self.assertFalse(jnp.not_equal(normed_output, unnormed_output).all())
+    self.assertTrue(jnp.not_equal(normed_output, unnormed_output).all())
 
   @parameterized.parameters(
       dict(
@@ -379,10 +379,10 @@ class BlockTest(parameterized.TestCase):
         embed_dim,
         head_dim,
         1,
-        True,
-        True,  # use_post_ffw_norm
-        1.0,
-        modules.AttentionType.GLOBAL,
+        use_post_attn_norm=False,
+        use_post_ffw_norm=True,
+        query_pre_attn_scalar=1.0,
+        attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
     unnormed_block = modules.Block(
@@ -391,10 +391,10 @@ class BlockTest(parameterized.TestCase):
         embed_dim,
         head_dim,
         1,
-        False,
-        False,  # use_post_ffw_norm
-        1.0,
-        modules.AttentionType.GLOBAL,
+        use_post_attn_norm=False,
+        use_post_ffw_norm=False,
+        query_pre_attn_scalar=1.0,
+        attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
 
@@ -411,7 +411,7 @@ class BlockTest(parameterized.TestCase):
       all_outputs.append(outputs)
 
     normed_output, unnormed_output = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
-    self.assertFalse(jnp.not_equal(normed_output, unnormed_output).all())
+    self.assertTrue(jnp.not_equal(normed_output, unnormed_output).all())
 
 
 if __name__ == '__main__':
