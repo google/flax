@@ -22,6 +22,7 @@ import modules
 import sampler as sampler_lib
 import sow_lib
 import transformer as transformer_lib
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -107,6 +108,25 @@ class SamplerTest(absltest.TestCase):
 
     result = sampler(['input string', 'hello world'], total_generation_steps=10)
     self.assertIsNotNone(result)
+
+    top_p_result = sampler(
+        ['input string', 'hello world'],
+        total_generation_steps=10,
+        temperature=9,
+        top_p=0.95,
+    )
+    self.assertIsNotNone(top_p_result)
+    self.assertNotEqual(result.text, top_p_result.text)
+
+    top_p_result_2 = sampler(
+        ['input string', 'hello world'],
+        total_generation_steps=10,
+        temperature=9,
+        top_p=0.95,
+        seed=jax.random.PRNGKey(42),
+    )
+    self.assertIsNotNone(top_p_result_2)
+    self.assertNotEqual(top_p_result.text, top_p_result_2.text)
 
   def test_forbidden_tokens(self):
     vocab = MockVocab()
@@ -246,6 +266,11 @@ class SamplerTest(absltest.TestCase):
     sample_state = sampler.init_sample_state(
         all_input_ids,
         total_sampling_steps=total_sampling_steps,
+        include_logits=True,
+        forbidden_token_ids=None,
+        temperature=0.0,
+        top_p=0.95,
+        seed=jax.random.PRNGKey(0),
     )
 
     # Check that the position indices correctly ignore padding
@@ -282,6 +307,11 @@ class SamplerTest(absltest.TestCase):
     sample_state = sampler.init_sample_state(
         all_input_ids,
         total_sampling_steps=total_sampling_steps,
+        include_logits=True,
+        forbidden_token_ids=None,
+        temperature=0.0,
+        top_p=0.95,
+        seed=jax.random.PRNGKey(0),
     )
 
     masked_token_buffer = sampler.mask_tokens_after_eos_ids(
@@ -389,8 +419,8 @@ class SamplerTest(absltest.TestCase):
         time_step, seq_len, input_mask
     )
     expected_attn_mask = jnp.array(
-        [[0, 0, 1, 1, 1, 0, 0, 0],
-         [0, 0, 1, 0, 1, 0, 0, 0]], dtype=jnp.bool_)
+        [[0, 0, 1, 1, 1, 0, 0, 0], [0, 0, 1, 0, 1, 0, 0, 0]], dtype=jnp.bool_
+    )
 
     self.assertTrue((attn_mask.squeeze(1) == expected_attn_mask).all())
 
@@ -403,8 +433,8 @@ class SamplerTest(absltest.TestCase):
     )
     print(attn_mask)
     expected_attn_mask = jnp.array(
-        [[0, 1, 1, 1],
-         [0, 1, 0, 1]], dtype=jnp.bool_)
+        [[0, 1, 1, 1], [0, 1, 0, 1]], dtype=jnp.bool_
+    )
 
     self.assertTrue((attn_mask.squeeze(1) == expected_attn_mask).all())
 
