@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 import dataclasses
+import enum
 from typing import Any
 
 from flax import nnx
@@ -30,6 +31,19 @@ import jax.numpy as jnp
 from jaxtyping import Array  # pylint: disable=g-importing-member,g-multiple-import
 
 Cache = dict[str, modules.LayerCache]
+
+
+class QueryPreAttentionNormalisation(enum.Enum):
+  """Initialization strategy."""
+
+  # Whether to scale the query by 1/sqrt(head_dim)
+  BY_ONE_OVER_SQRT_HEAD_DIM = enum.auto()
+
+  # Whether to scale the query by `embed_dim // num_heads`
+  BY_EMBED_DIM_DIV_NUM_HEADS = enum.auto()
+
+  # Whether to scale the query by `1/sqrt(embed_dim // num_heads)`
+  BY_ONE_OVER_SQRT_EMBED_DIM_DIV_NUM_HEADS = enum.auto()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -47,9 +61,22 @@ class TransformerConfig:
   use_post_attn_norm: bool
   use_post_ffw_norm: bool
   attention_types: Iterable[modules.AttentionType]
+  query_pre_attn_norm: QueryPreAttentionNormalisation = (
+      QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM
+  )
   attn_logits_soft_cap: float | None = None
   use_qk_norm: bool = False
   sliding_window_size: int | None = None
+
+  def query_pre_attn_scalar(self) -> float:
+    """Returns the scalar to multiply the query by before attention."""
+    match self.query_pre_attn_norm:
+      case QueryPreAttentionNormalisation.BY_EMBED_DIM_DIV_NUM_HEADS:
+        return self.embed_dim // self.num_heads
+      case QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_EMBED_DIM_DIV_NUM_HEADS:  # pylint: disable=line-too-long
+        return (self.embed_dim // self.num_heads) ** -0.5
+      case QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM | _:
+        return self.head_dim**-0.5
 
   @classmethod
   def from_path(cls, path: str) -> TransformerConfig:
@@ -248,6 +275,7 @@ class Transformer(nnx.Module):
             use_post_ffw_norm=config.use_post_ffw_norm,
             attn_logits_soft_cap=config.attn_logits_soft_cap,
             attn_type=attn_type,
+            query_pre_attn_scalar=config.query_pre_attn_scalar(),
             rngs=rngs,
             use_qk_norm=config.use_qk_norm,
             sow_config=sow_config,

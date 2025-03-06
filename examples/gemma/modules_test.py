@@ -78,6 +78,7 @@ class AttentionTest(parameterized.TestCase):
         num_kv_heads=4,
         features=5,
         head_dim=head_dim,
+        query_pre_attn_scalar=1.0,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
@@ -107,6 +108,7 @@ class AttentionTest(parameterized.TestCase):
         num_kv_heads=num_kv_heads,
         features=5,
         head_dim=8,
+        query_pre_attn_scalar=1.0,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
@@ -144,7 +146,8 @@ class AttentionTest(parameterized.TestCase):
         num_heads,
         features,
         head_dim,
-        modules.AttentionType.GLOBAL,
+        query_pre_attn_scalar=1.0,
+        attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
     cache = attn.init_cache(
@@ -177,7 +180,8 @@ class AttentionTest(parameterized.TestCase):
         num_heads,
         features,
         head_dim,
-        modules.AttentionType.GLOBAL,
+        query_pre_attn_scalar=1.0,
+        attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
     cache = attn.init_cache(
@@ -191,7 +195,8 @@ class AttentionTest(parameterized.TestCase):
         num_heads,
         features,
         head_dim,
-        modules.AttentionType.LOCAL_SLIDING,
+        query_pre_attn_scalar=1.0,
+        attn_type=modules.AttentionType.LOCAL_SLIDING,
         sliding_window_size=sliding_window_size,
         rngs=nnx.Rngs(params=0),
     )
@@ -272,6 +277,7 @@ class BlockTest(parameterized.TestCase):
         1,
         use_post_attn_norm,
         use_post_ffw_norm,
+        1.0,
         modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
@@ -315,6 +321,7 @@ class BlockTest(parameterized.TestCase):
         1,
         True,
         False,  # use_post_ffw_norm
+        1.0,
         modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
@@ -326,6 +333,7 @@ class BlockTest(parameterized.TestCase):
         1,
         False,
         False,  # use_post_ffw_norm
+        1.0,
         modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
@@ -373,6 +381,7 @@ class BlockTest(parameterized.TestCase):
         1,
         True,
         True,  # use_post_ffw_norm
+        1.0,
         modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
@@ -384,6 +393,7 @@ class BlockTest(parameterized.TestCase):
         1,
         False,
         False,  # use_post_ffw_norm
+        1.0,
         modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )

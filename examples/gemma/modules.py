@@ -80,6 +80,7 @@ class Attention(nnx.Module):
       num_kv_heads: int,
       features: int,
       head_dim: int,
+      query_pre_attn_scalar: float,
       attn_type: AttentionType,
       *,
       rngs: nnx.Rngs,
@@ -93,6 +94,7 @@ class Attention(nnx.Module):
           '`sliding_window_size` must be set if `attn_type` is Local Sliding.'
       )
 
+    self.query_pre_attn_scalar = query_pre_attn_scalar
     self.attn_type = attn_type
     self.sliding_window_size = sliding_window_size
     self.attn_logits_soft_cap = attn_logits_soft_cap
@@ -149,7 +151,7 @@ class Attention(nnx.Module):
         segment_pos,
         head_dim=self.head_dim,
     )
-    query_scaled = query_proj * self.head_dim**-0.5
+    query_scaled = query_proj * self.query_pre_attn_scalar
     key_proj = positional_embeddings.apply_rope(
         key_proj,
         segment_pos,
@@ -304,6 +306,7 @@ class Block(nnx.Module):
       hidden_dim: int,
       use_post_attn_norm: bool,
       use_post_ffw_norm: bool,
+      query_pre_attn_scalar: float,
       attn_type: AttentionType,
       *,
       rngs: nnx.Rngs,
@@ -318,6 +321,7 @@ class Block(nnx.Module):
         num_kv_heads=num_kv_heads,
         features=embed_dim,
         head_dim=head_dim,
+        query_pre_attn_scalar=query_pre_attn_scalar,
         attn_type=attn_type,
         attn_logits_soft_cap=attn_logits_soft_cap,
         sliding_window_size=sliding_window_size,
