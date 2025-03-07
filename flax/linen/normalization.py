@@ -187,7 +187,8 @@ def _normalize(
   Returns:
     The normalized input.
   """
-  reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
+  ndim = x.ndim
+  reduction_axes = _canonicalize_axes(ndim, reduction_axes)
   feature_axes = _canonicalize_axes(x.ndim, feature_axes)
   feature_shape = [1] * x.ndim
   reduced_feature_shape = []
