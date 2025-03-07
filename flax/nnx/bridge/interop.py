@@ -14,18 +14,32 @@
 
 import typing as tp
 
+from flax.linen import module as nn_module
 from flax.nnx import graph, rnglib
+from flax.nnx.bridge import wrappers
 from flax.nnx.bridge import module as bdg_module
 import flax.nnx.module as nnx_module
 from flax.nnx.transforms.transforms import eval_shape as nnx_eval_shape
 from flax.nnx.transforms.compilation import jit as nnx_jit
 
 
-def wrap_nnx_mdl(factory: tp.Callable[[rnglib.Rngs], nnx_module.Module],
-                 name: str | None = None):
-  """Create module at init time, or make abstract module and let parent bind it with its state. Use current bridge module scope for RNG generation."""
+def nnx_in_bridge_mdl(factory: tp.Callable[[rnglib.Rngs], nnx_module.Module],
+                      name: str | None = None) -> nnx_module.Module:
+  """Make pure NNX modules a submodule of a bridge module.
+
+  Create module at init time, or make abstract module and let parent bind
+  it with its state.
+  Use current bridge module scope for RNG generation.
+
+  Args:
+    factory: a function that takes an `nnx.Rngs` arg and returns an NNX module.
+    name: the name of the module. Only used during `bridge.compact` functions;
+      in setup() function the user will set it to an attribute explicitly.
+  Returns:
+    A submodule (`nnx.Module`) of the bridge module.
+  """
   parent_ctx, parent = bdg_module.current_context(), bdg_module.current_module()
-  assert parent_ctx is not None and parent is not None, 'wrap_nnx_mdl only needed inside bridge Module'
+  assert parent_ctx is not None and parent is not None, 'nnx_in_bridge_mdl() only needed inside bridge Module'
   parent = parent_ctx.module
   assert parent.scope is not None
 
@@ -48,5 +62,28 @@ def wrap_nnx_mdl(factory: tp.Callable[[rnglib.Rngs], nnx_module.Module],
   if parent_ctx.in_compact:
     if name is None:
       name = bdg_module._auto_submodule_name(parent_ctx, type(module))
+    setattr(parent, name, module)
+  return module
+
+
+def linen_in_bridge_mdl(linen_module: nn_module.Module,
+                        name: str | None = None) -> nnx_module.Module:
+  """Make Linen modules a submodule of a bridge module using wrappers.ToNNX().
+
+  Args:
+    linen_module: the underlying Linen module instance.
+    name: the name of the module. Only used during `bridge.compact` functions;
+      in setup() function the user will set it to an attribute explicitly.
+  Returns:
+    A submodule (`nnx.Module`) of the bridge module.
+  """
+  parent_ctx, parent = bdg_module.current_context(), bdg_module.current_module()
+  assert parent_ctx is not None and parent is not None, 'linen_in_bridge_mdl() only needed inside bridge Module'
+  assert parent.scope is not None
+  module = wrappers.ToNNX(linen_module, parent.scope.rngs)
+  wrappers._set_initializing(module, parent.is_initializing())
+  if parent_ctx.in_compact:
+    if name is None:
+      name = bdg_module._auto_submodule_name(parent_ctx, type(linen_module))
     setattr(parent, name, module)
   return module

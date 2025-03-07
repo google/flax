@@ -23,6 +23,7 @@ from flax.core import meta
 from flax.nnx import graph
 from flax.nnx import variablelib
 from flax.nnx.bridge import variables as bv
+from flax.nnx.bridge import module as bdg_module
 from flax.nnx.module import Module
 from flax.nnx.object import Object
 from flax.nnx.rnglib import Rngs
@@ -124,7 +125,6 @@ class ToNNX(Module):
   ):
     self.module = module
     self.rngs = rngs
-    self.linen_attributes: tuple[str, ...] = ()
 
   def lazy_init(self, *args, **kwargs):
     """A shortcut of calling `nnx.bridge.lazy_init()` upon this module."""
@@ -140,9 +140,7 @@ class ToNNX(Module):
       rngs = self.rngs
     if self._object__state.initializing:
       _rngs = (
-        {name: stream.key.raw_value for name, stream in rngs.items()}
-        if rngs
-        else {}
+        {name: stream() for name, stream in rngs.items()} if rngs else {}
       )
       # rename default to params
       if 'params' not in _rngs and 'default' in _rngs:
@@ -150,35 +148,40 @@ class ToNNX(Module):
       out, variables = self.module.init_with_output(_rngs, *args, method=method, **kwargs)
 
       nnx_attrs = bv.linen_vars_to_nnx_attrs(variables)
-      linen_attributes = set(self.linen_attributes)
       for attr_name, value in nnx_attrs.items():
         setattr(self, attr_name, value)
-        linen_attributes.add(attr_name)
-      self.linen_attributes = tuple(linen_attributes)  # make it hashable
 
     else:
-      nnx_attrs = {name: getattr(self, name) for name in self.linen_attributes}
+      nnx_attrs = {k: v for k, v in vars(self).items()
+                   if k not in ['module', 'rngs', '_object__state']}
       variables = bv.nnx_attrs_to_linen_vars(nnx_attrs)
 
       _rngs = (
         {name: stream() for name, stream in rngs.items()} if rngs else {}
       )
+
+      # Get `mutable` from top level bridge.Module context if any
+      if (m := bdg_module.current_module()) is not None:
+        assert m.scope is not None
+        mutable = m.scope.mutable
+        if 'mutable' in kwargs and kwargs['mutable'] != mutable:
+          raise ValueError(
+            f"Multiple `mutable` arguments detected: {mutable} at top level vs "
+            f"{kwargs['mutable']} in ToNNX() call")
+        kwargs['mutable'] = mutable
+
       out = self.module.apply(variables, *args, rngs=_rngs, method=method, **kwargs)
 
     # Split out the updates if `mutable` is passed into the Flax module
     if kwargs.get('mutable', False) != False:
       out, updates = out
       nnx_attrs = bv.linen_vars_to_nnx_attrs(updates)
-      linen_attributes = set(self.linen_attributes)
       for attr_name, value in nnx_attrs.items():
-        linen_attributes.add(attr_name)
         if hasattr(self, attr_name) and isinstance(value, dict):
           original_tree = getattr(self, attr_name)
           setattr(self, attr_name, original_tree | value)
         else:
           setattr(self, attr_name, value)
-
-      self.linen_attributes = tuple(linen_attributes)  # make it hashable
 
     return out
 
