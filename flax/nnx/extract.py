@@ -127,8 +127,8 @@ class PrefixMapping(abc.ABC):
   ) -> tp.Any: ...
 
 def check_consistent_aliasing(
-  node: tuple[tp.Any, ...],
-  prefix: tuple[tp.Any, ...],
+  node: tp.Any,
+  prefix: tp.Any,
   /,
   *,
   node_prefixes: dict[tp.Any, list[tuple[PathParts, tp.Any]]] | None = None,
@@ -279,7 +279,9 @@ def to_tree(
     with graph.split_context(ctxtag) as split_ctx:
       return jax.tree.map(
         lambda x: split_fn(split_ctx, (), prefix, x)
-        if map_non_graph_nodes or graph.is_graph_node(x)
+        if map_non_graph_nodes
+        or graph.is_graph_node(x)
+        or isinstance(x, variablelib.Variable)
         else x,
         tree,
       )
@@ -296,7 +298,7 @@ def to_tree(
 
   with graph.split_context(ctxtag) as split_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
-      if graph.is_graph_node(leaf):
+      if graph.is_graph_node(leaf) or isinstance(leaf, variablelib.Variable):
         if check_aliasing:
           check_consistent_aliasing(
             leaf, leaf_prefix, node_prefixes=node_prefixes
@@ -343,7 +345,9 @@ def from_tree(
     with graph.merge_context(is_inner, ctxtag) as merge_ctx:
       return jax.tree.map(
         lambda x: merge_fn(merge_ctx, (), prefix, x)
-        if map_non_graph_nodes or is_node_leaf(x)
+        if map_non_graph_nodes
+        or is_node_leaf(x)
+        or isinstance(x, variablelib.Variable)
         else x,
         tree,
         is_leaf=is_leaf,
@@ -362,7 +366,11 @@ def from_tree(
 
   with graph.merge_context(is_inner, ctxtag) as merge_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
-      if map_non_graph_nodes or is_node_leaf(leaf):
+      if (
+        map_non_graph_nodes
+        or is_node_leaf(leaf)
+        or isinstance(leaf, variablelib.Variable)
+      ):
         leaf = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)
       leaves_out.append(leaf)
 
@@ -370,4 +378,9 @@ def from_tree(
   return pytree_out
 
 def clear_non_graph_nodes(tree):
-  return jax.tree.map(lambda x: x if graph.is_graph_node(x) else None, tree)
+  return jax.tree.map(
+    lambda x: x
+    if graph.is_graph_node(x) or isinstance(x, variablelib.Variable)
+    else None,
+    tree,
+  )
