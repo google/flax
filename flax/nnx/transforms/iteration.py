@@ -1328,7 +1328,7 @@ class WhileLoopCondFn:
 def _add_fake_index_mapping(tree: tp.Any):
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.NodeDef
+      node_state._graphdef, graph.NodeDef | graph.VariableDef
     ):
       return node_state
 
@@ -1345,10 +1345,10 @@ def _remove_index_mapping(tree: tp.Any):
 
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.NodeDef
+      node_state._graphdef, graph.NodeDef | graph.VariableDef
     ):
       return node_state
-    assert isinstance(node_state._graphdef, graph.NodeDef)
+    assert isinstance(node_state._graphdef, graph.NodeDef | graph.VariableDef)
     node_state = dataclasses.replace(
       node_state, _graphdef=node_state._graphdef.with_no_outer_index()
     )

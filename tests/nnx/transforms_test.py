@@ -762,6 +762,35 @@ class TestGrad(parameterized.TestCase):
     self.assertNotIn('kernel', grads_m2[0])
     self.assertIn('bias', grads_m2[0])
 
+  def test_variables_in_grad(self):
+    p1 = nnx.Param(10.0)
+    p2 = nnx.Param(20.0)
+
+    m = dict(a=[p1, p2], b=p1)
+
+    @nnx.grad
+    def f(m: dict):
+      # sum all params
+      return m['a'][0].value + m['a'][1].value + m['b'].value
+
+    grads = f(m)
+
+    assert m['a'][0] is m['b']
+    assert isinstance(grads, dict)
+    assert issubclass(grads['a'][0].type, nnx.Variable)
+    assert grads['a'][1].value == 1.0
+    assert issubclass(grads['a'][1].type, nnx.Variable)
+    assert len(jax.tree.leaves(grads)) == 2
+
+    jax.tree.map(nnx.update, m, grads)
+
+    assert m['a'][0] is m['b']
+    assert m['a'][0].value == 2.0
+    assert m['a'][1].value == 1.0
+    assert m['b'].value == 2.0
+    assert m['c'] == 7
+    assert m['d'] == 5.0
+
 
 class TestCustomVJP(parameterized.TestCase):
 
