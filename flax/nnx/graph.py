@@ -21,14 +21,14 @@ import functools
 import threading
 import typing as tp
 
-from flax.nnx import filterlib, reprlib, variablelib
+from flax.nnx import filterlib, reprlib, traversals, variablelib
 from flax.nnx import statelib
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
   DelayedAccessor,
 )
-from flax.nnx.statelib import FlatState, State
+from flax.nnx.statelib import EmptyState, FlatState, State
 from flax.nnx.variablelib import Variable, VariableState
 from flax.typing import Key, PathParts, is_key_like
 import jax
@@ -266,8 +266,8 @@ jax.tree_util.register_static(NodeRef)
 
 
 @dataclasses.dataclass(frozen=True, repr=False)
-class VariableDef(reprlib.Representable):
-  type: type[Variable]
+class VariableDef(reprlib.Representable, tp.Generic[Node]):
+  type: type[Node]
   index: int
   outer_index: int | None
   metadata: HashableMapping[str, tp.Any]
@@ -319,7 +319,8 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
   outer_index: int | None
   attributes: tuple[
     tuple[
-      Key, NodeDef[tp.Any] | VariableDef | NodeRef[tp.Any] | Static[tp.Any]
+      Key,
+      NodeDef[tp.Any] | VariableDef[tp.Any] | NodeRef[tp.Any] | Static[tp.Any],
     ],
     ...,
   ]
@@ -406,7 +407,7 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
 
 jax.tree_util.register_static(NodeDef)
 
-GraphDef = tp.Union[NodeDef[Node], NodeRef[Node]]
+GraphDef = tp.Union[NodeDef[Node], NodeRef[Node], VariableDef[Node]]
 PureState = tuple[GraphDef[Node], GraphState]
 
 
@@ -497,7 +498,7 @@ def flatten(
   path: list[Key] | None = [] if with_paths else None
   paths: list[PathParts] | None = [] if with_paths else None
   node_impl = get_node_impl(node)
-  if node_impl is None:
+  if node_impl is None and not isinstance(node, Variable):
     raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
   graphdef = _graph_flatten(
     node,
@@ -518,26 +519,50 @@ def flatten(
 
 def _graph_flatten(
   node: Node,
-  node_impl: NodeImpl[Node, Leaf, AuxData],
+  node_impl: NodeImpl[Node, Leaf, AuxData] | None,
   path: list[Key] | None,
   ref_index: RefMap,
   ref_outer_index: RefMap | None,
   leaves: list[StateLeaf | Variable[tp.Any]],
   paths: list[PathParts] | None,
   return_variables: bool,
-) -> NodeDef[tp.Any] | NodeRef:
+) -> NodeDef | NodeRef | VariableDef:
   is_pytree_node_ = isinstance(node_impl, PytreeNodeImpl)
   is_graph_node_ = isinstance(node_impl, GraphNodeImpl)
+  is_variable = isinstance(node, Variable)
 
   if not is_pytree_node_ and node in ref_index:
     return NodeRef(type(node), ref_index[node])
 
   # only cache graph nodes
-  if is_graph_node_:
+  if is_graph_node_ or is_variable:
     index = len(ref_index)
     ref_index[node] = index
   else:
     index = -1
+
+  if is_variable:
+    assert isinstance(node, Variable)
+    if return_variables:
+      leaf = node
+    elif path is None:
+      leaf = node.raw_value
+    else:
+      leaf = node.to_state()  # type: ignore[assignment]
+    leaves.append(leaf)
+    if path is not None:
+      assert paths is not None
+      paths.append(tuple(path))
+    variabledef = VariableDef(
+      type=type(node),
+      index=index,
+      outer_index=ref_outer_index.get(node, None) if ref_outer_index else None,
+      metadata=HashableMapping(node._var_metadata),
+    )
+    return variabledef
+
+  if node_impl is None:
+    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
 
   attributes: list[
     tuple[Key, Static[tp.Any] | NodeDef[tp.Any] | VariableDef | NodeRef[tp.Any]]
@@ -548,7 +573,7 @@ def _graph_flatten(
     value_node_impl = get_node_impl(value)
     if path is not None:
       path.append(key)
-    if value_node_impl is not None:
+    if value_node_impl is not None or isinstance(value, Variable):
       nodedef = _graph_flatten(
         value,
         value_node_impl,
@@ -560,30 +585,6 @@ def _graph_flatten(
         return_variables,
       )
       attributes.append((key, nodedef))
-    elif isinstance(value, Variable):
-      if value in ref_index:
-        attributes.append((key, NodeRef(type(value), ref_index[value])))
-      else:
-        if return_variables:
-          leaf = value
-        elif path is None:
-          leaf = value.raw_value
-        else:
-          leaf = value.to_state()  # type: ignore[assignment]
-        leaves.append(leaf)
-        if path is not None:
-          assert paths is not None
-          paths.append(tuple(path))
-        variable_index = ref_index[value] = len(ref_index)
-        variabledef = VariableDef(
-          type=type(value),
-          index=variable_index,
-          outer_index=ref_outer_index.get(value, None)
-          if ref_outer_index
-          else None,
-          metadata=HashableMapping(value._var_metadata),
-        )
-        attributes.append((key, variabledef))
     else:
       if isinstance(value, (jax.Array, np.ndarray)):
         if path is not None:
@@ -867,10 +868,7 @@ def unflatten(
   if isinstance(graphdef, NodeRef):
     node = index_ref[graphdef.index]
   else:
-    assert isinstance(graphdef, NodeDef)
     node_impl = get_node_impl_for_type(graphdef.type)
-    if node_impl is None:
-      raise RuntimeError(f'Unsupported type: {graphdef.type}, this is a bug.')
     node = _graph_unflatten(
       graphdef, node_impl, leaves, index_ref, outer_index_outer_ref
     )
@@ -883,8 +881,8 @@ def unflatten(
 
 
 def _graph_unflatten(
-  nodedef: NodeDef[Node] | NodeRef[Node],
-  node_impl: NodeImpl[Node, Leaf, AuxData],
+  nodedef: GraphDef[Node],
+  node_impl: NodeImpl[Node, Leaf, AuxData] | None,
   leaves: deque[tp.Any],
   index_ref: dict[Index, tp.Any],
   outer_index_outer_ref: dict[Index, tp.Any] | None,
@@ -904,7 +902,55 @@ def _graph_unflatten(
   """
   if type(nodedef) is NodeRef:
     return index_ref[nodedef.index]
+
+  def make_variable(key, variabledef: VariableDef[Variable]) -> tp.Any:
+    if not leaves:
+      raise ValueError('Not enough leaves to unflatten the graph')
+    # its a unseen variable, create a new one
+    value = leaves.popleft()
+    # when idxmap is present, check if the Varable exists there
+    # and update existing variables if it does
+    if (
+      outer_index_outer_ref is not None
+      and variabledef.outer_index in outer_index_outer_ref
+    ):
+      # if variable exists, update it
+      variable = outer_index_outer_ref[variabledef.outer_index]
+      if not isinstance(variable, Variable):
+        raise ValueError(
+          f'Expected a Variable type for {key!r}, but got {type(variable)}.'
+        )
+      elif isinstance(value, Variable):
+        raise ValueError(
+          f'Cannot unflatten flat_state containing Variables when using `outer_index_outer_ref`. '
+          f'Got {value!r} for {key!r}.'
+        )
+      elif isinstance(value, VariableState):
+        variable.update_from_state(value)
+      else:
+        variable.raw_value = value
+    else:  # variabledef.index not in index_ref_cache
+      # variable reference does not exist outside, create a new one
+      if isinstance(value, Variable):
+        variable = value
+      elif isinstance(value, VariableState):
+        variable = value.to_variable()
+      else:
+        variable = variabledef.type.from_metadata(
+          value, dict(variabledef.metadata)
+        )
+    index_ref[variabledef.index] = variable
+    return variable
+
+  if type(nodedef) is VariableDef:
+    return make_variable(
+      None,
+      nodedef,  # type: ignore
+    )
+
   assert type(nodedef) is NodeDef
+  if node_impl is None:
+    raise RuntimeError(f'Unsupported type: {nodedef.type}, this is a bug.')
   if nodedef.index in index_ref:
     raise RuntimeError(f'GraphDef index {nodedef.index} already used.')
 
@@ -927,44 +973,8 @@ def _graph_unflatten(
         )
         children.append((key, subnode))
       elif type(value) is VariableDef:
-        variabledef = value
-        if not leaves:
-          raise ValueError('Not enough leaves to unflatten the graph')
-        # its a unseen variable, create a new one
-        value = leaves.popleft()
-        # when idxmap is present, check if the Varable exists there
-        # and update existing variables if it does
-        if (
-          outer_index_outer_ref is not None
-          and variabledef.outer_index in outer_index_outer_ref
-        ):
-          # if variable exists, update it
-          variable = outer_index_outer_ref[variabledef.outer_index]
-          if not isinstance(variable, Variable):
-            raise ValueError(
-              f'Expected a Variable type for {key!r}, but got {type(variable)}.'
-            )
-          elif isinstance(value, Variable):
-            raise ValueError(
-              f'Cannot unflatten flat_state containing Variables when using `outer_index_outer_ref`. '
-              f'Got {value!r} for {key!r}.'
-            )
-          elif isinstance(value, VariableState):
-            variable.update_from_state(value)
-          else:
-            variable.raw_value = value
-        else:  # variabledef.index not in index_ref_cache
-          # variable reference does not exist outside, create a new one
-          if isinstance(value, Variable):
-            variable = value
-          elif isinstance(value, VariableState):
-            variable = value.to_variable()
-          else:
-            variable = variabledef.type.from_metadata(
-              value, dict(variabledef.metadata)
-            )
+        variable = make_variable(key, value)
         children.append((key, variable))
-        index_ref[variabledef.index] = variable
       else:
         raise RuntimeError(f'Unknown static field: {key!r}')
 
@@ -1070,6 +1080,24 @@ def _graph_pop(
 
 
 def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
+  def _update_variable(node: Variable, value):
+    if isinstance(value, VariableState):
+      # updated from VariableState
+      node.update_from_state(value)
+    else:
+      # updated from raw value
+      if isinstance(value, State) and not value:
+        # NOTE: this is a special case when trying to update a Variable from state
+        # created when flattening into a NodeRef, which creates an empty State. This
+        # can happen when using standalone Variables with `grad`
+        pass
+      else:
+        node.raw_value = value
+
+  if isinstance(node, Variable):
+    _update_variable(node, state)
+    return
+
   if not is_node(node):
     raise RuntimeError(f'Unsupported type: {type(node)}')
 
@@ -1090,7 +1118,6 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
       node_impl.set_key(node, key, value)
       continue
 
-    # check values are of the same type
     current_value = node_dict[key]
 
     # case 2: subgraph is being updated
@@ -1105,12 +1132,7 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
           f'Trying to update a non-Variable attribute {key!r} with a Variable: '
           f'{value!r}'
         )
-      if isinstance(value, VariableState):
-        # updated from VariableState
-        current_value.update_from_state(value)
-      else:
-        # updated from raw value
-        current_value.raw_value = value
+      _update_variable(current_value, value)
 
 
 # --------------------------------------------------------
@@ -1134,8 +1156,8 @@ class StaticCache(tp.NamedTuple):
     new_ref_index: RefMap,
   ):
     new_index_ref = {index: obj for obj, index in new_ref_index.items()}
-    final_graphdef: NodeDef[tp.Any] | NodeRef[tp.Any]
-    if type(graphdef) is NodeDef:
+    final_graphdef: GraphDef[tp.Any]
+    if type(graphdef) is NodeDef or type(graphdef) is VariableDef:
       final_graphdef = graphdef.with_same_outer_index()
     else:
       final_graphdef = graphdef
@@ -1310,9 +1332,7 @@ class SplitContext:
       node, ref_index=self.ref_index, ref_outer_index=inner_ref_outer_index
     )
     flat_states = _split_state(flat_state, filters)
-    states = tuple(
-      statelib.from_flat_state(flat_state) for flat_state in flat_states
-    )
+    states = _to_nested_state(graphdef, flat_states)
 
     return graphdef, *states
 
@@ -1469,9 +1489,9 @@ class MergeContext:
   def merge(
     self,
     graphdef: GraphDef[A],
-    state: GraphState,
+    state: GraphState | VariableState,
     /,
-    *states: GraphState,
+    *states: GraphState | VariableState,
   ) -> A:
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
@@ -1480,7 +1500,7 @@ class MergeContext:
       ctx.outer_index_outer_ref if ctx and ctx.outer_index_outer_ref else None
     )
 
-    _state = statelib.merge_state(state, *states)
+    _state = _merge_to_flat_state((state, *states))
     node = unflatten(
       graphdef,
       _state,
@@ -1735,10 +1755,8 @@ class UpdateContext:
     graphdef, flat_state = flatten(
       node, ref_index=ref_index, ref_outer_index=self.inner_ref_outer_index
     )
-    states = tuple(
-      statelib.from_flat_state(flat_state)
-      for flat_state in _split_state(flat_state, filters)
-    )
+    flat_states = _split_state(flat_state, filters)
+    states = _to_nested_state(graphdef, flat_states)
     assert len(states) >= 1
     self.flatten_end(ref_index)
     return graphdef, *states  # type: ignore[return-value]
@@ -1765,11 +1783,11 @@ class UpdateContext:
       # inner merge (2)
       index_ref_cache = None
 
-    state = statelib.merge_state(state, *states)
+    _state = _merge_to_flat_state((state, *states))
     index_ref: dict[Index, tp.Any] = {}
     node = unflatten(
       graphdef,
-      state,
+      _state,
       index_ref=index_ref,
       outer_index_outer_ref=index_ref_cache,
     )
@@ -1955,11 +1973,13 @@ def _split_state(
 
 
 @tp.overload
-def split(graph_node: A, /) -> tuple[GraphDef[A], GraphState]: ...
+def split(
+  graph_node: A, /
+) -> tuple[GraphDef[A], GraphState | VariableState]: ...
 @tp.overload
 def split(
   graph_node: A, first: filterlib.Filter, /
-) -> tuple[GraphDef[A], GraphState]: ...
+) -> tuple[GraphDef[A], GraphState | VariableState]: ...
 @tp.overload
 def split(
   graph_node: A,
@@ -1967,10 +1987,18 @@ def split(
   second: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
-) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]: ...
+) -> tuple[
+  GraphDef[A],
+  GraphState | VariableState,
+  tpe.Unpack[tuple[GraphState | VariableState, ...]],
+]: ...
 def split(
   node: A, *filters: filterlib.Filter
-) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
+) -> tuple[
+  GraphDef[A],
+  GraphState | VariableState,
+  tpe.Unpack[tuple[GraphState | VariableState, ...]],
+]:
   """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
   a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef
   contains all the static information needed to reconstruct a ``Module`` graph, it is analogous
@@ -2041,15 +2069,43 @@ def split(
   """
   graphdef, flat_state = flatten(node)
   flat_states = _split_state(flat_state, filters)
-  states = tuple(statelib.from_flat_state(flat_state) for flat_state in flat_states)
+  states = _to_nested_state(graphdef, flat_states)
   return graphdef, *states  # type: ignore[return-value]
+
+
+def _to_nested_state(
+  graphdef: GraphDef[A], flat_states: tp.Iterable[tp.Any]
+) -> tuple[tp.Any, ...]:
+  if type(graphdef) is VariableDef:
+    states = tuple(
+      flat_state[0][1] if flat_state else EmptyState()
+      for flat_state in flat_states
+    )
+  else:
+    states = tuple(
+      statelib.from_flat_state(flat_state) for flat_state in flat_states
+    )
+  return states
+
+
+def _merge_to_flat_state(states: tp.Iterable[tp.Any]):
+  flat_state: list[tuple[PathParts, tp.Any]] = []
+
+  for state in states:
+    if isinstance(state, dict | State):
+      flat_state.extend(traversals.flatten_to_sequence(state))
+    else:
+      flat_state.append(((), state))
+
+  flat_state.sort()
+  return [value for _, value in flat_state]
 
 
 def merge(
   graphdef: GraphDef[A],
-  state: tp.Mapping[Key, tp.Any],
+  state: tp.Any,
   /,
-  *states: tp.Mapping[Key, tp.Any],
+  *states: tp.Any,
 ) -> A:
   """The inverse of :func:`flax.nnx.split`.
 
@@ -2094,14 +2150,12 @@ def merge(
   Returns:
     The merged :class:`flax.nnx.Module`.
   """
-  _state = statelib.merge_state(state, *states)
+  _state = _merge_to_flat_state((state, *states))
   node = unflatten(graphdef, _state)
   return node
 
 
-def update(
-  node, state: tp.Mapping[KeyT, tp.Any], /, *states: tp.Mapping[KeyT, tp.Any]
-) -> None:
+def update(node, state: tp.Any, /, *states: tp.Any) -> None:
   """Update the given graph node with a new state(s) in-place.
 
   Example usage::
@@ -2128,7 +2182,20 @@ def update(
     *states: Additional :class:`State` objects.
   """
   if states:
-    state = statelib.merge_state(state, *states)
+    if isinstance(node, Variable):
+      non_empty_states = [
+        _state
+        for _state in (state, *states)
+        if not isinstance(_state, tp.Mapping) or _state
+      ]
+      if len(non_empty_states) != 1:
+        all_states = (state, *states)
+        raise ValueError(
+          f'Expected exactly one non-empty state, got: {all_states!r}'
+        )
+      state = non_empty_states[0]
+    else:
+      state = statelib.merge_state(state, *states)
   _graph_update_dynamic(node, state)
 
 

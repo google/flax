@@ -127,8 +127,8 @@ class PrefixMapping(abc.ABC):
   ) -> tp.Any: ...
 
 def check_consistent_aliasing(
-  node: tuple[tp.Any, ...],
-  prefix: tuple[tp.Any, ...],
+  node: tp.Any,
+  prefix: tp.Any,
   /,
   *,
   node_prefixes: dict[tp.Any, list[tuple[PathParts, tp.Any]]] | None = None,
@@ -207,9 +207,9 @@ S = tp.TypeVar(
   'S', bound=graph.GraphState | graph.GraphFlatState | list[tp.Any]
 )
 
-class NodeStates(struct.PyTreeNode, tp.Generic[S]):
+class NodeStates(struct.PyTreeNode):
   _graphdef: graph.GraphDef[tp.Any] | None
-  states: tuple[S, ...]
+  states: tuple[tp.Any, ...]
   metadata: tp.Any = struct.field(pytree_node=False)
 
   @property
@@ -219,7 +219,7 @@ class NodeStates(struct.PyTreeNode, tp.Generic[S]):
     return self._graphdef
 
   @property
-  def state(self) -> S:
+  def state(self) -> tp.Any:
     if len(self.states) != 1:
       raise ValueError(
         f'Expected exactly one GraphDefState, got {len(self.states)}'
@@ -230,9 +230,9 @@ class NodeStates(struct.PyTreeNode, tp.Generic[S]):
   def from_split(
     cls,
     graphdef: graph.GraphDef[tp.Any],
-    state: S,
+    state: tp.Any,
     /,
-    *states: S,
+    *states: tp.Any,
     metadata: tp.Any = None,
   ):
     return cls(_graphdef=graphdef, states=(state, *states), metadata=metadata)
@@ -240,8 +240,8 @@ class NodeStates(struct.PyTreeNode, tp.Generic[S]):
   @classmethod
   def from_states(
     cls,
-    state: S,
-    *states: S,
+    state: tp.Any,
+    *states: tp.Any,
   ):
     return cls(_graphdef=None, states=(state, *states), metadata=None)
 
@@ -279,7 +279,9 @@ def to_tree(
     with graph.split_context(ctxtag) as split_ctx:
       return jax.tree.map(
         lambda x: split_fn(split_ctx, (), prefix, x)
-        if map_non_graph_nodes or graph.is_graph_node(x)
+        if map_non_graph_nodes
+        or graph.is_graph_node(x)
+        or isinstance(x, variablelib.Variable)
         else x,
         tree,
       )
@@ -296,7 +298,7 @@ def to_tree(
 
   with graph.split_context(ctxtag) as split_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
-      if graph.is_graph_node(leaf):
+      if graph.is_graph_node(leaf) or isinstance(leaf, variablelib.Variable):
         if check_aliasing:
           check_consistent_aliasing(
             leaf, leaf_prefix, node_prefixes=node_prefixes
@@ -341,13 +343,17 @@ def from_tree(
   if prefix is Missing or prefix is None:
     # fast path, no need for prefix broadcasting or consistent aliasing checks
     with graph.merge_context(is_inner, ctxtag) as merge_ctx:
-      return jax.tree.map(
-        lambda x: merge_fn(merge_ctx, (), prefix, x)
-        if map_non_graph_nodes or is_node_leaf(x)
-        else x,
-        tree,
-        is_leaf=is_leaf,
-      )
+
+      def maybe_split(x):
+        if (
+          map_non_graph_nodes
+          or is_node_leaf(x)
+          or isinstance(x, variablelib.Variable)
+        ):
+          return merge_fn(merge_ctx, (), prefix, x)
+        return x
+
+      return jax.tree.map(maybe_split, tree, is_leaf=is_leaf)
   leaf_prefixes = broadcast_prefix(
     prefix,
     tree,
@@ -362,7 +368,11 @@ def from_tree(
 
   with graph.merge_context(is_inner, ctxtag) as merge_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
-      if map_non_graph_nodes or is_node_leaf(leaf):
+      if (
+        map_non_graph_nodes
+        or is_node_leaf(leaf)
+        or isinstance(leaf, variablelib.Variable)
+      ):
         leaf = merge_fn(merge_ctx, keypath, leaf_prefix, leaf)
       leaves_out.append(leaf)
 
@@ -370,4 +380,9 @@ def from_tree(
   return pytree_out
 
 def clear_non_graph_nodes(tree):
-  return jax.tree.map(lambda x: x if graph.is_graph_node(x) else None, tree)
+  return jax.tree.map(
+    lambda x: x
+    if graph.is_graph_node(x) or isinstance(x, variablelib.Variable)
+    else None,
+    tree,
+  )

@@ -49,7 +49,7 @@ class Functional(tp.Generic[M]):
     graphdef, state = nnx.split(module)
     assert type(graphdef) is graph.NodeDef
     self.graphdef = graphdef
-    return state
+    return state  # type: ignore
 
   def apply(self, *states: tp.Any):
     assert self.graphdef is not None

@@ -25,7 +25,7 @@ from flax.nnx import (
   graph,
   variablelib,
 )
-from flax.nnx.statelib import State
+from flax.nnx.statelib import EmptyState, State
 import jax
 import jax.core
 import jax.stages
@@ -64,7 +64,7 @@ class DiffState:
 class GradFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
-  nondiff_states: deque[State | None]
+  nondiff_states: deque[State | variablelib.VariableState | None]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
@@ -135,7 +135,7 @@ def _grad_general(
   def grad_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
     del kwargs
-    nondiff_states: deque[State | None] = deque()
+    nondiff_states: deque[State | variablelib.VariableState | None] = deque()
 
     def _grad_split_fn(
       ctx: graph.SplitContext, path, prefix: DiffState | None, value
@@ -412,7 +412,7 @@ def _custom_vjp_split_fn(
     # but we return a TreeNode.from_states which doesn't have a graphdef
     # in order to keep the gradients clean from any metadata
     graphdef, passed = ctx.split(value)
-    broadcast = State({})
+    broadcast = EmptyState()
     nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
     return extract.NodeStates.from_states(passed)
   else:
@@ -554,8 +554,8 @@ class BwdFn:
       if is_differentiable:
         if isinstance(x, jax.Array):
           return x
-        elif not isinstance(x, State):
-          raise ValueError(f'Expected State, got {type(x)}')
+        elif not isinstance(x, State | variablelib.VariableState):
+          raise ValueError(f'Expected State or VariableState, got {type(x)}')
         return extract.NodeStates.from_states(x)
       return x
 
@@ -563,7 +563,7 @@ class BwdFn:
       state_to_node_states,
       self.tree_node_args,
       tangent,
-      is_leaf=lambda x: isinstance(x, State),
+      is_leaf=lambda x: isinstance(x, State | variablelib.VariableState),
     )
     return pure_tangent
 

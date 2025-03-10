@@ -445,6 +445,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
     )
 
 
+
 def _state_flatten_with_keys(x: State):
   items = sorted(x._mapping.items())
   children = tuple((jtu.DictKey(key), value) for key, value in items)
@@ -465,6 +466,9 @@ jax.tree_util.register_pytree_with_keys(
   partial(_state_unflatten, State),  # type: ignore[arg-type]
 )
 
+class EmptyState(State):
+  def __init__(self):
+    super().__init__({})
 
 def map_state(f: tp.Callable[[tuple, tp.Any], tp.Any], state: State) -> State:
   flat_state = to_flat_state(state)
