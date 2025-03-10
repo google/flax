@@ -785,7 +785,7 @@ def save_checkpoint_multiprocess(
     gda_manager: required if target contains a JAX GlobalDeviceArray. Will save
       the GDAs to a separate subdirectory with postfix "_gda" asynchronously.
       Same as async_manager, this will block subsequent saves.
-    orbax_checkpointer: if defined, the save will be done by Orbax In the
+    orbax_checkpointer: if defined, the save will be done by Orbax. In the
       future, all Flax checkpointing features will be migrated to Orbax, and
       starting to use an ``orbax_checkpointer`` is recommended. Please check out
       the checkpointing guide
