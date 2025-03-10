@@ -19,6 +19,7 @@ from threading import Thread
 from typing import Any
 
 from absl.testing import absltest, parameterized
+import numpy as np
 from flax import linen, nnx, struct
 import jax
 import jax.numpy as jnp
@@ -885,6 +886,130 @@ class TestGraphUtils(absltest.TestCase):
     self.assertTrue(nnx.graph.check_fingerprint(m2, fp2))
     self.assertFalse(nnx.graph.check_fingerprint(m1, fp2))
     self.assertFalse(nnx.graph.check_fingerprint(m2, fp1))
+
+  def test_split_variable(self):
+    v = nnx.Param(1)
+    graphdef, state = nnx.split(v)
+
+    self.assertIsInstance(graphdef, nnx.graph.VariableDef)
+    self.assertIsInstance(state, nnx.VariableState)
+
+    v2 = nnx.merge(graphdef, state)
+    self.assertIsInstance(v2, nnx.Param)
+
+  def test_split_filter_variable(self):
+    v = nnx.Param(1)
+    graphdef, batch_stats, params, rest = nnx.split(
+      v, nnx.BatchStat, nnx.Param, ...
+    )
+
+    self.assertIsInstance(graphdef, nnx.graph.VariableDef)
+    self.assertIsInstance(params, nnx.VariableState)
+    self.assertIsInstance(batch_stats, nnx.State)
+    self.assertEmpty(batch_stats)
+    self.assertIsInstance(rest, nnx.State)
+    self.assertEmpty(rest)
+
+    v2 = nnx.merge(graphdef, batch_stats, params, rest)
+    self.assertIsInstance(v2, nnx.Param)
+
+  def test_split_update_variable(self):
+    v = nnx.Param(1)
+    graphdef, state = nnx.split(v)
+
+    self.assertIsInstance(graphdef, nnx.graph.VariableDef)
+    self.assertIsInstance(state, nnx.VariableState)
+
+    state.value = 2
+    nnx.update(v, state)
+
+    self.assertEqual(v.value, 2)
+
+  def test_split_update_filter_variable(self):
+    v = nnx.Param(1)
+    graphdef, batch_stats, params, rest = nnx.split(
+      v, nnx.BatchStat, nnx.Param, ...
+    )
+
+    self.assertIsInstance(graphdef, nnx.graph.VariableDef)
+    self.assertIsInstance(params, nnx.VariableState)
+    self.assertIsInstance(batch_stats, nnx.State)
+    self.assertEmpty(batch_stats)
+    self.assertIsInstance(rest, nnx.State)
+    self.assertEmpty(rest)
+
+    params.value = 2
+    nnx.update(v, batch_stats, params, rest)
+
+    self.assertEqual(v.value, 2)
+
+  def test_jit_variable(self):
+    v = nnx.Param(1)
+
+    @nnx.jit
+    def f(v):
+      v += 1
+
+    f(v)
+
+    np.testing.assert_allclose(v.value, 2)
+
+  def test_jit_pytree_of_variables(self):
+    v1 = nnx.Param(1)
+    v2 = nnx.Param(2)
+    vs = [v1, v1, v2]
+
+    @nnx.jit
+    def f(vs):
+      self.assertIs(vs[0], vs[1])
+      self.assertIsNot(vs[0], vs[2])
+      vs[0] += 10
+
+    f(vs)
+
+    self.assertIs(vs[0], vs[1])
+    self.assertIsNot(vs[0], vs[2])
+    np.testing.assert_allclose(vs[0].value, 11)
+    np.testing.assert_allclose(vs[2].value, 2)
+
+  def test_variable_reference_in_module(self):
+    class Foo(nnx.Module):
+      def __init__(self, var):
+        self.var = var
+
+    var = nnx.Param(1)
+    foo = Foo(var)
+
+    @nnx.jit
+    def increment_var(var, foo):
+      self.assertIs(var, foo.var)
+      var += 1
+
+    increment_var(var, foo)
+    self.assertEqual(foo.var.value, 2)
+
+  def test_variables_example(self):
+    def stateful_linear_init(din: int, dout: int, rngs: nnx.Rngs):
+      w = nnx.Param(jax.random.normal(rngs(), (din, dout)))
+      b = nnx.Param(jnp.zeros((dout,)))
+      count = nnx.Variable(jnp.array(0))
+      return w, b, count
+
+    rngs = nnx.Rngs(0)
+    w, b, count = stateful_linear_init(2, 3, rngs=rngs)
+
+    @nnx.jit
+    def stateful_linear(w, b, count, x):
+      count += 1
+      return x @ w + b[None]
+
+    x = jax.random.normal(rngs(), (1, 2))
+    y = stateful_linear(w, b, count, x)
+    self.assertEqual(count.value, 1)
+
+    y = stateful_linear(w, b, count, x)
+    self.assertEqual(count.value, 2)
+    self.assertEqual(y.shape, (1, 3))
 
 
 class SimpleModule(nnx.Module):
