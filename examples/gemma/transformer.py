@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""Gemma transformer."""
+"""Gemma transformer. Just testing something -- ignore this."""
 
 from __future__ import annotations
 
