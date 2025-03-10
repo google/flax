@@ -24,6 +24,7 @@ import jax
 from jax.experimental import checkify, mesh_utils
 import jax.numpy as jnp
 import numpy as np
+from flax import errors
 
 
 class List(nnx.Module):
@@ -2512,7 +2513,6 @@ class TestVmap(absltest.TestCase):
 
     f(m, m, m)
 
-  @absltest.skip('Enable once jax#19586 resolved')
   def test_captured_module_in_return_error(self):
     class Foo(nnx.Module):
 
@@ -2526,8 +2526,8 @@ class TestVmap(absltest.TestCase):
       return x, m
 
     with self.assertRaisesRegex(
-        ValueError,
-        r'Trying to extract graph node from different trace level.*Foo',
+      errors.TraceContextError,
+      r'Trying to extract graph node from different trace level.*Foo',
     ):
       x = jnp.zeros((5,))
       f(x)
