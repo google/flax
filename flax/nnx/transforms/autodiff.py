@@ -534,6 +534,7 @@ class FwdFn:
 @dataclasses.dataclass(eq=False)
 class BwdFn:
   bwd: tp.Callable[..., tp.Any]
+  jax_nondiff_argnums: tuple[int, ...]
   tree_node_args: tuple[tp.Any, ...]
 
   def __post_init__(self):
@@ -547,8 +548,16 @@ class BwdFn:
       (pure_args_out_g, pure_out_g),
       is_leaf=lambda x: isinstance(x, extract.NodeStates),
     )
+    iter_nondiff = iter(nondiff)
+    iter_pure_args_out_g = iter(pure_args_out_g)
+    input_args = tuple(
+      next(iter_nondiff)
+      if i in self.jax_nondiff_argnums
+      else next(iter_pure_args_out_g)
+      for i in range(len(nondiff) + len(pure_args_out_g))
+    )
 
-    tangent = self.bwd(*nondiff, residual, (pure_args_out_g, pure_out_g))
+    tangent = self.bwd(*input_args, residual, pure_out_g)
 
     def state_to_node_states(is_differentiable: bool, x):
       if is_differentiable:
@@ -595,11 +604,6 @@ class CustomVjp(tp.Generic[A]):
         if isinstance(argnum, DiffState)
         else False
       )
-
-  # def __getattr__(self, name: str) -> tp.Any:
-  #   if not hasattr(self.custom_vjp_fn, name):
-  #     raise AttributeError(f'{type(self).__name__} has no attribute {name}')
-  #   return getattr(self.custom_vjp_fn, name)
 
   def __call__(
     self, *args: tp.Any, **kwargs: tp.Any
@@ -653,6 +657,7 @@ class CustomVjp(tp.Generic[A]):
         ),
         bwd=BwdFn(
           bwd=self.bwd,
+          jax_nondiff_argnums=self.jax_nondiff_argnums,
           tree_node_args=tree_node_args,
         ),
         symbolic_zeros=self.symbolic_zeros,
@@ -710,11 +715,19 @@ def custom_vjp(
 
   ``nnx.custom_vjp`` accepts Modules and other Flax NNX objects as arguments. The main difference
   with the JAX version is that, because Modules follow reference semantics, they propagate the State
-  updates for the inputs as auxiliary outputs. This means that the incomming gradients in the ``bwd`` function
-  will have the form ``(input_updates_g, out_g)`` where ``input_updates_g`` is the gradient updated state of
-  the inputs w.r.t. to the inputs. All Module terms on the inputs will an associated ``State`` term in
-  ``input_updates_g``, while all non-Module terms will appear as None. The shape of the tanget will be
-  expected to have the same shape as the input, with ``State`` terms in place of the corresponding Module terms.
+  updates for the inputs as auxiliary outputs. For convenience the signature of the ``bwd`` function
+  is modified to have the form::
+
+    (*inputs, residual, output_gradient) -> inputs_tangent
+
+  Where each element in `*inputs` is either:
+  * The exact input value if it was declared as non differentiable in `nondiff_argnums`.
+  * A ``State`` object representing the gradient of state updates if the input is
+    a graph node.
+  * ``None`` for all input Arrays.
+
+  The shape of the tanget must be a tuple corresponding to the differentiable
+  inputs but with ``State`` terms in place of the corresponding Module terms.
 
   Example::
 
@@ -734,12 +747,9 @@ def custom_vjp(
     >>> def f_fwd(m: Foo):
     ...   return f(m), (jnp.cos(m.x), jnp.sin(m.x), m)
     ...
-    >>> def f_bwd(res, g):
-    ...   input_updates_g, out_g = g
+    >>> def f_bwd(m_update_g, res, out_g):
     ...   cos_x, sin_x, m = res
-    ...   (m_updates_g,) = input_updates_g
-    ...   m_g = jax.tree.map(lambda x: x, m_updates_g) # create copy
-    ...
+    ...   m_g = m_update_g # use as template
     ...   m_g['x'].value = cos_x * out_g * m.y
     ...   m_g['y'].value = sin_x * out_g
     ...   return (m_g,)
@@ -761,19 +771,18 @@ def custom_vjp(
       )
     })
 
-  Note that the State objects that represent Module terms on ``input_updates_g`` have the
-  same shape as the State objects expected in the output tanget. This means that you can
-  usually just copy them from ``input_updates_g`` and update them with their corresponding
-  gradient values.
+  Note that the gradient terms on the backward's ``*inputs`` usually have the
+  same shape as the objects expected in the output tanget, this means that you can
+  just update them to construct the tangent values.
 
   You can select which substates are differentiable (have a tangent) for Modules and other
-  graph nodes by passing a ``DiffState`` to ``nondiff_argnums``. For example, if you want to
-  differentiate only the ``x`` attribute of the ``Foo`` class, you can do the following::
+  graph nodes by passing a ``DiffState`` with a `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
+  to ``nondiff_argnums``. For example, here's how to differentiate only the ``x``
+  attribute of ``m``::
 
-    >>> x_attribute = nnx.PathContains('x')
-    >>> diff_state = nnx.DiffState(0, x_attribute)
+    >>> x_attr = nnx.PathContains('x')
     ...
-    >>> @nnx.custom_vjp(nondiff_argnums=(diff_state,))
+    >>> @nnx.custom_vjp(nondiff_argnums=nnx.DiffState(0, x_attr))
     ... def f(m: Foo):
     ...   return jnp.sin(m.x) * m.y  # type: ignore
 
@@ -782,12 +791,9 @@ def custom_vjp(
     ...   res = (jnp.cos(m.x), m)  # type: ignore
     ...   return y, res
     ...
-    >>> def f_bwd(res, g):
-    ...   input_updates_g, out_g = g
+    >>> def f_bwd(m_out_g, res, out_g):
     ...   cos_x, m = res
-    ...   (m_updates_g,) = input_updates_g
-    ...   m_g = jax.tree.map(lambda x: x, m_updates_g) # create copy
-    ...
+    ...   m_g = m_out_g # use as template
     ...   m_g.x.value = cos_x * out_g * m.y
     ...   del m_g['y'] # y is not differentiable
     ...   return (m_g,)
@@ -795,7 +801,7 @@ def custom_vjp(
     >>> f.defvjp(f_fwd, f_bwd)
     ...
     >>> m = Foo(x=jnp.array(1.), y=jnp.array(2.))
-    >>> grad = nnx.grad(f, argnums=nnx.DiffState(0, x_attribute))(m)
+    >>> grad = nnx.grad(f, argnums=nnx.DiffState(0, x_attr))(m)
     ...
     >>> jax.tree.map(jnp.shape, grad)
     State({
@@ -806,7 +812,7 @@ def custom_vjp(
     })
 
   Note that ``grad`` cannot calculate gradients for states that don't have a tangent
-  defined by ``custom_vjp``, in the example above we reuse the same ``x_attribute``
+  defined by ``custom_vjp``, so in the example above we reuse the same ``x_attr``
   filter to keep ``custom_vjp`` and ``grad`` in sync.
 
   Args:
