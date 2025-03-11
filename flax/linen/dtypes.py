@@ -13,10 +13,11 @@
 # limitations under the License.
 """APIs for handling dtypes in Linen Modules."""
 
-from typing import Any
+from typing import Any, TypeVar
 from flax.typing import Dtype
 from jax import numpy as jnp
 
+T = TypeVar('T', bound=tuple)
 
 def canonicalize_dtype(
   *args, dtype: Dtype | None = None, inexact: bool = True
