@@ -28,7 +28,7 @@ from flax import nnx
 from flax.nnx import rnglib
 from flax.nnx.module import Module, first_from
 from flax.nnx.nn import initializers
-from flax.nnx.nn import dtypes
+from flax.nnx.nn.dtypes import promote_dtype
 from flax.nnx.nn.linear import (
   LinearGeneral,
   default_kernel_init,
@@ -36,7 +36,6 @@ from flax.nnx.nn.linear import (
 from flax.nnx.nn.normalization import LayerNorm
 from flax.typing import (
   Dtype,
-  PromoteDtypeFn,
   Shape,
   Initializer,
   PrecisionLike,
@@ -58,7 +57,6 @@ def dot_product_attention_weights(
   dtype: Dtype | None = None,
   precision: PrecisionLike = None,
   module: Module | None = None,
-  promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -88,9 +86,6 @@ def dot_product_attention_weights(
     module: the Module that will sow the attention weights into the
       ``nnx.Intermediate`` collection. If ``module`` is None, the attention
       weights will not be sowed.
-    promote_dtype: function to promote the dtype of the arrays to the desired
-      dtype. The function should accept a tuple of ``(query, key)`` and a ``dtype``
-      keyword argument, and return a tuple of arrays with the promoted dtype.
 
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
@@ -153,7 +148,6 @@ def dot_product_attention(
   dtype: Dtype | None = None,
   precision: PrecisionLike = None,
   module: Module | None = None,
-  promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -188,10 +182,6 @@ def dot_product_attention(
     module: the Module that will sow the attention weights into the
       ``nnx.Intermediate`` collection. If ``module`` is None, the attention
       weights will not be sowed.
-    promote_dtype: function to promote the dtype of the arrays to the desired
-      dtype. The function should accept a tuple of ``(query, key, value)`` and a
-      ``dtype`` keyword argument, and return a tuple of arrays with the promoted
-      dtype.
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
