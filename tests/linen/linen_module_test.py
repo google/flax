@@ -800,6 +800,7 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
+        promote_dtype = promote_dtype
         dot_general = None
         dot_general_cls = None
     )
@@ -812,6 +813,7 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
+        promote_dtype = promote_dtype
         dot_general = None
         dot_general_cls = None
     )

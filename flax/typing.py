@@ -224,3 +224,12 @@ class SizeBytes:  # type: ignore[misc]
         size_bytes += cls.from_array(leaf)
 
     return size_bytes
+
+
+TupleArg = TypeVar('TupleArg', bound=tuple)
+
+
+class PromoteDtypeFn(Protocol):
+  def __call__(
+    self, args: TupleArg, /, *, dtype: Any = None, inexact: bool = True
+  ) -> TupleArg: ...
