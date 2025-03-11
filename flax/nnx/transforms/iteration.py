@@ -112,7 +112,10 @@ class StateAxes(extract.PrefixMapping):
     return hash((self.filters, self.axes))
 
 
-AxisFn = tp.Callable[[graph.GraphState, int, tp.Mapping], graph.GraphState]
+AxisFn = tp.Callable[
+  [graph.GraphState | variablelib.VariableState, int, tp.Mapping],
+  graph.GraphState | variablelib.VariableState,
+]
 
 
 def _update_variable_sharding_metadata(
@@ -124,13 +127,13 @@ def _update_variable_sharding_metadata(
     ):
       if isinstance(node_states.metadata, int):
         state = node_states.state
-        assert isinstance(state, State)
+        assert isinstance(state, State | variablelib.VariableState)
         state = axis_fn(state, node_states.metadata, transform_metadata)
         return node_states.replace(states=(state,))
       else:
-        states_out: list[graph.GraphState] = []
+        states_out: list[graph.GraphState | variablelib.VariableState] = []
         for state, axis in zip(node_states.states, node_states.metadata.axes):
-          assert isinstance(state, graph.State)
+          assert isinstance(state, graph.State | variablelib.VariableState)
           if isinstance(axis, int):
             state = axis_fn(state, axis, transform_metadata)
           states_out.append(state)
@@ -653,11 +656,11 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
   )
 
 def _extract_nodedefs(
-  pure_carry_arg_out, carry_nodedefs: list[graph.NodeDef], /
+  pure_carry_arg_out, carry_nodedefs: list[graph.NodeDef | graph.VariableDef], /
 ):
   def extract_index_mappings(x):
     if isinstance(x, extract.NodeStates) and isinstance(
-      x._graphdef, graph.NodeDef
+      x._graphdef, graph.NodeDef | graph.VariableDef
     ):
       nodedef = x._graphdef
       assert nodedef.outer_index is not None
@@ -695,19 +698,19 @@ def _insert_nodedefs(
 
 
 def _scan_split_in(
-    carry_deque: PytreeDeque[list[State]],
-    broadcast_deque: PytreeDeque[list[State]],
-    broadcast_arrays: PytreeDeque[Broadcasted],
-    /,
-    ctx: graph.SplitContext,
-    path,
-    prefix,
-    x,
+  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  broadcast_arrays: PytreeDeque[Broadcasted],
+  /,
+  ctx: graph.SplitContext,
+  path,
+  prefix,
+  x,
 ):
-  if graph.is_graph_node(x):
-    vectorized_states: list[State] = []
-    carry_states: list[State] = []
-    broadcast_states: list[State] = []
+  if graph.is_graph_node(x) or isinstance(x, variablelib.Variable):
+    vectorized_states: list[State | variablelib.VariableState] = []
+    carry_states: list[State | variablelib.VariableState] = []
+    broadcast_states: list[State | variablelib.VariableState] = []
     if isinstance(prefix, StateAxes):
       graphdef, *states = ctx.split(x, *prefix.filters)
 
@@ -776,21 +779,21 @@ def _scan_split_in(
 
 
 def _scan_split_out(
-    carry_deque: PytreeDeque[list[State]],
-    broadcast_deque: PytreeDeque[list[State]],
-    /,
-    ctx: graph.SplitContext,
-    path: extract.KeyPath,
-    prefix,
-    x,
+  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  /,
+  ctx: graph.SplitContext,
+  path: extract.KeyPath,
+  prefix,
+  x,
 ):
   assert isinstance(path[0], jax.tree_util.SequenceKey)
   is_input_arg = path[0].idx == 0
 
-  if graph.is_graph_node(x):
-    vectorized_states: list[State] = []
-    carry_states: list[State] = []
-    broadcast_states: list[State] = []
+  if graph.is_graph_node(x) or isinstance(x, variablelib.Variable):
+    vectorized_states: list[State | variablelib.VariableState] = []
+    carry_states: list[State | variablelib.VariableState] = []
+    broadcast_states: list[State | variablelib.VariableState] = []
     if isinstance(prefix, StateAxes):
       graphdef, *states = ctx.split(x, *prefix.filters)
 
@@ -866,14 +869,14 @@ def _scan_split_out(
 
 
 def _scan_merge_in(
-    carry_deque: PytreeDeque[list[State]],
-    broadcast_deque: PytreeDeque[list[State]],
-    broadcast_arrays: PytreeDeque[Broadcasted],
-    /,
-    ctx: graph.MergeContext,
-    path,
-    prefix,
-    x,
+  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  broadcast_arrays: PytreeDeque[Broadcasted],
+  /,
+  ctx: graph.MergeContext,
+  path,
+  prefix,
+  x,
 ):
   if isinstance(x, extract.NodeStates):
     carry_states = carry_deque.popleft()
@@ -887,25 +890,25 @@ def _scan_merge_in(
 
 
 def _scan_merge_out(
-    carry_deque: PytreeDeque[list[State]],
-    broadcast_deque: PytreeDeque[list[State]],
-    /,
-    ctx: graph.MergeContext,
-    path,
-    prefix,
-    x,
+  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  /,
+  ctx: graph.MergeContext,
+  path,
+  prefix,
+  x,
 ):
   assert isinstance(path[0], jax.tree_util.SequenceKey)
   is_input_arg = path[0].idx == 0
 
   if isinstance(x, extract.NodeStates):
-    states: list[State] = []
+    states: list[State | variablelib.VariableState] = []
     if is_input_arg:
       carry_states = deque(carry_deque.popleft())
       broadcast_states = deque(broadcast_deque.popleft())
     else:
-      carry_states = deque[State]()
-      broadcast_states = deque[State]()
+      carry_states = deque[State | variablelib.VariableState]()
+      broadcast_states = deque[State | variablelib.VariableState]()
     if isinstance(prefix, StateAxes):
       vectorized_states = deque(x.states)
       for axis in prefix.axes:
@@ -979,8 +982,8 @@ class ScanFn:
     self,
     carry: tuple[
       tp.Any,  # carry_arg
-      PytreeDeque[list[State]],  # carry_deque
-      PytreeDeque[list[State]],  # broadcast_deque
+      PytreeDeque[list[State | variablelib.VariableState]],  # carry_deque
+      PytreeDeque[list[State | variablelib.VariableState]],  # broadcast_deque
       PytreeDeque[Broadcasted],  # broadcast_arrays
     ],
     pure_args: tuple[tp.Any, ...],
@@ -1061,8 +1064,10 @@ class ScanFn:
       assert self.input_carry_argnum is None
       assert carry_arg_out is None
 
-    carry_deque_out = PytreeDeque[list[State]]()
-    _broadcast_deque_out_tmp = PytreeDeque[list[State]]()  # discarded
+    carry_deque_out = PytreeDeque[list[State | variablelib.VariableState]]()
+    _broadcast_deque_out_tmp = PytreeDeque[
+      list[State | variablelib.VariableState]
+    ]()  # discarded
     pure_args_out: tuple
     pure_args_out, pure_out = extract.to_tree(
       (args_out, out),
@@ -1095,7 +1100,7 @@ class ScanFn:
 
     # next we have to remove all the index_mappings from the NodeDefs
     # in the carry outputs because they are not present in the inputs
-    carry_nodedefs: list[graph.NodeDef] = []
+    carry_nodedefs: list[graph.NodeDef | graph.VariableDef] = []
     pure_carry_arg_out = _extract_nodedefs(pure_carry_arg_out, carry_nodedefs)
 
     carry_arg_out = (
@@ -1328,7 +1333,7 @@ class WhileLoopCondFn:
 def _add_fake_index_mapping(tree: tp.Any):
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.NodeDef
+      node_state._graphdef, graph.NodeDef | graph.VariableDef
     ):
       return node_state
 
@@ -1345,10 +1350,10 @@ def _remove_index_mapping(tree: tp.Any):
 
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.NodeDef
+      node_state._graphdef, graph.NodeDef | graph.VariableDef
     ):
       return node_state
-    assert isinstance(node_state._graphdef, graph.NodeDef)
+    assert isinstance(node_state._graphdef, graph.NodeDef | graph.VariableDef)
     node_state = dataclasses.replace(
       node_state, _graphdef=node_state._graphdef.with_no_outer_index()
     )
