@@ -106,7 +106,6 @@ def _grad_general(
   has_aux: bool,
   holomorphic: bool,
   allow_int: bool,
-  reduce_axes: tp.Sequence[AxisName],
   return_value: bool,
 ) -> tp.Callable[..., tp.Any]:
   transform = jax.value_and_grad if return_value else jax.grad
@@ -159,7 +158,6 @@ def _grad_general(
       has_aux=True,
       holomorphic=holomorphic,
       allow_int=allow_int,
-      reduce_axes=reduce_axes,
     )
 
     fn_out = gradded_fn(*pure_args)
@@ -304,14 +302,10 @@ def grad(
     allow_int: Optional, bool. Whether to allow differentiating with
       respect to integer valued inputs. The gradient of an integer input will
       have a trivial vector-space dtype (float0). Default False.
-    reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
-      ``fun`` implicitly broadcasts a value over that axis, the backward pass
-      will perform a ``psum`` of the corresponding gradient. Otherwise, the
-      gradient will be per-example over named axes. For example, if ``'batch'``
-      is a named batch axis, ``grad(f, reduce_axes=('batch',))`` will create a
-      function that computes the total gradient while ``grad(f)`` will create
-      one that computes the per-example gradient.
   """
+  if reduce_axes:
+    raise NotImplementedError('reduce_axes argument to grad is deprecated')
+  del reduce_axes
 
   if isinstance(f, Missing):
     return functools.partial(
@@ -320,7 +314,6 @@ def grad(
       has_aux=has_aux,
       holomorphic=holomorphic,
       allow_int=allow_int,
-      reduce_axes=reduce_axes,
     )
   return _grad_general(
     f,
@@ -328,7 +321,6 @@ def grad(
     has_aux,
     holomorphic,
     allow_int,
-    reduce_axes,
     return_value=False,
   )
 
@@ -364,6 +356,11 @@ def value_and_grad(
   tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
+  if reduce_axes:
+    raise NotImplementedError(
+        'reduce_axes argument to value_and_grad is deprecated')
+  del reduce_axes
+
   if f is Missing:
     return functools.partial(
       value_and_grad,
@@ -371,7 +368,6 @@ def value_and_grad(
       has_aux=has_aux,
       holomorphic=holomorphic,
       allow_int=allow_int,
-      reduce_axes=reduce_axes,
     )
   return _grad_general(
     f,
@@ -379,7 +375,6 @@ def value_and_grad(
     has_aux,
     holomorphic,
     allow_int,
-    reduce_axes,
     return_value=True,
   )
 
