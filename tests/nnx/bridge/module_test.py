@@ -431,6 +431,19 @@ class TestBridgeModule(absltest.TestCase):
     y2 = model.apply(variables, x, rngs={'params': k1, 'dropout': k3})
     assert not jnp.array_equal(y1, y2)
 
+  def test_name(self):
+    class Foo(bridge.Module):
+      name: str
+
+    class Bar(bridge.Module):
+      @bridge.compact
+      def __call__(self):
+        f = Foo(name='f')
+        assert f.name == 'f'
+        assert self.f == f
+
+    Bar().init()
+
 
 
 if __name__ == '__main__':
