@@ -169,9 +169,39 @@ class Sampler:
     return nnx.merge(self._transformer_graphdef, self._transformer_state)
 
   @property
+  def transformer_state(self) -> statelib.State:
+    return self._transformer_state
+
+  @transformer_state.setter
+  def transformer_state(self, state: statelib.State) -> statelib.State:
+    def check_tree_structure(tree1, tree2):
+      if jax.tree_util.tree_structure(tree1) != jax.tree_util.tree_structure(
+          tree2
+      ):
+        raise ValueError(
+            "New state must have the same structure as the old state."
+        )
+
+      def check_shape_dtype(x, y):
+        return jnp.shape(x) == jnp.shape(y) and jnp.dtype(x) == jnp.dtype(y)
+
+      if not all(
+          jax.tree_util.tree_leaves(
+              jax.tree_util.tree_map(check_shape_dtype, tree1, tree2)
+          )
+      ):
+        raise ValueError(
+            "New state must have the same shape and dtype as the old state."
+        )
+
+    check_tree_structure(self._transformer_state, state)
+    self._transformer_state = state
+
+  @property
   def dtype(self) -> jnp.dtype:
-    params_state = nnx.state(self.transformer, nnx.Param)
-    return jax.tree_util.tree_leaves(nnx.to_flat_state(params_state))[0].dtype
+    return jax.tree_util.tree_leaves(
+        nnx.to_flat_state(self._transformer_state)
+    )[0].dtype
 
   def _sample_step(
       self, params: statelib.State, sampler_state: _SamplingState
@@ -399,7 +429,7 @@ class Sampler:
         token_id = self.vocab.EncodeAsIds(token)
         if len(token_id) != 1:
           raise ValueError(
-              'Forbidden tokens must map to single token ids in the vocab.'
+              "Forbidden tokens must map to single token ids in the vocab."
           )
         forbidden_token_ids.extend(token_id)
       forbidden_token_ids = tuple(forbidden_token_ids)

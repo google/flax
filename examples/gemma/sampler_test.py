@@ -128,6 +128,88 @@ class SamplerTest(absltest.TestCase):
     self.assertIsNotNone(top_p_result_2)
     self.assertNotEqual(top_p_result.text, top_p_result_2.text)
 
+  def test_state_update(self):
+    vocab = MockVocab()
+    num_layers = 6
+    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+        num_layers=num_layers,
+        num_embed=vocab.GetPieceSize(),
+        embed_dim=768,
+        hidden_dim=6144,
+        num_heads=4,
+        num_kv_heads=4,
+        head_dim=256,
+        final_logit_softcap=None,
+        attention_types=[modules.AttentionType.GLOBAL] * num_layers,
+        attn_logits_soft_cap=None,
+        use_post_attn_norm=None,
+        use_post_ffw_norm=None,
+    )
+    transformer = transformer_lib.Transformer(
+        transformer_config, rngs=nnx.Rngs(params=0)
+    )
+    sampler = sampler_lib.Sampler(
+        transformer=transformer,
+        vocab=vocab,
+        cache_size=1024,
+    )
+    input_strings = ['input string', 'hello world']
+    original_logits = sampler(input_strings, total_generation_steps=10).logits
+
+    new_transformer = transformer_lib.Transformer(
+        transformer_config, rngs=nnx.Rngs(params=42)
+    )
+    sampler.transformer_state = nnx.state(new_transformer, nnx.Param)
+    new_logits = sampler(input_strings, total_generation_steps=10).logits
+    with self.assertRaises(AssertionError):
+      np.testing.assert_allclose(
+          original_logits, new_logits, atol=1e-1, rtol=1e-1
+      )
+
+  def test_invalid_state_update(self):
+    vocab = MockVocab()
+
+    def make_config(num_layers, embed_dim):
+      return transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+          num_layers=num_layers,
+          num_embed=vocab.GetPieceSize(),
+          embed_dim=embed_dim,
+          hidden_dim=6144,
+          num_heads=4,
+          num_kv_heads=4,
+          head_dim=256,
+          final_logit_softcap=None,
+          attention_types=[modules.AttentionType.GLOBAL] * num_layers,
+          attn_logits_soft_cap=None,
+          use_post_attn_norm=None,
+          use_post_ffw_norm=None,
+      )
+
+    transformer = transformer_lib.Transformer(
+        make_config(num_layers=6, embed_dim=768), rngs=nnx.Rngs(params=0)
+    )
+    sampler = sampler_lib.Sampler(
+        transformer=transformer,
+        vocab=vocab,
+        cache_size=1024,
+    )
+
+    new_transformer = transformer_lib.Transformer(
+        make_config(num_layers=3, embed_dim=768), rngs=nnx.Rngs(params=42)
+    )
+    with self.assertRaisesRegex(
+        ValueError, '.*must have the same structure.*'
+    ):
+      sampler.transformer_state = nnx.state(new_transformer, nnx.Param)
+
+    new_transformer = transformer_lib.Transformer(
+        make_config(num_layers=6, embed_dim=1024), rngs=nnx.Rngs(params=42)
+    )
+    with self.assertRaisesRegex(
+        ValueError, '.*must have the same shape and dtype.*'
+    ):
+      sampler.transformer_state = nnx.state(new_transformer, nnx.Param)
+
   def test_forbidden_tokens(self):
     vocab = MockVocab()
     transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
@@ -431,7 +513,6 @@ class SamplerTest(absltest.TestCase):
     attn_mask = sampler_lib._compute_attention_masks(
         time_step, seq_len, input_mask
     )
-    print(attn_mask)
     expected_attn_mask = jnp.array(
         [[0, 1, 1, 1], [0, 1, 0, 1]], dtype=jnp.bool_
     )
