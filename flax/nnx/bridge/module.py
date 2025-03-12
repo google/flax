@@ -142,7 +142,8 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
 
   name = None
   if parent_ctx is not None:
-    if not parent_ctx.in_compact and 'name' in kwargs:
+    want_name = 'name' in kwargs and 'name' in inspect.get_annotations(cls)
+    if not want_name and not parent_ctx.in_compact and 'name' in kwargs:
       raise ValueError(
         f"'name' can only be set in @compact functions. If in setup(), "
           "use parent's `self.<attr_name> to set the submodule name.")
@@ -156,7 +157,7 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
           )
       else:
         if 'name' in kwargs:
-          name = kwargs.pop('name')
+          name = kwargs['name'] if want_name else kwargs.pop('name')
           if not isinstance(name, str):
             raise ValueError(f"'name' must be a 'str', got {type(name).__name__}")
         else:
