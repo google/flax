@@ -289,7 +289,7 @@ def predict_step(
   """Predict translation with fast decoding beam search on a batch."""
   # Prepare transformer fast-decoder call for beam search: for beam search, we
   # need to set up our decoder model to handle a batch size equal to
-  # batch_size * beam_size, where each batch item"s data is expanded in-place
+  # batch_size * beam_size, where each batch item's data is expanded in-place
   # rather than tiled.
   # i.e. if we denote each batch element subtensor as el[n]:
   # [el0, el1, el2] --> beamsize=2 --> [el0,el0,el1,el1,el2,el2]
