@@ -12,7 +12,7 @@ jupytext:
 
 Currently, Flax [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/transforms.html#flax.nnx.jit) traverses the object graph in pure Python which can add overhead. This overhead mostly affects small to medium models and can be mitigated in the following ways:
 * By leveraging JAX's [Asynchronous dispatch](#asynchronous-dispatch).
-* By using [nnx.cache_args](#caching-graph-node-traversals) to cache the graph node traversals.
+* By using [nnx.cached_partial](#caching-graph-node-traversals) to cache the graph node traversals.
 * By using a [Functional training loop](#functional-training-loop) which stages out the graph traversals.
 
 A full resolution _might_ involve developing a C extension (e.g. `flaxlib`) to speed up some of the traversal logic in [`graph.py`](https://github.com/google/flax/blob/main/flax/nnx/graph.py). Before we continue lets an example of a model and a simple training loop:
@@ -77,7 +77,7 @@ As we can observe, after a certain model size both `jax.jit` and `nnx.jit` conve
 
 ## Caching graph node traversals
 
-The simplest way to get rid of the traversal overhead entirely is by using `nnx.cache_args` to convert a transformed function and the input graph objects into a partial function which caches the graph object and just expects the remaining arguments. In this example we use `nnx.cache_args` over `train_step` and partially apply `model`, `optimizer`, and `metrics`, to create `cached_train_step`. Then we simply update our training loop to use `cached_train_step` which only expects the `x` and `y` inputs:
+The simplest way to get rid of the traversal overhead entirely is by using `nnx.cached_partial` to convert a transformed function and the input graph objects into a partial function which caches the graph object and just expects the remaining arguments. In this example we use `nnx.cached_partial` over `train_step` and partially apply `model`, `optimizer`, and `metrics`, to create `cached_train_step`. Then we simply update our training loop to use `cached_train_step` which only expects the `x` and `y` inputs:
 
 ```{code-cell}
 cached_train_step = nnx.cached_partial(train_step, model, optimizer, metrics)
@@ -87,9 +87,9 @@ for _ in range(10):
   loss = cached_train_step(x, y)
 ```
 
-Note that `cache_args` will enforce that the structure of the graph nodes doesn't change during `train_step` (no mutations except for `Variable` state update) so the cache is guaranteed to be up-to-date and we can avoid costly checks which require traversals. This is actually what is expected for most step functions as making any change here would imply costly recompilation, so enforcing this might be a secondary feature that could be useful for this purpose.
+Note that `cached_partial` will enforce that the structure of the graph nodes doesn't change during `train_step` (no mutations except for `Variable` state update) so the cache is guaranteed to be up-to-date and we can avoid costly checks which require traversals. This is actually what is expected for most step functions as making any change here would imply costly recompilation, so enforcing this might be a secondary feature that could be useful for this purpose.
 
-Similarly, to prevent the user from mutating the cached objects outside, `cache_args` creates a copy of all the graph nodes but, to allow state to be propagated to the original objects, they share references to the same `Variable`s.
+Similarly, to prevent the user from mutating the cached objects outside, `cached_partial` creates a copy of all the graph nodes but, to allow state to be propagated to the original objects, they share references to the same `Variable`s.
 
 +++
 
