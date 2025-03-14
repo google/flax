@@ -17,6 +17,7 @@ import dataclasses
 import pickle
 import tempfile
 from typing import TypeVar
+import typing as tp
 
 from absl.testing import absltest
 import cloudpickle
@@ -39,28 +40,35 @@ class List(nnx.Module):
 
 
 class Dict(nnx.Module):
-  def __init__(self, *args, **kwargs):
-    vars(self)['items'] = dict(*args, **kwargs)
+  @tp.overload
+  def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /): ...
 
-  def __getitem__(self, key):
-    return vars(self)['items'][key]
+  @tp.overload
+  def __init__(
+    self, mapping: tp.Optional[tp.Mapping[str, A]] = None, /, **kwargs: A
+  ): ...
+
+  def __init__(self, *args, **kwargs):
+    for name, value in dict(*args, **kwargs).items():
+      setattr(self, name, value)
+
+  def __getitem__(self, key) -> A:
+    return getattr(self, key)
 
   def __setitem__(self, key, value):
-    vars(self)['items'][key] = value
+    setattr(self, key, value)
+
+  def __getattr__(self, key) -> A:
+    return super().__getattribute__(key)
 
   def __setattr__(self, key, value):
-    if key == 'items':
-      object.__setattr__(self, key, value)
-    else:
-      vars(self)['items'][key] = value
+    super().__setattr__(key, value)
 
-  def __getattr__(self, key):
-    attrs = vars(self)
-    if 'items' not in attrs:
-      raise AttributeError('items')
-    elif key not in attrs['items']:
-      raise AttributeError(key)
-    return attrs['items'][key]
+  def __iter__(self) -> tp.Iterator[str]:
+    return (k for k in vars(self) if k != '_object__state')
+
+  def __len__(self) -> int:
+    return len(vars(self))
 
 
 class TestModule(absltest.TestCase):
@@ -71,15 +79,14 @@ class TestModule(absltest.TestCase):
 
     assert hasattr(foo, '_object__state')
 
-  @absltest.skip("Context checking doesn't work yet with stackless")
   def test_trace_level(self):
     m = Dict(a=nnx.Param(1))
 
     @jax.jit
     def f():
       with self.assertRaisesRegex(
-          errors.TraceContextError,
-          "Cannot mutate 'Dict' from different trace level",
+        errors.TraceContextError,
+        "Cannot mutate 'Dict' from different trace level",
       ):
         m.a = 2
 
@@ -112,18 +119,6 @@ class TestModule(absltest.TestCase):
     m2 = nnx.merge(graphdef, state)
 
     assert m2.a == 2
-
-  def test_no_trace_level_error_on_grad(self):
-    # No trace level error occurs because jax doesn't update
-    # its top trace for grad.
-    m = Dict(a=nnx.Param(1.0))
-
-    @jax.grad
-    def f(_):
-      m.a = 2.0
-      return 1.0
-
-    f(1.0)
 
   def test_call(self):
     class Foo(nnx.Module):
