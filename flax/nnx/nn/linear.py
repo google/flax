@@ -603,7 +603,8 @@ class Conv(Module):
     strides: an integer or a sequence of ``n`` integers, representing the
       inter-window strides (default: 1).
     padding: either the string ``'SAME'``, the string ``'VALID'``, the string
-      ``'CIRCULAR'`` (periodic boundary conditions), or a sequence of ``n``
+      ``'CIRCULAR'`` (periodic boundary conditions), the string `'REFLECT'`
+      (reflection across the padding boundary), or a sequence of ``n``
       ``(low, high)`` integer pairs that give the padding to apply before and after each
       spatial dimension. A single int is interpeted as applying the same padding
       in all dims and passign a single int in a sequence causes the same padding
@@ -745,7 +746,7 @@ class Conv(Module):
     kernel_dilation = maybe_broadcast(self.kernel_dilation)
 
     padding_lax = canonicalize_padding(self.padding, len(kernel_size))
-    if padding_lax == 'CIRCULAR':
+    if padding_lax in ('CIRCULAR', 'REFLECT'):
       kernel_size_dilated = [
         (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
@@ -755,7 +756,8 @@ class Conv(Module):
         + [((k - 1) // 2, k // 2) for k in kernel_size_dilated]
         + [(0, 0)]
       )
-      inputs = jnp.pad(inputs, pads, mode='wrap')
+      padding_mode = {'CIRCULAR': 'wrap', 'REFLECT': 'reflect'}[padding_lax]
+      inputs = jnp.pad(inputs, pads, mode=padding_mode)
       padding_lax = 'VALID'
     elif padding_lax == 'CAUSAL':
       if len(kernel_size) != 1:

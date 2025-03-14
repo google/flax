@@ -30,7 +30,7 @@ from flax.typing import PaddingLike, Dtype, PrecisionLike
 class TestConvLinenConsistency(parameterized.TestCase):
   @parameterized.product(
     strides=[None, (2, 3)],
-    padding=['VALID', 'CIRCULAR', (4, 2)],
+    padding=['VALID', 'CIRCULAR', 'REFLECT', (4, 2)],
     input_dilation=[(2, 3)],
     kernel_dilation=[(2, 3)],
     feature_group_count=[3],
