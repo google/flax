@@ -14,37 +14,37 @@
 
 """Linear modules."""
 
-from typing import (
-  Any,
-)
 from collections.abc import Iterable, Sequence
-
-import jax
-import jax.numpy as jnp
-import numpy as np
-from jax import eval_shape, lax
-from jax.core import ShapedArray
-
-import opt_einsum
+from typing import Any, Protocol
 
 from flax.core import meta
 from flax.linen import initializers
-from flax.linen.dtypes import promote_dtype
 from flax.linen import module
+from flax.linen.dtypes import promote_dtype
 from flax.linen.module import Module, compact
 from flax.typing import (
-  Array,
-  PRNGKey as PRNGKey,
-  Dtype,
-  Shape as Shape,
-  Initializer,
-  PrecisionLike,
-  DotGeneralT,
-  ConvGeneralDilatedT,
-  PaddingLike,
-  LaxPadding,
+    Array,
+    ConvGeneralDilatedT,
+    DotGeneralT,
+    Dtype,
+    Initializer,
+    LaxPadding,
+    PRNGKey as PRNGKey,
+    PaddingLike,
+    PrecisionLike,
+    Shape as Shape,
 )
+import jax
+from jax import eval_shape, lax
+from jax.core import ShapedArray
+import jax.numpy as jnp
+import numpy as np
+import opt_einsum
 
+class PromoteDtypeFn(Protocol):
+  def __call__(
+    self, *args: jax.Array | None, dtype: Any = None, inexact: bool = True
+  ) -> list[jax.Array | None]: ...
 
 default_kernel_init = initializers.lecun_normal()
 
@@ -94,6 +94,10 @@ class DenseGeneral(Module):
     bias_init: initializer function for the bias.
     precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
+      and a ``dtype`` keyword argument, and return a tuple of arrays with the
+      promoted dtype.
   """
 
   features: int | Sequence[int]
@@ -105,6 +109,7 @@ class DenseGeneral(Module):
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   precision: PrecisionLike = None
+  promote_dtype: PromoteDtypeFn = promote_dtype
   # Deprecated. Will be removed.
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
@@ -181,7 +186,9 @@ class DenseGeneral(Module):
     else:
       bias = None
 
-    inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
+    inputs, kernel, bias = self.promote_dtype(
+      inputs, kernel, bias, dtype=self.dtype
+    )
 
     if self.dot_general_cls is not None:
       dot_general = self.dot_general_cls()
@@ -225,6 +232,10 @@ class Dense(Module):
       for details.
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
+      and a ``dtype`` keyword argument, and return a tuple of arrays with the
+      promoted dtype.
   """
 
   features: int
@@ -234,6 +245,7 @@ class Dense(Module):
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
+  promote_dtype: PromoteDtypeFn = promote_dtype
   # Deprecated. Will be removed.
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
@@ -260,7 +272,11 @@ class Dense(Module):
       )
     else:
       bias = None
-    inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
+    inputs, kernel, bias = self.promote_dtype(
+      inputs, kernel, bias, dtype=self.dtype
+    )
+    assert inputs is not None
+    assert kernel is not None
 
     if self.dot_general_cls is not None:
       dot_general = self.dot_general_cls()
@@ -306,6 +322,10 @@ class Einsum(Module):
       for details.
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
+      and a ``dtype`` keyword argument, and return a tuple of arrays with the
+      promoted dtype.
   """
 
   shape: Shape
@@ -316,6 +336,7 @@ class Einsum(Module):
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
+  promote_dtype: PromoteDtypeFn = promote_dtype
 
   @compact
   def __call__(self, inputs: Array, einsum_str: str | None = None) -> Array:
@@ -361,7 +382,9 @@ class Einsum(Module):
     else:
       bias = None
 
-    inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
+    inputs, kernel, bias = self.promote_dtype(
+      inputs, kernel, bias, dtype=self.dtype
+    )
 
     y = jnp.einsum(einsum_str, inputs, kernel, precision=self.precision)
 
@@ -469,6 +492,10 @@ class _Conv(Module):
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
+      and a ``dtype`` keyword argument, and return a tuple of arrays with the
+      promoted dtype.
   """
 
   features: int
@@ -485,6 +512,7 @@ class _Conv(Module):
   precision: PrecisionLike = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
+  promote_dtype: PromoteDtypeFn = promote_dtype
   # Deprecated. Will be removed.
   conv_general_dilated: ConvGeneralDilatedT | None = None
   conv_general_dilated_cls: Any = None
@@ -647,7 +675,12 @@ class _Conv(Module):
     else:
       bias = None
 
-    inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
+    inputs, kernel, bias = self.promote_dtype(
+      inputs, kernel, bias, dtype=self.dtype
+    )
+    assert inputs is not None
+    assert kernel is not None
+
     if self.shared_weights:
       if self.conv_general_dilated_cls is not None:
         conv_general_dilated = self.conv_general_dilated_cls()
@@ -749,6 +782,10 @@ class Conv(_Conv):
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
+      and a ``dtype`` keyword argument, and return a tuple of arrays with the
+      promoted dtype.
   """
 
   @property
@@ -816,6 +853,10 @@ class ConvLocal(_Conv):
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
+      and a ``dtype`` keyword argument, and return a tuple of arrays with the
+      promoted dtype.
   """
 
   @property
@@ -879,6 +920,10 @@ class ConvTranspose(Module):
     bias_init: initializer for the bias.
     transpose_kernel: if ``True`` flips spatial axes and swaps the input/output
       channel axes of the kernel.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
+      and a ``dtype`` keyword argument, and return a tuple of arrays with the
+      promoted dtype.
   """
 
   features: int
@@ -894,6 +939,7 @@ class ConvTranspose(Module):
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   transpose_kernel: bool = False
+  promote_dtype: PromoteDtypeFn = promote_dtype
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -976,7 +1022,11 @@ class ConvTranspose(Module):
     else:
       bias = None
 
-    inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
+    inputs, kernel, bias = self.promote_dtype(
+      inputs, kernel, bias, dtype=self.dtype
+    )
+    assert inputs is not None
+    assert kernel is not None
 
     y = lax.conv_transpose(
       inputs,
@@ -1089,6 +1139,10 @@ class Embed(Module):
     dtype: the dtype of the embedding vectors (default: same as embedding).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     embedding_init: embedding initializer.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype. The function should accept a tuple of ``(embedding,)`` during ``__call__``
+      or ``(query, embedding)`` during ``attend``, and a ``dtype`` keyword argument,
+      and return a tuple of arrays with the promoted dtype.
   """
 
   num_embeddings: int
@@ -1096,6 +1150,7 @@ class Embed(Module):
   dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   embedding_init: Initializer = default_embed_init
+  promote_dtype: PromoteDtypeFn = promote_dtype
 
   def setup(self):
     self.embedding = self.param(
@@ -1120,9 +1175,10 @@ class Embed(Module):
       raise ValueError('Input type must be an integer or unsigned integer.')
     # Use take because fancy indexing numpy arrays with JAX indices does not
     # work correctly.
-    (embedding,) = promote_dtype(
+    (embedding,) = self.promote_dtype(
       self.embedding, dtype=self.dtype, inexact=False
     )
+    assert embedding is not None
     if self.num_embeddings == 1:
       return jnp.broadcast_to(embedding, inputs.shape + (self.features,))
     return jnp.take(embedding, inputs, axis=0)
@@ -1140,5 +1196,10 @@ class Embed(Module):
       Commonly used for weight-sharing between embeddings and logit transform
       in NLP models.
     """
-    query, embedding = promote_dtype(query, self.embedding, dtype=self.dtype)
+    embedding: Array
+    query, embedding = self.promote_dtype(
+      query, self.embedding, dtype=self.dtype
+    )
+    assert query is not None
+    assert embedding is not None
     return jnp.dot(query, embedding.T)
