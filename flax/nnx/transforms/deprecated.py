@@ -1621,7 +1621,6 @@ def _grad_general(
   has_aux: bool,
   holomorphic: bool,
   allow_int: bool,
-  reduce_axes: tp.Sequence[AxisName],
   wrt: filterlib.Filter,
   return_value: bool,
 ) -> tp.Callable[..., tp.Any]:
@@ -1662,7 +1661,6 @@ def _grad_general(
       has_aux=True,
       holomorphic=holomorphic,
       allow_int=allow_int,
-      reduce_axes=reduce_axes,
     )(*args, f, graphdef, non_diff_state, has_aux, diff_args)
 
     if return_value:
@@ -1748,17 +1746,13 @@ def grad(
     allow_int: Optional, bool. Whether to allow differentiating with
       respect to integer valued inputs. The gradient of an integer input will
       have a trivial vector-space dtype (float0). Default False.
-    reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
-      ``fun`` implicitly broadcasts a value over that axis, the backward pass
-      will perform a ``psum`` of the corresponding gradient. Otherwise, the
-      gradient will be per-example over named axes. For example, if ``'batch'``
-      is a named batch axis, ``grad(f, reduce_axes=('batch',))`` will create a
-      function that computes the total gradient while ``grad(f)`` will create
-      one that computes the per-example gradient.
     wrt: Optional, filterlib.Filter. Filter to extract the differentiable state
       of each graph node. Default is `nnx.Param`.
 
   """
+  if reduce_axes:
+    raise NotImplementedError('reduce_axes argument to grad is deprecated')
+  del reduce_axes
 
   return _grad_general(
     f,
@@ -1766,7 +1760,6 @@ def grad(
     has_aux,
     holomorphic,
     allow_int,
-    reduce_axes,
     wrt,
     return_value=False,
   )
@@ -1782,13 +1775,17 @@ def value_and_grad(
   *,
   wrt: filterlib.Filter = variablelib.Param,
 ) -> tp.Callable[..., tp.Any]:
+  if reduce_axes:
+    raise NotImplementedError(
+        'reduce_axes argument to value_and_grad is deprecated')
+  del reduce_axes
+
   return _grad_general(
     f,
     argnums,
     has_aux,
     holomorphic,
     allow_int,
-    reduce_axes,
     wrt,
     return_value=True,
   )
@@ -1801,7 +1798,6 @@ class Grad(tp.Generic[M], LiftedModule[M]):
     has_aux: bool = False,
     holomorphic: bool = False,
     allow_int: bool = False,
-    reduce_axes: tp.Sequence[AxisName] = (),
     return_value: bool = False,
     *,
     wrt: filterlib.Filter = variablelib.Param,
@@ -1813,7 +1809,6 @@ class Grad(tp.Generic[M], LiftedModule[M]):
         has_aux=has_aux,
         holomorphic=holomorphic,
         allow_int=allow_int,
-        reduce_axes=reduce_axes,
         return_value=return_value,
         # submodule args
         module_init_args=args,
@@ -1829,7 +1824,6 @@ class Grad(tp.Generic[M], LiftedModule[M]):
     has_aux: bool = False,
     holomorphic: bool = False,
     allow_int: bool = False,
-    reduce_axes: tp.Sequence[AxisName] = (),
     *,
     wrt: filterlib.Filter = variablelib.Param,
     # submodule args
@@ -1847,7 +1841,6 @@ class Grad(tp.Generic[M], LiftedModule[M]):
       has_aux=has_aux,
       holomorphic=holomorphic,
       allow_int=allow_int,
-      reduce_axes=reduce_axes,
       wrt=wrt,
     )
     def grad_call_apply(module, *args):
