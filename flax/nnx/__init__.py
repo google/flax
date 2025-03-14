@@ -30,6 +30,7 @@ from .filterlib import Nothing as Nothing
 from .graph import GraphDef as GraphDef
 from .graph import GraphState as GraphState
 from .graph import PureState as PureState
+from .graph import PytreeState as PytreeState
 from .object import Object as Object
 from .helpers import Dict as Dict
 from .helpers import Sequential as Sequential
@@ -175,6 +176,5 @@ from .variablelib import register_variable_name as register_variable_name
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree
-from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
 from . import traversals as traversals

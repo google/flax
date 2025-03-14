@@ -97,12 +97,12 @@ class StateSharding(extract.PrefixMapping):
 def _jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
   if isinstance(prefix, StateSharding):
     graphdef, *states = ctx.flatten(x, *prefix.filters)
-    return extract.NodeStates.from_split(graphdef, *states, metadata=prefix)
-  return extract.NodeStates.from_split(*ctx.flatten(x, with_paths=False))
+    return graph.PytreeState(graphdef, *states)
+  return ctx.flatten(x, with_paths=False)
 
 
 def _jit_merge_fn(ctx: graph.MergeContext, path, prefix, leaf) -> tp.Any:
-  if not isinstance(leaf, extract.NodeStates):
+  if not isinstance(leaf, graph.PytreeState):
     raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
   return ctx.unflatten(leaf.graphdef, *leaf.states)
 
@@ -322,13 +322,13 @@ def jit(
     )  # type: ignore[return-value]
   kwarg_shardings = None
   jax_in_shardings = jax.tree.map(
-    lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+    lambda x: graph.PytreeState(None, *x.shardings)
     if isinstance(x, StateSharding)
     else x,
     in_shardings,
   )
   jax_out_shardings = jax.tree.map(
-    lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+    lambda x: graph.PytreeState(None, x.shardings)
     if isinstance(x, StateSharding)
     else x,
     out_shardings,
@@ -608,21 +608,13 @@ def shard_map(
 
   kwarg_specs = PartitionSpec()
   jax_in_specs = jax.tree.map(
-    lambda x: extract.NodeStates(
-      _graphdef=PartitionSpec(),  # type: ignore[arg-type]
-      states=x.shardings,
-      metadata=x,
-    )
+    lambda x: graph.PytreeState(PartitionSpec(), *x.shardings)
     if isinstance(x, StateSharding)
     else x,
     in_specs,
   )
   jax_out_specs = jax.tree.map(
-    lambda x: extract.NodeStates(
-      _graphdef=PartitionSpec(),  # type: ignore[arg-type]
-      states=x.shardings,
-      metadata=x,
-    )
+    lambda x: graph.PytreeState(PartitionSpec(), *x.shardings)
     if isinstance(x, StateSharding)
     else x,
     out_specs,

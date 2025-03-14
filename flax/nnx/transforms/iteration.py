@@ -119,38 +119,39 @@ AxisFn = tp.Callable[
 
 
 def _update_variable_sharding_metadata(
-    tree, transform_metadata, axis_fn: AxisFn
+  axes, tree, transform_metadata, axis_fn: AxisFn
 ):
-  def _update_axes_fn(node_states):
-    if isinstance(node_states, extract.NodeStates) and isinstance(
-      node_states.metadata, (StateAxes, int)
+  def _update_axes_fn(axis, node_states):
+    if isinstance(node_states, graph.PytreeState) and isinstance(
+      axis, (StateAxes, int)
     ):
-      if isinstance(node_states.metadata, int):
+      if isinstance(axis, int):
         state = node_states.state
         assert isinstance(state, State | variablelib.VariableState)
-        state = axis_fn(state, node_states.metadata, transform_metadata)
-        return node_states.replace(states=(state,))
+        state = axis_fn(state, axis, transform_metadata)
+        return node_states.replace_states((state,))
       else:
         states_out: list[graph.GraphState | variablelib.VariableState] = []
-        for state, axis in zip(node_states.states, node_states.metadata.axes):
+        for state, axis in zip(node_states.states, axis.axes):
           assert isinstance(state, graph.State | variablelib.VariableState)
           if isinstance(axis, int):
             state = axis_fn(state, axis, transform_metadata)
           states_out.append(state)
-        return node_states.replace(states=tuple(states_out))
+        return node_states.replace_states(states_out)
     return node_states
 
   return jax.tree.map(
-    _update_axes_fn, tree, is_leaf=lambda x: isinstance(x, extract.NodeStates)
+    _update_axes_fn,
+    axes,
+    tree,
+    is_leaf=lambda x: isinstance(x, graph.PytreeState) or x is None,
   )
 
 
 def _vmap_split_fn(ctx: graph.SplitContext, path, prefix, x):
   if isinstance(prefix, StateAxes):
-    return extract.NodeStates.from_split(
-      *ctx.split(x, *prefix.filters), metadata=prefix
-    )
-  return extract.NodeStates.from_split(*ctx.split(x), metadata=prefix)
+    return ctx.split(x, *prefix.filters)
+  return ctx.split(x)
 
 
 @dataclasses.dataclass(eq=False)
@@ -166,7 +167,7 @@ class VmapFn:
   def __call__(self, *pure_args: tuple[tp.Any, ...]):
     if spmd.PARTITION_NAME in self.transform_metadata:
       pure_args = _update_variable_sharding_metadata(
-          pure_args, self.transform_metadata, spmd.remove_axis
+        self.in_axes, pure_args, self.transform_metadata, spmd.remove_axis
       )
     args = extract.from_tree(pure_args, ctxtag='vmap', is_inner=True)
 
@@ -181,7 +182,10 @@ class VmapFn:
     )
     if spmd.PARTITION_NAME in self.transform_metadata:
       pure_args_out, pure_out = _update_variable_sharding_metadata(
-          (pure_args_out, pure_out), self.transform_metadata, spmd.add_axis
+        (self.in_axes, self.out_axes),
+        (pure_args_out, pure_out),
+        self.transform_metadata,
+        spmd.add_axis,
       )
     return pure_args_out, pure_out
 
@@ -318,13 +322,13 @@ def vmap(
     )  # type: ignore[return-value]
 
   jax_in_axes = jax.tree.map(
-    lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
+    lambda x: graph.PytreeState(None, *x.axes)
     if isinstance(x, StateAxes)
     else x,
     in_axes,
   )
   jax_out_axes = jax.tree.map(
-    lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
+    lambda x: graph.PytreeState(None, *x.axes)
     if isinstance(x, StateAxes)
     else x,
     out_axes,
@@ -540,13 +544,13 @@ def pmap(
     )  # type: ignore[return-value]
 
   jax_in_axes = jax.tree.map(
-    lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
+    lambda x: graph.PytreeState(None, *x.axes)
     if isinstance(x, StateAxes)
     else x,
     in_axes,
   )
   jax_out_axes = jax.tree.map(
-    lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
+    lambda x: graph.PytreeState(None, *x.axes)
     if isinstance(x, StateAxes)
     else x,
     out_axes,
@@ -659,19 +663,19 @@ def _extract_nodedefs(
   pure_carry_arg_out, carry_nodedefs: list[graph.NodeDef | graph.VariableDef], /
 ):
   def extract_index_mappings(x):
-    if isinstance(x, extract.NodeStates) and isinstance(
-      x._graphdef, graph.NodeDef | graph.VariableDef
+    if isinstance(x, graph.PytreeState) and isinstance(
+      x.graphdef, graph.NodeDef | graph.VariableDef
     ):
-      nodedef = x._graphdef
+      nodedef = x.graphdef
       assert nodedef.outer_index is not None
       carry_nodedefs.append(nodedef)
-      x = x.replace(_graphdef=nodedef.with_no_outer_index())
+      x = x.replace_graphdef(nodedef.with_no_outer_index())
     return x
 
   pure_carry_arg_out = jax.tree.map(
     extract_index_mappings,
     pure_carry_arg_out,
-    is_leaf=lambda x: isinstance(x, extract.NodeStates),
+    is_leaf=lambda x: isinstance(x, graph.PytreeState),
   )
 
   return pure_carry_arg_out
@@ -682,17 +686,17 @@ def _insert_nodedefs(
   /,
 ):
   def insert_index_mappings(x):
-    if isinstance(x, extract.NodeStates) and isinstance(
-      x._graphdef, graph.NodeDef
+    if isinstance(x, graph.PytreeState) and isinstance(
+      x.graphdef, graph.NodeDef
     ):
       nodedef = carry_nodedefs.popleft()
-      x = x.replace(_graphdef=nodedef)
+      x = x.replace_graphdef(graphdef=nodedef)
     return x
 
   pure_carry_arg_out = jax.tree.map(
     insert_index_mappings,
     pure_carry_arg_out,
-    is_leaf=lambda x: isinstance(x, extract.NodeStates),
+    is_leaf=lambda x: isinstance(x, graph.PytreeState),
   )
   return pure_carry_arg_out
 
@@ -727,9 +731,7 @@ def _scan_split_in(
         vectorized_states.append(State({}))
       carry_deque.append(carry_states)
       broadcast_deque.append(broadcast_states)
-      return extract.NodeStates.from_split(
-        graphdef, *vectorized_states, metadata=prefix
-      )
+      return graph.PytreeState(graphdef, *vectorized_states)
     elif isinstance(prefix, int):
       graphdef, state = ctx.split(x)
       state = jax.tree.map(lambda x: jnp.moveaxis(x, prefix, 0), state)
@@ -751,9 +753,7 @@ def _scan_split_in(
       vectorized_states.append(State({}))
     carry_deque.append(carry_states)
     broadcast_deque.append(broadcast_states)
-    return extract.NodeStates.from_split(
-      graphdef, *vectorized_states, metadata=prefix
-    )
+    return graph.PytreeState(graphdef, *vectorized_states)
   else:
     if isinstance(prefix, StateAxes):
       raise ValueError(
@@ -818,9 +818,7 @@ def _scan_split_out(
       if is_input_arg:
         carry_deque.append(carry_states)
         broadcast_deque.append(broadcast_states)
-      return extract.NodeStates.from_split(
-        graphdef, *vectorized_states, metadata=prefix
-      )
+      return graph.PytreeState(graphdef, *vectorized_states)
     elif isinstance(prefix, int):
       graphdef, state = ctx.split(x)
       vectorized_states.append(state)
@@ -844,9 +842,7 @@ def _scan_split_out(
     if is_input_arg:
       carry_deque.append(carry_states)
       broadcast_deque.append(broadcast_states)
-    return extract.NodeStates.from_split(
-      graphdef, *vectorized_states, metadata=prefix
-    )
+    return graph.PytreeState(graphdef, *vectorized_states)
   else:
     if isinstance(prefix, StateAxes):
       obj_repr = 'args' if is_input_arg else 'out'
@@ -878,7 +874,7 @@ def _scan_merge_in(
   prefix,
   x,
 ):
-  if isinstance(x, extract.NodeStates):
+  if isinstance(x, graph.PytreeState):
     carry_states = carry_deque.popleft()
     broadcast_states = broadcast_deque.popleft()
     return ctx.merge(x.graphdef, *x.states, *carry_states, *broadcast_states)
@@ -901,7 +897,7 @@ def _scan_merge_out(
   assert isinstance(path[0], jax.tree_util.SequenceKey)
   is_input_arg = path[0].idx == 0
 
-  if isinstance(x, extract.NodeStates):
+  if isinstance(x, graph.PytreeState):
     states: list[State | variablelib.VariableState] = []
     if is_input_arg:
       carry_states = deque(carry_deque.popleft())
@@ -1006,7 +1002,7 @@ class ScanFn:
 
     if spmd.PARTITION_NAME in self.transform_metadata:
       pure_args = _update_variable_sharding_metadata(
-          pure_args, self.transform_metadata, spmd.remove_axis
+        self.in_axes, pure_args, self.transform_metadata, spmd.remove_axis
       )
 
     args: tuple = extract.from_tree(
@@ -1015,7 +1011,7 @@ class ScanFn:
       merge_fn=functools.partial(
         _scan_merge_in, carry_deque, broadcast_deque, broadcast_arrays
       ),
-      is_leaf=lambda x: isinstance(x, (extract.NodeStates, Broadcasted)),
+      is_leaf=lambda x: isinstance(x, (graph.PytreeState, Broadcasted)),
       map_non_graph_nodes=True,
       ctxtag='scan',
       is_inner=True,
@@ -1080,6 +1076,7 @@ class ScanFn:
     )
     if spmd.PARTITION_NAME in self.transform_metadata:
       pure_args_out, pure_out = _update_variable_sharding_metadata(
+        (self.in_axes, self.out_axes),
         (pure_args_out, pure_out),
         self.transform_metadata,
         spmd.add_axis,
@@ -1278,7 +1275,7 @@ def scan(
       merge_fn=functools.partial(
         _scan_merge_out, carry_deque_out, broadcast_deque_out
       ),
-      is_leaf=lambda x: isinstance(x, (extract.NodeStates, Broadcasted)),
+      is_leaf=lambda x: isinstance(x, (graph.PytreeState, Broadcasted)),
       map_non_graph_nodes=True,
       ctxtag='scan',
       is_inner=False,
@@ -1331,36 +1328,38 @@ class WhileLoopCondFn:
 
 
 def _add_fake_index_mapping(tree: tp.Any):
-  def per_node_state(node_state: extract.NodeStates | tp.Any):
-    if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.NodeDef | graph.VariableDef
+  def per_node_state(node_state: graph.PytreeState | tp.Any):
+    if not isinstance(node_state, graph.PytreeState) or not isinstance(
+      node_state.graphdef, graph.NodeDef | graph.VariableDef
     ):
       return node_state
 
-    return dataclasses.replace(
-      node_state, _graphdef=node_state._graphdef.with_same_outer_index()
+    return node_state.replace_graphdef(
+      node_state.graphdef.with_same_outer_index()
     )
 
-  return jax.tree.map(per_node_state, tree,
-                      is_leaf=lambda x: isinstance(x, extract.NodeStates))
+  return jax.tree.map(
+    per_node_state, tree, is_leaf=lambda x: isinstance(x, graph.PytreeState)
+  )
 
 
 def _remove_index_mapping(tree: tp.Any):
   """Remove a fake outer_index for the input to match that of the output."""
 
-  def per_node_state(node_state: extract.NodeStates | tp.Any):
-    if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.NodeDef | graph.VariableDef
+  def per_node_state(node_state: graph.PytreeState | tp.Any):
+    if not isinstance(node_state, graph.PytreeState) or not isinstance(
+      node_state.graphdef, graph.NodeDef | graph.VariableDef
     ):
       return node_state
-    assert isinstance(node_state._graphdef, graph.NodeDef | graph.VariableDef)
-    node_state = dataclasses.replace(
-      node_state, _graphdef=node_state._graphdef.with_no_outer_index()
+    assert isinstance(node_state.graphdef, graph.NodeDef | graph.VariableDef)
+    node_state = node_state.replace_graphdef(
+      graphdef=node_state.graphdef.with_no_outer_index()
     )
     return node_state
 
-  return jax.tree.map(per_node_state, tree,
-                      is_leaf=lambda x: isinstance(x, extract.NodeStates))
+  return jax.tree.map(
+    per_node_state, tree, is_leaf=lambda x: isinstance(x, graph.PytreeState)
+  )
 
 
 @dataclasses.dataclass(eq=False)

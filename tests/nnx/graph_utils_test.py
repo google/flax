@@ -679,10 +679,10 @@ class TestGraphUtils(absltest.TestCase):
     t2 = pure_tree[2]['b']
 
     self.assertEqual(pure_tree[1], 1)
-    self.assertIsInstance(t1, nnx.NodeStates)
-    assert isinstance(t1, nnx.NodeStates)
-    self.assertIsInstance(t2, nnx.NodeStates)
-    assert isinstance(t2, nnx.NodeStates)
+    self.assertIsInstance(t1, nnx.PytreeState)
+    assert isinstance(t1, nnx.PytreeState)
+    self.assertIsInstance(t2, nnx.PytreeState)
+    assert isinstance(t2, nnx.PytreeState)
     self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
     self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
     self.assertLen(nnx.to_flat_state(t1.states[0]), 2)
@@ -714,10 +714,10 @@ class TestGraphUtils(absltest.TestCase):
       t2 = pure_tree[2]['b']
 
       self.assertEqual(pure_tree[1], 1)
-      self.assertIsInstance(t1, nnx.NodeStates)
-      assert isinstance(t1, nnx.NodeStates)
-      self.assertIsInstance(t2, nnx.NodeStates)
-      assert isinstance(t2, nnx.NodeStates)
+      self.assertIsInstance(t1, nnx.PytreeState)
+      assert isinstance(t1, nnx.PytreeState)
+      self.assertIsInstance(t2, nnx.PytreeState)
+      assert isinstance(t2, nnx.PytreeState)
       self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
       self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
       self.assertLen(nnx.to_flat_state(t1.states[0]), 1)
@@ -741,10 +741,10 @@ class TestGraphUtils(absltest.TestCase):
         t2 = pure_tree2[2]['b']
 
         # self.assertEqual(pure_tree2[1], 1)
-        self.assertIsInstance(t1, nnx.NodeStates)
-        assert isinstance(t1, nnx.NodeStates)
-        self.assertIsInstance(t2, nnx.NodeStates)
-        assert isinstance(t2, nnx.NodeStates)
+        self.assertIsInstance(t1, nnx.PytreeState)
+        assert isinstance(t1, nnx.PytreeState)
+        self.assertIsInstance(t2, nnx.PytreeState)
+        assert isinstance(t2, nnx.PytreeState)
         self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
         self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
         self.assertLen(nnx.to_flat_state(t1.states[0]), 1)
@@ -796,7 +796,7 @@ class TestGraphUtils(absltest.TestCase):
       m1_axes = StateAxes(None, 0)
       in_axes = (m1_axes, None, {'b': m1_axes})
       jax_in_axes = jax.tree.map(
-        lambda x: nnx.NodeStates.from_prefixes((x.params, x.batch_stats))
+        lambda x: nnx.PytreeState(None, x.params, x.batch_stats)
         if isinstance(x, StateAxes)
         else x,
         in_axes,
@@ -805,10 +805,8 @@ class TestGraphUtils(absltest.TestCase):
 
       def split_fn(ctx: nnx.SplitContext, path, prefix, x):
         if isinstance(prefix, StateAxes):
-          return nnx.NodeStates.from_split(
-            *ctx.split(x, nnx.Param, nnx.BatchStat)
-          )
-        return nnx.NodeStates.from_split(*ctx.split(x))
+          return ctx.split(x, nnx.Param, nnx.BatchStat)
+        return ctx.split(x)
 
       pure_args = nnx.to_tree(
           args, ctxtag=ctxtag, prefix=in_axes, split_fn=split_fn

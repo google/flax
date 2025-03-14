@@ -73,7 +73,7 @@ class GradFn:
     # rebuild diff_state from substates in args
 
     def _grad_merge_fn(
-      ctx: graph.MergeContext, path, prefix, value: extract.NodeStates
+      ctx: graph.MergeContext, path, prefix, value: graph.PytreeState
     ):
       nondiff = self.nondiff_states.popleft()
       if nondiff is None:
@@ -142,11 +142,11 @@ def _grad_general(
     ):
       if prefix is None:
         nondiff_states.append(None)
-        return extract.NodeStates.from_split(*ctx.split(value))
+        return ctx.split(value)
       else:
         graphdef, diff, nondiff = ctx.split(value, prefix.filter, ...)  # type: ignore[misc]
         nondiff_states.append(nondiff)  # type: ignore[container-type-mismatch]
-        return extract.NodeStates.from_split(graphdef, diff)
+        return graph.PytreeState(graphdef, diff)
 
     arg_filters = tuple(index_filter.get(i) for i in range(len(args)))
     pure_args = extract.to_tree(
@@ -166,9 +166,9 @@ def _grad_general(
 
     def process_grads(grads):
       return jax.tree.map(
-        lambda x: x.state if isinstance(x, extract.NodeStates) else x,
+        lambda x: x.state if isinstance(x, graph.PytreeState) else x,
         grads,
-        is_leaf=lambda x: isinstance(x, extract.NodeStates),
+        is_leaf=lambda x: isinstance(x, graph.PytreeState),
       )
 
     def process_out(pure_out: A, /) -> A:
@@ -399,14 +399,17 @@ def value_and_grad(
 # 4. BwdFn: wraps the user's bwd function, it converts its input pytrees to graph nodes
 #    and output graph nodes to pytrees. It doesn't need to be aware of the outer context
 #    since it will never update the outer references as it runs during the backward pass.
+class GraphDefState(tp.NamedTuple):
+  graphdef: graph.GraphDef[tp.Any]
+  state: graph.GraphState
 
 def _custom_vjp_merge_fn(
   ctx: graph.MergeContext,
   path,
   prefix: bool | DiffState,
-  value: extract.NodeStates,
+  value: graph.PytreeState,
   *,
-  nondiff_states: deque[extract.GraphDefState],
+  nondiff_states: deque[GraphDefState],
 ):
   nondiff = nondiff_states.popleft()
   return ctx.merge(nondiff.graphdef, value.state, nondiff.state)
@@ -418,7 +421,7 @@ def _custom_vjp_split_fn(
   prefix: bool | DiffState,
   value,
   *,
-  nondiff_states: list[extract.GraphDefState],
+  nondiff_states: list[GraphDefState],
 ):
   broadcast: graph.GraphState
   if prefix is False:
@@ -433,16 +436,16 @@ def _custom_vjp_split_fn(
     # in order to keep the gradients clean from any metadata
     graphdef, passed = ctx.split(value)
     broadcast = EmptyState()
-    nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
-    return extract.NodeStates.from_states(passed)
+    nondiff_states.append(GraphDefState(graphdef, broadcast))
+    return graph.PytreeState(None, passed)
   else:
     # differentiable arg with DiffState filter, we use the filter to split the state
     # as before we return a TreeNode.from_states to keep the gradients clean
     # from any metadata, the non-differentiable state is stored in a deque
     # which is broadcasted during the forward pass
     graphdef, passed, broadcast = ctx.split(value, prefix.filter, ...)  # type: ignore[misc]
-    nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
-    return extract.NodeStates.from_states(passed)
+    nondiff_states.append(GraphDefState(graphdef, broadcast))
+    return graph.PytreeState(None, passed)
 
 
   nondiff_argnums: tuple[int, ...] = struct.field(pytree_node=False)
@@ -460,7 +463,7 @@ class CustomVjpFnWrapper:
   f: tp.Callable[..., tp.Any]
   jax_nondiff_argnums: tuple[int, ...]
   ctxtag: str
-  nondiff_states: list[extract.GraphDefState]
+  nondiff_states: list[GraphDefState]
   nodedefs: deque[graph.NodeDef]
 
   def __post_init__(self):
@@ -503,7 +506,7 @@ class FwdFn:
   fwd: tp.Callable[..., tp.Any]
   nondiff_argnums: tuple[int, ...]
   ctxtag: str
-  nondiff_states: list[extract.GraphDefState]
+  nondiff_states: list[GraphDefState]
   nodedefs: deque[graph.NodeDef]
 
   def __post_init__(self):
@@ -563,9 +566,9 @@ class BwdFn:
     *nondiff, pure_residual, (pure_args_out_g, pure_out_g) = args
     residual = extract.from_tree(pure_residual, is_inner=True)
     (pure_args_out_g, pure_out_g) = jax.tree.map(
-      lambda x: x.state if isinstance(x, extract.NodeStates) else x,
+      lambda x: x.state if isinstance(x, graph.PytreeState) else x,
       (pure_args_out_g, pure_out_g),
-      is_leaf=lambda x: isinstance(x, extract.NodeStates),
+      is_leaf=lambda x: isinstance(x, graph.PytreeState),
     )
 
     tangent = self.bwd(*nondiff, residual, (pure_args_out_g, pure_out_g))
@@ -576,7 +579,7 @@ class BwdFn:
           return x
         elif not isinstance(x, State | variablelib.VariableState):
           raise ValueError(f'Expected State or VariableState, got {type(x)}')
-        return extract.NodeStates.from_states(x)
+        return graph.PytreeState(None, x)
       return x
 
     pure_tangent = jax.tree.map(
@@ -627,7 +630,7 @@ class CustomVjp(tp.Generic[A]):
     with graph.update_context(self.ctxtag):
       args = resolve_kwargs(self.fun, args, kwargs)
       del kwargs
-      nondiff_states: list[extract.GraphDefState] = []
+      nondiff_states: list[GraphDefState] = []
       arg_filters = tuple(
         self.diff_filter.get(i, True) for i in range(len(args))
       )
@@ -640,9 +643,9 @@ class CustomVjp(tp.Generic[A]):
         ctxtag=self.ctxtag,
       )
       tree_node_args = jax.tree.map(
-        lambda x: isinstance(x, extract.NodeStates),
+        lambda x: isinstance(x, graph.PytreeState),
         pure_args,
-        is_leaf=lambda x: isinstance(x, extract.NodeStates),
+        is_leaf=lambda x: isinstance(x, graph.PytreeState),
       )
       tree_node_args = tuple(
         x

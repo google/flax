@@ -199,67 +199,10 @@ def broadcast_prefix(
   return result
 
 
-class GraphDefState(struct.PyTreeNode):
-  graphdef: graph.GraphDef[tp.Any] = struct.field(pytree_node=False)
-  state: graph.GraphState = struct.field(pytree_node=True)
-
-S = tp.TypeVar(
-  'S', bound=graph.GraphState | graph.GraphFlatState | list[tp.Any]
-)
-
-class NodeStates(struct.PyTreeNode):
-  _graphdef: graph.GraphDef[tp.Any] | None
-  states: tuple[tp.Any, ...]
-  metadata: tp.Any = struct.field(pytree_node=False)
-
-  @property
-  def graphdef(self) -> graph.GraphDef[tp.Any]:
-    if self._graphdef is None:
-      raise ValueError('No graphdef available')
-    return self._graphdef
-
-  @property
-  def state(self) -> tp.Any:
-    if len(self.states) != 1:
-      raise ValueError(
-        f'Expected exactly one GraphDefState, got {len(self.states)}'
-      )
-    return self.states[0]
-
-  @classmethod
-  def from_split(
-    cls,
-    graphdef: graph.GraphDef[tp.Any],
-    state: tp.Any,
-    /,
-    *states: tp.Any,
-    metadata: tp.Any = None,
-  ):
-    return cls(_graphdef=graphdef, states=(state, *states), metadata=metadata)
-
-  @classmethod
-  def from_states(
-    cls,
-    state: tp.Any,
-    *states: tp.Any,
-  ):
-    return cls(_graphdef=None, states=(state, *states), metadata=None)
-
-  @classmethod
-  def from_prefixes(
-    cls,
-    prefixes: tp.Iterable[tp.Any],
-    /,
-    *,
-    metadata: tp.Any = None,
-  ):
-    return cls(_graphdef=None, states=tuple(prefixes), metadata=metadata)
-
-
 def default_split_fn(
   ctx: graph.SplitContext, path: KeyPath, prefix: Prefix, leaf: Leaf
 ) -> tp.Any:
-  return NodeStates.from_split(*ctx.split(leaf))
+  return ctx.split(leaf)
 
 
 def to_tree(
@@ -317,13 +260,13 @@ def to_tree(
 def merge_tree_node(
   ctx: graph.MergeContext, path: KeyPath, prefix: Prefix, leaf: Leaf
 ) -> tp.Any:
-  if not isinstance(leaf, NodeStates):
+  if not isinstance(leaf, graph.PytreeState):
     raise ValueError(f'Expected TreeNode, got {type(leaf)} at path {path}')
   return ctx.merge(leaf.graphdef, *leaf.states)
 
 
 def is_tree_node(x):
-  return isinstance(x, NodeStates)
+  return isinstance(x, graph.PytreeState)
 
 
 def from_tree(

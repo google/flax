@@ -409,6 +409,51 @@ jax.tree_util.register_static(NodeDef)
 
 GraphDef = tp.Union[NodeDef[Node], NodeRef[Node], VariableDef[Node]]
 PureState = tuple[GraphDef[Node], GraphState]
+TS = tpe.TypeVarTuple('TS')
+
+
+class PytreeState(tuple[tp.Unpack[TS]]):
+  def __new__(cls, *args: tp.Unpack[TS]) -> PytreeState[tp.Unpack[TS]]:
+    return super().__new__(cls, args)
+
+  @property
+  def graphdef(self) -> GraphDef[tp.Any]:
+    return self[0]  # type: ignore
+
+  @property
+  def state(self) -> tp.Any:
+    if len(self) != 2:
+      raise ValueError(
+        f'Expected exactly one GraphDefState, got {len(self[1:])}'
+      )
+    return self[1]
+
+  @property
+  def states(self) -> tuple[tp.Any, ...]:
+    return self[1:]
+
+  def replace_graphdef(self, graphdef: A):
+    return PytreeState(graphdef, *self[1:])
+
+  def replace_states(self, states: tp.Iterable[tp.Any]):
+    return PytreeState(self[0], *states)
+
+
+def _flatten_pytree_state(
+  pytree_state: PytreeState[tp.Any],
+):
+  return pytree_state, None
+
+
+def _unflatten_pytree_state(_, states: tuple[tp.Any, ...]):
+  return PytreeState(*states)
+
+
+jax.tree_util.register_pytree_node(
+  PytreeState,
+  _flatten_pytree_state,  # type: ignore
+  _unflatten_pytree_state,  # type: ignore
+)
 
 
 @tp.overload
@@ -1299,29 +1344,31 @@ class SplitContext:
   is_inner: bool | None
 
   @tp.overload
-  def split(self, graph_node: A, /) -> tuple[GraphDef[A], GraphState]:
+  def split(self, graph_node: A, /) -> PytreeState[GraphDef[A], GraphState]:
     ...
 
   @tp.overload
   def split(
-      self, graph_node: A, first: filterlib.Filter, /
-  ) -> tuple[GraphDef[A], GraphState]:
+    self, graph_node: A, first: filterlib.Filter, /
+  ) -> PytreeState[GraphDef[A], GraphState]:
     ...
 
   @tp.overload
   def split(
-      self,
-      graph_node: A,
-      first: filterlib.Filter,
-      second: filterlib.Filter,
-      /,
-      *filters: filterlib.Filter,
-  ) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
+    self,
+    graph_node: A,
+    first: filterlib.Filter,
+    second: filterlib.Filter,
+    /,
+    *filters: filterlib.Filter,
+  ) -> PytreeState[
+    GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]
+  ]:
     ...  # type: ignore[not-supported-yet]
 
   def split(
     self, node: A, *filters: filterlib.Filter
-  ) -> tuple[GraphDef[A], tpe.Unpack[tuple[GraphState, ...]]]:  # type: ignore[not-supported-yet]
+  ) -> PytreeState[GraphDef[A], tpe.Unpack[tuple[GraphState, ...]]]:  # type: ignore[not-supported-yet]
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
     )
@@ -1334,47 +1381,47 @@ class SplitContext:
     flat_states = _split_state(flat_state, filters)
     states = _to_nested_state(graphdef, flat_states)
 
-    return graphdef, *states
+    return PytreeState(graphdef, *states)
 
   @tp.overload
   def flatten(
-      self,
-      graph_node: A,
-      /,
-      *,
-      with_paths: tp.Literal[False],
-  ) -> tuple[GraphDef[A], list[tp.Any]]:
+    self,
+    graph_node: A,
+    /,
+    *,
+    with_paths: tp.Literal[False],
+  ) -> PytreeState[GraphDef[A], list[tp.Any]]:
     ...
 
   @tp.overload
   def flatten(
-      self,
-      graph_node: A,
-      /,
-  ) -> tuple[GraphDef[A], FlatState[VariableState[tp.Any]]]:
+    self,
+    graph_node: A,
+    /,
+  ) -> PytreeState[GraphDef[A], FlatState[VariableState[tp.Any]]]:
     ...
 
   @tp.overload
   def flatten(
-      self,
-      graph_node: A,
-      first: filterlib.Filter,
-      /,
-  ) -> tuple[GraphDef[A], FlatState[VariableState[tp.Any]]]:
+    self,
+    graph_node: A,
+    first: filterlib.Filter,
+    /,
+  ) -> PytreeState[GraphDef[A], FlatState[VariableState[tp.Any]]]:
     ...
 
   @tp.overload
   def flatten(
-      self,
-      graph_node: A,
-      first: filterlib.Filter,
-      second: filterlib.Filter,
-      /,
-      *filters: filterlib.Filter,
-  ) -> tuple[
-      GraphDef[A],
-      FlatState[VariableState[tp.Any]],
-      tpe.Unpack[tuple[FlatState[VariableState[tp.Any]], ...]],
+    self,
+    graph_node: A,
+    first: filterlib.Filter,
+    second: filterlib.Filter,
+    /,
+    *filters: filterlib.Filter,
+  ) -> PytreeState[
+    GraphDef[A],
+    FlatState[VariableState[tp.Any]],
+    tpe.Unpack[tuple[FlatState[VariableState[tp.Any]], ...]],
   ]:
     ...
 
@@ -1383,7 +1430,7 @@ class SplitContext:
     node: A,
     *filters: filterlib.Filter,
     with_paths: bool = True,
-  ) -> tuple[
+  ) -> PytreeState[
     GraphDef[A],
     FlatState[VariableState[tp.Any]] | list[tp.Any],
     tpe.Unpack[tuple[FlatState[VariableState[tp.Any]], ...]],
@@ -1458,9 +1505,9 @@ class SplitContext:
       assert paths is not None
       flat_state = FlatState.from_sorted_keys_values(paths, leaves)
       flat_states = _split_state(flat_state, filters)
-      return graphdef, *flat_states  # type: ignore[bad-return-type]
+      return PytreeState(graphdef, *flat_states)  # type: ignore[bad-return-type]
     else:
-      return graphdef, leaves
+      return PytreeState(graphdef, leaves)
 
 
 @contextlib.contextmanager
@@ -1665,29 +1712,31 @@ class UpdateContext:
       )
 
   @tp.overload
-  def split(self, graph_node: A, /) -> tuple[GraphDef[A], GraphState]:
+  def split(self, graph_node: A, /) -> PytreeState[GraphDef[A], GraphState]:
     ...
 
   @tp.overload
   def split(
-      self, graph_node: A, first: filterlib.Filter, /
-  ) -> tuple[GraphDef[A], GraphState]:
+    self, graph_node: A, first: filterlib.Filter, /
+  ) -> PytreeState[GraphDef[A], GraphState]:
     ...
 
   @tp.overload
   def split(
-      self,
-      graph_node: A,
-      first: filterlib.Filter,
-      second: filterlib.Filter,
-      /,
-      *filters: filterlib.Filter,
-  ) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
+    self,
+    graph_node: A,
+    first: filterlib.Filter,
+    second: filterlib.Filter,
+    /,
+    *filters: filterlib.Filter,
+  ) -> PytreeState[
+    GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]
+  ]:
     ...
 
   def split(
     self, node: A, *filters: filterlib.Filter
-  ) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
+  ) -> PytreeState[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
     """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
     a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef
     contains all the static information needed to reconstruct a ``Module`` graph, it is analogous
@@ -1759,7 +1808,7 @@ class UpdateContext:
     states = _to_nested_state(graphdef, flat_states)
     assert len(states) >= 1
     self.flatten_end(ref_index)
-    return graphdef, *states  # type: ignore[return-value]
+    return PytreeState(graphdef, *states)  # type: ignore[return-value]
 
   def merge(
     self,
@@ -1975,11 +2024,11 @@ def _split_state(
 @tp.overload
 def split(
   graph_node: A, /
-) -> tuple[GraphDef[A], GraphState | VariableState]: ...
+) -> PytreeState[GraphDef[A], GraphState | VariableState]: ...
 @tp.overload
 def split(
   graph_node: A, first: filterlib.Filter, /
-) -> tuple[GraphDef[A], GraphState | VariableState]: ...
+) -> PytreeState[GraphDef[A], GraphState | VariableState]: ...
 @tp.overload
 def split(
   graph_node: A,
@@ -1987,14 +2036,14 @@ def split(
   second: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
-) -> tuple[
+) -> PytreeState[
   GraphDef[A],
   GraphState | VariableState,
   tpe.Unpack[tuple[GraphState | VariableState, ...]],
 ]: ...
 def split(
   node: A, *filters: filterlib.Filter
-) -> tuple[
+) -> PytreeState[
   GraphDef[A],
   GraphState | VariableState,
   tpe.Unpack[tuple[GraphState | VariableState, ...]],
@@ -2070,7 +2119,7 @@ def split(
   graphdef, flat_state = flatten(node)
   flat_states = _split_state(flat_state, filters)
   states = _to_nested_state(graphdef, flat_states)
-  return graphdef, *states  # type: ignore[return-value]
+  return PytreeState(graphdef, *states)  # type: ignore[return-value]
 
 
 def _to_nested_state(
