@@ -1011,6 +1011,42 @@ class TestGraphUtils(absltest.TestCase):
     self.assertEqual(count.value, 2)
     self.assertEqual(y.shape, (1, 3))
 
+  def test_array_attributes(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.a = jnp.array(1)
+        self.b = 'yes'
+
+    m = Foo()
+
+    graphdef, state = nnx.split(m)
+
+    self.assertLen(state, 1)
+    self.assertIsInstance(state['a'], jax.Array)
+
+    m2 = nnx.merge(graphdef, state)
+
+    self.assertIsInstance(m2.a, jax.Array)
+    self.assertEqual(m2.a, 1)
+    self.assertEqual(m2.b, 'yes')
+
+  def test_transform_array_attributes(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.a = jnp.array(1)
+        self.b = 'yes'
+
+    m = Foo()
+
+    @nnx.jit
+    def f(m):
+      m.a += 1
+      self.assertEqual(m.b, 'yes')
+
+    f(m)
+
+    self.assertEqual(m.a, 2)
+
 
 class SimpleModule(nnx.Module):
   pass
