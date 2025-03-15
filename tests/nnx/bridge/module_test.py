@@ -22,6 +22,7 @@ os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 import jax
 import jax.numpy as jnp
 from absl.testing import absltest
+import numpy as np
 
 from flax import linen as nn
 from flax import nnx
@@ -443,6 +444,78 @@ class TestBridgeModule(absltest.TestCase):
         assert self.f == f
 
     Bar().init()
+
+  def test_transforms(self):
+    class Dense(bridge.Module):
+      dout: int
+      @bridge.compact
+      def __call__(self, x: jax.Array) -> jax.Array:
+        return x @ self.param('w', nn.initializers.normal(),
+                              (x.shape[-1], self.dout))
+
+    class MLP(bridge.Module):
+      dim: int
+      num_layers: int
+      def setup(self):
+        @nnx.split_rngs(splits=self.num_layers)
+        @nnx.vmap(
+            in_axes=(nnx.StateAxes({nnx.RngState: 0, ...: None}),),
+            axis_size=self.num_layers,
+            transform_metadata={nnx.PARTITION_NAME: None},
+        )
+        def create_block(parent):
+          block = Dense(self.dim)
+          parent.block = block
+        create_block(self)
+
+      def __call__(self, x):
+        @nnx.split_rngs(splits=self.num_layers)
+        @nnx.scan(
+            in_axes=(0, nnx.Carry),
+            out_axes=nnx.Carry,
+            transform_metadata={nnx.PARTITION_NAME: None},
+        )
+        def forward_block(model, x):
+          return model(x)
+        x = forward_block(self.block, x)
+        return x
+
+    model = MLP(dim=32, num_layers=2)
+    x = jnp.ones((4, 32))
+    variables = model.init(jax.random.key(0), x)
+    y = model.apply(variables, x)
+    w = variables['params']['block']['w']
+    np.testing.assert_array_equal(y, x @ w[0] @ w[1])
+
+  def test_shared_modules(self):
+    class Dense(bridge.Module):
+      dout: int
+      @bridge.compact
+      def __call__(self, x):
+        return x @ self.param('w', nn.initializers.normal(),
+                              (x.shape[-1], self.dout))
+
+    class Bottom(bridge.Module):
+      def setup(self):
+        self.layer = Dense(4)
+
+      def __call__(self, x):
+        return self.layer(x)
+
+    class Top(bridge.Module):
+      def setup(self):
+        self.zzz = Bottom()
+        self.set_attr_priority('zzz', bridge.AttrPriority.HIGH)
+        self.aaa = self.zzz  # another reference
+        self.dense = self.aaa.layer  # and another reference
+
+      def __call__(self, x):
+        return self.dense(x)
+
+    model = Top()
+    x = jnp.ones((4, 32))
+    params = model.init(jax.random.key(0), x)['params']
+    self.assertSameElements(['zzz'], params.keys())
 
 
 
