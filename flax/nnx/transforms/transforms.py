@@ -92,7 +92,7 @@ def resolve_kwargs(
     return ba.args
 
 
-
+# TODO(cgarciae): Remove this when deprecated is removed.
 class LiftedModule(tp.Generic[M], Module):  # type: ignore[ignored-abstractmethod]
   @abstractmethod
   def _call(self, accessor: DelayedAccessor, *args, **kwargs) -> tp.Any:
