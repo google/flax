@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import dataclasses
+import enum
 import functools
 import inspect
 import threading
@@ -166,7 +167,9 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
 
   module = nnx_module.ModuleMeta.__call__(cls, *args, **kwargs)
   module.scope = None
+  module.attr_priorities = {}
 
+  # compact behavior
   if parent is not None:
     assert parent.scope is not None
     assert name is not None
@@ -178,9 +181,15 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
 # the use of TYPE_CHECKING conditionals for metaclass methods
 ModuleMeta.__call__ = _module_meta_call  # type: ignore
 
+class AttrPriority(enum.IntEnum):
+  HIGH = 1
+  DEFAULT = 2
+  LOW = 3
+
 class ModuleBase:
   if tp.TYPE_CHECKING:
     scope: Scope | None
+    attr_priorities: dict[str, AttrPriority]
 
 
 @tpe.dataclass_transform(field_specifiers=(dataclasses.field,))  # type: ignore[not-supported-yet]
@@ -211,6 +220,16 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
           leaf._object__state._initializing = self.is_initializing()
           _bind_module(self, leaf)
     super()._setattr(name, value)
+
+  def _graph_node_flatten(self):
+    nodes = vars(self).copy()
+    keys = ((self.attr_priorities.get(k, AttrPriority.DEFAULT), k)
+            for k in nodes.keys())
+    sorted_nodes = ((k, nodes[k]) for _, k in sorted(keys))
+    return sorted_nodes, type(self)
+
+  def set_attr_priority(self, name: str, value: AttrPriority):
+    self.attr_priorities[name] = value
 
   def make_rng(self, name: str = 'default') -> jax.Array:
     if self.scope is None:
