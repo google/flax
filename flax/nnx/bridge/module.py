@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import dataclasses
+import enum
 import functools
 import inspect
 import threading
@@ -166,7 +167,9 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
 
   module = nnx_module.ModuleMeta.__call__(cls, *args, **kwargs)
   module.scope = None
+  module.attr_priorities = {}
 
+  # compact behavior
   if parent is not None:
     assert parent.scope is not None
     assert name is not None
@@ -178,9 +181,45 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
 # the use of TYPE_CHECKING conditionals for metaclass methods
 ModuleMeta.__call__ = _module_meta_call  # type: ignore
 
+class AttrPriority(enum.IntEnum):
+  HIGH = 1
+  DEFAULT = 2
+  LOW = 3
+
+
+class PriorityStr(str):
+  _priority: AttrPriority
+
+  def __new__(cls, priority: AttrPriority, value: str):
+    obj = super().__new__(cls, value)
+    obj._priority = priority
+    return obj
+
+  def _check_and_get_priority(self, other) -> AttrPriority:
+    if not isinstance(other, (str, PriorityStr)):
+      raise NotImplementedError(
+        f'Cannot compare {type(self)} with {type(other)}'
+      )
+    if isinstance(other, PriorityStr):
+      return other._priority
+    return AttrPriority.DEFAULT
+
+  def __lt__(self, other) -> bool:
+    other_priority = self._check_and_get_priority(other)
+    if self._priority == other_priority:
+      return super().__lt__(other)
+    return self._priority < other_priority
+
+  def __gt__(self, other) -> bool:
+    other_priority = self._check_and_get_priority(other)
+    if self._priority == other_priority:
+      return super().__gt__(other)
+    return self._priority > other_priority
+
 class ModuleBase:
   if tp.TYPE_CHECKING:
     scope: Scope | None
+    attr_priorities: dict[str, AttrPriority]
 
 
 @tpe.dataclass_transform(field_specifiers=(dataclasses.field,))  # type: ignore[not-supported-yet]
@@ -211,6 +250,18 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
           leaf._object__state._initializing = self.is_initializing()
           _bind_module(self, leaf)
     super()._setattr(name, value)
+
+  def _graph_node_flatten(self):
+    nodes = vars(self).copy()
+    keys = (
+      PriorityStr(self.attr_priorities.get(k, AttrPriority.DEFAULT), k)
+      for k in nodes.keys()
+    )
+    sorted_nodes = ((k, nodes[k]) for k in sorted(keys))
+    return sorted_nodes, type(self)
+
+  def set_attr_priority(self, name: str, value: AttrPriority):
+    self.attr_priorities[name] = value
 
   def make_rng(self, name: str = 'default') -> jax.Array:
     if self.scope is None:
