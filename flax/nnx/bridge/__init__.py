@@ -23,6 +23,7 @@ from .variables import NNXMeta as NNXMeta
 from .variables import with_partitioning as with_partitioning
 from .module import Module as Module
 from .module import Scope as Scope
+from .module import AttrPriority as AttrPriority
 from .module import compact as compact
 from .module import current_context as current_context
 from .module import current_module as current_module

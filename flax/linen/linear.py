@@ -584,6 +584,7 @@ class _Conv(Module):
 
     padding_lax = canonicalize_padding(self.padding, len(kernel_size))
     if padding_lax in ('CIRCULAR', 'REFLECT'):
+      assert isinstance(padding_lax, str)
       kernel_size_dilated = [
         (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
