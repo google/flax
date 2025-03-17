@@ -288,11 +288,141 @@ namespace flaxlib
     return nb::make_tuple(node_fp, next_index);
   }
 
+  //---------------------------------------------------------------
+  // NodeDef
+  //---------------------------------------------------------------
+
+  struct NodeDef
+  {
+    nb::object type;
+    std::optional<int> index;
+    std::optional<int> outer_index;
+    int num_attributes;
+    nb::object metadata;
+
+    NodeDef(nb::object type, std::optional<int> index, std::optional<int> outer_index, int num_attributes, nb::object metadata)
+        : type(type), index(index), outer_index(outer_index), num_attributes(num_attributes), metadata(metadata) {}
+
+    NodeDef with_no_outer_index() const
+    {
+      return NodeDef(type, index, std::nullopt, num_attributes, metadata);
+    }
+
+    NodeDef with_same_outer_index() const
+    {
+      return NodeDef(type, index, index, num_attributes, metadata);
+    }
+
+    bool __eq__(const NodeDef &other) const
+    {
+      return type.equal(other.type) && index == other.index && outer_index == other.outer_index && num_attributes == other.num_attributes && metadata.equal(other.metadata);
+    }
+
+    int __hash__() const
+    {
+      // return nb::hash(type) ^ nb::hash(nb::cast(index)) ^ nb::hash(nb::cast(outer_index)) ^ nb::hash(nb::cast(num_attributes)) ^ nb::hash(metadata);
+      return nb::hash(nb::make_tuple(type, index, outer_index, num_attributes, metadata));
+    }
+
+    nb::tuple __getstate__() const
+    {
+      return nb::make_tuple(type, index, outer_index, num_attributes, metadata);
+    }
+
+    static void __setstate__(NodeDef &nodedef, nb::tuple &t)
+    {
+      new (&nodedef) NodeDef(t[0], nb::cast<std::optional<int>>(t[1]), nb::cast<std::optional<int>>(t[2]), nb::cast<int>(t[3]), t[4]);
+    }
+  };
+
+  //---------------------------------------------------------------
+  // VariableDef
+  //---------------------------------------------------------------
+
+  struct VariableDef
+  {
+    nb::object type;
+    int index;
+    std::optional<int> outer_index;
+    nb::object metadata;
+
+    VariableDef(nb::object type, int index, std::optional<int> outer_index, nb::object metadata)
+        : type(type), index(index), outer_index(outer_index), metadata(metadata) {}
+
+    VariableDef with_no_outer_index() const
+    {
+      return VariableDef(type, index, std::nullopt, metadata);
+    }
+
+    VariableDef with_same_outer_index() const
+    {
+      return VariableDef(type, index, index, metadata);
+    }
+
+    bool __eq__(const VariableDef &other) const
+    {
+      return type.equal(other.type) && index == other.index && outer_index == other.outer_index && metadata.equal(other.metadata);
+    }
+
+    int __hash__() const
+    {
+      // return nb::hash(type) ^ nb::hash(nb::cast(index)) ^ nb::hash(nb::cast(outer_index)) ^ nb::hash(metadata);
+      return nb::hash(nb::make_tuple(type, index, outer_index, metadata));
+    }
+
+    nb::tuple __getstate__() const
+    {
+      return nb::make_tuple(type, index, outer_index, metadata);
+    }
+
+    static void __setstate__(VariableDef &variabledef, nb::tuple &t)
+    {
+      new (&variabledef) VariableDef(t[0], nb::cast<int>(t[1]), nb::cast<std::optional<int>>(t[2]), t[3]);
+    }
+  };
+
   NB_MODULE(flaxlib_cpp, m)
   {
     // Remove the conflicting binding
     nb::bind_map<RefMap>(m, "RefMap")
         .def("get", &ref_map_get, nb::arg("key").none(), nb::arg("default_value").none());
     m.def("_graph_fingerprint", &_graph_fingerprint);
+    nb::class_<flaxlib::NodeDef>(m, "NodeDef")
+        .def(nb::init<nb::object, std::optional<int>, std::optional<int>, int, nb::object>(),
+             nb::arg("type"), nb::arg("index").none(), nb::arg("outer_index").none(), nb::arg("num_attributes"), nb::arg("metadata").none())
+        .def_prop_ro("type", [](const flaxlib::NodeDef &n)
+                     { return n.type; })
+        .def_prop_ro("index", [](const flaxlib::NodeDef &n)
+                     { return n.index; })
+        .def_prop_ro("outer_index", [](const flaxlib::NodeDef &n)
+                     { return n.outer_index; })
+        .def_prop_ro("num_attributes", [](const flaxlib::NodeDef &n)
+                     { return n.num_attributes; })
+        .def_prop_ro("metadata", [](const flaxlib::NodeDef &n)
+                     { return n.metadata; })
+        .def("with_no_outer_index", &flaxlib::NodeDef::with_no_outer_index)
+        .def("with_same_outer_index", &flaxlib::NodeDef::with_same_outer_index)
+        .def("__eq__", &flaxlib::NodeDef::__eq__)
+        .def("__hash__", &flaxlib::NodeDef::__hash__)
+        .def("__getstate__", &flaxlib::NodeDef::__getstate__)
+        .def("__setstate__", &flaxlib::NodeDef::__setstate__);
+
+    nb::class_<flaxlib::VariableDef>(m, "VariableDef")
+        .def(nb::init<nb::object, int, std::optional<int>, nb::object>(),
+             nb::arg("type"), nb::arg("index"), nb::arg("outer_index").none(), nb::arg("metadata").none())
+        .def_prop_ro("type", [](const flaxlib::VariableDef &n)
+                     { return n.type; })
+        .def_prop_ro("index", [](const flaxlib::VariableDef &n)
+                     { return n.index; })
+        .def_prop_ro("outer_index", [](const flaxlib::VariableDef &n)
+                     { return n.outer_index; })
+        .def_prop_ro("metadata", [](const flaxlib::VariableDef &n)
+                     { return n.metadata; })
+        .def("with_no_outer_index", &flaxlib::VariableDef::with_no_outer_index)
+        .def("with_same_outer_index", &flaxlib::VariableDef::with_same_outer_index)
+        .def("__eq__", &flaxlib::VariableDef::__eq__)
+        .def("__hash__", &flaxlib::VariableDef::__hash__)
+        .def("__getstate__", &flaxlib::VariableDef::__getstate__)
+        .def("__setstate__", &flaxlib::VariableDef::__setstate__);
   }
 } // namespace flaxlib
