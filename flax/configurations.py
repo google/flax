@@ -23,6 +23,7 @@ _T = TypeVar('_T')
 
 class Config:
   flax_use_flaxlib: bool
+  flax_max_repr_depth: int | None
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
 
@@ -122,6 +123,38 @@ def bool_flag(name: str, *, default: bool, help: str) -> FlagHolder[bool]:
   return fh
 
 
+def int_flag(name: str, *, default: int | None, help: str) -> FlagHolder[int]:
+  """Set up an integer flag.
+
+  Example::
+
+    num_foo = int_flag(
+        name='flax_num_foo',
+        default=42,
+        help='Number of foo.',
+    )
+
+  Now the ``FLAX_NUM_FOO`` shell environment variable can be used to
+  control the process-level value of the flag, in addition to using e.g.
+  ``config.update("flax_num_foo", 42)`` directly.
+
+  Args:
+    name: converted to lowercase to define the name of the flag. It is
+      converted to uppercase to define the corresponding shell environment
+      variable.
+    default: a default value for the flag.
+    help: used to populate the docstring of the returned flag holder object.
+
+  Returns:
+    A flag holder object for accessing the value of the flag.
+  """
+  name = name.lower()
+  config._add_option(name, static_int_env(name.upper(), default))
+  fh = FlagHolder[int](name, help)
+  setattr(Config, name, property(lambda _: fh.value, doc=help))
+  return fh
+
+
 def static_bool_env(varname: str, default: bool) -> bool:
   """Read an environment variable and interpret it as a boolean.
 
@@ -147,6 +180,27 @@ def static_bool_env(varname: str, default: bool) -> bool:
     raise ValueError(
       f'invalid truth value {val!r} for environment {varname!r}'
     )
+
+
+def static_int_env(varname: str, default: int | None) -> int | None:
+  """Read an environment variable and interpret it as an integer.
+
+  Args:
+    varname: the name of the variable
+    default: the default integer value
+  Returns:
+    integer return value derived from defaults and environment.
+  Raises: ValueError if the environment variable is not an integer.
+  """
+  val = os.getenv(varname)
+  if val is None:
+    return default
+  try:
+    return int(val)
+  except ValueError:
+    raise ValueError(
+      f'invalid integer value {val!r} for environment {varname!r}'
+    ) from None
 
 
 @contextmanager
@@ -211,4 +265,10 @@ flax_use_flaxlib = bool_flag(
   name='flax_use_flaxlib',
   default=False,
   help='Whether to use flaxlib for C++ acceleration.',
+)
+
+flax_max_repr_depth = int_flag(
+  name='flax_max_repr_depth',
+  default=None,
+  help='Maximum depth of reprs for nested flax objects. Default is None (no limit).',
 )
