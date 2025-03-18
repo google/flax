@@ -542,6 +542,28 @@ class TestBridgeModule(absltest.TestCase):
     params = model.init(jax.random.key(0), x)['params']
     self.assertSameElements([f'layer_{i}' for i in range(3)], params.keys())
 
+  def test_share_scope(self):
+    class Dense(bridge.Module):
+      dout: int
+      @bridge.compact
+      def __call__(self, x):
+        return x @ self.param('w', nn.initializers.normal(),
+                              (x.shape[-1], self.dout))
+
+    class Top(bridge.Module):
+      def setup(self):
+        self.a = Dense(4)
+        bridge.module.share_scope(self, self.a)
+
+      def __call__(self, x):
+        return self.a(x)
+
+    model = Top()
+    x = jnp.ones((4, 32))
+    params = model.init(jax.random.key(0), x)['params']
+    self.assertSameElements(['w'], params.keys())  # 'a' doesn't exist
+
+
 
 if __name__ == '__main__':
   absltest.main()
