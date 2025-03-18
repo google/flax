@@ -34,7 +34,6 @@ from flax.typing import (
     PaddingLike,
     PrecisionLike,
     Shape as Shape,
-    Tuple,
 )
 import jax
 from jax import eval_shape, lax
