@@ -38,17 +38,24 @@ class HasSharding(tp.Protocol):
 def _has_sharding(x: tp.Any) -> tp.TypeGuard[HasSharding]:
   return hasattr(x, 'sharding') and x.sharding is not None
 
-def add_axis(tree: A, index: int, params: tp.Mapping) -> A:
-  axis_name = _get_partition_name(params)
+def add_axis(tree: A, index: int, transform_metadata: tp.Mapping) -> A:
+  axis_name, other_meta = _get_partition_name_and_metadata(transform_metadata)
+
+  def insert_field(fields, index, value):
+    iterable = list(fields)
+    while len(iterable) < index:
+      iterable.append(None)
+    iterable.insert(index, value)
+    return tuple(iterable)
 
   def _add_axis(x: tp.Any):
     if isinstance(x, variablelib.VariableState):
       if _has_sharding(x) and x.sharding is not None:
-        sharding: list[str | None] = list(x.sharding)
-        while len(sharding) < index:
-          sharding.append(None)
-        sharding.insert(index, axis_name)
-        x.sharding = tuple(sharding)  # type: ignore
+        x.sharding = insert_field(x.sharding, index, axis_name)
+
+      for k, v in other_meta.items():
+        if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
+          setattr(x, k, insert_field(t, index, v))
 
       assert isinstance(x, variablelib.VariableState)
       x.add_axis(index, axis_name)
@@ -59,15 +66,23 @@ def add_axis(tree: A, index: int, params: tp.Mapping) -> A:
   )
 
 
-def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
-  axis_name = _get_partition_name(params)
+def remove_axis(tree: A, index: int, transform_metadata: tp.Mapping[tp.Any, tp.Any]) -> A:
+  axis_name, other_meta = _get_partition_name_and_metadata(transform_metadata)
+
+  def remove_field(fields, index, value):
+    iterable = list(fields)
+    assert iterable.pop(index) == value
+    return tuple(iterable)
 
   def _remove_axis(x: tp.Any):
     if isinstance(x, variablelib.VariableState):
       if hasattr(x, 'sharding') and x.sharding is not None:
-        sharding = list(x.sharding)
-        assert sharding.pop(index) == axis_name
-        x.sharding = tuple(sharding)
+        x.sharding = remove_field(x.sharding, index, axis_name)
+
+      for k, v in other_meta.items():
+        if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
+          setattr(x, k, remove_field(t, index, v))
+
       x.remove_axis(index, axis_name)
     return x
 
@@ -78,13 +93,17 @@ def remove_axis(tree: A, index: int, params: tp.Mapping[tp.Any, tp.Any]) -> A:
   )
 
 
-def _get_partition_name(params: tp.Mapping[tp.Any, tp.Any]) -> str:
-  if PARTITION_NAME not in params:
+def _get_partition_name_and_metadata(
+  transform_metadata: tp.Mapping[tp.Any, tp.Any]
+) -> tuple[str, tp.Mapping[tp.Any, tp.Any]]:
+  if PARTITION_NAME not in transform_metadata:
     raise ValueError(
       'Trying to transform a Partitioned variable but "partition_name" '
-      f'is not specified in scan_metadata: {params}'
+      f'is not specified in transform_metadata: {transform_metadata}'
     )
-  return params[PARTITION_NAME]
+  other_meta = dict(transform_metadata)  # shallow copy
+  other_meta.pop(PARTITION_NAME)
+  return transform_metadata[PARTITION_NAME], other_meta
 
 
 def get_partition_spec(tree: A) -> A:
