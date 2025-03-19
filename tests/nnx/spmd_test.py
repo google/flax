@@ -108,7 +108,7 @@ class TestSPMD(absltest.TestCase):
       @nnx.split_rngs(splits=5)
       @nnx.vmap(
           in_axes=(0, 0),
-          transform_metadata={nnx.PARTITION_NAME: 'layers'},
+          transform_metadata={nnx.PARTITION_NAME: 'layers', 'nickname': 'nick'},
       )
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(
@@ -117,6 +117,7 @@ class TestSPMD(absltest.TestCase):
           kernel_init=nnx.with_metadata(
             nnx.initializers.lecun_normal(),
             sharding=('din', 'dout'),
+            nickname=('in', 'out'),
             on_add_axis=lambda _, idx, name: kadds.append((idx, name)),
             on_remove_axis=lambda _, idx, name: kremoves.append((idx, name)),
           ),
@@ -145,6 +146,7 @@ class TestSPMD(absltest.TestCase):
     m = MLP(rngs=nnx.Rngs(0))
     self.assertEqual(m.linear.kernel.shape, (5, 3, 3))
     self.assertEqual(m.linear.kernel.sharding, ('layers', 'din', 'dout'))
+    self.assertEqual(m.linear.kernel.nickname, ('nick', 'in', 'out'))
     self.assertEqual(m.linear.bias.shape, (5, 3))
     # One add_axis called to add the `nnx.vmap` dimension
     self.assertEqual(kadds, [(0, 'layers')])
