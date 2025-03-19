@@ -329,3 +329,29 @@ model = nnx.merge(graphdef, params, counts)
 # Update with multiple `State`s
 nnx.update(model, params, counts)
 ```
+
+### Pytree proxies
+The [nnx.Pytree](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/pytreelib.html#flax.nnx.Pytree) type can be used to interact more easily with certain JAX APIs that expect callable stateless pytrees such as `odeint` or even other pytree-based Module systems. `nnx.Pytree` is a frozen view of any NNX object that is both a pytree and acts as a proxy over the object's methods.
+
+```{code-cell} ipython3
+from jax.experimental import ode
+
+rngs = nnx.Rngs(0)
+model = nnx.Sequential(
+  nnx.Linear(2, 64, rngs=rngs),
+  nnx.relu,
+  nnx.Linear(64, 2, rngs=rngs)
+)
+jax_model = nnx.Pytree(model)
+
+y0 = jax.numpy.array([0.5, -0.5])
+
+def dy_dt(y, t, jax_model):
+  return jax_model(y)
+
+t = jax.numpy.linspace(0, 1, 10)
+y = ode.odeint(dy_dt, y0, t, jax_model)
+
+nnx.display(jax_model)
+print(f"{y.shape = }")
+```

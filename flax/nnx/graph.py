@@ -424,6 +424,19 @@ def flatten(
   node: Node,
   /,
   *,
+  with_paths: tp.Literal[False],
+  return_variables: tp.Literal[False],
+  ref_index: RefMap | None = None,
+  ref_outer_index: RefMap | None = None,
+) -> tuple[
+  GraphDef[Node],
+  list[tp.Any],
+]: ...
+@tp.overload
+def flatten(
+  node: Node,
+  /,
+  *,
   with_paths: tp.Literal[True],
   return_variables: tp.Literal[True],
   ref_index: RefMap | None = None,
@@ -2088,7 +2101,14 @@ def _to_nested_state(
   return states
 
 
-def _merge_to_flat_state(states: tp.Iterable[tp.Any]):
+def _merge_to_flat_state(states: tp.Sequence[tp.Any]) -> list[tp.Any]:
+  if isinstance(states[0], list):
+    if len(states) != 1:
+      raise ValueError(
+        f'When a list is passed, only one state is expected, got: {states!r}'
+      )
+    return states[0]
+
   flat_state: list[tuple[PathParts, tp.Any]] = []
 
   for state in states:
