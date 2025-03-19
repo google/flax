@@ -20,6 +20,7 @@ import functools
 import threading
 import typing as tp
 
+from flax import config
 from flax.nnx import filterlib, reprlib, traversals, variablelib
 from flax.nnx import statelib
 from flax.nnx.proxy_caller import (
@@ -299,6 +300,11 @@ class VariableDef(reprlib.Representable, tp.Generic[Node]):
       subtree_renderer=subtree_renderer,
     )
 
+if config.flax_use_flaxlib:
+  import flaxlib
+
+  jax.tree_util.register_static(flaxlib.VariableDef)
+  globals()['VariableDef'] = flaxlib.VariableDef
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False, slots=True)
@@ -331,9 +337,6 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       metadata=self.metadata,
     )
 
-  def replace(self, **kwargs):
-    return dataclasses.replace(self, **kwargs)
-
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
 
@@ -356,6 +359,13 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       path=path,
       subtree_renderer=subtree_renderer,
     )
+
+
+if config.flax_use_flaxlib:
+  import flaxlib
+
+  jax.tree_util.register_static(flaxlib.NodeDef)
+  globals()['NodeDef'] = flaxlib.NodeDef
 
 
 @jax.tree_util.register_static
@@ -599,13 +609,13 @@ def _graph_flatten(
   values, metadata = node_impl.flatten(node)
   num_attributes = len(values)
   nodedef = NodeDef(
-    type=node_impl.type,
-    index=index,
-    outer_index=ref_outer_index[node]
+    node_impl.type,
+    index,
+    ref_outer_index[node]
     if is_graph_node_ and ref_outer_index and node in ref_outer_index
     else None,
-    num_attributes=num_attributes,
-    metadata=metadata,
+    num_attributes,
+    metadata,
   )
   nodes.append(nodedef)
 
