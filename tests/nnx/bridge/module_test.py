@@ -521,6 +521,26 @@ class TestBridgeModule(absltest.TestCase):
     params = model.init(jax.random.key(0), x)['params']
     self.assertSameElements(['zzz'], params.keys())
 
+  def test_linen_layer_naming(self):
+    class Dense(bridge.Module):
+      dout: int
+      @bridge.compact
+      def __call__(self, x):
+        return x @ self.param('w', lambda _: jnp.ones((x.shape[-1], self.dout)))
+
+    class MLP(bridge.Module):
+      nlayers: int
+      def setup(self):
+        self.layers = [Dense(4, name=f'layer_{i}') for i in range(self.nlayers)]
+      def __call__(self, x):
+        for layer in self.layers:
+          x = layer(x)
+        return x
+
+    model = MLP(nlayers=3)
+    x = jnp.ones((2, 4))
+    params = model.init(jax.random.key(0), x)['params']
+    self.assertSameElements([f'layer_{i}' for i in range(3)], params.keys())
 
 
 if __name__ == '__main__':

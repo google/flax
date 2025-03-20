@@ -143,37 +143,34 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
 
   name = None
   if parent_ctx is not None:
-    want_name = 'name' in kwargs and 'name' in inspect.get_annotations(cls)
-    if not want_name and not parent_ctx.in_compact and 'name' in kwargs:
-      raise ValueError(
-        f"'name' can only be set in @compact functions. If in setup(), "
-          "use parent's `self.<attr_name> to set the submodule name.")
+    if 'parent' in kwargs:
+      parent = kwargs.pop('parent')
+      if parent_ctx.in_compact and parent is not None:
+        raise ValueError(
+          f"'parent' can only be set to None, got {type(parent).__name__}"
+        )
+    else:
+      parent = parent_ctx.module
 
-    if parent_ctx.in_compact:
-      if 'parent' in kwargs:
-        parent = kwargs.pop('parent')
-        if parent is not None:
-          raise ValueError(
-            f"'parent' can only be set to None, got {type(parent).__name__}"
-          )
-      else:
-        if 'name' in kwargs:
-          name = kwargs['name'] if want_name else kwargs.pop('name')
-          if not isinstance(name, str):
-            raise ValueError(f"'name' must be a 'str', got {type(name).__name__}")
-        else:
-          name = _auto_submodule_name(parent_ctx, cls)
-        parent = parent_ctx.module
+    if 'name' in kwargs:
+      name = kwargs['name']
+      if not 'name' in inspect.get_annotations(cls):
+         kwargs.pop('name')
+      if not isinstance(name, str):
+        raise ValueError(f"'name' must be a 'str', got {type(name).__name__}")
+    elif parent_ctx.in_compact:
+      name = _auto_submodule_name(parent_ctx, cls)
 
   module = nnx_module.ModuleMeta.__call__(cls, *args, **kwargs)
   module.scope = None
   module.attr_priorities = {}
 
-  # compact behavior
   if parent is not None:
     assert parent.scope is not None
-    assert name is not None
-    setattr(parent, name, module)
+    # compact, or setup if `name` exists
+    if name is not None:
+      setattr(parent, name, module)
+      parent.set_attr_priority(name, AttrPriority.INIT_PARENT)
 
   return module  # type: ignore
 
@@ -182,9 +179,10 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
 ModuleMeta.__call__ = _module_meta_call  # type: ignore
 
 class AttrPriority(enum.IntEnum):
-  HIGH = 1
-  DEFAULT = 2
-  LOW = 3
+  HIGH = 0
+  INIT_PARENT = 20
+  DEFAULT = 50
+  LOW = 100
 
 
 class PriorityStr(str):
