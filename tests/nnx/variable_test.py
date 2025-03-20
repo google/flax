@@ -81,6 +81,18 @@ class TestVariableState(absltest.TestCase):
 
     self.assertEqual(result, 6)
 
+  def test_binary_ops(self):
+    v1 = nnx.Param(2)
+    v2 = nnx.Param(3)
+
+    result = v1 + v2
+
+    self.assertEqual(result, 5)
+
+    v1 += v2
+
+    self.assertEqual(v1.value, 5)
+
 
 if __name__ == '__main__':
   absltest.main()

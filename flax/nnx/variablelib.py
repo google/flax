@@ -397,90 +397,148 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return item in self.value  # type: ignore
 
   def __add__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__add__(other)  # type: ignore
 
   def __sub__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__sub__(other)  # type: ignore
 
   def __mul__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__mul__(other)  # type: ignore
 
   def __matmul__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__matmul__(other)  # type: ignore
 
   def __truediv__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__truediv__(other)  # type: ignore
 
   def __floordiv__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__floordiv__(other)  # type: ignore
 
   def __mod__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__mod__(other)  # type: ignore
 
   def __divmod__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__divmod__(other)  # type: ignore
 
   def __pow__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__pow__(other)  # type: ignore
 
   def __lshift__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__lshift__(other)  # type: ignore
 
   def __rshift__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rshift__(other)  # type: ignore
 
   def __and__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__and__(other)  # type: ignore
 
   def __xor__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__xor__(other)  # type: ignore
 
   def __or__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__or__(other)  # type: ignore
 
   def __radd__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__radd__(other)  # type: ignore
 
   def __rsub__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rsub__(other)  # type: ignore
 
   def __rmul__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rmul__(other)  # type: ignore
 
   def __rmatmul__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rmatmul__(other)  # type: ignore
 
   def __rtruediv__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rtruediv__(other)  # type: ignore
 
   def __rfloordiv__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rfloordiv__(other)  # type: ignore
 
   def __rmod__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rmod__(other)  # type: ignore
 
   def __rdivmod__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rdivmod__(other)  # type: ignore
 
   def __rpow__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rpow__(other)  # type: ignore
 
   def __rlshift__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rlshift__(other)  # type: ignore
 
   def __rrshift__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rrshift__(other)  # type: ignore
 
   def __rand__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rand__(other)  # type: ignore
 
   def __rxor__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__rxor__(other)  # type: ignore
 
   def __ror__(self, other) -> A:
+    if isinstance(other, Variable):
+      other = other.value
     return self.value.__ror__(other)  # type: ignore
 
   def __iadd__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__iadd__'):
       value.__iadd__(other)
@@ -489,6 +547,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __isub__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__isub__'):
       value.__isub__(other)
@@ -497,6 +557,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __imul__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__imul__'):
       value.__imul__(other)
@@ -505,6 +567,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __imatmul__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__imatmul__'):
       value.__imatmul__(other)
@@ -513,6 +577,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __itruediv__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__itruediv__'):
       value.__itruediv__(other)
@@ -521,6 +587,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __ifloordiv__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__ifloordiv__'):
       value.__ifloordiv__(other)
@@ -529,6 +597,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __imod__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__imod__'):
       value.__imod__(other)
@@ -537,6 +607,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __ipow__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__ipow__'):
       value.__ipow__(other)
@@ -545,6 +617,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __ilshift__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__ilshift__'):
       value.__ilshift__(other)
@@ -553,6 +627,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __irshift__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__irshift__'):
       value.__irshift__(other)
@@ -561,6 +637,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __iand__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__iand__'):
       value.__iand__(other)
@@ -569,6 +647,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __ixor__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__ixor__'):
       value.__ixor__(other)
@@ -577,6 +657,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self
 
   def __ior__(self: V, other) -> V:
+    if isinstance(other, Variable):
+      other = other.value
     value = self.value
     if hasattr(value, '__ior__'):
       value.__ior__(other)
