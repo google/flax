@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import functools
 import typing as tp
 
 import jax
@@ -751,14 +752,11 @@ class Conv(Module):
       kernel_size_dilated = [
         (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
-      zero_pad: tp.List[tuple[int, int]] = [(0, 0)]
-      pads = (
-        zero_pad
-        + [((k - 1) // 2, k // 2) for k in kernel_size_dilated]
-        + [(0, 0)]
-      )
+      pads = [((k - 1) // 2, k // 2) for k in kernel_size_dilated] + [(0, 0)]
       padding_mode = {'CIRCULAR': 'wrap', 'REFLECT': 'reflect'}[padding_lax]
-      inputs = jnp.pad(inputs, pads, mode=padding_mode)
+      inputs = jax.vmap(
+          functools.partial(jnp.pad, pad_width=pads, mode=padding_mode)
+      )(inputs)
       padding_lax = 'VALID'
     elif padding_lax == 'CAUSAL':
       if len(kernel_size) != 1:
