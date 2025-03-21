@@ -191,7 +191,7 @@ class _DynamicContext(threading.local):
   # 3.7
 
   def __init__(self):
-    self.module_stack = [
+    self.module_stack: list['Module' | None] = [
       None,
     ]
     self.capture_stack = []
