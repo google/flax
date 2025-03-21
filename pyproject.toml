@@ -185,6 +185,8 @@ filterwarnings = [
     "ignore:.*divide by zero encountered in.*:RuntimeWarning",
     # DeprecationWarning: numpy.core is deprecated
     "ignore:.*numpy.core is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: shape requires ndarray or scalar arguments
+    "ignore:.*shape requires ndarray or scalar arguments.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
