@@ -473,13 +473,6 @@ def vjp(
     has_aux: Optional, bool. Indicates whether ``fn`` returns a pair where the
      first element is considered the output of the mathematical function to be
      differentiated and the second element is auxiliary data. Default ``False``.
-    reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
-      ``fn`` implicitly broadcasts a value over that axis, the backward pass
-      will perform a ``psum`` of the corresponding gradient. Otherwise, the
-      VJP will be per-example over named axes. For example, if ``'batch'``
-      is a named batch axis, ``vjp(f, *args, reduce_axes=('batch',))`` will
-      create a VJP function that sums over the batch while ``vjp(f, *args)``
-      will create a per-example VJP.
     vjp_variables: The vjpfun will return a cotangent vector for all
       variable collections specified by this filter.
     variables: other variables collections that are available inside `fn` but
@@ -496,6 +489,9 @@ def vjp(
     ``(primals_out, vjpfun, aux)`` tuple where ``aux`` is the auxiliary data
     returned by ``fn``.
   """
+  if reduce_axes:
+    raise NotImplementedError('reduce_axes argument to vjp is deprecated')
+  del reduce_axes
 
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     vjp_vars, other_vars = variable_groups
@@ -512,7 +508,7 @@ def vjp(
       return y, (aux, repack_fn(scope))
 
     y, bwd, (aux, out_vars) = jax.vjp(
-      wrapper, vjp_vars, *args, reduce_axes=reduce_axes, has_aux=True
+      wrapper, vjp_vars, *args, has_aux=True
     )
     treedef = jax.tree_util.tree_structure(scope)
     bwd = jax.tree_util.Partial(functools.partial(_bwd_wrapper, treedef), bwd)
@@ -570,13 +566,6 @@ def value_and_grad(
     has_aux: Optional, bool. Indicates whether ``fn`` returns a pair where the
      first element is considered the output of the mathematical function to be
      differentiated and the second element is auxiliary data. Default ``False``.
-    reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
-      ``fn`` implicitly broadcasts a value over that axis, the backward pass
-      will perform a ``psum`` of the corresponding gradient. Otherwise, the
-      VJP will be per-example over named axes. For example, if ``'batch'``
-      is a named batch axis, ``vjp(f, *args, reduce_axes=('batch',))`` will
-      create a VJP function that sums over the batch while ``vjp(f, *args)``
-      will create a per-example VJP.
     variables: other variables collections that are available inside `fn` but
       do not receive a cotangent.
     rngs: the prngs that are available inside `fn`.
@@ -588,6 +577,10 @@ def value_and_grad(
     ``(primals_out, aux, grads)`` tuple where ``aux`` is the auxiliary data
     returned by ``fn``.
   """
+  if reduce_axes:
+    raise NotImplementedError(
+        'reduce_axes argument to value_and_grad is deprecated')
+  del reduce_axes
 
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     @functools.wraps(fn)
@@ -604,7 +597,6 @@ def value_and_grad(
       wrapper,
       *args,
       has_aux=True,
-      reduce_axes=reduce_axes,
     )
 
     inputs_grad = bwd(jax.numpy.ones_like(y))
