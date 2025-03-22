@@ -268,7 +268,7 @@ jax.tree_util.register_static(NodeRef)
 @dataclasses.dataclass(frozen=True, repr=False)
 class VariableDef(reprlib.Representable, tp.Generic[Node]):
   type: type[Node]
-  index: int
+  index: int  # TODO(cgarciae): make Optional instead of using -1
   outer_index: int | None
   metadata: HashableMapping[str, tp.Any]
 
@@ -320,7 +320,11 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
   attributes: tuple[
     tuple[
       Key,
-      NodeDef[tp.Any] | VariableDef[tp.Any] | NodeRef[tp.Any] | Static[tp.Any],
+      NodeDef[tp.Any]
+      | VariableDef[tp.Any]
+      | NodeRef[tp.Any]
+      | Static[tp.Any]
+      | ArrayAttr,
     ],
     ...,
   ]
@@ -387,6 +391,7 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
+  # TODO(cgarciae): remove this method
   def apply(
     self, state: GraphState, *states: GraphState
   ) -> ApplyCaller[tuple[GraphDef[Node], GraphState]]:
@@ -407,9 +412,15 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
 
 jax.tree_util.register_static(NodeDef)
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class ArrayAttr:
+  pass
+
+
+ARRAY_ATTR = ArrayAttr()
+
 GraphDef = tp.Union[NodeDef[Node], NodeRef[Node], VariableDef[Node]]
 PureState = tuple[GraphDef[Node], GraphState]
-
 
 @tp.overload
 def flatten(
@@ -494,7 +505,7 @@ def flatten(
   if ref_index is None:
     ref_index = RefMap()
 
-  leaves: list[StateLeaf | Variable[tp.Any]] = []
+  leaves: list[StateLeaf | Variable[tp.Any] | jax.Array | np.ndarray] = []
   path: list[Key] | None = [] if with_paths else None
   paths: list[PathParts] | None = [] if with_paths else None
   node_impl = get_node_impl(node)
@@ -523,7 +534,7 @@ def _graph_flatten(
   path: list[Key] | None,
   ref_index: RefMap,
   ref_outer_index: RefMap | None,
-  leaves: list[StateLeaf | Variable[tp.Any]],
+  leaves: list[StateLeaf | Variable[tp.Any] | jax.Array | np.ndarray],
   paths: list[PathParts] | None,
   return_variables: bool,
 ) -> NodeDef | NodeRef | VariableDef:
@@ -539,6 +550,7 @@ def _graph_flatten(
     index = len(ref_index)
     ref_index[node] = index
   else:
+    # TODO(cgarciae): use None instead of -1
     index = -1
 
   if is_variable:
@@ -565,7 +577,14 @@ def _graph_flatten(
     raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
 
   attributes: list[
-    tuple[Key, Static[tp.Any] | NodeDef[tp.Any] | VariableDef | NodeRef[tp.Any]]
+    tuple[
+      Key,
+      Static[tp.Any]
+      | ArrayAttr
+      | NodeDef[tp.Any]
+      | VariableDef
+      | NodeRef[tp.Any],
+    ]
   ] = []
 
   values, metadata = node_impl.flatten(node)
@@ -585,16 +604,12 @@ def _graph_flatten(
         return_variables,
       )
       attributes.append((key, nodedef))
+    elif isinstance(value, (jax.Array, np.ndarray)):
+      if paths is not None:
+        paths.append(tuple(path))  # type: ignore
+      attributes.append((key, ARRAY_ATTR))
+      leaves.append(value)
     else:
-      if isinstance(value, (jax.Array, np.ndarray)):
-        if path is not None:
-          path_str = '/'.join(map(str, path))
-          raise ValueError(
-            f'Arrays leaves are not supported, at {path_str!r}: {value}'
-          )
-        else:
-          raise ValueError(f'Arrays leaves are not supported, found {value}')
-      # static_fields.append((key, value))
       attributes.append((key, Static(value)))
 
     if path is not None:
@@ -695,9 +710,7 @@ def _graph_fingerprint(
         append_fn(variable_index)
         for key_value in value._var_metadata.items():
           append_fn(key_value)
-    else:
-      if isinstance(value, (jax.Array, np.ndarray)):
-        raise ValueError(f'Arrays leaves are not supported: {value}')
+    elif not isinstance(value, (jax.Array, np.ndarray)):
       append_fn(value)
 
 
@@ -961,6 +974,11 @@ def _graph_unflatten(
     for key, value in nodedef.attributes:
       if type(value) is Static:
         children.append((key, value.value))
+      elif type(value) is ArrayAttr:
+        if not leaves:
+          raise ValueError('Not enough leaves to unflatten the graph')
+        array = leaves.popleft()
+        children.append((key, array))
       elif type(value) is NodeRef:
         children.append((key, index_ref[value.index]))
       elif type(value) is NodeDef:
@@ -1126,8 +1144,16 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
         raise ValueError(f'Expected a subgraph for {key!r}, but got: {value!r}')
       _graph_update_dynamic(current_value, value)
     else:
-      # case 3: state leaf is being updated
-      if not isinstance(current_value, Variable):
+      if isinstance(current_value, jax.Array | np.ndarray):
+        if isinstance(node_impl, PytreeNodeImpl):
+          raise ValueError(
+            f'Cannot set key {key!r} on immutable node of '
+            f'type {type(node).__name__}'
+          )
+        node_impl.set_key(node, key, value)
+        continue
+      elif not isinstance(current_value, Variable):
+        # case 3: state leaf is being updated
         raise ValueError(
           f'Trying to update a non-Variable attribute {key!r} with a Variable: '
           f'{value!r}'
@@ -1255,7 +1281,8 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
   cached_ref_index: RefMap = RefMap()
 
   def create_static_cache(x):
-    if is_graph_node(x):
+    # TODO(cgarciae): support Array attribute updates for graph nodes
+    if is_graph_node(x) or isinstance(x, Variable):
       graphdef, flat_state = flatten(
         x, with_paths=True, return_variables=True, ref_index=original_ref_index
       )
