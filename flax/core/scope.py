@@ -59,6 +59,12 @@ traceback_util.register_exclusion(__file__)
 
 T = TypeVar('T')
 
+MISSING_KEY_ERROR = lambda key: KeyError(f'Key: {key} is not in the variables belonging '
+                                         'to this scope. Perhaps the variable you are '
+                                         'trying to access has not been defined yet. '
+                                         'Please make sure you access variables after '
+                                         'shape inference and that you use the proper key.')
+
 
 Filter = Union[bool, str, typing.Collection[str], 'DenyList']
 
@@ -494,14 +500,16 @@ class Scope:
       k: v for k, v in self._variables.items() if in_filter(self.mutable, k)
     }
     if config.flax_return_frozendict:
-      return freeze(xs)
+      xs = freeze(xs)  # type: ignore
+      return xs.set_error_handlers(missing_key=MISSING_KEY_ERROR)
     return xs
 
   def variables(self) -> VariableDict | dict[str, Any]:
     """Returns an immutable copy of the variables belonging to this Scope."""
     self._populate_collections()
     if config.flax_return_frozendict:
-      return freeze(self._variables)
+      xs = freeze(self._variables)
+      return xs.set_error_handlers(missing_key=MISSING_KEY_ERROR)
     return self._variables
 
   def _validate_trace_level(self):

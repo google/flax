@@ -173,6 +173,20 @@ class FrozenDictTest(parameterized.TestCase):
       frozen,
     )
 
+  def test_error_handlers(self):
+    xs = FrozenDict()
+    xs = xs.set_error_handlers(
+      missing_key=lambda key: KeyError(f'Missing key: {key}'),
+      set_item=lambda key, value: ValueError(
+        f'Cannot set key/value pair: {key}/{value}. '
+        'FrozenDict is immutable.'
+      )
+    )
+    with self.assertRaisesRegex(KeyError, 'Missing key: a'):
+      xs['a']
+    with self.assertRaisesRegex(ValueError, 'Cannot set key/value pair: a/1.'):
+      xs['a'] = 1
+
 
 if __name__ == '__main__':
   absltest.main()

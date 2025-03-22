@@ -3338,5 +3338,26 @@ class ShareScopeTest(absltest.TestCase):
     self.assertNotIn('main_child', params['params'])
     self.assertIn('child', params['params'])
 
+  def test_module_variables_missing_key(self):
+    class MyModule(nn.Module):
+      @compact
+      def __call__(self, x):
+        bias = DummyModule()
+        output = bias(x)
+        return output, bias.variables
+
+    with set_config('flax_return_frozendict', True):
+      with_variables = MyModule()
+      x = jnp.ones((1, 2))
+      (_, bias_variables), all_variables = with_variables.init_with_output(random.PRNGKey(0), x)
+
+      self.assertTrue(isinstance(bias_variables, FrozenDict))
+      self.assertTrue(isinstance(all_variables, FrozenDict))
+      self.assertTrue(isinstance(bias_variables['params'], FrozenDict))
+
+      with self.assertRaisesRegex(KeyError, "not in the variables belonging"):
+        _ = bias_variables['params']['bias_0']
+
+
 if __name__ == '__main__':
   absltest.main()

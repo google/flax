@@ -16,12 +16,14 @@
 
 import collections
 from types import MappingProxyType
+import typing as tp
 from typing import Any, TypeVar
 from collections.abc import Hashable, Mapping
 
 import jax
 
 from flax import serialization
+from flax.error_handlers import ErrorHandlers
 
 
 class FrozenKeysView(collections.abc.KeysView):
@@ -54,9 +56,9 @@ def _indent(x, num_spaces):
 class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
 
-  __slots__ = ('_dict', '_hash')
+  __slots__ = ('_dict', '_hash', '_error_handlers')
 
-  def __init__(self, *args, __unsafe_skip_copy__=False, **kwargs):  # pylint: disable=invalid-name
+  def __init__(self, *args, __unsafe_skip_copy__=False, __missing_key_err__=None, __set_item_err__=None, **kwargs):  # pylint: disable=invalid-name
     # make sure the dict is as
     xs = dict(*args, **kwargs)
     if __unsafe_skip_copy__:
@@ -65,14 +67,33 @@ class FrozenDict(Mapping[K, V]):
       self._dict = _prepare_freeze(xs)
 
     self._hash = None
+    self._error_handlers = ErrorHandlers(
+      missing_key=__missing_key_err__, set_item=__set_item_err__
+    )
 
   def __getitem__(self, key):
+    if not self.__contains__(key) and self._error_handlers.missing_key is not None:
+      raise self._error_handlers.missing_key(key)
     v = self._dict[key]
     if isinstance(v, dict):
-      return FrozenDict(v)
+      xs = FrozenDict(v)
+
+      # Ensure that nested FrozenDict has the same error handlers as the parent.
+      return xs.set_error_handlers(
+        missing_key=self._error_handlers.missing_key,
+        set_item=self._error_handlers.set_item,
+      )
+    if isinstance(v, FrozenDict):
+      # Ensure that nested FrozenDict has the same error handlers as the parent.
+      return v.set_error_handlers(
+        missing_key=self._error_handlers.missing_key,
+        set_item=self._error_handlers.set_item,
+      )
     return v
 
   def __setitem__(self, key, value):
+    if self._error_handlers.set_item is not None:
+      raise self._error_handlers.set_item(key, value)
     raise ValueError('FrozenDict is immutable.')
 
   def __contains__(self, key):
@@ -113,6 +134,30 @@ class FrozenDict(Mapping[K, V]):
         h ^= hash((key, value))
       self._hash = h
     return self._hash
+
+  def set_error_handlers(
+    self,
+    missing_key: tp.Optional[tp.Callable[[str], Exception]] | None = None,
+    set_item: tp.Optional[tp.Callable[[str, Any], Exception]] | None = None
+  ) -> 'FrozenDict[K, V]':
+    """Set error handlers for missing key and set item operations.
+
+    Example:
+
+      >>> from flax.core import FrozenDict
+      >>> xs = FrozenDict()
+      >>> xs = xs.set_error_handlers(missing_key=lambda key: KeyError(...),
+      ...                            set_item=lambda key, value: ValueError(...))
+
+    Args:
+      missing_key: A callable that raises an exception when a key is missing.
+      set_item: A callable that raises an exception when an item is set.
+    Returns:
+      A new FrozenDict with the error handlers set.
+    """
+    return type(self)(
+      dict(self._dict), __missing_key_err__=missing_key, __set_item_err__=set_item
+    )
 
   def copy(
     self, add_or_replace: Mapping[K, V] = MappingProxyType({})
