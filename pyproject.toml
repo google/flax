@@ -14,7 +14,7 @@ dependencies = [
     "numpy>=1.23.2; python_version>='3.11'",
     "numpy>=1.26.0; python_version>='3.12'",
     # keep in sync with jax-version in .github/workflows/build.yml
-    "jax>=0.4.27",
+    "jax>=0.5.1",
     "msgpack",
     "optax",
     "orbax-checkpoint",
@@ -163,8 +163,6 @@ filterwarnings = [
     "ignore:.*the function signature of MultiHeadDotProductAttention's `__call__` method has changed.*:DeprecationWarning",
     # DeprecationWarning: ml_dtypes.float8_e4m3b11 is deprecated.
     "ignore:.*ml_dtypes.float8_e4m3b11 is deprecated.*:DeprecationWarning",
-    # DeprecationWarning: jax.config.define_bool_state is deprecated. Please use other libraries for configuration instead.
-    "ignore:.*jax.config.define_bool_state is deprecated.:DeprecationWarning",
     # pytest-cov uses a deprecated feature of pytest-xdist. (2023-11-06)
     "ignore:The --rsyncdir command line argument and rsyncdirs config variable are deprecated.:DeprecationWarning",
     # DeprecationWarning: jax.random.KeyArray is deprecated.
