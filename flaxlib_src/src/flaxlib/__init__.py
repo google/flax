@@ -13,4 +13,7 @@
 # limitations under the License.
 
 from .flaxlib_cpp import RefMap as RefMap
-from .flaxlib_cpp import _graph_fingerprint as _graph_fingerprint
+from .flaxlib_cpp import IndexMap as IndexMap
+from .flaxlib_cpp import NodeDef as NodeDef
+from .flaxlib_cpp import VariableDef as VariableDef
+from .flaxlib_cpp import NodeRef as NodeRef

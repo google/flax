@@ -116,14 +116,14 @@ def main(argv):
       loss = jnp.mean((y - y_pred) ** 2)
       return {'loss': loss}
 
-    cached_train_step_nnx = nnx.cached_partial(train_step_nnx, model, optimizer)
-    cached_test_step_nnx = nnx.cached_partial(test_step_nnx, model)
+    # cached_train_step_nnx = nnx.cached_partial(train_step_nnx, model, optimizer)
+    # cached_test_step_nnx = nnx.cached_partial(test_step_nnx, model)
 
     for step, batch in enumerate(dataset(X, Y, batch_size)):
-      cached_train_step_nnx(batch)
+      train_step_nnx(model, optimizer, batch)
 
       if step % 1000 == 0:
-        logs = cached_test_step_nnx((X, Y))
+        logs = test_step_nnx(model, (X, Y))
 
       if step >= total_steps - 1:
         break
