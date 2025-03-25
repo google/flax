@@ -68,29 +68,8 @@ struct NbObjectEqual
   }
 };
 
-NB_MAKE_OPAQUE(std::unordered_map<nb::object, int, NbObjectHash, NbObjectEqual>);
-
 namespace flaxlib
 {
-  //---------------------------------------------------------------
-  // RefMap
-  //---------------------------------------------------------------
-
-  using RefMap = std::unordered_map<nb::object, int, NbObjectHash, NbObjectEqual>;
-
-  std::optional<int> ref_map_get(RefMap &map, nb::object &key, std::optional<int> default_value = std::nullopt)
-  {
-    auto it = map.find(key);
-    if (it != map.end())
-    {
-      return it->second;
-    }
-    else
-    {
-      return std::nullopt;
-    }
-  }
-
   //---------------------------------------------------------------
   // NNXContext
   //---------------------------------------------------------------
@@ -150,149 +129,359 @@ namespace flaxlib
   }
 
   //---------------------------------------------------------------
-  // fingerprint
+  // IndexMap
   //---------------------------------------------------------------
-  std::tuple<nb::object, nb::object> _key_values_metadata(
-      PythonContext &ctx,
-      nb::object &node,
-      nb::object &node_impl)
+
+  struct IndexMap : public std::unordered_map<int, nb::object>
   {
-    if (nb::isinstance(node, ctx.Object))
+  };
+
+  //---------------------------------------------------------------
+  // RefMap
+  //---------------------------------------------------------------
+
+  struct RefMapKeysIterator
+  {
+    std::unordered_map<intptr_t, std::tuple<nb::object, int>>::iterator it;
+    std::unordered_map<intptr_t, std::tuple<nb::object, int>>::iterator end;
+
+    RefMapKeysIterator(std::unordered_map<intptr_t, std::tuple<nb::object, int>>::iterator it, std::unordered_map<intptr_t, std::tuple<nb::object, int>>::iterator end)
+        : it(it), end(end) {}
+
+    nb::object __next__()
     {
-      nb::dict nodes_dict = node.attr("__dict__");
-      nb::handle object_state = nodes_dict["_object__state"];
-      nb::del(nodes_dict["_object__state"]);
-      auto nodes = nodes_dict.items();
-      nodes.sort();
-      nodes_dict["_object__state"] = object_state;
-      auto metadata = nb::make_tuple(node.type(), object_state.attr("_initializing"));
-      return {nodes, metadata};
-    }
-    else if (PyList_Check(node.ptr()) || PyTuple_Check(node.ptr()))
-    {
-      int i = 0;
-      nb::list values;
-      for (const auto &value : node)
+      if (it == end)
       {
-        values.append(nb::make_tuple(i, value));
-        i += 1;
+        throw nb::stop_iteration();
       }
-      return {values, nb::none()};
+      auto elem = it->second;
+      ++it;
+      return std::get<0>(elem);
     }
-    else
-    {
-      auto values_metadata = node_impl.attr("flatten")(node);
-      auto values = values_metadata[0];
-      auto metadata = values_metadata[1];
-      return {values, metadata};
-    }
-  }
+  };
 
-  nb::tuple _graph_fingerprint_recursive(
-      PythonContext &ctx,
-      nb::object &node,
-      nb::object &node_impl,
-      RefMap &ref_index,
-      RefMap &new_ref_index,
-      int &next_index)
+  struct RefMapItemsIterator
   {
-    bool is_pytree_node = node_impl.type().is(ctx.PytreeNodeImpl);
-    bool is_graph_node = node_impl.type().is(ctx.GraphNodeImpl);
+    std::unordered_map<intptr_t, std::tuple<nb::object, int>>::iterator it;
+    std::unordered_map<intptr_t, std::tuple<nb::object, int>>::iterator end;
 
-    if (is_pytree_node)
+    RefMapItemsIterator(std::unordered_map<intptr_t, std::tuple<nb::object, int>>::iterator it, std::unordered_map<intptr_t, std::tuple<nb::object, int>>::iterator end)
+        : it(it), end(end) {}
+
+    RefMapItemsIterator __iter__()
     {
-      // pass
-    }
-    else if (ref_index.find(node) != ref_index.end())
-    {
-      return nb::make_tuple(nb_id(node), node.type(), ref_index[node]);
-    }
-    else if (new_ref_index.find(node) != new_ref_index.end())
-    {
-      return nb::make_tuple(nb_id(node), node.type(), new_ref_index[node]);
+      return *this;
     }
 
-    // only cache graph nodes
+    nb::tuple __next__()
+    {
+      if (it == end)
+      {
+        throw nb::stop_iteration();
+      }
+      auto elem = it->second;
+      ++it;
+      return nb::make_tuple(std::get<0>(elem), std::get<1>(elem));
+    }
+  };
+
+  struct RefMap
+  {
+    std::unordered_map<intptr_t, std::tuple<nb::object, int>> mapping;
+
+    RefMap() {}
+
+    RefMap(const nb::object &iterable) : RefMap()
+    {
+      for (auto item : iterable)
+      {
+        nb::object obj = item[0];
+        auto value = nb::cast<int>(item[1]);
+        mapping[nb_id(obj)] = {obj, value};
+      }
+    }
+
+    void update(const RefMap &other)
+    {
+      for (const auto &[key_id, value_tuple] : other.mapping)
+      {
+        mapping[key_id] = value_tuple;
+      }
+    }
+
+    int __getitem__(const nb::object &key)
+    {
+      return std::get<1>(mapping[nb_id(key)]);
+    }
+
+    void __setitem__(const nb::object &key, int value)
+    {
+      mapping[nb_id(key)] = std::make_tuple(key, value);
+    }
+
+    int __len__() const
+    {
+      return mapping.size();
+    }
+
+    bool __contains__(const nb::object &key) const
+    {
+      return mapping.find(nb_id(key)) != mapping.end();
+    }
+
+    RefMapKeysIterator __iter__()
+    {
+      return RefMapKeysIterator(mapping.begin(), mapping.end());
+    };
+
+    RefMapItemsIterator items()
+    {
+      return RefMapItemsIterator(mapping.begin(), mapping.end());
+    }
+
+    std::optional<int> get(const nb::object &key, std::optional<int> default_value = std::nullopt)
+    {
+      auto it = mapping.find(nb_id(key));
+      if (it != mapping.end())
+      {
+        return std::get<1>(it->second);
+      }
+      return default_value;
+    }
+  };
+
+  static IndexMap indexmap_from_refmap(const RefMap &refmap)
+  {
+    IndexMap indexmap;
+    for (const auto &[_, value_index] : refmap.mapping)
+    {
+      nb::object value = std::get<0>(value_index);
+      int index = std::get<1>(value_index);
+      indexmap[index] = value;
+    }
+    return indexmap;
+  };
+
+  static RefMap refmap_from_indexmap(const IndexMap &indexmap)
+  {
+    RefMap refmap;
+    for (const auto &[index, value] : indexmap)
+    {
+      refmap.mapping[nb_id(value)] = std::make_tuple(value, index);
+    }
+    return refmap;
+  };
+
+  //---------------------------------------------------------------
+  // NodeDef
+  //---------------------------------------------------------------
+
+  struct NodeDef
+  {
+    nb::object type;
+    std::optional<int> index;
+    std::optional<int> outer_index;
+    int num_attributes;
+    nb::object metadata;
+
+    NodeDef(nb::object type, std::optional<int> index, std::optional<int> outer_index, int num_attributes, nb::object metadata)
+        : type(type), index(index), outer_index(outer_index), num_attributes(num_attributes), metadata(metadata) {}
+
+    NodeDef with_no_outer_index() const
+    {
+      return NodeDef(type, index, std::nullopt, num_attributes, metadata);
+    }
+
+    NodeDef with_same_outer_index() const
+    {
+      return NodeDef(type, index, index, num_attributes, metadata);
+    }
+
+    bool __eq__(const nb::object &other_obj) const
+    {
+      if (!nb::isinstance<NodeDef>(other_obj))
+      {
+        return false;
+      }
+      NodeDef other = nb::cast<NodeDef>(other_obj);
+      return type.equal(other.type) && index == other.index && outer_index == other.outer_index && num_attributes == other.num_attributes && metadata.equal(other.metadata);
+    }
+
+    int __hash__() const
+    {
+      // return nb::hash(type) ^ nb::hash(nb::cast(index)) ^ nb::hash(nb::cast(outer_index)) ^ nb::hash(nb::cast(num_attributes)) ^ nb::hash(metadata);
+      return nb::hash(nb::make_tuple(type, index, outer_index, num_attributes, metadata));
+    }
+
+    nb::tuple __getstate__() const
+    {
+      return nb::make_tuple(type, index, outer_index, num_attributes, metadata);
+    }
+
+    static void __setstate__(NodeDef &nodedef, nb::tuple &t)
+    {
+      new (&nodedef) NodeDef(t[0], nb::cast<std::optional<int>>(t[1]), nb::cast<std::optional<int>>(t[2]), nb::cast<int>(t[3]), t[4]);
+    }
+  };
+
+  //---------------------------------------------------------------
+  // VariableDef
+  //---------------------------------------------------------------
+
+  struct VariableDef
+  {
+    nb::object type;
     int index;
-    if (is_graph_node)
-    {
-      index = new_ref_index[node] = next_index;
-      next_index += 1;
-    }
-    else
-    {
-      index = -1;
-    }
+    std::optional<int> outer_index;
+    nb::object metadata;
 
-    std::vector<nb::object> attributes;
+    VariableDef(nb::object type, int index, std::optional<int> outer_index, nb::object metadata)
+        : type(type), index(index), outer_index(outer_index), metadata(metadata) {}
 
-    auto [values, metadata] = _key_values_metadata(ctx, node, node_impl);
-
-    for (const auto &key_value : values)
+    VariableDef with_no_outer_index() const
     {
-      nb::object key = key_value[0];
-      nb::object value = key_value[1];
-      auto value_node_impl = ctx.get_node_impl(value);
-      if (!value_node_impl.is_none())
-      {
-        auto node_fp = _graph_fingerprint_recursive(ctx, value, value_node_impl, ref_index, new_ref_index, next_index);
-        attributes.push_back(nb::make_tuple(key, node_fp));
-      }
-      else if (nb::isinstance(value, ctx.Variable))
-      {
-        if (ref_index.find(value) != ref_index.end())
-        {
-          attributes.push_back(nb::make_tuple(key, nb_id(value), value.type(), ref_index[value]));
-        }
-        else if (new_ref_index.find(value) != new_ref_index.end())
-        {
-          attributes.push_back(nb::make_tuple(key, nb_id(value), value.type(), new_ref_index[value]));
-        }
-        else
-        {
-          auto variable_index = new_ref_index[value] = next_index;
-          next_index += 1;
-          auto var_meta = nb::tuple(value.attr("_var_metadata").attr("items")());
-          attributes.push_back(nb::make_tuple(key, nb_id(value), value.type(), variable_index, var_meta));
-        }
-      }
-      else // static attribute
-      {
-        if (nb::isinstance(value, ctx.jax_Array) || nb::isinstance(value, ctx.np_ndarray))
-        {
-          auto repr = "Arrays leaves are not supported: " + nb::cast<std::string>(nb::repr(value));
-        }
-        attributes.push_back(nb::make_tuple(key, value));
-      }
+      return VariableDef(type, index, std::nullopt, metadata);
     }
 
-    auto node_fp = nb::make_tuple(
-        is_graph_node ? nb::cast(nb_id(node)) : nb::none(),
-        node_impl.attr("type"),
-        index,
-        vector_to_tuple(attributes),
-        metadata);
+    VariableDef with_same_outer_index() const
+    {
+      return VariableDef(type, index, index, metadata);
+    }
 
-    return node_fp;
-  }
+    bool __eq__(const nb::object &other_obj) const
+    {
+      if (!nb::isinstance<VariableDef>(other_obj))
+      {
+        return false;
+      }
+      VariableDef other = nb::cast<VariableDef>(other_obj);
+      return type.equal(other.type) && index == other.index && outer_index == other.outer_index && metadata.equal(other.metadata);
+    }
 
-  nb::tuple _graph_fingerprint(
-      nb::object &node,
-      nb::object &node_impl,
-      RefMap &ref_index,
-      RefMap &new_ref_index,
-      int next_index)
+    int __hash__() const
+    {
+      // return nb::hash(type) ^ nb::hash(nb::cast(index)) ^ nb::hash(nb::cast(outer_index)) ^ nb::hash(metadata);
+      return nb::hash(nb::make_tuple(type, index, outer_index, metadata));
+    }
+
+    nb::tuple __getstate__() const
+    {
+      return nb::make_tuple(type, index, outer_index, metadata);
+    }
+
+    static void __setstate__(VariableDef &variabledef, nb::tuple &t)
+    {
+      new (&variabledef) VariableDef(t[0], nb::cast<int>(t[1]), nb::cast<std::optional<int>>(t[2]), t[3]);
+    }
+  };
+
+  //---------------------------------------------------------------
+  // NodeRef
+  //---------------------------------------------------------------
+
+  struct NodeRef
   {
-    auto ctx = get_python_context();
-    auto node_fp = _graph_fingerprint_recursive(ctx, node, node_impl, ref_index, new_ref_index, next_index);
-    return nb::make_tuple(node_fp, next_index);
-  }
+    int index;
+
+    NodeRef(int index)
+        : index(index) {}
+
+    bool __eq__(const nb::object &other_obj) const
+    {
+      if (!nb::isinstance<NodeRef>(other_obj))
+      {
+        return false;
+      }
+      NodeRef other = nb::cast<NodeRef>(other_obj);
+      return index == other.index;
+    }
+
+    int __hash__() const
+    {
+      return nb::hash(nb::cast(index));
+    }
+
+    nb::tuple __getstate__() const
+    {
+      return nb::make_tuple(index);
+    }
+
+    static void __setstate__(NodeRef &noderef, nb::tuple &t)
+    {
+      new (&noderef) NodeRef(nb::cast<int>(t[0]));
+    }
+  };
 
   NB_MODULE(flaxlib_cpp, m)
   {
-    // Remove the conflicting binding
-    nb::bind_map<RefMap>(m, "RefMap")
-        .def("get", &ref_map_get, nb::arg("key").none(), nb::arg("default_value").none());
-    m.def("_graph_fingerprint", &_graph_fingerprint);
+    nb::bind_map<IndexMap>(m, "IndexMap")
+        .def_static("from_refmap", &indexmap_from_refmap);
+    nb::class_<flaxlib::RefMapKeysIterator>(m, "RefMapKeysIterator")
+        .def("__next__", &flaxlib::RefMapKeysIterator::__next__);
+
+    nb::class_<flaxlib::RefMapItemsIterator>(m, "RefMapItemsIterator")
+        .def("__iter__", &flaxlib::RefMapItemsIterator::__iter__)
+        .def("__next__", &flaxlib::RefMapItemsIterator::__next__);
+
+    nb::class_<flaxlib::RefMap>(m, "RefMap")
+        .def(nb::init<>())
+        .def(nb::init<nb::object>(), nb::arg("iterable"))
+        .def("update", &flaxlib::RefMap::update)
+        .def_static("from_indexmap", &refmap_from_indexmap)
+        .def("__getitem__", &flaxlib::RefMap::__getitem__, nb::arg("key").none())
+        .def("__setitem__", &flaxlib::RefMap::__setitem__, nb::arg("key").none(), nb::arg("value"))
+        .def("__len__", &flaxlib::RefMap::__len__)
+        .def("__contains__", &flaxlib::RefMap::__contains__, nb::arg("key").none())
+        .def("__iter__", &flaxlib::RefMap::__iter__)
+        .def("items", &flaxlib::RefMap::items)
+        .def("get", &flaxlib::RefMap::get, nb::arg("key").none(), nb::arg("default_value").none());
+
+    nb::class_<flaxlib::NodeDef>(m, "NodeDef")
+        .def(nb::init<nb::object, std::optional<int>, std::optional<int>, int, nb::object>(),
+             nb::arg("type"), nb::arg("index").none(), nb::arg("outer_index").none(), nb::arg("num_attributes"), nb::arg("metadata").none())
+        .def_prop_ro("type", [](const flaxlib::NodeDef &n)
+                     { return n.type; })
+        .def_prop_ro("index", [](const flaxlib::NodeDef &n)
+                     { return n.index; })
+        .def_prop_ro("outer_index", [](const flaxlib::NodeDef &n)
+                     { return n.outer_index; })
+        .def_prop_ro("num_attributes", [](const flaxlib::NodeDef &n)
+                     { return n.num_attributes; })
+        .def_prop_ro("metadata", [](const flaxlib::NodeDef &n)
+                     { return n.metadata; })
+        .def("with_no_outer_index", &flaxlib::NodeDef::with_no_outer_index)
+        .def("with_same_outer_index", &flaxlib::NodeDef::with_same_outer_index)
+        .def("__eq__", &flaxlib::NodeDef::__eq__, nb::arg().none())
+        .def("__hash__", &flaxlib::NodeDef::__hash__)
+        .def("__getstate__", &flaxlib::NodeDef::__getstate__)
+        .def("__setstate__", &flaxlib::NodeDef::__setstate__);
+
+    nb::class_<flaxlib::VariableDef>(m, "VariableDef")
+        .def(nb::init<nb::object, int, std::optional<int>, nb::object>(),
+             nb::arg("type"), nb::arg("index"), nb::arg("outer_index").none(), nb::arg("metadata").none())
+        .def_prop_ro("type", [](const flaxlib::VariableDef &n)
+                     { return n.type; })
+        .def_prop_ro("index", [](const flaxlib::VariableDef &n)
+                     { return n.index; })
+        .def_prop_ro("outer_index", [](const flaxlib::VariableDef &n)
+                     { return n.outer_index; })
+        .def_prop_ro("metadata", [](const flaxlib::VariableDef &n)
+                     { return n.metadata; })
+        .def("with_no_outer_index", &flaxlib::VariableDef::with_no_outer_index)
+        .def("with_same_outer_index", &flaxlib::VariableDef::with_same_outer_index)
+        .def("__eq__", &flaxlib::VariableDef::__eq__, nb::arg().none())
+        .def("__hash__", &flaxlib::VariableDef::__hash__)
+        .def("__getstate__", &flaxlib::VariableDef::__getstate__)
+        .def("__setstate__", &flaxlib::VariableDef::__setstate__);
+
+    nb::class_<flaxlib::NodeRef>(m, "NodeRef")
+        .def(nb::init<int>(),
+             nb::arg("index"))
+        .def_prop_ro("index", [](const flaxlib::NodeRef &n)
+                     { return n.index; })
+        .def("__eq__", &flaxlib::NodeRef::__eq__, nb::arg().none())
+        .def("__hash__", &flaxlib::NodeRef::__hash__)
+        .def("__getstate__", &flaxlib::NodeRef::__getstate__)
+        .def("__setstate__", &flaxlib::NodeRef::__setstate__);
   }
 } // namespace flaxlib

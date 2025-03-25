@@ -220,7 +220,7 @@ def unflatten_mapping(xs: Any,
   result: dict[Any, Any] = {}
   for path, value in xs:
     if sep is not None:
-      path = path.split(sep)
+      path = path.split(sep)  # type: ignore
     if value is empty_node:
       value = {}
     cursor = result
