@@ -20,6 +20,7 @@ import functools
 import threading
 import typing as tp
 
+from flax import config
 from flax.nnx import filterlib, reprlib, traversals, variablelib
 from flax.nnx import statelib
 from flax.nnx.proxy_caller import (
@@ -63,27 +64,47 @@ def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
 def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
   return isinstance(x, Variable)
 
+class IndexMap(dict[Index, tp.Any]):
+  @staticmethod
+  def from_refmap(refmap: RefMap) -> IndexMap:
+    indexmap = IndexMap()
+    indexmap.update((index, value) for value, index in refmap.items())
+    return indexmap
+
+if config.flax_use_flaxlib:
+  import flaxlib
+
+  globals()['IndexMap'] = flaxlib.IndexMap
+
 
 # RefMap = dict
-class RefMap(tp.MutableMapping[A, B]):
+class RefMap(tp.MutableMapping[tp.Any, int]):
   """A mapping that hashes keys by their identity."""
 
   def __init__(
-      self,
-      mapping: tp.Mapping[A, B] | tp.Iterable[tuple[A, B]] | None = None,
-      /,
+    self,
+    mapping: tp.Mapping[tp.Any, int]
+    | tp.Iterable[tuple[tp.Any, int]]
+    | None = None,
+    /,
   ):
-    self._mapping: dict[int, tuple[A, B]] = dict()
+    self._mapping: dict[int, tuple[tp.Any, int]] = dict()
     if mapping is not None:
       self.update(mapping)
 
-  def __getitem__(self, key: A) -> B:
+  @staticmethod
+  def from_indexmap(indexmap: IndexMap) -> RefMap:
+    refmap = RefMap()
+    refmap.update((value, index) for index, value in indexmap.items())
+    return refmap
+
+  def __getitem__(self, key: tp.Any) -> int:
     return self._mapping[id(key)][1]
 
-  def __setitem__(self, key: A, value: B):
+  def __setitem__(self, key: tp.Any, value: int):
     self._mapping[id(key)] = (key, value)
 
-  def __delitem__(self, key: A):
+  def __delitem__(self, key: tp.Any):
     del self._mapping[id(key)]
 
   def __len__(self) -> int:
@@ -92,12 +113,18 @@ class RefMap(tp.MutableMapping[A, B]):
   def __contains__(self, key: tp.Any) -> bool:
     return id(key) in self._mapping
 
-  def __iter__(self) -> tp.Iterator[A]:
+  def __iter__(self) -> tp.Iterator[tp.Any]:
     for key, _ in self._mapping.values():
       yield key
 
-  def items(self) -> tp.ItemsView[A, B]:
+  def items(self) -> tp.ItemsView[tp.Any, int]:
     return self._mapping.values()  # type: ignore
+
+
+if config.flax_use_flaxlib:
+  import flaxlib
+
+  globals()['RefMap'] = flaxlib.RefMap
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -258,6 +285,11 @@ class NodeRef(tp.Generic[Node], reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
+if config.flax_use_flaxlib:
+  import flaxlib
+
+  jax.tree_util.register_static(flaxlib.NodeRef)
+  globals()['NodeRef'] = flaxlib.NodeRef
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False)
@@ -299,6 +331,11 @@ class VariableDef(reprlib.Representable, tp.Generic[Node]):
       subtree_renderer=subtree_renderer,
     )
 
+if config.flax_use_flaxlib:
+  import flaxlib
+
+  jax.tree_util.register_static(flaxlib.VariableDef)
+  globals()['VariableDef'] = flaxlib.VariableDef
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False, slots=True)
@@ -331,9 +368,6 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       metadata=self.metadata,
     )
 
-  def replace(self, **kwargs):
-    return dataclasses.replace(self, **kwargs)
-
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
 
@@ -356,6 +390,13 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       path=path,
       subtree_renderer=subtree_renderer,
     )
+
+
+if config.flax_use_flaxlib:
+  import flaxlib
+
+  jax.tree_util.register_static(flaxlib.NodeDef)
+  globals()['NodeDef'] = flaxlib.NodeDef
 
 
 @jax.tree_util.register_static
@@ -548,7 +589,7 @@ def _graph_flatten(
   node: Node,
   node_impl: NodeImpl[Node, Leaf, AuxData] | None,
   path: list[Key] | None,
-  ref_index: RefMap[tp.Any, int],
+  ref_index: RefMap,
   ref_outer_index: RefMap | None,
   nodes: list[NodeDef[tp.Any] | VariableDef[tp.Any] | NodeRef[tp.Any]],
   attributes: list[tuple[Key, NodeAttr | ArrayAttr | Static[tp.Any]]],
@@ -556,14 +597,15 @@ def _graph_flatten(
   paths: list[PathParts] | None,
   return_variables: bool,
 ) -> None:
-  is_pytree_node_ = isinstance(node_impl, PytreeNodeImpl)
-  is_graph_node_ = isinstance(node_impl, GraphNodeImpl)
-  is_variable = isinstance(node, Variable)
+  is_pytree_node_ = type(node_impl) is PytreeNodeImpl
 
   index: int | None
   if not is_pytree_node_ and node in ref_index:
     nodes.append(NodeRef(index := ref_index[node]))
     return
+
+  is_graph_node_ = type(node_impl) is GraphNodeImpl
+  is_variable = isinstance(node, Variable)
 
   # only cache graph nodes
   if is_graph_node_ or is_variable:
@@ -600,13 +642,13 @@ def _graph_flatten(
   values, metadata = node_impl.flatten(node)
   num_attributes = len(values)
   nodedef = NodeDef(
-    type=node_impl.type,
-    index=index,
-    outer_index=ref_outer_index[node]
+    node_impl.type,
+    index,
+    ref_outer_index[node]
     if is_graph_node_ and ref_outer_index and node in ref_outer_index
     else None,
-    num_attributes=num_attributes,
-    metadata=metadata,
+    num_attributes,
+    metadata,
   )
   nodes.append(nodedef)
 
@@ -866,8 +908,8 @@ def unflatten(
   state: State[Key, tp.Any] | FlatState[tp.Any] | list[tp.Any],
   /,
   *,
-  index_ref: dict[Index, tp.Any] | None = None,
-  outer_index_outer_ref: dict[Index, tp.Any] | None = None,
+  index_ref: IndexMap | None = None,
+  outer_index_outer_ref: IndexMap | None = None,
 ) -> Node:
   """Unflattens a graphdef into a node with the given state.
 
@@ -893,7 +935,7 @@ def unflatten(
   else:
     raise ValueError(f'Unsupported state type: {type(state)}')
   if index_ref is None:
-    index_ref = {}
+    index_ref = IndexMap()
 
   if len(leaves) != graphdef.num_leaves:
     raise ValueError(
@@ -937,8 +979,8 @@ def _graph_unflatten(
     tuple[Key, NodeAttr | ArrayAttr | Static[tp.Any]]
   ],
   leaves_iter: tp.Iterator[tp.Any],
-  index_ref: dict[Index, tp.Any],
-  outer_index_outer_ref: dict[Index, tp.Any] | None,
+  index_ref: IndexMap,
+  outer_index_outer_ref: IndexMap | None,
 ) -> Node:
   """Recursive helper for graph_unflatten.
 
@@ -1002,7 +1044,7 @@ def _graph_unflatten(
   assert type(nodedef) is NodeDef
   if node_impl is None:
     raise RuntimeError(f'Unsupported type: {nodedef.type}, this is a bug.')
-  if nodedef.index in index_ref:
+  if nodedef.index is not None and nodedef.index in index_ref:
     raise RuntimeError(f'GraphDef index {nodedef.index} already used.')
 
   def _get_children() -> list[tuple[Key, tp.Any]]:
@@ -1215,7 +1257,7 @@ class StaticCache(tp.NamedTuple):
   paths: tuple[PathParts, ...]
   variables: list[Variable[tp.Any]]
   new_ref_index: RefMap
-  new_index_ref: dict[Index, tp.Any]
+  new_index_ref: IndexMap
 
   @staticmethod
   def create(
@@ -1224,7 +1266,7 @@ class StaticCache(tp.NamedTuple):
     variables: list[Variable[tp.Any]],
     new_ref_index: RefMap,
   ):
-    new_index_ref = {index: obj for obj, index in new_ref_index.items()}
+    new_index_ref = IndexMap.from_refmap(new_ref_index)
     final_graphdef: GraphDef[tp.Any]
     final_graphdef = graphdef.with_same_outer_index()
     return StaticCache(
@@ -1244,7 +1286,7 @@ class GraphContext(threading.local):
   )
   ref_index_stack: list[SplitContext] = dataclasses.field(default_factory=list)
   index_ref_stack: list[MergeContext] = dataclasses.field(default_factory=list)
-  tmp_static_cache: RefMap[tp.Any, StaticCache] | None = None
+  tmp_static_cache: RefMap | None = None
   caching: bool = False
 
 
@@ -1252,7 +1294,7 @@ GRAPH_CONTEXT = GraphContext()
 
 
 @contextlib.contextmanager
-def static_cache(static_cache: RefMap[tp.Any, StaticCache]):
+def static_cache(static_cache: RefMap):
   if GRAPH_CONTEXT.caching:
     yield
     return
@@ -1315,9 +1357,9 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
   Returns:
     A partial function expecting the remaining arguments to the original function.
   """
-  cache: RefMap[tp.Any, StaticCache] = RefMap()
+  cache: RefMap = RefMap()
   original_ref_index: RefMap = RefMap()
-  index_ref: dict[Index, tp.Any] = {}
+  index_ref: IndexMap = IndexMap()
   cached_ref_index: RefMap = RefMap()
 
   def create_static_cache(x):
@@ -1543,7 +1585,7 @@ def split_context(ctxtag: tp.Hashable | None = None):
 @dataclasses.dataclass
 class MergeContext:
   ctxtag: tp.Hashable | None
-  index_ref: dict[Index, tp.Any]
+  index_ref: IndexMap
   is_inner: bool | None
 
   def merge(
@@ -1669,7 +1711,7 @@ def merge_context(): ...
 def merge_context(ctxtag: tp.Hashable | None, inner: bool | None): ...
 @contextlib.contextmanager
 def merge_context(ctxtag: tp.Hashable | None = None, inner: bool | None = None):
-  GRAPH_CONTEXT.index_ref_stack.append(MergeContext(ctxtag, {}, inner))
+  GRAPH_CONTEXT.index_ref_stack.append(MergeContext(ctxtag, IndexMap(), inner))
 
   try:
     yield GRAPH_CONTEXT.index_ref_stack[-1]
@@ -1692,11 +1734,11 @@ class UpdateContext:
 
   tag: tp.Hashable
   outer_ref_outer_index: RefMap | None
-  outer_index_inner_ref: dict[Index, tp.Any] | None
+  outer_index_inner_ref: IndexMap | None
   # reverse caches
-  outer_index_outer_ref: dict[Index, tp.Any] | None
+  outer_index_outer_ref: IndexMap | None
   inner_ref_outer_index: RefMap | None
-  static_cache: RefMap[tp.Any, StaticCache] | None
+  static_cache: RefMap | None
 
   # define hash and eq to make this an opaque object
   def __hash__(self):
@@ -1717,13 +1759,11 @@ class UpdateContext:
       self.outer_index_inner_ref = None
       self.inner_ref_outer_index = None
 
-  def unflatten_end(self, index_ref: dict[Index, tp.Any], inner_merge: bool):
+  def unflatten_end(self, index_ref: IndexMap, inner_merge: bool):
     if inner_merge:
       # inner merge (2)
       self.outer_index_inner_ref = index_ref
-      self.inner_ref_outer_index = RefMap(
-        (obj, index) for index, obj in index_ref.items()
-      )
+      self.inner_ref_outer_index = RefMap.from_indexmap(index_ref)
 
 
 @dataclasses.dataclass

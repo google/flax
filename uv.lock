@@ -753,7 +753,9 @@ all = [
     { name = "matplotlib" },
 ]
 dev = [
+    { name = "nanobind" },
     { name = "pre-commit" },
+    { name = "scikit-build-core" },
 ]
 docs = [
     { name = "dm-haiku" },
@@ -833,6 +835,7 @@ requires-dist = [
     { name = "msgpack" },
     { name = "mypy", marker = "extra == 'testing'" },
     { name = "myst-nb", marker = "extra == 'docs'" },
+    { name = "nanobind", marker = "extra == 'dev'", specifier = ">=2.5.0" },
     { name = "nbstripout", marker = "extra == 'docs'" },
     { name = "numpy", marker = "python_full_version >= '3.11'", specifier = ">=1.23.2" },
     { name = "numpy", marker = "python_full_version >= '3.12'", specifier = ">=1.26.0" },
@@ -849,6 +852,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=5.4.1" },
     { name = "recommonmark", marker = "extra == 'docs'" },
     { name = "rich", specifier = ">=11.1" },
+    { name = "scikit-build-core", extras = ["pyproject"], marker = "extra == 'dev'", specifier = ">=0.11.0" },
     { name = "scikit-learn", marker = "extra == 'docs'" },
     { name = "sentencepiece", marker = "extra == 'testing'" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = ">=3.3.1" },
