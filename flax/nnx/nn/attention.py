@@ -19,6 +19,7 @@ from __future__ import annotations
 import functools
 from typing import Any
 from collections.abc import Callable
+import math
 
 import jax
 import jax.numpy as jnp
@@ -161,6 +162,9 @@ def dot_product_attention(
   https://arxiv.org/abs/1706.03762. It calculates the attention weights given
   query and key and combines the values using the attention weights.
 
+  Will use the more optimized `jax.nn.dot_product_attention` if dropout is
+  not activated and `module=None`.
+
   .. note::
     ``query``, ``key``, ``value`` needn't have any batch dimensions.
 
@@ -206,6 +210,22 @@ def dot_product_attention(
     query.shape[-2] == key.shape[-2] == value.shape[-2]
   ), 'q, k, v num_heads must match.'
   assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
+
+  # Criteria that invoke the more optimized dot product attention
+  if dropout_rate == 0.0 and module == None:
+    # make sure qkv batch are compressed to one dim
+    query_shape = query.shape
+    if len(query_shape) > 4:
+      def reshape_4d(x):
+        return jnp.reshape(x, (math.prod(x.shape[:-3]), *x.shape[-3:]))
+      query, key, value, bias, mask = jax.tree.map(
+        reshape_4d, (query, key, value, bias, mask))
+    if mask is not None:
+      mask = mask.astype(jnp.bool)
+    out = jax.nn.dot_product_attention(query, key, value, bias, mask)
+    if len(query_shape) > 4:
+      out = jnp.reshape(out, query_shape)
+    return out
 
   # compute attention weights
   attn_weights = dot_product_attention_weights(
