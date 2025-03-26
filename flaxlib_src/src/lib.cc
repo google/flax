@@ -129,6 +129,145 @@ namespace flaxlib
   }
 
   //---------------------------------------------------------------
+  // PytreeNodeImpl
+  //---------------------------------------------------------------
+  // @dataclasses.dataclass(frozen=True, slots=True)
+  // class NodeImplBase(tp.Generic[Node, Leaf, AuxData]):
+  //   type: type[Node]
+  //   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[Key, Leaf]], AuxData]]
+
+  //   def node_dict(self, node: Node) -> dict[Key, Leaf]:
+  //     nodes, _ = self.flatten(node)
+  //     return dict(nodes)
+
+  struct NodeImplBase
+  {
+    nb::object type;
+    nb::object flatten;
+
+    NodeImplBase(nb::object type, nb::object flatten)
+        : type(type), flatten(flatten) {}
+
+    nb::dict node_dict(nb::object &node)
+    {
+      nb::object nodes_aux = flatten(node);
+      nb::dict out;
+      for (auto elem : nodes_aux[0])
+      {
+        out[elem[0]] = elem[1];
+      }
+      return out;
+    }
+
+    bool __eq__(const nb::object &other_obj) const
+    {
+      if (!nb::isinstance<NodeImplBase>(other_obj))
+      {
+        return false;
+      }
+      NodeImplBase other = nb::cast<NodeImplBase>(other_obj);
+      return type.equal(other.type) && flatten.equal(other.flatten);
+    }
+
+    int __hash__() const
+    {
+      return nb::hash(nb::make_tuple(type, flatten));
+    }
+
+    nb::tuple __getstate__() const
+    {
+      return nb::make_tuple(type, flatten);
+    }
+
+    static void __setstate__(NodeImplBase &nodeimplbase, nb::tuple &t)
+    {
+      new (&nodeimplbase) NodeImplBase(t[0], t[1]);
+    }
+  };
+
+  // @dataclasses.dataclass(frozen=True, slots=True)
+  // class GraphNodeImpl(NodeImplBase):
+  //   set_key: tp.Callable[[tp.Any, Key, tp.Any], None]
+  //   pop_key: tp.Callable[[tp.Any, Key], tp.Any]
+  //   create_empty: tp.Callable[[tp.Any], tp.Any]
+  //   clear: tp.Callable[[tp.Any], None]
+  //   init: tp.Callable[[tp.Any, tp.Iterable[tuple[Key, tp.Any]]], None]
+
+  struct GraphNodeImpl : public NodeImplBase
+  {
+    nb::object set_key;
+    nb::object pop_key;
+    nb::object create_empty;
+    nb::object clear;
+    nb::object init;
+
+    GraphNodeImpl(nb::object type, nb::object flatten, nb::object set_key, nb::object pop_key, nb::object create_empty, nb::object clear, nb::object init)
+        : NodeImplBase(type, flatten), set_key(set_key), pop_key(pop_key), create_empty(create_empty), clear(clear), init(init) {}
+
+    bool __eq__(const nb::object &other_obj) const
+    {
+      if (!nb::isinstance<GraphNodeImpl>(other_obj))
+      {
+        return false;
+      }
+      GraphNodeImpl other = nb::cast<GraphNodeImpl>(other_obj);
+      return type.equal(other.type) && flatten.equal(other.flatten) && set_key.equal(other.set_key) && pop_key.equal(other.pop_key) && create_empty.equal(other.create_empty) && clear.equal(other.clear) && init.equal(other.init);
+    }
+
+    int __hash__() const
+    {
+      return nb::hash(nb::make_tuple(type, flatten, set_key, pop_key, create_empty, clear, init));
+    }
+
+    nb::tuple __getstate__() const
+    {
+      return nb::make_tuple(type, flatten, set_key, pop_key, create_empty, clear, init);
+    }
+
+    static void __setstate__(GraphNodeImpl &graphnodeimpl, nb::tuple &t)
+    {
+      new (&graphnodeimpl) GraphNodeImpl(t[0], t[1], t[2], t[3], t[4], t[5], t[6]);
+    }
+  };
+
+  // @dataclasses.dataclass(frozen=True, slots=True)
+  // class PytreeNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
+  //   unflatten: tp.Callable[[tp.Sequence[tuple[Key, Leaf]], AuxData], Node]
+
+  struct PytreeNodeImpl : public NodeImplBase
+  {
+    nb::object unflatten;
+
+    PytreeNodeImpl(nb::object type, nb::object flatten, nb::object unflatten)
+        : NodeImplBase(type, flatten), unflatten(unflatten) {}
+
+    bool __eq__(const nb::object &other_obj) const
+    {
+      if (!nb::isinstance<PytreeNodeImpl>(other_obj))
+      {
+        return false;
+      }
+      PytreeNodeImpl other = nb::cast<PytreeNodeImpl>(other_obj);
+      return unflatten.equal(other.unflatten);
+    }
+
+    int __hash__() const
+    {
+      return nb::hash(nb::make_tuple(type, flatten, unflatten));
+    }
+
+    nb::tuple __getstate__() const
+    {
+      return nb::make_tuple(type, flatten, unflatten);
+    }
+
+    static void __setstate__(PytreeNodeImpl &pytreenodeimpl, nb::tuple &t)
+    {
+      new (&pytreenodeimpl) PytreeNodeImpl(t[0], t[1], t[2]);
+    }
+  };
+
+  //---------------------------------------------------------------
   // IndexMap
   //---------------------------------------------------------------
 
@@ -239,6 +378,14 @@ namespace flaxlib
         return std::get<1>(it->second);
       }
       return default_value;
+    }
+
+    void update(const RefMap &other)
+    {
+      for (const auto &[key, value_index] : other.mapping)
+      {
+        mapping[key] = value_index;
+      }
     }
   };
 
@@ -406,6 +553,54 @@ namespace flaxlib
 
   NB_MODULE(flaxlib_cpp, m)
   {
+    nb::class_<NodeImplBase>(m, "NodeImplBase")
+        .def(nb::init<nb::object, nb::object>())
+        .def_prop_ro("type", [](const NodeImplBase &n)
+                     { return n.type; })
+        .def_prop_ro("flatten", [](const NodeImplBase &n)
+                     { return n.flatten; })
+        .def("node_dict", &NodeImplBase::node_dict, nb::arg().none())
+        .def("__eq__", &NodeImplBase::__eq__, nb::arg().none())
+        .def("__hash__", &NodeImplBase::__hash__)
+        .def("__getstate__", &NodeImplBase::__getstate__)
+        .def("__setstate__", &NodeImplBase::__setstate__);
+
+    nb::class_<GraphNodeImpl>(m, "GraphNodeImpl")
+        .def(nb::init<nb::object, nb::object, nb::object, nb::object, nb::object, nb::object, nb::object>())
+        .def_prop_ro("type", [](const GraphNodeImpl &n)
+                     { return n.type; })
+        .def_prop_ro("flatten", [](const GraphNodeImpl &n)
+                     { return n.flatten; })
+        .def_prop_ro("set_key", [](const GraphNodeImpl &n)
+                     { return n.set_key; })
+        .def_prop_ro("pop_key", [](const GraphNodeImpl &n)
+                     { return n.pop_key; })
+        .def_prop_ro("create_empty", [](const GraphNodeImpl &n)
+                     { return n.create_empty; })
+        .def_prop_ro("clear", [](const GraphNodeImpl &n)
+                     { return n.clear; })
+        .def_prop_ro("init", [](const GraphNodeImpl &n)
+                     { return n.init; })
+        .def("node_dict", &GraphNodeImpl::node_dict, nb::arg().none())
+        .def("__eq__", &GraphNodeImpl::__eq__, nb::arg().none())
+        .def("__hash__", &GraphNodeImpl::__hash__)
+        .def("__getstate__", &GraphNodeImpl::__getstate__)
+        .def("__setstate__", &GraphNodeImpl::__setstate__);
+
+    nb::class_<PytreeNodeImpl>(m, "PytreeNodeImpl")
+        .def(nb::init<nb::object, nb::object, nb::object>())
+        .def_prop_ro("type", [](const PytreeNodeImpl &n)
+                     { return n.type; })
+        .def_prop_ro("flatten", [](const PytreeNodeImpl &n)
+                     { return n.flatten; })
+        .def_prop_ro("unflatten", [](const PytreeNodeImpl &n)
+                     { return n.unflatten; })
+        .def("node_dict", &PytreeNodeImpl::node_dict, nb::arg().none())
+        .def("__eq__", &PytreeNodeImpl::__eq__, nb::arg().none())
+        .def("__hash__", &PytreeNodeImpl::__hash__)
+        .def("__getstate__", &PytreeNodeImpl::__getstate__)
+        .def("__setstate__", &PytreeNodeImpl::__setstate__);
+
     nb::bind_map<IndexMap>(m, "IndexMap")
         .def_static("from_refmap", &indexmap_from_refmap);
     nb::class_<flaxlib::RefMapKeysIterator>(m, "RefMapKeysIterator")
@@ -417,19 +612,20 @@ namespace flaxlib
 
     nb::class_<flaxlib::RefMap>(m, "RefMap")
         .def(nb::init<>())
-        .def(nb::init<nb::object>(), nb::arg("iterable"))
+        .def(nb::init<nb::object>())
         .def_static("from_indexmap", &refmap_from_indexmap)
-        .def("__getitem__", &flaxlib::RefMap::__getitem__, nb::arg("key").none())
-        .def("__setitem__", &flaxlib::RefMap::__setitem__, nb::arg("key").none(), nb::arg("value"))
+        .def("__getitem__", &flaxlib::RefMap::__getitem__, nb::arg())
+        .def("__setitem__", &flaxlib::RefMap::__setitem__, nb::arg(), nb::arg())
         .def("__len__", &flaxlib::RefMap::__len__)
-        .def("__contains__", &flaxlib::RefMap::__contains__, nb::arg("key").none())
+        .def("__contains__", &flaxlib::RefMap::__contains__, nb::arg())
         .def("__iter__", &flaxlib::RefMap::__iter__)
         .def("items", &flaxlib::RefMap::items)
-        .def("get", &flaxlib::RefMap::get, nb::arg("key").none(), nb::arg("default_value").none());
+        .def("get", &flaxlib::RefMap::get, nb::arg(), nb::arg().none())
+        .def("update", &flaxlib::RefMap::update);
 
     nb::class_<flaxlib::NodeDef>(m, "NodeDef")
         .def(nb::init<nb::object, std::optional<int>, std::optional<int>, int, nb::object>(),
-             nb::arg("type"), nb::arg("index").none(), nb::arg("outer_index").none(), nb::arg("num_attributes"), nb::arg("metadata").none())
+             nb::arg(), nb::arg().none(), nb::arg().none(), nb::arg(), nb::arg().none())
         .def_prop_ro("type", [](const flaxlib::NodeDef &n)
                      { return n.type; })
         .def_prop_ro("index", [](const flaxlib::NodeDef &n)
@@ -449,7 +645,7 @@ namespace flaxlib
 
     nb::class_<flaxlib::VariableDef>(m, "VariableDef")
         .def(nb::init<nb::object, int, std::optional<int>, nb::object>(),
-             nb::arg("type"), nb::arg("index"), nb::arg("outer_index").none(), nb::arg("metadata").none())
+             nb::arg(), nb::arg(), nb::arg().none(), nb::arg().none())
         .def_prop_ro("type", [](const flaxlib::VariableDef &n)
                      { return n.type; })
         .def_prop_ro("index", [](const flaxlib::VariableDef &n)
@@ -467,7 +663,7 @@ namespace flaxlib
 
     nb::class_<flaxlib::NodeRef>(m, "NodeRef")
         .def(nb::init<int>(),
-             nb::arg("index"))
+             nb::arg())
         .def_prop_ro("index", [](const flaxlib::NodeRef &n)
                      { return n.index; })
         .def("__eq__", &flaxlib::NodeRef::__eq__, nb::arg().none())

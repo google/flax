@@ -14,52 +14,24 @@
 
 import typing as tp
 
+class NodeImplBase:
+  pass
+
+class GraphNodeImpl:
+  pass
+
+class PytreeNodeImpl:
+  pass
+
 RefMap = tp.MutableMapping[tp.Any, int]
 IndexMap = dict[int, tp.Any]
 
 class NodeDef:
-  type: type
-  index: int | None
-  outer_index: int | None
-  num_attributes: int
-  metadata: tp.Any
-
-  def with_no_outer_index(self) -> NodeDef: ...
-  def with_same_outer_index(self) -> NodeDef: ...
-  def __eq__(self, other: tp.Any) -> bool: ...
-  def __hash__(self) -> int: ...
-  def __getstate__(
-    self,
-  ) -> tuple[tp.Any, tp.Any, tp.Any, tp.Any, tp.Any]: ...
-  @staticmethod
-  def __setstate__(
-    nodedef: NodeDef, state: tuple[tp.Any, tp.Any, tp.Any, tp.Any, tp.Any]
-  ) -> None: ...
+  pass
 
 class VariableDef:
-  type: type
-  index: int
-  outer_index: int | None
-  metadata: tp.Any
-
-  def with_no_outer_index(self) -> VariableDef: ...
-  def with_same_outer_index(self) -> VariableDef: ...
-  def __eq__(self, other: tp.Any) -> bool: ...
-  def __hash__(self) -> int: ...
-  def __getstate__(
-    self,
-  ) -> tuple[tp.Any, int, tp.Any, tp.Any]: ...
-  @staticmethod
-  def __setstate__(
-    variabledef: 'VariableDef', state: tuple[tp.Any, int, tp.Any, tp.Any]
-  ) -> None: ...
+  pass
 
 class NodeRef:
-  index: int
-
-  def __eq__(self, other: tp.Any) -> bool: ...
-  def __hash__(self) -> int: ...
-  def __getstate__(self) -> tuple[int]: ...
-  @staticmethod
-  def __setstate__(noderef: NodeRef, state: tuple[int]) -> None: ...
+  pass
 
