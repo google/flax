@@ -78,7 +78,7 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
     module = fn
     assert callable(fn)
   else:
-    if not hasattr(fn, '__self__') and isinstance(fn.__self__, Module):
+    if not (hasattr(fn, '__self__') and isinstance(fn.__self__, Module)):
       raise ValueError(f'{fn = } needs to be a method of an NNX Module.')
     module = fn.__self__
   _set_initializing(module, True)
