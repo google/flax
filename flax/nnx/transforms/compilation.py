@@ -95,10 +95,13 @@ class StateSharding(extract.PrefixMapping):
 
 
 def _jit_split_fn(ctx: graph.SplitContext, path, prefix, x):
-  if isinstance(prefix, StateSharding):
+  if type(prefix) is StateSharding:
     graphdef, *states = ctx.flatten(x, *prefix.filters)
     return extract.NodeStates.from_split(graphdef, *states, metadata=prefix)
-  return extract.NodeStates.from_split(*ctx.flatten(x, with_paths=False))
+  elif graph.GRAPH_CONTEXT.caching:
+    return extract.NodeStates.from_split(*ctx.flatten(x, with_paths=False))
+  else:
+    return extract.NodeStates.from_split(*ctx.flatten_fast(x))
 
 
 def _jit_merge_fn(ctx: graph.MergeContext, path, prefix, leaf) -> tp.Any:
