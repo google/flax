@@ -82,7 +82,7 @@ jobs:
   tests:
     name: Run Tests
     needs: [pre-commit, commit-count, test-import]
-    runs-on: ubuntu-20.04-16core
+    runs-on: ubuntu-24.04-16core
     strategy:
       matrix:
         python-version: ['3.10', '3.11']
