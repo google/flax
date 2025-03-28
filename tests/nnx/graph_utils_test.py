@@ -592,6 +592,25 @@ class TestGraphUtils(absltest.TestCase):
     self.assertFalse(hasattr(ctx, 'index_ref'))
     self.assertFalse(hasattr(ctx, 'ctxtag'))
 
+  def test_split_merge_context_example(self):
+    m1 = nnx.Dict({})
+    with nnx.update_context('example'):
+      with nnx.split_context('example') as ctx:
+        graphdef, state = ctx.split(m1)
+
+      @jax.jit
+      def f(graphdef, state):
+        with nnx.merge_context('example', True) as ctx:
+          m2 = ctx.merge(graphdef, state)
+        m2.a = 1
+        m2.ref = m2  # create a reference cycle
+        with nnx.split_context('example') as ctx:
+          return ctx.split(m2)
+
+      graphdef_out, state_out = f(graphdef, state)
+      with nnx.merge_context('example', False) as ctx:
+        m3 = ctx.merge(graphdef_out, state_out)
+
   def test_split_merge_context_nested(self):
     m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     m1 = nnx.Sequential(m2)
@@ -636,7 +655,7 @@ class TestGraphUtils(absltest.TestCase):
 
       @jax.jit
       def f(graphdef1, state1, graphdef2, state2):
-        with nnx.graph.merge_context(True, ctxtag) as ctx:
+        with nnx.graph.merge_context(ctxtag, True) as ctx:
           m1 = ctx.merge(graphdef1, state1)
           m2 = ctx.merge(graphdef2, state2)
 
@@ -657,7 +676,7 @@ class TestGraphUtils(absltest.TestCase):
           graphdef1, state1, graphdef2, state2
       )
 
-      with nnx.graph.merge_context(False, ctxtag) as ctx:
+      with nnx.graph.merge_context(ctxtag, False) as ctx:
         m1_out = ctx.merge(graphdef1, state1)
         m2_out = ctx.merge(graphdef2, state2)
 
