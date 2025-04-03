@@ -34,6 +34,7 @@ Shape = Sequence[Union[int, Any]]
 
 K_MASK = -2.3819763e38  # Set to a large negative number.
 DEFAULT_ROPE_BASE_FREQUENCY = 10_000
+DEFAULT_ROPE_SCALE_FACTOR = 1.0
 
 
 class AttentionType(enum.Enum):
@@ -86,6 +87,7 @@ class Attention(nnx.Module):
       *,
       rngs: nnx.Rngs,
       rope_base_frequency: int = DEFAULT_ROPE_BASE_FREQUENCY,
+      rope_scale_factor: float = DEFAULT_ROPE_SCALE_FACTOR,
       attn_logits_soft_cap: float | None = None,
       sliding_window_size: int | None = None,
       use_qk_norm: bool = False,
@@ -106,6 +108,7 @@ class Attention(nnx.Module):
         rngs=rngs,
     )
     self.rope_base_frequency = rope_base_frequency
+    self.rope_scale_factor = rope_scale_factor
     self.use_qk_norm = use_qk_norm
     self.sow_config = sow_config
 
@@ -154,6 +157,7 @@ class Attention(nnx.Module):
         segment_pos,
         head_dim=self.head_dim,
         max_wavelength=self.rope_base_frequency,
+        scale_factor=self.rope_scale_factor,
     )
     query_scaled = query_proj * self.query_pre_attn_scalar
     key_proj = positional_embeddings.apply_rope(
@@ -161,6 +165,7 @@ class Attention(nnx.Module):
         segment_pos,
         head_dim=self.head_dim,
         max_wavelength=self.rope_base_frequency,
+        scale_factor=self.rope_scale_factor,
     )
 
     # Cache is left aligned.
@@ -316,6 +321,7 @@ class Block(nnx.Module):
       *,
       rngs: nnx.Rngs,
       rope_base_frequency: int = DEFAULT_ROPE_BASE_FREQUENCY,
+      rope_scale_factor: float = DEFAULT_ROPE_SCALE_FACTOR,
       attn_logits_soft_cap: float | None = None,
       sliding_window_size: int | None = None,
       use_qk_norm: bool = False,
@@ -330,6 +336,7 @@ class Block(nnx.Module):
         query_pre_attn_scalar=query_pre_attn_scalar,
         attn_type=attn_type,
         rope_base_frequency=rope_base_frequency,
+        rope_scale_factor=rope_scale_factor,
         attn_logits_soft_cap=attn_logits_soft_cap,
         sliding_window_size=sliding_window_size,
         rngs=rngs,

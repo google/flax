@@ -69,6 +69,8 @@ class TransformerConfig:
   transpose_gating_einsum: bool = False
   local_base_frequency: int = modules.DEFAULT_ROPE_BASE_FREQUENCY
   global_base_frequency: int = modules.DEFAULT_ROPE_BASE_FREQUENCY
+  local_scale_factor: float = modules.DEFAULT_ROPE_SCALE_FACTOR
+  global_scale_factor: float = modules.DEFAULT_ROPE_SCALE_FACTOR
   use_qk_norm: bool = False
   sliding_window_size: int | None = None
 
@@ -298,6 +300,9 @@ class Transformer(nnx.Module):
             rope_base_frequency=config.local_base_frequency
             if attn_type == modules.AttentionType.LOCAL_SLIDING
             else config.global_base_frequency,
+            rope_scale_factor=config.local_scale_factor
+            if attn_type == modules.AttentionType.LOCAL_SLIDING
+            else config.global_scale_factor,
             use_qk_norm=config.use_qk_norm,
             sow_config=sow_config,
         )
