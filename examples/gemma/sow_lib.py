@@ -17,6 +17,7 @@
 import dataclasses
 from flax import nnx
 import jax
+import jax.numpy as jnp
 
 
 @jax.tree_util.register_dataclass
@@ -55,10 +56,10 @@ class LayerIntermediates:
           ]
         else:
           step_value = getattr(layer, field.name).value[0]
-      except AttributeError:
+      except AttributeError as exc:
         raise ValueError(
             f'Intermediate {field.name} is not in the step intermediates.'
-        )
+        ) from exc
       # This logic is the same for all intermediates. The second dimenions is
       # the length dimension, where we want to merge the intermediates from
       # multiple steps.
@@ -94,8 +95,10 @@ class TransformerIntermediates:
         self.embeddings = self.embeddings.at[:, decoding_step + 1, ...].set(
             transformer.embeddings.value[0][:, 0, ...]
         )
-      except AttributeError:
-        raise ValueError('Embeddings are not in the step intermediates.')
+      except AttributeError as exc:
+        raise ValueError(
+            'Embeddings are not in the step intermediates.'
+        ) from exc
     if len(self.layers) != len(transformer.layers):
       raise ValueError(
           'Number of layers in the transformer and intermediates do not match.'
@@ -167,9 +170,10 @@ class SowConfig:
       activations: jax.Array,
       module: nnx.Module,
   ):
-    """Sows top-k activations in a mlp hidden layer if configured."""
+    """Sows top-absolute-k activations in a mlp hidden layer if configured."""
     if self.mlp_hidden_topk:
-      values, indices = jax.lax.top_k(activations, self.mlp_hidden_topk)
+      _, indices = jax.lax.top_k(jnp.abs(activations), self.mlp_hidden_topk)
+      values = jnp.take_along_axis(activations, indices, axis=-1)
       module.sow(nnx.Intermediate, 'hidden_topk_values', values)
       module.sow(nnx.Intermediate, 'hidden_topk_indices', indices)
 
