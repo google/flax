@@ -80,6 +80,7 @@ from .fp8_ops import (
     Fp8DirectDotGeneralOp as Fp8DirectDotGeneralOp,
     Fp8DotGeneralOp as Fp8DotGeneralOp,
     NANOOFp8DotGeneralOp as NANOOFp8DotGeneralOp,
+    Fp8Einsum as Fp8Einsum,
 )
 from .initializers import (
     ones_init as ones_init,
