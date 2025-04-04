@@ -17,6 +17,7 @@ from absl.testing import absltest
 import numpy as np
 
 from flax import nnx
+from jax import numpy as jnp
 
 
 class TestLora(absltest.TestCase):
@@ -114,6 +115,14 @@ class TestLora(absltest.TestCase):
     assert ('lora_a' in params) and ('lora_b' in params)
     np.testing.assert_allclose(params['lora_a'].value, model.lora_a.value)
     assert lora_params == {}
+
+  def test_dtype(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.LoRA(3, 4, 2, dtype=jnp.float16, param_dtype=jnp.float32,
+                     rngs=rngs)
+    assert model.lora_a.value.dtype == jnp.float32
+    y = model(jnp.ones((1, 3)).astype(jnp.float32))
+    assert y.dtype == jnp.float16
 
 
 if __name__ == '__main__':
