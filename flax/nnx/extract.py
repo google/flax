@@ -16,7 +16,6 @@ import abc
 import typing as tp
 
 import jax
-# from jax._src.tree_util import broadcast_prefix
 
 from flax import struct
 from flax.nnx.object import Object
@@ -31,91 +30,6 @@ KeyPath = tuple[KeyEntry, ...]
 Prefix = tp.Any
 Leaf = tp.Any
 
-
-class ExtractionIndex(struct.PyTreeNode):
-  """Index of a graph node in a Pytree structure."""
-
-  index: Index = struct.field(pytree_node=False)
-
-
-@tp.overload
-def extract_graph_nodes(
-  pytree: A,
-  /,
-  *,
-  validate_fn: tp.Callable[[KeyPath, Prefix, Leaf], None] | None = None,
-) -> tuple[A, tuple[tp.Any, ...]]: ...
-@tp.overload
-def extract_graph_nodes(
-  pytree: A,
-  /,
-  *,
-  prefix: tp.Any,
-  validate_fn: tp.Callable[[KeyPath, Prefix, Leaf], None] | None = None,
-) -> tuple[A, tuple[tp.Any, ...], tuple[tp.Any, ...]]: ...
-def extract_graph_nodes(
-  pytree: A,
-  /,
-  *,
-  prefix: tp.Any = Missing,
-  validate_fn: tp.Callable[[KeyPath, Prefix, Leaf], None] | None = None,
-) -> (
-  tuple[A, tuple[tp.Any, ...]]
-  | tuple[A, tuple[tp.Any, ...], tuple[tp.Any, ...]]
-):
-  """Extracts all graph nodes from a pytree."""
-  nodes: dict[tp.Any, Index] = {}
-  node_prefixes = []
-  leaves = []
-
-  prefix_leaves = broadcast_prefix(
-    prefix,
-    pytree,
-    prefix_is_leaf=lambda x: x is None,
-  )
-  key_leaves, treedef = jax.tree_util.tree_flatten_with_path(pytree)
-
-  assert len(key_leaves) == len(prefix_leaves)
-
-  for (keypath, leaf), prefix_leaf in zip(key_leaves, prefix_leaves):
-    if validate_fn:
-      validate_fn(keypath, prefix_leaf, leaf)
-    if graph.is_graph_node(leaf):
-      if leaf not in nodes:
-        index = nodes[leaf] = len(nodes)
-        node_prefixes.append(prefix_leaf)
-      else:
-        index = nodes[leaf]
-        # check consistent aliasing
-        if prefix_leaf != node_prefixes[index]:
-          path_str = jax.tree_util.keystr(keypath)
-          raise ValueError(
-            f'Inconsistent aliasing detected. Node {type(leaf)} at path {path_str} '
-            f'has different prefixes: {prefix_leaf} and {node_prefixes[index]}.'
-          )
-      leaves.append(ExtractionIndex(index))
-    else:
-      leaves.append(leaf)
-
-  pytree_out = jax.tree.unflatten(treedef, leaves)
-
-  if prefix is Missing:
-    return pytree_out, tuple(nodes)  # type: ignore[bad-return-type]
-  else:
-    return pytree_out, tuple(nodes), tuple(node_prefixes)  # type: ignore[bad-return-type]
-
-
-def insert_graph_nodes(pytree: A, nodes: tuple[tp.Any, ...], /) -> A:
-  """Inserts graph nodes into a pytree."""
-
-  def _maybe_insert(x):
-    if isinstance(x, ExtractionIndex):
-      return nodes[x.index]
-    return x
-
-  return jax.tree.map(
-    _maybe_insert, pytree, is_leaf=lambda x: isinstance(x, ExtractionIndex)
-  )
 
 class PrefixMapping(abc.ABC):
   @abc.abstractmethod
@@ -342,7 +256,7 @@ def from_tree(
 ) -> tp.Any:
   if prefix is Missing or prefix is None:
     # fast path, no need for prefix broadcasting or consistent aliasing checks
-    with graph.merge_context(is_inner, ctxtag) as merge_ctx:
+    with graph.merge_context(ctxtag, is_inner) as merge_ctx:
 
       def maybe_split(x):
         if (
@@ -366,7 +280,7 @@ def from_tree(
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
 
-  with graph.merge_context(is_inner, ctxtag) as merge_ctx:
+  with graph.merge_context(ctxtag, is_inner) as merge_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
       if (
         map_non_graph_nodes
