@@ -452,6 +452,7 @@ def fp8_scaled_dot_general(
     rhs,
     dimension_numbers,
     precision=None,
+    preferred_element_type=None,
     *,
     lhs_scale=None,
     rhs_scale=None,
@@ -460,8 +461,12 @@ def fp8_scaled_dot_general(
     rhs_amax_history=None,
     grad_amax_history=None,
     quantize_compute_type=jnp.float32,
-    preferred_element_type=None
 ):
+  if precision != None:
+    warnings.warn(
+      'The function fp8_scaled_dot_general will set the "precision" and '
+      'disregard any provided "precision" argument.'
+    )
   q_lhs, new_lhs_scale = in_q(
       quantize_compute_type, jnp.float8_e4m3fn, lhs, lhs_scale, lhs_amax_history
   )
@@ -575,6 +580,14 @@ class Fp8DotGeneralBase(module.Module):
 
 
 class Fp8DotGeneralOp(Fp8DotGeneralBase):
+  def __post_init__(self):
+    super().__post_init__()
+    warnings.warn(
+      'The Fp8DotGeneralOp is deprecated. Use Fp8DirectDotGeneralOp or '
+      'Fp8Einsum instead.',
+      DeprecationWarning,
+    )
+
   def __call__(self, *args, **kwargs):
     x, k, dimension_numbers, comp_dtype = _parse_dot_inputs(
       *args, **kwargs
@@ -607,7 +620,8 @@ class Fp8DirectDotGeneralOp(Fp8DotGeneralBase):
       x,
       k,
       dimension_numbers,
-      None,
+      precision=None,
+      preferred_element_type=x.dtype,
       lhs_scale=self.input_scale.value,
       rhs_scale=self.kernel_scale.value,
       grad_scale=self.output_grad_scale.value,
@@ -615,7 +629,6 @@ class Fp8DirectDotGeneralOp(Fp8DotGeneralBase):
       rhs_amax_history=self.kernel_amax_history.value,
       grad_amax_history=self.output_grad_amax_history.value,
       quantize_compute_type=comp_dtype,
-      preferred_element_type=x.dtype
     )
 
     return y  # type: ignore
@@ -626,7 +639,9 @@ class NANOOFp8DotGeneralOp(Fp8DotGeneralOp):
 
 class Fp8Einsum(Fp8DotGeneralBase):
 
-  def __call__(self, eqn, lhs: jnp.ndarray, rhs: jnp.ndarray) -> jnp.ndarray:
+  def __call__(self, eqn, lhs: jnp.ndarray, rhs: jnp.ndarray,
+               precision: lax.Precision | None = None,
+               preferred_element_type: DTypeLike | None = None) -> jnp.ndarray:
     # Here we assume that the rhs is the weight and its dtype is the actual compute dtype (not storage dtype).
     # TODO(kaixih@nvidia): Better way to handle this?
     actual_compute_dtype = rhs.dtype
@@ -642,5 +657,7 @@ class Fp8Einsum(Fp8DotGeneralBase):
         grad_amax_history=self.output_grad_amax_history.value,
         quantize_compute_type=actual_compute_dtype
     )
-    out = jnp.einsum(eqn, lhs, rhs, _dot_general=dot_general_fn)
+    out = jnp.einsum(eqn, lhs, rhs, precision=precision,
+                     preferred_element_type=preferred_element_type,
+                     _dot_general=dot_general_fn)
     return out
