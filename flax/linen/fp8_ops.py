@@ -582,11 +582,12 @@ class Fp8DotGeneralBase(module.Module):
 class Fp8DotGeneralOp(Fp8DotGeneralBase):
   def __post_init__(self):
     super().__post_init__()
-    warnings.warn(
-      'The Fp8DotGeneralOp is deprecated. Use Fp8DirectDotGeneralOp or '
-      'Fp8Einsum instead.',
-      DeprecationWarning,
-    )
+    if type(self) is Fp8DotGeneralOp:
+      warnings.warn(
+        'The Fp8DotGeneralOp is deprecated. Use Fp8DirectDotGeneralOp or '
+        'Fp8Einsum instead.',
+        DeprecationWarning,
+      )
 
   def __call__(self, *args, **kwargs):
     x, k, dimension_numbers, comp_dtype = _parse_dot_inputs(
@@ -661,3 +662,6 @@ class Fp8Einsum(Fp8DotGeneralBase):
                      preferred_element_type=preferred_element_type,
                      _dot_general=dot_general_fn)
     return out
+
+# Alias for backward compatibility
+Fp8DotGeneral = Fp8DirectDotGeneralOp

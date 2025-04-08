@@ -1291,11 +1291,9 @@ class Fp8Test(parameterized.TestCase):
     
     
   @parameterized.parameters(
-    {'fp8_genre': 'OCP', 'use_direct_quant': True},
-    {'fp8_genre': 'OCP', 'use_direct_quant': False},
-    {'fp8_genre': 'NANOO', 'use_direct_quant': False}
+    {'fp8_genre': 'OCP'}, {'fp8_genre': 'NANOO'}
   )
-  def test_fp8_dot_general_injection(self, fp8_genre, use_direct_quant):
+  def test_fp8_dot_general_injection(self, fp8_genre):
     # Used to cast the inputs to be representable in FP8, so that the difference
     # of the results from the original gemm and fp8 gemm is small.
     cast_to_representable = functools.partial(
@@ -1314,14 +1312,7 @@ class Fp8Test(parameterized.TestCase):
       random.uniform(random_key, (16, 64)), e5m2_dtype
     )
 
-    if fp8_genre == 'NANOO':
-      assert use_direct_quant == False
-      quant_cls = nn.NANOOFp8DotGeneralOp
-    else:
-      quant_cls = (
-        nn.Fp8DirectDotGeneralOp
-        if use_direct_quant else nn.Fp8DotGeneralOp
-      )
+    quant_cls = nn.Fp8DotGeneral if fp8_genre == 'OCP' else nn.NANOOFp8DotGeneralOp
 
     def run(fp8_injection, expected_shapes):
       p = nn.DenseGeneral(features=64, name='dense')
@@ -1370,22 +1361,13 @@ class Fp8Test(parameterized.TestCase):
     np.testing.assert_allclose(dx1, dx2, atol=1e-04)
 
   @parameterized.parameters(
-    {'fp8_genre': 'OCP', 'use_direct_quant': True},
-    {'fp8_genre': 'OCP', 'use_direct_quant': False},
-    {'fp8_genre': 'NANOO', 'use_direct_quant': False}
+    {'fp8_genre': 'OCP'}, {'fp8_genre': 'NANOO'}
   )
-  def test_fp8_train_state(self, fp8_genre, use_direct_quant):
+  def test_fp8_train_state(self, fp8_genre):
     key, init_key, random_key = random.split(random.PRNGKey(seed=123), 3)
     x = random.uniform(random_key, (16, 16), dtype=jnp.float32)
 
-    if fp8_genre == 'NANOO':
-      assert use_direct_quant == False
-      quant_cls = nn.NANOOFp8DotGeneralOp
-    else:
-      quant_cls = (
-        nn.Fp8DirectDotGeneralOp
-        if use_direct_quant else nn.Fp8DotGeneralOp
-      )
+    quant_cls = nn.Fp8DotGeneral if fp8_genre == 'OCP' else nn.NANOOFp8DotGeneralOp
     dense = nn.DenseGeneral(
       features=32, use_bias=True, dot_general_cls=quant_cls
     )
