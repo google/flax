@@ -31,6 +31,7 @@ from typing import (
   overload,
 )
 from collections.abc import Callable, Iterable, Mapping, Sequence
+import weakref
 
 import jax
 import numpy as np
@@ -423,7 +424,11 @@ class Scope:
     """
     rngs = {k: LazyRng.create(v) for k, v in rngs.items()} if rngs else {}
     self._variables = variables
-    self.parent = parent
+    self._weak_ref_parent = None
+    # We are capturing a weak reference to the parent scope to avoid creating
+    # reference cycles.
+    if parent is not None:
+      self._weak_ref_parent = weakref.ref(parent)
     self.name = name
     self.path = tuple(path)
     self.debug_path = tuple(debug_path) or self.path
@@ -438,6 +443,21 @@ class Scope:
     self.reservations = collections.defaultdict(set)
 
     self._invalid = False
+
+  @property
+  def parent(self) -> Optional['Scope']:
+    """Returns the parent scope."""
+    if self._weak_ref_parent is None:
+      return None
+    return self._weak_ref_parent()
+
+  @parent.setter
+  def parent(self, parent: Optional['Scope']) -> None:
+    """Sets the parent scope."""
+    if parent is None:
+      self._weak_ref_parent = None
+    else:
+      self._weak_ref_parent = weakref.ref(parent)
 
   def __eq__(self, other: Any) -> bool:
     # If the root variable dict and path are the same, then two scopes behave
