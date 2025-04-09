@@ -1250,50 +1250,11 @@ def get_fp8_dtypes(fp8_genre):
 
 class Fp8Test(parameterized.TestCase):
   @parameterized.parameters(
-    {'x_shape': (16, 32), 'y_shape': (32, 64), 'g_shape': (16, 64), 'eqn': 'mk,kn->mn'},
-    {'x_shape': (2, 3, 32), 'y_shape': (64, 32), 'g_shape': (2, 3, 64), 'eqn': '...k,nk->...n'},
-    {'x_shape': (2, 3, 64), 'y_shape': (64, 32), 'g_shape': (2, 3, 32), 'eqn': '...k,kn->...n'},
+    {'fp8_genre': 'OCP', 'use_direct_quant': True},
+    {'fp8_genre': 'OCP', 'use_direct_quant': False},
+    {'fp8_genre': 'NANOO', 'use_direct_quant': False}
   )
-  def test_fp8_einsum(self, x_shape, y_shape, g_shape, eqn):
-    rng, key1, key2, key3 = random.split(random.key(42), 4)
-    x = random.normal(key1, x_shape)
-    y = random.normal(key2, y_shape)
-    g = random.normal(key3, g_shape)
-    e4m3_dtype = jnp.float8_e4m3fn
-    e5m2_dtype = jnp.float8_e5m2
-    cast_to_representable = functools.partial(
-        fp8_ops.qdq,
-        scale=jnp.ones((1,)),
-        compute_dtype=jnp.float32,
-    )
-
-    x = cast_to_representable(x, e4m3_dtype)
-    y = cast_to_representable(y, e4m3_dtype)
-    g = cast_to_representable(g, e5m2_dtype)
-
-    p = nn.Fp8Einsum()
-    vars = p.init(rng, eqn, x, y)
-    def loss_fn(vars, x, y):
-      out = p.apply(vars, eqn, x, y)
-      return jnp.sum(out * g.astype(out.dtype))
-    step_fn = jax.value_and_grad(loss_fn, argnums=[1, 2])
-    out, grads = jax.jit(step_fn)(vars, x, y)
-
-    def loss_fn_ref(x, y):
-      out = jnp.einsum(eqn, x, y)
-      return jnp.sum(out * g.astype(out.dtype))
-    step_fn_ref = jax.value_and_grad(loss_fn_ref, argnums=[0, 1])
-    out_ref, grads_ref = jax.jit(step_fn_ref)(x, y)
-
-    np.testing.assert_allclose(out, out_ref, atol=1e-02, rtol=1e-02)
-    np.testing.assert_allclose(grads[0], grads_ref[0], atol=1e-02, rtol=1e-02)
-    np.testing.assert_allclose(grads[1], grads_ref[1], atol=1e-02, rtol=1e-02)
-
-
-  @parameterized.parameters(
-    {'fp8_genre': 'OCP'}, {'fp8_genre': 'NANOO'}
-  )
-  def test_fp8_dot_general_injection(self, fp8_genre):
+  def test_fp8_dot_general_injection(self, fp8_genre, use_direct_quant):
     # Used to cast the inputs to be representable in FP8, so that the difference
     # of the results from the original gemm and fp8 gemm is small.
     cast_to_representable = functools.partial(
@@ -1312,7 +1273,14 @@ class Fp8Test(parameterized.TestCase):
       random.uniform(random_key, (16, 64)), e5m2_dtype
     )
 
-    quant_cls = nn.Fp8DotGeneral if fp8_genre == 'OCP' else nn.NANOOFp8DotGeneralOp
+    if fp8_genre == 'NANOO':
+      assert use_direct_quant == False
+      quant_cls = nn.NANOOFp8DotGeneralOp
+    else:
+      quant_cls = (
+        nn.Fp8DirectDotGeneralOp
+        if use_direct_quant else nn.Fp8DotGeneralOp
+      )
 
     def run(fp8_injection, expected_shapes):
       p = nn.DenseGeneral(features=64, name='dense')
@@ -1361,13 +1329,22 @@ class Fp8Test(parameterized.TestCase):
     np.testing.assert_allclose(dx1, dx2, atol=1e-04)
 
   @parameterized.parameters(
-    {'fp8_genre': 'OCP'}, {'fp8_genre': 'NANOO'}
+    {'fp8_genre': 'OCP', 'use_direct_quant': True},
+    {'fp8_genre': 'OCP', 'use_direct_quant': False},
+    {'fp8_genre': 'NANOO', 'use_direct_quant': False}
   )
-  def test_fp8_train_state(self, fp8_genre):
+  def test_fp8_train_state(self, fp8_genre, use_direct_quant):
     key, init_key, random_key = random.split(random.PRNGKey(seed=123), 3)
     x = random.uniform(random_key, (16, 16), dtype=jnp.float32)
 
-    quant_cls = nn.Fp8DotGeneral if fp8_genre == 'OCP' else nn.NANOOFp8DotGeneralOp
+    if fp8_genre == 'NANOO':
+      assert use_direct_quant == False
+      quant_cls = nn.NANOOFp8DotGeneralOp
+    else:
+      quant_cls = (
+        nn.Fp8DirectDotGeneralOp
+        if use_direct_quant else nn.Fp8DotGeneralOp
+      )
     dense = nn.DenseGeneral(
       features=32, use_bias=True, dot_general_cls=quant_cls
     )
