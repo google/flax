@@ -1288,8 +1288,8 @@ class Fp8Test(parameterized.TestCase):
     np.testing.assert_allclose(out, out_ref, atol=1e-02, rtol=1e-02)
     np.testing.assert_allclose(grads[0], grads_ref[0], atol=1e-02, rtol=1e-02)
     np.testing.assert_allclose(grads[1], grads_ref[1], atol=1e-02, rtol=1e-02)
-    
-    
+
+
   @parameterized.parameters(
     {'fp8_genre': 'OCP'}, {'fp8_genre': 'NANOO'}
   )
