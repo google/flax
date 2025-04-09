@@ -158,7 +158,7 @@ To cite this repository:
   title = {{F}lax: A neural network library and ecosystem for {JAX}},
   url = {http://github.com/google/flax},
   version = {0.10.5},
-  year = {2024},
+  year = {2025},
 }
 ```
 
