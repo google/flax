@@ -1633,9 +1633,9 @@ class MergeContext:
 def merge_context(): ...
 @tp.overload
 @contextlib.contextmanager
-def merge_context(inner: bool | None, ctxtag: tp.Hashable | None): ...
+def merge_context(ctxtag: tp.Hashable | None, inner: bool | None): ...
 @contextlib.contextmanager
-def merge_context(inner: bool | None = None, ctxtag: tp.Hashable | None = None):
+def merge_context(ctxtag: tp.Hashable | None = None, inner: bool | None = None):
   GRAPH_CONTEXT.index_ref_stack.append(MergeContext(ctxtag, {}, inner))
 
   try:
@@ -1690,138 +1690,6 @@ class UpdateContext:
       self.inner_ref_outer_index = RefMap(
           (obj, index) for index, obj in index_ref.items()
       )
-
-  @tp.overload
-  def split(self, graph_node: A, /) -> tuple[GraphDef[A], GraphState]:
-    ...
-
-  @tp.overload
-  def split(
-      self, graph_node: A, first: filterlib.Filter, /
-  ) -> tuple[GraphDef[A], GraphState]:
-    ...
-
-  @tp.overload
-  def split(
-      self,
-      graph_node: A,
-      first: filterlib.Filter,
-      second: filterlib.Filter,
-      /,
-      *filters: filterlib.Filter,
-  ) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
-    ...
-
-  def split(
-    self, node: A, *filters: filterlib.Filter
-  ) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]:
-    """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
-    a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef
-    contains all the static information needed to reconstruct a ``Module`` graph, it is analogous
-    to JAX’s ``PyTreeDef``. :func:`split` is used in conjunction with :func:`merge` to switch
-    seamlessly between stateful and stateless representations of the graph.
-
-    Example usage::
-
-      >>> from flax import nnx
-      >>> import jax, jax.numpy as jnp
-      ...
-      >>> class Foo(nnx.Module):
-      ...   def __init__(self, rngs):
-      ...     self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
-      ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
-      ...
-      >>> node = Foo(nnx.Rngs(0))
-      >>> graphdef, params, batch_stats = nnx.split(node, nnx.Param, nnx.BatchStat)
-      ...
-      >>> jax.tree.map(jnp.shape, params)
-      State({
-        'batch_norm': {
-          'bias': VariableState(
-            type=Param,
-            value=(2,)
-          ),
-          'scale': VariableState(
-            type=Param,
-            value=(2,)
-          )
-        },
-        'linear': {
-          'bias': VariableState(
-            type=Param,
-            value=(3,)
-          ),
-          'kernel': VariableState(
-            type=Param,
-            value=(2, 3)
-          )
-        }
-      })
-      >>> jax.tree.map(jnp.shape, batch_stats)
-      State({
-        'batch_norm': {
-          'mean': VariableState(
-            type=BatchStat,
-            value=(2,)
-          ),
-          'var': VariableState(
-            type=BatchStat,
-            value=(2,)
-          )
-        }
-      })
-
-    Arguments:
-      node: graph node to split.
-      *filters: some optional filters to group the state into mutually exclusive substates.
-    Returns:
-      :class:`GraphDef` and one or more :class:`State`'s equal to the number of filters passed. If no
-      filters are passed, a single :class:`State` is returned.
-    """
-    ref_index: RefMap = RefMap()
-    graphdef, flat_state = flatten(
-      node, ref_index=ref_index, ref_outer_index=self.inner_ref_outer_index
-    )
-    flat_states = _split_state(flat_state, filters)
-    states = _to_nested_state(graphdef, flat_states)
-    assert len(states) >= 1
-    self.flatten_end(ref_index)
-    return graphdef, *states  # type: ignore[return-value]
-
-  def merge(
-    self,
-    graphdef: GraphDef[A],
-    state: GraphState,
-    *states: GraphState,
-  ) -> A:
-    """merge"""
-    if not isinstance(graphdef, NodeDef):
-      raise ValueError(
-        f'Expected a NodeDef instance, but got {type(graphdef)}.'
-      )
-    if self.outer_ref_outer_index is None:
-      raise ValueError('Cannot merge without ref_index.')
-
-    if self.outer_ref_outer_index is not None:
-      # outer merge (4), create index_ref_cache
-      index_ref_cache = self.outer_index_outer_ref
-      assert index_ref_cache is not None
-    else:
-      # inner merge (2)
-      index_ref_cache = None
-
-    _state = _merge_to_flat_state((state, *states))
-    index_ref: dict[Index, tp.Any] = {}
-    node = unflatten(
-      graphdef,
-      _state,
-      index_ref=index_ref,
-      outer_index_outer_ref=index_ref_cache,
-    )
-
-    self.unflatten_end(index_ref, True)
-
-    return node
 
 
 jax.tree_util.register_static(UpdateContext)
@@ -1919,16 +1787,20 @@ def update_context(tag: tp.Hashable):
     >>> from flax import nnx
     ...
     >>> m1 = nnx.Dict({})
-    >>> with nnx.update_context('example') as ctx:
-    ...   graphdef, state = ctx.split(m1)
+    >>> with nnx.update_context('example'):
+    ...   with nnx.split_context('example') as ctx:
+    ...     graphdef, state = ctx.split(m1)
     ...   @jax.jit
     ...   def f(graphdef, state):
-    ...     m2 = ctx.merge(graphdef, state)
+    ...     with nnx.merge_context('example', inner=True) as ctx:
+    ...       m2 = ctx.merge(graphdef, state)
     ...     m2.a = 1
     ...     m2.ref = m2  # create a reference cycle
-    ...     return ctx.split(m2)
+    ...     with nnx.split_context('example') as ctx:
+    ...       return ctx.split(m2)
     ...   graphdef_out, state_out = f(graphdef, state)
-    ...   m3 = ctx.merge(graphdef_out, state_out)
+    ...   with nnx.merge_context('example', inner=False) as ctx:
+    ...     m3 = ctx.merge(graphdef_out, state_out)
     ...
     >>> assert m1 is m3
     >>> assert m1.a == 1
@@ -1937,36 +1809,36 @@ def update_context(tag: tp.Hashable):
   Note that ``update_context`` takes in a ``tag`` argument which is used
   primarily as a safety mechanism reduce the risk of accidentally using the
   wrong UpdateContext when using :func:`current_update_context` to access the
-  current active context. current_update_context can be used as a way of
-  accessing the current active context without having to pass it as a capture::
+  current active context. ``update_context`` can also be used as a
+  decorator that creates/activates an UpdateContext context for the
+  duration of the function::
 
     >>> from flax import nnx
     ...
     >>> m1 = nnx.Dict({})
     >>> @jax.jit
     ... def f(graphdef, state):
-    ...   ctx = nnx.current_update_context('example')
-    ...   m2 = ctx.merge(graphdef, state)
+    ...   with nnx.merge_context('example', inner=True) as ctx:
+    ...     m2 = ctx.merge(graphdef, state)
     ...   m2.a = 1     # insert static attribute
     ...   m2.ref = m2  # create a reference cycle
-    ...   return ctx.split(m2)
+    ...   with nnx.split_context('example') as ctx:
+    ...     return ctx.split(m2)
     ...
     >>> @nnx.update_context('example')
     ... def g(m1):
-    ...   ctx = nnx.current_update_context('example')
-    ...   graphdef, state = ctx.split(m1)
+    ...   with nnx.split_context('example') as ctx:
+    ...     graphdef, state = ctx.split(m1)
     ...   graphdef_out, state_out = f(graphdef, state)
-    ...   return ctx.merge(graphdef_out, state_out)
+    ...   with nnx.merge_context('example', inner=False) as ctx:
+    ...     return ctx.merge(graphdef_out, state_out)
     ...
     >>> m3 = g(m1)
     >>> assert m1 is m3
     >>> assert m1.a == 1
     >>> assert m1.ref is m1
 
-  As shown in the code above, ``update_context`` can also be used as a
-  decorator that creates/activates an UpdateContext context for the
-  duration of the function. The context can be accessed using
-  :func:`current_update_context`.
+  The context can be accessed using :func:`current_update_context`.
 
   Args:
     tag: A string tag to identify the context.
