@@ -12,15 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # pytype: skip-file
+from __future__ import annotations
 
 import dataclasses
 import functools
 import typing as tp
 
+import jax
+import jax._src.stages
+import jax.core
 import jax.experimental
 import jax.experimental.shard_map
-from jax.sharding import PartitionSpec
-from jax.sharding import Mesh, AbstractMesh
+import jax.stages
+from jax.sharding import AbstractMesh, Mesh, PartitionSpec
 
 from flax.nnx import (
   extract,
@@ -29,10 +33,6 @@ from flax.nnx import (
   statelib,
   variablelib,
 )
-import jax
-import jax.core
-import jax.stages
-
 from flax.typing import Missing
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
@@ -153,10 +153,10 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   abstracted_axes: tp.Optional[tp.Any] = None,
-) -> tp.Callable[[F], F]: ...
+) -> tp.Callable[[tp.Callable[..., tp.Any]], JitWrapped]: ...
 @tp.overload
 def jit(
-  fun: F,
+  fun: tp.Callable[..., tp.Any],
   *,
   in_shardings: tp.Any = None,
   out_shardings: tp.Any = None,
@@ -169,9 +169,9 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   abstracted_axes: tp.Optional[tp.Any] = None,
-) -> F: ...
+) -> JitWrapped: ...
 def jit(
-  fun: F | type[Missing] = Missing,
+  fun: tp.Callable[..., tp.Any] | type[Missing] = Missing,
   *,
   in_shardings: tp.Any = None,
   out_shardings: tp.Any = None,
@@ -184,7 +184,7 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   abstracted_axes: tp.Optional[tp.Any] = None,
-) -> F | tp.Callable[[F], F]:
+) -> JitWrapped | tp.Callable[[tp.Callable[..., tp.Any]], JitWrapped]:
   """
   Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
   arguments.
@@ -320,48 +320,11 @@ def jit(
       inline=inline,
       abstracted_axes=abstracted_axes,
     )  # type: ignore[return-value]
-  kwarg_shardings = None
-  jax_in_shardings = jax.tree.map(
-    lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
-    if isinstance(x, StateSharding)
-    else x,
-    in_shardings,
-  )
-  jax_out_shardings = jax.tree.map(
-    lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
-    if isinstance(x, StateSharding)
-    else x,
-    out_shardings,
-  )
 
-  @functools.wraps(fun)
-  def jit_wrapper(*args, **kwargs):
-    # run dynamic_cache_context before update_context
-    with graph.update_context(jit_wrapper):
-      pure_args, pure_kwargs = extract.to_tree(
-        (args, kwargs),
-        prefix=(in_shardings, kwarg_shardings)
-        if in_shardings is not None or kwarg_shardings is not None
-        else None,
-        split_fn=_jit_split_fn,
-        check_aliasing=in_shardings is not None or kwarg_shardings is not None,
-        ctxtag=jit_wrapper,
-      )
-      pure_args_out, pure_kwargs_out, pure_out = jitted_fn(
-        *pure_args, **pure_kwargs
-      )
-      _args_out, _kwargs_out, out = extract.from_tree(
-        (pure_args_out, pure_kwargs_out, pure_out),
-        merge_fn=_jit_merge_fn,
-        is_inner=False,
-        ctxtag=jit_wrapper,
-      )
-    return out
-
-  jitted_fn = jax.jit(
-    JitFn(fun, in_shardings, out_shardings, kwarg_shardings, jit_wrapper),
-    in_shardings=jax_in_shardings,
-    out_shardings=(jax_in_shardings, kwarg_shardings, jax_out_shardings),  # type: ignore
+  return JitWrapped(
+    fun,
+    in_shardings=in_shardings,
+    out_shardings=out_shardings,
     static_argnums=static_argnums,
     static_argnames=static_argnames,
     donate_argnums=donate_argnums,
@@ -373,9 +336,265 @@ def jit(
     abstracted_axes=abstracted_axes,
   )
 
-  jit_wrapper.inner = jitted_fn  # type: ignore
 
-  return jit_wrapper  # type: ignore
+class JitWrapped:
+  def __init__(
+    self,
+    fun: tp.Callable[..., tp.Any],
+    in_shardings: tp.Any,
+    out_shardings: tp.Any,
+    static_argnums: int | tp.Sequence[int] | None = None,
+    static_argnames: str | tp.Iterable[str] | None = None,
+    donate_argnums: int | tp.Sequence[int] | None = None,
+    donate_argnames: str | tp.Iterable[str] | None = None,
+    keep_unused: bool = False,
+    device: tp.Optional[jax.Device] = None,
+    backend: tp.Optional[str] = None,
+    inline: bool = False,
+    abstracted_axes: tp.Optional[tp.Any] = None,
+  ):
+    functools.update_wrapper(self, fun)
+    kwarg_shardings = None
+    self.jax_in_shardings = jax.tree.map(
+      lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+      if isinstance(x, StateSharding)
+      else x,
+      in_shardings,
+    )
+    self.jax_out_shardings = jax.tree.map(
+      lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+      if isinstance(x, StateSharding)
+      else x,
+      out_shardings,
+    )
+
+    self.jitted_fn = jax.jit(
+      JitFn(fun, in_shardings, out_shardings, kwarg_shardings, self),
+      in_shardings=self.jax_in_shardings,
+      out_shardings=(
+        self.jax_in_shardings,
+        kwarg_shardings,
+        self.jax_out_shardings,
+      ),
+      static_argnums=static_argnums,
+      static_argnames=static_argnames,
+      donate_argnums=donate_argnums,
+      donate_argnames=donate_argnames,
+      keep_unused=keep_unused,
+      device=device,
+      backend=backend,
+      inline=inline,
+      abstracted_axes=abstracted_axes,
+    )
+    self.in_shardings = in_shardings
+    self.out_shardings = out_shardings
+    self.kwarg_shardings = kwarg_shardings
+    self.static_argnums = static_argnums
+
+  # implement descriptor protocol so that we can use this as a method
+  def __get__(self, obj, objtype=None):
+    if obj is None:
+      return self
+    return functools.partial(self, obj)
+
+  def _get_pure_args_kwargs(self, args, kwargs):
+    pure_args, pure_kwargs = extract.to_tree(
+      (args, kwargs),
+      prefix=(self.in_shardings, self.kwarg_shardings)
+      if self.in_shardings is not None or self.kwarg_shardings is not None
+      else None,
+      split_fn=_jit_split_fn,
+      check_aliasing=self.in_shardings is not None
+      or self.kwarg_shardings is not None,
+      ctxtag=self,
+    )
+    return pure_args, pure_kwargs
+
+  def _get_non_pure_out(self, pure_args_out, pure_kwargs_out, pure_out, /):
+    _args_out, _kwargs_out, out = extract.from_tree(
+      (pure_args_out, pure_kwargs_out, pure_out),
+      merge_fn=_jit_merge_fn,
+      is_inner=False,
+      ctxtag=self,
+    )
+    return out
+
+  def __call__(self, *args, **kwargs):
+    # run dynamic_cache_context before update_context
+    with graph.update_context(self):
+      pure_args, pure_kwargs = self._get_pure_args_kwargs(args, kwargs)
+      pure_args_out, pure_kwargs_out, pure_out = self.jitted_fn(
+        *pure_args, **pure_kwargs
+      )
+      out = self._get_non_pure_out(pure_args_out, pure_kwargs_out, pure_out)
+    return out
+
+  def eval_shape(self, *args, **kwargs):
+    args, kwargs = graph.clone((args, kwargs))
+    with graph.update_context(self):
+      pure_args, pure_kwargs = self._get_pure_args_kwargs(args, kwargs)
+      pure_args_out, pure_kwargs_out, pure_out = self.jitted_fn.eval_shape(
+        *pure_args, **pure_kwargs
+      )
+      out = self._get_non_pure_out(pure_args_out, pure_kwargs_out, pure_out)
+    return out
+
+  def trace(self, *args, **kwargs) -> Traced:
+    with graph.update_context(self):
+      pure_args, pure_kwargs = self._get_pure_args_kwargs(args, kwargs)
+      traced = self.jitted_fn.trace(*pure_args, **pure_kwargs)
+    return Traced(traced, self)
+
+  def lower(self, *args, **kwargs) -> Lowered:
+    with graph.update_context(self):
+      pure_args, pure_kwargs = self._get_pure_args_kwargs(args, kwargs)
+      lowered = self.jitted_fn.lower(*pure_args, **pure_kwargs)
+    return Lowered(lowered, self)
+
+
+class Stage:
+  args_info: tp.Any  # PyTree of ArgInfo
+
+  @property
+  def _inner_obj(self) -> tp.Any:
+    raise NotImplementedError
+
+  @property
+  def in_tree(self) -> jax.tree_util.PyTreeDef:
+    return self._inner_obj.in_tree
+
+  @property
+  def in_avals(self):
+    return self._inner_obj.in_avals
+
+  @property
+  def donate_argnums(self):
+    return self._inner_obj.donate_argnums
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Compiled(Stage):
+  compiled: jax._src.stages.Compiled
+  jit_wrapped: JitWrapped
+
+  @property
+  def _inner_obj(self):
+    return self.compiled
+
+  @property
+  def args_info(self) -> tp.Any:  # PyTree of ArgInfo
+    raise self.compiled.args_info
+
+  @staticmethod
+  def call(*args, **kwargs):
+    raise NotImplementedError
+
+  def __call__(self, *args, **kwargs):
+    with graph.update_context(self.jit_wrapped):
+      pure_args, pure_kwargs = self.jit_wrapped._get_pure_args_kwargs(
+        args, kwargs
+      )
+      pure_args_out, pure_kwargs_out, pure_out = self.compiled(
+        *pure_args, **pure_kwargs
+      )
+      out = self.jit_wrapped._get_non_pure_out(
+        pure_args_out, pure_kwargs_out, pure_out
+      )
+    return out
+
+  @property
+  def out_tree(self) -> jax.tree_util.PyTreeDef:
+    return self.compiled.out_tree
+
+  def as_text(self) -> str | None:
+    return self.compiled.as_text()
+
+  def cost_analysis(self) -> tp.Any | None:
+    return self.compiled.cost_analysis()
+
+  def memory_analysis(self) -> tp.Any | None:
+    return self.compiled.memory_analysis()
+
+  def runtime_executable(self) -> tp.Any | None:
+    return self.compiled.runtime_executable()
+
+  @property
+  def input_shardings(self):  # PyTree[sharding.Sharding]
+    return self.compiled.input_shardings
+
+  @property
+  def output_shardings(self):  # PyTree[sharding.Sharding]
+    return self.compiled.output_shardings
+
+  @property
+  def input_layouts(self):
+    return self.compiled.input_layouts
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Lowered(Stage):
+  lowered: jax._src.stages.Lowered
+  jit_wrapped: JitWrapped
+
+  @property
+  def _inner_obj(self):
+    return self.lowered
+
+  @property
+  def args_info(self) -> tp.Any:  # PyTree of ArgInfo
+    return self.lowered.args_info
+
+  @property
+  def out_tree(self):
+    return self.lowered.out_tree
+
+  @classmethod
+  def from_flat_info(
+    cls,
+    lowering: jax._src.stages.XlaLowering,
+    in_tree: jax.tree_util.PyTreeDef,
+    in_avals,
+    donate_argnums: tuple[int, ...],
+    out_tree: jax.tree_util.PyTreeDef,
+    no_kwargs: bool = False,
+  ):
+    raise NotImplementedError
+
+  def compile(
+    self, compiler_options: jax._src.stages.CompilerOptions | None = None
+  ) -> Compiled:
+    compiled = self.lowered.compile(compiler_options)
+    return Compiled(compiled, self.jit_wrapped)
+
+  def as_text(
+    self, dialect: str | None = None, *, debug_info: bool = False
+  ) -> str:
+    return self.lowered.as_text(dialect=dialect, debug_info=debug_info)
+
+  def compiler_ir(self, dialect: str | None = None) -> tp.Any | None:
+    return self.lowered.compiler_ir(dialect=dialect)
+
+  def cost_analysis(self) -> tp.Any | None:
+    return self.lowered.cost_analysis()
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Traced(Stage):
+  traced: jax._src.stages.Traced
+  jit_wrapped: JitWrapped
+
+  @property
+  def _inner_obj(self):
+    return self.traced
+
+  @property
+  def out_info(self):
+    return self.traced.out_info
+
+  def lower(
+    self, *, lowering_platforms: tuple[str, ...] | None = None
+  ) -> Lowered:
+    lowered = self.traced.lower(lowering_platforms=lowering_platforms)
+    return Lowered(lowered, self.jit_wrapped)
+
 
 # -------------------------------
 # shard_map
@@ -384,6 +603,7 @@ def jit(
 # TODO: create StateSpec and consider enabling a mode that does
 # not use filters during split for performance. Overall there might
 # be performance limitations for using shard_map at a top-level
+
 
 @dataclasses.dataclass(eq=False)
 class ShardMapFn:
