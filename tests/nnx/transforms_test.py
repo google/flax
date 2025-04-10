@@ -397,6 +397,36 @@ class TestJIT(absltest.TestCase):
     cached_m2 = cached_f(m)
     self.assertIs(cached_m, cached_m2)
 
+  def test_jit_wrapped(self):
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.count = nnx.Variable(jnp.array(0))
+
+      @nnx.jit
+      def __call__(self, x: jax.Array) -> jax.Array:
+        self.count.value += 1
+        return x * 2
+
+    m = Foo(rngs=nnx.Rngs(0))
+    x = jnp.array(3.0)
+
+    @nnx.jit
+    def f(m: nnx.Linear, x):
+      return m(x)
+
+    lowered = f.lower(m, x)
+    compiled = lowered.compile()
+    text = compiled.as_text()
+    cost_analysis = compiled.cost_analysis()
+    self.assertIsNotNone(cost_analysis)
+    self.assertIsNotNone(text)
+
+    y = compiled(m, x)
+    np.testing.assert_allclose(y, 6.0)
+    self.assertEqual(m.count.value, 1)
+    y = compiled(m, x)
+    self.assertEqual(m.count.value, 2)
+
 
 class TestShardMap(absltest.TestCase):
   def test_basic_shardmap(self):
