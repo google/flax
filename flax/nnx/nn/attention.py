@@ -439,6 +439,7 @@ class MultiHeadAttention(Module):
     rngs: rnglib.Rngs | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
+    attention_bias: Array | None = None,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -469,6 +470,8 @@ class MultiHeadAttention(Module):
       decode: whether to prepare and use an autoregressive cache. The ``decode``
         flag passed into the call method will take precedence over the ``decode``
         flag passed into the constructor.
+      attention_bias: bias for the attention logits of shape
+        ``[batch_sizes..., num_heads, q_length, kv_length]``.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
@@ -591,6 +594,7 @@ class MultiHeadAttention(Module):
       dtype=self.dtype,
       precision=self.precision,
       module=self if sow_weights else None,
+      bias=attention_bias,
     )
     # back to the original inputs dimensions
     out = self.out(x)

@@ -444,6 +444,7 @@ class MultiHeadDotProductAttention(Module):
     deterministic: bool | None = None,
     dropout_rng: PRNGKey | None = None,
     sow_weights: bool = False,
+    attention_bias: Array | None = None,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -474,6 +475,8 @@ class MultiHeadDotProductAttention(Module):
         'intermediates' collection. Remember to mark 'intermediates' as
         mutable via ``mutable=['intermediates']`` in order to have that
         collection returned.
+      attention_bias: bias for the attention logits of shape
+        ``[batch_sizes..., num_heads, q_length, kv_length]``.
 
     Returns:
       output of shape ``[batch_sizes..., length, features]``.
@@ -662,6 +665,7 @@ class MultiHeadDotProductAttention(Module):
       force_fp32_for_softmax=self.force_fp32_for_softmax,
       qk_attn_weights_einsum=qk_attn_weights_einsum,
       attn_weights_value_einsum=attn_weights_value_einsum,
+      bias=attention_bias,
     )
     attn_kwargs = {
         k: v
