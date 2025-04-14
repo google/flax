@@ -416,6 +416,7 @@ class MultiHeadDotProductAttention(Module):
     deterministic: bool | None = None,
     dropout_rng: PRNGKey | None = None,
     sow_weights: bool = False,
+    attention_bias: Array | None = None,
   ):
     ...
 
@@ -429,6 +430,7 @@ class MultiHeadDotProductAttention(Module):
     deterministic: bool | None = None,
     dropout_rng: PRNGKey | None = None,
     sow_weights: bool = False,
+    attention_bias: Array | None = None,
   ):
     ...
 
