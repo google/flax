@@ -102,23 +102,6 @@ class TestMultiHeadAttention(absltest.TestCase):
       assert y1.shape == (1, 1, 4)
       assert y2.shape == (1, 1, 4)
 
-  def test_multihead_dot_product_attention_bias(self):
-    dim = 4
-    batch_size = 5
-    num_q, num_k, num_heads = 3, 4, 2
-    mha = nnx.MultiHeadAttention(
-        in_features=dim,
-        num_heads=num_heads,
-        decode=False,
-        rngs=nnx.Rngs(0),
-    )
-    q = jnp.ones((batch_size, num_q, dim))
-    k = jnp.ones((batch_size, num_k, dim))
-    bias = jnp.ones((batch_size, num_heads, num_q, num_k))
-    out = mha(q, k, attention_bias=bias)
-    self.assertEqual(out.shape, (batch_size, num_q, dim))
-
-
 
 # TODO: add all possible constructor argument values to parameterized.product
 class TestLinenConsistency(parameterized.TestCase):

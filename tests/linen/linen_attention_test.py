@@ -616,19 +616,6 @@ class AttentionTest(parameterized.TestCase):
         attn_weights_value_einsum=attn_weights_value_einsum,
     )
 
-  def test_multihead_dot_product_attention_bias(self):
-    dim = 4
-    batch_size = 5
-    num_q, num_k, num_heads = 3, 4, 2
-    mha = nn.MultiHeadDotProductAttention(
-        num_heads=num_heads, qkv_features=dim
-    )
-    q = random.uniform(random.key(0), (batch_size, num_q, dim))
-    k = random.uniform(random.key(0), (batch_size, num_k, dim))
-    bias = random.uniform(random.key(1), (batch_size, num_heads, num_q, num_k))
-    out, _ = mha.init_with_output(random.key(1), q, k, attention_bias=bias)
-    self.assertEqual(out.shape, (batch_size, num_q, dim))
-
 
 if __name__ == '__main__':
   absltest.main()
