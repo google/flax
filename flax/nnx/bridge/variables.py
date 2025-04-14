@@ -154,7 +154,7 @@ def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
     elif isinstance(v, variablelib.VariableState):
       col_name = variablelib.variable_name_from_type(v.type)
       v = to_linen_var(v)
-    elif isinstance(v, graph.NodeDef) or isinstance(v, graph.NodeRef):
+    elif isinstance(v, graph.GraphDef):
       col_name = 'nnx'  # an nnx.GraphDef for some ToLinen submodule
     else:
       raise ValueError(f'Cannot infer collection name from value: {v}')

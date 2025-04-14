@@ -443,9 +443,8 @@ def _custom_vjp_split_fn(
   nondiff_argnums: tuple[int, ...] = struct.field(pytree_node=False)
   tangent_tree_node_args: tuple[tp.Any, ...] = struct.field(pytree_node=False)
 
-def _extract_nodedefs(x, *, nodedefs: deque[graph.NodeDef]):
-  if isinstance(x, graph.NodeDef):
-    assert x.outer_index is not None
+def _extract_nodedefs(x, *, nodedefs: deque[graph.GraphDef]):
+  if isinstance(x, graph.GraphDef):
     nodedefs.append(x)
     return x.with_no_outer_index()
   return x
@@ -456,7 +455,7 @@ class CustomVjpFnWrapper:
   jax_nondiff_argnums: tuple[int, ...]
   ctxtag: str
   nondiff_states: list[extract.GraphDefState]
-  nodedefs: deque[graph.NodeDef]
+  nodedefs: deque[graph.GraphDef]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
@@ -482,12 +481,12 @@ class CustomVjpFnWrapper:
     pure_args_out, pure_out = extract.to_tree(
       (args_out, out), ctxtag=self.ctxtag
     )
-    # remove outer_index from NodeDef's but store them in global context
+    # remove outer_index from GraphDef's but store them in global context
 
     pure_args_out, pure_out = jax.tree.map(
       functools.partial(_extract_nodedefs, nodedefs=self.nodedefs),
       (pure_args_out, pure_out),
-      is_leaf=lambda x: isinstance(x, graph.NodeDef),
+      is_leaf=lambda x: isinstance(x, graph.GraphDef),
     )
 
     return pure_args_out, pure_out
@@ -499,7 +498,7 @@ class FwdFn:
   nondiff_argnums: tuple[int, ...]
   ctxtag: str
   nondiff_states: list[extract.GraphDefState]
-  nodedefs: deque[graph.NodeDef]
+  nodedefs: deque[graph.GraphDef]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.fwd)
@@ -507,7 +506,7 @@ class FwdFn:
   def __call__(self, *pure_args):
     # here we need to be aware if the update_context is active or not
     # when its not active, index_mappings will be None
-    # when its active, we will remove the index_mappings from the NodeDef's and store them
+    # when its active, we will remove the index_mappings from the GraphDef's and store them
     # in the index_mappings deque created by CustomVjp
     update_context_active = (
       self.ctxtag in graph.GRAPH_CONTEXT.update_context_stacks
@@ -536,11 +535,11 @@ class FwdFn:
     pure_residual = extract.to_tree(residual)
 
     if update_context_active:
-      # remove outer_index from NodeDef's but store them in global context
+      # remove outer_index from GraphDef's but store them in global context
       pure_args_out, pure_out = jax.tree.map(
         functools.partial(_extract_nodedefs, nodedefs=self.nodedefs),
         (pure_args_out, pure_out),
-        is_leaf=lambda x: isinstance(x, graph.NodeDef),
+        is_leaf=lambda x: isinstance(x, graph.GraphDef),
       )
 
     return (pure_args_out, pure_out), pure_residual
@@ -644,7 +643,7 @@ class CustomVjp(tp.Generic[A]):
         for i, x in enumerate(tree_node_args)
         if i not in self.jax_nondiff_argnums
       )
-      nodedefs: deque[graph.NodeDef] = deque()
+      nodedefs: deque[graph.GraphDef] = deque()
       if self.fwd is None or self.bwd is None or self.symbolic_zeros is None:
         raise ValueError()
 
@@ -676,15 +675,15 @@ class CustomVjp(tp.Generic[A]):
 
       # insert index_mappings
       def _insert_index_mappings(x):
-        if isinstance(x, graph.NodeDef):
-          nodedef: graph.NodeDef = nodedefs.popleft()
+        if isinstance(x, graph.GraphDef):
+          nodedef = nodedefs.popleft()
           return nodedef
         return x
 
       pure_args_out, pure_out = jax.tree_util.tree_map(
         _insert_index_mappings,
         (pure_args_out, pure_out),
-        is_leaf=lambda x: isinstance(x, graph.NodeDef),
+        is_leaf=lambda x: isinstance(x, graph.GraphDef),
       )
 
       args_out, out = extract.from_tree(

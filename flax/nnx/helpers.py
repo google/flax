@@ -102,7 +102,7 @@ class ModuleDefApply(tp.Protocol, tp.Generic[M]):
 
 
 class TrainState(tp.Generic[M], struct.PyTreeNode):
-  graphdef: graph.NodeDef[M]
+  graphdef: graph.GraphDef[M]
   params: State
   opt_state: optax.OptState
   step: jax.Array
@@ -111,7 +111,7 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
   @classmethod
   def create(
     cls,
-    graphdef: graph.NodeDef[M],
+    graphdef: graph.GraphDef[M],
     *,
     params: State,
     tx: optax.GradientTransformation,

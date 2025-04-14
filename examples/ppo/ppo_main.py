@@ -23,6 +23,10 @@ import tensorflow as tf
 import env_utils
 import models
 import ppo_lib
+import gymnasium as gym
+import ale_py
+
+gym.register_envs(ale_py)
 
 
 FLAGS = flags.FLAGS

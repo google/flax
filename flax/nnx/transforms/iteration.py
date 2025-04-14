@@ -655,17 +655,16 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
     check_carry_same_references, carry_arg, carry_arg_out
   )
 
-def _extract_nodedefs(
-  pure_carry_arg_out, carry_nodedefs: list[graph.NodeDef | graph.VariableDef], /
+def _extract_graphdefs(
+  pure_carry_arg_out, carry_graphdefs: list[graph.GraphDef], /
 ):
   def extract_index_mappings(x):
     if isinstance(x, extract.NodeStates) and isinstance(
-      x._graphdef, graph.NodeDef | graph.VariableDef
+      x._graphdef, graph.GraphDef
     ):
-      nodedef = x._graphdef
-      assert nodedef.outer_index is not None
-      carry_nodedefs.append(nodedef)
-      x = x.replace(_graphdef=nodedef.with_no_outer_index())
+      graphdef = x._graphdef
+      carry_graphdefs.append(graphdef)
+      x = x.replace(_graphdef=graphdef.with_no_outer_index())
     return x
 
   pure_carry_arg_out = jax.tree.map(
@@ -676,17 +675,17 @@ def _extract_nodedefs(
 
   return pure_carry_arg_out
 
-def _insert_nodedefs(
+def _insert_graphdefs(
   pure_carry_arg_out,
-  carry_nodedefs: deque[graph.NodeDef],
+  carry_graphdefs: deque[graph.GraphDef],
   /,
 ):
   def insert_index_mappings(x):
     if isinstance(x, extract.NodeStates) and isinstance(
-      x._graphdef, graph.NodeDef
+      x._graphdef, graph.GraphDef
     ):
-      nodedef = carry_nodedefs.popleft()
-      x = x.replace(_graphdef=nodedef)
+      graphdef = carry_graphdefs.popleft()
+      x = x.replace(_graphdef=graphdef)
     return x
 
   pure_carry_arg_out = jax.tree.map(
@@ -1098,10 +1097,10 @@ class ScanFn:
       assert self.input_carry_argnum is None
       pure_carry_arg_out = None
 
-    # next we have to remove all the index_mappings from the NodeDefs
+    # next we have to remove all the index_mappings from the GraphDefs
     # in the carry outputs because they are not present in the inputs
-    carry_nodedefs: list[graph.NodeDef | graph.VariableDef] = []
-    pure_carry_arg_out = _extract_nodedefs(pure_carry_arg_out, carry_nodedefs)
+    carry_graphdefs: list[graph.GraphDef] = []
+    pure_carry_arg_out = _extract_graphdefs(pure_carry_arg_out, carry_graphdefs)
 
     carry_arg_out = (
       pure_carry_arg_out,
@@ -1110,7 +1109,7 @@ class ScanFn:
       broadcast_arrays_out,
     )
     scan_out = (
-      carry_nodedefs,
+      carry_graphdefs,
       pure_args_out,
       pure_out,
     )
@@ -1250,15 +1249,15 @@ def scan(
         broadcast_arrays_out,
     ) = carry_out
     (
-      carry_nodedefs,
+      carry_graphdefs,
       pure_args_out,
       pure_out,
     ) = scan_out
 
-    # next we have to insert all the index_mappings back into the NodeDefs
+    # next we have to insert all the index_mappings back into the GraphDefs
     # in the carry outputs
-    pure_carry_arg_out = _insert_nodedefs(
-      pure_carry_arg_out, deque(carry_nodedefs)
+    pure_carry_arg_out = _insert_graphdefs(
+      pure_carry_arg_out, deque(carry_graphdefs)
     )
 
     # insert pure carry into pure_args_out
@@ -1333,7 +1332,7 @@ class WhileLoopCondFn:
 def _add_fake_index_mapping(tree: tp.Any):
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.NodeDef | graph.VariableDef
+      node_state._graphdef, graph.GraphDef
     ):
       return node_state
 
@@ -1350,10 +1349,10 @@ def _remove_index_mapping(tree: tp.Any):
 
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.NodeDef | graph.VariableDef
+      node_state._graphdef, graph.GraphDef
     ):
       return node_state
-    assert isinstance(node_state._graphdef, graph.NodeDef | graph.VariableDef)
+    assert isinstance(node_state._graphdef, graph.GraphDef)
     node_state = dataclasses.replace(
       node_state, _graphdef=node_state._graphdef.with_no_outer_index()
     )
