@@ -68,6 +68,7 @@ PrecisionLike = Union[
 ]
 DotGeneralT = Callable[..., Array]
 ConvGeneralDilatedT = Callable[..., Array]
+EinsumT = Callable[..., Array]
 
 PaddingLike = Union[str, int, Sequence[Union[int, tuple[int, int]]]]
 LaxPadding = Union[str, Sequence[tuple[int, int]]]
