@@ -38,7 +38,7 @@ M = tp.TypeVar('M', bound=Module)
 @dataclasses.dataclass
 class Functional(tp.Generic[M]):
   module_type: tp.Type[M]
-  graphdef: tp.Optional[graph.NodeDef[M]]
+  graphdef: tp.Optional[graph.GraphDef[M]]
   args: tuple[tp.Any, ...]
   kwargs: dict[str, tp.Any]
 
@@ -48,7 +48,6 @@ class Functional(tp.Generic[M]):
       kwargs['rngs'] = rngs
     module = self.module_type(*self.args, **self.kwargs, **kwargs)
     graphdef, state = nnx.split(module)
-    assert type(graphdef) is graph.NodeDef
     self.graphdef = graphdef
     return state  # type: ignore
 
@@ -217,7 +216,7 @@ class ToLinen(linen.Module):
     >>> variables.keys()
     dict_keys(['nnx', 'params'])
     >>> type(variables['nnx']['graphdef'])
-    <class 'flax.nnx.graph.NodeDef'>
+    <class 'flax.nnx.graph.GraphDef'>
 
   Args:
     nnx_class: The NNX Module class (not instance!).

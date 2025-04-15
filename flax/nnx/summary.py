@@ -205,7 +205,7 @@ def _call_obj(
     top_method(obj, *input_args, **input_kwargs)
   finally:
     for obj_type, methods in original_methods.items():
-      for name, top_method in methods.items():
+      for name, top_method in methods.items():  # type: ignore[assignment]
         setattr(obj_type, name, top_method)
 
 
@@ -404,7 +404,7 @@ def tabulate(
             **metadata,
           }
         elif value_repr:
-          attributes[name] = value_repr
+          attributes[name] = value_repr  # type: ignore[assignment]
 
       if attributes:
         col_repr = _as_yaml_str(attributes) + '\n\n'
