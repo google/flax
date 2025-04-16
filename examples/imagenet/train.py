@@ -36,6 +36,7 @@ import jax.numpy as jnp
 from jax import random
 import ml_collections
 import optax
+import orbax.checkpoint as ocp
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -228,7 +229,15 @@ def restore_checkpoint(state, workdir):
 def save_checkpoint(state, workdir):
   step = int(state.step)
   logging.info('Saving checkpoint step %d.', step)
-  checkpoints.save_checkpoint_multiprocess(workdir, state, step, keep=3)
+
+  # Orbax can not handle host local arrays from pmap. Convert to global arrays.
+  replicated_state = jax.tree_util.tree_map(
+      ocp.utils.fully_replicated_host_local_array_to_global_array,
+      state,
+  )
+  checkpoints.save_checkpoint_multiprocess(
+      workdir, replicated_state, step, keep=3
+  )
 
 
 def create_train_state(
@@ -239,8 +248,6 @@ def create_train_state(
   platform = jax.local_devices()[0].platform
   if config.half_precision and platform == 'gpu':
     dynamic_scale = dynamic_scale_lib.DynamicScale()
-  else:
-    dynamic_scale = None
 
   params, batch_stats = initialized(rng, image_size, model)
   tx = optax.sgd(

@@ -38,6 +38,7 @@ import jax.numpy as jnp
 import ml_collections
 import numpy as np
 import optax
+import orbax.checkpoint as ocp
 import tensorflow as tf
 
 import bleu
@@ -684,7 +685,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       )
       if config.save_checkpoints and save_checkpoint:
         logging.info("Saving checkpoint step %d.", step)
+
+        # Orbax can not handle host local arrays from pmap.
+        replicated_state = jax.tree_util.tree_map(
+            ocp.utils.fully_replicated_host_local_array_to_global_array,
+            state,
+        )
         with report_progress.timed("checkpoint"):
           checkpoints.save_checkpoint_multiprocess(
-              workdir, jax_utils.unreplicate(state), step
+              workdir, replicated_state, step
           )
