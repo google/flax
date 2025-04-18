@@ -122,8 +122,11 @@ jobs:
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
+          # TODO(cgarciae): Remove this once dm-haiku 0.0.14 is released
+          uv pip install -U git+https://github.com/google-deepmind/dm-haiku.git
           uv run tests/run_all_tests.sh --only-doctest
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
+          uv pip install -U tensorflow-datasets
           uv run tests/run_all_tests.sh --only-pytest
         elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
           uv run tests/run_all_tests.sh --only-pytype
