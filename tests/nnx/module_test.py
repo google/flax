@@ -639,42 +639,6 @@ class TestModule(absltest.TestCase):
     self.assertIn(str(expected_total_rng_states), foo_repr[0])
 
 
-class TestModulePytree:
-  def test_tree_map(self):
-    class Foo(nnx.Module, experimental_pytree=True):
-      def __init__(self):
-        self.node = nnx.Param(1)
-        self.graphdef = 1
-
-    m = Foo()
-
-    m = jax.tree.map(lambda x: x + 1, m)
-
-    assert m.node.value == 2
-    assert m.graphdef == 1
-
-  def test_static(self):
-    class C(nnx.Module, experimental_pytree=True):
-      def __init__(self, x):
-        self.x = x
-
-    n = 0
-
-    @jax.jit
-    def f(x):
-      nonlocal n
-      n += 1
-
-    f(C(1))
-    assert n == 1
-    f(C(1))
-    assert n == 1
-    f(C(2))
-    assert n == 2
-    f(C(2))
-    assert n == 2
-
-
 class TestModuleDataclass:
   def test_basic(self):
 

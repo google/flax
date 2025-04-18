@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 import dataclasses
 from functools import partial
 from threading import Thread
@@ -23,8 +22,9 @@ import numpy as np
 from flax import linen, nnx, struct
 import jax
 import jax.numpy as jnp
+from flax import config
 
-class List(nnx.Module):
+class List(nnx.Module, pytree='auto'):
   def __init__(self, items):
     self.items = list(items)
 
@@ -35,7 +35,7 @@ class List(nnx.Module):
     self.items[idx] = value
 
 
-class Dict(nnx.Module):
+class Dict(nnx.Module, pytree='auto'):
   def __init__(self, *args, **kwargs):
     self.items = dict(*args, **kwargs)
 
@@ -46,6 +46,8 @@ class Dict(nnx.Module):
     self.items[key] = value
 
 class StatefulLinear(nnx.Module):
+  if config.flax_mutable_array:
+    __data__ = ('w', 'b', 'count')
   def __init__(self, din, dout, rngs):
     self.w = nnx.Param(jax.random.uniform(rngs(), (din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
@@ -75,16 +77,16 @@ class TestGraphUtils(absltest.TestCase):
     assert g[3] in refmap
 
   def test_flatten_no_paths(self):
-    a = {'a': 1, 'b': nnx.Param(2)}
-    g = [a, 3, a, nnx.Param(4)]
+    a = {'a': 1, 'b': nnx.Param(jnp.array(2))}
+    g = [a, 3, a, nnx.Param(jnp.array(4))]
 
     refmap = nnx.graph.RefMap()
     graphdef, flat_state = nnx.graph.flatten(
       g, ref_index=refmap, with_paths=False
     )
 
-    assert flat_state[0] == 2
-    assert flat_state[1] == 4
+    assert flat_state[0][...] == 2
+    assert flat_state[1][...] == 4
 
     assert len(refmap) == 2
     assert a['b'] in refmap
@@ -213,6 +215,9 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_tied_weights(self):
     class Foo(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('bar', 'baz')
+
       def __init__(self, *, rngs: nnx.Rngs) -> None:
         self.bar = nnx.Linear(2, 2, rngs=rngs)
         self.baz = nnx.Linear(2, 2, rngs=rngs)
@@ -231,6 +236,9 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_tied_weights_example(self):
     class LinearTranspose(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('kernel',)
+
       def __init__(self, dout: int, din: int, *, rngs: nnx.Rngs) -> None:
         self.kernel = nnx.Param(
           nnx.initializers.lecun_normal()(rngs(), (dout, din))
@@ -240,6 +248,8 @@ class TestGraphUtils(absltest.TestCase):
         return x @ self.kernel.value.T
 
     class Encoder(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('embed', 'linear_out')
       def __init__(self, *, rngs: nnx.Rngs) -> None:
         self.embed = nnx.Embed(10, 2, rngs=rngs)
         ...
@@ -265,6 +275,9 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_state_variables_not_shared_with_graph(self):
     class Foo(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('a',)
+
       def __init__(self):
         self.a = nnx.Param(1)
 
@@ -285,6 +298,8 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_shared_state_variables_not_shared_with_graph(self):
     class Foo(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('a', 'b')
       def __init__(self):
         p = nnx.Param(1)
         self.a = p
@@ -340,6 +355,8 @@ class TestGraphUtils(absltest.TestCase):
       b: str = struct.field(pytree_node=False)
 
     class Foo(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('tree',)
       def __init__(self):
         self.tree = Tree(nnx.Param(1), 'a')
 
@@ -360,6 +377,8 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_cached_unflatten(self):
     class Foo(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('a', 'b')
       def __init__(self, *, rngs: nnx.Rngs):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.BatchNorm(2, rngs=rngs)
@@ -400,6 +419,8 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_cached_unflatten_swap_variables(self):
     class Foo(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('a', 'b')
       def __init__(self):
         self.a = nnx.Param(1)
         self.b = nnx.Param(2)
@@ -440,6 +461,8 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_cached_unflatten_add_self_reference(self):
     class Foo(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('ref',)
       def __init__(self):
         self.ref = None
 
@@ -476,6 +499,8 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_call_jit_update(self):
     class Counter(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('count',)
       def __init__(self):
         self.count = nnx.Param(jnp.zeros(()))
 
@@ -543,6 +568,9 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_object_state_propagation_nested(self):
     class NNXOuter(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('inner', 'rngs')
+
       def __init__(self, dout: int, rngs: nnx.Rngs):
         self.inner = nnx.bridge.ToNNX(linen.Dense(dout), rngs=rngs)
         self.rngs = rngs
@@ -624,7 +652,8 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_split_merge_update_context(self):
     class Foo(nnx.Module):
-
+      if config.flax_mutable_array:
+        __data__ = ('a', 'b')
       def __init__(self):
         self.a = nnx.Param(1)
         self.b = 2
@@ -708,6 +737,8 @@ class TestGraphUtils(absltest.TestCase):
 
   def test_to_tree_update_context(self):
     class Foo(nnx.Module):
+      if config.flax_mutable_array:
+        __data__ = ('a', 'b')
 
       def __init__(self):
         self.a = nnx.Param(1)
@@ -1062,18 +1093,9 @@ class SimpleModule(nnx.Module):
   pass
 
 
-class SimplePyTreeModule(nnx.Module, experimental_pytree=True):
-  pass
-
-
 class TestThreading(parameterized.TestCase):
-
-  @parameterized.parameters(
-      (SimpleModule,),
-      (SimplePyTreeModule,),
-  )
-  def test_threading(self, module_fn: Callable[[], nnx.Module]):
-    x = module_fn()
+  def test_threading(self):
+    x = SimpleModule()
 
     class MyThread(Thread):
 

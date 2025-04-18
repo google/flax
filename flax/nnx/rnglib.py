@@ -22,6 +22,7 @@ import jax.numpy as jnp
 from flax import struct
 from flax.nnx import graph
 from flax.nnx import statelib
+from flax.nnx import variablelib
 from flax.nnx.statelib import State
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
@@ -33,7 +34,7 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 Counts = list[int]
 AxesValue = tp.Union[int, None]
 SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
-
+fry_dtype = jax.eval_shape(lambda: jax.random.key(0)).dtype
 
 class RngState(Variable[jax.Array]):
   tag: str
@@ -49,15 +50,24 @@ NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
 
 
 class RngStream(Object):
+  __data__ = ('key', 'count')
+
   def __init__(
     self,
     tag: str,
-    key: jax.Array,
-    count: jax.Array,
+    key: jax.Array | int,
   ):
-    if not isinstance(key, jax.Array):
-      raise TypeError(f'key must be a jax.Array, got {type(key)}')
+    if isinstance(key, int):
+      key = jax.random.key(key)
+    elif isinstance(key, jax.Array) and key.dtype == jnp.uint32:
+      key = jax.random.wrap_key_data(key)
 
+    if not isinstance(key, jax.Array) or key.dtype != fry_dtype:
+      raise ValueError(f'Invalid rng value: {key}')
+
+    count = jnp.zeros(key.shape, dtype=jnp.uint32)
+
+    self.tag = tag
     self.key = RngKey(key, tag=tag)
     self.count = RngCount(count, tag=tag)
 
@@ -65,8 +75,8 @@ class RngStream(Object):
     self._check_valid_context(
       lambda: 'Cannot call RngStream from a different trace level'
     )
-    key = jax.random.fold_in(self.key.value, self.count.value)
-    self.count.value += 1
+    key = jax.random.fold_in(self.key[...], self.count[...])
+    self.count[...] += 1
     return key
 
 
@@ -156,6 +166,8 @@ class Rngs(Object):
     >>> assert_same(x, 0, params=1, dropout=2)
   """
 
+  __data__ = ('streams',)
+
   def __init__(
       self,
       default: RngValue | RngDict | None = None,
@@ -178,32 +190,21 @@ class Rngs(Object):
       else:
         rngs['default'] = default
 
-    for name, value in rngs.items():
-      if isinstance(value, int):
-        key = jax.random.key(value)
-      elif isinstance(value, jax.Array):
-        if value.dtype == jnp.uint32:
-          key = jax.random.wrap_key_data(value)
-        else:
-          key = value
-      else:
-        raise ValueError(f'Invalid rng value: {value}')
-
-      stream = RngStream(
+    self.streams = {
+      name: RngStream(
         tag=name,
-        key=key,
-        count=jnp.zeros(key.shape, dtype=jnp.uint32),
+        key=value,
       )
-      setattr(self, name, stream)
+      for name, value in rngs.items()
+    }
 
   def _get_stream(self, name: str, error_type: type[Exception]) -> RngStream:
-    rngs_vars = vars(self)
-    if name not in rngs_vars:
-      if 'default' not in rngs_vars:
+    if name not in self.streams:
+      if 'default' not in self.streams:
         raise error_type(f"No RNG named {name!r} or 'default' found in Rngs.")
-      stream = rngs_vars['default']
+      stream = self.streams['default']
     else:
-      stream = rngs_vars[name]
+      stream = self.streams[name]
 
     return stream
 
@@ -217,26 +218,16 @@ class Rngs(Object):
     return self.default()
 
   def __iter__(self) -> tp.Iterator[str]:
-    for name in vars(self):
-      if name != '_object__state':
-        yield name
+    return iter(self.streams)
 
   def __len__(self) -> int:
     return len(vars(self)) - 1
 
   def __contains__(self, name: tp.Any) -> bool:
-    return name in vars(self)
-
-  # pickle support
-  def __getstate__(self):
-    return vars(self).copy()
-
-  def __setstate__(self, state):
-    vars(self).update(state)
+    return name in self.streams
 
   def items(self):
-    for name in self:
-      yield name, self[name]
+    return self.streams.items()
 
 
 class ForkStates(tp.NamedTuple):
@@ -444,14 +435,22 @@ def split_rngs(
       key = jax.random.split(key, splits)
       if squeeze:
         key = key[0]
-      stream.key.value = key
+      if variablelib.is_mutable_array(stream.key.raw_value):
+        stream.key.raw_value = variablelib.mutable_array(key)
+      else:
+        stream.key.value = key
       if squeeze:
         counts_shape = stream.count.shape
       elif isinstance(splits, int):
         counts_shape = (splits, *stream.count.shape)
       else:
         counts_shape = (*splits, *stream.count.shape)
-      stream.count.value = jnp.zeros(counts_shape, dtype=jnp.uint32)
+
+      count = jnp.zeros(counts_shape, dtype=jnp.uint32)
+      if variablelib.is_mutable_array(stream.count.raw_value):
+        stream.count.raw_value = variablelib.mutable_array(count)
+      else:
+        stream.count.value = count
 
   return SplitBackups(backups)
 

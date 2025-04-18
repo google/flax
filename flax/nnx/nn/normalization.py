@@ -264,6 +264,8 @@ class BatchNorm(Module):
     rngs: rng key.
   """
 
+  __data__ = ('mean', 'var', 'scale', 'bias')
+
   def __init__(
     self,
     num_features: int,
@@ -436,6 +438,8 @@ class LayerNorm(Module):
     rngs: rng key.
   """
 
+  __data__ = ('scale', 'bias')
+
   def __init__(
     self,
     num_features: int,
@@ -567,6 +571,8 @@ class RMSNorm(Module):
         calculation for the variance.
     rngs: rng key.
   """
+
+  __data__ = ('scale',)
 
   def __init__(
     self,
@@ -710,6 +716,8 @@ class GroupNorm(Module):
       calculation for the variance.
     rngs: rng key.
   """
+
+  __data__ = ('scale', 'bias')
 
   def __init__(
     self,

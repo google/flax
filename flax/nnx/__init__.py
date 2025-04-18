@@ -167,6 +167,8 @@ from .variablelib import with_metadata as with_metadata
 from .variablelib import variable_type_from_name as variable_type_from_name
 from .variablelib import variable_name_from_type as variable_name_from_type
 from .variablelib import register_variable_name as register_variable_name
+from .variablelib import mutable_array as mutable_array
+from .variablelib import is_mutable_array as is_mutable_array
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree

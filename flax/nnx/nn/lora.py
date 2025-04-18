@@ -77,6 +77,8 @@ class LoRA(Module):
     lora_param_type: the type of the LoRA params.
   """
 
+  __data__ = ('lora_a', 'lora_b', 'base_module')
+
   def __init__(
       self,
       in_features: int,
@@ -155,6 +157,8 @@ class LoRALinear(Linear):
       `zero initializer`.
     lora_param_type: the type of the LoRA params.
   """
+
+  __data__ = ('lora',)  # type: ignore[assignment]
 
   def __init__(
       self,

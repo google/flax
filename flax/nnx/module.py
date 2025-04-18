@@ -15,21 +15,17 @@
 from __future__ import annotations
 
 import typing as tp
-from functools import partial
 
 import jax
 import jax.numpy as jnp
-import jax.tree_util as jtu
 
 from flax.nnx import (
   filterlib,
   graph,
 )
 from flax.nnx import variablelib as variableslib
-from flax.nnx.graph import GraphDef
 from flax.nnx.object import Object, ObjectMeta
-from flax.nnx.graph import GraphState, StateLeaf
-from flax.nnx.statelib import State
+from flax.nnx.graph import GraphState
 from flax.typing import Key, Path, PathParts
 
 A = tp.TypeVar('A')
@@ -480,43 +476,6 @@ class Module(Object, metaclass=ModuleMeta):
       **attributes,
       raise_if_not_found=False,
     )
-
-  def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
-    super().__init_subclass__()
-
-    if experimental_pytree:
-      jtu.register_pytree_with_keys(
-        cls,
-        partial(_module_flatten, with_keys=True),
-        _module_unflatten,  # type: ignore[arg-type]
-        flatten_func=partial(_module_flatten, with_keys=False),
-      )
-
-# -------------------------
-# Pytree Definition
-# -------------------------
-def _module_flatten(module: Module, *, with_keys: bool):
-  graphdef, state = graph.split(module)
-  key_values = sorted(
-    state.raw_mapping.items()  # type: ignore
-  )
-  keys = tuple(key for key, _ in key_values)
-
-  children: tuple[tp.Any, ...]
-  if with_keys:
-    children = tuple((jtu.DictKey(key), value) for key, value in key_values)
-  else:
-    children = tuple(value for _, value in key_values)
-
-  return children, (keys, graphdef)
-
-
-def _module_unflatten(
-  paths_moduledef: tuple[tuple[Path, ...], GraphDef[M]],
-  variables: tuple[StateLeaf, ...],
-) -> M:
-  paths, graphdef = paths_moduledef
-  return graph.merge(graphdef, State(zip(paths, variables)))
 
 
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:
