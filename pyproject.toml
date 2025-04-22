@@ -48,7 +48,7 @@ testing = [
     "jaxlib",
     "jaxtyping",
     "jraph>=0.0.6dev0",
-    "ml-collections",
+    "ml_collections>=1.1.0",
     "mypy",
     "opencv-python",
     "pytest",
@@ -85,7 +85,7 @@ docs = [
     "matplotlib",
     "scikit-learn",
     # The next packages are used in testcode blocks.
-    "ml_collections",
+    "ml_collections>=1.1.0",
     # notebooks
     "einops",
     "kagglehub>=0.3.3",
