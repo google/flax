@@ -253,8 +253,6 @@ class TestCompatibility(absltest.TestCase):
     y, variables = model.init_with_output(jax.random.key(0), x)
     assert y.shape == (1, 64)
     np.testing.assert_allclose(y, x @ variables['params']['kernel'])
-    assert 'nnx' in variables
-    assert isinstance(variables['nnx']['graphdef'], nnx.GraphDef)
 
   def test_nnx_to_linen_multiple_rngs(self):
     class NNXInner(nnx.Module):
@@ -291,7 +289,7 @@ class TestCompatibility(absltest.TestCase):
     x = jax.random.normal(xkey, (2, 4))
     model = bridge.to_linen(NNXInner, 4, 3)
     var = model.init({'params': pkey, 'dropout': dkey}, x)
-    self.assertSameElements(var.keys(), ['nnx', 'LoRAParam', 'params', 'batch_stats'])
+    self.assertSameElements(var.keys(), ['LoRAParam', 'params', 'batch_stats'])
     y = model.apply(var, x)
     assert y.shape == (2, 3)
 
@@ -332,15 +330,7 @@ class TestCompatibility(absltest.TestCase):
     variables = model.init(jax.random.key(0))
     assert variables['Count']['count'] == 0
 
-    # This does not work, because the __call__ also changes the static data of the model.
-    _, updates = model.apply(variables, mutable='Count')
-    assert updates['Count']['count'] == 1
-    assert updates['Count']['count_nonzero'] == 1
-    with self.assertRaises(ValueError):
-      _ = model.apply(variables | updates)
-
-    # This makes sure the static data is updated too. Using mutable=True also works.
-    _, updates = model.apply(variables, mutable=['Count', 'nnx'])
+    _, updates = model.apply(variables, mutable=['Count'])
     assert updates['Count']['count'] == 1
     assert updates['Count']['count_nonzero'] == 1
     _ = model.apply(variables | updates)
@@ -351,9 +341,9 @@ class TestCompatibility(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         inner = nn.vmap(
-          bridge.ToLinen,
-          variable_axes={'params': 0, 'nnx': None},
-          split_rngs={'params': True}
+            bridge.ToLinen,
+            variable_axes={'params': 0},
+            split_rngs={'params': True},
         )(nnx.Linear, args=(x.shape[-1], self.dout))
         return inner(x)
 
@@ -364,7 +354,6 @@ class TestCompatibility(absltest.TestCase):
     k = var['params']['VmapToLinen_0']['kernel']
     assert k.shape == (2, 4, 3)
     np.testing.assert_allclose(y, jnp.einsum('ab,abc->ac', x, k))
-    assert 'nnx' in var
 
   def test_nnx_to_linen_metadata(self):
     model = bridge.to_linen(
@@ -420,7 +409,7 @@ class TestCompatibility(absltest.TestCase):
     def get_weights(variables):
       non_rngs = {}
       for kp, v in flax.traverse_util.flatten_dict(variables).items():
-        if 'rngs' not in kp and 'nnx' not in kp:
+        if 'rngs' not in kp:
           non_rngs[kp] = v
       return flax.traverse_util.unflatten_dict(non_rngs)
     from_top_weights = get_weights(from_top)
