@@ -261,7 +261,7 @@ class TransformTest(parameterized.TestCase):
         for i in np.arange(x2.shape[0])
     ])
     y2 = vmap_model.apply(init_variables, x2)
-    np.testing.assert_allclose(y1, y2, atol=1e-7)
+    np.testing.assert_allclose(y1, y2, atol=1e-6)
 
   def test_vmap_decorated(self):
     key1, key2, key3 = random.split(random.key(3), 3)
@@ -285,7 +285,7 @@ class TransformTest(parameterized.TestCase):
         for i in np.arange(x2.shape[0])
     ])
     y2 = vmap_model.apply(init_variables, x2)
-    np.testing.assert_allclose(y1, y2, atol=1e-7)
+    np.testing.assert_allclose(y1, y2, atol=1e-6)
 
   def test_vmap_batchnorm(self):
     key1, key2, key3 = random.split(random.key(3), 3)

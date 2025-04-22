@@ -255,7 +255,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       PriorityStr(self.attr_priorities.get(k, AttrPriority.DEFAULT), k)
       for k in nodes.keys()
     )
-    sorted_nodes = ((k, nodes[k]) for k in sorted(keys))
+    sorted_nodes = list((k, nodes[k]) for k in sorted(keys))
     return sorted_nodes, type(self)
 
   def set_attr_priority(self, name: str, value: AttrPriority):

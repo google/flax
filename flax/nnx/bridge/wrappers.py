@@ -38,7 +38,7 @@ M = tp.TypeVar('M', bound=Module)
 @dataclasses.dataclass
 class Functional(tp.Generic[M]):
   module_type: tp.Type[M]
-  graphdef: tp.Optional[graph.NodeDef[M]]
+  graphdef: tp.Optional[graph.GraphDef[M]]
   args: tuple[tp.Any, ...]
   kwargs: dict[str, tp.Any]
 
@@ -48,7 +48,6 @@ class Functional(tp.Generic[M]):
       kwargs['rngs'] = rngs
     module = self.module_type(*self.args, **self.kwargs, **kwargs)
     graphdef, state = nnx.split(module)
-    assert type(graphdef) is graph.NodeDef
     self.graphdef = graphdef
     return state  # type: ignore
 
@@ -78,7 +77,7 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
     module = fn
     assert callable(fn)
   else:
-    if not hasattr(fn, '__self__') and isinstance(fn.__self__, Module):
+    if not (hasattr(fn, '__self__') and isinstance(fn.__self__, Module)):
       raise ValueError(f'{fn = } needs to be a method of an NNX Module.')
     module = fn.__self__
   _set_initializing(module, True)
@@ -186,20 +185,27 @@ class ToNNX(Module):
     return out
 
 
-def linen_rngs_dict(linen_module: linen.Module) -> tp.Mapping[str, jax.Array]:
+def linen_rngs_dict(linen_module: linen.Module, add_default: bool = False):
   """Given a module, split out one of its every active RNG key collections."""
   assert linen_module.scope is not None, 'linen_rngs_dict() must be called inside a Linen module.'
-  return {name: linen_module.make_rng(name)
-          for name in linen_module.scope.rngs.keys()}
+  rngs: dict[str, tp.Any] = {
+      name: linen_module.make_rng(name)
+      for name in linen_module.scope.rngs.keys()
+  }
+  if add_default and 'default' not in rngs:
+    rngs['default'] = 0
+  return rngs
 
 
 class ToLinen(linen.Module):
   """A wrapper to turn any NNX module into a Linen module.
 
-  The result Linen module can be used standalone with all Linen APIs, or as a submodule of
+  The result Linen module can be used standalone with all Linen APIs, or as a
+  submodule of
   another Linen module.
 
-  Since NNX modules are stateful and owns the state, we only create it once during init
+  Since NNX modules are stateful and owns the state, we only create it once
+  during init
   time, and will track its state and static data as separate variables.
 
   Example::
@@ -215,15 +221,16 @@ class ToLinen(linen.Module):
     (32, 64)
     >>> # The static GraphDef of the underlying NNX module
     >>> variables.keys()
-    dict_keys(['nnx', 'params'])
-    >>> type(variables['nnx']['graphdef'])
-    <class 'flax.nnx.graph.NodeDef'>
+    dict_keys(['params'])
 
   Args:
     nnx_class: The NNX Module class (not instance!).
-    args: The arguments that normally would be passed in to create the NNX module.
-    kwargs: The keyword arguments that normally would be passed in to create the NNX module.
-    skip_rng: True if this NNX module doesn't need `rngs` arg during initialization (not common).
+    args: The arguments that normally would be passed in to create the NNX
+      module.
+    kwargs: The keyword arguments that normally would be passed in to create the
+      NNX module.
+    skip_rng: True if this NNX module doesn't need `rngs` arg during
+      initialization (not common).
 
   Returns:
     A stateful NNX module that behaves the same as the wrapped Linen module.
@@ -232,59 +239,108 @@ class ToLinen(linen.Module):
   args: tp.Sequence = ()
   kwargs: tp.Mapping[str, tp.Any] = FrozenDict({})
   skip_rng: bool = False
-  metadata_type: tp.Type = bv.NNXMeta
+  metadata_fn: tp.Callable[[variablelib.VariableState], tp.Any] | None = (
+      bv.to_linen_var
+  )
 
   @linen.compact
   def __call__(self, *args, **kwargs):
+    module_kwargs = dict(self.kwargs)
+    maybe_add_default = not self.is_initializing()
+    def _module_kwargs():
+      if not self.skip_rng:
+        module_kwargs['rngs'] = nnx.Rngs(
+            **linen_rngs_dict(self, add_default=maybe_add_default)
+        )
+      return module_kwargs
+
     # init codepath
     if self.is_initializing():
-      module_kwargs = dict(self.kwargs)
-      if not self.skip_rng:
-        module_kwargs |= dict(rngs=nnx.Rngs(**linen_rngs_dict(self)))
-      module = self.nnx_class(*self.args, **module_kwargs)
+      module = self.nnx_class(*self.args, **_module_kwargs())
       # TODO: add lazy_init here in case there's an `ToNNX` submodule under `module`.
+      # update linen variables before call module to save initial state
       self._update_variables(module)
-      return module(*args, **kwargs)
+      out = module(*args, **kwargs)
+      return out
 
-    # apply codepath
-    gdef = self.get_variable('nnx', 'graphdef')
-    assert gdef, 'GraphDef not found in variables. Was the collection "nnx" dropped somewhere?'
-    variables = {col: v for col, v in self.variables.items() if col != 'nnx'}
-    states = jtu.tree_map_with_path(
-        lambda kp, x: bv.to_nnx_var(bv.get_col_name(kp), x).to_state(),
-        variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
-    states = [State(v) for v in states.values()]
-    nnx_state = nnx.merge_state(*states) if states else nnx.GraphState({})
-    module = nnx.merge(gdef, nnx_state)
-    nnx.reseed(module, **linen_rngs_dict(self))  # reseed with keys from linen apply call.
+    # create state
+    def maybe_unbox(x):
+      if isinstance(x, meta.AxisMetadata):
+        return x.unbox()
+      return x
+    states = jtu.tree_map(
+        maybe_unbox,
+        list(self.variables.values()),
+        is_leaf=lambda x: isinstance(x, meta.AxisMetadata),
+    )
+    if not states:
+      states = ({},)
+
+    # update module state
+    module = nnx.eval_shape(
+        lambda: self.nnx_class(*self.args, **_module_kwargs())
+    )
+    nnx.update(module, *states)
+    nnx.reseed(
+        module, **linen_rngs_dict(self, add_default=maybe_add_default)
+    )  # reseed with keys from linen apply call.
+
     out = module(*args, **kwargs)
     self._update_variables(module)
     return out
 
   def _update_variables(self, module):
     """Store the NNX module's graph def and state inside Linen module variables."""
-    gdef, state = nnx.split(module)
-    # Save the graph def.
-    if self.is_mutable_collection('nnx'):
-      self.put_variable('nnx', 'graphdef', gdef)
-    # Sort all the variable types.
-    types = set(jax.tree.leaves(
-      jax.tree.map(lambda x: x.type, state,
-                    is_leaf=lambda x: isinstance(x, nnx.VariableState))))
-    types = bv.sort_variable_types(types)
-    _, *state_by_types = nnx.split(module, *types)
-    # Each variable type goes to its own linen collection, and
-    # each attribute goes to its own linen variable
-    for typ, state in zip(types, state_by_types):
-      collection = variablelib.variable_name_from_type(typ, allow_register=True)
+    state = nnx.state(module, nnx.Not(nnx.RngState))
+
+    collection_flat_state: dict[str, list[tuple[tuple[str, ...], tp.Any]]] = {}
+
+    # group state by collection
+    for path, leaf in nnx.to_flat_state(state):
+      type_ = leaf.type if isinstance(leaf, nnx.VariableState) else type(leaf)
+      collection = variablelib.variable_name_from_type(
+          type_, allow_register=True
+      )
+      if collection not in collection_flat_state:
+        collection_flat_state[collection] = []
+      collection_flat_state[collection].append((path, leaf))
+
+    # update linen variables
+    for collection, flat_state in collection_flat_state.items():
       if self.is_mutable_collection(collection):
-        for k, v in state.raw_mapping.items():
-          v = jax.tree.map(bv.to_linen_var, v,
-                           is_leaf=lambda x: isinstance(x, nnx.VariableState))
+
+        def _to_linen_var(x):
+          if isinstance(x, nnx.VariableState):
+            if self.metadata_fn:
+              return self.metadata_fn(x)
+            else:
+              return x.value
+          return x
+
+        collection_state = nnx.traversals.unflatten_mapping(flat_state)
+        collection_state = jax.tree.map(
+            _to_linen_var,
+            collection_state,
+            is_leaf=lambda x: isinstance(x, nnx.VariableState),
+        )
+        for k, v in collection_state.items():
           self.put_variable(collection, k, v)
 
 
-def to_linen(nnx_class: tp.Callable[..., Module], *args,
-             name: str | None = None, **kwargs):
+def to_linen(
+    nnx_class: tp.Callable[..., Module],
+    *args,
+    metadata_fn: (
+        tp.Callable[[variablelib.VariableState], tp.Any] | None
+    ) = bv.to_linen_var,
+    name: str | None = None,
+    **kwargs,
+):
   """Shortcut of `nnx.bridge.ToLinen` if user is not changing any of its default fields."""
-  return ToLinen(nnx_class, args=args, kwargs=FrozenDict(kwargs), name=name)
+  return ToLinen(
+      nnx_class,
+      args=args,
+      kwargs=FrozenDict(kwargs),
+      metadata_fn=metadata_fn,
+      name=name,
+  )

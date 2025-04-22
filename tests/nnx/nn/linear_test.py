@@ -154,6 +154,15 @@ class TestLinenConsistency(parameterized.TestCase):
     assert isinstance(out, jax.Array)
     np.testing.assert_array_equal(out, out_nnx)
 
+  def test_einsum_op(self):
+    def custom_einsum(*args, **kwargs):
+      out = jnp.einsum(*args, **kwargs)
+      return out.reshape((1, *out.shape))
+    model = nnx.Einsum('ab,bc->ac', (3, 4), einsum_op=custom_einsum,
+                       rngs=nnx.Rngs(42))
+    y = model(jnp.ones((2, 3)))
+    assert y.shape == (1, 2, 4)
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -16,12 +16,10 @@ data must be scaled to fit within the FP8 representable range, a process known
 as quantization (Q). Conversely, de-quantization (DQ) rescales the FP8 data back
 to its original type.
 
-Although jnp.dot supports FP8 inputs, certain limitations make it impractical
-for real-world applications. Alternatively, XLA, our compiler, can recognize
-patterns like <FP8>->DQ->Dot and subsequently invoke FP8 backends (e.g.,
-cublasLt for GPUs). FLAX encapsulates such patterns into the
-nn.fp8_ops.Fp8DotGeneralOp module, allowing users to easily configure it for
-existing layers (e.g., nn.Dense).
+While jnp.dot supports FP8 inputs directly, proper quantization and
+dequantization is needed for optimal performance. Flax provides
+nn.fp8_ops.Fp8DotGeneral and nn.fp8_ops.Fp8Einsum modules that handle
+this automatically and can be used with existing layers like nn.Dense.
 
 This tutorial will walk you through the basics of how to use it.
 
@@ -46,7 +44,6 @@ from flax import linen as nn
 from flax.linen import fp8_ops
 
 e4m3 = jnp.float8_e4m3fn
-e5m2 = jnp.float8_e5m2
 f32 = jnp.float32
 E4M3_MAX = jnp.finfo(e4m3).max.astype(f32)
 
@@ -66,29 +63,24 @@ The JAX dot operations (e.g. `jnp.dot`) support the FP8 dtype inputs. So it is
 legal to do the following call:
 
 ```{code-cell}
-key = random.key(0)
-A = random.uniform(key, (16, 32))
-B = random.uniform(key, (32, 64))
+k0, k1 = random.split(random.key(0), 2)
+a = random.uniform(k0, (16, 32))
+b = random.uniform(k1, (32, 64))
 @jax.jit
-def dot_fp8(A, B):
-  return jnp.dot(A.astype(e4m3), B.astype(e4m3), preferred_element_type=f32)
-check_fp8_call(dot_fp8.lower(A, B))
+def dot_fp8(a, b):
+  return jnp.dot(a.astype(e4m3), b.astype(e4m3), preferred_element_type=f32)
+check_fp8_call(dot_fp8.lower(a, b))
 ```
 
-However, there are two main issues with this approach. Firstly, `jnp.dot` does
-not accept scaling factors for the operands, defaulting to a scaling factor of
-1.0. Secondly, it does not support operands of mixed FP8 data types. For
-example, when the operands are E5M2 and E4M3, the dot product is performed using
-the promoted FP16 data type.
+However, this approach has two key limitations:
 
-In real-world scenarios, it is essential to specify scaling factors, either from
-calibration for inference or a user-defined algorithm during training.
-Additionally, it is common practice to use E5M2 for gradients and E4M3 for
-activations and kernels. These limitations make this method less practical for
-real-world applications.
+1. `jnp.dot` does not support custom scaling factors for operands, defaulting to
+   a scale of 1.0
+2. The autodiff does not automatically use E5M2 for gradients and E4M3 for
+   activations/weights during training, which is the recommended practice
 
-To address these limitations and create a more versatile FP8 dot product, we
-recommend leveraging XLA-FP8. Let's begin with a simple scaling strategy.
+To overcome these limitations and implement proper FP8 matrix multiplication, we
+recommend using the Flax FP8 APIs. Let's start with a basic scaling approach.
 
 
 ### Current Scaling
@@ -101,31 +93,33 @@ operand tensors of the dot product.
 
 ```{code-cell}
 @jax.jit
-def dot_fp8(A, B):
-  A_scale = jnp.max(jnp.abs(A)) / E4M3_MAX
-  B_scale = jnp.max(jnp.abs(B)) / E4M3_MAX
-  A = fp8_ops.quantize_dequantize(A, e4m3, A_scale, f32)
-  B = fp8_ops.quantize_dequantize(B, e4m3, B_scale, f32)
+def dot_fp8(a, b):
+  a_scale = jnp.max(jnp.abs(A)) / E4M3_MAX
+  b_scale = jnp.max(jnp.abs(B)) / E4M3_MAX
+  a = fp8_ops.quantize(a, e4m3, a_scale, f32)
+  b = fp8_ops.quantize(b, e4m3, b_scale, f32)
 
-  C = jnp.dot(A, B)
-  return C
+  c = jnp.dot(a, b, preferred_element_type=f32)
+  c = fp8_ops.dequantize(c, f32, a_scale * b_scale)
+  return c
 
-C = dot_fp8(A, B)
-check_fp8_call(dot_fp8.lower(A, B))
+c = dot_fp8(a, b)
+check_fp8_call(dot_fp8.lower(a, b))
 ```
 
-As shown in the code, we perform fake quantization
-(`fp8_ops.quantize_dequantize`) on the operands of the dot product. Although the
-`jnp.dot` still processes higher-precision inputs, XLA detects this pattern and
-rewrites the dot operation as an FP8 dot call (e.g., cublasLt call for GPUs).
-This approach effectively mimics the first example but offers greater
-flexibility. We can control the input dtypes (both are set to E4M3 here, but we
-could use mixed E4M3 and E5M2) and define scaling factors, which XLA can detect
-and use in the dot backend.
+As shown in the code, we perform quantization (`fp8_ops.quantize`) on the
+tensors to get the lower precision operands. The `jnp.dot` processes them and
+accumulates the output in high precision (i.e., the `preferred_element_type`).
+After that, we multiply the result by the scaling factors to dequantize back to
+the original range (`fp8_ops.dequantize`). Note that while this example uses
+E4M3 for both inputs, it is possible to use different FP8 dtypes like E4M3 and
+E5M2 for the inputs. The quantization method and the scaling factors can also be
+customized based on application needs.
 
-One major issue with the current scaling method is the overhead introduced by
-computing `A_scale` and `B_scale`, which requires additional loading of the
-operand tensors. To overcome this issue, we recommend the delayed scaling.
+One major issue with the current scaling method is the performance overhead
+introduced by computing `a_scale` and `b_scale`, which requires additional
+loading of the operand tensors. To overcome this issue, we recommend the delayed
+scaling.
 
 ### Delayed Scaling
 
@@ -134,57 +128,54 @@ scaling factor remains a scalar, but the amax history is a list that stores amax
 values from recent steps (e.g., 1024 steps). Both tensors are computed from
 previous steps and maintained in the model parameters.
 
-Fake quantization for delayed scaling is provided by `fp8_ops.in_qdq` for the
-activations and weights, and `fp8_ops.out_qdq` for the gradients.
+The quantization and dequantization operations for delayed scaling are provided
+by `fp8_ops.in_q` and `fp8_ops.out_dq` respectively. `fp8_ops.in_q` handles
+input quantization and update the amax history and scaling factor, while
+`fp8_ops.out_dq` performs output dequantization.
 
 ```{code-cell}
 a_scale = jnp.array(1.0)
 b_scale = jnp.array(1.0)
-g_scale = jnp.array(1.0)
 a_amax_hist = jnp.zeros((1024,))
 b_amax_hist = jnp.zeros((1024,))
-g_amax_hist = jnp.zeros((1024,))
 
 @jax.jit
-def dot_fp8(a, a_scale, a_amax_hist, b, b_scale, b_amax_hist,
-            g_scale, g_amax_hist):
-  a = fp8_ops.in_qdq(f32, e4m3, a, a_scale, a_amax_hist)
-  b = fp8_ops.in_qdq(f32, e4m3, b, b_scale, b_amax_hist)
+def dot_fp8(a, a_scale, a_amax_hist, b, b_scale, b_amax_hist):
+  a, a_scale = fp8_ops.in_q(f32, e4m3, a, a_scale, a_amax_hist)
+  b, b_scale = fp8_ops.in_q(f32, e4m3, b, b_scale, b_amax_hist)
   
-  c = jnp.dot(a, b)
-  c = fp8_ops.out_qdq(f32, e5m2, c, g_scale, g_amax_hist)
+  c = jnp.dot(a, b, preferred_element_type=f32)
+  c = fp8_ops.out_dq(f32, a_scale, b_scale, c)
   return c
 
-C = dot_fp8(A, a_scale, a_amax_hist, B, b_scale, b_amax_hist,
-            g_scale, g_amax_hist)
-check_fp8_call(dot_fp8.lower(A, a_scale, a_amax_hist, B, b_scale, b_amax_hist,
-                             g_scale, g_amax_hist))
+c = dot_fp8(a, a_scale, a_amax_hist, b, b_scale, b_amax_hist)
+check_fp8_call(dot_fp8.lower(a, a_scale, a_amax_hist, b, b_scale, b_amax_hist))
 ```
 
 In this example, we first prepare three pairs of scaling factors and amax
 histories, treating them as results computed from previous steps. Then, we apply
-`fp8_ops.in_qdq` to the input operands of `jnp.dot`, followed by
-`fp8_ops.out_qdq` to the output of `jnp.dot`. Note the `fp8_ops.out_qdq` will
-apply fake quantization to the gradient of the output via custom_vjp functions.
-The new scaling factors and amax histories will be returned through their
-gradients, which will be covered in the next section.
+`fp8_ops.in_q` to the input operands of `jnp.dot`, followed by `fp8_ops.out_dq`
+to the output of `jnp.dot`.
 
 
 ## FLAX High Level API
-With the FLAX library, incorporating FP8 operations into existing FLAX layers
-is a seamless process. Users don't need to manipulate the low-level APIs for
-quantization. Instead, they can integrate the provided custom FP8 dot
-(`fp8_ops.Fp8DotGeneralOp`) into FLAX layers using a straightforward
-"code-injection" approach. This custom operation encapsulates all FP8-related
-tasks, including the placement of quantization-dequantization ops, algorithms
-for updating scaling factors, and the selection of FP8 dtype combinations for
-forward and backward propagation.
+Flax provides high-level operations to seamlessly integrate FP8 quantization
+into existing layers. Instead of manually handling quantization of the delayed
+scaling (e.g., the maintanence of the amax history and scaling factors), users
+can simply use these drop-in replacements:
+
+* `fp8_ops.Fp8DotGeneral` for `lax.dot_general` operations
+* `fp8_ops.Fp8Einsum` for `jnp.einsum` operations 
+
+These operations automatically handle all FP8-related functionality, including
+quantization/dequantization, scale factor updates, and FP8 dtype selection for
+both forward and backward passes.
 
 Consider the following example:
 
 ```{code-cell}
-model = nn.Dense(features=64, dot_general_cls=fp8_ops.Fp8DotGeneralOp)
-params = model.init(key, A)
+model = nn.Dense(features=64, dot_general_cls=fp8_ops.Fp8DotGeneral)
+params = model.init(k0, A)
 
 @jax.jit
 def train_step(var, a): 
@@ -194,13 +185,49 @@ def train_step(var, a):
 check_fp8_call(train_step.lower(params, A))
 ```
 
-In this example, we simply set `dot_general_cls=fp8_ops.Fp8DotGeneralOp` to
-enable the Dense layer to utilize the FP8 dot operation. The usage of the model
-remains almost the same as before. The main difference is the addition of a new
-category of parameters: the sets of scaling factors and amax history. In the
-next section, we will explore how to update these parameters.
+By setting `dot_general_cls=fp8_ops.Fp8DotGeneral`, we replace the
+default `lax.dot_general` operation in `nn.Dense` with an FP8-enabled version.
+The model usage remains similar, but now includes additional parameters for FP8
+quantization: scaling factors and amax history values. The next section explains
+how to update these FP8-specific parameters.
+
+For models that use `jnp.einsum` operations, such as Mixture of Experts (MoE)
+layers, users can replace them with `fp8_ops.Fp8Einsum` to enable FP8
+quantization. Here's an example:
+
+```{code-cell}
+from typing import Any
+class FooModule(nn.Module):
+  einsum: Any = None
+  @nn.compact
+  def __call__(self, a, b):
+    if self.einsum is not None:
+      einsum_fn = self.einsum()
+    elif self.einsum is None:
+      einsum_fn = jnp.einsum
+    c = einsum_fn("mk,kn->mn", a, b)
+    return c
+
+model = FooModule(einsum=fp8_ops.Fp8Einsum)
+params = model.init(k0, a, b)
+
+@jax.jit
+def train_step(var, a, b):
+  c = model.apply(var, a, b)
+  return jnp.sum(c)
+
+check_fp8_call(train_step.lower(params, a, b))
+```
 
 ## Manipulate FP8 params
+
+The following sections explain the internal FP8 parameters managed by
+`fp8_ops.Fp8DotGeneral` and `fp8_ops.Fp8Einsum`. These parameters
+include scaling factors and amax history values that control the FP8
+quantization process. While most users don't need to interact with these
+directly, understanding them can be valuable for advanced optimization and
+debugging.
+
 Let's first examine the data structure of `params`. In the code below, we redact
 the parameter values and then display the PyTree structure.
 
@@ -216,13 +243,12 @@ pprint.pprint(params_structure)
 The output is as follows:
 
 ```plaintext
-{'_overwrite_with_gradient': {'Fp8DotGeneralOp_0': {'input_amax_history': '*',
-                                                    'input_scale': '*',
-                                                    'kernel_amax_history': '*',
-                                                    'kernel_scale': '*',
-                                                    'output_grad_amax_history': '*',
-                                                    'output_grad_scale': '*'}},
- 'params': {'bias': '*', 'kernel': '*'}}
+{'_overwrite_with_gradient': {'Fp8Einsum_0': {'input_amax_history': '*',
+                                              'input_scale': '*',
+                                              'kernel_amax_history': '*',
+                                              'kernel_scale': '*',
+                                              'output_grad_amax_history': '*',
+                                              'output_grad_scale': '*'}}}
 ```
 
 In addition to the expected `params`, there is an additional category called
@@ -308,3 +334,22 @@ gradients of the two branches are added:
 ```
 
 This casting is already included if users choose to use the high-level APIs.
+
+## Deprecated APIs
+Previously, we provided APIs like `fp8_ops.quantize_dequantize` for current
+scaling and `fp8_ops.[in|out]_qdq` for delayed scaling. These were used with
+high precision dot operations, leveraging an XLA-FP8 feature that
+pattern-matched QDQ->dot sequences to Q->fp8_cublas_gemm. The corresponding
+high-level API was called `fp8_ops.Fp8DotGeneralOp`. However, this pattern
+matching-based solution proved brittle, as the patterns could be easily broken
+by other XLA optimizations. We recommend users migrate from these deprecated
+APIs to the newer ones described above.
+
+For migration, users should replace:
+* `fp8_ops.quantize_dequantize -> jnp.dot` with `fp8_ops.quantize -> jnp.dot ->
+  fp8_ops.dequantize`
+* `fp8_ops.in_qdq -> jnp.dot -> fp8_ops.out_qdq` with `fp8_ops.in_q -> jnp.dot
+  -> fp8_ops.out_dq`
+* `fp8_ops.Fp8DotGeneralOp` with `fp8_ops.Fp8DotGeneral`
+
+Additionally, we provide an einsum variant through `fp8_ops.Fp8Einsum`.

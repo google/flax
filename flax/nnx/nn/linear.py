@@ -36,6 +36,7 @@ from flax.typing import (
   PaddingLike,
   LaxPadding,
   PromoteDtypeFn,
+  EinsumT,
 )
 
 Array = jax.Array
@@ -426,6 +427,8 @@ class Einsum(Module):
       dtype. The function should accept a tuple of ``(inputs, kernel, bias)``
       and a ``dtype`` keyword argument, and return a tuple of arrays with the
       promoted dtype.
+    einsum_op: An injectable alternative of `jnp.einsum` to do the computation.
+      Should support same signature as `jnp.einsum`.
     rngs: rng key.
   """
 
@@ -441,6 +444,7 @@ class Einsum(Module):
     kernel_init: Initializer = default_kernel_init,
     bias_init: Initializer = default_bias_init,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+    einsum_op: EinsumT = jnp.einsum,
     rngs: rnglib.Rngs,
   ):
     einsum_str = einsum_str.replace(' ', '')
@@ -465,6 +469,7 @@ class Einsum(Module):
     self.kernel_init = kernel_init
     self.bias_init = bias_init
     self.promote_dtype = promote_dtype
+    self.einsum_op = einsum_op
 
   def __call__(
     self, inputs: Array, einsum_str: tp.Optional[str] = None
@@ -500,7 +505,7 @@ class Einsum(Module):
       dtype=self.dtype,
     )
 
-    y = jnp.einsum(einsum_str, inputs, kernel, precision=self.precision)
+    y = self.einsum_op(einsum_str, inputs, kernel, precision=self.precision)
 
     if bias is not None:
       broadcasted_bias_shape = self._infer_broadcasted_bias_shape(

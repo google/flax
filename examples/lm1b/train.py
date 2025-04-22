@@ -273,25 +273,6 @@ def pad_examples(x, desired_batch_size):
   return np.concatenate([x, np.tile(x[-1], (batch_pad, 1))], axis=0)
 
 
-def per_host_sum_pmap(in_tree):
-  """Execute psum on in_tree"s leaves over one device per host."""
-  host2devices = collections.defaultdict(list)
-  for d in jax.devices():
-    host2devices[d.process_index].append(d)
-  devices = [host2devices[k][0] for k in host2devices]
-  host_psum = jax.pmap(lambda x: jax.lax.psum(x, "i"), "i", devices=devices)
-
-  def pre_pmap(xs):
-    return jax.tree_util.tree_map(
-        lambda x: jnp.broadcast_to(x, (1,) + x.shape), xs
-    )
-
-  def post_pmap(xs):
-    return jax.tree_util.tree_map(lambda x: x[0], xs)
-
-  return post_pmap(host_psum(pre_pmap(in_tree)))
-
-
 def tohost(x):
   """Collect batches from all devices to host and flatten batch dimensions."""
   n_device, n_batch, *remaining_dims = x.shape

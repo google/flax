@@ -288,8 +288,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     obj = object.__new__(type(self))
     object.__setattr__(obj, '_trace_state', self._trace_state)
     object.__setattr__(obj, 'raw_value', kwargs.pop('raw_value'))
-    object.__setattr__(obj, '_var_metadata', self.get_metadata())
-    obj._var_metadata.update(kwargs)
+    object.__setattr__(obj, '_var_metadata', self.get_metadata() | kwargs)
     return obj
 
   @classmethod

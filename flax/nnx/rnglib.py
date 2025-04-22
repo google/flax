@@ -157,10 +157,9 @@ class Rngs(Object):
   """
 
   def __init__(
-    self,
-    default: RngValue | RngDict | None = None,
-    /,
-    **rngs: RngValue,
+      self,
+      default: RngValue | RngDict | None = None,
+      **rngs: RngValue,
   ):
     """
     Args:

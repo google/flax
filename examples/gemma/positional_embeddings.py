@@ -43,10 +43,11 @@ def add_positional_embedding(
 
 
 def apply_rope(
-    inputs: jax.Array,    # [B, L]
-    positions: jax.Array, # [B, L]
+    inputs: jax.Array,  # [B, L]
+    positions: jax.Array,  # [B, L]
     head_dim: int,
     max_wavelength: int = _MAX_WAVELENGTH,
+    scale_factor: float = 1.0,
 ) -> jax.Array:
   """Applies RoPE."""
   fraction = 2 * jnp.arange(0, head_dim // 2) / head_dim
@@ -56,6 +57,10 @@ def apply_rope(
       positions[..., jnp.newaxis] / timescale[jnp.newaxis, jnp.newaxis, :]
   )
   sinusoid_inp = sinusoid_inp[..., jnp.newaxis, :]
+  if scale_factor < 1.0:
+    raise ValueError(f'scale_factor must be >= 1.0, got {scale_factor}')
+  sinusoid_inp /= scale_factor
+
   sin = jnp.sin(sinusoid_inp)
   cos = jnp.cos(sinusoid_inp)
 

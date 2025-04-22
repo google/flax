@@ -125,9 +125,7 @@ class TestGraphUtils(absltest.TestCase):
 
     graphdef, state = nnx.split(g)
 
-    with self.assertRaisesRegex(
-      ValueError, 'Not enough leaves to unflatten the graph'
-    ):
+    with self.assertRaisesRegex(ValueError, 'Incorrect number of leaves'):
       nnx.graph.unflatten(graphdef, nnx.State({}))
 
   def test_unflatten_return_variables(self):
@@ -351,7 +349,6 @@ class TestGraphUtils(absltest.TestCase):
 
     assert 'tree' in state
     assert 'a' in state['tree']
-    assert graphdef.attributes[0][1].type is nnx.graph.GenericPytree
 
     m2 = nnx.merge(graphdef, state)
 
@@ -579,8 +576,8 @@ class TestGraphUtils(absltest.TestCase):
 
     self.assertFalse(hasattr(ctx, 'ref_index'))
     self.assertFalse(hasattr(ctx, 'ctxtag'))
-    self.assertIsInstance(graphdef1, nnx.graph.NodeDef)
-    self.assertIsInstance(graphdef2, nnx.graph.NodeRef)
+    self.assertIsInstance(graphdef1.nodes[0], nnx.graph.NodeDef)
+    self.assertIsInstance(graphdef2.nodes[0], nnx.graph.NodeRef)
     self.assertLen(nnx.to_flat_state(state1), 2)
     self.assertLen(nnx.to_flat_state(state2), 0)
 
@@ -592,6 +589,25 @@ class TestGraphUtils(absltest.TestCase):
     self.assertFalse(hasattr(ctx, 'index_ref'))
     self.assertFalse(hasattr(ctx, 'ctxtag'))
 
+  def test_split_merge_context_example(self):
+    m1 = nnx.Dict({})
+    with nnx.update_context('example'):
+      with nnx.split_context('example') as ctx:
+        graphdef, state = ctx.split(m1)
+
+      @jax.jit
+      def f(graphdef, state):
+        with nnx.merge_context('example', True) as ctx:
+          m2 = ctx.merge(graphdef, state)
+        m2.a = 1
+        m2.ref = m2  # create a reference cycle
+        with nnx.split_context('example') as ctx:
+          return ctx.split(m2)
+
+      graphdef_out, state_out = f(graphdef, state)
+      with nnx.merge_context('example', False) as ctx:
+        m3 = ctx.merge(graphdef_out, state_out)
+
   def test_split_merge_context_nested(self):
     m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     m1 = nnx.Sequential(m2)
@@ -599,8 +615,8 @@ class TestGraphUtils(absltest.TestCase):
       graphdef1, state1 = ctx.split(m1)
       graphdef2, state2 = ctx.split(m2)
 
-    self.assertIsInstance(graphdef1, nnx.graph.NodeDef)
-    self.assertIsInstance(graphdef2, nnx.graph.NodeRef)
+    self.assertIsInstance(graphdef1.nodes[0], nnx.graph.NodeDef)
+    self.assertIsInstance(graphdef2.nodes[0], nnx.graph.NodeRef)
     self.assertLen(nnx.to_flat_state(state1), 2)
     self.assertLen(nnx.to_flat_state(state2), 0)
 
@@ -629,14 +645,14 @@ class TestGraphUtils(absltest.TestCase):
 
       self.assertFalse(hasattr(ctx, 'ref_index'))
       self.assertFalse(hasattr(ctx, 'ctxtag'))
-      self.assertIsInstance(graphdef1, nnx.graph.NodeDef)
-      self.assertIsInstance(graphdef2, nnx.graph.NodeRef)
+      self.assertIsInstance(graphdef1.nodes[0], nnx.graph.NodeDef)
+      self.assertIsInstance(graphdef2.nodes[0], nnx.graph.NodeRef)
       self.assertLen(nnx.to_flat_state(state1), 1)
       self.assertLen(nnx.to_flat_state(state2), 0)
 
       @jax.jit
       def f(graphdef1, state1, graphdef2, state2):
-        with nnx.graph.merge_context(True, ctxtag) as ctx:
+        with nnx.graph.merge_context(ctxtag, True) as ctx:
           m1 = ctx.merge(graphdef1, state1)
           m2 = ctx.merge(graphdef2, state2)
 
@@ -657,7 +673,7 @@ class TestGraphUtils(absltest.TestCase):
           graphdef1, state1, graphdef2, state2
       )
 
-      with nnx.graph.merge_context(False, ctxtag) as ctx:
+      with nnx.graph.merge_context(ctxtag, False) as ctx:
         m1_out = ctx.merge(graphdef1, state1)
         m2_out = ctx.merge(graphdef2, state2)
 
@@ -683,8 +699,8 @@ class TestGraphUtils(absltest.TestCase):
     assert isinstance(t1, nnx.NodeStates)
     self.assertIsInstance(t2, nnx.NodeStates)
     assert isinstance(t2, nnx.NodeStates)
-    self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
-    self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
+    self.assertIsInstance(t1.graphdef.nodes[0], nnx.graph.NodeDef)
+    self.assertIsInstance(t2.graphdef.nodes[0], nnx.graph.NodeRef)
     self.assertLen(nnx.to_flat_state(t1.states[0]), 2)
     self.assertLen(nnx.to_flat_state(t2.states[0]), 0)
 
@@ -718,8 +734,8 @@ class TestGraphUtils(absltest.TestCase):
       assert isinstance(t1, nnx.NodeStates)
       self.assertIsInstance(t2, nnx.NodeStates)
       assert isinstance(t2, nnx.NodeStates)
-      self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
-      self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
+      self.assertIsInstance(t1.graphdef.nodes[0], nnx.graph.NodeDef)
+      self.assertIsInstance(t2.graphdef.nodes[0], nnx.graph.NodeRef)
       self.assertLen(nnx.to_flat_state(t1.states[0]), 1)
       self.assertLen(nnx.to_flat_state(t2.states[0]), 0)
 
@@ -745,8 +761,8 @@ class TestGraphUtils(absltest.TestCase):
         assert isinstance(t1, nnx.NodeStates)
         self.assertIsInstance(t2, nnx.NodeStates)
         assert isinstance(t2, nnx.NodeStates)
-        self.assertIsInstance(t1.graphdef, nnx.graph.NodeDef)
-        self.assertIsInstance(t2.graphdef, nnx.graph.NodeRef)
+        self.assertIsInstance(t1.graphdef.nodes[0], nnx.graph.NodeDef)
+        self.assertIsInstance(t2.graphdef.nodes[0], nnx.graph.NodeRef)
         self.assertLen(nnx.to_flat_state(t1.states[0]), 1)
         self.assertLen(nnx.to_flat_state(t2.states[0]), 0)
 
@@ -891,7 +907,7 @@ class TestGraphUtils(absltest.TestCase):
     v = nnx.Param(1)
     graphdef, state = nnx.split(v)
 
-    self.assertIsInstance(graphdef, nnx.graph.VariableDef)
+    self.assertIsInstance(graphdef.nodes[0], nnx.graph.VariableDef)
     self.assertIsInstance(state, nnx.VariableState)
 
     v2 = nnx.merge(graphdef, state)
@@ -903,7 +919,7 @@ class TestGraphUtils(absltest.TestCase):
       v, nnx.BatchStat, nnx.Param, ...
     )
 
-    self.assertIsInstance(graphdef, nnx.graph.VariableDef)
+    self.assertIsInstance(graphdef.nodes[0], nnx.graph.VariableDef)
     self.assertIsInstance(params, nnx.VariableState)
     self.assertIsInstance(batch_stats, nnx.State)
     self.assertEmpty(batch_stats)
@@ -917,7 +933,7 @@ class TestGraphUtils(absltest.TestCase):
     v = nnx.Param(1)
     graphdef, state = nnx.split(v)
 
-    self.assertIsInstance(graphdef, nnx.graph.VariableDef)
+    self.assertIsInstance(graphdef.nodes[0], nnx.graph.VariableDef)
     self.assertIsInstance(state, nnx.VariableState)
 
     state.value = 2
@@ -931,7 +947,7 @@ class TestGraphUtils(absltest.TestCase):
       v, nnx.BatchStat, nnx.Param, ...
     )
 
-    self.assertIsInstance(graphdef, nnx.graph.VariableDef)
+    self.assertIsInstance(graphdef.nodes[0], nnx.graph.VariableDef)
     self.assertIsInstance(params, nnx.VariableState)
     self.assertIsInstance(batch_stats, nnx.State)
     self.assertEmpty(batch_stats)
