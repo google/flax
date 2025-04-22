@@ -56,6 +56,15 @@ NodeLeaf = Variable[tp.Any]
 GraphState = State[Key, StateLeaf]
 GraphFlatState = FlatState[StateLeaf]
 
+def maybe_use_flaxlib(name: str, register_static: bool = False):
+  if config.flax_use_flaxlib:
+    import flaxlib
+
+    flaxlib_version: type = getattr(flaxlib, name)
+    globals()[name] = flaxlib_version
+
+    if register_static:
+      jax.tree_util.register_static(flaxlib_version)
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
   return isinstance(x, VariableState)
@@ -71,10 +80,7 @@ class IndexMap(dict[Index, tp.Any]):
     indexmap.update((index, value) for value, index in refmap.items())
     return indexmap
 
-if config.flax_use_flaxlib:
-  import flaxlib
-
-  globals()['IndexMap'] = flaxlib.IndexMap
+maybe_use_flaxlib('IndexMap')
 
 
 # RefMap = dict
@@ -120,11 +126,12 @@ class RefMap(tp.MutableMapping[tp.Any, int]):
   def items(self) -> tp.ItemsView[tp.Any, int]:
     return self._mapping.values()  # type: ignore
 
+# TODO(cgarciae): PyRefMap is currently being used for
+# cached_partial, but it should be removed when cached_partial
+# is no longer needed.
+PyRefMap = RefMap
 
-if config.flax_use_flaxlib:
-  import flaxlib
-
-  globals()['RefMap'] = flaxlib.RefMap
+maybe_use_flaxlib('RefMap')
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -136,28 +143,33 @@ class NodeImplBase(tp.Generic[Node, Leaf, AuxData]):
     nodes, _ = self.flatten(node)
     return dict(nodes)
 
+maybe_use_flaxlib('NodeImplBase')
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class GraphNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
-  set_key: tp.Callable[[Node, Key, Leaf], None]
-  pop_key: tp.Callable[[Node, Key], Leaf]
-  create_empty: tp.Callable[[AuxData], Node]
-  clear: tp.Callable[[Node], None]
-  init: tp.Callable[[Node, tp.Iterable[tuple[Key, Leaf]]], None]
+class GraphNodeImpl(NodeImplBase):
+  set_key: tp.Callable[[tp.Any, Key, tp.Any], None]
+  pop_key: tp.Callable[[tp.Any, Key], tp.Any]
+  create_empty: tp.Callable[[tp.Any], tp.Any]
+  clear: tp.Callable[[tp.Any], None]
+  init: tp.Callable[[tp.Any, tp.Iterable[tuple[Key, tp.Any]]], None]
+
+
+maybe_use_flaxlib('GraphNodeImpl')
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class PytreeNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
-  unflatten: tp.Callable[[tp.Sequence[tuple[Key, Leaf]], AuxData], Node]
+class PytreeNodeImpl(NodeImplBase):
+  unflatten: tp.Callable[[tp.Sequence[tuple[Key, tp.Any]], tp.Any], tp.Any]
 
 
-NodeImpl = tp.Union[
-  GraphNodeImpl[Node, Leaf, AuxData], PytreeNodeImpl[Node, Leaf, AuxData]
-]
+maybe_use_flaxlib('PytreeNodeImpl')
 
 
-GRAPH_REGISTRY: dict[type, NodeImpl[tp.Any, tp.Any, tp.Any]] = {}
-PYTREE_REGISTRY: dict[type, PytreeNodeImpl[tp.Any, tp.Any, tp.Any]] = {}
+NodeImpl = tp.Union[GraphNodeImpl, PytreeNodeImpl]
+
+
+GRAPH_REGISTRY: dict[type, NodeImpl] = {}
+PYTREE_REGISTRY: dict[type, PytreeNodeImpl] = {}
 
 
 def register_graph_node_type(
@@ -173,13 +185,13 @@ def register_graph_node_type(
     raise ValueError(f'Node type {type} is already registered.')
 
   GRAPH_REGISTRY[type] = GraphNodeImpl(
-    type=type,
-    flatten=flatten,
-    set_key=set_key,
-    pop_key=pop_key,
-    create_empty=create_empty,
-    clear=clear,
-    init=init,
+    type,
+    flatten,
+    set_key,
+    pop_key,
+    create_empty,
+    clear,
+    init,
   )
 
 
@@ -191,9 +203,7 @@ def register_pytree_node_type(
   if type in PYTREE_REGISTRY:
     raise ValueError(f'Node type {type} is already registered.')
 
-  PYTREE_REGISTRY[type] = PytreeNodeImpl(
-    type=type, flatten=flatten, unflatten=unflatten
-  )
+  PYTREE_REGISTRY[type] = PytreeNodeImpl(type, flatten, unflatten)
 
 
 def is_node(x: tp.Any) -> bool:
@@ -210,16 +220,13 @@ def is_node_type(x: type[tp.Any]) -> bool:
   return x in GRAPH_REGISTRY or x in PYTREE_REGISTRY or x is GenericPytree
 
 
-def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any] | None:
-  if isinstance(x, Variable):
-    return None
-
+def get_node_impl(x) -> NodeImpl | None:
   node_type = type(x)
 
-  if node_type in GRAPH_REGISTRY:
-    return GRAPH_REGISTRY[node_type]
-  elif node_type in PYTREE_REGISTRY:
-    return PYTREE_REGISTRY[node_type]
+  if node_impl := GRAPH_REGISTRY.get(node_type):
+    return node_impl
+  elif node_impl := PYTREE_REGISTRY.get(node_type):
+    return node_impl
   elif node_type in JAX_PYTREE_REGISTRY or issubclass(node_type, tuple):
     return PYTREE_NODE_IMPL  # type: ignore
   else:
@@ -285,11 +292,7 @@ class NodeRef(tp.Generic[Node], reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
-if config.flax_use_flaxlib:
-  import flaxlib
-
-  jax.tree_util.register_static(flaxlib.NodeRef)
-  globals()['NodeRef'] = flaxlib.NodeRef
+maybe_use_flaxlib('NodeRef', register_static=True)
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False)
@@ -331,11 +334,7 @@ class VariableDef(reprlib.Representable, tp.Generic[Node]):
       subtree_renderer=subtree_renderer,
     )
 
-if config.flax_use_flaxlib:
-  import flaxlib
-
-  jax.tree_util.register_static(flaxlib.VariableDef)
-  globals()['VariableDef'] = flaxlib.VariableDef
+maybe_use_flaxlib('VariableDef', register_static=True)
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False, slots=True)
@@ -391,12 +390,7 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
-
-if config.flax_use_flaxlib:
-  import flaxlib
-
-  jax.tree_util.register_static(flaxlib.NodeDef)
-  globals()['NodeDef'] = flaxlib.NodeDef
+maybe_use_flaxlib('NodeDef', register_static=True)
 
 
 @jax.tree_util.register_static
@@ -628,10 +622,10 @@ def _graph_flatten(
       assert paths is not None
       paths.append(tuple(path))
     variabledef = VariableDef(
-      type=type(node),
-      index=index,
-      outer_index=ref_outer_index.get(node, None) if ref_outer_index else None,
-      metadata=HashableMapping(node._var_metadata),
+      type(node),
+      index,
+      ref_outer_index.get(node, None) if ref_outer_index else None,
+      HashableMapping(node._var_metadata),
     )
     nodes.append(variabledef)
     return
@@ -680,6 +674,111 @@ def _graph_flatten(
 
     if path is not None:
       path.pop()
+
+  return
+
+def _flatten_fast(
+  node: Node,
+  /,
+  *,
+  ref_index: RefMap,
+  ref_outer_index: RefMap | None,
+) -> tuple[GraphDef[Node], list[tp.Any]]:
+  leaves: list[jax.Array | np.ndarray] = []
+  nodes: list[NodeDef[tp.Any] | VariableDef[tp.Any] | NodeRef[tp.Any]] = []
+  attributes: list[tuple[Key, NodeAttr | ArrayAttr | Static[tp.Any]]] = []
+  node_impl = get_node_impl(node)
+  if node_impl is None and not isinstance(node, Variable):
+    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
+  _graph_flatten_fast(
+    node,
+    node_impl,
+    ref_index,
+    ref_outer_index,
+    nodes,
+    attributes,
+    leaves,
+  )
+  graphdef = GraphDef(
+    nodes=nodes, attributes=attributes, num_leaves=len(leaves)
+  )
+
+  return graphdef, leaves
+
+
+def _graph_flatten_fast(
+  node: Node,
+  node_impl: NodeImpl[Node, Leaf, AuxData] | None,
+  ref_index: RefMap,
+  ref_outer_index: RefMap | None,
+  nodes: list[NodeDef[tp.Any] | VariableDef[tp.Any] | NodeRef[tp.Any]],
+  attributes: list[tuple[Key, NodeAttr | ArrayAttr | Static[tp.Any]]],
+  leaves: list[jax.Array | np.ndarray],
+) -> None:
+  is_pytree_node_ = type(node_impl) is PytreeNodeImpl
+
+  if not is_pytree_node_ and node in ref_index:
+    nodes.append(NodeRef(index := ref_index[node]))
+    return
+
+  is_graph_node_ = type(node_impl) is GraphNodeImpl
+  is_variable = isinstance(node, Variable)
+
+  # only cache graph nodes
+  if is_pytree_node_:
+    index = None
+  else:
+    index = len(ref_index)
+    ref_index[node] = index
+
+  if is_variable:
+    assert isinstance(node, Variable)
+    assert index is not None
+    leaf = node.raw_value
+    leaves.append(leaf)
+    variabledef = VariableDef(
+      type(node),
+      index,
+      ref_outer_index.get(node, None) if ref_outer_index else None,
+      HashableMapping(node._var_metadata),
+    )
+    nodes.append(variabledef)
+    return
+
+  if node_impl is None:
+    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
+
+  values, metadata = node_impl.flatten(node)
+  num_attributes = len(values)
+  nodedef = NodeDef(
+    node_impl.type,
+    index,
+    ref_outer_index[node]
+    if is_graph_node_ and ref_outer_index and node in ref_outer_index
+    else None,
+    num_attributes,
+    metadata,
+  )
+  nodes.append(nodedef)
+
+  for key, value in values:
+    value_node_impl = get_node_impl(value)
+    if value_node_impl is not None or isinstance(value, Variable):
+      attributes.append((key, NODE_ATTR))
+      _graph_flatten_fast(
+        value,
+        value_node_impl,
+        ref_index,
+        ref_outer_index,
+        nodes,
+        attributes,
+        leaves,
+      )
+    elif isinstance(value, (jax.Array, np.ndarray)):
+      attributes.append((key, ARRAY_ATTR))
+      leaves.append(value)
+    else:
+      attributes.append((key, Static(value)))
 
   return
 
@@ -1286,7 +1385,7 @@ class GraphContext(threading.local):
   )
   ref_index_stack: list[SplitContext] = dataclasses.field(default_factory=list)
   index_ref_stack: list[MergeContext] = dataclasses.field(default_factory=list)
-  tmp_static_cache: RefMap | None = None
+  tmp_static_cache: PyRefMap | None = None
   caching: bool = False
 
 
@@ -1294,7 +1393,7 @@ GRAPH_CONTEXT = GraphContext()
 
 
 @contextlib.contextmanager
-def static_cache(static_cache: RefMap):
+def static_cache(static_cache: PyRefMap):
   if GRAPH_CONTEXT.caching:
     yield
     return
@@ -1357,7 +1456,7 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
   Returns:
     A partial function expecting the remaining arguments to the original function.
   """
-  cache: RefMap = RefMap()
+  cache = PyRefMap()
   original_ref_index: RefMap = RefMap()
   index_ref: IndexMap = IndexMap()
   cached_ref_index: RefMap = RefMap()
@@ -1379,7 +1478,7 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
         new_ref_index=cached_new_ref_index,
       )
       cached_ref_index.update(cached_new_ref_index)
-      cache[node_cache] = StaticCache.create(
+      cache[node_cache] = StaticCache.create(  # type: ignore
         graphdef, paths, variables, cached_new_ref_index
       )
       return node_cache
@@ -1563,6 +1662,20 @@ class SplitContext:
       return graphdef, *flat_states  # type: ignore[bad-return-type]
     else:
       return graphdef, leaves
+
+  def flatten_fast(self, node: A) -> tuple[GraphDef[A], list[tp.Any]]:
+    ctx = (
+      current_update_context(self.ctxtag) if self.ctxtag is not None else None
+    )
+    ref_outer_index = (
+      ctx.inner_ref_outer_index if ctx and ctx.inner_ref_outer_index else None
+    )
+    graphdef, leaves = _flatten_fast(
+      node,
+      ref_index=self.ref_index,
+      ref_outer_index=ref_outer_index,
+    )
+    return graphdef, leaves
 
 
 @contextlib.contextmanager
@@ -2621,9 +2734,9 @@ def _unflatten_pytree(
 
 
 PYTREE_NODE_IMPL = PytreeNodeImpl(
-  type=GenericPytree,
-  flatten=_flatten_pytree,
-  unflatten=_unflatten_pytree,  # type: ignore
+  GenericPytree,
+  _flatten_pytree,
+  _unflatten_pytree,  # type: ignore
 )
 
 # common pytrees

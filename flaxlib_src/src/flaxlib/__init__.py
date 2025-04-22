@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .flaxlib_cpp import NodeImplBase as NodeImplBase
+from .flaxlib_cpp import GraphNodeImpl as GraphNodeImpl
+from .flaxlib_cpp import PytreeNodeImpl as PytreeNodeImpl
 from .flaxlib_cpp import RefMap as RefMap
 from .flaxlib_cpp import IndexMap as IndexMap
 from .flaxlib_cpp import NodeDef as NodeDef
