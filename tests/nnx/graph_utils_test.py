@@ -378,11 +378,9 @@ class TestGraphUtils(absltest.TestCase):
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
-      idx_out_ref_in: dict[int, Any] = {}
+      idx_out_ref_in = nnx.graph.IndexMap()
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
-      ref_in_idx_out = nnx.graph.RefMap(
-        {v: k for k, v in idx_out_ref_in.items()}
-      )
+      ref_in_idx_out = nnx.graph.RefMap.from_indexmap(idx_out_ref_in)
       f(m)
       ref_in_idx_in = nnx.graph.RefMap()
       graphdef, state = nnx.graph.flatten(
@@ -392,7 +390,7 @@ class TestGraphUtils(absltest.TestCase):
       return state, graphdef
 
     state, graphdef_out = f_pure(graphdef, state)
-    idx_out_ref_out = {v: k for k, v in ref_out_idx_out.items()}
+    idx_out_ref_out = nnx.graph.IndexMap.from_refmap(ref_out_idx_out)
     m2 = nnx.graph.unflatten(
       graphdef_out, state, outer_index_outer_ref=idx_out_ref_out
     )
@@ -421,11 +419,9 @@ class TestGraphUtils(absltest.TestCase):
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
-      idx_out_ref_in: dict[int, Any] = {}
+      idx_out_ref_in = nnx.graph.IndexMap()
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
-      ref_in_idx_out = nnx.graph.RefMap(
-        {v: k for k, v in idx_out_ref_in.items()}
-      )
+      ref_in_idx_out = nnx.graph.RefMap.from_indexmap(idx_out_ref_in)
       f(m)
       ref_in_idx_in = nnx.graph.RefMap()
       graphdef, state = nnx.graph.flatten(
@@ -455,16 +451,14 @@ class TestGraphUtils(absltest.TestCase):
     ref_out_idx_out = nnx.graph.RefMap()
     graphdef: nnx.graph.GraphDef[Foo]
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_out_idx_out)
-    idx_out_ref_out = {v: k for k, v in ref_out_idx_out.items()}
+    idx_out_ref_out = nnx.graph.IndexMap.from_refmap(ref_out_idx_out)
     state = state.to_nested_state()
 
     @partial(jax.jit, static_argnums=(0,))
     def f_pure(graphdef: nnx.graph.GraphDef[Foo], state):
-      idx_out_ref_in: dict[int, Any] = {}
+      idx_out_ref_in = nnx.graph.IndexMap()
       m = nnx.graph.unflatten(graphdef, state, index_ref=idx_out_ref_in)
-      ref_in_idx_out = nnx.graph.RefMap(
-        {v: k for k, v in idx_out_ref_in.items()}
-      )
+      ref_in_idx_out = nnx.graph.RefMap.from_indexmap(idx_out_ref_in)
       f(m)
       ref_in_idx_in = nnx.graph.RefMap()
       graphdef, state = nnx.graph.flatten(
