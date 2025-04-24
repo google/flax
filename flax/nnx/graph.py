@@ -197,6 +197,8 @@ def register_pytree_node_type(
 
 
 def is_node(x: tp.Any) -> bool:
+  if isinstance(x, Variable):
+    return False
   if type(x) in GRAPH_REGISTRY:
     return True
   return is_pytree_node(x)
@@ -2573,6 +2575,8 @@ from jax._src.tree_util import _registry as JAX_PYTREE_REGISTRY
 
 
 def is_pytree_node(x: tp.Any) -> bool:
+  if isinstance(x, Variable):
+    return False
   if type(x) in JAX_PYTREE_REGISTRY:
     return True
   elif isinstance(x, tuple):

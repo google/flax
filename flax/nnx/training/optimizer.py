@@ -80,7 +80,11 @@ def _opt_state_variables_to_state(opt_state):
         f'Unexpected type when converting optimizer state: {type(x)}'
       )
 
-  return jax.tree.map(optimizer_variable_to_state_fn, opt_state)
+  return jax.tree.map(
+    optimizer_variable_to_state_fn,
+    opt_state,
+    is_leaf=lambda x: isinstance(x, nnx.Variable),
+  )
 
 
 def _update_opt_state(opt_state, updates):
@@ -102,7 +106,12 @@ def _update_opt_state(opt_state, updates):
         f'Unexpected type when updating optimizer state: {type(x)}'
       )
 
-  return jax.tree.map(optimizer_update_variables, opt_state, updates)
+  return jax.tree.map(
+    optimizer_update_variables,
+    opt_state,
+    updates,
+    is_leaf=lambda x: isinstance(x, nnx.Variable),
+  )
 
 
 class Optimizer(Object, tp.Generic[M]):
