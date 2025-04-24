@@ -882,12 +882,23 @@ class Scope:
 
   @overload
   def param(
-    self,
-    name: str,
-    init_fn: Callable[..., T],
-    *init_args,
-    unbox: Literal[True],
-    **init_kwargs,
+      self,
+      name: str,
+      init_fn: Callable[..., meta.AxisMetadata[T]] | Callable[..., T],
+      *init_args,
+      unbox: Literal[True],
+      **init_kwargs,
+  ) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[False],
+      **init_kwargs,
   ) -> T:
     ...
 
@@ -895,18 +906,7 @@ class Scope:
   def param(
     self,
     name: str,
-    init_fn: Callable[..., T],
-    *init_args,
-    unbox: Literal[False],
-    **init_kwargs,
-  ) -> meta.AxisMetadata[T]:
-    ...
-
-  @overload
-  def param(
-    self,
-    name: str,
-    init_fn: Callable[..., T],
+    init_fn: Callable[..., T | meta.AxisMetadata[T]],
     *init_args,
     unbox: bool,
     **init_kwargs,
