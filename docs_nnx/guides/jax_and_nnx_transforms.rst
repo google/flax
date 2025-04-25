@@ -56,8 +56,8 @@ Notice that:
     def loss_fn(model):
       return ((model(x) - y) ** 2).mean()
     grads = nnx.grad(loss_fn)(model)
-    params = nnx.state(model, nnx.Param)
-    params = jax.tree_util.tree_map(
+    params = nnx.pure(nnx.state(model, nnx.Param))
+    params = jax.tree.map(
       lambda p, g: p - 0.1 * g, params, grads
     )
     nnx.update(model, params)
@@ -74,8 +74,8 @@ Notice that:
     grads = jax.grad(loss_fn, argnums=1)(graphdef, state) #!
 
     model = nnx.merge(graphdef, state) #!
-    params = nnx.state(model, nnx.Param)
-    params = jax.tree_util.tree_map(
+    params = nnx.pure(nnx.state(model, nnx.Param))
+    params = jax.tree.map(
       lambda p, g: p - 0.1 * g, params, grads
     )
     nnx.update(model, params)
@@ -102,8 +102,8 @@ in your code is pure and has valid argument types that are recognized by JAX.
       model = nnx.merge(graphdef, state)
       return ((model(x) - y) ** 2).mean()
     grads = jax.grad(loss_fn, 1)(*nnx.split(model)) #!
-    params = nnx.state(model, nnx.Param)
-    params = jax.tree_util.tree_map(
+    params = nnx.pure(nnx.state(model, nnx.Param))
+    params = jax.tree.map(
       lambda p, g: p - 0.1 * g, params, grads
     )
     nnx.update(model, params)
@@ -118,8 +118,8 @@ in your code is pure and has valid argument types that are recognized by JAX.
     def loss_fn(model):
       return ((model(x) - y) ** 2).mean()
     grads = nnx.grad(loss_fn)(model)
-    params = nnx.state(model, nnx.Param)
-    params = jax.tree_util.tree_map(
+    params = nnx.pure(nnx.state(model, nnx.Param))
+    params = jax.tree.map(
       lambda p, g: p - 0.1 * g, params, grads
     )
     nnx.update(model, params)

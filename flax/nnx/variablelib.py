@@ -78,12 +78,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
     >>> jax.tree.map(jnp.shape, linear_variables)
     State({
       'linear': {
-        'bias': VariableState(
-          type=Param,
+        'bias': Param(
           value=(3,)
         ),
-        'kernel': VariableState(
-          type=Param,
+        'kernel': Param(
           value=(2, 3)
         )
       }
@@ -92,8 +90,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     >>> custom_variable = nnx.state(model, CustomVariable)
     >>> jax.tree.map(jnp.shape, custom_variable)
     State({
-      'custom_variable': VariableState(
-        type=CustomVariable,
+      'custom_variable': CustomVariable(
         value=(1, 3)
       )
     })
@@ -101,17 +98,14 @@ class Variable(tp.Generic[A], reprlib.Representable):
     >>> variables = nnx.state(model)
     >>> jax.tree.map(jnp.shape, variables)
     State({
-      'custom_variable': VariableState(
-        type=CustomVariable,
+      'custom_variable': CustomVariable(
         value=(1, 3)
       ),
       'linear': {
-        'bias': VariableState(
-          type=Param,
+        'bias': Param(
           value=(3,)
         ),
-        'kernel': VariableState(
-          type=Param,
+        'kernel': Param(
           value=(2, 3)
         )
       }
@@ -194,10 +188,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
     else:
       del self._var_metadata[name]
 
-  @classmethod
-  def state(cls, value: A, **metadata) -> VariableState[A]:
-    return cls(value, **metadata).to_state()
-
   def get_metadata(self):
     return self._var_metadata
 
@@ -213,10 +203,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
     self._var_metadata.clear()
     self._var_metadata.update(other.get_metadata())
 
-  def update_from_state(self, variable_state: VariableState[A]):
+  def update_from_state(self, variable_state: Variable[A]):
     object.__setattr__(self, 'raw_value', variable_state.value)
     object.__setattr__(
-        self, '_var_metadata', variable_state._var_metadata.copy()
+      self, '_var_metadata', variable_state._var_metadata.copy()
     )
 
   @property
@@ -250,12 +240,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
 
   @tp.overload
-  def replace(self, value: B, **kwargs) -> Variable[B]:
-    ...
+  def replace(self, value: B, **kwargs) -> Variable[B]: ...
 
   @tp.overload
-  def replace(self, **kwargs) -> Variable[A]:
-    ...
+  def replace(self, **kwargs) -> Variable[A]: ...
 
   def replace(self, value: tp.Any = Missing, **kwargs) -> Variable[tp.Any]:
     if value is not Missing:
@@ -305,9 +293,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
     object.__setattr__(obj, 'raw_value', self.raw_value)
     object.__setattr__(obj, '_var_metadata', self.get_metadata().copy())
     return obj
-
-  def to_state(self: Variable[A]) -> VariableState[A]:
-    return VariableState(type(self), self.raw_value, **self._var_metadata)
 
   def __nnx_repr__(self):
     stats = SizeBytes.from_any(self.value)
@@ -363,9 +348,9 @@ class Variable(tp.Generic[A], reprlib.Representable):
   # pickle support
   def __getstate__(self):
     return {
-        'raw_value': self.raw_value,
-        '_trace_state': self._trace_state,
-        '_var_metadata': self._var_metadata,
+      'raw_value': self.raw_value,
+      '_trace_state': self._trace_state,
+      '_var_metadata': self._var_metadata,
     }
 
   def __setstate__(self, state):
@@ -749,12 +734,10 @@ class Param(Variable[A]):
     >>> layer = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     >>> jax.tree.map(jnp.shape, nnx.state(layer))
     State({
-      'bias': VariableState(
-        type=Param,
+      'bias': Param(
         value=(3,)
       ),
-      'kernel': VariableState(
-        type=Param,
+      'kernel': Param(
         value=(2, 3)
       )
     })
@@ -776,20 +759,16 @@ class BatchStat(Variable[A]):
     >>> layer = nnx.BatchNorm(3, rngs=nnx.Rngs(0))
     >>> jax.tree.map(jnp.shape, nnx.state(layer))
     State({
-      'bias': VariableState(
-        type=Param,
+      'bias': Param(
         value=(3,)
       ),
-      'mean': VariableState(
-        type=BatchStat,
+      'mean': BatchStat(
         value=(3,)
       ),
-      'scale': VariableState(
-        type=Param,
+      'scale': Param(
         value=(3,)
       ),
-      'var': VariableState(
-        type=BatchStat,
+      'var': BatchStat(
         value=(3,)
       )
     })
@@ -816,16 +795,13 @@ class Cache(Variable[A]):
   >>> layer.init_cache((1, 3))
   >>> jax.tree.map(jnp.shape, nnx.state(layer, nnx.Cache))
   State({
-    'cache_index': VariableState(
-      type=Cache,
+    'cache_index': Cache(
       value=()
     ),
-    'cached_key': VariableState(
-      type=Cache,
+    'cached_key': Cache(
       value=(1, 2, 3)
     ),
-    'cached_value': VariableState(
-      type=Cache,
+    'cached_value': Cache(
       value=(1, 2, 3)
     )
   })
@@ -856,8 +832,7 @@ class Intermediate(Variable[A]):
     >>> y = model(x)
     >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Intermediate))
     State({
-      'i': VariableState(
-        type=Intermediate,
+      'i': Intermediate(
         value=((1, 3),)
       )
     })
@@ -888,137 +863,13 @@ class Perturbation(Intermediate[A]):
     >>> y = model(x)
     >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Perturbation))
     State({
-      'i': VariableState(
-        type=Perturbation,
+      'i': Perturbation(
         value=(1, 3)
       )
     })
   """
 
   pass
-
-
-class VariableState(tp.Generic[A], reprlib.Representable):
-  __slots__ = ('type', 'value', '_var_metadata')
-  type: type[Variable[A]]
-  value: A
-  _var_metadata: dict[str, tp.Any]
-
-  def __init__(
-    self,
-    type: type[Variable[A]],  # type: ignore [valid-type]
-    value: A,
-    **metadata,
-  ):
-    object.__setattr__(self, 'type', type)
-    object.__setattr__(self, 'value', value)
-    object.__setattr__(self, '_var_metadata', metadata)
-
-  def __getattr__(self, name: str) -> None:
-    var_metadata = object.__getattribute__(self, '_var_metadata')
-    if name not in var_metadata:
-      raise AttributeError(f"'VariableState' object has no attribute '{name}'")
-    return var_metadata[name]
-
-  def __setattr__(self, name: str, value: Any) -> None:
-    if name == 'type' or name == 'value' or name == '_var_metadata':
-      object.__setattr__(self, name, value)
-    else:
-      self._var_metadata[name] = value
-
-  def __delattr__(self, name: str) -> None:
-    if name == 'type' or name == 'value' or name == '_var_metadata':
-      object.__delattr__(self, name)
-    else:
-      del self._var_metadata[name]
-
-  def __nnx_repr__(self):
-    stats = SizeBytes.from_any(self.value)
-    if stats:
-      comment = f' # {stats}'
-    else:
-      comment = ''
-
-    yield reprlib.Object(type=type(self), comment=comment)
-    yield reprlib.Attr('type', self.type)
-    yield reprlib.Attr('value', self.value)
-
-    for name, value in self._var_metadata.items():
-      yield reprlib.Attr(name, value)
-
-  def __treescope_repr__(self, path, subtree_renderer):
-    size_bytes = SizeBytes.from_any(self.value)
-    if size_bytes:
-      stats_repr = f' # {size_bytes}'
-      first_line_annotation = treescope.rendering_parts.comment_color(
-        treescope.rendering_parts.text(f'{stats_repr}')
-      )
-    else:
-      first_line_annotation = None
-    children = {'type': self.type, 'value': self.value, **self._var_metadata}
-    return visualization.render_object_constructor(
-      object_type=type(self),
-      attributes=children,
-      path=path,
-      subtree_renderer=subtree_renderer,
-      first_line_annotation=first_line_annotation,
-    )
-
-  def replace(self, value: B) -> VariableState[B]:
-    return VariableState(self.type, value, **self.get_metadata())
-
-  def to_variable(self) -> Variable[A]:
-    # we use object.__new__ to avoid calling __init__ and bypass the
-    # __init__ logic which should not be called twice
-    variable = object.__new__(self.type)
-    object.__setattr__(variable, '_trace_state', tracers.TraceState())
-    object.__setattr__(variable, 'raw_value', self.value)
-    object.__setattr__(variable, '_var_metadata', self.get_metadata().copy())
-    return variable
-
-  def copy(self: VariableState[A]) -> VariableState[A]:
-    return jax.tree.map(lambda x: x, self)
-
-  def get_metadata(self) -> dict[str, tp.Any]:
-    return self._var_metadata
-
-  def add_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
-    if 'on_add_axis' in self._var_metadata:
-      self._var_metadata['on_add_axis'](self, axis_index, axis_name)
-
-  def remove_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
-    if 'on_remove_axis' in self._var_metadata:
-      self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
-
-GraphVariableState = VariableState[VariableState[tp.Any]]
-
-def _variable_state_flatten(x: VariableState[tp.Any], *, with_keys: bool):
-  metadata = tuple(x.get_metadata().items())
-  if with_keys:
-    node = (jtu.GetAttrKey('value'), x.value)
-  else:
-    node = x.value
-
-  return (node,), (x.type, metadata)
-
-
-def _variable_state_unflatten(
-  static: tuple[type[Variable[A]], tuple[tuple[str, tp.Any], ...]],
-  children: tuple[A],
-) -> VariableState[A]:
-  return VariableState(
-    type=static[0],
-    value=children[0],
-    **dict(static[1]),
-  )
-
-
-jtu.register_pytree_with_keys(
-  VariableState,
-  partial(_variable_state_flatten, with_keys=True),  # type: ignore
-  _variable_state_unflatten,  # type: ignore
-  flatten_func=partial(_variable_state_flatten, with_keys=False),  # type: ignore
-)
 
 
 def with_metadata(
@@ -1093,14 +944,14 @@ def with_metadata(
 
 
 def split_flat_state(
-    flat_state: tp.Iterable[tuple[PathParts, Variable | VariableState]],
-    filters: tuple[filterlib.Filter, ...],
-) -> tuple[list[tuple[PathParts, Variable | VariableState]], ...]:
+  flat_state: tp.Iterable[tuple[PathParts, Variable]],
+  filters: tuple[filterlib.Filter, ...],
+) -> tuple[list[tuple[PathParts, Variable]], ...]:
   predicates = filterlib.filters_to_predicates(filters)
   # we have n + 1 states, where n is the number of predicates
   # the last state is for values that don't match any predicate
-  flat_states: tuple[list[tuple[PathParts, Variable | VariableState]], ...] = (
-    tuple([] for _ in predicates)
+  flat_states: tuple[list[tuple[PathParts, Variable]], ...] = tuple(
+    [] for _ in predicates
   )
 
   for path, value in flat_state:

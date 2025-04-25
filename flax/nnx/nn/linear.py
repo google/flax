@@ -300,12 +300,10 @@ class Linear(Module):
     >>> layer = nnx.Linear(in_features=3, out_features=4, rngs=nnx.Rngs(0))
     >>> jax.tree.map(jnp.shape, nnx.state(layer))
     State({
-      'bias': VariableState(
-        type=Param,
+      'bias': Param(
         value=(4,)
       ),
-      'kernel': VariableState(
-        type=Param,
+      'kernel': Param(
         value=(3, 4)
       )
     })
@@ -1105,8 +1103,7 @@ class Embed(Module):
     >>> layer = nnx.Embed(num_embeddings=5, features=3, rngs=nnx.Rngs(0))
     >>> nnx.state(layer)
     State({
-      'embedding': VariableState( # 15 (60 B)
-        type=Param,
+      'embedding': Param( # 15 (60 B)
         value=Array([[ 0.57966787, -0.523274  , -0.43195742],
                [-0.676289  , -0.50300646,  0.33996582],
                [ 0.41796115, -0.59212935,  0.95934135],

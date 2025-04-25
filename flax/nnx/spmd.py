@@ -49,20 +49,22 @@ def add_axis(tree: A, index: int, transform_metadata: tp.Mapping) -> A:
     return tuple(iterable)
 
   def _add_axis(x: tp.Any):
-    if isinstance(x, variablelib.VariableState):
-      if _has_sharding(x) and x.sharding is not None:
-        x.sharding = insert_field(x.sharding, index, axis_name)
+    if isinstance(x, variablelib.Variable):
+      # NOTE(cgarciae): change the default name set by with_partitioning to
+      # something other than 'sharding' because this clashes with the new Array.sharding
+      metadata = x.get_metadata()
+      if (sharding := metadata.get('sharding')) is not None:
+        metadata['sharding'] = insert_field(sharding, index, axis_name)
 
       for k, v in other_meta.items():
         if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
           setattr(x, k, insert_field(t, index, v))
 
-      assert isinstance(x, variablelib.VariableState)
       x.add_axis(index, axis_name)
     return x
 
   return jax.tree.map(
-    _add_axis, tree, is_leaf=lambda x: isinstance(x, variablelib.VariableState)
+    _add_axis, tree, is_leaf=lambda x: isinstance(x, variablelib.Variable)
   )
 
 
@@ -75,9 +77,10 @@ def remove_axis(tree: A, index: int, transform_metadata: tp.Mapping[tp.Any, tp.A
     return tuple(iterable)
 
   def _remove_axis(x: tp.Any):
-    if isinstance(x, variablelib.VariableState):
-      if hasattr(x, 'sharding') and x.sharding is not None:
-        x.sharding = remove_field(x.sharding, index, axis_name)
+    if isinstance(x, variablelib.Variable):
+      metadata = x.get_metadata()
+      if (sharding := metadata.get('sharding')) is not None:
+        metadata['sharding'] = remove_field(sharding, index, axis_name)
 
       for k, v in other_meta.items():
         if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
@@ -89,7 +92,7 @@ def remove_axis(tree: A, index: int, transform_metadata: tp.Mapping[tp.Any, tp.A
   return jax.tree.map(
     _remove_axis,
     tree,
-    is_leaf=lambda x: isinstance(x, variablelib.VariableState),
+    is_leaf=lambda x: isinstance(x, variablelib.Variable),
   )
 
 
@@ -106,7 +109,7 @@ def _get_partition_name_and_metadata(
   return transform_metadata[PARTITION_NAME], other_meta
 
 
-def get_partition_spec(tree: A) -> A:
+def get_partition_spec(tree):
   """Extracts a PartitionSpec tree from a PyTree containing ``Variable`` values."""
 
   def _maybe_replicate(x):
@@ -116,23 +119,24 @@ def get_partition_spec(tree: A) -> A:
       return None
 
   def f(x):
-    if isinstance(x, (variablelib.VariableState, variablelib.Variable)):
-      if hasattr(x, 'sharding') and x.sharding:
-        if core_spmd.get_logical_axis_rules() or hasattr(x, 'sharding_rules'):
+    if isinstance(x, variablelib.Variable):
+      metadata = x.get_metadata()
+      if (sharding := metadata.get('sharding')) is not None:
+        if core_spmd.get_logical_axis_rules() or 'sharding_rules' in metadata:
           context_rules = core_spmd.get_logical_axis_rules()
-          local_rules = getattr(x, 'sharding_rules', ())
+          local_rules = metadata.get('sharding_rules', ())
           rules = core_spmd.composite_rules(context_rules, local_rules)
-          return x.replace(
-              PartitionSpec(*core_spmd.from_sharding_rules(x.sharding, rules))
+          return PartitionSpec(
+            *core_spmd.from_sharding_rules(x.sharding, rules)
           )
-        return x.replace(PartitionSpec(*x.sharding))
+        return PartitionSpec(*sharding)
       else:
-        return x.replace(_maybe_replicate(x.value))
+        return _maybe_replicate(x.value)
 
     return _maybe_replicate(x)
 
   return jax.tree.map(
-    f, tree, is_leaf=lambda x: isinstance(x, variablelib.VariableState)
+    f, tree, is_leaf=lambda x: isinstance(x, variablelib.Variable)
   )
 
 
@@ -170,8 +174,12 @@ def _with_sharding_constraint(
 
 
 def _is_spec(x):
-  return x is None or (
-    isinstance(x, tuple) and all(isinstance(e, str) or e is None for e in x)
+  return (
+    x is None
+    or isinstance(x, variablelib.Variable)
+    or (
+      isinstance(x, tuple) and all(isinstance(e, str) or e is None for e in x)
+    )
   )
 
 

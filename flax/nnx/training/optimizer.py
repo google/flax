@@ -23,7 +23,7 @@ from flax import nnx
 from flax.nnx import filterlib
 from flax.nnx import variablelib
 from flax.nnx.object import Object
-from flax.nnx.variablelib import Variable, VariableState
+from flax.nnx.variablelib import Variable
 
 M = tp.TypeVar('M', bound=nnx.Module)
 
@@ -51,60 +51,21 @@ class OptVariable(OptState):
 
 def _wrap_optimizer_state(opt_state):
   def wrap_optimizer_state_fn(x):
-    if isinstance(x, variablelib.VariableState):
-      new_state = x.copy()
-      new_state.source_type = x.type
-      new_state.type = OptVariable
-      return new_state.to_variable()
+    if isinstance(x, variablelib.Variable):
+      return OptVariable.from_metadata(x.value, x.get_metadata())
     else:
       return OptArray(x)
 
   return jax.tree.map(
     wrap_optimizer_state_fn,
     opt_state,
-    is_leaf=lambda x: isinstance(x, variablelib.VariableState),
-  )
-
-
-def _opt_state_variables_to_state(opt_state):
-  def optimizer_variable_to_state_fn(x):
-    if isinstance(x, OptVariable):
-      state = x.to_state()
-      state.type = x.source_type
-      del state.source_type
-      return state
-    elif isinstance(x, OptArray):
-      return x.value
-    else:
-      raise TypeError(
-        f'Unexpected type when converting optimizer state: {type(x)}'
-      )
-
-  return jax.tree.map(
-    optimizer_variable_to_state_fn,
-    opt_state,
-    is_leaf=lambda x: isinstance(x, nnx.Variable),
+    is_leaf=lambda x: isinstance(x, variablelib.Variable),
   )
 
 
 def _update_opt_state(opt_state, updates):
-  def optimizer_update_variables(x, update):
-    if isinstance(x, OptVariable):
-      if not isinstance(update, VariableState):
-        raise TypeError(
-          f'Expected update to be VariableState, got {type(update)}'
-        )
-      x.raw_value = update.value
-    elif isinstance(x, OptArray):
-      if isinstance(update, VariableState):
-        raise TypeError(
-          f'Expected update to not to be a VariableState, got {update}'
-        )
-      x.raw_value = update
-    else:
-      raise TypeError(
-        f'Unexpected type when updating optimizer state: {type(x)}'
-      )
+  def optimizer_update_variables(x: OptState, update: jax.Array):
+    x.value = update
 
   return jax.tree.map(
     optimizer_update_variables,
@@ -228,17 +189,14 @@ class Optimizer(Object, tp.Generic[M]):
       >>> model = Model(rngs=nnx.Rngs(0))
       >>> jax.tree.map(jnp.shape, nnx.state(model))
       State({
-        'custom_variable': VariableState(
-          type=CustomVariable,
+        'custom_variable': CustomVariable(
           value=(1, 3)
         ),
         'linear': {
-          'bias': VariableState(
-            type=Param,
+          'bias': Param(
             value=(3,)
           ),
-          'kernel': VariableState(
-            type=Param,
+          'kernel': Param(
             value=(2, 3)
           )
         }
@@ -265,8 +223,10 @@ class Optimizer(Object, tp.Generic[M]):
       **kwargs: additional keyword arguments passed to the tx.update, to support
       ``GradientTransformationExtraArgs``, such as ``optax.scale_by_backtracking_linesearch``.
     """
-    params = nnx.state(self.model, self.wrt)
-    opt_state = _opt_state_variables_to_state(self.opt_state)
+    params = nnx.pure(nnx.state(self.model, self.wrt))
+    opt_state = nnx.pure(self.opt_state)
+    grads = nnx.pure(grads)
+    kwargs = nnx.pure(kwargs)
 
     updates, new_opt_state = self.tx.update(grads, opt_state, params, **kwargs)
     new_params = optax.apply_updates(params, updates)

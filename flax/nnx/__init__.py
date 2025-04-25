@@ -28,8 +28,6 @@ from .filterlib import Not as Not
 from .filterlib import Everything as Everything
 from .filterlib import Nothing as Nothing
 from .graph import GraphDef as GraphDef
-from .graph import GraphState as GraphState
-from .graph import PureState as PureState
 from .object import Object as Object
 from .helpers import Dict as Dict
 from .helpers import Sequential as Sequential
@@ -43,6 +41,7 @@ from .graph import current_update_context as current_update_context
 from .graph import split as split
 from .graph import update as update
 from .graph import clone as clone
+from .graph import pure as pure
 from .graph import pop as pop
 from .graph import state as state
 from .graph import graphdef as graphdef
@@ -161,7 +160,6 @@ from .variablelib import Cache as Cache
 from .variablelib import Intermediate as Intermediate
 from .variablelib import Perturbation as Perturbation
 from .variablelib import Variable as Variable
-from .variablelib import VariableState as VariableState
 from .variablelib import VariableMetadata as VariableMetadata
 from .variablelib import with_metadata as with_metadata
 from .variablelib import variable_type_from_name as variable_type_from_name

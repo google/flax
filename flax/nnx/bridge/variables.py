@@ -43,7 +43,7 @@ def sort_variable_types(types: tp.Iterable[type]):
 
 
 class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
-  """Default Flax metadata class for `nnx.VariableState`."""
+  """Default Flax metadata class for `nnx.Variable`."""
 
   var_type: type[variablelib.Variable[tp.Any]] = struct.field(pytree_node=False)
   value: Any = struct.field(pytree_node=True)
@@ -65,14 +65,14 @@ class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
 
   def get_partition_spec(self) -> jax.sharding.PartitionSpec:
     """Returns the ``Partitionspec`` for this partitioned value."""
-    nnx_var = self.to_nnx_variable().to_state()
-    return spmd.get_partition_spec(nnx_var).value
+    nnx_var = self.to_nnx_variable()
+    return spmd.get_partition_spec(nnx_var)
 
   def to_nnx_variable(self) -> variablelib.Variable:
     return self.var_type(self.value, **self.metadata)
 
 
-def is_vanilla_variable(vs: variablelib.VariableState) -> bool:
+def is_vanilla_variable(vs: variablelib.Variable) -> bool:
   """A variables state is vanilla if its metadata is essentially blank.
 
   Returns False only if it has non-empty hooks or any non-built-in attribute.
@@ -86,7 +86,7 @@ def is_vanilla_variable(vs: variablelib.VariableState) -> bool:
   return True
 
 
-def to_linen_var(vs: variablelib.VariableState) -> meta.AxisMetadata:
+def to_linen_var(vs: variablelib.Variable) -> meta.AxisMetadata:
   metadata = vs.get_metadata()
   if 'linen_meta_type' in metadata:
     linen_type = metadata['linen_meta_type']
@@ -95,7 +95,7 @@ def to_linen_var(vs: variablelib.VariableState) -> meta.AxisMetadata:
     return linen_type(vs.value, **metadata)
   if is_vanilla_variable(vs):
     return vs.value
-  return NNXMeta(vs.type, vs.value, metadata)
+  return NNXMeta(type(vs), vs.value, metadata)
 
 
 def get_col_name(keypath: tp.Sequence[Any]) -> str:
@@ -150,10 +150,7 @@ def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
   for kp, v in traversals.flatten_mapping(nnx_attrs).items():
     if isinstance(v, variablelib.Variable):
       col_name = variablelib.variable_name_from_type(type(v))
-      v = to_linen_var(v.to_state())
-    elif isinstance(v, variablelib.VariableState):
-      col_name = variablelib.variable_name_from_type(v.type)
-      v = to_linen_var(v)
+      v = to_linen_var(v.copy())
     elif isinstance(v, graph.GraphDef):
       col_name = 'nnx'  # an nnx.GraphDef for some ToLinen submodule
     else:

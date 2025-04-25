@@ -28,14 +28,14 @@ from flax.nnx import (
 from flax.nnx import variablelib as variableslib
 from flax.nnx.graph import GraphDef
 from flax.nnx.object import Object, ObjectMeta
-from flax.nnx.graph import GraphState, StateLeaf
+from flax.nnx.graph import StateLeaf
 from flax.nnx.statelib import State
 from flax.typing import Key, Path, PathParts
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
 M = tp.TypeVar('M', bound='Module')
-S = tp.TypeVar('S', bound=tp.Union[GraphState, tuple[GraphState, ...]])
+S = tp.TypeVar('S', bound=tp.Union[State, tuple[State, ...]])
 V = tp.TypeVar('V', bound=variableslib.Variable[tp.Any])
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
