@@ -2065,6 +2065,8 @@ def _merge_to_flat_state(states: tp.Iterable[tp.Any]):
   for state in states:
     if isinstance(state, dict | State):
       flat_state.extend(traversals.flatten_to_sequence(state))
+    elif isinstance(state, FlatState):
+      flat_state.extend(state)
     else:
       flat_state.append(((), state))
 
@@ -2121,7 +2123,14 @@ def merge(  # type: ignore[invalid-annotation]
   Returns:
     The merged :class:`flax.nnx.Module`.
   """
-  _state = _merge_to_flat_state((state, *states))
+  if isinstance(state, list):
+    if len(states) != 0:
+      raise ValueError(
+        f'Only one state can be passed as a list.'
+      )
+    _state = state
+  else:
+    _state = _merge_to_flat_state((state, *states))
   node = unflatten(graphdef, _state)
   return node
 
