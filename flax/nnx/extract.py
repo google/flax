@@ -109,7 +109,13 @@ def broadcast_prefix(
     t, is_leaf=tree_is_leaf
   ).num_leaves
   add_leaves = lambda x, subtree: result.extend([x] * num_leaves(subtree))
-  jax.tree.map(add_leaves, prefix_tree, full_tree, is_leaf=prefix_is_leaf)
+  jax.tree.map(
+    add_leaves,
+    prefix_tree,
+    full_tree,
+    is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    or (prefix_is_leaf is not None and prefix_is_leaf(x)),
+  )
   return result
 
 
@@ -198,13 +204,16 @@ def to_tree(
         or isinstance(x, variablelib.Variable)
         else x,
         tree,
+        is_leaf=lambda x: isinstance(x, variablelib.Variable),
       )
   leaf_prefixes = broadcast_prefix(
     prefix,
     tree,
     prefix_is_leaf=lambda x: x is None,
   )
-  leaf_keys, treedef = jax.tree_util.tree_flatten_with_path(tree)
+  leaf_keys, treedef = jax.tree_util.tree_flatten_with_path(
+    tree, is_leaf=lambda x: isinstance(x, variablelib.Variable)
+  )
 
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
@@ -299,4 +308,5 @@ def clear_non_graph_nodes(tree):
     if graph.is_graph_node(x) or isinstance(x, variablelib.Variable)
     else None,
     tree,
+    is_leaf=lambda x: isinstance(x, variablelib.Variable),
   )

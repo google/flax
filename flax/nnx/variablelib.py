@@ -701,6 +701,42 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def __ceil__(self) -> A:
     return self.value.__ceil__()  # type: ignore
 
+  def _variable_flatten(self):
+    metadata = tuple(self.get_metadata().items())
+    node = self.value
+    return (node,), metadata
+
+  def _variable_flatten_with_keys(self):
+    metadata = tuple(self.get_metadata().items())
+    node = (jtu.GetAttrKey('value'), self.value)
+    return (node,), metadata
+
+  @classmethod
+  def _variable_unflatten(
+    cls,
+    static: tuple[tuple[str, tp.Any], ...],
+    children: tuple[A],
+  ):
+    return cls.from_metadata(children[0], dict(static))
+
+  def __init_subclass__(cls):
+    super().__init_subclass__()
+
+    jax.tree_util.register_pytree_with_keys(
+      cls,
+      cls._variable_flatten_with_keys,
+      cls._variable_unflatten,  # type: ignore
+      flatten_func=cls._variable_flatten,
+    )
+
+
+jax.tree_util.register_pytree_with_keys(
+  Variable,
+  Variable._variable_flatten_with_keys,
+  Variable._variable_unflatten,  # type: ignore
+  flatten_func=Variable._variable_flatten,
+)
+
 
 class Param(Variable[A]):
   """The canonical learnable parameter. All learnable parameters

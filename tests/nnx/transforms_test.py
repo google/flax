@@ -789,7 +789,9 @@ class TestGrad(parameterized.TestCase):
     assert issubclass(grads['a'][1].type, nnx.Variable)
     assert len(jax.tree.leaves(grads)) == 2
 
-    jax.tree.map(nnx.update, m, grads)
+    jax.tree.map(
+      nnx.update, m, grads, is_leaf=lambda x: isinstance(x, nnx.Variable)
+    )
 
     assert m['a'][0] is m['b']
     assert m['a'][0].value == 2.0
