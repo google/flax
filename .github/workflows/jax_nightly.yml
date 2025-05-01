@@ -40,7 +40,7 @@ jobs:
         uv sync --extra all --extra testing --extra docs
     - name: Install JAX
       run: |
-        uv pip install -U --pre jax jaxlib -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html
+        uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
     - name: Run test suite
       if: success()
       run: |
