@@ -295,7 +295,7 @@ If you are using a Google TPU pod or a pod slice, you can create a custom `block
 %%timeit
 
 def block_all(xs):
-  jax.tree_util.tree_map(lambda x: x.block_until_ready(), xs)
+  jax.tree.map(lambda x: x.block_until_ready(), xs)
   return xs
 
 with mesh:

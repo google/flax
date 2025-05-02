@@ -334,9 +334,9 @@ def tabulate(
   _collect_stats((), obj, node_stats, object_types)
   _variable_types: set[type] = {
     nnx.RngState  # type: ignore[misc]
-    if issubclass(variable_state.type, nnx.RngState)
-    else variable_state.type
-    for _, variable_state in nnx.to_flat_state(nnx.state(obj))
+    if isinstance(variable, nnx.RngState)
+    else type(variable)
+    for _, variable in nnx.to_flat_state(nnx.state(obj))
   }
   variable_types: list[type] = sorted(_variable_types, key=lambda t: t.__name__)
 

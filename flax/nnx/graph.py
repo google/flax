@@ -21,15 +21,15 @@ import threading
 import typing as tp
 
 from flax import config
-from flax.nnx import filterlib, reprlib, traversals, variablelib
+from flax.nnx import filterlib, reprlib, traversals
 from flax.nnx import statelib
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
   DelayedAccessor,
 )
-from flax.nnx.statelib import EmptyState, FlatState, State
-from flax.nnx.variablelib import Variable, VariableState
+from flax.nnx.statelib import FlatState, State
+from flax.nnx.variablelib import Variable
 from flax.typing import Key, PathParts, is_key_like
 import jax
 import numpy as np
@@ -50,24 +50,17 @@ Names = tp.Sequence[int]
 Node = tp.TypeVar('Node')
 Leaf = tp.TypeVar('Leaf')
 AuxData = tp.TypeVar('AuxData')
-
-StateLeaf = VariableState[tp.Any]
-NodeLeaf = Variable[tp.Any]
-GraphState = State[Key, StateLeaf]
-GraphFlatState = FlatState[StateLeaf]
-
+StateLeaf = tp.Union[Variable[tp.Any] | jax.Array | np.ndarray]
 
 def is_state_leaf(x: tp.Any) -> tpe.TypeGuard[StateLeaf]:
-  return isinstance(x, VariableState)
+  return isinstance(x, Variable | jax.Array | np.ndarray)
 
-
-def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[NodeLeaf]:
-  return isinstance(x, Variable)
 
 class IndexMap(dict[Index, tp.Any]):
   @staticmethod
   def from_refmap(refmap: RefMap) -> IndexMap:
     return IndexMap((index, value) for value, index in refmap.items())
+
 
 if config.flax_use_flaxlib:
   import flaxlib  # type: ignore[import]
@@ -117,6 +110,7 @@ class RefMap(tp.MutableMapping[tp.Any, int]):
 
   def items(self) -> tp.ItemsView[tp.Any, int]:
     return self._mapping.values()  # type: ignore
+
 
 # save python version
 PythonRefMap = RefMap
@@ -270,6 +264,7 @@ class HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
   def __repr__(self) -> str:
     return repr(self._mapping)
 
+
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False)
 class NodeRef(tp.Generic[Node], reprlib.Representable):
@@ -287,11 +282,13 @@ class NodeRef(tp.Generic[Node], reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
+
 if config.flax_use_flaxlib:
   import flaxlib  # type: ignore[import]
 
   jax.tree_util.register_static(flaxlib.NodeRef)
   globals()['NodeRef'] = flaxlib.NodeRef
+
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False)
@@ -333,11 +330,13 @@ class VariableDef(reprlib.Representable, tp.Generic[Node]):
       subtree_renderer=subtree_renderer,
     )
 
+
 if config.flax_use_flaxlib:
   import flaxlib  # type: ignore[import]
 
   jax.tree_util.register_static(flaxlib.VariableDef)
   globals()['VariableDef'] = flaxlib.VariableDef
+
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False, slots=True)
@@ -452,13 +451,13 @@ class GraphDef(tp.Generic[Node]):
 
   # TODO(cgarciae): remove this method
   def apply(
-    self, state: GraphState, *states: GraphState
-  ) -> ApplyCaller[tuple[GraphDef[Node], GraphState]]:
+    self, state: State[Key, tp.Any], *states: State[Key, tp.Any]
+  ) -> ApplyCaller[tuple[GraphDef[Node], State[Key, tp.Any]]]:
     accessor = DelayedAccessor()
 
     def _apply(
       accessor: DelayedAccessor, *args, **kwargs
-    ) -> tuple[tp.Any, tuple[GraphDef[Node], GraphState]]:
+    ) -> tuple[tp.Any, tuple[GraphDef[Node], State[Key, tp.Any]]]:
       module = merge(self, state, *states)
       fn = accessor(module)
       out = fn(*args, **kwargs)
@@ -469,78 +468,43 @@ class GraphDef(tp.Generic[Node]):
     return CallableProxy(_apply, accessor)  # type: ignore
 
 
-PureState = tuple[GraphDef[Node], GraphState]
-
-
 @tp.overload
 def flatten(  # type: ignore[invalid-annotation]
   node: Node,
   /,
   *,
+  with_paths: tp.Literal[True] = True,
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
-) -> tuple[GraphDef[Node], FlatState[VariableState[tp.Any]]]: ...
-@tp.overload
-def flatten(  # type: ignore[invalid-annotation]
-  node: Node,
-  /,
-  *,
-  with_paths: tp.Literal[True],
-  return_variables: tp.Literal[True],
-  ref_index: RefMap | None = None,
-  ref_outer_index: RefMap | None = None,
-) -> tuple[
-  GraphDef[Node],
-  FlatState[Variable[tp.Any]],
-]: ...
+) -> tuple[GraphDef[Node], FlatState[StateLeaf]]: ...
 @tp.overload
 def flatten(  # type: ignore[invalid-annotation]
   node: Node,
   /,
   *,
   with_paths: tp.Literal[False],
-  return_variables: tp.Literal[True],
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
-) -> tuple[
-  GraphDef[Node],
-  list[Variable[tp.Any]],
-]: ...
+) -> tuple[GraphDef[Node], list[StateLeaf]]: ...
 @tp.overload
-def flatten(  # type: ignore[invalid-annotation]
-  node: Node,
-  /,
-  *,
-  return_variables: tp.Literal[True],
-  ref_index: RefMap | None = None,
-  ref_outer_index: RefMap | None = None,
-) -> tuple[
-  GraphDef[Node],
-  FlatState[Variable[tp.Any]],
-]: ...
-@tp.overload
-def flatten(  # type: ignore[invalid-annotation]
-  node: Node,
-  /,
-  *,
-  with_paths: bool,
-  ref_index: RefMap | None = None,
-  ref_outer_index: RefMap | None = None,
-) -> tuple[
-  GraphDef[Node],
-  FlatState[VariableState[tp.Any]] | list[tp.Any],
-]: ...
 def flatten(  # type: ignore[invalid-annotation]
   node: Node,
   /,
   *,
   with_paths: bool = True,
-  return_variables: bool = False,
+  ref_index: RefMap | None = None,
+  ref_outer_index: RefMap | None = None,
+) -> tuple[GraphDef[Node], FlatState[StateLeaf] | list[StateLeaf]]: ...
+def flatten(  # type: ignore[invalid-annotation]
+  node: Node,
+  /,
+  *,
+  with_paths: bool = True,
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
 ) -> tuple[
   GraphDef[Node],
-  FlatState[VariableState[tp.Any]] | FlatState[Variable[tp.Any]] | list[tp.Any],
+  FlatState[Variable[tp.Any]] | list[tp.Any],
 ]:
   """Flattens a graph node into a (graphdef, state) pair.
 
@@ -550,13 +514,13 @@ def flatten(  # type: ignore[invalid-annotation]
       empty dictionary is created. This argument can be used to flatten a sequence of graph
       nodes that share references.
     with_paths: A boolean that indicates whether to return a FlatState object that includes
-      the paths to VariableState objects, or just a list of the Variable's inner values.
+      the paths to Variable objects, or just a list of the Variable's inner values.
   """
   if ref_index is None:
     ref_index = RefMap()
 
   leaves: list[
-    VariableState[tp.Any] | Variable[tp.Any] | jax.Array | np.ndarray
+    Variable[tp.Any] | Variable[tp.Any] | jax.Array | np.ndarray
   ] = []
   path: list[Key] | None = [] if with_paths else None
   paths: list[PathParts] | None = [] if with_paths else None
@@ -575,14 +539,13 @@ def flatten(  # type: ignore[invalid-annotation]
     attributes,
     leaves,
     paths,
-    return_variables,
   )
   graphdef: GraphDef = GraphDef(
     nodes=nodes, attributes=attributes, num_leaves=len(leaves)
   )
 
   if paths is not None:
-    return graphdef, FlatState.from_sorted_keys_values(tuple(paths), leaves)  # type: ignore[return-value]
+    return graphdef, FlatState.from_sorted_keys_values(tuple(paths), leaves)  # type: ignore[arg-type]
   else:
     return graphdef, leaves
 
@@ -597,7 +560,6 @@ def _graph_flatten(
   attributes: list[tuple[Key, NodeAttr | ArrayAttr | Static[tp.Any]]],
   leaves: list[StateLeaf | Variable[tp.Any] | jax.Array | np.ndarray],
   paths: list[PathParts] | None,
-  return_variables: bool,
 ) -> None:
   is_pytree_node_ = type(node_impl) is PytreeNodeImpl
 
@@ -619,12 +581,8 @@ def _graph_flatten(
   if is_variable:
     assert isinstance(node, Variable)
     assert index is not None
-    if return_variables:
-      leaf = node
-    elif path is None:
-      leaf = node.raw_value
-    else:
-      leaf = node.to_state()  # type: ignore[assignment]
+    leaf = node
+
     leaves.append(leaf)
     if path is not None:
       assert paths is not None
@@ -670,7 +628,6 @@ def _graph_flatten(
         attributes,
         leaves,
         paths,
-        return_variables,
       )
     elif isinstance(value, (jax.Array, np.ndarray)):
       attributes.append((key, ARRAY_ATTR))
@@ -1017,11 +974,6 @@ def _graph_unflatten(
           f'Expected a Variable type for {key!r}, but got {type(variable)}.'
         )
       elif isinstance(value, Variable):
-        raise ValueError(
-          f'Cannot unflatten flat_state containing Variables when using `outer_index_outer_ref`. '
-          f'Got {value!r} for {key!r}.'
-        )
-      elif isinstance(value, VariableState):
         variable.update_from_state(value)
       else:
         variable.raw_value = value
@@ -1029,8 +981,6 @@ def _graph_unflatten(
       # variable reference does not exist outside, create a new one
       if isinstance(value, Variable):
         variable = value
-      elif isinstance(value, VariableState):
-        variable = value.to_variable()
       else:
         variable = variabledef.type.from_metadata(
           value, dict(variabledef.metadata)
@@ -1051,7 +1001,7 @@ def _graph_unflatten(
     raise RuntimeError(f'GraphDef index {nodedef.index} already used.')
 
   def _get_children() -> list[tuple[Key, tp.Any]]:
-    children: list[tuple[Key, NodeLeaf | Node]] = []  # type: ignore[invalid-annotation]
+    children: list[tuple[Key, StateLeaf | Node]] = []  # type: ignore[invalid-annotation]
 
     assert type(nodedef) is NodeDef
     for _ in range(nodedef.num_attributes):
@@ -1114,27 +1064,11 @@ def _graph_unflatten(
   return node
 
 
-def graph_pop(
-  node: tp.Any,
-  filters: tuple[filterlib.Filter, ...],
-) -> tuple[GraphState, ...]:
-  id_to_index: dict[int, Index] = {}
-  path_parts: PathParts = ()
-  predicates = tuple(filterlib.to_predicate(filter) for filter in filters)
-  flat_states: tuple[dict[PathParts, StateLeaf], ...] = tuple(
-    {} for _ in predicates
-  )
-  _graph_pop(node, id_to_index, path_parts, flat_states, predicates)
-  return tuple(
-    statelib.from_flat_state(flat_state) for flat_state in flat_states
-  )
-
-
 def _graph_pop(
   node: tp.Any,
   id_to_index: dict[int, Index],
   path_parts: PathParts,
-  flat_states: tuple[dict[PathParts, StateLeaf], ...],
+  flat_states: tuple[list[tuple[PathParts, StateLeaf]], ...],
   predicates: tuple[filterlib.Predicate, ...],
 ) -> None:
   if not is_node(node):
@@ -1159,7 +1093,7 @@ def _graph_pop(
         predicates=predicates,
       )
       continue
-    elif not is_node_leaf(value):
+    elif not is_state_leaf(value):
       continue
     elif id(value) in id_to_index:
       continue
@@ -1177,9 +1111,7 @@ def _graph_pop(
           )
         id_to_index[id(value)] = len(id_to_index)
         node_impl.pop_key(node, name)
-        if isinstance(value, Variable):
-          value = value.to_state()
-        state[node_path] = value  # type: ignore[index] # mypy is wrong here?
+        state.append((node_path, value))  # type: ignore[index] # mypy is wrong here?
         break
     else:
       # NOTE: should we raise an error here?
@@ -1188,8 +1120,8 @@ def _graph_pop(
 
 def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
   def _update_variable(node: Variable, value):
-    if isinstance(value, VariableState):
-      # updated from VariableState
+    if isinstance(value, Variable):
+      # updated from Variable
       node.update_from_state(value)
     else:
       # updated from raw value
@@ -1370,7 +1302,7 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
     # TODO(cgarciae): support Array attribute updates for graph nodes
     if is_graph_node(x) or isinstance(x, Variable):
       graphdef, flat_state = flatten(
-        x, with_paths=True, return_variables=True, ref_index=original_ref_index
+        x, with_paths=True, ref_index=original_ref_index
       )
       paths = flat_state.paths
       variables = flat_state.leaves
@@ -1412,12 +1344,14 @@ class SplitContext:
   is_inner: bool | None
 
   @tp.overload
-  def split(self, graph_node: A, /) -> tuple[GraphDef[A], GraphState]: ...  # type: ignore[invalid-annotation]
+  def split(
+    self, graph_node: A, /
+  ) -> tuple[GraphDef[A], State[Key, tp.Any]]: ...  # type: ignore[invalid-annotation]
 
   @tp.overload
   def split(  # type: ignore[invalid-annotation]
     self, graph_node: A, first: filterlib.Filter, /
-  ) -> tuple[GraphDef[A], GraphState]: ...
+  ) -> tuple[GraphDef[A], State[Key, tp.Any]]: ...
 
   @tp.overload
   def split(
@@ -1427,11 +1361,13 @@ class SplitContext:
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]: ...  # type: ignore[not-supported-yet]
+  ) -> tuple[
+    GraphDef[A], State[Key, tp.Any], tpe.Unpack[tuple[State[Key, tp.Any], ...]]
+  ]: ...  # type: ignore[not-supported-yet]
 
   def split(
     self, node: A, *filters: filterlib.Filter
-  ) -> tuple[GraphDef[A], tpe.Unpack[tuple[GraphState, ...]]]:  # type: ignore[not-supported-yet]
+  ) -> tuple[GraphDef[A], tpe.Unpack[tuple[State[Key, tp.Any], ...]]]:  # type: ignore[not-supported-yet]
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
     )
@@ -1439,7 +1375,9 @@ class SplitContext:
       ctx.inner_ref_outer_index if ctx and ctx.inner_ref_outer_index else None
     )
     graphdef, flat_state = flatten(
-      node, ref_index=self.ref_index, ref_outer_index=inner_ref_outer_index
+      node,
+      ref_index=self.ref_index,
+      ref_outer_index=inner_ref_outer_index,
     )
     flat_states = _split_state(flat_state, filters)
     states = _to_nested_state(graphdef, flat_states)
@@ -1460,7 +1398,7 @@ class SplitContext:
     self,
     graph_node: A,
     /,
-  ) -> tuple[GraphDef[A], FlatState[VariableState[tp.Any]]]: ...
+  ) -> tuple[GraphDef[A], FlatState[Variable[tp.Any]]]: ...
 
   @tp.overload
   def flatten(  # type: ignore[invalid-annotation]
@@ -1468,7 +1406,7 @@ class SplitContext:
     graph_node: A,
     first: filterlib.Filter,
     /,
-  ) -> tuple[GraphDef[A], FlatState[VariableState[tp.Any]]]: ...
+  ) -> tuple[GraphDef[A], FlatState[Variable[tp.Any]]]: ...
 
   @tp.overload
   def flatten(  # type: ignore[invalid-annotation]
@@ -1480,8 +1418,8 @@ class SplitContext:
     *filters: filterlib.Filter,
   ) -> tuple[
     GraphDef[A],
-    FlatState[VariableState[tp.Any]],
-    tpe.Unpack[tuple[FlatState[VariableState[tp.Any]], ...]],
+    FlatState[Variable[tp.Any]],
+    tpe.Unpack[tuple[FlatState[Variable[tp.Any]], ...]],
   ]: ...
 
   def flatten(  # type: ignore[invalid-annotation]
@@ -1491,8 +1429,8 @@ class SplitContext:
     with_paths: bool = True,
   ) -> tuple[
     GraphDef[A],
-    FlatState[VariableState[tp.Any]] | list[tp.Any],
-    tpe.Unpack[tuple[FlatState[VariableState[tp.Any]], ...]],
+    FlatState[Variable[tp.Any]] | list[tp.Any],
+    tpe.Unpack[tuple[FlatState[Variable[tp.Any]], ...]],
   ]:
     if not with_paths and filters:
       raise ValueError('Cannot use filters with with_paths=False')
@@ -1506,11 +1444,7 @@ class SplitContext:
     ref_outer_index = (
       ctx.inner_ref_outer_index if ctx and ctx.inner_ref_outer_index else None
     )
-    flat_state: (
-      FlatState[VariableState[tp.Any]]
-      | FlatState[Variable[tp.Any]]
-      | list[tp.Any]
-    )
+    flat_state: FlatState[StateLeaf] | list[StateLeaf]
     leaves: list[tp.Any]
     if node in self.ref_index:
       # node is already in the ref_index, call flatten which will return a NodeRef
@@ -1527,7 +1461,9 @@ class SplitContext:
       else:
         assert isinstance(flat_state, list)
         paths = None
-        leaves = flat_state
+        leaves = [
+          x.raw_value if isinstance(x, Variable) else x for x in flat_state
+        ]
     elif static_cache is not None and node in static_cache:
       node_static_cache = static_cache[node]
       graphdef = node_static_cache.graphdef
@@ -1536,9 +1472,7 @@ class SplitContext:
 
       if with_paths:
         paths = node_static_cache.paths
-        leaves = [
-          variable.to_state() for variable in node_static_cache.variables
-        ]
+        leaves = node_static_cache.variables
       else:
         paths = None
         leaves = [
@@ -1558,7 +1492,9 @@ class SplitContext:
       else:
         assert isinstance(flat_state, list)
         paths = None
-        leaves = flat_state
+        leaves = [
+          x.raw_value if isinstance(x, Variable) else x for x in flat_state
+        ]
 
     if with_paths:
       assert paths is not None
@@ -1595,9 +1531,9 @@ class MergeContext:
   def merge(  # type: ignore[invalid-annotation]
     self,
     graphdef: GraphDef[A],
-    state: GraphState | VariableState,
+    state: State[Key, tp.Any] | Variable,
     /,
-    *states: GraphState | VariableState,
+    *states: State[Key, tp.Any] | Variable,
   ) -> A:
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
@@ -1618,9 +1554,9 @@ class MergeContext:
   def unflatten(  # type: ignore[invalid-annotation]
     self,
     graphdef: GraphDef[A],
-    flat_state: GraphFlatState | list[tp.Any],
+    flat_state: FlatState[StateLeaf] | list[tp.Any],
     /,
-    *flat_states: GraphFlatState,
+    *flat_states: FlatState[StateLeaf],
   ) -> A:
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
@@ -1674,7 +1610,7 @@ class MergeContext:
               f'leaves in the state, got {len(leaves)}'
             )
           for variable, leaf in zip(static_cache_node.variables, leaves):
-            if type(leaf) is VariableState:
+            if isinstance(leaf, Variable):
               variable.update_from_state(leaf)
             else:
               variable.raw_value = leaf
@@ -1948,11 +1884,11 @@ def _split_state(
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
   graph_node: A, /
-) -> tuple[GraphDef[A], GraphState | VariableState]: ...
+) -> tuple[GraphDef[A], State[Key, tp.Any] | Variable]: ...
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
   graph_node: A, first: filterlib.Filter, /
-) -> tuple[GraphDef[A], GraphState | VariableState]: ...
+) -> tuple[GraphDef[A], State[Key, tp.Any] | Variable]: ...
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
   graph_node: A,
@@ -1962,15 +1898,15 @@ def split(  # type: ignore[invalid-annotation]
   *filters: filterlib.Filter,
 ) -> tuple[
   GraphDef[A],
-  GraphState | VariableState,
-  tpe.Unpack[tuple[GraphState | VariableState, ...]],
+  State[Key, tp.Any] | Variable,
+  tpe.Unpack[tuple[State[Key, tp.Any] | Variable, ...]],
 ]: ...
 def split(  # type: ignore[invalid-annotation]
   node: A, *filters: filterlib.Filter
 ) -> tuple[
   GraphDef[A],
-  GraphState | VariableState,
-  tpe.Unpack[tuple[GraphState | VariableState, ...]],
+  State[Key, tp.Any] | Variable,
+  tpe.Unpack[tuple[State[Key, tp.Any] | Variable, ...]],
 ]:
   """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
   a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef
@@ -1994,22 +1930,18 @@ def split(  # type: ignore[invalid-annotation]
     >>> jax.tree.map(jnp.shape, params)
     State({
       'batch_norm': {
-        'bias': VariableState(
-          type=Param,
+        'bias': Param(
           value=(2,)
         ),
-        'scale': VariableState(
-          type=Param,
+        'scale': Param(
           value=(2,)
         )
       },
       'linear': {
-        'bias': VariableState(
-          type=Param,
+        'bias': Param(
           value=(3,)
         ),
-        'kernel': VariableState(
-          type=Param,
+        'kernel': Param(
           value=(2, 3)
         )
       }
@@ -2017,12 +1949,10 @@ def split(  # type: ignore[invalid-annotation]
     >>> jax.tree.map(jnp.shape, batch_stats)
     State({
       'batch_norm': {
-        'mean': VariableState(
-          type=BatchStat,
+        'mean': BatchStat(
           value=(2,)
         ),
-        'var': VariableState(
-          type=BatchStat,
+        'var': BatchStat(
           value=(2,)
         )
       }
@@ -2051,7 +1981,7 @@ def _to_nested_state(
 ) -> tuple[tp.Any, ...]:
   if type(graphdef.nodes[0]) is VariableDef:
     states = tuple(
-      flat_state[0][1] if flat_state else EmptyState()
+      flat_state[0][1] if flat_state else State({})
       for flat_state in flat_states
     )
   else:
@@ -2204,7 +2134,7 @@ def variables(
   *filters: filterlib.Filter,
 ) -> tp.Union[State[Key, Variable], tuple[State[Key, Variable], ...]]:
   """Similar to :func:`state` but returns the current :class:`Variable` objects instead
-  of new :class:`VariableState` instances.
+  of new :class:`Variable` instances.
 
   Example::
 
@@ -2222,28 +2152,13 @@ def variables(
   Returns:
     One or more :class:`State` mappings containing the :class:`Variable` objects.
   """
-  num_filters = len(filters)
-  if num_filters == 0:
-    filters = (..., ...)
-  else:
-    filters = (*filters, ...)
-
-  variables_iterable = _variables_generator(node)
-  flat_states = variablelib.split_flat_state(
-    variables_iterable, (*filters, ...)
-  )
-  states = tuple(
-    statelib.from_flat_state(flat_state) for flat_state in flat_states
-  )
-  if num_filters < 2:
-    return states[0]
-  return states
+  return state(node, *filters)  # type: ignore[call-arg]
 
 
 @tp.overload
-def state(node, /) -> GraphState: ...
+def state(node, /) -> State[Key, tp.Any]: ...
 @tp.overload
-def state(node, first: filterlib.Filter, /) -> GraphState: ...
+def state(node, first: filterlib.Filter, /) -> State[Key, tp.Any]: ...
 @tp.overload
 def state(
   node,
@@ -2251,11 +2166,12 @@ def state(
   second: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
-) -> tuple[GraphState, ...]: ...
+) -> tuple[State[Key, tp.Any], ...]: ...
 def state(
   node,
+  /,
   *filters: filterlib.Filter,
-) -> tp.Union[GraphState, tuple[GraphState, ...]]:
+) -> tp.Union[State[Key, tp.Any], tuple[State[Key, tp.Any], ...]]:
   """Similar to :func:`split` but only returns the :class:`State`'s indicated by the filters.
 
   Example usage::
@@ -2285,18 +2201,15 @@ def state(
   Returns:
     One or more :class:`State` mappings.
   """
-  _, flat_state = flatten(node)
-  state = flat_state.to_nested_state()
-
-  states: GraphState | tuple[GraphState, ...]
   if len(filters) == 0:
-    states = state
-  elif len(filters) == 1:
-    states = statelib.filter_state(state, filters[0])
+    filters = (...,)
+  _, *_states, _ = split(node, *filters, ...)  # type: ignore[misc, assignment]
+  states = tuple(_states)
+  assert len(states) > 0
+  if len(states) == 1:
+    return states[0]  # type: ignore[return-value]
   else:
-    states = statelib.filter_state(state, filters[0], filters[1], *filters[2:])
-
-  return states
+    return states  # type: ignore[return-value]
 
 
 def graphdef(node: tp.Any, /) -> GraphDef[tp.Any]:
@@ -2320,11 +2233,7 @@ def graphdef(node: tp.Any, /) -> GraphDef[tp.Any]:
 
 
 @tp.overload
-def pop(
-  node,
-  filter: filterlib.Filter,
-  /,
-) -> GraphState: ...
+def pop(node, filter: filterlib.Filter, /) -> State[Key, tp.Any]: ...
 
 
 @tp.overload
@@ -2334,12 +2243,12 @@ def pop(
   filter2: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
-) -> tuple[GraphState, ...]: ...
+) -> tuple[State[Key, tp.Any], ...]: ...
 
 
 def pop(
   node, *filters: filterlib.Filter
-) -> tp.Union[GraphState, tuple[GraphState, ...]]:
+) -> tp.Union[State[Key, tp.Any], tuple[State[Key, tp.Any], ...]]:
   """Pop one or more :class:`Variable` types from the graph node.
 
   Example usage::
@@ -2380,8 +2289,8 @@ def pop(
   id_to_index: dict[int, Index] = {}
   path_parts: PathParts = ()
   predicates = tuple(filterlib.to_predicate(filter) for filter in filters)
-  flat_states: tuple[dict[PathParts, StateLeaf], ...] = tuple(
-    {} for _ in predicates
+  flat_states: tuple[list[tuple[PathParts, StateLeaf]], ...] = tuple(
+    [] for _ in predicates
   )
   _graph_pop(
     node=node,
@@ -2398,6 +2307,15 @@ def pop(
     return states[0]
   else:
     return states
+
+
+def pure(tree: A) -> A:
+  """Convert a pytree of :class:`Variable`'s to a tree of pure values."""
+  return jax.tree.map(
+    lambda x: x.value if isinstance(x, Variable) else x,
+    tree,
+    is_leaf=lambda x: isinstance(x, Variable),
+  )
 
 
 def clone(node: Node) -> Node:
@@ -2418,12 +2336,20 @@ def clone(node: Node) -> Node:
     A deep copy of the :class:`Module` object.
   """
   graphdef, state = split(node)
+
+  def clone_arrays(x):
+    if isinstance(x, jax.Array):
+      return jax.numpy.copy(x)
+    return x
+
+  # tree_map will copy the Variables and clone_arrays the arrays
+  state = jax.tree.map(clone_arrays, state)
   return merge(graphdef, state)
 
 
 def call(
-  graphdef_state: tuple[GraphDef[A], GraphState], /
-) -> ApplyCaller[tuple[GraphDef[A], GraphState]]:
+  graphdef_state: tuple[GraphDef[A], State[Key, tp.Any]], /
+) -> ApplyCaller[tuple[GraphDef[A], State[Key, tp.Any]]]:
   """Calls a method underlying graph node defined by a (GraphDef, State) pair.
 
   ``call`` takes a ``(GraphDef, State)`` pair and creates a proxy object that can be
@@ -2610,9 +2536,11 @@ def _key_path_to_key(key: tp.Any) -> Key:
   else:
     return str(key)
 
+
 class IndexesPytreeDef(tp.NamedTuple):
   key_index: HashableMapping[Key, int]
   treedef: jax.tree_util.PyTreeDef
+
 
 def _flatten_pytree(pytree: tp.Any):
   leaves, treedef = jax.tree_util.tree_flatten_with_path(

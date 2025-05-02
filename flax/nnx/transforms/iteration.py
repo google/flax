@@ -113,8 +113,8 @@ class StateAxes(extract.PrefixMapping):
 
 
 AxisFn = tp.Callable[
-  [graph.GraphState | variablelib.VariableState, int, tp.Mapping],
-  graph.GraphState | variablelib.VariableState,
+  [graph.State | variablelib.Variable, int, tp.Mapping],
+  graph.State | variablelib.Variable,
 ]
 
 
@@ -127,13 +127,13 @@ def _update_variable_sharding_metadata(
     ):
       if isinstance(node_states.metadata, int):
         state = node_states.state
-        assert isinstance(state, State | variablelib.VariableState)
+        assert isinstance(state, State | variablelib.Variable)
         state = axis_fn(state, node_states.metadata, transform_metadata)
         return node_states.replace(states=(state,))
       else:
-        states_out: list[graph.GraphState | variablelib.VariableState] = []
+        states_out: list[graph.State | variablelib.Variable] = []
         for state, axis in zip(node_states.states, node_states.metadata.axes):
-          assert isinstance(state, graph.State | variablelib.VariableState)
+          assert isinstance(state, graph.State | variablelib.Variable)
           if isinstance(axis, int):
             state = axis_fn(state, axis, transform_metadata)
           states_out.append(state)
@@ -697,8 +697,8 @@ def _insert_graphdefs(
 
 
 def _scan_split_in(
-  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
-  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  carry_deque: PytreeDeque[list[State | variablelib.Variable]],
+  broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   broadcast_arrays: PytreeDeque[Broadcasted],
   /,
   ctx: graph.SplitContext,
@@ -707,9 +707,9 @@ def _scan_split_in(
   x,
 ):
   if graph.is_graph_node(x) or isinstance(x, variablelib.Variable):
-    vectorized_states: list[State | variablelib.VariableState] = []
-    carry_states: list[State | variablelib.VariableState] = []
-    broadcast_states: list[State | variablelib.VariableState] = []
+    vectorized_states: list[State | variablelib.Variable] = []
+    carry_states: list[State | variablelib.Variable] = []
+    broadcast_states: list[State | variablelib.Variable] = []
     if isinstance(prefix, StateAxes):
       graphdef, *states = ctx.split(x, *prefix.filters)
 
@@ -778,8 +778,8 @@ def _scan_split_in(
 
 
 def _scan_split_out(
-  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
-  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  carry_deque: PytreeDeque[list[State | variablelib.Variable]],
+  broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   /,
   ctx: graph.SplitContext,
   path: extract.KeyPath,
@@ -790,9 +790,9 @@ def _scan_split_out(
   is_input_arg = path[0].idx == 0
 
   if graph.is_graph_node(x) or isinstance(x, variablelib.Variable):
-    vectorized_states: list[State | variablelib.VariableState] = []
-    carry_states: list[State | variablelib.VariableState] = []
-    broadcast_states: list[State | variablelib.VariableState] = []
+    vectorized_states: list[State | variablelib.Variable] = []
+    carry_states: list[State | variablelib.Variable] = []
+    broadcast_states: list[State | variablelib.Variable] = []
     if isinstance(prefix, StateAxes):
       graphdef, *states = ctx.split(x, *prefix.filters)
 
@@ -868,8 +868,8 @@ def _scan_split_out(
 
 
 def _scan_merge_in(
-  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
-  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  carry_deque: PytreeDeque[list[State | variablelib.Variable]],
+  broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   broadcast_arrays: PytreeDeque[Broadcasted],
   /,
   ctx: graph.MergeContext,
@@ -889,8 +889,8 @@ def _scan_merge_in(
 
 
 def _scan_merge_out(
-  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
-  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  carry_deque: PytreeDeque[list[State | variablelib.Variable]],
+  broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   /,
   ctx: graph.MergeContext,
   path,
@@ -901,13 +901,13 @@ def _scan_merge_out(
   is_input_arg = path[0].idx == 0
 
   if isinstance(x, extract.NodeStates):
-    states: list[State | variablelib.VariableState] = []
+    states: list[State | variablelib.Variable] = []
     if is_input_arg:
       carry_states = deque(carry_deque.popleft())
       broadcast_states = deque(broadcast_deque.popleft())
     else:
-      carry_states = deque[State | variablelib.VariableState]()
-      broadcast_states = deque[State | variablelib.VariableState]()
+      carry_states = deque[State | variablelib.Variable]()
+      broadcast_states = deque[State | variablelib.Variable]()
     if isinstance(prefix, StateAxes):
       vectorized_states = deque(x.states)
       for axis in prefix.axes:
@@ -981,15 +981,16 @@ class ScanFn:
     self,
     carry: tuple[
       tp.Any,  # carry_arg
-      PytreeDeque[list[State | variablelib.VariableState]],  # carry_deque
-      PytreeDeque[list[State | variablelib.VariableState]],  # broadcast_deque
+      PytreeDeque[list[State | variablelib.Variable]],  # carry_deque
+      PytreeDeque[list[State | variablelib.Variable]],  # broadcast_deque
       PytreeDeque[Broadcasted],  # broadcast_arrays
     ],
     pure_args: tuple[tp.Any, ...],
   ):
     pure_carry_arg, carry_deque, broadcast_deque, broadcast_arrays = carry
-    broadcast_deque_out = PytreeDeque(broadcast_deque)
-    broadcast_arrays_out = PytreeDeque(broadcast_arrays)
+    # copy to "freeze" the breadcast references
+    broadcast_deque_out = jax.tree.map(lambda x: x, broadcast_deque)
+    broadcast_arrays_out = jax.tree.map(lambda x: x, broadcast_arrays)
 
     if self.input_carry_argnum == 'all':
       assert pure_args == ()
@@ -1063,9 +1064,9 @@ class ScanFn:
       assert self.input_carry_argnum is None
       assert carry_arg_out is None
 
-    carry_deque_out = PytreeDeque[list[State | variablelib.VariableState]]()
+    carry_deque_out = PytreeDeque[list[State | variablelib.Variable]]()
     _broadcast_deque_out_tmp = PytreeDeque[
-      list[State | variablelib.VariableState]
+      list[State | variablelib.Variable]
     ]()  # discarded
     pure_args_out: tuple
     pure_args_out, pure_out = extract.to_tree(

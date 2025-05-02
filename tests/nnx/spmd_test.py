@@ -96,9 +96,9 @@ class TestSPMD(absltest.TestCase):
     )
     state_spec = nnx.get_partition_spec(state)
 
-    assert state_spec.params['w'].value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].mu['w'].value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].nu['w'].value == PartitionSpec('row', 'col')
+    assert state_spec.params['w'] == PartitionSpec('row', 'col')
+    assert state_spec.opt_state[0].mu['w'] == PartitionSpec('row', 'col')
+    assert state_spec.opt_state[0].nu['w'] == PartitionSpec('row', 'col')
 
   def test_add_remove_axis_in_transform(self):
     test = self
@@ -190,9 +190,9 @@ class TestSPMD(absltest.TestCase):
     with flax.core.spmd.logical_axis_rules((('col-alias', 'col'),)):
       state_spec = nnx.get_partition_spec(state)
 
-    assert state_spec.params['w'].value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].mu['w'].value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].nu['w'].value == PartitionSpec('row', 'col')
+    assert state_spec.params['w'] == PartitionSpec('row', 'col')
+    assert state_spec.opt_state[0].mu['w'] == PartitionSpec('row', 'col')
+    assert state_spec.opt_state[0].nu['w'] == PartitionSpec('row', 'col')
 
 
 if __name__ == '__main__':

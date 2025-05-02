@@ -34,7 +34,7 @@ from flax.nnx import (
   tracers,
   visualization,
 )
-from flax.nnx.variablelib import Variable, VariableState
+from flax.nnx.variablelib import Variable
 from flax.typing import SizeBytes
 
 G = tp.TypeVar('G', bound='Object')
@@ -333,7 +333,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     elif (
       hasattr(self, key)
       and isinstance(variable := getattr(self, key), Variable)
-      and isinstance(value, VariableState)
+      and isinstance(value, Variable)
     ):
       variable.update_from_state(value)
     else:

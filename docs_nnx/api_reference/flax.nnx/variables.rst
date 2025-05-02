@@ -18,8 +18,6 @@ variables
    :members:
 .. autoclass:: VariableMetadata
    :members:
-.. autoclass:: VariableState
-   :members:
 
 .. autofunction:: with_metadata
 

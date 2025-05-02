@@ -136,7 +136,7 @@ model = ExplicitMLP(features=[3,4,5])
 init_variables = model.init(key2, x)
 y = model.apply(init_variables, x)
 
-print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, flax.core.unfreeze(init_variables)))
+print('initialized parameter shapes:\n', jax.tree.map(jnp.shape, flax.core.unfreeze(init_variables)))
 print('output:\n', y)
 ```
 
@@ -168,7 +168,7 @@ model = SimpleMLP(features=[3,4,5])
 init_variables = model.init(key2, x)
 y = model.apply(init_variables, x)
 
-print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, flax.core.unfreeze(init_variables)))
+print('initialized parameter shapes:\n', jax.tree.map(jnp.shape, flax.core.unfreeze(init_variables)))
 print('output:\n', y)
 ```
 
@@ -338,7 +338,7 @@ updated_variables = flax.core.freeze(dict(params=init_params,
 
 print('updated variables:\n', updated_variables)
 print('initialized variable shapes:\n',
-      jax.tree_util.tree_map(jnp.shape, init_variables))
+      jax.tree.map(jnp.shape, init_variables))
 print('output:\n', y)
 
 # Let's run these model variables during "evaluation":
@@ -383,7 +383,7 @@ model = MLP(features=[3,4,5])
 init_variables = model.init(key2, x)
 y = model.apply(init_variables, x)
 
-print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, flax.core.unfreeze(init_variables)))
+print('initialized parameter shapes:\n', jax.tree.map(jnp.shape, flax.core.unfreeze(init_variables)))
 print('output:\n', y)
 ```
 
@@ -420,7 +420,7 @@ model = RematMLP(features=[3,4,5])
 init_variables = model.init(key2, x)
 y = model.apply(init_variables, x)
 
-print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, flax.core.unfreeze(init_variables)))
+print('initialized parameter shapes:\n', jax.tree.map(jnp.shape, flax.core.unfreeze(init_variables)))
 print('output:\n', y)
 ```
 
@@ -545,7 +545,7 @@ model = functools.partial(
   batch_axes=(0,))
 
 init_variables = model(train=False).init({'params': key2}, x, x)
-print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, flax.core.unfreeze(init_variables)))
+print('initialized parameter shapes:\n', jax.tree.map(jnp.shape, flax.core.unfreeze(init_variables)))
 
 y = model(train=True).apply(init_variables, x, x, rngs={'dropout': key4})
 print('output:\n', y.shape)
@@ -590,7 +590,7 @@ xs = random.uniform(key1, (1, 5, 2))
 model = SimpleScan(2)
 init_variables = model.init(key2, xs)
 
-print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, flax.core.unfreeze(init_variables)))
+print('initialized parameter shapes:\n', jax.tree.map(jnp.shape, flax.core.unfreeze(init_variables)))
 
 y = model.apply(init_variables, xs)
 print('output:\n', y)

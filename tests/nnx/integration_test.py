@@ -60,7 +60,10 @@ class TestIntegration(absltest.TestCase):
       nnx.update(
         model,
         jax.tree.map(
-          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+          lambda w, g: w - 0.1 * g,
+          nnx.state(model, nnx.Param),
+          grads,
+          is_leaf=lambda x: isinstance(x, nnx.Variable),
         ),
       )
 
@@ -113,7 +116,10 @@ class TestIntegration(absltest.TestCase):
       nnx.update(
         model,
         jax.tree.map(
-          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+          lambda w, g: w - 0.1 * g,
+          nnx.state(model, nnx.Param),
+          grads,
+          is_leaf=lambda x: isinstance(x, nnx.Variable),
         ),
       )
 
@@ -169,7 +175,10 @@ class TestIntegration(absltest.TestCase):
       nnx.update(
         model,
         jax.tree.map(
-          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+          lambda w, g: w - 0.1 * g,
+          nnx.state(model, nnx.Param),
+          grads,
+          is_leaf=lambda x: isinstance(x, nnx.Variable),  # type: ignore
         ),
       )
 
@@ -198,7 +207,7 @@ class TestIntegration(absltest.TestCase):
     y = model(x)
     assert model.count.value == 1
 
-    graphdef, params, counts = nnx.split(model, nnx.Param, Count)
+    graphdef, params, counts = nnx.pure(nnx.split(model, nnx.Param, Count))
 
     @jax.jit
     def train_step(params, counts, x, y):
@@ -210,7 +219,12 @@ class TestIntegration(absltest.TestCase):
       # compute gradient
       grads, counts = jax.grad(loss_fn, has_aux=True)(params)
       # SGD update
-      params = jax.tree.map(lambda w, g: w - 0.1 * g, params, grads)
+      params = jax.tree.map(
+        lambda w, g: w - 0.1 * g,
+        params,
+        grads,
+        is_leaf=lambda x: isinstance(x, nnx.Variable),
+      )  # type: ignore
 
       return params, counts
 

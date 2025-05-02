@@ -660,15 +660,15 @@ class RNN(Module):
 
     # maybe reverse the sequence
     if reverse:
-      inputs = jax.tree_util.tree_map(
-                lambda x: flip_sequences(
-                    x,
-                    seq_lengths,
-                    num_batch_dims=len(batch_dims),
-                    time_major=time_major,  # type: ignore
-                ),
-                inputs,
-            )
+      inputs = jax.tree.map(
+        lambda x: flip_sequences(
+          x,
+          seq_lengths,
+          num_batch_dims=len(batch_dims),
+          time_major=time_major,  # type: ignore
+        ),
+        inputs,
+      )
     if rngs is None:
       rngs = self.rngs
     carry: Carry = (
@@ -716,15 +716,15 @@ class RNN(Module):
       carry, outputs = scan_output
 
     if reverse and keep_order:
-      outputs = jax.tree_util.tree_map(
-                lambda x: flip_sequences(
-                    x,
-                    seq_lengths,
-                    num_batch_dims=len(batch_dims),
-                    time_major=time_major,  # type: ignore
-                ),
-                outputs,
-            )
+      outputs = jax.tree.map(
+        lambda x: flip_sequences(
+          x,
+          seq_lengths,
+          num_batch_dims=len(batch_dims),
+          time_major=time_major,  # type: ignore
+        ),
+        outputs,
+      )
 
     if return_carry:
       return carry, outputs
@@ -733,12 +733,12 @@ class RNN(Module):
 
 
 def _select_last_carry(sequence: A, seq_lengths: jnp.ndarray) -> A:
-    last_idx = seq_lengths - 1
+  last_idx = seq_lengths - 1
 
-    def _slice_array(x: jnp.ndarray):
-        return x[last_idx, jnp.arange(x.shape[1])]
+  def _slice_array(x: jnp.ndarray):
+    return x[last_idx, jnp.arange(x.shape[1])]
 
-    return jax.tree_util.tree_map(_slice_array, sequence)
+  return jax.tree.map(_slice_array, sequence)
 
 
 def _expand_dims_like(x, target):
@@ -889,54 +889,52 @@ class Bidirectional(Module):
         reverse: bool | None = None,  # unused
         keep_order: bool | None = None,  # unused
     ) -> Output | tuple[tuple[Carry, Carry], Output]:
-        if time_major is None:
-            time_major = self.time_major
-        if return_carry is None:
-            return_carry = self.return_carry
-        if rngs is None:
-            rngs = self.rngs
-        if initial_carry is not None:
-            initial_carry_forward, initial_carry_backward = initial_carry
-        else:
-            initial_carry_forward = None
-            initial_carry_backward = None
-        # Throw a warning in case the user accidentally re-uses the forward RNN
-        # for the backward pass and does not intend for them to share parameters.
-        if self.forward_rnn is self.backward_rnn:
-            logging.warning(
-                "forward_rnn and backward_rnn is the same object, so "
-                "they will share parameters."
-            )
-
-        # Encode in the forward direction.
-        carry_forward, outputs_forward = self.forward_rnn(
-            inputs,
-            initial_carry=initial_carry_forward,
-            rngs=rngs,
-            seq_lengths=seq_lengths,
-            return_carry=True,
-            time_major=time_major,
-            reverse=False,
+      if time_major is None:
+        time_major = self.time_major
+      if return_carry is None:
+        return_carry = self.return_carry
+      if rngs is None:
+        rngs = self.rngs
+      if initial_carry is not None:
+        initial_carry_forward, initial_carry_backward = initial_carry
+      else:
+        initial_carry_forward = None
+        initial_carry_backward = None
+      # Throw a warning in case the user accidentally re-uses the forward RNN
+      # for the backward pass and does not intend for them to share parameters.
+      if self.forward_rnn is self.backward_rnn:
+        logging.warning(
+          'forward_rnn and backward_rnn is the same object, so '
+          'they will share parameters.'
         )
 
-        # Encode in the backward direction.
-        carry_backward, outputs_backward = self.backward_rnn(
-            inputs,
-            initial_carry=initial_carry_backward,
-            rngs=rngs,
-            seq_lengths=seq_lengths,
-            return_carry=True,
-            time_major=time_major,
-            reverse=True,
-            keep_order=True,
-        )
+      # Encode in the forward direction.
+      carry_forward, outputs_forward = self.forward_rnn(
+        inputs,
+        initial_carry=initial_carry_forward,
+        rngs=rngs,
+        seq_lengths=seq_lengths,
+        return_carry=True,
+        time_major=time_major,
+        reverse=False,
+      )
 
-        carry = (carry_forward, carry_backward) if return_carry else None
-        outputs = jax.tree_util.tree_map(
-            self.merge_fn, outputs_forward, outputs_backward
-        )
+      # Encode in the backward direction.
+      carry_backward, outputs_backward = self.backward_rnn(
+        inputs,
+        initial_carry=initial_carry_backward,
+        rngs=rngs,
+        seq_lengths=seq_lengths,
+        return_carry=True,
+        time_major=time_major,
+        reverse=True,
+        keep_order=True,
+      )
 
-        if return_carry:
-            return carry, outputs
-        else:
-            return outputs
+      carry = (carry_forward, carry_backward) if return_carry else None
+      outputs = jax.tree.map(self.merge_fn, outputs_forward, outputs_backward)
+
+      if return_carry:
+        return carry, outputs
+      else:
+        return outputs

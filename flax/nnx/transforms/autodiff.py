@@ -25,10 +25,8 @@ from flax.nnx import (
   graph,
   variablelib,
 )
-from flax.nnx.statelib import EmptyState, State
+from flax.nnx.statelib import State
 import jax
-import jax.core
-import jax.stages
 
 from flax.nnx.transforms import general
 from flax.nnx.transforms.transforms import resolve_kwargs
@@ -64,7 +62,7 @@ class DiffState:
 class GradFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
-  nondiff_states: deque[State | variablelib.VariableState | None]
+  nondiff_states: deque[State | variablelib.Variable | None]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
@@ -134,7 +132,7 @@ def _grad_general(
   def grad_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
     del kwargs
-    nondiff_states: deque[State | variablelib.VariableState | None] = deque()
+    nondiff_states: deque[State | variablelib.Variable | None] = deque()
 
     def _grad_split_fn(
       ctx: graph.SplitContext, path, prefix: DiffState | None, value
@@ -249,12 +247,10 @@ def grad(
     >>> grads = grad_fn(m, x, y)
     >>> jax.tree.map(jnp.shape, grads)
     State({
-      'bias': VariableState(
-        type=Param,
+      'bias': Param(
         value=(3,)
       ),
-      'kernel': VariableState(
-        type=Param,
+      'kernel': Param(
         value=(2, 3)
       )
     })
@@ -275,8 +271,7 @@ def grad(
     >>> grads = grad_fn(m, x, y)
     >>> jax.tree.map(jnp.shape, grads)
     State({
-      'kernel': VariableState(
-        type=Param,
+      'kernel': Param(
         value=(2, 3)
       )
     })
@@ -415,7 +410,7 @@ def _custom_vjp_split_fn(
   *,
   nondiff_states: list[extract.GraphDefState],
 ):
-  broadcast: graph.GraphState
+  broadcast: graph.State
   if prefix is False:
     # pure non-differentiable arg, not supported
     raise TypeError(
@@ -427,7 +422,7 @@ def _custom_vjp_split_fn(
     # but we return a TreeNode.from_states which doesn't have a graphdef
     # in order to keep the gradients clean from any metadata
     graphdef, passed = ctx.split(value)
-    broadcast = EmptyState()
+    broadcast = State({})
     nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
     return extract.NodeStates.from_states(passed)
   else:
@@ -568,8 +563,8 @@ class BwdFn:
       if is_differentiable:
         if isinstance(x, jax.Array):
           return x
-        elif not isinstance(x, State | variablelib.VariableState):
-          raise ValueError(f'Expected State or VariableState, got {type(x)}')
+        elif not isinstance(x, State | variablelib.Variable):
+          raise ValueError(f'Expected State or Variable, got {type(x)}')
         return extract.NodeStates.from_states(x)
       return x
 
@@ -577,7 +572,7 @@ class BwdFn:
       state_to_node_states,
       self.tree_node_args,
       tangent,
-      is_leaf=lambda x: isinstance(x, State | variablelib.VariableState),
+      is_leaf=lambda x: isinstance(x, State | variablelib.Variable),
     )
     return pure_tangent
 
@@ -680,7 +675,7 @@ class CustomVjp(tp.Generic[A]):
           return nodedef
         return x
 
-      pure_args_out, pure_out = jax.tree_util.tree_map(
+      pure_args_out, pure_out = jax.tree.map(
         _insert_index_mappings,
         (pure_args_out, pure_out),
         is_leaf=lambda x: isinstance(x, graph.GraphDef),
@@ -765,12 +760,10 @@ def custom_vjp(
     ...
     >>> jax.tree.map(jnp.shape, grads)
     State({
-      'x': VariableState(
-        type=Param,
+      'x': Param(
         value=()
       ),
-      'y': VariableState(
-        type=Param,
+      'y': Param(
         value=()
       )
     })
@@ -813,8 +806,7 @@ def custom_vjp(
     ...
     >>> jax.tree.map(jnp.shape, grad)
     State({
-      'x': VariableState(
-        type=Param,
+      'x': Param(
         value=()
       )
     })

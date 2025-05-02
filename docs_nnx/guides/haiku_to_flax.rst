@@ -199,9 +199,9 @@ The dropout behavior:
       return optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
 
     grads = nnx.grad(loss_fn)(model)
-    _, params, rest = nnx.split(model, nnx.Param, ...)
+    _, params, rest = nnx.pure(nnx.split(model, nnx.Param, ...))
     params = jax.tree.map(lambda p, g: p - 0.1 * g, params, grads)
-    nnx.update(model, nnx.merge_state(params, rest))
+    nnx.update(model, params, rest)
 
 .. testcode:: Haiku
   :hide:

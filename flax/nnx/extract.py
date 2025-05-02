@@ -121,11 +121,9 @@ def broadcast_prefix(
 
 class GraphDefState(struct.PyTreeNode):
   graphdef: graph.GraphDef[tp.Any] = struct.field(pytree_node=False)
-  state: graph.GraphState = struct.field(pytree_node=True)
+  state: graph.State = struct.field(pytree_node=True)
 
-S = tp.TypeVar(
-  'S', bound=graph.GraphState | graph.GraphFlatState | list[tp.Any]
-)
+S = tp.TypeVar('S', bound=graph.State | graph.FlatState | list[tp.Any])
 
 class NodeStates(struct.PyTreeNode):
   _graphdef: graph.GraphDef[tp.Any] | None
@@ -179,7 +177,7 @@ class NodeStates(struct.PyTreeNode):
 def default_split_fn(
   ctx: graph.SplitContext, path: KeyPath, prefix: Prefix, leaf: Leaf
 ) -> tp.Any:
-  return NodeStates.from_split(*ctx.split(leaf))
+  return NodeStates.from_split(*graph.pure(ctx.split(leaf)))
 
 
 def to_tree(

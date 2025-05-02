@@ -598,10 +598,10 @@ class TestGrad(parameterized.TestCase):
 
     assert m.a[0] is m.b
     assert isinstance(grads, nnx.State)
-    assert grads['a']['0'].value == 2.0
-    assert issubclass(grads['a']['0'].type, nnx.Variable)
-    assert grads['a']['1'].value == 1.0
-    assert issubclass(grads['a']['1'].type, nnx.Variable)
+    assert grads['a']['0'] == 2.0
+    assert isinstance(grads['a']['0'], jax.Array)
+    assert grads['a']['1'] == 1.0
+    assert isinstance(grads['a']['1'], jax.Array)
     assert len(nnx.to_flat_state(grads)) == 2
 
     nnx.update(m, grads)
@@ -629,8 +629,8 @@ class TestGrad(parameterized.TestCase):
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a']['0'].value == 1.0
-    assert issubclass(grads['a']['0'].type, nnx.Param)
+    assert grads['a']['0'] == 1.0
+    assert isinstance(grads['a']['0'], jax.Array)
     assert len(grads) == 2
 
     nnx.update(m, grads)
@@ -657,8 +657,8 @@ class TestGrad(parameterized.TestCase):
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a']['1'].value == 1.0
-    assert issubclass(grads['a']['1'].type, nnx.BatchStat)
+    assert grads['a']['1'] == 1.0
+    assert isinstance(grads['a']['1'], jax.Array)
     assert len(grads) == 1
 
     nnx.update(m, grads)
@@ -679,9 +679,9 @@ class TestGrad(parameterized.TestCase):
     grads = grad_fn(m, x, y)
 
     assert 'kernel' in grads
-    assert grads['kernel'].value.shape == (2, 3)
+    assert grads['kernel'].shape == (2, 3)
     assert 'bias' in grads
-    assert grads['bias'].value.shape == (3,)
+    assert grads['bias'].shape == (3,)
 
   @parameterized.parameters(
     {
@@ -706,13 +706,13 @@ class TestGrad(parameterized.TestCase):
     grads_m1, grads_m2 = grad_fn(*inputs)
 
     assert 'kernel' in grads_m1
-    assert grads_m1['kernel'].value.shape == (2, 3)
+    assert grads_m1['kernel'].shape == (2, 3)
     assert 'bias' in grads_m1
-    assert grads_m1['bias'].value.shape == (3,)
+    assert grads_m1['bias'].shape == (3,)
     assert 'kernel' in grads_m2
-    assert grads_m2['kernel'].value.shape == (3, 3)
+    assert grads_m2['kernel'].shape == (3, 3)
     assert 'bias' in grads_m2
-    assert grads_m2['bias'].value.shape == (3,)
+    assert grads_m2['bias'].shape == (3,)
 
   def test_multiple_args(self):
     m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
@@ -814,9 +814,9 @@ class TestGrad(parameterized.TestCase):
 
     assert m['a'][0] is m['b']
     assert isinstance(grads, dict)
-    assert issubclass(grads['a'][0].type, nnx.Variable)
-    assert grads['a'][1].value == 1.0
-    assert issubclass(grads['a'][1].type, nnx.Variable)
+    assert isinstance(grads['a'][0], jax.Array)
+    assert grads['a'][1] == 1.0
+    assert isinstance(grads['a'][1], jax.Array)
     assert len(jax.tree.leaves(grads)) == 2
 
     jax.tree.map(
@@ -964,8 +964,8 @@ class TestCustomVJP(parameterized.TestCase):
       self.assertIsInstance(m, Foo)
 
       # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g['x'].value = cos_x * out_g * m.y
-      m_g['y'].value = sin_x * out_g
+      m_g['x'] = cos_x * out_g * m.y
+      m_g['y'] = sin_x * out_g
       return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
@@ -978,8 +978,8 @@ class TestCustomVJP(parameterized.TestCase):
 
     grad: nnx.State = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
 
-    np.testing.assert_allclose(grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'].value, jnp.sin(1.0))  # type: ignore
+    np.testing.assert_allclose(grad['x'], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grad['y'], jnp.sin(1.0))  # type: ignore
     self.assertEqual(m.z, 1)
 
   def test_two_args(self):
@@ -1029,11 +1029,11 @@ class TestCustomVJP(parameterized.TestCase):
       loss_fn, argnums=(nnx.DiffState(0, ...), nnx.DiffState(1, ...))
     )(m1, m2)
 
-    np.testing.assert_allclose(m1_grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(m1_grad['y'].value, jnp.sin(1.0))  # type: ignore
+    np.testing.assert_allclose(m1_grad['x'], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(m1_grad['y'], jnp.sin(1.0))  # type: ignore
     self.assertEqual(m1.z, 1)
-    np.testing.assert_allclose(m2_grad['x'].value, 4.0)  # type: ignore
-    np.testing.assert_allclose(m2_grad['y'].value, 3.0)  # type: ignore
+    np.testing.assert_allclose(m2_grad['x'], 4.0)  # type: ignore
+    np.testing.assert_allclose(m2_grad['y'], 3.0)  # type: ignore
 
   def test_non_diff_args(self):
     @dataclasses.dataclass
@@ -1067,8 +1067,8 @@ class TestCustomVJP(parameterized.TestCase):
       self.assertIsInstance(m, Foo)
 
       # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g['x'].value = cos_x * out_g * m.y
-      m_g['y'].value = sin_x * out_g
+      m_g['x'] = cos_x * out_g * m.y
+      m_g['y'] = sin_x * out_g
       return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
@@ -1082,8 +1082,8 @@ class TestCustomVJP(parameterized.TestCase):
 
     grad: nnx.State = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
 
-    np.testing.assert_allclose(grad['x'].value, jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'].value, jnp.sin(1.0))  # type: ignore
+    np.testing.assert_allclose(grad['x'], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grad['y'], jnp.sin(1.0))  # type: ignore
     self.assertEqual(m.z, 1)
 
   def test_docs_example(self):

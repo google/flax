@@ -71,49 +71,58 @@ class MLP(nnx.Module):
     return nnx.relu(x @ self.w1 + self.b1) @ self.w2
 
 
-class SGDState(nnx.Variable):
+class SGDState(nnx.Variable[jax.Array]):
   pass
 
 
 class SGD(nnx.Object):
-  def __init__(self, params: nnx.State, lr, decay=0.9):
+  def __init__(self, params, lr, decay=0.9):
     def init_optimizer_state(variable: nnx.Variable):
       return SGDState(
         jnp.zeros_like(variable.value), **variable.get_metadata()
       )
 
     self.lr = lr
-    self.params = params
-    self.momentum: nnx.State = jax.tree.map(init_optimizer_state, self.params)
+    self.momentum: nnx.State = jax.tree.map(
+      init_optimizer_state,
+      params,
+      is_leaf=lambda x: isinstance(x, nnx.Variable),
+    )
     self.decay = decay
 
-  def update(self, grads: nnx.State):
+  def update(self, params, grads):
     def update_fn(
-      params: nnx.Variable, momentum: SGDState, grad: nnx.VariableState
+      params: nnx.Variable[jax.Array], momentum: SGDState, grad: jax.Array
     ):
       # v_t = β * v_{t-1} + (1 - β) * ∇J(θ_t)
-      momentum.value = self.decay * momentum + (1 - self.decay) * grad.value
+      momentum.value = self.decay * momentum[...] + (1 - self.decay) * grad[...]
       # θ_{t+1} = θ_t - α * v_t
-      params.value -= self.lr * momentum
+      params.value -= self.lr * momentum[...]
 
-    jax.tree.map(update_fn, self.params, self.momentum, grads)
+    jax.tree.map(
+      update_fn,
+      params,
+      self.momentum,
+      grads,
+      is_leaf=lambda x: isinstance(x, nnx.Variable),
+    )
 
 
 @nnx.jit
 def create_model():
   model = MLP(1, 32, 1, rngs=nnx.Rngs(0))
   optimizer = SGD(nnx.variables(model, nnx.Param), 0.01, decay=0.9)
-  state = nnx.state(optimizer)
+  state = nnx.variables(optimizer)
   sharded_state = jax.lax.with_sharding_constraint(
     state, nnx.get_named_sharding(state, mesh)
   )
 
-  def get_named_shardings(path: tuple, value: nnx.VariableState):
+  def get_named_shardings(path: tuple, value: nnx.Variable):
     if path[0] == 'params':
-      return value.replace(NamedSharding(mesh, P(*value.sharding)))
+      return NamedSharding(mesh, P(*value.sharding))
     elif path[0] == 'momentum':
       # currently the same as above but in general it could be different
-      return value.replace(NamedSharding(mesh, P(*value.sharding)))
+      return NamedSharding(mesh, P(*value.sharding))
     else:
       raise ValueError(f'Unknown path: {path}')
 
@@ -137,7 +146,7 @@ def train_step(model: MLP, optimizer: SGD, x, y):
     return loss
 
   loss, grad = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grad)
+  optimizer.update(nnx.variables(model, nnx.Param), grad)
   return loss
 
 

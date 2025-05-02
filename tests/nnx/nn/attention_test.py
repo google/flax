@@ -70,11 +70,11 @@ class TestMultiHeadAttention(absltest.TestCase):
 
     _ = module(x, True)
     intermediates = nnx.pop(module, nnx.Intermediate)
-    assert intermediates['attention_layers'][0]['attention_weights'].value[
+    assert intermediates['attention_layers'][0]['attention_weights'][
       0
     ].shape == (4, 8, 6, 6)
     assert 1 not in intermediates['attention_layers']
-    assert intermediates['attention_layers'][2]['attention_weights'].value[
+    assert intermediates['attention_layers'][2]['attention_weights'][
       0
     ].shape == (4, 8, 6, 6)
 

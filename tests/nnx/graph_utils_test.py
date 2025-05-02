@@ -82,6 +82,9 @@ class TestGraphUtils(absltest.TestCase):
     graphdef, flat_state = nnx.graph.flatten(
       g, ref_index=refmap, with_paths=False
     )
+    flat_state = [
+      x.raw_value if isinstance(x, nnx.Variable) else x for x in flat_state
+    ]
 
     assert flat_state[0] == 2
     assert flat_state[1] == 4
@@ -132,9 +135,7 @@ class TestGraphUtils(absltest.TestCase):
     a = Dict({'a': 1, 'b': nnx.Param(2)})
     g = List([a, 3, a, nnx.Param(4)])
 
-    graphdef, state = nnx.graph.flatten(
-      g, with_paths=False, return_variables=True
-    )
+    graphdef, state = nnx.graph.flatten(g, with_paths=False)
 
     self.assertLen(state, 2)
     self.assertIsInstance(state, list)
@@ -145,9 +146,7 @@ class TestGraphUtils(absltest.TestCase):
     a = Dict({'a': 1, 'b': nnx.Param(2)})
     g = List([a, 3, a, nnx.Param(4)])
 
-    graphdef, state = nnx.graph.flatten(
-      g, with_paths=False, return_variables=True
-    )
+    graphdef, state = nnx.graph.flatten(g, with_paths=False)
 
     g2 = nnx.graph.unflatten(graphdef, state)
 
@@ -263,7 +262,7 @@ class TestGraphUtils(absltest.TestCase):
 
     assert y.shape == (2, 10)
 
-  def test_state_variables_not_shared_with_graph(self):
+  def test_state_variables_shared_with_graph(self):
     class Foo(nnx.Module):
       def __init__(self):
         self.a = nnx.Param(1)
@@ -272,18 +271,18 @@ class TestGraphUtils(absltest.TestCase):
     graphdef, state = nnx.split(m)
 
     assert isinstance(m.a, nnx.Param)
-    assert issubclass(state['a'].type, nnx.Param)
-    assert m.a is not state['a']
+    assert isinstance(state['a'], nnx.Param)
+    assert m.a is state['a']
     assert m.a.value == state['a'].value
 
     m2 = nnx.merge(graphdef, state)
 
     assert isinstance(m2.a, nnx.Param)
-    assert issubclass(state['a'].type, nnx.Param)
-    assert m2.a is not state['a']
+    assert isinstance(state['a'], nnx.Param)
+    assert m2.a is state['a']
     assert m2.a.value == state['a'].value
 
-  def test_shared_state_variables_not_shared_with_graph(self):
+  def test_shared_state_variables_shared_with_graph(self):
     class Foo(nnx.Module):
       def __init__(self):
         p = nnx.Param(1)
@@ -295,22 +294,18 @@ class TestGraphUtils(absltest.TestCase):
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(m.b, nnx.Param)
-    assert issubclass(state['a'].type, nnx.Param)
+    assert isinstance(state['a'], nnx.Param)
     assert 'b' not in state
-    assert m.a is not state['a']
-    assert m.b is not state['a']
-    assert m.a.value == state['a'].value
-    assert m.b.value == state['a'].value
+    assert m.a is state['a']
+    assert m.b is state['a']
 
     m2 = nnx.merge(graphdef, state)
 
     assert isinstance(m2.a, nnx.Param)
     assert isinstance(m2.b, nnx.Param)
-    assert issubclass(state['a'].type, nnx.Param)
-    assert m2.a is not state['a']
-    assert m2.b is not state['a']
-    assert m2.a.value == state['a'].value
-    assert m2.b.value == state['a'].value
+    assert isinstance(state['a'], nnx.Param)
+    assert m2.a is state['a']
+    assert m2.b is state['a']
     assert m2.a is m2.b
 
   def test_pytree_flatten(self):
@@ -355,7 +350,7 @@ class TestGraphUtils(absltest.TestCase):
     assert isinstance(m2.tree, Tree)
     assert m2.tree.a.raw_value == 1
     assert m2.tree.b == 'a'
-    assert m2.tree.a is not m.tree.a
+    assert m2.tree.a is m.tree.a
     assert m2.tree is not m.tree
 
   def test_cached_unflatten(self):
@@ -486,7 +481,7 @@ class TestGraphUtils(absltest.TestCase):
     graph_state = nnx.split(Counter())
 
     @jax.jit
-    def update(graph_state: nnx.PureState[Counter]):
+    def update(graph_state: tuple[nnx.GraphDef[Counter], nnx.State]):
       out, graph_state = nnx.call(graph_state).inc()
       self.assertEqual(out, 1)
       return graph_state
@@ -503,7 +498,7 @@ class TestGraphUtils(absltest.TestCase):
     linear_state = nnx.split(linear)
 
     @jax.jit
-    def forward(x, pure_linear: nnx.PureState[StatefulLinear]):
+    def forward(x, pure_linear: tuple[nnx.GraphDef[StatefulLinear], nnx.State]):
       y, pure_linear = nnx.call(pure_linear)(x)
       return y, pure_linear
 
@@ -902,7 +897,7 @@ class TestGraphUtils(absltest.TestCase):
     graphdef, state = nnx.split(v)
 
     self.assertIsInstance(graphdef.nodes[0], nnx.graph.VariableDef)
-    self.assertIsInstance(state, nnx.VariableState)
+    self.assertIsInstance(state, nnx.Param)
 
     v2 = nnx.merge(graphdef, state)
     self.assertIsInstance(v2, nnx.Param)
@@ -914,7 +909,7 @@ class TestGraphUtils(absltest.TestCase):
     )
 
     self.assertIsInstance(graphdef.nodes[0], nnx.graph.VariableDef)
-    self.assertIsInstance(params, nnx.VariableState)
+    self.assertIsInstance(params, nnx.Param)
     self.assertIsInstance(batch_stats, nnx.State)
     self.assertEmpty(batch_stats)
     self.assertIsInstance(rest, nnx.State)
@@ -928,7 +923,7 @@ class TestGraphUtils(absltest.TestCase):
     graphdef, state = nnx.split(v)
 
     self.assertIsInstance(graphdef.nodes[0], nnx.graph.VariableDef)
-    self.assertIsInstance(state, nnx.VariableState)
+    self.assertIsInstance(state, nnx.Param)
 
     state.value = 2
     nnx.update(v, state)
@@ -942,7 +937,7 @@ class TestGraphUtils(absltest.TestCase):
     )
 
     self.assertIsInstance(graphdef.nodes[0], nnx.graph.VariableDef)
-    self.assertIsInstance(params, nnx.VariableState)
+    self.assertIsInstance(params, nnx.Param)
     self.assertIsInstance(batch_stats, nnx.State)
     self.assertEmpty(batch_stats)
     self.assertIsInstance(rest, nnx.State)

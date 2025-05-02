@@ -87,7 +87,7 @@ class TestOptimizer(parameterized.TestCase):
 
     self.assertEqual(state['opt_state'][0]['mu']['kernel'].sharding, ('a', 'b'))
     self.assertEqual(
-      partition_spec['opt_state'][0]['mu']['kernel'].value,
+      partition_spec['opt_state'][0]['mu']['kernel'],
       jax.sharding.PartitionSpec('a', 'b'),
     )
 
@@ -224,11 +224,11 @@ class TestOptimizer(parameterized.TestCase):
     self.assertTrue(state.metrics.compute() < initial_loss)
 
   @parameterized.parameters(
-      {'variable': nnx.Param},
-      {'variable': nnx.LoRAParam},
-      {'variable': (nnx.Param, nnx.LoRAParam)},
+    {'variable_type': nnx.Param},
+    {'variable_type': nnx.LoRAParam},
+    {'variable_type': (nnx.Param, nnx.LoRAParam)},
   )
-  def test_wrt_update(self, variable):
+  def test_wrt_update(self, variable_type):
     in_features = 4
     out_features = 10
     model = nnx.LoRA(
@@ -240,13 +240,15 @@ class TestOptimizer(parameterized.TestCase):
         ),
         rngs=nnx.Rngs(1),
     )
-    state = nnx.Optimizer(model, optax.adam(1e-3), wrt=variable)
-    prev_variables, prev_other_variables = nnx.state(model, variable, ...)
+    state = nnx.Optimizer(model, optax.adam(1e-3), wrt=variable_type)
+    prev_variables, prev_other_variables = nnx.clone(
+      nnx.state(model, variable_type, ...)
+    )
 
     x = jnp.ones((1, 4))
     y = jnp.ones((1, 10))
     loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
-    grad_fn = nnx.grad(loss_fn, argnums=nnx.DiffState(0, variable))
+    grad_fn = nnx.grad(loss_fn, argnums=nnx.DiffState(0, variable_type))
 
     def step():
       grads = grad_fn(state.model, x, y)
@@ -261,7 +263,7 @@ class TestOptimizer(parameterized.TestCase):
       step()
 
     # make sure only the Variable's filtered in `wrt` are changed, and the others are unchanged
-    variables, other_variables = nnx.state(model, variable, ...)
+    variables, other_variables = nnx.state(model, variable_type, ...)
 
     jax.tree.map_with_path(assert_not_equal, prev_variables, variables)
 
@@ -288,7 +290,9 @@ class TestOptimizer(parameterized.TestCase):
         rngs=nnx.Rngs(1),
     )
     state = nnx.Optimizer(model, optax.lbfgs(), wrt=variable)
-    prev_variables, prev_other_variables = nnx.state(model, variable, ...)
+    prev_variables, prev_other_variables = nnx.clone(
+      nnx.state(model, variable, ...)
+    )
 
     x = jnp.ones((1, 4))
     y = jnp.ones((1, 10))
