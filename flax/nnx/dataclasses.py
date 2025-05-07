@@ -117,24 +117,23 @@ def dataclass(
       raise ValueError(
           'dataclass can only be used with a class derived from nnx.Object'
       )
+    if cls._object__pytree_mode != 'strict':
+      raise ValueError(
+          "dataclass can only be used with a class with pytree='strict', "
+          f'got {cls._object__pytree_mode}'
+      )
     if '__data__' in vars(cls):
       raise ValueError(
           'dataclass can only be used with a class without a __data__ attribute'
       )
-    if config.flax_mutable_array:
-      if cls._object__pytree_mode != 'strict':
-        raise ValueError(
-            "dataclass can only be used with a class with pytree='strict', "
-            f'got {cls._object__pytree_mode}'
-        )
 
-      # here we redefine _object__nodes using the type hints
-      hints = cls.__annotations__
-      all_nodes = list(cls._object__nodes)
-      all_nodes.extend(name for name, typ in hints.items() if not _is_static(typ))
-      cls._object__nodes = frozenset(all_nodes)
+    # here we redefine _object__nodes using the type hints
+    hints = cls.__annotations__
+    all_nodes = list(cls._object__nodes)
+    all_nodes.extend(name for name, typ in hints.items() if not _is_static(typ))
+    cls._object__nodes = frozenset(all_nodes)
 
-    cls = dataclasses.dataclass( # type: ignore
+    cls = dataclasses.dataclass(
         cls,
         init=init,
         repr=False,
