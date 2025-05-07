@@ -42,7 +42,6 @@ from flax.typing import SizeBytes
 O = tp.TypeVar('O', bound='Object')
 
 BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
-DEFAULT_PYTREE_MODE = 'strict' if config.flax_mutable_array else None
 
 def _collect_stats(
   node: tp.Any, node_stats: dict[int, dict[type[Variable], SizeBytes]]
@@ -192,9 +191,8 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     _object__state: ObjectState
 
   def __init_subclass__(
-    cls, pytree: tp.Literal['strict', 'auto', 'all'] | None = DEFAULT_PYTREE_MODE, **kwargs
+    cls, pytree: tp.Literal['strict', 'auto', 'all'] = 'strict', **kwargs
   ) -> None:
-    cls._object__pytree_mode = pytree
     super().__init_subclass__(**kwargs)
 
     graph.register_graph_node_type(
@@ -207,6 +205,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       init=cls._graph_node_init,  # type: ignore
     )
     if config.flax_mutable_array and pytree is not None:
+      cls._object__pytree_mode = pytree
       parent_pytree_mode = getattr(cls, '_object__pytree_mode', None)
       if (
           parent_pytree_mode is not None
@@ -463,7 +462,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     vars_obj.update(zip(node_names, node_attrs, strict=True))
     vars_obj.update(static_attrs)
     return obj
-  
+
   # all
   def _object__all_flatten_with_paths(self):
     obj_vars = vars(self)
