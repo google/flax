@@ -104,6 +104,8 @@ from .nn.normalization import BatchNorm as BatchNorm
 from .nn.normalization import LayerNorm as LayerNorm
 from .nn.normalization import RMSNorm as RMSNorm
 from .nn.normalization import GroupNorm as GroupNorm
+from .nn.normalization import InstanceNorm as InstanceNorm
+from .nn.normalization import SpectralNorm as SpectralNorm
 from .nn.stochastic import Dropout as Dropout
 from .rnglib import Rngs as Rngs
 from .rnglib import RngStream as RngStream
