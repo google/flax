@@ -18,7 +18,7 @@ from absl.testing import absltest
 from flax.nnx import ids
 
 
-class TestIds:
+class TestIds(absltest.TestCase):
   def test_hashable(self):
     id1 = ids.uuid()
     id2 = ids.uuid()

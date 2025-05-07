@@ -94,13 +94,13 @@ def _update_opt_state(opt_state, updates):
         raise TypeError(
           f'Expected update to be VariableState, got {type(update)}'
         )
-      x.raw_value = update.value
+      x.value = update.value
     elif isinstance(x, OptArray):
       if isinstance(update, VariableState):
         raise TypeError(
           f'Expected update to not to be a VariableState, got {update}'
         )
-      x.raw_value = update
+      x.value = update
     else:
       raise TypeError(
         f'Unexpected type when updating optimizer state: {type(x)}'

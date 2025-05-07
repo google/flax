@@ -21,7 +21,8 @@ import jax.numpy as jnp
 import optax
 
 from flax.nnx import graph
-from flax.nnx.module import GraphDef, Module
+from flax.nnx.graph import GraphDef
+from flax.nnx.module import Module
 from flax.nnx.proxy_caller import ApplyCaller
 from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
@@ -32,7 +33,7 @@ M = tp.TypeVar('M', bound=Module)
 TS = tp.TypeVar('TS', bound='TrainState')
 
 
-class Dict(Module, tp.Mapping[str, A]):
+class Dict(Module, tp.Mapping[str, A], pytree='all'):
   @tp.overload
   def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /): ...
 
@@ -68,6 +69,8 @@ class Dict(Module, tp.Mapping[str, A]):
 
 
 class Sequential(Module):
+  __data__ = ('layers',)
+
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
     self.layers = list(fns)
 

@@ -65,6 +65,7 @@ class ModuleState(statelib.State):
 
 
 class Scope(Object):
+  __data__ = ('rngs',)
   def __init__(self, rngs: rnglib.Rngs, mutable: CollectionFilter):
     self.rngs = rngs
     self.mutable = mutable
@@ -222,8 +223,8 @@ class ModuleBase:
 
 @tpe.dataclass_transform(field_specifiers=(dataclasses.field,))  # type: ignore[not-supported-yet]
 class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
-  def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
-    super().__init_subclass__(experimental_pytree)
+  def __init_subclass__(cls) -> None:
+    super().__init_subclass__(pytree='auto')
 
     cls = dataclasses.dataclass(repr=False)(cls)
     cls.__hash__ = object.__hash__  # type: ignore[method-assign]
@@ -243,7 +244,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         state := vars(self)[name], ModuleState
       ):
         graph.update(value, state)
-      for leaf in jax.tree.leaves(value):
+      for leaf in jax.tree.leaves(value, is_leaf=graph.is_graph_node):
         if isinstance(leaf, Module):
           leaf._object__state._initializing = self.is_initializing()
           _bind_module(self, leaf)
@@ -296,8 +297,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       abs_value = jax.eval_shape(
         lambda: init_fn(jax.random.key(0), *init_args, **init_kwargs)
       )
-      abs_value_flat = jax.tree_util.tree_leaves(abs_value)
-      value_flat = jax.tree_util.tree_leaves(value)
+      abs_value_flat = jax.tree.leaves(abs_value)
+      value_flat = jax.tree.leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
         if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
@@ -347,8 +348,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         raise ValueError(f"Expected 'init_fn' to be a callable, got None")
 
       abs_value = jax.eval_shape(lambda: init_fn(*init_args, **init_kwargs))
-      abs_value_flat = jax.tree_util.tree_leaves(abs_value)
-      value_flat = jax.tree_util.tree_leaves(value)
+      abs_value_flat = jax.tree.leaves(abs_value)
+      value_flat = jax.tree.leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
         if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
@@ -376,7 +377,6 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
 
     variable_state: variablelib.VariableState
     for path, variable_state in statelib.to_flat_state(state):
-
       if issubclass(variable_state.type, rnglib.RngState):
         # Don't return RNG states, since Linen doesn't have them.
         continue
@@ -403,6 +403,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       collection: traversals.unflatten_mapping(flat_state)
       for collection, flat_state in _variables.items()
     }
+
+    # _variables = nnx.freeze(_variables)
 
     return _variables
 

@@ -27,7 +27,7 @@ class TrainState(nnx.TrainState):
   batch_stats: nnx.State
 
 
-class TestHelpers:
+class TestHelpers(absltest.TestCase):
   def test_train_state(self):
     m = nnx.Dict(a=nnx.Param(1), b=nnx.BatchStat(2))
 

@@ -149,7 +149,7 @@ def split(node, *filters):
   predicates = [nnx.filterlib.to_predicate(f) for f in filters]
   flat_states: list[dict[KeyPath, Any]] = [{} for p in predicates]
 
-  for path, value in state.flat_state():
+  for path, value in state:
     for i, predicate in enumerate(predicates):
       if predicate(path, value):
         flat_states[i][path] = value

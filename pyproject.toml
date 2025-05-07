@@ -188,6 +188,8 @@ filterwarnings = [
     "ignore:.*numpy.core is deprecated.*:DeprecationWarning",
     # DeprecationWarning: shape requires ndarray or scalar arguments
     "ignore:.*shape requires ndarray or scalar arguments.*:DeprecationWarning",
+    # UserWarning: Sharding info not provided when restoring
+    "ignore:.*Sharding info not provided when restoring.*:UserWarning",
 ]
 
 [tool.coverage.report]

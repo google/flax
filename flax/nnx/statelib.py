@@ -754,6 +754,6 @@ def create_path_filters(state: State):
   value_paths: dict[tp.Any, set[PathParts]] = {}
   for path, value in flat_state:
     if isinstance(value, (variablelib.Variable, variablelib.VariableState)):
-      value = value.value
+      value = value.raw_value
     value_paths.setdefault(value, set()).add(path)
   return {filterlib.PathIn(*value_paths[value]): value for value in value_paths}

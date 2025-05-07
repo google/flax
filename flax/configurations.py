@@ -23,6 +23,7 @@ _T = TypeVar('_T')
 
 class Config:
   flax_use_flaxlib: bool
+  flax_mutable_array: bool
   flax_max_repr_depth: int | None
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
@@ -265,6 +266,11 @@ flax_use_flaxlib = bool_flag(
   name='flax_use_flaxlib',
   default=False,
   help='Whether to use flaxlib for C++ acceleration.',
+)
+flax_mutable_array = bool_flag(
+  name='flax_mutable_array',
+  default=False,
+  help='Whether to use mutable arrays.',
 )
 
 flax_max_repr_depth = int_flag(

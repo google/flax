@@ -200,7 +200,9 @@ class TestRngs(absltest.TestCase):
     self.assertLen(jax.tree.leaves(broadcast_keys), 1)
     self.assertLen(jax.tree.leaves(broadcast_counts), 1)
     self.assertEqual(split_keys['params']['key'].value.shape, (4,))
-    self.assertEqual(broadcast_keys['dropout']['key'].value.shape, ())
+    self.assertEqual(
+      broadcast_keys['dropout']['key'].value.shape, ()
+    )
     self.assertEqual(split_counts['params']['count'].value, 0)
     self.assertEqual(broadcast_counts['dropout']['count'].value, 0)
 
@@ -215,8 +217,12 @@ class TestRngs(absltest.TestCase):
     self.assertLen(jax.tree.leaves(split_counts), 2)
     self.assertEmpty(jax.tree.leaves(broadcast_keys))
     self.assertEmpty(jax.tree.leaves(broadcast_counts))
-    self.assertEqual(split_keys['params']['key'].value.shape, (4, 1, 3))
-    self.assertEqual(split_keys['dropout']['key'].value.shape, (4, 1, 3))
+    self.assertEqual(
+      split_keys['params']['key'].value.shape, (4, 1, 3)
+    )
+    self.assertEqual(
+      split_keys['dropout']['key'].value.shape, (4, 1, 3)
+    )
     self.assertEqual(split_counts['params']['count'].value, 0)
     self.assertEqual(split_counts['dropout']['count'].value, 0)
 
@@ -231,8 +237,12 @@ class TestRngs(absltest.TestCase):
     self.assertLen(jax.tree.leaves(split_counts), 1)
     self.assertLen(jax.tree.leaves(broadcast_keys), 1)
     self.assertLen(jax.tree.leaves(broadcast_counts), 1)
-    self.assertEqual(split_keys['params']['key'].value.shape, (4, 1, 3))
-    self.assertEqual(broadcast_keys['dropout']['key'].value.shape, ())
+    self.assertEqual(
+      split_keys['params']['key'].value.shape, (4, 1, 3)
+    )
+    self.assertEqual(
+      broadcast_keys['dropout']['key'].value.shape, ()
+    )
     self.assertEqual(split_counts['params']['count'].value, 0)
     self.assertEqual(broadcast_counts['dropout']['count'].value, 0)
 

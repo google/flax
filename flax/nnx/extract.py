@@ -204,15 +204,22 @@ def to_tree(
         or isinstance(x, variablelib.Variable)
         else x,
         tree,
-        is_leaf=lambda x: isinstance(x, variablelib.Variable),
+        is_leaf=lambda x: isinstance(x, variablelib.Variable)
+        or graph.is_graph_node(x),
       )
   leaf_prefixes = broadcast_prefix(
     prefix,
     tree,
-    prefix_is_leaf=lambda x: x is None,
+    prefix_is_leaf=lambda x: x is None
+    or isinstance(x, variablelib.Variable)
+    or graph.is_graph_node(x),
+    tree_is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    or graph.is_graph_node(x),
   )
   leaf_keys, treedef = jax.tree_util.tree_flatten_with_path(
-    tree, is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    tree,
+    is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    or graph.is_graph_node(x),
   )
 
   assert len(leaf_keys) == len(leaf_prefixes)

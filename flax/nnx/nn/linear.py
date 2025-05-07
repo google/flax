@@ -328,6 +328,8 @@ class Linear(Module):
     rngs: rng key.
   """
 
+  __data__ = ('kernel', 'bias')
+
   def __init__(
     self,
     in_features: int,
@@ -431,6 +433,8 @@ class Einsum(Module):
       Should support same signature as `jnp.einsum`.
     rngs: rng key.
   """
+
+  __data__ = ('kernel', 'bias')
 
   def __init__(
     self,
@@ -640,6 +644,8 @@ class Conv(Module):
       promoted dtype.
     rngs: rng key.
   """
+
+  __data__ = ('kernel', 'bias')
 
   def __init__(
     self,
@@ -897,6 +903,8 @@ class ConvTranspose(Module):
     rngs: rng key.
   """
 
+  __data__ = ('kernel', 'bias')
+
   def __init__(
     self,
     in_features: int,
@@ -1146,6 +1154,8 @@ class Embed(Module):
       and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
   """
+
+  __data__ = ('embedding',)
 
   def __init__(
     self,

@@ -22,6 +22,7 @@ import jax.numpy as jnp
 from flax import struct
 from flax.nnx import graph
 from flax.nnx import statelib
+from flax.nnx import variablelib
 from flax.nnx.statelib import State
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
@@ -33,7 +34,13 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 Counts = list[int]
 AxesValue = tp.Union[int, None]
 SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
+_fry_dtype: jnp.dtype | None = None
 
+def get_fry_dtype():
+  global _fry_dtype
+  if _fry_dtype is None:
+    _fry_dtype = jax.eval_shape(lambda: jax.random.key(0)).dtype
+  return _fry_dtype
 
 class RngState(Variable[jax.Array]):
   tag: str
@@ -49,15 +56,24 @@ NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
 
 
 class RngStream(Object):
+  __data__ = ('key', 'count')
+
   def __init__(
     self,
     tag: str,
-    key: jax.Array,
-    count: jax.Array,
+    key: jax.Array | int
   ):
-    if not isinstance(key, jax.Array):
-      raise TypeError(f'key must be a jax.Array, got {type(key)}')
+    if isinstance(key, int):
+      key = jax.random.key(key)
+    elif isinstance(key, jax.Array) and key.dtype == jnp.uint32:
+      key = jax.random.wrap_key_data(key)
 
+    if not isinstance(key, jax.Array) or key.dtype != get_fry_dtype():
+      raise ValueError(f'Invalid rng value: {key}, expected a '
+                       f'jax.Array of dtype {get_fry_dtype()}')
+
+    count = jnp.zeros(key.shape, dtype=jnp.uint32)
+    self.tag = tag
     self.key = RngKey(key, tag=tag)
     self.count = RngCount(count, tag=tag)
 
@@ -65,8 +81,8 @@ class RngStream(Object):
     self._check_valid_context(
       lambda: 'Cannot call RngStream from a different trace level'
     )
-    key = jax.random.fold_in(self.key.value, self.count.value)
-    self.count.value += 1
+    key = jax.random.fold_in(self.key[...], self.count[...])
+    self.count[...] += 1
     return key
 
 
@@ -78,7 +94,7 @@ RngDict = tp.Union[
 ]
 
 
-class Rngs(Object):
+class Rngs(Object, pytree='all'):
   """NNX rng container class. To instantiate the ``Rngs``, pass
   in an integer, specifying the starting seed. ``Rngs`` can have
   different "streams", allowing the user to generate different
@@ -178,23 +194,12 @@ class Rngs(Object):
       else:
         rngs['default'] = default
 
-    for name, value in rngs.items():
-      if isinstance(value, int):
-        key = jax.random.key(value)
-      elif isinstance(value, jax.Array):
-        if value.dtype == jnp.uint32:
-          key = jax.random.wrap_key_data(value)
-        else:
-          key = value
-      else:
-        raise ValueError(f'Invalid rng value: {value}')
-
+    for tag, key in rngs.items():
       stream = RngStream(
-        tag=name,
+        tag=tag,
         key=key,
-        count=jnp.zeros(key.shape, dtype=jnp.uint32),
       )
-      setattr(self, name, stream)
+      setattr(self, tag, stream)
 
   def _get_stream(self, name: str, error_type: type[Exception]) -> RngStream:
     rngs_vars = vars(self)
@@ -226,13 +231,6 @@ class Rngs(Object):
 
   def __contains__(self, name: tp.Any) -> bool:
     return name in vars(self)
-
-  # pickle support
-  def __getstate__(self):
-    return vars(self).copy()
-
-  def __setstate__(self, state):
-    vars(self).update(state)
 
   def items(self):
     for name in self:
@@ -444,14 +442,22 @@ def split_rngs(
       key = jax.random.split(key, splits)
       if squeeze:
         key = key[0]
-      stream.key.value = key
+      if variablelib.is_mutable_array(stream.key.raw_value):
+        stream.key.raw_value = variablelib.mutable_array(key)
+      else:
+        stream.key.value = key
       if squeeze:
         counts_shape = stream.count.shape
       elif isinstance(splits, int):
         counts_shape = (splits, *stream.count.shape)
       else:
         counts_shape = (*splits, *stream.count.shape)
-      stream.count.value = jnp.zeros(counts_shape, dtype=jnp.uint32)
+
+      count = jnp.zeros(counts_shape, dtype=jnp.uint32)
+      if variablelib.is_mutable_array(stream.count.raw_value):
+        stream.count.raw_value = variablelib.mutable_array(count)
+      else:
+        stream.count.value = count
 
   return SplitBackups(backups)
 

@@ -88,7 +88,7 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
   return fn
 
 
-class ToNNX(Module):
+class ToNNX(Module, pytree='auto'):
   """A wrapper to turn any Linen module into an NNX module.
 
   The result NNX module can be used standalone with all NNX APIs, or as a submodule of
@@ -117,6 +117,7 @@ class ToNNX(Module):
   Returns:
     A stateful NNX module that behaves the same as the wrapped Linen module.
   """
+
   def __init__(
     self,
     module: linen.Module,

@@ -127,7 +127,7 @@ def get_partition_spec(tree: A) -> A:
           )
         return x.replace(PartitionSpec(*x.sharding))
       else:
-        return x.replace(_maybe_replicate(x.value))
+        return x.replace(_maybe_replicate(x.raw_value))
 
     return _maybe_replicate(x)
 
