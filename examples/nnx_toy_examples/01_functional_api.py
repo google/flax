@@ -20,8 +20,8 @@ import numpy as np
 
 from flax import nnx
 
-X = np.linspace(0, 1, 100)[:, None]
-Y = 0.8 * X**2 + 0.1 + np.random.normal(0, 0.1, size=X.shape)
+X = np.linspace(-jnp.pi, jnp.pi, 100)[:, None]
+Y = 0.8 * jnp.sin(X) + 0.1 + np.random.normal(0, 0.1, size=X.shape)
 
 
 def dataset(batch_size):
@@ -50,11 +50,8 @@ class MLP(nnx.Module):
     self.linear2 = Linear(dhidden, dout, rngs=rngs)
 
   def __call__(self, x):
-    self.count.value += 1
-    x = self.linear1(x)
-    x = jax.nn.relu(x)
-    x = self.linear2(x)
-    return x
+    self.count[...] += 1
+    return self.linear2(jax.nn.relu(self.linear1(x) * 0.5))
 
 
 graphdef, params, counts = nnx.split(

@@ -109,7 +109,7 @@ class LoRA(Module):
 
   def __call__(self, x: jax.Array):
     x, lora_a, lora_b = promote_dtype(
-      (x, self.lora_a.value, self.lora_b.value), dtype=self.dtype
+      (x, self.lora_a[...], self.lora_b[...]), dtype=self.dtype
     )
     out = x @ lora_a @ lora_b
     if self.base_module is not None:

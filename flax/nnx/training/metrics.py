@@ -80,6 +80,8 @@ class Average(Metric):
     Array(nan, dtype=float32)
   """
 
+  __data__ = ('total', 'count')
+
   def __init__(self, argname: str = 'values'):
     """Pass in a string denoting the key-word argument that :func:`update` will use to derive the new value.
     For example, constructing the metric as ``avg = Average('test')`` would allow you to make updates with
@@ -152,6 +154,8 @@ class Welford(Metric):
     >>> metrics.compute()
     Statistics(mean=Array(0., dtype=float32), standard_error_of_mean=Array(nan, dtype=float32), standard_deviation=Array(nan, dtype=float32))
   """
+
+  __data__ = ('count', 'mean', 'm2')
 
   def __init__(self, argname: str = 'values'):
     """Pass in a string denoting the key-word argument that :func:`update` will use to derive the new value.

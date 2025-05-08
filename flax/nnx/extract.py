@@ -114,6 +114,7 @@ def broadcast_prefix(
     prefix_tree,
     full_tree,
     is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    or graph.is_graph_node(x)
     or (prefix_is_leaf is not None and prefix_is_leaf(x)),
   )
   return result
@@ -315,5 +316,6 @@ def clear_non_graph_nodes(tree):
     if graph.is_graph_node(x) or isinstance(x, variablelib.Variable)
     else None,
     tree,
-    is_leaf=lambda x: isinstance(x, variablelib.Variable),
+    is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    or graph.is_graph_node(x),
   )

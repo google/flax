@@ -75,6 +75,8 @@ class Dropout(Module):
   rng_collection: str = 'dropout'
   rngs: rnglib.Rngs | None = None
 
+  __data__ = ('rngs',)
+
   def __call__(
     self,
     inputs,

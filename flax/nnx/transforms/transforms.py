@@ -138,7 +138,7 @@ def eval_shape(
   def _eval_shape_fn(*args, **kwargs):
     args, kwargs = extract.from_tree((args, kwargs))
     out = f(*args, **kwargs)
-    return extract.to_tree(out)
+    return extract.to_tree(graph.freeze(out))
 
   out = jax.eval_shape(_eval_shape_fn, *args, **kwargs)
   return extract.from_tree(out)

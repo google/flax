@@ -59,7 +59,7 @@ def _collect_stats(
     var_type = type(node)
     if issubclass(var_type, nnx.RngState):
       var_type = nnx.RngState
-    size_bytes = SizeBytes.from_any(node.value)
+    size_bytes = SizeBytes.from_any(node.raw_value)
     if size_bytes:
       stats[var_type] = size_bytes
 
@@ -185,13 +185,13 @@ class MutableArrayRepr(reprlib.Representable):
 class Object(reprlib.Representable, metaclass=ObjectMeta):
 
   if tp.TYPE_CHECKING:
-    _object__nodes: frozenset[str]
-    _object__pytree_mode: str
-    __data__: tuple[str, ...]
+    _object__nodes: frozenset[str] | tp.Literal['all', 'auto'] | None
+    _object__is_pytree: bool
+    __data__: tuple[str, ...] | tp.Literal['all', 'auto']
     _object__state: ObjectState
 
   def __init_subclass__(
-    cls, pytree: tp.Literal['strict', 'auto', 'all'] = 'strict', **kwargs
+    cls, pytree: bool = config.flax_mutable_array, **kwargs
   ) -> None:
     super().__init_subclass__(**kwargs)
 
@@ -204,59 +204,75 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       clear=cls._graph_node_clear,
       init=cls._graph_node_init,  # type: ignore
     )
-    if config.flax_mutable_array and pytree is not None:
-      cls._object__pytree_mode = pytree
-      parent_pytree_mode = getattr(cls, '_object__pytree_mode', None)
-      if (
-          parent_pytree_mode is not None
-          and parent_pytree_mode != pytree
-          and (parent_pytree_mode != 'strict' or len(cls._object__nodes) > 1)
-      ):
-        raise ValueError(
-            f"Cannot set pytree mode for class '{cls.__name__}' to '{pytree}' "
-            f"because it is already set to '{parent_pytree_mode}' on its "
-            'parent.'
-        )
+    cls._object__is_pytree = pytree
+    class_nodes: tuple[str, ...] | tp.Literal['all', 'auto'] | None = vars(
+      cls
+    ).get('__data__', None)
+    parent_nodes: frozenset[str] | tp.Literal['all', 'auto'] | None = getattr(
+      cls, '_object__nodes', None
+    )
+    if (
+      class_nodes is not None
+      and parent_nodes is not None
+      and not (
+        (isinstance(parent_nodes, frozenset) and isinstance(class_nodes, tuple))
+        or parent_nodes == class_nodes
+      )
+    ):
+      raise ValueError(
+        f"Cannot set __data__ for class '{cls.__name__}' to '{class_nodes}' "
+        f"because it is already set to '{parent_nodes}' on its parent."
+      )
 
-      if pytree == 'strict':
-        all_nodes: list[str] = (
-            list(cls._object__nodes)
-            if hasattr(cls, '_object__nodes')
-            else ['_object__state']
-        )
-        current_nodes = vars(cls).get('__data__', ())
-        all_nodes.extend(current_nodes)
-        cls._object__nodes = frozenset(all_nodes)
-        assert '_object__state' in cls._object__nodes
-        jax.tree_util.register_pytree_with_keys(
-            cls,
-            flatten_with_keys=cls._object__strict_flatten_with_paths,
-            unflatten_func=cls._object__strict_unflatten,
-            flatten_func=cls._object__strict_flatten,
-        )
-      elif pytree == 'auto':
-        jax.tree_util.register_pytree_with_keys(
-            cls,
-            flatten_with_keys=cls._object__auto_flatten_with_paths,
-            unflatten_func=cls._object__auto_unflatten,
-            flatten_func=cls._object__auto_flatten,
-        )
-      elif pytree == 'all':
-        jax.tree_util.register_pytree_with_keys(
-            cls,
-            flatten_with_keys=cls._object__all_flatten_with_paths,
-            unflatten_func=cls._object__all_unflatten,
-            flatten_func=cls._object__all_flatten,
-        )
+    if class_nodes is None and parent_nodes is not None:
+      cls._object__nodes = parent_nodes
+    elif isinstance(class_nodes, tuple):
+      if parent_nodes is None:
+        all_nodes = set()
       else:
-        raise ValueError(
-            f"Invalid pytree type '{pytree}' for class '{cls.__name__}'. "
-            "Expected 'strict' or 'auto'."
-        )
+        assert isinstance(parent_nodes, frozenset)
+        all_nodes = set(parent_nodes)
+      all_nodes.update(class_nodes)
+      all_nodes.add('_object__state')
+      cls._object__nodes = frozenset(all_nodes)
+    elif class_nodes in ('all', 'auto'):
+      cls._object__nodes = class_nodes
+    else:
+      assert class_nodes is None
+      cls._object__nodes = None
+
+    if pytree:
+      cls._object__register_pytree()
 
     if BUILDING_DOCS:
       # set correct signature for sphinx
       cls.__signature__ = inspect.signature(cls.__init__)
+
+  @classmethod
+  def _object__register_pytree(cls):
+    if (
+      isinstance(cls._object__nodes, frozenset)
+      or cls._object__nodes is None
+      or cls._object__nodes == 'all'
+    ):
+      jax.tree_util.register_pytree_with_keys(
+        cls,
+        flatten_with_keys=cls._object__flatten_with_paths,
+        unflatten_func=cls._object__unflatten,
+        flatten_func=cls._object__flatten,
+      )
+    elif cls._object__nodes == 'auto':
+      jax.tree_util.register_pytree_with_keys(
+        cls,
+        flatten_with_keys=cls._object__auto_flatten_with_paths,
+        unflatten_func=cls._object__auto_unflatten,
+        flatten_func=cls._object__auto_flatten,
+      )
+    else:
+      raise ValueError(
+        f"Invalid pytree type '{cls._object__nodes}' for class '{cls.__name__}'. "
+        "Expected 'strict' or 'auto'."
+      )
 
   if not tp.TYPE_CHECKING:
 
@@ -268,9 +284,9 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       lambda: f"Cannot mutate '{type(self).__name__}' from different trace level"
     )
     if (
-        config.flax_mutable_array
-        and type(self)._object__pytree_mode == 'strict'
-        and name not in self._object__nodes
+      type(self)._object__is_pytree
+      and isinstance(self._object__nodes, frozenset)
+      and name not in self._object__nodes
     ):
       for leaf in jax.tree.leaves(value):
         if isinstance(leaf, jax.Array) or is_mutable_array(leaf):
@@ -420,14 +436,19 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
   # Pytree Definition
   # -------------------------
   # strict
-  def _object__strict_flatten_with_paths(self):
+  def _object__flatten_with_paths(self):
     obj_vars = vars(self)
     type_nodes = type(self)._object__nodes
+    assert type_nodes != 'auto'
     node_names: list[str] = []
     node_attrs: list[tuple[tp.Any, tp.Any]] = []
     static_attrs: list[tuple[str, tp.Any]] = []
     for name, value in sorted(obj_vars.items()):
-      if name in type_nodes:
+      if (
+        name == '_object__state'
+        or type_nodes == 'all'
+        or (isinstance(type_nodes, frozenset) and name in type_nodes)
+      ):
         node_names.append(name)
         node_attrs.append((jax.tree_util.GetAttrKey(name), value))
       else:
@@ -435,14 +456,19 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
 
     return node_attrs, (tuple(node_names), tuple(static_attrs))
 
-  def _object__strict_flatten(self):
+  def _object__flatten(self):
     obj_vars = vars(self)
     type_nodes = type(self)._object__nodes
+    assert type_nodes != 'auto'
     node_names: list[str] = []
     node_attrs: list[tp.Any] = []
     static_attrs: list[tuple[str, tp.Any]] = []
     for name, value in sorted(obj_vars.items()):
-      if name in type_nodes:
+      if (
+        name == '_object__state'
+        or type_nodes == 'all'
+        or (isinstance(type_nodes, frozenset) and name in type_nodes)
+      ):
         node_names.append(name)
         node_attrs.append(value)
       else:
@@ -451,48 +477,16 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     return node_attrs, (tuple(node_names), tuple(static_attrs))
 
   @classmethod
-  def _object__strict_unflatten(
-      cls,
-      static: tuple[tuple[str, ...], tuple[tuple[str, tp.Any], ...]],
-      node_attrs: tp.Iterable[tp.Any],
+  def _object__unflatten(
+    cls,
+    static: tuple[tuple[str, ...], tuple[tuple[str, tp.Any], ...]],
+    node_attrs: tp.Iterable[tp.Any],
   ):
     node_names, static_attrs = static
     obj = object.__new__(cls)
     vars_obj = vars(obj)
     vars_obj.update(zip(node_names, node_attrs, strict=True))
     vars_obj.update(static_attrs)
-    return obj
-
-  # all
-  def _object__all_flatten_with_paths(self):
-    obj_vars = vars(self)
-    node_names: list[str] = []
-    node_attrs: list[tuple[tp.Any, tp.Any]] = []
-    for name, value in sorted(obj_vars.items()):
-      node_names.append(name)
-      node_attrs.append((jax.tree_util.GetAttrKey(name), value))
-
-    return node_attrs, node_names
-
-  def _object__all_flatten(self):
-    obj_vars = vars(self)
-    node_names: list[str] = []
-    node_attrs: list[tp.Any] = []
-    for name, value in sorted(obj_vars.items()):
-      node_names.append(name)
-      node_attrs.append(value)
-
-    return node_attrs, tuple(node_names)
-
-  @classmethod
-  def _object__all_unflatten(
-      cls,
-      node_names: tuple[str, ...],
-      node_attrs: tp.Iterable[tp.Any],
-  ):
-    obj = object.__new__(cls)
-    vars_obj = vars(obj)
-    vars_obj.update(zip(node_names, node_attrs, strict=True))
     return obj
 
   # auto

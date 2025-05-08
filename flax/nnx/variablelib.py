@@ -44,6 +44,9 @@ AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
+MUTABLE_DEFAULT = True if config.flax_mutable_array else None
+
+
 def is_mutable_array(x) -> tp.TypeGuard[MutableArray]:
   return isinstance(x, jax.Array | AbstractRef | MutableArray) and isinstance(
     jax.typeof(x), AbstractRef | MutableArray
@@ -137,7 +140,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     self,
     value: tp.Union[A, VariableMetadata[A]],
     *,
-    mutable: bool | None = True if config.flax_mutable_array else None,
+    mutable: bool | None = MUTABLE_DEFAULT,
     **metadata: tp.Any,
   ):
     var_t = type(self)
@@ -147,11 +150,6 @@ class Variable(tp.Generic[A], reprlib.Representable):
       metadata.update(value.metadata)
       value = tp.cast(A, value.raw_value)
 
-    if mutable is not None and not config.flax_mutable_array:
-      raise ValueError(
-        'Cannot create mutable variable if FLAX_MUTABLE_ARRAY '
-        'or config.flax_mutable_array is not set.'
-      )
     if mutable is None:
       _value = value
     elif mutable:
@@ -186,14 +184,15 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def __getattr__(self, name: str) -> tp.Any:
     if name in object.__getattribute__(self, '_var_metadata'):
       return self._var_metadata[name]
-    return getattr(self.value, name)
+    return getattr(self.raw_value, name)
 
   def __setattr__(self, name: str, value: tp.Any):
-    if not self._trace_state.is_valid():
-      if name != 'value' or not config.flax_mutable_array:
-        raise errors.TraceContextError(
-          f'Cannot mutate {type(self).__name__} from a different trace level'
-        )
+    if not self._trace_state.is_valid() and (
+      name != 'value' or not self.mutable
+    ):
+      raise errors.TraceContextError(
+        f'Cannot mutate {type(self).__name__} from a different trace level'
+      )
     if (
       name == 'value'
       or name == 'raw_value'
@@ -222,18 +221,16 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
   @classmethod
   def state(cls, value: A, **metadata) -> VariableState[A]:
-    if config.flax_mutable_array:
-      raise NotImplementedError(
-        '`state` method is not implemented for mutable arrays.'
-      )
-
     return cls(value, **metadata).to_state()
 
   @property
   def mutable(self) -> bool | None:
-    if not config.flax_mutable_array:
+    if is_mutable_array(self.raw_value):
+      return True
+    elif isinstance(self.raw_value, jax.Array):
+      return False
+    else:
       return None
-    return is_mutable_array(self.raw_value)
 
   def get_metadata(self):
     return self._var_metadata
@@ -274,7 +271,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       )
     if 'on_set_value' in self._var_metadata:
       value = self._var_metadata['on_set_value'](self, value)
-    if config.flax_mutable_array and is_mutable_array(self.raw_value):
+    if config.flax_mutable_array:
       self.raw_value[...] = value  # type: ignore
     else:
       object.__setattr__(self, 'raw_value', value)
@@ -293,12 +290,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
 
   @tp.overload
-  def replace(self, value: B, **kwargs) -> Variable[B]:
-    ...
+  def replace(self, value: B, **kwargs) -> Variable[B]: ...
 
   @tp.overload
-  def replace(self, **kwargs) -> Variable[A]:
-    ...
+  def replace(self, **kwargs) -> Variable[A]: ...
 
   def replace(self, value: tp.Any = Missing, **kwargs) -> Variable[tp.Any]:
     if value is not Missing:
@@ -353,7 +348,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return VariableState(type(self), self.raw_value, **self._var_metadata)
 
   def __nnx_repr__(self):
-    stats = SizeBytes.from_any(self.value)
+    stats = SizeBytes.from_any(self.raw_value)
     if stats:
       comment = f' # {stats}'
     else:
@@ -420,21 +415,22 @@ class Variable(tp.Generic[A], reprlib.Representable):
   # proxy methods
   # --------------------------------------------
 
-  def __getitem__(self, key) -> tp.Any:
+  def __getitem__(self, key) -> jax.Array:
     return self.value[key]  # type: ignore
 
   def __setitem__(self, key, value) -> None:
-    # check MutableArray first because 'Traced<Ref>' also passes isinstance(Array) check
-    if is_mutable_array(self.raw_value):
+    if config.flax_mutable_array:
       self.raw_value[key] = value  # type: ignore
-    elif isinstance(self.raw_value, jax.Array):
-      self.raw_value = self.value.at[key].set(value)  # type: ignore
     else:
-      if not self._trace_state.is_valid():
-        raise errors.TraceContextError(
-          f'Cannot mutate {type(self).__name__} from a different trace level'
-        )
-      self.raw_value[key] = value  # type: ignore
+      if not is_mutable_array(self.raw_value):
+        if not self._trace_state.is_valid():
+          raise errors.TraceContextError(
+            f'Cannot mutate {type(self).__name__} from a different trace level'
+          )
+      if isinstance(self.raw_value, jax.Array):
+        self.raw_value = self.raw_value.at[key].set(value)  # type: ignore
+      else:
+        self.raw_value[key] = value  # type: ignore
 
   def __call__(self, *args, **kwargs) -> tp.Any:
     return self.value(*args, **kwargs)  # type: ignore
@@ -991,16 +987,22 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     return var_metadata[name]
 
   def __setattr__(self, name: str, value: Any) -> None:
-    if name == 'type' or name == 'value' or name == '_var_metadata':
+    if name in ('type', 'value', '_var_metadata', 'raw_value'):
       object.__setattr__(self, name, value)
     else:
       self._var_metadata[name] = value
 
   def __delattr__(self, name: str) -> None:
-    if name == 'type' or name == 'value' or name == '_var_metadata':
+    if name in ('type', 'value', '_var_metadata', 'raw_value'):
       object.__delattr__(self, name)
     else:
       del self._var_metadata[name]
+
+  def __getitem__(self, key: Any) -> jax.Array:
+    return self.raw_value[key]  # type: ignore
+
+  def __setitem__(self, key: Any, value: Any) -> None:
+    self.raw_value[key] = value  # type: ignore
 
   def __nnx_repr__(self):
     stats = SizeBytes.from_any(self.raw_value)

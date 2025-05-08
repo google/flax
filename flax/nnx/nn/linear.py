@@ -141,6 +141,8 @@ class LinearGeneral(Module):
     rngs: rng key.
   """
 
+  __data__ = ('kernel', 'bias')
+
   def __init__(
     self,
     in_features: Size | tp.Sequence[Size],
@@ -645,7 +647,7 @@ class Conv(Module):
     rngs: rng key.
   """
 
-  __data__ = ('kernel', 'bias')
+  __data__ = ('kernel', 'bias', 'mask')
 
   def __init__(
     self,
@@ -903,7 +905,7 @@ class ConvTranspose(Module):
     rngs: rng key.
   """
 
-  __data__ = ('kernel', 'bias')
+  __data__ = ('kernel', 'bias', 'mask')
 
   def __init__(
     self,

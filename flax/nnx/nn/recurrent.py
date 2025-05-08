@@ -91,7 +91,7 @@ def modified_orthogonal(key: Array, shape: Shape, dtype: Dtype = jnp.float32) ->
     return initializer(key, shape).astype(dtype)
 
 class LSTMCell(RNNCellBase):
-    r"""LSTM cell.
+  r"""LSTM cell.
 
   The mathematical definition of the cell is as follows
 
@@ -109,107 +109,113 @@ class LSTMCell(RNNCellBase):
   the memory.
   """
 
-    def __init__(
-        self,
-        in_features: int,
-        hidden_features: int,
-        *,
-        gate_fn: Callable[..., Any] = sigmoid,
-        activation_fn: Callable[..., Any] = tanh,
-        kernel_init: Initializer = default_kernel_init,
-        recurrent_kernel_init: Initializer = modified_orthogonal,
-        bias_init: Initializer = initializers.zeros_init(),
-        dtype: Dtype | None = None,
-        param_dtype: Dtype = jnp.float32,
-        carry_init: Initializer = initializers.zeros_init(),
-        rngs: rnglib.Rngs,
-    ):
-        self.in_features = in_features
-        self.hidden_features = hidden_features
-        self.gate_fn = gate_fn
-        self.activation_fn = activation_fn
-        self.kernel_init = kernel_init
-        self.recurrent_kernel_init = recurrent_kernel_init
-        self.bias_init = bias_init
-        self.dtype = dtype
-        self.param_dtype = param_dtype
-        self.carry_init = carry_init
-        self.rngs = rngs
+  __data__ = ('ii', 'if_', 'ig', 'io', 'hi', 'hf', 'hg', 'ho', 'rngs')
 
-        # input and recurrent layers are summed so only one needs a bias.
-        dense_i = partial(
-            Linear,
-            in_features=in_features,
-            out_features=hidden_features,
-            use_bias=False,
-            kernel_init=self.kernel_init,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            rngs=rngs,
-        )
+  def __init__(
+    self,
+    in_features: int,
+    hidden_features: int,
+    *,
+    gate_fn: Callable[..., Any] = sigmoid,
+    activation_fn: Callable[..., Any] = tanh,
+    kernel_init: Initializer = default_kernel_init,
+    recurrent_kernel_init: Initializer = modified_orthogonal,
+    bias_init: Initializer = initializers.zeros_init(),
+    dtype: Dtype | None = None,
+    param_dtype: Dtype = jnp.float32,
+    carry_init: Initializer = initializers.zeros_init(),
+    rngs: rnglib.Rngs,
+  ):
+    self.in_features = in_features
+    self.hidden_features = hidden_features
+    self.gate_fn = gate_fn
+    self.activation_fn = activation_fn
+    self.kernel_init = kernel_init
+    self.recurrent_kernel_init = recurrent_kernel_init
+    self.bias_init = bias_init
+    self.dtype = dtype
+    self.param_dtype = param_dtype
+    self.carry_init = carry_init
+    self.rngs = rngs
 
-        dense_h = partial(
-            Linear,
-            in_features=hidden_features,
-            out_features=hidden_features,
-            use_bias=True,
-            kernel_init=self.recurrent_kernel_init,
-            bias_init=self.bias_init,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            rngs=rngs,
-        )
+    # input and recurrent layers are summed so only one needs a bias.
+    dense_i = partial(
+      Linear,
+      in_features=in_features,
+      out_features=hidden_features,
+      use_bias=False,
+      kernel_init=self.kernel_init,
+      dtype=self.dtype,
+      param_dtype=self.param_dtype,
+      rngs=rngs,
+    )
 
-        self.ii = dense_i()
-        self.if_ = dense_i()
-        self.ig = dense_i()
-        self.io = dense_i()
-        self.hi = dense_h()
-        self.hf = dense_h()
-        self.hg = dense_h()
-        self.ho = dense_h()
+    dense_h = partial(
+      Linear,
+      in_features=hidden_features,
+      out_features=hidden_features,
+      use_bias=True,
+      kernel_init=self.recurrent_kernel_init,
+      bias_init=self.bias_init,
+      dtype=self.dtype,
+      param_dtype=self.param_dtype,
+      rngs=rngs,
+    )
 
-    def __call__(self, carry: tuple[Array, Array], inputs: Array) -> tuple[tuple[Array, Array], Array]: # type: ignore[override]
-        r"""A long short-term memory (LSTM) cell.
+    self.ii = dense_i()
+    self.if_ = dense_i()
+    self.ig = dense_i()
+    self.io = dense_i()
+    self.hi = dense_h()
+    self.hf = dense_h()
+    self.hg = dense_h()
+    self.ho = dense_h()
 
-        Args:
-          carry: the hidden state of the LSTM cell,
-            initialized using ``LSTMCell.initialize_carry``.
-          inputs: an ndarray with the input for the current time step.
-            All dimensions except the final are considered batch dimensions.
+  def __call__(
+    self, carry: tuple[Array, Array], inputs: Array
+  ) -> tuple[tuple[Array, Array], Array]:  # type: ignore[override]
+    r"""A long short-term memory (LSTM) cell.
 
-        Returns:
-          A tuple with the new carry and the output.
-        """
-        c, h = carry
-        i = self.gate_fn(self.ii(inputs) + self.hi(h))
-        f = self.gate_fn(self.if_(inputs) + self.hf(h))
-        g = self.activation_fn(self.ig(inputs) + self.hg(h))
-        o = self.gate_fn(self.io(inputs) + self.ho(h))
-        new_c = f * c + i * g
-        new_h = o * self.activation_fn(new_c)
-        return (new_c, new_h), new_h
+    Args:
+      carry: the hidden state of the LSTM cell,
+        initialized using ``LSTMCell.initialize_carry``.
+      inputs: an ndarray with the input for the current time step.
+        All dimensions except the final are considered batch dimensions.
 
-    def initialize_carry(self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None) -> tuple[Array, Array]: # type: ignore[override]
-        """Initialize the RNN cell carry.
+    Returns:
+      A tuple with the new carry and the output.
+    """
+    c, h = carry
+    i = self.gate_fn(self.ii(inputs) + self.hi(h))
+    f = self.gate_fn(self.if_(inputs) + self.hf(h))
+    g = self.activation_fn(self.ig(inputs) + self.hg(h))
+    o = self.gate_fn(self.io(inputs) + self.ho(h))
+    new_c = f * c + i * g
+    new_h = o * self.activation_fn(new_c)
+    return (new_c, new_h), new_h
 
-        Args:
-          rng: random number generator passed to the init_fn.
-          input_shape: a tuple providing the shape of the input to the cell.
-        Returns:
-          An initialized carry for the given RNN cell.
-        """
-        batch_dims = input_shape[:-1]
-        if rngs is None:
-            rngs = self.rngs
-        mem_shape = batch_dims + (self.hidden_features,)
-        c = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
-        h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
-        return (c, h)
+  def initialize_carry(
+    self, input_shape: tuple[int, ...], rngs: rnglib.Rngs | None = None
+  ) -> tuple[Array, Array]:  # type: ignore[override]
+    """Initialize the RNN cell carry.
 
-    @property
-    def num_feature_axes(self) -> int:
-        return 1
+    Args:
+      rng: random number generator passed to the init_fn.
+      input_shape: a tuple providing the shape of the input to the cell.
+    Returns:
+      An initialized carry for the given RNN cell.
+    """
+    batch_dims = input_shape[:-1]
+    if rngs is None:
+      rngs = self.rngs
+    mem_shape = batch_dims + (self.hidden_features,)
+    c = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
+    h = self.carry_init(rngs.carry(), mem_shape, self.param_dtype)
+    return (c, h)
+
+  @property
+  def num_feature_axes(self) -> int:
+    return 1
 
 
 class OptimizedLSTMCell(RNNCellBase):
@@ -598,6 +604,8 @@ class RNN(Module):
   """
 
   state_axes: dict[str, int | type[iteration.Carry] | None]
+
+  __data__ = ('cell', 'rngs')
 
   def __init__(
     self,

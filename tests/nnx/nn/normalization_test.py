@@ -40,6 +40,7 @@ class TestLinenConsistency(parameterized.TestCase):
     mask: tp.Optional[np.ndarray],
   ):
     class NNXModel(nnx.Module):
+      __data__ = ('norm_layer', 'linear')
       def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
         self.norm_layer = nnx.BatchNorm(
           5,
@@ -116,6 +117,7 @@ class TestLinenConsistency(parameterized.TestCase):
     mask: tp.Optional[np.ndarray],
   ):
     class NNXModel(nnx.Module):
+      __data__ = ('norm_layer', 'linear')
       def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
         self.norm_layer = nnx.LayerNorm(
           5,
@@ -189,6 +191,7 @@ class TestLinenConsistency(parameterized.TestCase):
     mask: tp.Optional[np.ndarray],
   ):
     class NNXModel(nnx.Module):
+      __data__ = ('norm_layer', 'linear')
       def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
         self.norm_layer = nnx.RMSNorm(
           5,
@@ -262,6 +265,7 @@ class TestLinenConsistency(parameterized.TestCase):
     mask: tp.Optional[np.ndarray],
   ):
     class NNXModel(nnx.Module):
+      __data__ = ('norm_layer', 'linear')
       def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
         self.norm_layer = nnx.GroupNorm(
           6,

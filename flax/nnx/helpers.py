@@ -33,7 +33,9 @@ M = tp.TypeVar('M', bound=Module)
 TS = tp.TypeVar('TS', bound='TrainState')
 
 
-class Dict(Module, tp.Mapping[str, A], pytree='all'):
+class Dict(Module, tp.Mapping[str, A]):
+  __data__ = 'all'
+
   @tp.overload
   def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /): ...
 

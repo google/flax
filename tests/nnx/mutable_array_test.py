@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 from absl.testing import absltest
 from flax import config
 from flax import nnx
@@ -45,13 +46,395 @@ class TestObject(absltest.TestCase):
     class Foo(nnx.Module):
       node: jax.Array
       meta: nnx.Static[int]
+      meta2: int = nnx.static(default=3)
+      meta3: int = nnx.field(default=4, static=True)
+      meta4: int = dataclasses.field(default=5, metadata={'static': True})
+      node2: jax.Array = nnx.field(default=6)
 
     m = Foo(node=jnp.array(1), meta=1)
 
     m: Foo = jax.tree.map(lambda x: x + 1, m)
 
     assert m.node == 2
+
     assert m.meta == 1
+    assert m.meta2 == 3
+    assert m.meta3 == 4
+    assert m.meta4 == 5
+    assert m.node2 == 7
+
+
+@pytest.mark.skipif(
+  not config.flax_mutable_array, reason='MutableArray not enabled'
+)
+class TestMutableArrayGraph(absltest.TestCase):
+  def test_split_mutable_array(self):
+    m = nnx.mutable_array(1)
+    graphdef, state = nnx.split(m)
+
+    self.assertIs(m, state)
+
+    m2 = nnx.merge(graphdef, state)
+
+    self.assertIs(m2, m)
+
+  def test_freeze_and_mutable(self):
+    class Foo(nnx.Module):
+      __data__ = ('a',)
+
+      def __init__(self):
+        self.a = nnx.Param(1)
+
+    m = Foo()
+    self.assertTrue(m.a.mutable)
+
+    m2 = nnx.freeze(m)
+    self.assertFalse(m2.a.mutable)
+    self.assertIsNot(m, m2)
+
+    m3 = nnx.mutable(m2)
+    self.assertTrue(m3.a.mutable)
+    self.assertIsNot(m2, m3)
+    self.assertIsNot(m2.a, m3.a)
+
+  def test_freeze_and_mutable_with_filter(self):
+    class Foo(nnx.Module):
+      __data__ = ('a', 'b')
+
+      def __init__(self):
+        self.a = nnx.Param(1)
+        self.b = nnx.BatchStat(2)
+
+    m = Foo()
+    self.assertTrue(m.a.mutable)
+    self.assertTrue(m.b.mutable)
+
+    m2 = nnx.freeze(m, only=nnx.BatchStat)
+    self.assertTrue(m2.a.mutable)
+    self.assertFalse(m2.b.mutable)
+    self.assertIsNot(m, m2)
+
+    m3 = nnx.mutable(m2, nnx.BatchStat)
+    self.assertTrue(m3.a.mutable)
+    self.assertTrue(m3.b.mutable)
+    self.assertIsNot(m2, m3)
+    self.assertIs(m.a, m3.a)
+
+  def test_freeze_duplicate_error(self):
+    class Foo(nnx.Module):
+      __data__ = ('a', 'b')
+
+      def __init__(self):
+        self.a = nnx.mutable_array(1)
+        self.b = self.a
+
+    m = Foo()
+
+    with self.assertRaisesRegex(
+      ValueError, 'Found duplicate MutableArray found at path'
+    ):
+      nnx.freeze(m)
+
+  def test_mutable_array_split(self):
+    class Foo(nnx.Module):
+      __data__ = ('a', 'b')
+
+      def __init__(self):
+        self.a = nnx.mutable_array(1)
+        self.b = self.a
+
+    m = Foo()
+
+    ref_map = nnx.graph.RefMap()
+    graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
+    self.assertLen(state, 1)
+    self.assertLen(ref_map, 2)  # 1 Foo + 1 MutableArray
+
+    m1 = nnx.merge(graphdef, state)
+    self.assertIs(m1.a, m1.b)
+    self.assertIsInstance(m1.a, nnx.MutableArray)
+
+  def test_mutable_array_split_merge_in_variable(self):
+    class Foo(nnx.Module):
+      __data__ = ('a', 'b')
+
+      def __init__(self):
+        self.a = nnx.Param(nnx.mutable_array(1))
+        self.b = self.a
+
+    m = Foo()
+
+    ref_map = nnx.graph.RefMap()
+    graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
+    self.assertLen(state, 1)
+    self.assertLen(ref_map, 3)  # 1 Foo + 1 Param + 1 MutableArray
+
+    m1 = nnx.merge(graphdef, state)
+    self.assertIs(m1.a, m1.b)
+    self.assertIsInstance(m1.a, nnx.Param)
+
+  def test_mutable_array_split_merge_in_variable_shared_array(self):
+    class Foo(nnx.Module):
+      __data__ = ('a', 'b')
+
+      def __init__(self):
+        m_array = nnx.mutable_array(1)
+        self.a = nnx.Param(m_array)
+        self.b = nnx.Param(m_array)
+
+    m = Foo()
+    self.assertIs(m.a.raw_value, m.b.raw_value)
+
+    ref_map = nnx.graph.RefMap()
+    graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
+    self.assertLen(state, 1)
+    self.assertLen(ref_map, 4)  # 1 Foo + 2 Param + 1 MutableArray
+
+    m1 = nnx.merge(graphdef, state)
+    self.assertIs(m1.a.raw_value, m1.b.raw_value)
+    self.assertIsInstance(m1.a, nnx.Param)
+
+  def test_mutable_array_split_freeze(self):
+    class Foo(nnx.Module):
+      __data__ = ('a', 'b')
+
+      def __init__(self):
+        self.a = nnx.mutable_array(1)
+        self.b = self.a
+
+    m = Foo()
+
+    ref_map = nnx.graph.RefMap()
+    graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
+    state = nnx.freeze(state)
+    self.assertLen(state, 1)
+
+    m1 = nnx.merge(graphdef, nnx.mutable(state))
+    self.assertIs(m1.a, m1.b)
+    self.assertIsInstance(m1.a, nnx.MutableArray)
+
+  def test_update_context(self):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    with nnx.update_context('example'):
+      with nnx.split_context('example') as ctx:
+        graphdef, state = ctx.split(m1)
+
+      with nnx.merge_context('example', True) as ctx:
+        m2 = ctx.merge(graphdef, state)
+
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+
+      with nnx.split_context('example') as ctx:
+        graphdef_out, state_out = ctx.split((m2, m_out1, m2))
+
+      self.assertIsInstance(state_out[0]['kernel'].value, nnx.graph.NoUpdate)
+      self.assertIsInstance(state_out[0]['bias'].value, nnx.graph.NoUpdate)
+      self.assertIsInstance(
+        state_out[1]['kernel'].value, nnx.graph.MutableArrayOutput
+      )
+      self.assertIsInstance(
+        state_out[1]['bias'].value, nnx.graph.MutableArrayOutput
+      )
+      # 2 MutableArrayOutput + 2 NoUpdate, however, NoUpdate are empty nodes
+      self.assertLen(jax.tree.leaves(state_out), 2)
+
+      with nnx.merge_context('example', False) as ctx:
+        m3, m_out2, _ = ctx.merge(graphdef_out, state_out)
+
+      self.assertIs(m3, m1)
+      self.assertIsNot(m_out2, m_out1)
+
+  def test_update_context_flatten(self):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    with nnx.update_context('example'):
+      with nnx.split_context('example') as ctx:
+        graphdef, state = ctx.flatten(m1)
+
+      with nnx.merge_context('example', True) as ctx:
+        m2 = ctx.merge(graphdef, state)
+
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+
+      with nnx.split_context('example') as ctx:
+        graphdef_out, state_out = ctx.flatten((m2, m_out1, m2))
+
+      state_out_dict = dict(state_out)
+
+      self.assertIsInstance(
+        state_out_dict[(0, 'kernel')].value, nnx.graph.NoUpdate
+      )
+      self.assertIsInstance(
+        state_out_dict[(0, 'bias')].value, nnx.graph.NoUpdate
+      )
+      self.assertIsInstance(
+        state_out_dict[(1, 'kernel')].value, nnx.graph.MutableArrayOutput
+      )
+      self.assertIsInstance(
+        state_out_dict[(1, 'bias')].value, nnx.graph.MutableArrayOutput
+      )
+      # 2 MutableArrayOutput + 2 NoUpdate, however, NoUpdate are empty nodes
+      self.assertLen(jax.tree.leaves(state_out), 2)
+
+      with nnx.merge_context('example', False) as ctx:
+        m3, m_out2, _ = ctx.merge(graphdef_out, state_out)
+
+      self.assertIs(m3, m1)
+      self.assertIsNot(m_out2, m_out1)
+
+  def test_update_context_to_tree1(self):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    with nnx.update_context('example'):
+      m1_tree = nnx.to_tree((m1,), ctxtag='example')
+
+      (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True)
+
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+
+      # with nnx.split_context('example') as ctx:
+      #   graphdef_out, state_out = ctx.split((m2, m_out1))
+      out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example')
+
+      self.assertIsInstance(
+        out_tree[0][0].states[0]['kernel'].value, nnx.graph.NoUpdate
+      )
+      self.assertIsInstance(
+        out_tree[0][0].states[0]['bias'].value, nnx.graph.NoUpdate
+      )
+      self.assertIsInstance(
+        out_tree[1].states[0]['kernel'].value, nnx.graph.MutableArrayOutput
+      )
+      self.assertIsInstance(
+        out_tree[1].states[0]['bias'].value, nnx.graph.MutableArrayOutput
+      )
+      self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
+
+      # 2 MutableArrayOutput + 2 NoUpdate, however, NoUpdate are empty nodes
+      self.assertLen(jax.tree.leaves(out_tree), 2)
+
+      # with nnx.merge_context('example', False) as ctx:
+      #   m3, m_out2 = ctx.merge(graphdef_out, state_out)
+      (m3,), m_out2, _ = nnx.from_tree(
+        out_tree, ctxtag='example', is_inner=False
+      )
+
+      self.assertIs(m3, m1)
+      self.assertIsNot(m_out2, m_out1)
+
+  def test_update_context_to_tree2(self):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    with nnx.update_context('example') as ctx:
+      m1_tree = nnx.to_tree((m1,), ctxtag='example')
+
+      (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True)
+
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+
+      # with nnx.split_context('example') as ctx:
+      #   graphdef_out, state_out = ctx.split((m2, m_out1))
+      out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example')
+
+      self.assertIsInstance(
+        out_tree[0][0].states[0]['kernel'].value, nnx.graph.NoUpdate
+      )
+      self.assertIsInstance(
+        out_tree[0][0].states[0]['bias'].value, nnx.graph.NoUpdate
+      )
+      self.assertIsInstance(
+        out_tree[1].states[0]['kernel'].value, nnx.graph.MutableArrayOutput
+      )
+      self.assertIsInstance(
+        out_tree[1].states[0]['bias'].value, nnx.graph.MutableArrayOutput
+      )
+      self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
+
+      # 2 MutableArrayOutput + 2 NoUpdate, however, NoUpdate are empty nodes
+      self.assertLen(jax.tree.leaves(out_tree), 2)
+
+      # with nnx.merge_context('example', False) as ctx:
+      #   m3, m_out2 = ctx.merge(graphdef_out, state_out)
+      (m3,), m_out2, _ = nnx.from_tree(
+        out_tree, ctxtag='example', is_inner=False
+      )
+
+      self.assertIs(m3, m1)
+      self.assertIsNot(m_out2, m_out1)
+
+  def test_update_context_to_tree_trivial_prefix(self):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    with nnx.update_context('example'):
+      m1_tree = nnx.to_tree((m1,), ctxtag='example', prefix=0)
+
+      (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True, prefix=0)
+
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+
+      # with nnx.split_context('example') as ctx:
+      #   graphdef_out, state_out = ctx.split((m2, m_out1))
+      out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example', prefix=0)
+
+      self.assertIsInstance(
+        out_tree[0][0].states[0]['kernel'].value, nnx.graph.NoUpdate
+      )
+      self.assertIsInstance(
+        out_tree[0][0].states[0]['bias'].value, nnx.graph.NoUpdate
+      )
+      self.assertIsInstance(
+        out_tree[1].states[0]['kernel'].value, nnx.graph.MutableArrayOutput
+      )
+      self.assertIsInstance(
+        out_tree[1].states[0]['bias'].value, nnx.graph.MutableArrayOutput
+      )
+      self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
+
+      # 2 MutableArrayOutput + 2 NoUpdate, however, NoUpdate are empty nodes
+      self.assertLen(jax.tree.leaves(out_tree), 2)
+
+      # with nnx.merge_context('example', False) as ctx:
+      #   m3, m_out2 = ctx.merge(graphdef_out, state_out)
+      (m3,), m_out2, _ = nnx.from_tree(
+        out_tree, ctxtag='example', is_inner=False, prefix=0
+      )
+
+      self.assertIs(m3, m1)
+      self.assertIsNot(m_out2, m_out1)
+
+
+@pytest.mark.skipif(
+  not config.flax_mutable_array, reason='MutableArray not enabled'
+)
+class TestMutableArrayNNXTransforms(absltest.TestCase):
+  def test_simple_jit(self):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    m_out1 = None
+
+    @nnx.jit
+    def f(m2):
+      nonlocal m_out1
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+      return m_out1
+
+    m_out2 = f(m1)
+
+    self.assertIsNot(m_out1, m_out2)
+    self.assertIsInstance(m_out2.kernel, nnx.Param)
+    self.assertTrue(nnx.is_mutable_array(m_out2.kernel.raw_value))
+
+  def test_jit_mutable(self):
+    @nnx.dataclass
+    class Foo(nnx.Object):
+      a: nnx.MutableArray
+
+    m1 = Foo(a=nnx.mutable_array(1))
+
+    @nnx.jit
+    def f(m2: Foo):
+      m2.a[...] += 1
+      return m2
+
+    m_out1 = f(m1)
+    self.assertEqual(m_out1.a[...], 2)
+    self.assertIs(m_out1, m1)
+    self.assertIsInstance(m_out1.a, nnx.MutableArray)
 
 
 @pytest.mark.skipif(
@@ -173,7 +556,6 @@ class TestMutableArray(absltest.TestCase):
     params = f(params)
     self.assertEqual(params.count, 1)
 
-  @pytest.mark.skip(reason='Rngs not yet supported')
   def test_rngs_create(self):
     rngs = nnx.Rngs(0)
 
@@ -199,7 +581,6 @@ class TestMutableArray(absltest.TestCase):
       ),
     )
 
-  @pytest.mark.skip(reason='Keys in MutableArray failing')
   def test_rngs_call(self):
     rngs = nnx.Rngs(0)
     key = rngs()

@@ -361,12 +361,10 @@ class BatchNorm(Module):
         mask=mask,
       )
 
-      self.mean.value = (
+      self.mean[...] = (
         self.momentum * self.mean.value + (1 - self.momentum) * mean
       )
-      self.var.value = (
-        self.momentum * self.var.value + (1 - self.momentum) * var
-      )
+      self.var[...] = self.momentum * self.var.value + (1 - self.momentum) * var
 
     return _normalize(
       x,

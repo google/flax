@@ -15,11 +15,10 @@
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import field
 import typing as tp
 import typing_extensions as tpe
 
-from flax import config
+from flax import struct
 from flax.nnx import object as objectlib
 
 A = tp.TypeVar('A')
@@ -33,8 +32,76 @@ class StaticTag:
 Static = tp.Annotated[A, StaticTag]  # type: ignore[invalid-typevar]
 
 
-def _is_static(annotation):
-  return getattr(annotation, '__metadata__', None) == (StaticTag,)
+def _is_static(annotation: type, cls_attr: tp.Any) -> bool:
+  return (
+    annotation != tp.ClassVar
+    and getattr(annotation, '__metadata__', None) == (StaticTag,)
+  ) or (
+    isinstance(cls_attr, dataclasses.Field)
+    and (
+      cls_attr.metadata.get('static', False)
+      or not cls_attr.metadata.get('pytree_node', True)
+    )
+  )
+
+
+# def field(*, default=MISSING, default_factory=MISSING, init=True, repr=True,
+#           hash=None, compare=True, metadata=None, kw_only=MISSING):
+MISSING = dataclasses.MISSING
+
+
+@tp.overload # type: ignore[misc]
+def field(  # type: ignore[misc]
+  *,
+  default: tp.Any = MISSING,
+  default_factory: tp.Callable[[], A] | tp.Any = MISSING,
+  init: bool = True,
+  repr: bool = True,
+  hash: bool | None = None,
+  compare: bool = True,
+  metadata: tp.Mapping[str, tp.Any] | None = None,
+  kw_only: bool = False,
+  static: bool = False,
+) -> tp.Any: ...
+
+
+def field(
+  *,
+  static: bool = False,
+  **kwargs,
+):
+  metadata = kwargs.pop('metadata', None)
+  metadata = dict(metadata) if metadata else {}
+  if 'static' in metadata and metadata['static'] != static:
+    raise ValueError(
+      f'Inconsistent static metadata, field specified {static=} '
+      f'but also got {metadata["static"]=}'
+    )
+  else:
+    metadata['static'] = static
+  kwargs['metadata'] = metadata
+  return dataclasses.field(**kwargs)  # type: ignore[wrong-arg-type]
+
+
+@tp.overload # type: ignore[misc]
+def static(  # type: ignore[misc]
+  *,
+  default: tp.Any = MISSING,
+  default_factory: tp.Callable[[], A] | tp.Any = MISSING,
+  init: bool = True,
+  repr: bool = True,
+  hash: bool | None = None,
+  compare: bool = True,
+  metadata: tp.Mapping[str, tp.Any] | None = None,
+  kw_only: bool = False,
+) -> tp.Any: ...
+
+
+def static(**kwargs):
+  return field(
+    static=True,
+    **kwargs,
+  )
 
 
 @tp.overload
@@ -68,7 +135,7 @@ def dataclass(
 
 
 @tpe.dataclass_transform(  # type: ignore[not-supported-yet]
-    field_specifiers=(field,),
+  field_specifiers=(field, static, dataclasses.field, struct.field),
 )
 def dataclass(
     cls: T | None = None,
@@ -116,33 +183,34 @@ def dataclass(
       raise ValueError(
           'dataclass can only be used with a class derived from nnx.Object'
       )
-    if '__data__' in vars(cls):
+    if cls._object__nodes in ('auto', 'all'):
       raise ValueError(
-          'dataclass can only be used with a class without a __data__ attribute'
+        "dataclass cannot be used with a class that has __data__ set to 'auto' or 'all', "
+        f'got {cls._object__nodes}'
       )
-    if config.flax_mutable_array:
-      if cls._object__pytree_mode != 'strict':
-        raise ValueError(
-            "dataclass can only be used with a class with pytree='strict', "
-            f'got {cls._object__pytree_mode}'
-        )
 
-      # here we redefine _object__nodes using the type hints
-      hints = cls.__annotations__
-      all_nodes = list(cls._object__nodes)
-      all_nodes.extend(name for name, typ in hints.items() if not _is_static(typ))
-      cls._object__nodes = frozenset(all_nodes)
+    # here we redefine _object__nodes using the type hints
+    hints = cls.__annotations__
+    if cls._object__nodes is None:
+      all_nodes = set()
+    else:
+      all_nodes = set(cls._object__nodes)
+    for name, typ in hints.items():
+      class_attr = getattr(cls, name, None)
+      if not _is_static(typ, class_attr):
+        all_nodes.add(name)
+    cls._object__nodes = frozenset(all_nodes)
 
-    cls = dataclasses.dataclass( # type: ignore
-        cls,
-        init=init,
-        repr=False,
-        eq=eq,
-        order=order,
-        unsafe_hash=unsafe_hash,
-        match_args=match_args,
-        kw_only=kw_only,
-        slots=slots,
+    cls = dataclasses.dataclass(  # type: ignore
+      cls,
+      init=init,
+      repr=False,
+      eq=eq,
+      order=order,
+      unsafe_hash=unsafe_hash,
+      match_args=match_args,
+      kw_only=kw_only,
+      slots=slots,
     )
     return cls
 
