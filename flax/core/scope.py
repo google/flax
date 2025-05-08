@@ -422,12 +422,13 @@ class Scope:
       flags: internal flags.
     """
     rngs = {k: LazyRng.create(v) for k, v in rngs.items()} if rngs else {}
+    self._id = uuid()
     self._variables = variables
     self.parent = parent
     self.name = name
     self.path = tuple(path)
     self.debug_path = tuple(debug_path) or self.path
-    self.rngs = rngs
+    self.rngs: dict[str, LazyRng] = rngs
     self.mutable = mutable
     self.flags = freeze({} if flags is None else flags)
 
@@ -1210,3 +1211,16 @@ def _is_valid_rngs(rngs: PRNGKey | RNGSequences):
     if not _is_valid_rng(val):
       return False
   return True
+
+
+def freeze_filter(_filter: Filter, /):
+  if isinstance(_filter, (bool, str)):
+    return _filter
+  elif isinstance(_filter, DenyList):
+    return DenyList(freeze_filter(_filter.deny))
+  elif isinstance(_filter, Mapping):
+    return FrozenDict((k, freeze_filter(v)) for k, v in _filter.items())
+  elif isinstance(_filter, Iterable):
+    return tuple(map(freeze_filter, _filter))
+  else:
+    raise ValueError(f'Unknown filter type: {type(_filter)}')
