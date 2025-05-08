@@ -186,7 +186,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def __getattr__(self, name: str) -> tp.Any:
     if name in object.__getattribute__(self, '_var_metadata'):
       return self._var_metadata[name]
-    return getattr(self.value, name)
+    return getattr(self.raw_value, name)
 
   def __setattr__(self, name: str, value: tp.Any):
     if not self._trace_state.is_valid():
@@ -353,7 +353,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return VariableState(type(self), self.raw_value, **self._var_metadata)
 
   def __nnx_repr__(self):
-    stats = SizeBytes.from_any(self.value)
+    stats = SizeBytes.from_any(self.raw_value)
     if stats:
       comment = f' # {stats}'
     else:
@@ -992,13 +992,13 @@ class VariableState(tp.Generic[A], reprlib.Representable):
     return var_metadata[name]
 
   def __setattr__(self, name: str, value: Any) -> None:
-    if name == 'type' or name == 'value' or name == '_var_metadata':
+    if name in ('type', 'value', '_var_metadata', 'raw_value'):
       object.__setattr__(self, name, value)
     else:
       self._var_metadata[name] = value
 
   def __delattr__(self, name: str) -> None:
-    if name == 'type' or name == 'value' or name == '_var_metadata':
+    if name in ('type', 'value', '_var_metadata', 'raw_value'):
       object.__delattr__(self, name)
     else:
       del self._var_metadata[name]

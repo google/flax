@@ -31,118 +31,6 @@ from flax import nnx
 # # Utils
 A = TypeVar('A')
 
-def mutable_like(path, x):
-  return (isinstance(x, nnx.Variable) and x.mutable) or nnx.is_mutable_array(x)
-
-
-def freeze(x: A, only: nnx.filterlib.Filter = mutable_like) -> A:
-  freeze_filter = nnx.filterlib.to_predicate(only)
-  mutable_arrays: set[int] = set()
-
-  def check_mutable_array(path, x):
-    m_array_id = id(x)
-    if m_array_id in mutable_arrays:
-      path_str = jax.tree_util.keystr(path)
-      raise ValueError(
-        f'Found duplicate MutableArray found at path {path_str}: {x}'
-      )
-    mutable_arrays.add(m_array_id)
-
-  def _freeze_fn(jax_path, x):
-    path = tuple(nnx.graph._key_path_to_key(part) for part in jax_path)
-    if freeze_filter(path, x):
-      if isinstance(x, nnx.Variable):
-        check_mutable_array(jax_path, x.raw_value)
-        return x.from_metadata(x[...], x.get_metadata().copy())
-      elif nnx.is_mutable_array(x):
-        check_mutable_array(jax_path, x)
-        return x[...]
-    return x
-
-  return jax.tree.map_with_path(
-    _freeze_fn, x, is_leaf=lambda x: isinstance(x, nnx.Variable)
-  )
-
-
-def array_like(path, x):
-  return (
-    isinstance(x, nnx.Variable) and not x.mutable
-  ) or nnx.is_mutable_array(x)
-
-
-def mutable(x: A, only: nnx.filterlib.Filter = array_like) -> A:
-  freeze_filter = nnx.filterlib.to_predicate(only)
-  mutable_arrays: dict[int, Any] = {}
-
-  def get_mutable(x):
-    m_array_id = id(x)
-    if m_array_id in mutable_arrays:
-      return mutable_arrays[m_array_id]
-
-    if isinstance(x, nnx.Variable):
-      assert not x.mutable
-      _mutable = x.from_metadata(
-        nnx.mutable_array(x.raw_value),
-        x.get_metadata().copy(),
-      )
-      mutable_arrays[m_array_id] = _mutable
-      return _mutable
-    elif isinstance(x, jax.Array):
-      _mutable = nnx.mutable_array(x)
-      mutable_arrays[m_array_id] = _mutable
-      return _mutable
-    return x
-
-  def _mutable_fn(jax_path, x):
-    path = tuple(nnx.graph._key_path_to_key(part) for part in jax_path)
-    if freeze_filter(path, x):
-      return get_mutable(x)
-    return x
-
-  return jax.tree.map_with_path(
-    _mutable_fn, x, is_leaf=lambda x: isinstance(x, nnx.Variable)
-  )
-
-def pure(tree: A) -> A:
-  def _pure_fn(x):
-    if isinstance(x, nnx.Variable | nnx.VariableState):
-      return x.raw_value
-    return x
-
-  return jax.tree.map(
-    _pure_fn, tree, is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState)
-  )
-
-def fork_rngs(
-  rngs: nnx.Rngs,
-  /,
-  *,
-  split: Mapping[nnx.filterlib.Filter, int | tuple[int, ...]] | int | None = None,
-):
-  if split is None:
-    split = {}
-  elif isinstance(split, int):
-    split = {...: split}
-
-  split_predicates = {
-    nnx.filterlib.to_predicate(k): v for k, v in split.items()
-  }
-  keys: dict[str, jax.Array] = {}
-  for name, stream in rngs.items():
-    for predicate, num_splits in split_predicates.items():
-      if predicate((), stream):
-        keys[name] = jax.random.split(stream(), num_splits)
-        break
-    else:
-      keys[name] = stream()
-
-  return nnx.Rngs(**keys)
-
-
-def fork_stream(stream: nnx.RngStream):
-  key = stream()
-  return type(stream)(stream.tag, key)
-
 # ## Data
 # We create a simple dataset of points sampled from a parabola with some noise.
 X = np.linspace(-jnp.pi, jnp.pi, 100)[:, None]
@@ -223,7 +111,7 @@ class Block(nnx.Module):
     self.deterministic = deterministic
     # 'fork' is used to get a derived frozen stream, this is done
     # to avoid aliasing MutableArray as as its not supported by JAX
-    self.rng = fork_stream(rngs.dropout)
+    self.rng = rngs.dropout.fork()
 
   def __call__(self, x: jax.Array) -> jax.Array:
     # ----------- linear --------------------
@@ -283,9 +171,9 @@ class Model(nnx.Module):
 
       @jax.vmap
       def create_block(rngs, /):
-        return freeze(Block(dhidden, dhidden, rngs=rngs))
+        return nnx.freeze(Block(dhidden, dhidden, rngs=rngs))
 
-      self.blocks = mutable(create_block(fork_rngs(rngs, split=num_blocks)))
+      self.blocks = nnx.mutable(create_block(rngs.fork(split=num_blocks)))
     else:
       self.blocks = [
         Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)
@@ -345,9 +233,9 @@ class SGD(nnx.Object):
   # for each triplet we implement the SGD update rule which updates
   # both the optimizer's state (momentum) and the params in place.
   def update(self, params, grads):
-    params = pure(params)
-    grads = pure(grads)
-    momentum = pure(self.momentum)
+    params = nnx.pure(params)
+    grads = nnx.pure(grads)
+    momentum = nnx.pure(self.momentum)
 
     def update_fn(param: MutableArray, momentum: MutableArray, grad: jax.Array):
       momentum[...] = self.decay * momentum[...] + (1 - self.decay) * grad[...]
@@ -387,7 +275,7 @@ def train_step(model: Model, optimizer: SGD, x, y):
 
   # For the time being we have to use 'freeze' make the Variables immutable
   # as 'jax.grad' doesn't support MutableArrays yet.
-  grads = jax.grad(loss_fn)(freeze(params))
+  grads = jax.grad(loss_fn)(nnx.freeze(params))
   # 'update' mutates the optimizer's state and the params in place
   # so we don't need to return anything 🚀
   optimizer.update(params, grads)

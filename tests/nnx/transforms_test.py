@@ -24,7 +24,7 @@ import jax
 from jax.experimental import checkify, mesh_utils
 import jax.numpy as jnp
 import numpy as np
-from flax import errors
+from flax import errors, config
 
 
 class List(nnx.Module):
@@ -67,6 +67,21 @@ class TestJIT(absltest.TestCase):
     assert m.a == 2
     assert out == 1.0
 
+  def test_mutable_array_input_output(self):
+    m = nnx.mutable_array(jnp.array(1.0))
+
+    @nnx.jit
+    def f(m: nnx.MutableArray):
+      m[...] += 1.0
+      m2 = nnx.mutable_array(jnp.array(10.0))
+      return m2, m
+
+    m2, m_out = f(m)
+
+    self.assertEqual(m[...], 2.0)
+    self.assertIs(m, m_out)
+    self.assertTrue(nnx.is_mutable_array(m2))
+
   def test_simple_double_call(self):
     n = 0
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
@@ -92,7 +107,10 @@ class TestJIT(absltest.TestCase):
     n = 0
 
     class Foo(nnx.Module):
-      @partial(nnx.jit, static_argnums=(1, 2))
+      if config.flax_mutable_array:
+        __data__ = ('w',)
+
+      @nnx.jit(static_argnums=(1, 2))
       def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
         nonlocal n
         n += 1
@@ -117,7 +135,7 @@ class TestJIT(absltest.TestCase):
   def test_jit_on_call(self):
     n = 0
 
-    class Foo(nnx.Module):
+    class Foo(nnx.Module, pytree=None):
       def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
         key = rngs.params()
         self.w = nnx.Param(jax.random.normal(key, shape=(din, dout)))
@@ -147,7 +165,7 @@ class TestJIT(absltest.TestCase):
   def test_cached_unflatten(self):
     n = 0
 
-    class Foo(nnx.Module):
+    class Foo(nnx.Module, pytree='auto'):
       def __init__(self, *, rngs: nnx.Rngs):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.BatchNorm(2, rngs=rngs)
@@ -201,7 +219,7 @@ class TestJIT(absltest.TestCase):
   def test_cached_unflatten_same_type(self):
     n = 0
 
-    class Foo(nnx.Module):
+    class Foo(nnx.Module, pytree='auto'):
       def __init__(self, *, rngs: nnx.Rngs):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.Linear(2, 2, rngs=rngs)
@@ -231,7 +249,7 @@ class TestJIT(absltest.TestCase):
   def test_objects_in_pytree(self):
     n = 0
 
-    class Foo(nnx.Module):
+    class Foo(nnx.Module, pytree='auto'):
       def __init__(self, *, rngs: nnx.Rngs):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.Linear(2, 2, rngs=rngs)
@@ -263,7 +281,7 @@ class TestJIT(absltest.TestCase):
     assert m.b is b
 
   def test_cached_unflatten_swap_variables(self):
-    class Foo(nnx.Module):
+    class Foo(nnx.Module, pytree='auto'):
       def __init__(self):
         self.a = nnx.Param(1)
         self.b = nnx.Param(2)
@@ -284,7 +302,7 @@ class TestJIT(absltest.TestCase):
   def test_cached_unflatten_add_self_reference(self):
     n = 0
 
-    class Foo(nnx.Module):
+    class Foo(nnx.Module, pytree='auto'):
       def __init__(self):
         self.ref: tp.Optional[Foo] = None  # type: ignore[name-error]
 
@@ -314,7 +332,7 @@ class TestJIT(absltest.TestCase):
   def test_cached_unflatten_ref_in_output(self):
     n = 0
 
-    class Foo(nnx.Module):
+    class Foo(nnx.Module, pytree='auto'):
       def __init__(self):
         self.ref: tp.Optional[Foo] = None  # type: ignore[name-error]
 

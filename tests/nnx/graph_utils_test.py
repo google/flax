@@ -24,6 +24,7 @@ import jax
 import jax.numpy as jnp
 from flax import config
 
+
 class List(nnx.Module):
   if config.flax_mutable_array:
     __data__ = ('items',)
@@ -51,9 +52,11 @@ class Dict(nnx.Module):
   def __setitem__(self, key, value):
     self.items[key] = value
 
+
 class StatefulLinear(nnx.Module):
   if config.flax_mutable_array:
     __data__ = ('w', 'b', 'count')
+
   def __init__(self, din, dout, rngs):
     self.w = nnx.Param(jax.random.uniform(rngs(), (din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
@@ -78,7 +81,10 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0][1].value == 2
     assert flat_state[1][1].value == 4
 
-    assert len(refmap) == 2
+    if config.flax_mutable_array:
+      assert len(refmap) == 4  # 2 Variables + 2 MutableArrays
+    else:
+      assert len(refmap) == 2  # 2 Variables
     assert a['b'] in refmap
     assert g[3] in refmap
 
@@ -94,7 +100,10 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0][...] == 2
     assert flat_state[1][...] == 4
 
-    assert len(refmap) == 2
+    if config.flax_mutable_array:
+      assert len(refmap) == 2  # 2 Variables + 2 MutableArrays
+    else:
+      assert len(refmap) == 2  # 2 Variables
     assert a['b'] in refmap
     assert g[3] in refmap
 
@@ -190,7 +199,6 @@ class TestGraphUtils(absltest.TestCase):
     assert g[0]['b'].value == 3
     assert g[2]['b'].value == 3
 
-
   def test_module_list(self):
     rngs = nnx.Rngs(0)
     ls = [
@@ -256,6 +264,7 @@ class TestGraphUtils(absltest.TestCase):
     class Encoder(nnx.Module):
       if config.flax_mutable_array:
         __data__ = ('embed', 'linear_out')
+
       def __init__(self, *, rngs: nnx.Rngs) -> None:
         self.embed = nnx.Embed(10, 2, rngs=rngs)
         ...
@@ -306,6 +315,7 @@ class TestGraphUtils(absltest.TestCase):
     class Foo(nnx.Module):
       if config.flax_mutable_array:
         __data__ = ('a', 'b')
+
       def __init__(self):
         p = nnx.Param(1)
         self.a = p
@@ -363,6 +373,7 @@ class TestGraphUtils(absltest.TestCase):
     class Foo(nnx.Module):
       if config.flax_mutable_array:
         __data__ = ('tree',)
+
       def __init__(self):
         self.tree = Tree(nnx.Param(1), 'a')
 
@@ -385,6 +396,7 @@ class TestGraphUtils(absltest.TestCase):
     class Foo(nnx.Module):
       if config.flax_mutable_array:
         __data__ = ('a', 'b')
+
       def __init__(self, *, rngs: nnx.Rngs):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.BatchNorm(2, rngs=rngs)
@@ -427,6 +439,7 @@ class TestGraphUtils(absltest.TestCase):
     class Foo(nnx.Module):
       if config.flax_mutable_array:
         __data__ = ('a', 'b')
+
       def __init__(self):
         self.a = nnx.Param(1)
         self.b = nnx.Param(2)
@@ -469,6 +482,7 @@ class TestGraphUtils(absltest.TestCase):
     class Foo(nnx.Module):
       if config.flax_mutable_array:
         __data__ = ('ref',)
+
       def __init__(self):
         self.ref = None
 
@@ -507,6 +521,7 @@ class TestGraphUtils(absltest.TestCase):
     class Counter(nnx.Module):
       if config.flax_mutable_array:
         __data__ = ('count',)
+
       def __init__(self):
         self.count = nnx.Param(jnp.zeros(()))
 
@@ -660,6 +675,7 @@ class TestGraphUtils(absltest.TestCase):
     class Foo(nnx.Module):
       if config.flax_mutable_array:
         __data__ = ('a', 'b')
+
       def __init__(self):
         self.a = nnx.Param(1)
         self.b = 2
@@ -699,7 +715,7 @@ class TestGraphUtils(absltest.TestCase):
         return graphdef1, state1, graphdef2, state2
 
       graphdef1, state1, graphdef2, state2 = f(
-          graphdef1, state1, graphdef2, state2
+        graphdef1, state1, graphdef2, state2
       )
 
       with nnx.graph.merge_context(ctxtag, False) as ctx:
@@ -829,7 +845,6 @@ class TestGraphUtils(absltest.TestCase):
       batch_stats: Any
 
     class Foo(nnx.Module):
-
       def __init__(self, a, b):
         self.a = nnx.Param(a)
         self.b = nnx.BatchStat(b)
@@ -858,7 +873,7 @@ class TestGraphUtils(absltest.TestCase):
         return nnx.NodeStates.from_split(*ctx.split(x))
 
       pure_args = nnx.to_tree(
-          args, ctxtag=ctxtag, prefix=in_axes, split_fn=split_fn
+        args, ctxtag=ctxtag, prefix=in_axes, split_fn=split_fn
       )
 
       @partial(jax.vmap, in_axes=jax_in_axes, out_axes=(jax_in_axes, out_axes))
@@ -877,10 +892,10 @@ class TestGraphUtils(absltest.TestCase):
         args_out = nnx.extract.clear_non_graph_nodes(args)
 
         pure_args_out, y = nnx.to_tree(
-            (args_out, y),
-            prefix=(in_axes, out_axes),
-            ctxtag=ctxtag,
-            split_fn=split_fn,
+          (args_out, y),
+          prefix=(in_axes, out_axes),
+          ctxtag=ctxtag,
+          split_fn=split_fn,
         )
         return pure_args_out, y
 

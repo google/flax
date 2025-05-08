@@ -42,6 +42,7 @@ from flax.typing import SizeBytes
 O = tp.TypeVar('O', bound='Object')
 
 BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
+PYTREE_DEFAULT = 'strict' if config.flax_mutable_array else None
 
 def _collect_stats(
   node: tp.Any, node_stats: dict[int, dict[type[Variable], SizeBytes]]
@@ -59,7 +60,7 @@ def _collect_stats(
     var_type = type(node)
     if issubclass(var_type, nnx.RngState):
       var_type = nnx.RngState
-    size_bytes = SizeBytes.from_any(node.value)
+    size_bytes = SizeBytes.from_any(node.raw_value)
     if size_bytes:
       stats[var_type] = size_bytes
 
@@ -186,12 +187,14 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
 
   if tp.TYPE_CHECKING:
     _object__nodes: frozenset[str]
-    _object__pytree_mode: str
+    _object__pytree_mode: tp.Literal['strict', 'auto', 'all'] | None
     __data__: tuple[str, ...]
     _object__state: ObjectState
 
   def __init_subclass__(
-    cls, pytree: tp.Literal['strict', 'auto', 'all'] = 'strict', **kwargs
+    cls,
+    pytree: tp.Literal['strict', 'auto', 'all'] | None = PYTREE_DEFAULT,
+    **kwargs,
   ) -> None:
     super().__init_subclass__(**kwargs)
 
@@ -204,13 +207,19 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       clear=cls._graph_node_clear,
       init=cls._graph_node_init,  # type: ignore
     )
+    parent_pytree_mode = getattr(cls, '_object__pytree_mode', PYTREE_DEFAULT)
+    cls._object__pytree_mode = pytree
     if config.flax_mutable_array and pytree is not None:
-      cls._object__pytree_mode = pytree
-      parent_pytree_mode = getattr(cls, '_object__pytree_mode', None)
-      if (
-          parent_pytree_mode is not None
-          and parent_pytree_mode != pytree
-          and (parent_pytree_mode != 'strict' or len(cls._object__nodes) > 1)
+      if parent_pytree_mode != pytree and not (
+        # None is a valid parent pytree mode
+        parent_pytree_mode is None
+        # trivial strict with a single node is valid
+        or (
+          parent_pytree_mode == 'strict'
+          and (
+            not hasattr(cls, '_object__nodes') or len(cls._object__nodes) <= 1
+          )
+        )
       ):
         raise ValueError(
             f"Cannot set pytree mode for class '{cls.__name__}' to '{pytree}' "
