@@ -938,6 +938,26 @@ class Scope:
       The parameters. Throws an error if the params exist already.
     """
     self.reserve(name, 'params')
+    print(
+        f'Debugging param(): name={name}, scope_path={self.path_text}'
+    )  # New debugging statement
+
+    # Check if 'params' collection exists and print its contents 
+    # if it's not empty
+    params_collection = self._collection('params')
+    # Check if it's not a FrozenDict (empty)
+    if not isinstance(params_collection, FrozenDict):  
+        print(f"  - Contents of 'params' collection in scope {self.path_text}:")
+        for param_name, param_value in params_collection.items():
+            print(f"    - {param_name}: {param_value.shape}")  
+    # Print the structure of `self._variables`
+    print(f"  - Structure of '_variables' in scope {self.path_text}:")
+    for col_name, collection in self._variables.items():
+        print(f"    - {col_name}:")
+        if isinstance(collection, dict):
+            for var_name, var_value in collection.items():
+                print(f"      - {var_name}: {var_value.shape}")  
+
     if self.has_variable('params', name):
       value = self.get_variable('params', name)
       if unbox:
