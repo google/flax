@@ -175,3 +175,6 @@ from .extract import from_tree as from_tree
 from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
 from . import traversals as traversals
+from .dataclasses import dataclass as dataclass
+from .dataclasses import Static as Static
+from .dataclasses import field as field
