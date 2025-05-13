@@ -20,7 +20,6 @@ This script trains a Transformer on a LM1B dataset.
 # pytype: disable=wrong-arg-count
 # pytype: disable=attribute-error
 
-import collections
 import dataclasses
 import os
 
@@ -41,7 +40,6 @@ from jax.sharding import Mesh, NamedSharding
 from jax.sharding import PartitionSpec as P
 from utils import HasCache, TrainState
 
-from flax import linen as nn
 from flax import nnx
 from flax.training import checkpoints, common_utils
 
@@ -115,7 +113,7 @@ def compute_weighted_cross_entropy(
     targets, vocab_size, on_value=confidence, off_value=low_confidence
   )
 
-  loss = -jnp.sum(soft_targets * nn.log_softmax(logits), axis=-1)
+  loss = -jnp.sum(soft_targets * nnx.log_softmax(logits), axis=-1)
   loss = loss - normalizing_constant
 
   normalizing_factor = np.prod(targets.shape)
@@ -389,6 +387,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
     workdir: Working directory for checkpoints and TF summaries. If this
       contains checkpoint training will be resumed from the latest checkpoint.
   """
+  workdir = os.path.abspath(workdir)
   tf.io.gfile.makedirs(workdir)
 
   vocab_path = config.vocab_path
@@ -440,17 +439,14 @@ def train_and_evaluate(config: default.Config, workdir: str):
     max_len=max(config.max_target_length, config.max_eval_target_length),
     dropout_rate=config.dropout_rate,
     attention_dropout_rate=config.attention_dropout_rate,
-    kernel_init=nn.initializers.xavier_uniform(),
-    bias_init=nn.initializers.normal(stddev=1e-6),
+    kernel_init=nnx.initializers.xavier_uniform(),
+    bias_init=nnx.initializers.normal(stddev=1e-6),
     axis_rules=config.axis_rules,
   )
 
   # Mesh definition
   devices_array = utils.create_device_mesh(config)
   mesh = Mesh(devices_array, config.mesh_axes)
-
-  # print(mesh.shape)
-  # exit()
 
   start_step = 0
   rng = jax.random.PRNGKey(config.seed)
@@ -498,7 +494,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
       None,
     ),  # type: ignore
     out_shardings=(state_sharding, None),  # type: ignore
-    static_argnums=(2, 3),
+    static_argnames=("learning_rate_fn", "label_smoothing"),
     donate_argnums=0,
   )
 
@@ -509,7 +505,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
       data_sharding,
     ),  # type: ignore
     out_shardings=None,  # type: ignore
-    static_argnums=(2, 3),
+    static_argnames=("graphdef", "label_smoothing"),
   )
 
   # Since the inputs and rngkey args for predict_step will be batched,
@@ -575,7 +571,7 @@ def train_and_evaluate(config: default.Config, workdir: str):
         h(step)
 
       # Periodic metric handling.
-      if step % config.eval_every_steps == 0 or is_last_step:
+      if (step > 0 and step % config.eval_every_steps == 0) or is_last_step:
         with report_progress.timed('training_metrics'):
           logging.info('Gathering training metrics.')
           train_metrics = common_utils.stack_forest(train_metrics)

@@ -159,7 +159,10 @@ def setup_initial_state(
     model = constructor(config, rng)
     graphdef, params = nnx.split(model, nnx.Param)
     state = TrainState.create(
-      apply_fn=graphdef.apply, params=params, tx=tx, graphdef=graphdef
+      apply_fn=graphdef.apply,
+      params=params,
+      tx=tx,
+      graphdef=graphdef,
     )
     state = jax.tree.map(_to_array, state)
     state_spec = nnx.get_partition_spec(state)
