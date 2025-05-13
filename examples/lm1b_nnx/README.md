@@ -52,7 +52,7 @@ Then install Flax + the example dependencies:
 git clone --depth=1 --branch=main https://github.com/google/flax
 cd flax
 pip install -e .
-cd examples/lm1b
+cd examples/lm1b_nnx
 pip install -r requirements.txt
 ```
 
@@ -75,9 +75,9 @@ tensorboard --logdir=$HOME/logs
 You should expect to get numbers similar to these:
 
 
-Hardware | config  | Training time |      Loss      |                             TensorBoard.dev                              |                                                          Workdir
--------- | ------- | ------------- | -------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------
-TPU v3-8 | default | 13h18m | 3.127 | [2021-08-08](https://tensorboard.dev/experiment/n30WkNOZTJq3RHWD7wNslg/) | [gs://flax_public/examples/lm1b/default](https://console.cloud.google.com/storage/browser/flax_public/examples/lm1b/default)
+Hardware | config  | Training time |      Loss      |                                                          Workdir
+-------- | ------- | ------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------
+TPU v3-8 | default | 13h18m | 3.127 | [gs://flax_public/examples/lm1b/default](https://console.cloud.google.com/storage/browser/flax_public/examples/lm1b/default)
 
 ### Downloading the LM1B Datasets
 
@@ -87,6 +87,5 @@ data on a storage bucket, from where it can be loaded directly. Set the
 `TFDS_DATA_DIR` to your storage bucket path (`gs://<bucket name>`).
 
 You can download and prepare LM1B datasets using TFDS directly:
-`python -m tensorflow_datasets.scripts.download_and_prepare
---datasets=lm1b`
+`python -m tensorflow_datasets.scripts.download_and_prepare --datasets=lm1b`
 
