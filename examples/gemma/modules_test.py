@@ -18,6 +18,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
 import modules
+import transformer as transformer_lib
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -269,16 +270,23 @@ class BlockTest(parameterized.TestCase):
     inputs = jnp.ones((batch_size, 1, embed_dim))
     attn_mask = jnp.ones((batch_size, 1, cache_size))
 
+    config = transformer_lib.TransformerConfig(
+        num_heads=num_heads,
+        num_kv_heads=num_heads,
+        embed_dim=embed_dim,
+        head_dim=head_dim,
+        hidden_dim=1,
+        use_post_attn_norm=use_post_attn_norm,
+        use_post_ffw_norm=use_post_ffw_norm,
+        final_logit_softcap=None,
+        num_layers=-1,
+        num_embed=-1,
+        attention_types=[],
+    )
+
     block = modules.Block(
-        num_heads,
-        num_heads,
-        embed_dim,
-        head_dim,
-        1,
-        use_post_attn_norm,
-        use_post_ffw_norm,
-        1.0,
-        modules.AttentionType.GLOBAL,
+        config,
+        attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
     cache = block.init_cache(
@@ -313,27 +321,40 @@ class BlockTest(parameterized.TestCase):
     inputs = jnp.ones((batch_size, 1, embed_dim))
     attn_mask = jnp.ones((batch_size, 1, cache_size))
 
-    normed_block = modules.Block(
-        num_heads,
-        num_heads,
-        embed_dim,
-        head_dim,
-        1,
+    normed_block_config = transformer_lib.TransformerConfig(
+        num_heads=num_heads,
+        num_kv_heads=num_heads,
+        embed_dim=embed_dim,
+        head_dim=head_dim,
+        hidden_dim=1,
         use_post_attn_norm=True,
         use_post_ffw_norm=False,
-        query_pre_attn_scalar=1.0,
+        final_logit_softcap=None,
+        num_layers=-1,
+        num_embed=-1,
+        attention_types=[],
+    )
+    normed_block = modules.Block(
+        normed_block_config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
-    unnormed_block = modules.Block(
-        num_heads,
-        num_heads,
-        embed_dim,
-        head_dim,
-        1,
+
+    unnormed_block_config = transformer_lib.TransformerConfig(
+        num_heads=num_heads,
+        num_kv_heads=num_heads,
+        embed_dim=embed_dim,
+        head_dim=head_dim,
+        hidden_dim=1,
         use_post_attn_norm=False,
         use_post_ffw_norm=False,
-        query_pre_attn_scalar=1.0,
+        final_logit_softcap=None,
+        num_layers=-1,
+        num_embed=-1,
+        attention_types=[],
+    )
+    unnormed_block = modules.Block(
+        unnormed_block_config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
@@ -373,27 +394,40 @@ class BlockTest(parameterized.TestCase):
     inputs = jnp.ones((batch_size, 1, embed_dim))
     attn_mask = jnp.ones((batch_size, 1, cache_size))
 
-    normed_block = modules.Block(
-        num_heads,
-        num_heads,
-        embed_dim,
-        head_dim,
-        1,
+    normed_block_config = transformer_lib.TransformerConfig(
+        num_heads=num_heads,
+        num_kv_heads=num_heads,
+        embed_dim=embed_dim,
+        head_dim=head_dim,
+        hidden_dim=1,
         use_post_attn_norm=False,
         use_post_ffw_norm=True,
-        query_pre_attn_scalar=1.0,
+        final_logit_softcap=None,
+        num_layers=-1,
+        num_embed=-1,
+        attention_types=[],
+    )
+    normed_block = modules.Block(
+        normed_block_config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
-    unnormed_block = modules.Block(
-        num_heads,
-        num_heads,
-        embed_dim,
-        head_dim,
-        1,
+
+    unnormed_block_config = transformer_lib.TransformerConfig(
+        num_heads=num_heads,
+        num_kv_heads=num_heads,
+        embed_dim=embed_dim,
+        head_dim=head_dim,
+        hidden_dim=1,
         use_post_attn_norm=False,
         use_post_ffw_norm=False,
-        query_pre_attn_scalar=1.0,
+        final_logit_softcap=None,
+        num_layers=-1,
+        num_embed=-1,
+        attention_types=[],
+    )
+    unnormed_block = modules.Block(
+        unnormed_block_config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
     )
@@ -411,6 +445,9 @@ class BlockTest(parameterized.TestCase):
       all_outputs.append(outputs)
 
     normed_output, unnormed_output = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
+    print(normed_output.shape, unnormed_output.shape)
+    print(f"{normed_output=}")
+    print(f"{unnormed_output=}")
     self.assertTrue(jnp.not_equal(normed_output, unnormed_output).all())
 
 
