@@ -21,15 +21,16 @@ This script trains a Transformer on a LM1B dataset.
 # pytype: disable=attribute-error
 
 import dataclasses
-import os
-from typing import Any
+from pathlib import Path
 
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
 from flax import nnx
 import input_pipeline
-import sampler as sampler_lib
+import grain
+import jax
+import jax.numpy as jnp
 import tokenizer
 import transformer as transformer_lib
 import utils
@@ -40,20 +41,16 @@ from jax import random
 import jax.numpy as jnp
 import numpy as np
 import optax
-import tensorflow as tf
+import sampler as sampler_lib
+import utils
+from clu import metric_writers, periodic_actions
+from jax import random
+from jax.sharding import Mesh, NamedSharding
+from jax.sharding import PartitionSpec as P
+from utils import TrainState
 
-
-@dataclasses.dataclass(unsafe_hash=True)
-class MeshRules:
-  embed: str | None = None
-  mlp: str | None = None
-  kv: str | None = None
-  vocab: str | None = None
-
-  def __call__(self, *keys: str) -> tuple[str, ...]:
-    return tuple(
-        getattr(self, key) if key is not None else None for key in keys
-    )
+from flax import nnx
+from flax.training import checkpoints, common_utils
 
 
 @dataclasses.dataclass(unsafe_hash=True)
@@ -76,6 +73,8 @@ class TrainConfig:
   per_device_batch_size: int
   # Per device batch size for training.
   eval_per_device_batch_size: int
+  # Grain prefetch number of workers.
+  prefetch_num_workers: int | None
 
   # Prompt for language model sampling
   prompts: tuple[str, ...]
@@ -128,7 +127,6 @@ class TrainConfig:
 
   # Parallelism
   mesh_axes: tuple[str, ...]
-  axis_rules: MeshRules
   data_sharding: tuple[str, ...]
 
   # One axis for each parallelism type may hold a placeholder (-1)
@@ -151,10 +149,6 @@ class TrainConfig:
 
   def replace(self, **kwargs):
     return dataclasses.replace(self, **kwargs)
-
-  def __post_init__(self):
-    if isinstance(self.axis_rules, dict):
-      self.axis_rules = MeshRules(**self.axis_rules)
 
 
 def rsqrt_schedule(
@@ -281,34 +275,30 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
 
 
 def train_step(
-    state: utils.TrainState,
+    state: TrainState,
     batch,
     learning_rate_fn,
-    label_smoothing=0.0,
+    label_smoothing: float = 0.0,
+    pad_id: int = 0,
 ):
   """Perform a single training step."""
   # X_position and X_segmentation are needed only when using "packed examples"
   # where multiple sequences are packed into the same example with this
   # metadata.
-  # if such features are not present they are ignored and the example is treated
+  # If such features are not present they are ignored and the example is treated
   # like a normal, unpacked sequence example.
   train_keys = ['inputs', 'inputs_position', 'inputs_segmentation', 'targets']
   (inputs, inputs_positions, inputs_segmentation, targets) = (
       batch.get(k, None) for k in train_keys
   )
 
-  # TODO: this should be defined globally
-  pad_id = 0
   weights = jnp.where(inputs > pad_id, 1, 0).astype(jnp.float32)
   input_mask = inputs > pad_id
-  attention_mask = transformer_lib.make_causal_attn_mask(
-      input_mask
-  )  # (B, L, L)
-  # inputs_segmentation: (B, L)
-  mask = (
-      inputs_segmentation[:, :, None] == inputs_segmentation[:, None, :]
-  )  # (B, L, L)
-  attention_mask = jnp.logical_and(mask, attention_mask)
+  attention_mask = transformer_lib.make_causal_attn_mask(input_mask)  # (B, L, L)
+  if inputs_segmentation is not None:
+    # inputs_segmentation: (B, L)
+    mask = inputs_segmentation[:, :, None] == inputs_segmentation[:, None, :]  # (B, L, L)
+    attention_mask = jnp.logical_and(mask, attention_mask)
 
   def loss_fn(params):
     """loss function used for training."""
@@ -342,13 +332,12 @@ def eval_step(
     params: nnx.State,
     batch,
     graphdef: nnx.GraphDef[transformer_lib.Transformer],
-    label_smoothing=0.0,
+    label_smoothing: float = 0.0,
+    pad_id: int = 0,
 ):
   """Calculate evaluation metrics on a batch."""
   inputs, targets = batch['inputs'], batch['targets']
 
-  # TODO: this should be defined globally
-  pad_id = 0
   weights = jnp.where(inputs > pad_id, 1, 0).astype(jnp.float32)
   input_mask = inputs > pad_id
   inputs_positions = transformer_lib.build_positions_from_mask(input_mask)
@@ -368,8 +357,8 @@ def eval_step(
 def evaluate(
     *,
     jit_eval_step,
-    state: utils.TrainState,
-    eval_ds: tf.data.Dataset,
+    state: TrainState,
+    eval_ds: grain.IterDataset,
     num_eval_steps: int,
 ):
   """Evaluate the target an return a dictionary with the metrics."""
@@ -377,7 +366,6 @@ def evaluate(
   eval_metrics = []
   eval_iter = iter(eval_ds)  # pytype: disable=wrong-arg-types
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
-    eval_batch = jax.tree.map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
     metrics = jit_eval_step(state.params, eval_batch, state.graphdef)
     eval_metrics.append(metrics)
   eval_metrics = common_utils.stack_forest(eval_metrics)
@@ -398,20 +386,27 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
     workdir: Working directory for checkpoints and TF summaries. If this
       contains checkpoint training will be resumed from the latest checkpoint.
   """
-  workdir = os.path.abspath(workdir)
-  tf.io.gfile.makedirs(workdir)
+  workdir = Path(workdir).absolute().resolve()
+  workdir.mkdir(parents=True, exist_ok=True)
 
-  vocab_path = config.vocab_path
-  if vocab_path is None:
-    vocab_path = os.path.join(workdir, 'sentencepiece_model')
-    config.vocab_path = vocab_path
-  tf.io.gfile.makedirs(os.path.split(vocab_path)[0])
+  if config.vocab_path is None:
+    config.vocab_path = str(workdir / "sentencepiece_model")
+  vocab_path = Path(config.vocab_path).absolute().resolve()
+  vocab_path.parent.mkdir(parents=True, exist_ok=True)
+
+  workdir, vocab_path = str(workdir), str(vocab_path)
+
+  # Mesh definition
+  devices_array = utils.create_device_mesh(config)
+  mesh = Mesh(devices_array, config.mesh_axes)
 
   # Load Dataset
   # ---------------------------------------------------------------------------
   logging.info('Initializing dataset.')
+  data_sharding = NamedSharding(mesh, P(config.data_sharding))
+
   train_ds, eval_ds, encoder = input_pipeline.get_datasets(
-      n_devices=jax.local_device_count(), config=config, vocab_path=vocab_path
+      config=config, vocab_path=vocab_path, data_sharding=data_sharding
   )
 
   train_iter = iter(train_ds)
@@ -425,7 +420,6 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
         config.transformer_name,
         num_embed=vocab_size,
         dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
-        axis_rules=config.axis_rules,
     )
   else:
     assert config.transformer_params is not None
@@ -433,12 +427,7 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
         **config.transformer_params,
         num_embed=vocab_size,
         dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
-        axis_rules=config.axis_rules,
     )
-
-  # Mesh definition
-  devices_array = utils.create_device_mesh(config)
-  mesh = jax.sharding.Mesh(devices_array, config.mesh_axes)
 
   start_step = 0
   rng = jax.random.PRNGKey(config.seed)
@@ -463,7 +452,6 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
   state, state_sharding = utils.setup_initial_state(
       constructor, optimizer, model_config, init_rng, mesh
   )
-  data_sharding = jax.NamedSharding(mesh, jax.P(config.data_sharding))
 
   if config.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
@@ -481,22 +469,22 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
   jit_train_step = jax.jit(
       train_step,
       in_shardings=(
-          state_sharding,
-          data_sharding,
+        state_sharding,
+        data_sharding,
       ),  # type: ignore
       out_shardings=(state_sharding, None),  # type: ignore
-      static_argnames=('learning_rate_fn', 'label_smoothing'),
+      static_argnames=("learning_rate_fn", "label_smoothing", "pad_id"),
       donate_argnums=0,
   )
 
   jit_eval_step = jax.jit(
       eval_step,
       in_shardings=(
-          state_sharding.params,
-          data_sharding,
+        state_sharding.params,
+        data_sharding,
       ),  # type: ignore
       out_shardings=None,  # type: ignore
-      static_argnames=('graphdef', 'label_smoothing'),
+      static_argnames=("graphdef", "label_smoothing", "pad_id"),
   )
 
   vocab = tokenizer.load_sentencepiece_processor(vocab_path)
@@ -530,12 +518,15 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
       with jax.profiler.StepTraceAnnotation('train', step_num=step):
         with report_progress.timed('data'):
           batch = next(train_iter)
-          batch = jax.tree.map(
-              lambda x: jnp.asarray(x, device=data_sharding), batch
-          )
 
         with report_progress.timed('train_step'):
-          state, metrics = jit_train_step(state, batch, learning_rate_fn, 0.0)
+          state, metrics = jit_train_step(
+              state,
+              batch,
+              learning_rate_fn,
+              0.0,  # label_smoothing
+              encoder.pad_id(),  # pad_id
+          )
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
@@ -543,20 +534,16 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
       for h in hooks:
         h(step)
 
-      # Write batch loss and lr every step to TB
-      # without overwhelming the stdout:
-      if jax.process_index() == 0:
-        tb_writer = writer._writers[-1]  # pylint: disable=protected-access
-        lr = train_metrics[-1]['learning_rate']
-        train_batch_loss = train_metrics[-1]['loss']
-        denominator = train_metrics[-1]['denominator']
-        tb_writer.write_scalars(
-            step,
-            {
-                'train_learning_rate': lr,
-                'train_loss': train_batch_loss / denominator,
-            },
-        )
+      # # Write batch loss and lr every step to TB
+      # # without overwhelming the stdout:
+      # tb_writer = writer._writers[-1]
+      # lr = train_metrics[-1]['learning_rate']
+      # train_batch_loss = train_metrics[-1]['loss']
+      # denominator = train_metrics[-1]['denominator']
+      # tb_writer.write_scalars(step, {
+      #   "train_learning_rate": lr,
+      #   "train_loss": train_batch_loss / denominator,
+      # })
 
       # Periodic metric handling.
       if (step > 0 and step % config.eval_every_steps == 0) or is_last_step:
@@ -603,7 +590,7 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
       save_checkpoint = (
-          step % config.checkpoint_every_steps == 0 or is_last_step
+          (step > 0 and step % config.checkpoint_every_steps == 0) or is_last_step
       )
       if config.save_checkpoints and save_checkpoint:
         logging.info('Saving checkpoint step %d.', step)

@@ -106,7 +106,6 @@ class TransformerConfig:
   use_qk_norm: bool = False
   sliding_window_size: int | None = None
   dtype: Any = jnp.float32
-  axis_rules: Any | None = None
 
   def query_pre_attn_scalar(self) -> float:
     """Returns the scalar to multiply the query by before attention."""
@@ -529,10 +528,8 @@ class Transformer(nnx.Module):
     self.embedder = modules.Embedder(
         vocab_size=config.num_embed,
         embed_dim=config.embed_dim,
-        embedding_init=modules.maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          ("vocab", "embed"),
+        embedding_init=nnx.with_partitioning(
+          nnx.initializers.normal(), ("tensor", "fsdp")
         ),
         dtype=config.dtype,
         rngs=rngs,
@@ -550,10 +547,9 @@ class Transformer(nnx.Module):
     ])
     self.final_norm = layers.RMSNorm(
       config.embed_dim,
-      scale_init=modules.maybe_with_partitioning(
+      scale_init=nnx.with_partitioning(
         nnx.initializers.zeros_init(),
-        config.axis_rules,
-        ("embed", ),
+        ("tensor", ),
       ),
       rngs=rngs,
     )
