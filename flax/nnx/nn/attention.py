@@ -301,6 +301,10 @@ class MultiHeadAttention(Module):
     decode: whether to prepare and use an autoregressive cache.
     normalize_qk: should QK normalization be applied (arxiv.org/abs/2302.05442).
     rngs: rng key.
+    keep_rngs: whether to store the input rngs as attribute (i.e. `self.rngs = rngs`)
+      (default: True). If rngs is stored, we should split the module as
+      `graphdef, params, nondiff = nnx.split(module, nnx.Param, ...)` where `nondiff`
+      contains RNG object associated with stored `self.rngs`.
   """
 
   def __init__(
@@ -330,6 +334,7 @@ class MultiHeadAttention(Module):
     qkv_dot_general_cls: Any = None,
     out_dot_general_cls: Any = None,
     rngs: rnglib.Rngs,
+    keep_rngs: bool = True,
   ):
     self.num_heads = num_heads
     self.in_features = in_features
@@ -422,7 +427,7 @@ class MultiHeadAttention(Module):
       dot_general_cls=self.out_dot_general_cls,
       rngs=rngs,
     )
-    self.rngs = rngs if dropout_rate > 0.0 else None
+    self.rngs = rngs if keep_rngs else None
 
     self.cached_key: nnx.Cache[Array] | None = None
     self.cached_value: nnx.Cache[Array] | None = None
@@ -569,7 +574,8 @@ class MultiHeadAttention(Module):
       if not deterministic:
         if rngs is None:
           raise ValueError(
-            "'rngs' must be provided if 'dropout_rng' is not given."
+            "'rngs' must be provided to __call__ method if "
+            "MultiHeadAttention instance is defined with keep_rngs=False."
           )
         dropout_rng = rngs.dropout()
       else:
