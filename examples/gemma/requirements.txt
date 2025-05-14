@@ -1,0 +1,12 @@
+absl-py~=2.2
+clu==0.0.12
+flax~=0.10
+jax~=0.6
+mlcroissant~=1.0
+numpy~=2.1
+optax~=0.2
+sentencepiece~=0.2
+jaxtyping~=0.3
+tensorflow~=2.19
+tensorflow-datasets~=4.9
+tensorflow-text~=2.19
