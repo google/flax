@@ -224,13 +224,16 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return cls(value, **metadata).to_state()
 
   @property
-  def mutable(self) -> bool | None:
+  def mutable(self) -> bool:
     if is_mutable_array(self.raw_value):
       return True
     elif isinstance(self.raw_value, jax.Array):
       return False
     else:
-      return None
+      raise ValueError(
+        f'mutable is only supported for jax.Array and MutableArray, '
+        f'got {type(self.raw_value).__name__}'
+      )
 
   def get_metadata(self):
     return self._var_metadata
@@ -971,6 +974,18 @@ class VariableState(tp.Generic[A], reprlib.Representable):
   @raw_value.setter
   def raw_value(self, value: A) -> None:
     object.__setattr__(self, 'value', value)
+
+  @property
+  def mutable(self) -> bool:
+    if is_mutable_array(self.raw_value):
+      return True
+    elif isinstance(self.raw_value, jax.Array):
+      return False
+    else:
+      raise ValueError(
+        f'mutable is only supported for jax.Array and MutableArray, '
+        f'got {type(self.raw_value).__name__}'
+      )
 
   def __getattribute__(self, name: str) -> None:
     if name == 'value':
