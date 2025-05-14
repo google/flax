@@ -2652,10 +2652,22 @@ def clone(node: Node) -> Node:
   graphdef, state = split(node)
   return merge(graphdef, state)
 
+def find_duplicates(tree) -> tuple[str, str] | None:
+  mutable_arrays: dict[int, str] = {}
+  paths_leaves = jax.tree.leaves_with_path(tree)
+  for path, x in paths_leaves:
+    m_array_id = id(x)
+    if m_array_id in mutable_arrays:
+      current_path_str = jax.tree_util.keystr(path)
+      previous_path_str = mutable_arrays[m_array_id]
+      return current_path_str, previous_path_str
+    mutable_arrays[m_array_id] = jax.tree_util.keystr(path)
+
+  return None
 
 def _mutable_like(path, x):
   return (
-    isinstance(x, Variable) and x.mutable
+    isinstance(x, Variable | VariableState) and x.mutable
   ) or variablelib.is_mutable_array(x)
 
 
@@ -2681,7 +2693,7 @@ def freeze(tree: A, /, only: filterlib.Filter = _mutable_like) -> A:
     ...   nnx.freeze(tree)
     ... except ValueError as e:
     ...   print(e)
-    Found duplicate MutableArray found at path [1] and [0] ...
+    Found duplicate at path '[1]' and '[0]'.
 
   ``only`` is a `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
   that can be used to specify which mutable arrays to freeze::
@@ -2698,45 +2710,36 @@ def freeze(tree: A, /, only: filterlib.Filter = _mutable_like) -> A:
   Returns:
     A pytree with the frozen arrays.
   """
+  if (duplicate := find_duplicates(tree)) is not None:
+    current_path_str, previous_path_str = duplicate
+    raise ValueError(
+      f"Found duplicate at path '{current_path_str}' "
+      f"and '{previous_path_str}'."
+    )
   freeze_filter = filterlib.to_predicate(only)
-  mutable_arrays: dict[int, str] = {}
-
-  def check_mutable_array(path, x):
-    m_array_id = id(x)
-    if m_array_id in mutable_arrays:
-      current_path_str = jax.tree_util.keystr(path)
-      previous_path_str = mutable_arrays[m_array_id]
-      raise ValueError(
-        f'Found duplicate MutableArray found at path {current_path_str} '
-        f'and {previous_path_str} at object {x}.'
-      )
-    mutable_arrays[m_array_id] = jax.tree_util.keystr(path)
 
   def _freeze_fn(jax_path, x):
-    path = tuple(_key_path_to_key(part) for part in jax_path)
+    path = jax_to_nnx_path(jax_path)
     if freeze_filter(path, x):
-      if isinstance(x, Variable):
-        check_mutable_array(jax_path, x.raw_value)
-        return x.from_metadata(x[...], x.get_metadata().copy())
-      elif variablelib.is_mutable_array(x):
-        check_mutable_array(jax_path, x)
-        return x[...]
+      x = jax.tree.map(lambda x: x[...], x)
+    elif isinstance(x, Variable | VariableState):
+      x = jax.tree.map(lambda x: x, x)
     return x
 
   tree = jax.tree.map_with_path(
-    _freeze_fn, tree, is_leaf=lambda x: isinstance(x, Variable)
+    _freeze_fn, tree, is_leaf=lambda x: isinstance(x, Variable | VariableState)
   )
   return tree
 
 
 def _array_like(path, x):
   return (
-    isinstance(x, Variable) and isinstance(x.raw_value, jax.Array)
+    isinstance(x, Variable | VariableState) and not x.mutable
   ) or isinstance(x, jax.Array)
 
 
 def mutable(tree: A, /, only: filterlib.Filter = _array_like) -> A:
-  """Converts a pytree of arrays to mutable arrays.
+  """Converts a tree of arrays to mutable arrays.
 
   Example::
 
@@ -2757,7 +2760,7 @@ def mutable(tree: A, /, only: filterlib.Filter = _array_like) -> A:
     ...   nnx.mutable(tree)
     ... except ValueError as e:
     ...   print(e)
-    Found duplicate Array found at path [1] and [0] ...
+    Found duplicate at path '[1]' and '[0]'.
 
   ``only`` is a `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
   that can be used to specify which arrays to convert to mutable arrays.
@@ -2774,34 +2777,24 @@ def mutable(tree: A, /, only: filterlib.Filter = _array_like) -> A:
   Returns:
     A pytree with the mutable arrays.
   """
+  if (duplicate := find_duplicates(tree)) is not None:
+    current_path_str, previous_path_str = duplicate
+    raise ValueError(
+      f"Found duplicate at path '{current_path_str}' "
+      f"and '{previous_path_str}'."
+    )
   mutable_filter = filterlib.to_predicate(only)
-  arrays: dict[int, str] = {}
-
-  def check_array(path, x):
-    m_array_id = id(x)
-    if m_array_id in arrays:
-      current_path_str = jax.tree_util.keystr(path)
-      previous_path_str = arrays[m_array_id]
-      raise ValueError(
-        f'Found duplicate Array found at path {current_path_str} '
-        f'and {previous_path_str} at object {x}.'
-      )
-    arrays[m_array_id] = jax.tree_util.keystr(path)
 
   def _mutable_fn(jax_path, x):
-    path = tuple(_key_path_to_key(part) for part in jax_path)
+    path = jax_to_nnx_path(jax_path)
     if mutable_filter(path, x):
-      if isinstance(x, Variable) and isinstance(x.raw_value, jax.Array):
-        check_array(jax_path, x.raw_value)
-        mutable_array = variablelib.mutable_array(x.raw_value)
-        return x.from_metadata(mutable_array, x.get_metadata().copy())
-      elif isinstance(x, jax.Array):
-        check_array(jax_path, x)
-        return variablelib.mutable_array(x)
+      x = jax.tree.map(variablelib.mutable_array, x)
+    elif isinstance(x, Variable | VariableState):
+      x = jax.tree.map(lambda x: x, x)
     return x
 
   return jax.tree.map_with_path(
-    _mutable_fn, tree, is_leaf=lambda x: isinstance(x, Variable)
+    _mutable_fn, tree, is_leaf=lambda x: isinstance(x, Variable | VariableState)
   )
 
 
@@ -3046,6 +3039,11 @@ def _key_path_to_key(key: tp.Any) -> Key:
     return key.name
   else:
     return str(key)
+
+
+def jax_to_nnx_path(jax_path: tuple, /):
+  return tuple(_key_path_to_key(part) for part in jax_path)
+
 
 class IndexesPytreeDef(tp.NamedTuple):
   key_index: HashableMapping[Key, int]

@@ -14,6 +14,7 @@
 
 import dataclasses
 from absl.testing import absltest
+import optax
 from flax import config
 from flax import nnx
 import flax.errors
@@ -118,7 +119,7 @@ class TestMutableArrayGraph(absltest.TestCase):
     self.assertTrue(m3.a.mutable)
     self.assertTrue(m3.b.mutable)
     self.assertIsNot(m2, m3)
-    self.assertIs(m.a, m3.a)
+    self.assertIsNot(m.a, m3.a)
 
   def test_freeze_duplicate_error(self):
     class Foo(nnx.Module):
@@ -130,9 +131,7 @@ class TestMutableArrayGraph(absltest.TestCase):
 
     m = Foo()
 
-    with self.assertRaisesRegex(
-      ValueError, 'Found duplicate MutableArray found at path'
-    ):
+    with self.assertRaisesRegex(ValueError, 'Found duplicate at path'):
       nnx.freeze(m)
 
   def test_mutable_array_split(self):
@@ -193,6 +192,12 @@ class TestMutableArrayGraph(absltest.TestCase):
     m1 = nnx.merge(graphdef, state)
     self.assertIs(m1.a.raw_value, m1.b.raw_value)
     self.assertIsInstance(m1.a, nnx.Param)
+
+  def test_mutable_example(self):
+    tree = [jnp.array(1.0), nnx.mutable_array(jnp.array(2.0))]
+    mutable_tree = nnx.mutable(tree)
+    assert nnx.is_mutable_array(mutable_tree[0])
+    assert nnx.is_mutable_array(mutable_tree[1])
 
   def test_mutable_array_split_freeze(self):
     class Foo(nnx.Module):
@@ -438,7 +443,7 @@ class TestMutableArrayNNXTransforms(absltest.TestCase):
 
 
 @pytest.mark.skipif(
-    not config.flax_mutable_array, reason='MutableArray not enabled'
+  not config.flax_mutable_array, reason='MutableArray not enabled'
 )
 class TestMutableArray(absltest.TestCase):
 
@@ -585,6 +590,46 @@ class TestMutableArray(absltest.TestCase):
     rngs = nnx.Rngs(0)
     key = rngs()
     self.assertIsInstance(key, jax.Array)
+
+@pytest.mark.skipif(
+  not config.flax_mutable_array, reason='MutableArray not enabled'
+)
+class TestOptaxOptimizer(absltest.TestCase):
+  def test_optax_optimizer(self):
+    class Model(nnx.Module):
+      __data__ = ('linear1', 'linear2', 'bn')
+
+      def __init__(self, rngs):
+        self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+
+      def __call__(self, x):
+        return self.linear2(nnx.relu(self.bn(self.linear1(x))))
+
+    x = jax.random.normal(jax.random.key(0), (5, 2))
+    y = jnp.ones((5, 4))
+
+    model = Model(nnx.Rngs(1))
+    optimizer = nnx.OptaxOptimizer(
+      nnx.state(model, nnx.Param), tx=optax.adam(1e-3)
+    )
+
+    @jax.jit
+    def train_step(model, optimizer, x, y):
+      graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
+
+      def loss_fn(params):
+        model = nnx.merge(graphdef, params, nondiff)
+        return jnp.mean((model(x) - y) ** 2)
+
+      loss, grads = jax.value_and_grad(loss_fn)(nnx.freeze(params))
+      optimizer.update(params, grads)
+      return loss
+
+    loss = train_step(model, optimizer, x, y)
+
+    self.assertNotEqual(loss, 0.0)
 
 
 if __name__ == '__main__':
