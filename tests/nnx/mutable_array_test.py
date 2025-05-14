@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
-
-import flax.errors
+from absl.testing import absltest
 from flax import config
 from flax import nnx
+import flax.errors
 import jax
 import jax.numpy as jnp
-from absl.testing import absltest
+import pytest
+
 
 @pytest.mark.skipif(
   not config.flax_mutable_array, reason='MutableArray not enabled'
 )
-class TestMutableArray(absltest.TestCase):
-  def test_tree_map(self):
+class TestObject(absltest.TestCase):
+  def test_pytree(self):
     class Foo(nnx.Module):
       __data__ = ('node',)
 
@@ -39,6 +39,25 @@ class TestMutableArray(absltest.TestCase):
 
     assert m.node == 2
     assert m.meta == 1
+
+  def test_pytree_dataclass(self):
+    @nnx.dataclass
+    class Foo(nnx.Module):
+      node: jax.Array
+      meta: nnx.Static[int]
+
+    m = Foo(node=jnp.array(1), meta=1)
+
+    m: Foo = jax.tree.map(lambda x: x + 1, m)
+
+    assert m.node == 2
+    assert m.meta == 1
+
+
+@pytest.mark.skipif(
+    not config.flax_mutable_array, reason='MutableArray not enabled'
+)
+class TestMutableArray(absltest.TestCase):
 
   def test_static(self):
     class C(nnx.Module):
@@ -185,3 +204,7 @@ class TestMutableArray(absltest.TestCase):
     rngs = nnx.Rngs(0)
     key = rngs()
     self.assertIsInstance(key, jax.Array)
+
+
+if __name__ == '__main__':
+  absltest.main()

@@ -27,7 +27,7 @@ from flax import config
 class List(nnx.Module):
   if config.flax_mutable_array:
     __data__ = ('items',)
-  
+
   def __init__(self, items):
     self.items = list(items)
 
