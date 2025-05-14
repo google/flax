@@ -784,13 +784,12 @@ def _variable_unflatten(
 ):
   return cls.from_metadata(value=children[0], attributes=dict(static))
 
-if config.flax_mutable_array:
-  jax.tree_util.register_pytree_with_keys(
-    Variable,
-    flatten_with_keys=_variable_flatten_with_keys,
-    unflatten_func=partial(_variable_unflatten, Variable),  # type: ignore
-    flatten_func=_variable_flatten,
-  )
+jax.tree_util.register_pytree_with_keys(
+  Variable,
+  flatten_with_keys=_variable_flatten_with_keys,
+  unflatten_func=partial(_variable_unflatten, Variable),  # type: ignore
+  flatten_func=_variable_flatten,
+)
 
 
 class Param(Variable[A]):
