@@ -132,6 +132,14 @@ def eval_shape(
   *args: tp.Any,
   **kwargs: tp.Any,
 ) -> A:
+  """A "lifted" version of `jax.eval_shape <https://jax.readthedocs.io/en/latest/_autosummary/jax.eval_shape.html#jax.eval_shape>`_
+    that can handle `flax.nnx.Module <https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html#flax.nnx.Module>`_
+    / graph nodes as arguments.
+
+  Similar to ``jax.eval_shape``, it computes the shape/dtype of a function `f` without
+    performing any floating point operations (FLOPs) which can be expensive. This can be
+    useful for performing shape inference, for example.
+  """
   args, kwargs = extract.to_tree((args, kwargs))
 
   @functools.wraps(f)
@@ -142,14 +150,6 @@ def eval_shape(
 
   out = jax.eval_shape(_eval_shape_fn, *args, **kwargs)
   return extract.from_tree(out)
-  """A "lifted" version of `jax.eval_shape <https://jax.readthedocs.io/en/latest/_autosummary/jax.eval_shape.html#jax.eval_shape>`_
-    that can handle `flax.nnx.Module <https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html#flax.nnx.Module>`_
-    / graph nodes as arguments.
-
-  Similar to ``jax.eval_shape``, it computes the shape/dtype of a function `f` without
-    performing any floating point operations (FLOPs) which can be expensive. This can be
-    useful for performing shape inference, for example.
-  """
 
 @dataclasses.dataclass(eq=False)
 class CheckifyFn:
