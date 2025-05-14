@@ -16,7 +16,7 @@
 
 import dataclasses
 
-from train import MeshRules, TrainConfig
+from train import TrainConfig
 
 
 @dataclasses.dataclass(unsafe_hash=True)
@@ -37,6 +37,8 @@ class Config:
   per_device_batch_size: int = 32
   # Per device batch size for training.
   eval_per_device_batch_size: int = 32
+  # Grain prefetch number of workers.
+  prefetch_num_workers: int | None = None
 
   # Prompt for language model sampling
   prompts: tuple[str, ...] = (
@@ -104,9 +106,9 @@ class Config:
   # Whether to restore from existing model checkpoints.
   restore_checkpoints: bool = True
   # Save a checkpoint every these number of steps.
-  checkpoint_every_steps: int = 10_000
+  checkpoint_every_steps: int = 1000
   # Frequency of eval during training, e.g. every 1_000 steps.
-  eval_every_steps: int = 5_000
+  eval_every_steps: int = 2000
   # Use bfloat16 mixed precision training instead of float32.
   use_bfloat16: bool = True
   # Integer for PRNG random seed.
@@ -114,12 +116,6 @@ class Config:
 
   # Parallelism
   mesh_axes: tuple[str, ...] = ('data', 'fsdp', 'tensor')
-  axis_rules: MeshRules = MeshRules(
-    embed='fsdp',
-    mlp='tensor',
-    kv='tensor',
-    vocab='tensor',
-  )
   data_sharding: tuple[str, ...] = ('data', 'fsdp')
 
   # One axis for each parallelism type may hold a placeholder (-1)

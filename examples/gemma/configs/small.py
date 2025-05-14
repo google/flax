@@ -16,7 +16,7 @@
 
 import dataclasses
 
-from train import MeshRules, TrainConfig
+from train import TrainConfig
 
 
 @dataclasses.dataclass(unsafe_hash=True)
@@ -37,6 +37,8 @@ class Config:
   per_device_batch_size: int = 32
   # Per device batch size for training.
   eval_per_device_batch_size: int = 32
+  # Grain prefetch number of workers.
+  prefetch_num_workers: int | None = None
 
   # Prompt for language model sampling
   prompts: tuple[str, ...] = (
@@ -123,12 +125,6 @@ class Config:
 
   # Parallelism
   mesh_axes: tuple[str, ...] = ('data', 'fsdp', 'tensor')
-  axis_rules: MeshRules = MeshRules(
-    embed='fsdp',
-    mlp='tensor',
-    kv='tensor',
-    vocab='tensor',
-  )
   data_sharding: tuple[str, ...] = ('data', 'fsdp')
 
   # One axis for each parallelism type may hold a placeholder (-1)

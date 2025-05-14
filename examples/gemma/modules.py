@@ -143,7 +143,7 @@ class Attention(nnx.Module):
       self.q_einsum = layers.Einsum(
           einsum_str='BTD,NDH->BTNH',
           shape=(num_heads, features, head_dim),
-          kernel_init=q_einsum_kernel_init,
+          kernel_init=kernel_init,
           dtype=dtype,
           rngs=rngs,
       )
@@ -330,32 +330,38 @@ class FeedForward(nnx.Module):
       hidden_dim: int,
       *,
       kernel_init: nnx.Initializer = nnx.initializers.normal(),
+      gate_proj_kernel_init: nnx.Initializer | None = None,
+      up_proj_kernel_init: nnx.Initializer | None = None,
+      down_proj_kernel_init: nnx.Initializer | None = None,
       rngs: nnx.Rngs,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
       dtype: Any = jnp.float32,
   ):
+    gate_proj_kernel_init = gate_proj_kernel_init if gate_proj_kernel_init else kernel_init
     self.gate_proj = nnx.Linear(
         in_features=features,
         out_features=hidden_dim,
         use_bias=False,
         rngs=rngs,
-        kernel_init=kernel_init,
+        kernel_init=gate_proj_kernel_init,
         dtype=dtype,
     )
+    up_proj_kernel_init = up_proj_kernel_init if up_proj_kernel_init else kernel_init
     self.up_proj = nnx.Linear(
         in_features=features,
         out_features=hidden_dim,
         use_bias=False,
         rngs=rngs,
-        kernel_init=kernel_init,
+        kernel_init=up_proj_kernel_init,
         dtype=dtype,
     )
+    down_proj_kernel_init = down_proj_kernel_init if down_proj_kernel_init else kernel_init
     self.down_proj = nnx.Linear(
         in_features=hidden_dim,
         out_features=features,
         use_bias=False,
         rngs=rngs,
-        kernel_init=kernel_init,
+        kernel_init=down_proj_kernel_init,
         dtype=dtype,
     )
     self.sow_config = sow_config
@@ -405,11 +411,7 @@ class Block(nnx.Module):
 
     self.pre_attention_norm = layers.RMSNorm(
       embed_dim,
-      scale_init=maybe_with_partitioning(
-        nnx.initializers.zeros_init(),
-        config.axis_rules,
-        ("embed", ),
-      ),
+      scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
       rngs=rngs,
       dtype=dtype,
     )
@@ -427,41 +429,28 @@ class Block(nnx.Module):
         rngs=rngs,
         use_qk_norm=use_qk_norm,
         sow_config=sow_config,
-        attn_vec_einsum_kernel_init=maybe_with_partitioning(
+        attn_vec_einsum_kernel_init=nnx.with_partitioning(
           nnx.initializers.normal(),
-          config.axis_rules,
-          (None, "embed", "kv"),  # sharded array shape: (num_heads, head_dim, features)
+          ("tensor", None, "fsdp"),  # shape: (num_heads, head_dim, embed_dim)
         ),
-        qkv_einsum_kernel_init=maybe_with_partitioning(
+        qkv_einsum_kernel_init=nnx.with_partitioning(
           nnx.initializers.normal(),
-          config.axis_rules,
-          (None, None, "embed", "kv"),  # sharded array shape: (3, num_heads, features, head_dim)
+          (None, "tensor", "fsdp", None),  # shape: (3, num_heads, embed_dim, head_dim)
         ),
-        q_einsum_kernel_init=maybe_with_partitioning(
+        q_einsum_kernel_init=nnx.with_partitioning(
           nnx.initializers.normal(),
-          config.axis_rules,
-          (None, "embed", "kv"),  # sharded array shape: (num_heads, features, head_dim)
+          ("tensor", "fsdp", None),  # shape: (num_heads, embed_dim, head_dim)
         ),
-        kv_einsum_kernel_init=maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          (None, None, "embed", "kv"),  # sharded array shape: (2, num_kv_heads, features, head_dim)
+        kv_einsum_kernel_init=nnx.with_partitioning(
+          nnx.initializers.normal(), (None, "tensor", "fsdp", None),  # shape: (2, num_kv_heads, embed_dim, head_dim)
         ),
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         dtype=dtype,
     )
     if use_post_attn_norm:
       self.post_attention_norm = layers.RMSNorm(
         embed_dim,
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         rngs=rngs,
         dtype=dtype,
       )
@@ -470,21 +459,24 @@ class Block(nnx.Module):
 
     self.pre_ffw_norm = layers.RMSNorm(
       embed_dim,
-      scale_init=maybe_with_partitioning(
-        nnx.initializers.zeros_init(),
-        config.axis_rules,
-        ("embed", ),
-      ),
+      scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
       rngs=rngs,
       dtype=dtype,
     )
     self.mlp = FeedForward(
         features=embed_dim,
         hidden_dim=hidden_dim,
-        kernel_init=maybe_with_partitioning(
+        gate_proj_kernel_init=nnx.with_partitioning(
           nnx.initializers.normal(),
-          config.axis_rules,
-          ("embed", "mlp"),
+          ("fsdp", "tensor"),
+        ),
+        up_proj_kernel_init=nnx.with_partitioning(
+          nnx.initializers.normal(),
+          ("fsdp", "tensor"),
+        ),
+        down_proj_kernel_init=nnx.with_partitioning(
+          nnx.initializers.normal(),
+          ("tensor", "fsdp"),
         ),
         rngs=rngs,
         sow_config=sow_config,
@@ -492,11 +484,7 @@ class Block(nnx.Module):
     if use_post_ffw_norm:
       self.post_ffw_norm = layers.RMSNorm(
         embed_dim,
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         rngs=rngs,
         dtype=dtype,
       )
@@ -546,9 +534,3 @@ class Block(nnx.Module):
         batch_size=batch_size,
         dtype=dtype,
     )
-
-
-def maybe_with_partitioning(fn, axis_rules, axis_rules_args=()):
-  if axis_rules is None:
-    return fn
-  return nnx.with_partitioning(fn, axis_rules(*axis_rules_args))
