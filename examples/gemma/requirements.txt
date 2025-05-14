@@ -9,4 +9,4 @@ sentencepiece~=0.2
 jaxtyping~=0.3
 tensorflow~=2.19
 tensorflow-datasets~=4.9
-tensorflow-text~=2.19
+grain~=0.2
