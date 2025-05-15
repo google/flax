@@ -26,7 +26,7 @@ from absl.testing import parameterized
 from absl.testing import absltest
 
 
-class TestMultiHeadAttention(absltest.TestCase):
+class TestMultiHeadAttention(parameterized.TestCase):
   def test_basic(self):
     module = nnx.MultiHeadAttention(
       num_heads=2,
@@ -101,6 +101,29 @@ class TestMultiHeadAttention(absltest.TestCase):
 
       assert y1.shape == (1, 1, 4)
       assert y2.shape == (1, 1, 4)
+
+  @parameterized.product(keep_rngs=[True, False])
+  def test_keep_rngs(self, keep_rngs):
+    rngs = nnx.Rngs(42)
+    module = nnx.MultiHeadAttention(
+      in_features=4,
+      num_heads=2,
+      qkv_features=4,
+      decode=True,
+      rngs=rngs,
+      dropout_rate=0.5,
+      keep_rngs=keep_rngs
+    )
+    if keep_rngs:
+      assert module.rngs == rngs
+    else:
+      assert module.rngs is None
+    if keep_rngs:
+      _, _, nondiff = nnx.split(module, nnx.Param, ...)
+      assert nondiff["rngs"]["default"]["count"].type is nnx.RngCount
+      assert nondiff["rngs"]["default"]["key"].type is nnx.RngKey
+    else:
+      nnx.split(module, nnx.Param)
 
 
 # TODO: add all possible constructor argument values to parameterized.product
