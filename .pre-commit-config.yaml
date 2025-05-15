@@ -19,7 +19,7 @@ repos:
 #   hooks:
 #     - id: pyink
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.3.0
+  rev: v5.0.0
   hooks:
   - id: check-toml
   - id: trailing-whitespace
