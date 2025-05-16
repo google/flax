@@ -427,7 +427,7 @@ class MultiHeadAttention(Module):
       dot_general_cls=self.out_dot_general_cls,
       rngs=rngs,
     )
-    self.rngs = rngs if keep_rngs else None
+    self.rngs = rngs if keep_rngs and dropout_rate > 0 else None
 
     self.cached_key: nnx.Cache[Array] | None = None
     self.cached_value: nnx.Cache[Array] | None = None
