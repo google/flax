@@ -558,6 +558,7 @@ def reseed(node, /, **stream_keys: RngValue):
     >>> jnp.allclose(y1, y2)
     Array(True, dtype=bool)
   """
+  rngs = Rngs(**stream_keys)
   for _, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
       if stream.key.tag in stream_keys:
@@ -566,11 +567,9 @@ def reseed(node, /, **stream_keys: RngValue):
             f'Cannot reseed stream {stream.key.tag!r} with a non-scalar key, '
             f' found key with shape {stream.key.shape}.'
           )
-        key = stream_keys[stream.key.tag]
-        if isinstance(key, int):
-          key = jax.random.key(key)
-        stream.key.value = key
-        stream.count.value = jnp.array(0, dtype=jnp.uint32)
+        key = rngs[stream.key.tag]()
+        stream.key[...] = key
+        stream.count[...] = jnp.array(0, dtype=jnp.uint32)
 
 
 def restore_rngs(backups: tp.Iterable[StreamBackup], /):

@@ -73,16 +73,20 @@ class Dropout(Module):
   broadcast_dims: Sequence[int] = ()
   deterministic: bool = False
   rng_collection: str = 'dropout'
-  rngs: rnglib.Rngs | None = None
+  rngs: rnglib.Rngs | rnglib.RngStream | None = None
 
   __data__ = ('rngs',)
+
+  def __post_init__(self):
+    if isinstance(self.rngs, rnglib.Rngs | rnglib.RngStream):
+      self.rngs = self.rngs.fork()
 
   def __call__(
     self,
     inputs,
     *,
     deterministic: bool | None = None,
-    rngs: rnglib.Rngs | None = None,
+    rngs: rnglib.Rngs | rnglib.RngStream | jax.Array | None = None,
   ) -> jax.Array:
     """Applies a random dropout mask to the input.
 
@@ -92,8 +96,8 @@ class Dropout(Module):
         masked, whereas if true, no mask is applied and the inputs are returned
         as is. The ``deterministic`` flag passed into the call method will take
         precedence over the ``deterministic`` flag passed into the constructor.
-      rngs: rng key. The rng key passed into the call method will take
-        precedence over the rng key passed into the constructor.
+      rngs: an optional key, RngStream, or Rngs object used to generate the dropout mask.
+        If given it will take precedence over the rngs passed into the constructor.
 
     Returns:
       The masked inputs reweighted to preserve mean.
@@ -119,11 +123,21 @@ class Dropout(Module):
           as either a __call__ argument or class attribute.""",
     )
 
+    if isinstance(rngs, rnglib.Rngs):
+      key = rngs[self.rng_collection]()
+    elif isinstance(rngs, rnglib.RngStream):
+      key = rngs()
+    elif isinstance(rngs, jax.Array):
+      key = rngs
+    else:
+      raise TypeError(
+        f'rngs must be a Rngs, RngStream or jax.Array, but got {type(rngs)}.'
+      )
+
     keep_prob = 1.0 - self.rate
-    rng = rngs[self.rng_collection]()
     broadcast_shape = list(inputs.shape)
     for dim in self.broadcast_dims:
       broadcast_shape[dim] = 1
-    mask = random.bernoulli(rng, p=keep_prob, shape=broadcast_shape)
+    mask = random.bernoulli(key, p=keep_prob, shape=broadcast_shape)
     mask = jnp.broadcast_to(mask, inputs.shape)
     return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
