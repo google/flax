@@ -121,9 +121,11 @@ if $RUN_PYTEST; then
   # Run battery of core FLAX API tests.
   echo "pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE"
   pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
+  # test MutableArray
+  FLAX_MUTABLE_ARRAY=true pytest tests/nnx/mutable_array_test.py
   # Run nnx tests
-  pytest -n auto flax/nnx/tests $PYTEST_OPTS $PYTEST_IGNORE
   pytest -n auto docs/_ext/codediff_test.py $PYTEST_OPTS $PYTEST_IGNORE
+  pytest -n auto docs_nnx/_ext/codediff_test.py $PYTEST_OPTS $PYTEST_IGNORE
 
   # Per-example tests.
   #
