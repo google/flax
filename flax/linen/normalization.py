@@ -25,6 +25,7 @@ from jax import lax
 from jax.nn import initializers
 
 from flax.linen import dtypes, module, transforms
+from flax.linen.partitioning import param_with_axes
 from flax.typing import (
   Array,
   PRNGKey as PRNGKey,
@@ -160,7 +161,8 @@ def _normalize(
   use_scale: bool,
   bias_init: Initializer,
   scale_init: Initializer,
-  force_float32_reductions: bool = True
+  force_float32_reductions: bool = True,
+  axes: tuple[str, ...] = None,
 ):
   """Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
@@ -183,6 +185,7 @@ def _normalize(
     force_float32_reductions: If false, the scale and bias parameters use the
       param_dtype. Otherwise, they will have at least float32 precision due to
       the mean and var being promoted to float32.
+    axes: A tuple of axis names over which to shard parameters.
 
   Returns:
     The normalized input.
@@ -201,8 +204,9 @@ def _normalize(
   mul = lax.rsqrt(var + epsilon)
   args = [x]
   if use_scale:
-    scale = mdl.param(
-      'scale', scale_init, reduced_feature_shape, param_dtype
+    scale = param_with_axes(
+      'scale', scale_init, reduced_feature_shape,
+      param_dtype, axes=axes, module=mdl
     ).reshape(feature_shape)
     if not force_float32_reductions:
       scale = jnp.asarray(scale, param_dtype)
@@ -210,8 +214,9 @@ def _normalize(
     args.append(scale)
   y *= mul
   if use_bias:
-    bias = mdl.param(
-      'bias', bias_init, reduced_feature_shape, param_dtype
+    bias = param_with_axes(
+      'bias', bias_init, reduced_feature_shape,
+      param_dtype, axes=axes, module=mdl
     ).reshape(feature_shape)
     if not force_float32_reductions:
       bias = jnp.asarray(bias, param_dtype)
@@ -298,6 +303,7 @@ class BatchNorm(Module):
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    pjit_axis_names: A tuple of axis names.
   """
 
   use_running_average: bool | None = None
@@ -314,6 +320,7 @@ class BatchNorm(Module):
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
+  pjit_axis_name: tuple[str, ...] = None
 
   @compact
   def __call__(
@@ -413,6 +420,7 @@ class BatchNorm(Module):
       self.bias_init,
       self.scale_init,
       self.force_float32_reductions,
+      self.pjit_axis_name,
     )
 
 
@@ -476,6 +484,7 @@ class LayerNorm(Module):
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    pjit_axis_names: A tuple of axis names.
   """
 
   epsilon: float = 1e-6
@@ -491,6 +500,7 @@ class LayerNorm(Module):
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
+  pjit_axis_name: tuple[str, ...] = None
 
   @compact
   def __call__(self, x, *, mask: jax.Array | None = None):
@@ -530,6 +540,7 @@ class LayerNorm(Module):
       self.bias_init,
       self.scale_init,
       self.force_float32_reductions,
+      self.pjit_axis_name,
     )
 
 
@@ -578,6 +589,7 @@ class RMSNorm(Module):
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    pjit_axis_names: A tuple of axis names.
   """
 
   epsilon: float = 1e-6
@@ -591,6 +603,7 @@ class RMSNorm(Module):
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
+  pjit_axis_name: tuple[str, ...] = None
 
   @compact
   def __call__(self, x, *, mask: jax.Array | None = None):
@@ -631,6 +644,7 @@ class RMSNorm(Module):
       initializers.zeros,
       self.scale_init,
       self.force_float32_reductions,
+      self.pjit_axis_name,
     )
 
 
@@ -701,6 +715,7 @@ class GroupNorm(Module):
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    pjit_axis_names: A tuple of axis names.
   """
 
   num_groups: int | None = 32
@@ -717,6 +732,7 @@ class GroupNorm(Module):
   axis_index_groups: Any = None
   use_fast_variance: bool = True
   force_float32_reductions: bool = True
+  pjit_axis_name: tuple[str, ...] = None
 
   @compact
   def __call__(self, x, *, mask: jax.Array | None = None):
@@ -936,6 +952,7 @@ class InstanceNorm(Module):
       self.bias_init,
       self.scale_init,
       self.force_float32_reductions,
+      self.pjit_axis_name,
     )
 
 
