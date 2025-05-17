@@ -31,7 +31,6 @@ from .graph import GraphDef as GraphDef
 from .graph import GraphState as GraphState
 from .graph import PureState as PureState
 from .object import Object as Object
-from .helpers import Dict as Dict
 from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M

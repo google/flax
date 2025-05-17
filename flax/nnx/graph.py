@@ -2092,7 +2092,9 @@ def update_context(tag: tp.Hashable):
 
     >>> from flax import nnx
     ...
-    >>> m1 = nnx.Dict({})
+    >>> class Foo(nnx.Module): pass
+    ...
+    >>> m1 = Foo()
     >>> with nnx.update_context('example'):
     ...   with nnx.split_context('example') as ctx:
     ...     graphdef, state = ctx.split(m1)
@@ -2121,7 +2123,9 @@ def update_context(tag: tp.Hashable):
 
     >>> from flax import nnx
     ...
-    >>> m1 = nnx.Dict({})
+    >>> class Foo(nnx.Module): pass
+    ...
+    >>> m1 = Foo()
     >>> @jax.jit
     ... def f(graphdef, state):
     ...   with nnx.merge_context('example', inner=True) as ctx:

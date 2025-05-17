@@ -341,7 +341,8 @@ class OptaxOptimizer(Object):
     params: The parameters to be optimized.
     tx: An optax gradient transformation.
   """
-  __nodes__ = ('step', 'opt_state')
+
+  __data__ = ('step', 'opt_state')
 
   def __init__(self, params, tx: optax.GradientTransformation):
     self.tx = tx

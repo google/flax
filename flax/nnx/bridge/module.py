@@ -224,8 +224,7 @@ class ModuleBase:
 @tpe.dataclass_transform(field_specifiers=(dataclasses.field,))  # type: ignore[not-supported-yet]
 class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
   def __init_subclass__(cls) -> None:
-    cls.__data__ = 'auto'
-    super().__init_subclass__()
+    super().__init_subclass__(pytree=False)
 
     cls = dataclasses.dataclass(repr=False)(cls)
     cls.__hash__ = object.__hash__  # type: ignore[method-assign]

@@ -185,9 +185,9 @@ class MutableArrayRepr(reprlib.Representable):
 class Object(reprlib.Representable, metaclass=ObjectMeta):
 
   if tp.TYPE_CHECKING:
-    _object__nodes: frozenset[str] | tp.Literal['all', 'auto'] | None
+    _object__nodes: frozenset[str]
     _object__is_pytree: bool
-    __data__: tuple[str, ...] | tp.Literal['all', 'auto']
+    __data__: tuple[str, ...]
     _object__state: ObjectState
 
   def __init_subclass__(
@@ -205,41 +205,13 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       init=cls._graph_node_init,  # type: ignore
     )
     cls._object__is_pytree = pytree
-    class_nodes: tuple[str, ...] | tp.Literal['all', 'auto'] | None = vars(
-      cls
-    ).get('__data__', None)
-    parent_nodes: frozenset[str] | tp.Literal['all', 'auto'] | None = getattr(
-      cls, '_object__nodes', None
-    )
-    if (
-      class_nodes is not None
-      and parent_nodes is not None
-      and not (
-        (isinstance(parent_nodes, frozenset) and isinstance(class_nodes, tuple))
-        or parent_nodes == class_nodes
-      )
-    ):
-      raise ValueError(
-        f"Cannot set __data__ for class '{cls.__name__}' to '{class_nodes}' "
-        f"because it is already set to '{parent_nodes}' on its parent."
-      )
+    class_nodes: tuple[str, ...] = vars(cls).get('__data__', ())
+    parent_nodes: tp.Iterable[str] = getattr(cls, '_object__nodes', ())
 
-    if class_nodes is None and parent_nodes is not None:
-      cls._object__nodes = parent_nodes
-    elif isinstance(class_nodes, tuple):
-      if parent_nodes is None:
-        all_nodes = set()
-      else:
-        assert isinstance(parent_nodes, frozenset)
-        all_nodes = set(parent_nodes)
-      all_nodes.update(class_nodes)
-      all_nodes.add('_object__state')
-      cls._object__nodes = frozenset(all_nodes)
-    elif class_nodes in ('all', 'auto'):
-      cls._object__nodes = class_nodes
-    else:
-      assert class_nodes is None
-      cls._object__nodes = None
+    all_nodes: set[str] = set(parent_nodes)
+    all_nodes.update(class_nodes)
+    all_nodes.add('_object__state')
+    cls._object__nodes = frozenset(all_nodes)
 
     if pytree:
       cls._object__register_pytree()
@@ -250,29 +222,12 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
 
   @classmethod
   def _object__register_pytree(cls):
-    if (
-      isinstance(cls._object__nodes, frozenset)
-      or cls._object__nodes is None
-      or cls._object__nodes == 'all'
-    ):
-      jax.tree_util.register_pytree_with_keys(
-        cls,
-        flatten_with_keys=cls._object__flatten_with_paths,
-        unflatten_func=cls._object__unflatten,
-        flatten_func=cls._object__flatten,
-      )
-    elif cls._object__nodes == 'auto':
-      jax.tree_util.register_pytree_with_keys(
-        cls,
-        flatten_with_keys=cls._object__auto_flatten_with_paths,
-        unflatten_func=cls._object__auto_unflatten,
-        flatten_func=cls._object__auto_flatten,
-      )
-    else:
-      raise ValueError(
-        f"Invalid pytree type '{cls._object__nodes}' for class '{cls.__name__}'. "
-        "Expected 'strict' or 'auto'."
-      )
+    jax.tree_util.register_pytree_with_keys(
+      cls,
+      flatten_with_keys=cls._object__flatten_with_paths,
+      unflatten_func=cls._object__unflatten,
+      flatten_func=cls._object__flatten,
+    )
 
   if not tp.TYPE_CHECKING:
 
@@ -283,11 +238,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     self._check_valid_context(
       lambda: f"Cannot mutate '{type(self).__name__}' from different trace level"
     )
-    if (
-      type(self)._object__is_pytree
-      and isinstance(self._object__nodes, frozenset)
-      and name not in self._object__nodes
-    ):
+    if type(self)._object__is_pytree and name not in self._object__nodes:
       for leaf in jax.tree.leaves(value):
         if isinstance(leaf, jax.Array) or is_mutable_array(leaf):
           raise TypeError(
@@ -435,20 +386,14 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
   # -------------------------
   # Pytree Definition
   # -------------------------
-  # strict
   def _object__flatten_with_paths(self):
     obj_vars = vars(self)
     type_nodes = type(self)._object__nodes
-    assert type_nodes != 'auto'
     node_names: list[str] = []
     node_attrs: list[tuple[tp.Any, tp.Any]] = []
     static_attrs: list[tuple[str, tp.Any]] = []
     for name, value in sorted(obj_vars.items()):
-      if (
-        name == '_object__state'
-        or type_nodes == 'all'
-        or (isinstance(type_nodes, frozenset) and name in type_nodes)
-      ):
+      if name in type_nodes:
         node_names.append(name)
         node_attrs.append((jax.tree_util.GetAttrKey(name), value))
       else:
@@ -459,16 +404,11 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
   def _object__flatten(self):
     obj_vars = vars(self)
     type_nodes = type(self)._object__nodes
-    assert type_nodes != 'auto'
     node_names: list[str] = []
     node_attrs: list[tp.Any] = []
     static_attrs: list[tuple[str, tp.Any]] = []
     for name, value in sorted(obj_vars.items()):
-      if (
-        name == '_object__state'
-        or type_nodes == 'all'
-        or (isinstance(type_nodes, frozenset) and name in type_nodes)
-      ):
+      if name in type_nodes:
         node_names.append(name)
         node_attrs.append(value)
       else:
@@ -488,40 +428,6 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     vars_obj.update(zip(node_names, node_attrs, strict=True))
     vars_obj.update(static_attrs)
     return obj
-
-  # auto
-  def _object__auto_flatten_with_paths(self):
-    graphdef, state = graph.split(self)
-    key_values = sorted(
-      state.raw_mapping.items()  # type: ignore
-    )
-    keys = tuple(key for key, _ in key_values)
-
-    children: tuple[tp.Any, ...]
-    children = tuple(
-      (jax.tree_util.DictKey(key), value) for key, value in key_values
-    )
-
-    return children, (keys, graphdef)
-
-  def _object__auto_flatten(self):
-    graphdef, state = graph.split(self)
-    key_values = sorted(
-      state.raw_mapping.items()  # type: ignore
-    )
-    keys = tuple(key for key, _ in key_values)
-    children = tuple(value for _, value in key_values)
-
-    return children, (keys, graphdef)
-
-  @classmethod
-  def _object__auto_unflatten(
-    cls,
-    paths_moduledef: tuple[tuple[tp.Any, ...], graph.GraphDef[O]],
-    children: tp.Iterable[tp.Any],
-  ):
-    paths, graphdef = paths_moduledef
-    return graph.merge(graphdef, dict(zip(paths, children, strict=True)))
 
   # -------------------------
   # Graph Definition

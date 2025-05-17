@@ -572,7 +572,8 @@ class TestMutableArray(absltest.TestCase):
     self.assertEqual(
       paths[0],
       (
-        jax.tree_util.GetAttrKey('default'),
+        jax.tree_util.GetAttrKey('streams'),
+        jax.tree_util.DictKey('default'),
         jax.tree_util.GetAttrKey('count'),
         jax.tree_util.GetAttrKey('value'),
       ),
@@ -580,7 +581,8 @@ class TestMutableArray(absltest.TestCase):
     self.assertEqual(
       paths[1],
       (
-        jax.tree_util.GetAttrKey('default'),
+        jax.tree_util.GetAttrKey('streams'),
+        jax.tree_util.DictKey('default'),
         jax.tree_util.GetAttrKey('key'),
         jax.tree_util.GetAttrKey('value'),
       ),
