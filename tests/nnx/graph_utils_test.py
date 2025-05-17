@@ -619,7 +619,7 @@ class TestGraphUtils(absltest.TestCase):
     self.assertFalse(hasattr(ctx, 'ctxtag'))
 
   def test_split_merge_context_example(self):
-    m1 = nnx.Dict({})
+    m1 = Dict({})
     with nnx.update_context('example'):
       with nnx.split_context('example') as ctx:
         graphdef, state = ctx.split(m1)

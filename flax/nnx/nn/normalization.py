@@ -367,10 +367,10 @@ class BatchNorm(Module):
         stop_gradient = lambda x: x
 
       self.mean[...] = stop_gradient(
-        self.momentum * self.mean.value + (1 - self.momentum) * mean
+        self.momentum * self.mean[...] + (1 - self.momentum) * mean
       )
       self.var[...] = stop_gradient(
-        self.momentum * self.var.value + (1 - self.momentum) * var
+        self.momentum * self.var[...] + (1 - self.momentum) * var
       )
 
     return _normalize(

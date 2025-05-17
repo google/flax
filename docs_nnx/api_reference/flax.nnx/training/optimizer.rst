@@ -6,3 +6,6 @@ Optimizer
 
 .. autoclass:: Optimizer
    :members: __init__, update
+
+.. autoclass:: MutableArrayOptimizer
+   :members: __init__, update

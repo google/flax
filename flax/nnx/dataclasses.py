@@ -181,20 +181,11 @@ def dataclass(
   def _dataclass(cls: T):
     if not issubclass(cls, objectlib.Object):
       raise ValueError(
-          'dataclass can only be used with a class derived from nnx.Object'
-      )
-    if cls._object__nodes in ('auto', 'all'):
-      raise ValueError(
-        "dataclass cannot be used with a class that has __data__ set to 'auto' or 'all', "
-        f'got {cls._object__nodes}'
+        'dataclass can only be used with a class derived from nnx.Object'
       )
 
-    # here we redefine _object__nodes using the type hints
     hints = cls.__annotations__
-    if cls._object__nodes is None:
-      all_nodes = set()
-    else:
-      all_nodes = set(cls._object__nodes)
+    all_nodes = set(cls._object__nodes)
     for name, typ in hints.items():
       class_attr = getattr(cls, name, None)
       if not _is_static(typ, class_attr):

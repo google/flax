@@ -440,7 +440,7 @@ class MultiHeadAttention(Module):
       dot_general_cls=self.out_dot_general_cls,
       rngs=rngs,
     )
-    self.rngs = rngs if keep_rngs and dropout_rate > 0 else None
+    self.rngs = rngs.dropout.fork() if keep_rngs and dropout_rate > 0 else None
 
     self.cached_key: nnx.Cache[Array] | None = None
     self.cached_value: nnx.Cache[Array] | None = None
@@ -454,7 +454,7 @@ class MultiHeadAttention(Module):
     *,
     mask: Array | None = None,
     deterministic: bool | None = None,
-    rngs: rnglib.Rngs | None = None,
+    rngs: rnglib.Rngs | rnglib.RngStream | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
   ):
@@ -493,6 +493,8 @@ class MultiHeadAttention(Module):
     """
     if rngs is None:
       rngs = self.rngs
+    elif isinstance(rngs, rnglib.Rngs):
+      rngs = rngs.dropout
 
     if inputs_k is None:
       if inputs_v is not None:
@@ -590,7 +592,7 @@ class MultiHeadAttention(Module):
             "'rngs' must be provided to __call__ method if "
             "MultiHeadAttention instance is defined with keep_rngs=False."
           )
-        dropout_rng = rngs.dropout()
+        dropout_rng = rngs()
       else:
         dropout_rng = None
     else:
