@@ -23,42 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from flax import nnx
-from flax.nnx.variablelib import is_mutable_array
 
-
-def mutable_like(path, x):
-  return (
-    isinstance(x, nnx.Variable) and x.mutable
-  ) or nnx.variablelib.is_mutable_array(x)
-
-
-def freeze(x, only: nnx.filterlib.Filter = mutable_like):
-  freeze_filter = nnx.filterlib.to_predicate(only)
-  mutable_arrays: set[int] = set()
-
-  def check_mutable_array(path, x):
-    m_array_id = id(x)
-    if m_array_id in mutable_arrays:
-      path_str = jax.tree_util.keystr(path)
-      raise ValueError(
-        f'Found duplicate MutableArray found at path {path_str}: {x}'
-      )
-    mutable_arrays.add(m_array_id)
-
-  def _freeze_fn(jax_path, x):
-    path = tuple(nnx.graph._key_path_to_key(part) for part in jax_path)
-    if freeze_filter(path, x):
-      if isinstance(x, nnx.Variable):
-        check_mutable_array(jax_path, x.raw_value)
-        return x.from_metadata(x[...], x.get_metadata().copy())
-      elif nnx.variablelib.is_mutable_array(x):
-        check_mutable_array(jax_path, x)
-        return x[...]
-    return x
-
-  return jax.tree.map_with_path(
-    _freeze_fn, x, is_leaf=lambda x: isinstance(x, nnx.Variable)
-  )
 
 X = np.linspace(-jnp.pi, jnp.pi, 100)[:, None]
 Y = 0.8 * jnp.sin(X) + 0.1 + np.random.normal(0, 0.1, size=X.shape)
@@ -94,21 +59,21 @@ class MLP(nnx.Module):
 
   def __call__(self, x):
     self.count[...] += 1
-    return self.linear2(jax.nn.gelu(self.linear1(x)) * 0.5)
+    return self.linear2(jax.nn.relu(self.linear1(x)) * 0.5)
 
 
-model = MLP(din=1, dhidden=64, dout=1, rngs=nnx.Rngs(0))
+model = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0))
 
 
 @jax.jit
 def train_step(model, x, y):
-  graphdef, params, counts = nnx.split(model, nnx.Param, Count)
+  graphdef, params, counts = nnx.pure(nnx.split(model, nnx.Param, Count))
 
   def loss_fn(params):
     model = nnx.merge(graphdef, params, counts)
     return jnp.mean((y - model(x)) ** 2)
 
-  grads = jax.grad(loss_fn)(freeze(params))
+  grads = jax.grad(loss_fn)(nnx.freeze(params))
 
   def sgd(w, g):
     w[...] -= 0.1 * g[...]

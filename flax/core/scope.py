@@ -357,7 +357,7 @@ class Variable(Generic[T]):
         value, is_leaf=meta.is_axis_metadata
       )
       has_meta = any(map(meta.is_axis_metadata, cur_struct.flatten_up_to(cur)))
-      if cur_struct == value_struct and has_meta:
+      if cur_struct == value_struct and has_meta: # type: ignore[operator]
         value = meta.replace_boxed(cur, value)
 
     self.scope.put_variable(self.collection, self.name, value)

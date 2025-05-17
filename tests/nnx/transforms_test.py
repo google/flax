@@ -18,13 +18,14 @@ import typing as tp
 
 from absl.testing import absltest
 from absl.testing import parameterized
+import pytest
 from flax import nnx
 from flax.nnx.transforms import general
 import jax
 from jax.experimental import checkify, mesh_utils
 import jax.numpy as jnp
 import numpy as np
-from flax import errors
+from flax import errors, config
 
 
 class List(nnx.Module):
@@ -67,6 +68,21 @@ class TestJIT(absltest.TestCase):
     assert m.a == 2
     assert out == 1.0
 
+  def test_mutable_array_input_output(self):
+    m = nnx.mutable_array(jnp.array(1.0))
+
+    @nnx.jit
+    def f(m: nnx.MutableArray):
+      m[...] += 1.0
+      m2 = nnx.mutable_array(jnp.array(10.0))
+      return m2, m
+
+    m2, m_out = f(m)
+
+    self.assertEqual(m[...], 2.0)
+    self.assertIs(m, m_out)
+    self.assertTrue(nnx.is_mutable_array(m2))
+
   def test_simple_double_call(self):
     n = 0
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
@@ -92,7 +108,9 @@ class TestJIT(absltest.TestCase):
     n = 0
 
     class Foo(nnx.Module):
-      @partial(nnx.jit, static_argnums=(1, 2))
+      __data__ = ('w',)
+
+      @nnx.jit(static_argnums=(1, 2))
       def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
         nonlocal n
         n += 1
@@ -118,6 +136,7 @@ class TestJIT(absltest.TestCase):
     n = 0
 
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
         key = rngs.params()
         self.w = nnx.Param(jax.random.normal(key, shape=(din, dout)))
@@ -148,6 +167,7 @@ class TestJIT(absltest.TestCase):
     n = 0
 
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, *, rngs: nnx.Rngs):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.BatchNorm(2, rngs=rngs)
@@ -202,6 +222,7 @@ class TestJIT(absltest.TestCase):
     n = 0
 
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, *, rngs: nnx.Rngs):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.Linear(2, 2, rngs=rngs)
@@ -232,6 +253,7 @@ class TestJIT(absltest.TestCase):
     n = 0
 
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, *, rngs: nnx.Rngs):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.Linear(2, 2, rngs=rngs)
@@ -264,6 +286,7 @@ class TestJIT(absltest.TestCase):
 
   def test_cached_unflatten_swap_variables(self):
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self):
         self.a = nnx.Param(1)
         self.b = nnx.Param(2)
@@ -285,6 +308,7 @@ class TestJIT(absltest.TestCase):
     n = 0
 
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self):
         self.ref: tp.Optional[Foo] = None  # type: ignore[name-error]
 
@@ -315,6 +339,7 @@ class TestJIT(absltest.TestCase):
     n = 0
 
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self):
         self.ref: tp.Optional[Foo] = None  # type: ignore[name-error]
 
@@ -345,6 +370,10 @@ class TestJIT(absltest.TestCase):
     assert m.ref is m
     assert m2 is m
 
+  @pytest.mark.skipif(
+    config.flax_mutable_array,
+    reason='Mutable arrays are not supported with in_shardings',
+  )
   def test_apply_shardings(self):
     n_devices = max(jax.local_device_count() // 2, 1)
     devices = mesh_utils.create_device_mesh(
@@ -376,6 +405,10 @@ class TestJIT(absltest.TestCase):
 
     self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
 
+  @pytest.mark.skipif(
+    config.flax_mutable_array,
+    reason='Mutable arrays are not supported with cached_partial',
+  )
   def test_cache_args(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
@@ -399,6 +432,8 @@ class TestJIT(absltest.TestCase):
 
   def test_jit_wrapped(self):
     class Foo(nnx.Module):
+      __data__ = ('count',)
+
       def __init__(self, *, rngs: nnx.Rngs):
         self.count = nnx.Variable(jnp.array(0))
 
@@ -1937,6 +1972,7 @@ class TestVmap(absltest.TestCase):
 
   def test_state_axes(self):
     class Block(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
@@ -1993,6 +2029,7 @@ class TestVmap(absltest.TestCase):
 
   def test_split_rngs_context_manager(self):
     class Block(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
@@ -2044,6 +2081,7 @@ class TestVmap(absltest.TestCase):
 
   def test_split_rngs_decorator(self):
     class Block(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
@@ -2095,6 +2133,7 @@ class TestVmap(absltest.TestCase):
 
   def test_state_axes_simple(self):
     class Block(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -2129,6 +2168,7 @@ class TestVmap(absltest.TestCase):
 
   def test_split_rngs_decorator_simple(self):
     class Block(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -2173,6 +2213,7 @@ class TestVmap(absltest.TestCase):
 
   def test_state_axes_super_simple(self):
     class Block(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -2208,6 +2249,7 @@ class TestVmap(absltest.TestCase):
     dout = 10
 
     class Block(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
@@ -2251,6 +2293,7 @@ class TestVmap(absltest.TestCase):
 
   def test_consistent_aliasing_inputs(self):
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((5, 5)))
 
@@ -2265,6 +2308,7 @@ class TestVmap(absltest.TestCase):
 
   def test_consistent_aliasing_input_output(self):
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((2, 3)))
 
@@ -2279,10 +2323,12 @@ class TestVmap(absltest.TestCase):
 
   def test_consistent_aliasing_shared(self):
     class Shared(nnx.Module):
+      __data__ = 'auto'
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((3, 3)))
 
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, shared: Shared):
         self.a = shared
 
@@ -2313,6 +2359,10 @@ class TestVmap(absltest.TestCase):
 
     f(m, m, m)
 
+  @pytest.mark.skipif(
+    config.flax_mutable_array,
+    reason='Flax mutable array does not support in_sharding',
+  )
   def test_equivalent_state_sharding_mapping(self):
     m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
 
@@ -2332,6 +2382,7 @@ class TestVmap(absltest.TestCase):
 
   def test_captured_module_in_return_error(self):
     class Foo(nnx.Module):
+      __data__ = 'auto'
       def __init__(self):
         self.a = jnp.zeros((5, 5))
 
@@ -2354,6 +2405,7 @@ class TestVmap(absltest.TestCase):
     class Vectorized(nnx.Variable[nnx.A]): ...
 
     class Env(nnx.Module):
+      __data__ = 'auto'
       def __init__(self):
         self.broadcast = Broadcast(jnp.array(1))
         self.index = Vectorized(jnp.arange(8))
@@ -2658,7 +2710,7 @@ class TestCond(absltest.TestCase):
             step=nnx.Variable(jnp.array(0)), reward=nnx.Variable(jnp.array(0.0))
         )
 
-    @dataclasses.dataclass
+    @nnx.dataclass
     class Foo(nnx.Object):
       timestep: TimeStep
 
@@ -2712,8 +2764,8 @@ class TestCond(absltest.TestCase):
     self.assertEqual(x.value, 4)
 
   def test_cond_and_vmap(self):
-
     class Env(nnx.Object):
+      __data__ = ('index', 'step')
 
       def __init__(self):
         self.index = nnx.Variable(jnp.arange(8))

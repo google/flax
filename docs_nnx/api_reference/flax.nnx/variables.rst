@@ -8,8 +8,6 @@ variables
    :members:
 .. autoclass:: Cache
    :members:
-.. autoclass:: Empty
-   :members:
 .. autoclass:: Intermediate
    :members:
 .. autoclass:: Param

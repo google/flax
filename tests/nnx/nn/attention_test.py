@@ -14,9 +14,10 @@
 
 import jax, jax.numpy as jnp
 from jax.lax import Precision
+import pytest
 
 from flax import linen
-from flax import nnx
+from flax import nnx, config
 from flax.typing import Dtype, PrecisionLike
 
 import numpy as np
@@ -38,6 +39,10 @@ class TestMultiHeadAttention(parameterized.TestCase):
     y = module(jnp.ones((1, 7, 3)), decode=False)
     assert y.shape == (1, 7, 6)
 
+  @pytest.mark.skipif(
+    config.flax_mutable_array,
+    reason='sow is not supported with flax_mutable_array',
+  )
   def test_multihead_sow_attention_weights(self):
     class Model(nnx.Module):
       attention_kwargs: dict

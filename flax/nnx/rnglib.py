@@ -19,7 +19,7 @@ import typing as tp
 import jax
 import jax.numpy as jnp
 
-from flax import struct
+from flax import errors, struct
 from flax.nnx import graph
 from flax.nnx import statelib
 from flax.nnx import variablelib
@@ -78,23 +78,24 @@ class RngStream(Object):
     self.count = RngCount(count, tag=tag)
 
   def __call__(self) -> jax.Array:
-    self._check_valid_context(
-      lambda: 'Cannot call RngStream from a different trace level'
-    )
+    if not self.count.mutable and not self.count._trace_state.is_valid():
+      raise errors.TraceContextError(
+        f'Cannot mutate {type(self).__name__} from a different trace level'
+      )
     key = jax.random.fold_in(self.key[...], self.count[...])
     self.count[...] += 1
     return key
 
+  def fork(self, *, split: int | tuple[int, ...] | None = None):
+    key = self()
+    if split is not None:
+      key = jax.random.split(key, split)
+    return type(self)(self.tag, key)
+
 
 RngValue = tp.Union[int, jax.Array]
-RngDict = tp.Union[
-  tp.Mapping[str, int],
-  tp.Mapping[str, jax.Array],
-  tp.Mapping[str, RngValue],
-]
 
-
-class Rngs(Object, pytree='all'):
+class Rngs(Object):
   """NNX rng container class. To instantiate the ``Rngs``, pass
   in an integer, specifying the starting seed. ``Rngs`` can have
   different "streams", allowing the user to generate different
@@ -172,10 +173,15 @@ class Rngs(Object, pytree='all'):
     >>> assert_same(x, 0, params=1, dropout=2)
   """
 
+  __data__ = 'all'
+
   def __init__(
-      self,
-      default: RngValue | RngDict | None = None,
-      **rngs: RngValue,
+    self,
+    default: RngValue
+    | RngStream
+    | tp.Mapping[str, RngValue | RngStream]
+    | None = None,
+    **rngs: RngValue | RngStream,
   ):
     """
     Args:
@@ -195,6 +201,8 @@ class Rngs(Object, pytree='all'):
         rngs['default'] = default
 
     for tag, key in rngs.items():
+      if isinstance(key, RngStream):
+        key = key.key.value
       stream = RngStream(
         tag=tag,
         key=key,
@@ -235,6 +243,50 @@ class Rngs(Object, pytree='all'):
   def items(self):
     for name in self:
       yield name, self[name]
+
+  def fork(
+    self,
+    /,
+    *,
+    split: tp.Mapping[filterlib.Filter, int | tuple[int, ...]]
+    | int
+    | None = None,
+  ):
+    """Returns a new Rngs object with new unique RNG keys.
+
+    Example::
+      >>> from flax import nnx
+      ...
+      >>> rngs = nnx.Rngs(params=1, dropout=2)
+      >>> new_rngs = rngs.fork()
+      ...
+      >>> assert rngs.params() != new_rngs.params()
+
+    ``split`` can be used to additionally split the RNG keys
+    of the newly created Rngs object::
+
+      >>> rngs = nnx.Rngs(params=1, dropout=2)
+      >>> new_rngs = rngs.fork(split=5)
+      ...
+      >>> assert new_rngs.params.key.shape == (5,)
+      >>> assert new_rngs.dropout.key.shape == (5,)
+    """
+    if split is None:
+      split = {}
+    elif isinstance(split, int):
+      split = {...: split}
+
+    split_predicates = {filterlib.to_predicate(k): v for k, v in split.items()}
+    keys: dict[str, RngStream] = {}
+    for name, stream in self.items():
+      for predicate, num_splits in split_predicates.items():
+        if predicate((), stream):
+          keys[name] = stream.fork(split=num_splits)
+          break
+      else:
+        keys[name] = stream.fork()
+
+    return Rngs(**keys)
 
 
 class ForkStates(tp.NamedTuple):
@@ -438,7 +490,7 @@ def split_rngs(
       and predicate((*path, 'count'), stream.count)
     ):
       key = stream()
-      backups.append((stream, stream.key.value, stream.count.value))
+      backups.append((stream, stream.key.raw_value, stream.count.raw_value))
       key = jax.random.split(key, splits)
       if squeeze:
         key = key[0]
@@ -466,7 +518,7 @@ def backup_keys(node: tp.Any, /):
   backups: list[StreamBackup] = []
   for _, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
-      backups.append((stream, stream.key.value))
+      backups.append((stream, stream.key.raw_value))
   return backups
 
 
@@ -524,6 +576,6 @@ def reseed(node, /, **stream_keys: RngValue):
 def restore_rngs(backups: tp.Iterable[StreamBackup], /):
   for backup in backups:
     stream = backup[0]
-    stream.key.value = backup[1]  # key
+    stream.key.raw_value = backup[1]
     if len(backup) == 3:
-      stream.count.value = backup[2]  # count
+      stream.count.raw_value = backup[2]  # count

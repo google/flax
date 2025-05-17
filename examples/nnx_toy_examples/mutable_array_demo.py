@@ -17,131 +17,13 @@ import os
 
 os.environ['FLAX_MUTABLE_ARRAY'] = 'true'
 
-from typing import Any, TypeVar
-from collections.abc import Mapping
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from jax._src.core import MutableArray
 
 from flax import nnx
 
-
-# # Utils
-A = TypeVar('A')
-
-def mutable_like(path, x):
-  return (isinstance(x, nnx.Variable) and x.mutable) or nnx.is_mutable_array(x)
-
-
-def freeze(x: A, only: nnx.filterlib.Filter = mutable_like) -> A:
-  freeze_filter = nnx.filterlib.to_predicate(only)
-  mutable_arrays: set[int] = set()
-
-  def check_mutable_array(path, x):
-    m_array_id = id(x)
-    if m_array_id in mutable_arrays:
-      path_str = jax.tree_util.keystr(path)
-      raise ValueError(
-        f'Found duplicate MutableArray found at path {path_str}: {x}'
-      )
-    mutable_arrays.add(m_array_id)
-
-  def _freeze_fn(jax_path, x):
-    path = tuple(nnx.graph._key_path_to_key(part) for part in jax_path)
-    if freeze_filter(path, x):
-      if isinstance(x, nnx.Variable):
-        check_mutable_array(jax_path, x.raw_value)
-        return x.from_metadata(x[...], x.get_metadata().copy())
-      elif nnx.is_mutable_array(x):
-        check_mutable_array(jax_path, x)
-        return x[...]
-    return x
-
-  return jax.tree.map_with_path(
-    _freeze_fn, x, is_leaf=lambda x: isinstance(x, nnx.Variable)
-  )
-
-
-def array_like(path, x):
-  return (
-    isinstance(x, nnx.Variable) and not x.mutable
-  ) or nnx.is_mutable_array(x)
-
-
-def mutable(x: A, only: nnx.filterlib.Filter = array_like) -> A:
-  freeze_filter = nnx.filterlib.to_predicate(only)
-  mutable_arrays: dict[int, Any] = {}
-
-  def get_mutable(x):
-    m_array_id = id(x)
-    if m_array_id in mutable_arrays:
-      return mutable_arrays[m_array_id]
-
-    if isinstance(x, nnx.Variable):
-      assert not x.mutable
-      _mutable = x.from_metadata(
-        nnx.mutable_array(x.raw_value),
-        x.get_metadata().copy(),
-      )
-      mutable_arrays[m_array_id] = _mutable
-      return _mutable
-    elif isinstance(x, jax.Array):
-      _mutable = nnx.mutable_array(x)
-      mutable_arrays[m_array_id] = _mutable
-      return _mutable
-    return x
-
-  def _mutable_fn(jax_path, x):
-    path = tuple(nnx.graph._key_path_to_key(part) for part in jax_path)
-    if freeze_filter(path, x):
-      return get_mutable(x)
-    return x
-
-  return jax.tree.map_with_path(
-    _mutable_fn, x, is_leaf=lambda x: isinstance(x, nnx.Variable)
-  )
-
-def pure(tree: A) -> A:
-  def _pure_fn(x):
-    if isinstance(x, nnx.Variable | nnx.VariableState):
-      return x.raw_value
-    return x
-
-  return jax.tree.map(
-    _pure_fn, tree, is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState)
-  )
-
-def fork_rngs(
-  rngs: nnx.Rngs,
-  /,
-  *,
-  split: Mapping[nnx.filterlib.Filter, int | tuple[int, ...]] | int | None = None,
-):
-  if split is None:
-    split = {}
-  elif isinstance(split, int):
-    split = {...: split}
-
-  split_predicates = {
-    nnx.filterlib.to_predicate(k): v for k, v in split.items()
-  }
-  keys: dict[str, jax.Array] = {}
-  for name, stream in rngs.items():
-    for predicate, num_splits in split_predicates.items():
-      if predicate((), stream):
-        keys[name] = jax.random.split(stream(), num_splits)
-        break
-    else:
-      keys[name] = stream()
-
-  return nnx.Rngs(**keys)
-
-
-def fork_stream(stream: nnx.RngStream):
-  key = stream()
-  return type(stream)(stream.tag, key)
 
 # ## Data
 # We create a simple dataset of points sampled from a parabola with some noise.
@@ -221,11 +103,10 @@ class Block(nnx.Module):
     # ----------- dropout ------------------
     self.dropout_rate = dropout_rate
     self.deterministic = deterministic
-    # 'fork' is used to get a derived frozen stream, this is done
-    # to avoid aliasing MutableArray as as its not supported by JAX
-    self.rng = fork_stream(rngs.dropout)
 
-  def __call__(self, x: jax.Array) -> jax.Array:
+  def __call__(
+    self, x: jax.Array, *, rngs: nnx.Rngs | None = None
+  ) -> jax.Array:
     # ----------- linear --------------------
     x = x @ self.w[...] + self.b[None]
     # ----------- batch norm ----------------
@@ -244,19 +125,13 @@ class Block(nnx.Module):
     x = x * self.scale[...] + self.bias[...]
     # ----------- dropout -------------------
     if not self.deterministic and self.dropout_rate > 0.0:
+      assert rngs is not None
       keep_prob = 1.0 - self.dropout_rate
-      mask = jax.random.bernoulli(self.rng(), keep_prob, x.shape)
+      mask = jax.random.bernoulli(rngs.dropout(), keep_prob, x.shape)
       x = jnp.where(mask, x / keep_prob, jnp.zeros_like(x))
     # ----------- activation ---------------
     x = jax.nn.gelu(x)
     return x
-
-
-# Trivial Variables subclasses are used to easily
-# query state groups. In this case Count will be used to hold
-# non-differentiable state containing the number of times the model
-# is called.
-class Count(nnx.Variable): ...
 
 
 class Model(nnx.Module):
@@ -272,7 +147,7 @@ class Model(nnx.Module):
     use_scan: bool = True,
     rngs: nnx.Rngs,
   ):
-    self.count = Count(jnp.array(0))
+    self.count: nnx.MutableArray = nnx.mutable_array(jnp.array(0))
     self.block_in = Block(din, dhidden, rngs=rngs)
     self.linear_out = Linear(dhidden, dout, rngs=rngs)
 
@@ -283,17 +158,17 @@ class Model(nnx.Module):
 
       @jax.vmap
       def create_block(rngs, /):
-        return freeze(Block(dhidden, dhidden, rngs=rngs))
+        return nnx.freeze(Block(dhidden, dhidden, rngs=rngs))
 
-      self.blocks = mutable(create_block(fork_rngs(rngs, split=num_blocks)))
+      self.blocks = nnx.mutable(create_block(rngs.fork(split=num_blocks)))
     else:
       self.blocks = [
         Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)
       ]
 
-  def __call__(self, x: jax.Array):
+  def __call__(self, x: jax.Array, *, rngs: nnx.Rngs | None = None):
     self.count[...] += 1
-    x = self.block_in(x)
+    x = self.block_in(x, rngs=rngs)
 
     # on the forward pass we either iterate over the block
     # list or use jax.lax.scan to apply the blocks, if we
@@ -301,11 +176,11 @@ class Model(nnx.Module):
     # pass the shared state as a capture
     if isinstance(self.blocks, list):
       for block in self.blocks:
-        x = block(x)
+        x = block(x, rngs=rngs)
     else:
 
       def block_fw(x, block: Block):
-        x = block(x)
+        x = block(x, rngs=rngs)
         return x, None
 
       x, _ = jax.lax.scan(block_fw, x, self.blocks)
@@ -314,8 +189,6 @@ class Model(nnx.Module):
 
 
 # ## Optimizer
-
-
 class OptState(nnx.Variable): ...
 
 
@@ -338,18 +211,22 @@ class SGD(nnx.Object):
         return OptState(jnp.zeros_like(x))
 
     self.momentum = jax.tree.map(
-      make_opt_state, params, is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState)
+      make_opt_state,
+      params,
+      is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState),
     )
 
   # during the update we simply map over (params, momentum, grads),
   # for each triplet we implement the SGD update rule which updates
   # both the optimizer's state (momentum) and the params in place.
   def update(self, params, grads):
-    params = pure(params)
-    grads = pure(grads)
-    momentum = pure(self.momentum)
+    params = nnx.pure(params)
+    grads = nnx.pure(grads)
+    momentum = nnx.pure(self.momentum)
 
-    def update_fn(param: MutableArray, momentum: MutableArray, grad: jax.Array):
+    def update_fn(
+      param: nnx.MutableArray, momentum: nnx.MutableArray, grad: jax.Array
+    ):
       momentum[...] = self.decay * momentum[...] + (1 - self.decay) * grad[...]
       param[...] -= self.lr * momentum[...]
 
@@ -362,13 +239,17 @@ class SGD(nnx.Object):
 # initialization easier, however this means we have to use 'mutable' to
 # create the MutableArrays that will be updated during training.
 
-
+rngs = nnx.Rngs(params=0, dropout=1)
 model = Model(
-  num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=nnx.Rngs(0)
+  num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
 )
 optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
+# Create a copy of the model structure and set its attributes to eval model.
+# This works because they share the underlying MutableArrays so both models
+# will always be in sync.
 eval_model = nnx.merge(*nnx.split(model))
 eval_model.set_attributes(use_stats=True, deterministic=True)
+
 
 # The training step uses 'jax.jit' and receives the model and optimizer as arguments,
 # this is supported as they are now pytrees. The first thing we do is group the model
@@ -377,17 +258,17 @@ eval_model.set_attributes(use_stats=True, deterministic=True)
 # function we merge the params and non-diff state back into a single model and then
 # compute the loss by calling the model with the inputs.
 @jax.jit
-def train_step(model: Model, optimizer: SGD, x, y):
+def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
   treedef, params, nondiff = nnx.split(model, nnx.Param, ...)
 
   def loss_fn(params):
     model = nnx.merge(treedef, params, nondiff)
-    loss = jnp.mean((model(x) - y) ** 2)
+    loss = jnp.mean((model(x, rngs=rngs) - y) ** 2)
     return loss
 
   # For the time being we have to use 'freeze' make the Variables immutable
   # as 'jax.grad' doesn't support MutableArrays yet.
-  grads = jax.grad(loss_fn)(freeze(params))
+  grads = jax.grad(loss_fn)(nnx.freeze(params))
   # 'update' mutates the optimizer's state and the params in place
   # so we don't need to return anything 🚀
   optimizer.update(params, grads)
@@ -402,7 +283,7 @@ def test_step(model: Model, x, y):
 # minimalistic training loop
 total_steps = 10_000
 for step, (x, y) in enumerate(dataset(32)):
-  train_step(model, optimizer, x, y)
+  train_step(model, optimizer, rngs, x, y)
 
   if step % 1000 == 0:
     logs = test_step(eval_model, X, Y)

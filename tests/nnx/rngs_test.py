@@ -59,8 +59,8 @@ class TestRngs(absltest.TestCase):
     @jax.jit
     def f():
       with self.assertRaisesRegex(
-          errors.TraceContextError,
-          'Cannot call RngStream from a different trace level',
+        errors.TraceContextError,
+        'Cannot mutate RngStream from a different trace level',
       ):
         rngs.params()
 
@@ -78,7 +78,7 @@ class TestRngs(absltest.TestCase):
     self.assertIsInstance(rngs1, nnx.Rngs)
     with self.assertRaisesRegex(
       errors.TraceContextError,
-      'Cannot call RngStream from a different trace level',
+      'Cannot mutate RngStream from a different trace level',
     ):
       rngs1.params()
 

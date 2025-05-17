@@ -30,9 +30,9 @@ from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 import jax
 from jax import tree_util as jtu
+from flax import config
 
 M = tp.TypeVar('M', bound=Module)
-
 
 # Flax-like style is NNX
 @dataclasses.dataclass
@@ -87,8 +87,9 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
     _set_initializing(module, False)
   return fn
 
+PYTREE_DEFAULT = 'auto' if config.flax_mutable_array else None
 
-class ToNNX(Module, pytree='auto'):
+class ToNNX(Module):
   """A wrapper to turn any Linen module into an NNX module.
 
   The result NNX module can be used standalone with all NNX APIs, or as a submodule of
@@ -117,6 +118,8 @@ class ToNNX(Module, pytree='auto'):
   Returns:
     A stateful NNX module that behaves the same as the wrapped Linen module.
   """
+
+  __data__ = 'auto'
 
   def __init__(
     self,

@@ -50,6 +50,7 @@ class TestLora(absltest.TestCase):
 
   def test_layer_swap_lora(self):
     class MLP(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, dim, rngs: nnx.Rngs):
         self.linear1 = nnx.Linear(dim, dim, rngs=rngs)
         self.linear2 = nnx.Linear(dim, dim, rngs=rngs)
@@ -75,6 +76,7 @@ class TestLora(absltest.TestCase):
 
   def test_layer_swap_loralinear(self):
     class MLP(nnx.Module):
+      __data__ = 'auto'
       def __init__(self, dim, rngs: nnx.Rngs):
         self.linear1 = nnx.Linear(dim, dim, rngs=rngs)
         self.linear2 = nnx.Linear(dim, dim, rngs=rngs)
