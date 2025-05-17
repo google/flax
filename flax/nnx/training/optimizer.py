@@ -20,7 +20,7 @@ import jax.numpy as jnp
 import optax
 
 from flax import nnx
-from flax.nnx import filterlib, graph
+from flax.nnx import filterlib
 from flax.nnx.object import Object
 from flax.nnx.variablelib import Variable, VariableState
 
@@ -30,19 +30,19 @@ M = tp.TypeVar('M', bound=nnx.Module)
 
 
 class OptState(Variable):
-  """Holds any optimizer state."""
+  """Any optimizer state"""
 
   pass
 
 
 class OptArray(OptState):
-  """Holds an array of optimizer state."""
+  """Optimizer state for an array."""
 
   pass
 
 
 class OptVariable(OptState):
-  """Holds Variable state."""
+  """Optimizer state for a Variable."""
 
   source_type: type[Variable]
   pass
@@ -202,7 +202,9 @@ class Optimizer(Object, tp.Generic[M]):
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.model = model
     self.tx = tx
-    self.opt_state = _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
+    self.opt_state = nnx.data(
+      _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
+    )
     self.wrt = wrt
 
   def update(self, grads, **kwargs):
@@ -292,10 +294,20 @@ def to_opt_state(tree):
   return tree
 
 
-class OptaxOptimizer(Object):
-  """Stateful wrapper around an Optax optimizer.
+class PytreeOptimizer(Object):
+  """Optimizes any pytree of Variables or MutableArrays using Optax.
 
-  Example usage::
+  Optimizer takes a ``params`` pytree of Variables or MutableArrays and an Optax
+  gradient transformation ``tx``. Internally it stores the optimizer state ``opt_state``
+  as defined by Optax but replaces the leaves with ``OptState`` Variables, for Variable leaves
+  all the metadata is copied over to the new Variable. The ``update`` method takes in the ``params``
+  pytree and the gradients pytree ``grads``, and updates the ``params`` and ``opt_state``
+  in place. ``PytreeOptimizer`` also keeps track of the step count in ``step`` which is
+  also an ``OptState`` Variable.
+
+  In the following example ``nnx.state`` and ``nnx.split`` are used with a
+  ``nnx.Param`` filter to showcase how to only optimize the parameters of
+  a model::
 
     >>> from flax import config
     >>> if not config.flax_mutable_array:
@@ -308,7 +320,6 @@ class OptaxOptimizer(Object):
     >>> import optax
     ...
     >>> class Model(nnx.Module):
-    ...   __data__ = ('linear1', 'linear2', 'bn')
     ...   def __init__(self, rngs):
     ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
     ...     self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -320,7 +331,7 @@ class OptaxOptimizer(Object):
     >>> y = jnp.ones((5, 4))
     ...
     >>> model = Model(nnx.Rngs(1))
-    >>> optimizer = nnx.OptaxOptimizer(nnx.state(model, nnx.Param), tx=optax.adam(1e-3))
+    >>> optimizer = nnx.PytreeOptimizer(nnx.state(model, nnx.Param), tx=optax.adam(1e-3))
     ...
     >>> @jax.jit
     ... def train_step(model, optimizer, x, y):
@@ -336,22 +347,27 @@ class OptaxOptimizer(Object):
     >>> loss = train_step(model, optimizer, x, y)
     >>> loss
     Array(1.2029127, dtype=float32)
+    >>> optimizer.step.value
+    Array(1, dtype=uint32)
+
+  The key is to make sure that the ``params`` structure passed to
+  ``PytreeOptimizer`` matches the ``params`` and ``grads`` structures
+  passed to the ``update`` method.
 
   Args:
     params: The parameters to be optimized.
     tx: An optax gradient transformation.
   """
-  __nodes__ = ('step', 'opt_state')
 
   def __init__(self, params, tx: optax.GradientTransformation):
     self.tx = tx
     self.step = OptArray(jnp.array(0, dtype=jnp.uint32))
-    self.opt_state = to_opt_state(tx.init(params))
+    self.opt_state = nnx.data(to_opt_state(tx.init(nnx.freeze(params))))
 
   def update(self, params, grads, **kwargs):
-    param_arrays = graph.freeze(graph.pure(params))
-    grad_arrays = graph.freeze(graph.pure(grads))
-    opt_state_arrays = graph.freeze(graph.pure(self.opt_state))
+    param_arrays = nnx.freeze(nnx.pure(params))
+    grad_arrays = nnx.freeze(nnx.pure(grads))
+    opt_state_arrays = nnx.freeze(nnx.pure(self.opt_state))
 
     updates, new_opt_state = self.tx.update(
       grad_arrays, opt_state_arrays, param_arrays, **kwargs

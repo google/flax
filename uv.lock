@@ -825,8 +825,8 @@ requires-dist = [
     { name = "cloudpickle", marker = "extra == 'testing'", specifier = ">=3.0.0" },
     { name = "clu", marker = "python_full_version < '3.10' and extra == 'testing'", specifier = "<=0.0.9" },
     { name = "clu", marker = "extra == 'testing'" },
-    { name = "dm-haiku", marker = "extra == 'docs'" },
-    { name = "docutils", marker = "extra == 'docs'" },
+    { name = "dm-haiku", marker = "extra == 'docs'", specifier = ">=0.0.14" },
+    { name = "docutils", marker = "extra == 'docs'", specifier = "==0.16" },
     { name = "einops", marker = "extra == 'docs'" },
     { name = "einops", marker = "extra == 'testing'" },
     { name = "gymnasium", extras = ["accept-rom-license", "atari"], marker = "extra == 'testing'" },
@@ -2520,7 +2520,7 @@ wheels = [
 
 [[package]]
 name = "orbax-checkpoint"
-version = "0.11.13"
+version = "0.11.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
@@ -2536,9 +2536,9 @@ dependencies = [
     { name = "tensorstore" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/cb/e122160888cb922caabfd67582d402e6202fc7383c64f2e05a81727cef6a/orbax_checkpoint-0.11.13.tar.gz", hash = "sha256:6ce6f4458d0755a7ae556d4da3b2e3a943d4a830aeec2f98881643f1997e11bc", size = 316151 }
+sdist = { url = "https://files.pythonhosted.org/packages/08/e3/c16be24e4f70fab99586a31a918a124a0cbd4e852e7344399dfd9ead2003/orbax_checkpoint-0.11.15.tar.gz", hash = "sha256:b602787715200de22a5b29a493cfa6e09c951697bee5e3df36509b62f01c87d8", size = 338039 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/57/700709ca012b8595230dd2a004fbe284a57e6838f966d58c956d4529a2db/orbax_checkpoint-0.11.13-py3-none-any.whl", hash = "sha256:096eb6f475857d7aa73235989cdfe5d34c425628d24be881686dfbc3b566f495", size = 442700 },
+    { url = "https://files.pythonhosted.org/packages/c2/fd/94b37f1233f7f09d8f03712d6cfad3d3bcb752d22e845d9fe3eb075f1347/orbax_checkpoint-0.11.15-py3-none-any.whl", hash = "sha256:1c6ed79e398588a2fd592ad5e017d9aff8915fe83e8b2d7146daa78576c3bb05", size = 477501 },
 ]
 
 [[package]]

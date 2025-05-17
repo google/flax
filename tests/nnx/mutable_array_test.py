@@ -29,7 +29,20 @@ import pytest
 class TestObject(absltest.TestCase):
   def test_pytree(self):
     class Foo(nnx.Module):
-      __data__ = ('node',)
+      def __init__(self):
+        self.node = jnp.array(1)
+        self.meta = 1
+
+    m = Foo()
+
+    m = jax.tree.map(lambda x: x + 1, m)
+
+    assert m.node == 2
+    assert m.meta == 1
+
+  def test_pytree_data_typehint(self):
+    class Foo(nnx.Module):
+      node: nnx.Data[jax.Array]
 
       def __init__(self):
         self.node = jnp.array(1)
@@ -42,15 +55,28 @@ class TestObject(absltest.TestCase):
     assert m.node == 2
     assert m.meta == 1
 
-  def test_pytree_dataclass(self):
-    @nnx.dataclass
+  def test_pytree_data_instance(self):
     class Foo(nnx.Module):
-      node: jax.Array
-      meta: nnx.Static[int]
-      meta2: int = nnx.static(default=3)
-      meta3: int = nnx.field(default=4, static=True)
-      meta4: int = dataclasses.field(default=5, metadata={'static': True})
-      node2: jax.Array = nnx.field(default=6)
+      def __init__(self):
+        self.node = nnx.data(jnp.array(1))
+        self.meta = 1
+
+    m = Foo()
+
+    m = jax.tree.map(lambda x: x + 1, m)
+
+    assert m.node == 2
+    assert m.meta == 1
+
+  def test_pytree_dataclass(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      node: nnx.Data[jax.Array]
+      meta: int
+      meta2: int = 3
+      meta3: int = 4
+      meta4: int = 5
+      node2: nnx.Data[int] = 6
 
     m = Foo(node=jnp.array(1), meta=1)
 
@@ -63,6 +89,33 @@ class TestObject(absltest.TestCase):
     assert m.meta3 == 4
     assert m.meta4 == 5
     assert m.node2 == 7
+
+  def test_data_example(self):
+    class Foo(nnx.Object):
+      def __init__(self):
+        self.data_attr = nnx.data(42)  # pytree data
+        self.static_attr = 'hello'  # static attribute
+
+    foo = Foo()
+
+    self.assertEqual(jax.tree.leaves(foo), [42])
+
+  def test_register_data_type(self):
+    @dataclasses.dataclass(frozen=True)
+    class MyType:
+      value: int
+
+    nnx.register_data_type(MyType)
+
+    class Foo(nnx.Object):
+      def __init__(self, a):
+        self.a = MyType(a)  # Automatically registered as data
+        self.b = 'hello'  # str not registered as data
+
+    foo = Foo(42)
+
+    self.assertTrue(nnx.is_data_type(foo.a))
+    self.assertEqual(jax.tree.leaves(foo), [MyType(value=42)])
 
 
 @pytest.mark.skipif(
@@ -81,8 +134,6 @@ class TestMutableArrayGraph(absltest.TestCase):
 
   def test_freeze_and_mutable(self):
     class Foo(nnx.Module):
-      __data__ = ('a',)
-
       def __init__(self):
         self.a = nnx.Param(1)
 
@@ -100,8 +151,6 @@ class TestMutableArrayGraph(absltest.TestCase):
 
   def test_freeze_and_mutable_with_filter(self):
     class Foo(nnx.Module):
-      __data__ = ('a', 'b')
-
       def __init__(self):
         self.a = nnx.Param(1)
         self.b = nnx.BatchStat(2)
@@ -123,8 +172,6 @@ class TestMutableArrayGraph(absltest.TestCase):
 
   def test_freeze_duplicate_error(self):
     class Foo(nnx.Module):
-      __data__ = ('a', 'b')
-
       def __init__(self):
         self.a = nnx.mutable_array(1)
         self.b = self.a
@@ -136,8 +183,6 @@ class TestMutableArrayGraph(absltest.TestCase):
 
   def test_mutable_array_split(self):
     class Foo(nnx.Module):
-      __data__ = ('a', 'b')
-
       def __init__(self):
         self.a = nnx.mutable_array(1)
         self.b = self.a
@@ -155,8 +200,6 @@ class TestMutableArrayGraph(absltest.TestCase):
 
   def test_mutable_array_split_merge_in_variable(self):
     class Foo(nnx.Module):
-      __data__ = ('a', 'b')
-
       def __init__(self):
         self.a = nnx.Param(nnx.mutable_array(1))
         self.b = self.a
@@ -174,8 +217,6 @@ class TestMutableArrayGraph(absltest.TestCase):
 
   def test_mutable_array_split_merge_in_variable_shared_array(self):
     class Foo(nnx.Module):
-      __data__ = ('a', 'b')
-
       def __init__(self):
         m_array = nnx.mutable_array(1)
         self.a = nnx.Param(m_array)
@@ -201,8 +242,6 @@ class TestMutableArrayGraph(absltest.TestCase):
 
   def test_mutable_array_split_freeze(self):
     class Foo(nnx.Module):
-      __data__ = ('a', 'b')
-
       def __init__(self):
         self.a = nnx.mutable_array(1)
         self.b = self.a
@@ -425,9 +464,9 @@ class TestMutableArrayNNXTransforms(absltest.TestCase):
     self.assertTrue(nnx.is_mutable_array(m_out2.kernel.raw_value))
 
   def test_jit_mutable(self):
-    @nnx.dataclass
+    @dataclasses.dataclass
     class Foo(nnx.Object):
-      a: nnx.MutableArray
+      a: nnx.Data[nnx.MutableArray]
 
     m1 = Foo(a=nnx.mutable_array(1))
 
@@ -480,8 +519,6 @@ class TestMutableArray(absltest.TestCase):
 
   def test_object(self):
     class Params(nnx.Object):
-      __data__ = ('w', 'b', 'count')
-
       def __init__(self, din: int, dout: int):
         self.w = nnx.Param(jnp.zeros((din, dout), jnp.float32))
         self.b = nnx.Param(jnp.zeros((dout,), jnp.float32))
@@ -536,12 +573,10 @@ class TestMutableArray(absltest.TestCase):
 
   def test_object_state(self):
     class Params(nnx.Object):
-      __data__ = ('w', 'b', 'count')
-
       def __init__(self, din: int, dout: int):
         self.w = jnp.zeros((din, dout), jnp.float32)
         self.b = jnp.zeros((dout,), jnp.float32)
-        self.count = 0
+        self.count = nnx.data(0)
 
     params = Params(3, 4)
 
@@ -594,11 +629,9 @@ class TestMutableArray(absltest.TestCase):
 @pytest.mark.skipif(
   not config.flax_mutable_array, reason='MutableArray not enabled'
 )
-class TestOptaxOptimizer(absltest.TestCase):
-  def test_optax_optimizer(self):
+class TestPytreeOptimizer(absltest.TestCase):
+  def test_pytree_optimizer(self):
     class Model(nnx.Module):
-      __data__ = ('linear1', 'linear2', 'bn')
-
       def __init__(self, rngs):
         self.linear1 = nnx.Linear(2, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -611,7 +644,7 @@ class TestOptaxOptimizer(absltest.TestCase):
     y = jnp.ones((5, 4))
 
     model = Model(nnx.Rngs(1))
-    optimizer = nnx.OptaxOptimizer(
+    optimizer = nnx.PytreeOptimizer(
       nnx.state(model, nnx.Param), tx=optax.adam(1e-3)
     )
 

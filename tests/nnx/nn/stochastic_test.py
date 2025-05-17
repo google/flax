@@ -26,7 +26,7 @@ class TestStochastic:
     n = 0
     m1 = nnx.Dropout(rate=0.5, deterministic=False, rngs=nnx.Rngs(dropout=0))
     m2 = nnx.Dropout(rate=0.5, deterministic=False)
-    rngs2 = nnx.Rngs(dropout=0)
+    rngs2 = nnx.Rngs(dropout=0).fork()
 
     @nnx.jit
     def f(m, x, rngs=None):
@@ -35,18 +35,18 @@ class TestStochastic:
       return m(x, rngs=rngs)
 
     x = jnp.ones((1, 10))
-    assert m1.rngs is not None and m1.rngs.dropout.count.value == 0
+    assert m1.rngs is not None and m1.rngs.count.value == 0
 
     y1 = f(m1, x)
     assert n == 1
-    assert m1.rngs.dropout.count.value == 1
+    assert m1.rngs.count.value == 1
     y2 = f(m2, x, rngs=rngs2)
     assert n == 2
     assert rngs2.dropout.count.value == 1
     np.testing.assert_allclose(y1, y2)
 
     y1 = f(m1, x)
-    assert m1.rngs.dropout.count.value == 2
+    assert m1.rngs.count.value == 2
     y2 = f(m2, x, rngs=rngs2)
     assert rngs2.dropout.count.value == 2
     np.testing.assert_allclose(y1, y2)
@@ -63,7 +63,7 @@ class TestStochastic:
     with pytest.raises(AssertionError):
       np.testing.assert_allclose(y1, y2)
 
-    y2 = m2(x, rngs=nnx.Rngs(dropout=0))
+    y2 = m2(x, rngs=nnx.Rngs(dropout=0).fork())
     np.testing.assert_allclose(y1, y2)
 
   def test_dropout_arg_override(self):

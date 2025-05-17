@@ -120,13 +120,13 @@ class TestMultiHeadAttention(parameterized.TestCase):
       keep_rngs=keep_rngs
     )
     if keep_rngs:
-      assert module.rngs == rngs
+      assert module.rngs is not None
     else:
       assert module.rngs is None
     if keep_rngs:
       _, _, nondiff = nnx.split(module, nnx.Param, ...)
-      assert nondiff["rngs"]["default"]["count"].type is nnx.RngCount
-      assert nondiff["rngs"]["default"]["key"].type is nnx.RngKey
+      assert nondiff['rngs']['count'].type is nnx.RngCount
+      assert nondiff['rngs']['key'].type is nnx.RngKey
     else:
       nnx.split(module, nnx.Param)
 

@@ -264,8 +264,6 @@ class BatchNorm(Module):
     rngs: rng key.
   """
 
-  __data__ = ('mean', 'var', 'scale', 'bias')
-
   def __init__(
     self,
     num_features: int,
@@ -367,10 +365,10 @@ class BatchNorm(Module):
         stop_gradient = lambda x: x
 
       self.mean[...] = stop_gradient(
-        self.momentum * self.mean.value + (1 - self.momentum) * mean
+        self.momentum * self.mean[...] + (1 - self.momentum) * mean
       )
       self.var[...] = stop_gradient(
-        self.momentum * self.var.value + (1 - self.momentum) * var
+        self.momentum * self.var[...] + (1 - self.momentum) * var
       )
 
     return _normalize(
@@ -442,8 +440,6 @@ class LayerNorm(Module):
         calculation for the variance.
     rngs: rng key.
   """
-
-  __data__ = ('scale', 'bias')
 
   def __init__(
     self,
@@ -577,8 +573,6 @@ class RMSNorm(Module):
     rngs: rng key.
   """
 
-  __data__ = ('scale',)
-
   def __init__(
     self,
     num_features: int,
@@ -647,6 +641,7 @@ class RMSNorm(Module):
       self.dtype,
       self.epsilon,
     )
+
 
 class GroupNorm(Module):
   """Group normalization (arxiv.org/abs/1803.08494).
@@ -721,8 +716,6 @@ class GroupNorm(Module):
       calculation for the variance.
     rngs: rng key.
   """
-
-  __data__ = ('scale', 'bias')
 
   def __init__(
     self,
