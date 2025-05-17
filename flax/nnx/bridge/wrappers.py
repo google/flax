@@ -31,7 +31,6 @@ from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 import jax
 from jax import tree_util as jtu
-from flax import config
 
 M = tp.TypeVar('M', bound=Module)
 
@@ -88,9 +87,7 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
     _set_initializing(module, False)
   return fn
 
-PYTREE_DEFAULT = 'auto' if config.flax_mutable_array else None
-
-class ToNNX(Module):
+class ToNNX(Module, pytree=False):
   """A wrapper to turn any Linen module into an NNX module.
 
   The result NNX module can be used standalone with all NNX APIs, or as a submodule of
@@ -119,8 +116,6 @@ class ToNNX(Module):
   Returns:
     A stateful NNX module that behaves the same as the wrapped Linen module.
   """
-
-  __data__ = 'auto'
 
   def __init__(
     self,
@@ -166,8 +161,11 @@ class ToNNX(Module):
         setattr(self, attr_name, value)
 
     else:
-      nnx_attrs = {k: v for k, v in vars(self).items()
-                   if k not in ['module', 'rngs', '_object__state']}
+      nnx_attrs = {
+        k: v
+        for k, v in vars(self).items()
+        if k not in ['module', 'rngs'] and not k.startswith('_object__')
+      }
       variables = bv.nnx_attrs_to_linen_vars(nnx_attrs)
 
       _rngs = (

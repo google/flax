@@ -425,12 +425,16 @@ class Variable(tp.Generic[A], reprlib.Representable):
     if config.flax_mutable_array:
       self.raw_value[key] = value  # type: ignore
     else:
-      if not is_mutable_array(self.raw_value):
-        if not self._trace_state.is_valid():
-          raise errors.TraceContextError(
-            f'Cannot mutate {type(self).__name__} from a different trace level'
-          )
-      if isinstance(self.raw_value, jax.Array):
+      if (
+        not is_mutable_array(self.raw_value)
+        and not self._trace_state.is_valid()
+      ):
+        raise errors.TraceContextError(
+          f'Cannot mutate {type(self).__name__} from a different trace level'
+        )
+      if key == ...:
+        self.value = value
+      elif isinstance(self.raw_value, jax.Array):
         self.raw_value = self.raw_value.at[key].set(value)  # type: ignore
       else:
         self.raw_value[key] = value  # type: ignore
@@ -1295,8 +1299,10 @@ def register_variable_name(
     return partial(register_variable_name, name, overwrite=overwrite)
   typ = tp.cast(type[Variable[A]], typ)
   if not overwrite and name in VariableTypeCache:
-    raise ValueError(f'Name {name} already mapped to type {VariableTypeCache[name]}. '
-                     'To overwrite, call set_variable_name() with `overwrite=True`.')
+    raise ValueError(
+      f'Name {name} already mapped to type {VariableTypeCache[name]}. '
+      'To overwrite, call register_variable_name() with `overwrite=True`.'
+    )
   VariableTypeCache[name] = typ
   return typ
 
