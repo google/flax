@@ -31,7 +31,6 @@ from .graph import GraphDef as GraphDef
 from .graph import GraphState as GraphState
 from .graph import PureState as PureState
 from .object import Object as Object
-from .helpers import Dict as Dict
 from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
@@ -139,7 +138,7 @@ from .training import optimizer as optimizer
 from .training.metrics import Metric as Metric
 from .training.metrics import MultiMetric as MultiMetric
 from .training.optimizer import Optimizer as Optimizer
-from .training.optimizer import OptaxOptimizer as OptaxOptimizer
+from .training.optimizer import MutableArrayOptimizer as MutableArrayOptimizer
 from .transforms.autodiff import DiffState as DiffState
 from .transforms.autodiff import grad as grad
 from .transforms.autodiff import value_and_grad as value_and_grad
