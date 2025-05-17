@@ -202,7 +202,9 @@ class Optimizer(Object, tp.Generic[M]):
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.model = model
     self.tx = tx
-    self.opt_state = _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
+    self.opt_state = nnx.data(
+      _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
+    )
     self.wrt = wrt
 
   def update(self, grads, **kwargs):
@@ -292,7 +294,7 @@ def to_opt_state(tree):
   return tree
 
 
-class OptaxOptimizer(Object):
+class MutableArrayOptimizer(Object):
   """Stateful wrapper around an Optax optimizer.
 
   Example usage::
@@ -308,7 +310,6 @@ class OptaxOptimizer(Object):
     >>> import optax
     ...
     >>> class Model(nnx.Module):
-    ...   __data__ = ('linear1', 'linear2', 'bn')
     ...   def __init__(self, rngs):
     ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
     ...     self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -320,7 +321,7 @@ class OptaxOptimizer(Object):
     >>> y = jnp.ones((5, 4))
     ...
     >>> model = Model(nnx.Rngs(1))
-    >>> optimizer = nnx.OptaxOptimizer(nnx.state(model, nnx.Param), tx=optax.adam(1e-3))
+    >>> optimizer = nnx.MutableArrayOptimizer(nnx.state(model, nnx.Param), tx=optax.adam(1e-3))
     ...
     >>> @jax.jit
     ... def train_step(model, optimizer, x, y):
@@ -341,12 +342,11 @@ class OptaxOptimizer(Object):
     params: The parameters to be optimized.
     tx: An optax gradient transformation.
   """
-  __nodes__ = ('step', 'opt_state')
 
   def __init__(self, params, tx: optax.GradientTransformation):
     self.tx = tx
     self.step = OptArray(jnp.array(0, dtype=jnp.uint32))
-    self.opt_state = to_opt_state(tx.init(params))
+    self.opt_state = nnx.data(to_opt_state(tx.init(params)))
 
   def update(self, params, grads, **kwargs):
     param_arrays = graph.freeze(graph.pure(params))
