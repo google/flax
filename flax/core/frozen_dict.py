@@ -323,7 +323,13 @@ def pretty_repr(x: Any, num_spaces: int = 4) -> str:
 
 
 def _frozen_dict_state_dict(xs):
-  return {key: serialization.to_state_dict(value) for key, value in xs.items()}
+  str_keys = {str(k) for k in xs.keys()}
+  if len(str_keys) != len(xs):
+    raise ValueError(
+      'Dict keys do not have a unique string representation: '
+      f'{str_keys} vs given: {xs}'
+    )
+  return {str(key): serialization.to_state_dict(value) for key, value in xs.items()}
 
 
 def _restore_frozen_dict(xs, states):
@@ -337,7 +343,7 @@ def _restore_frozen_dict(xs, states):
 
   return FrozenDict(
     {
-      key: serialization.from_state_dict(value, states[key], name=key)
+      key: serialization.from_state_dict(value, states[str(key)], name=key)
       for key, value in xs.items()
     }
   )
