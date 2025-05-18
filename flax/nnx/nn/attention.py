@@ -440,7 +440,7 @@ class MultiHeadAttention(Module):
       dot_general_cls=self.out_dot_general_cls,
       rngs=rngs,
     )
-    self.rngs = rngs if keep_rngs and dropout_rate > 0 else None
+    self.rngs = rngs.fork() if keep_rngs and dropout_rate > 0 else None
 
     self.cached_key: nnx.Cache[Array] | None = None
     self.cached_value: nnx.Cache[Array] | None = None
@@ -454,7 +454,7 @@ class MultiHeadAttention(Module):
     *,
     mask: Array | None = None,
     deterministic: bool | None = None,
-    rngs: rnglib.Rngs | None = None,
+    rngs: rnglib.Rngs | jax.Array | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
   ):
@@ -493,6 +493,8 @@ class MultiHeadAttention(Module):
     """
     if rngs is None:
       rngs = self.rngs
+    elif isinstance(rngs, jax.Array):
+      rngs = rnglib.Rngs(rngs)
 
     if inputs_k is None:
       if inputs_v is not None:
