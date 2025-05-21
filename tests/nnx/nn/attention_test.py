@@ -199,5 +199,32 @@ class TestLinenConsistency(parameterized.TestCase):
     np.testing.assert_array_equal(out, out_nnx)
 
 
+class TestKVFeatures(parameterized.TestCase):
+
+  def test_varying_num_features(self):
+    key = jax.random.key(42)
+    rngs = nnx.Rngs(42)
+
+    num_heads = 2
+    in_features = 3
+    in_kv_features = 4
+    qkv_features = 6
+    out_features = 6
+
+    x = jax.numpy.ones((1, in_features))
+    y = jax.random.normal(key, (1, in_kv_features))
+    layer = nnx.MultiHeadAttention(
+      num_heads=num_heads,
+      in_features=in_features,
+      qkv_features=qkv_features,
+      out_features=out_features,
+      in_kv_features=in_kv_features,
+      rngs=rngs,
+      decode=False
+    )
+
+    self.assertIsNotNone(layer(x, y))
+
+
 if __name__ == '__main__':
   absltest.main()
