@@ -122,8 +122,8 @@ if $RUN_PYTEST; then
   echo "pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE"
   pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
   # Run nnx tests
-  pytest -n auto flax/nnx/tests $PYTEST_OPTS $PYTEST_IGNORE
   pytest -n auto docs/_ext/codediff_test.py $PYTEST_OPTS $PYTEST_IGNORE
+  pytest -n auto docs_nnx/_ext/codediff_test.py $PYTEST_OPTS $PYTEST_IGNORE
 
   # Per-example tests.
   #
