@@ -316,7 +316,7 @@ In this section we will cover some rules and limitations apply when using Module
 
 While Python allows for passing objects as closures to functions, this is generally not supported by Flax NNX transforms. The reason is that because Modules are mutable it is very easy to capture tracer into a Module created outside of the transform, this is silent error in JAX. To avoid this, Flax NNX checks that the Modules and Variables being mutated are passed as arguments to the transformed function.
 
-For example, if we have stateful Module such as `Counter` that increments a counter every time it is called, and we try to pass it as a closure to a function decorated with `nnx.jit`, we would be leaking the tracer. However Flax NNX will raise an error instead to prevent this:
+For example, if we have a stateful Module such as `Counter` that increments a counter every time it is called, and we try to pass it as a closure to a function decorated with `nnx.jit`, we would be leaking the tracer. However Flax NNX will raise an error instead to prevent this:
 
 ```{code-cell} ipython3
 class Counter(nnx.Module):
