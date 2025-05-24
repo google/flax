@@ -292,6 +292,7 @@ class EncoderDecoder1DBlock(nnx.Module):
       broadcast_dropout=False,
       dropout_rate=config.attention_dropout_rate,
       rngs=rngs,
+      keep_rngs=False,
     )
     self.mlp = MlpBlock(config=config, rngs=rngs)
     self.dropout = nnx.Dropout(rate=config.dropout_rate)
