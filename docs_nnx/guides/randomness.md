@@ -80,12 +80,13 @@ Below is a simple example of a model that uses `params` and `dropout` PRNG key s
 
 ```{code-cell} ipython3
 class Model(nnx.Module):
+  __data__ = ('linear', 'dropout')
   def __init__(self, rngs: nnx.Rngs):
     self.linear = nnx.Linear(20, 10, rngs=rngs)
-    self.drop = nnx.Dropout(0.1, rngs=rngs)
+    self.dropout = nnx.Dropout(0.1, rngs=rngs)
 
   def __call__(self, x):
-    return nnx.relu(self.drop(self.linear(x)))
+    return nnx.relu(self.dropout(self.linear(x)))
 
 model = Model(nnx.Rngs(params=0, dropout=1))
 
