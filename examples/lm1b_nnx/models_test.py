@@ -34,7 +34,8 @@ from utils import HasCache
 jax.config.update('jax_disable_most_optimizations', True)
 
 # add project_root to import lm1b Linen model
-project_root = str(Path(__file__).absolute().parents[4])
+# "/path/to/flax/examples/lm1b_nnx/models_test.py" -> "/path/to/flax"
+project_root = str(Path(__file__).absolute().parents[2])
 sys.path.append(project_root)
 from examples.lm1b.models import TransformerLM as TransformerLinen  # type: ignore[import-error]
 
