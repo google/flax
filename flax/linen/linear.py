@@ -205,6 +205,7 @@ class DenseGeneral(Module):
     # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if self.use_bias:
       # expand bias shape to broadcast bias over batch dims.
+      assert bias is not None
       bias = jnp.reshape(bias, expanded_batch_shape + features)
       out += bias
     return out

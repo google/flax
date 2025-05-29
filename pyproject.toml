@@ -67,7 +67,7 @@ testing = [
     "ale-py>=0.10.2",
 ]
 docs = [
-    "sphinx>=3.3.1",
+    "sphinx>=4.3.0",
     "sphinx-book-theme",
     "Pygments>=2.6.1",
     "ipykernel",
@@ -78,9 +78,7 @@ docs = [
     "sphinx-design",
     "jupytext==1.13.8",
     "dm-haiku",
-    # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
-    # ReadTheDocs: https://stackoverflow.com/a/68008428
-    "docutils==0.16",
+    "docutils",
     # The next packages are for notebooks.
     "matplotlib",
     "scikit-learn",
