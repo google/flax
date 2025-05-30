@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import dataclasses
+from functools import partial
 import typing as tp
 from typing import Any
 
@@ -132,6 +133,16 @@ class ToNNX(Module):
   def lazy_init(self, *args, **kwargs):
     """A shortcut of calling `nnx.bridge.lazy_init()` upon this module."""
     return lazy_init(self, *args, **kwargs)
+
+  def __getattr__(self, name: str):
+    if hasattr(super(), name):
+      return super().__getattribute__(name)
+    maybe_method = getattr(self.module.__class__, name, None)
+    if callable(maybe_method):
+      method = partial(self.__call__, method=maybe_method)
+      method.__self__ = self
+      return method
+    return super().__getattribute__(name)
 
   def __call__(
     self, *args: Any, rngs: tp.Optional[Rngs] = None,
