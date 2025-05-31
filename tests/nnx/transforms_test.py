@@ -1603,7 +1603,6 @@ class TestScan(absltest.TestCase):
         self.dropout = nnx.Dropout(0.5, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.split_rngs(splits=5)
       @nnx.scan(in_axes=(state_axes, nnx.Carry))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
@@ -1670,7 +1669,6 @@ class TestScan(absltest.TestCase):
         self.dropout = nnx.Dropout(0.5, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.split_rngs(splits=5)
       @nnx.scan(in_axes=(state_axes, nnx.Carry))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
@@ -1973,6 +1971,7 @@ class TestVmap(absltest.TestCase):
   def test_state_axes(self):
     class Block(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
@@ -2030,6 +2029,7 @@ class TestVmap(absltest.TestCase):
   def test_split_rngs_context_manager(self):
     class Block(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
@@ -2049,8 +2049,7 @@ class TestVmap(absltest.TestCase):
     rngs = nnx.Rngs(0)
     initial_key = rngs.default.key.value
 
-    with nnx.split_rngs(rngs, splits=5):
-      module = create_block(rngs)
+    module = create_block(rngs.fork(split=5))
 
     assert rngs.default.count.value == 1
     assert rngs.default.key.value == initial_key
@@ -2067,21 +2066,19 @@ class TestVmap(absltest.TestCase):
     def forward_block(module, x):
       return module(x)
 
-    with nnx.split_rngs(module, splits=5):
-      y = forward_block(module, x)
+    y = forward_block(module, x)
 
     assert y.shape == (5, 1, 3)
-    assert rngs.default.count.value == 2
     assert rngs.default.key.value == initial_key
 
-    with nnx.split_rngs(module, splits=5):
-      y2 = forward_block(module, x)
+    y2 = forward_block(module, x)
 
     assert not jnp.allclose(y, y2)
 
   def test_split_rngs_decorator(self):
     class Block(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
@@ -2115,7 +2112,6 @@ class TestVmap(absltest.TestCase):
 
     x = jnp.ones((5, 1, 3))
 
-    @nnx.split_rngs(splits=5)
     @nnx.vmap(in_axes=(state_axes, 0))
     def forward_block(module, x):
       self.assertEqual(x.shape, (1, 3))
@@ -2124,7 +2120,6 @@ class TestVmap(absltest.TestCase):
     y = forward_block(module, x)
 
     assert y.shape == (5, 1, 3)
-    assert rngs.default.count.value == 2
     assert rngs.default.key.value == initial_key
 
     y2 = forward_block(module, x)
@@ -2134,6 +2129,7 @@ class TestVmap(absltest.TestCase):
   def test_state_axes_simple(self):
     class Block(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -2169,6 +2165,7 @@ class TestVmap(absltest.TestCase):
   def test_split_rngs_decorator_simple(self):
     class Block(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -2192,28 +2189,25 @@ class TestVmap(absltest.TestCase):
     assert module.bn.scale.value.shape == (3,)
     assert module.bn.mean.value.shape == (5, 3)
     assert module.dropout.rngs is not None
-    self.assertEqual(module.dropout.rngs.params.key.shape, ())
-    self.assertEqual(module.dropout.rngs.dropout.key.shape, ())
+    self.assertEqual(module.dropout.rngs.key.shape, (5,))
 
-    @nnx.split_rngs(splits=5, only='dropout')
     @nnx.vmap(in_axes=(state_axes, 0), out_axes=0)
     def forward_block(module: Block, x):
       assert module.dropout.rngs is not None
-      self.assertEqual(module.dropout.rngs.params.key.shape, ())
-      self.assertEqual(module.dropout.rngs.dropout.key.shape, ())
+      self.assertEqual(module.dropout.rngs.key.shape, ())
       return module(x)
 
     x = jnp.ones((5, 1, 2))
     y = forward_block(module, x)
 
     assert module.dropout.rngs is not None
-    self.assertEqual(module.dropout.rngs.params.key.shape, ())
-    self.assertEqual(module.dropout.rngs.dropout.key.shape, ())
+    self.assertEqual(module.dropout.rngs.key.shape, (5,))
     assert y.shape == (5, 1, 3)
 
   def test_state_axes_super_simple(self):
     class Block(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
@@ -2250,6 +2244,7 @@ class TestVmap(absltest.TestCase):
 
     class Block(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
@@ -2268,10 +2263,10 @@ class TestVmap(absltest.TestCase):
       return module(x)
 
     rngs = nnx.Rngs(0)
-    initial_key = rngs.default.key.value
     module = create_block(rngs)
+    initial_key = module.dropout.rngs.key.value
 
-    assert rngs.default.count.value == 2
+    assert module.dropout.rngs.count.value == 0
     assert module.linear.kernel.value.shape == (din, dout)
     assert module.linear.bias.value.shape == (dout,)
 
@@ -2280,7 +2275,7 @@ class TestVmap(absltest.TestCase):
     y = forward_block(module, x)
 
     assert y.shape == (5, 1, dout)
-    assert rngs.default.count.value == 3
+    assert module.dropout.rngs.count.value == 1
 
     assert not jnp.allclose(y[0], y[1])
 
@@ -2289,11 +2284,12 @@ class TestVmap(absltest.TestCase):
     # dropout is working!
     assert not jnp.allclose(y, y2)
 
-    assert rngs.default.key.value == initial_key
+    assert module.dropout.rngs.key.value == initial_key
 
   def test_consistent_aliasing_inputs(self):
     class Foo(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((5, 5)))
 
@@ -2309,6 +2305,7 @@ class TestVmap(absltest.TestCase):
   def test_consistent_aliasing_input_output(self):
     class Foo(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((2, 3)))
 
@@ -2324,11 +2321,13 @@ class TestVmap(absltest.TestCase):
   def test_consistent_aliasing_shared(self):
     class Shared(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self):
         self.a = nnx.Param(jnp.zeros((3, 3)))
 
     class Foo(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self, shared: Shared):
         self.a = shared
 
@@ -2383,6 +2382,7 @@ class TestVmap(absltest.TestCase):
   def test_captured_module_in_return_error(self):
     class Foo(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self):
         self.a = jnp.zeros((5, 5))
 
@@ -2406,6 +2406,7 @@ class TestVmap(absltest.TestCase):
 
     class Env(nnx.Module):
       __data__ = 'auto'
+
       def __init__(self):
         self.broadcast = Broadcast(jnp.array(1))
         self.index = Vectorized(jnp.arange(8))
@@ -2590,17 +2591,15 @@ class TestPmap(absltest.TestCase):
       return Block(rngs)
 
     rngs = nnx.Rngs(0)
-    initial_key = rngs.default.key.value
     module = create_block(rngs)
+    initial_key = module.dropout.rngs.key.value
 
-    assert rngs.default.count.value == 1
-    assert rngs.default.key.value == initial_key
+    assert module.dropout.rngs.count.value[0] == 0
     assert module.linear.kernel.value.shape == (1, 3, 10)
     assert module.linear.bias.value.shape == (1, 10)
 
     x = jnp.ones((1, 1, 3))
 
-    @nnx.split_rngs(splits=1)
     @nnx.pmap(in_axes=(state_axes, 0), axis_size=1)
     def forward_block(module, x):
       return module(x)
@@ -2608,8 +2607,8 @@ class TestPmap(absltest.TestCase):
     y = forward_block(module, x)
 
     assert y.shape == (1, 1, 10)
-    assert rngs.default.count.value == 2
-    assert rngs.default.key.value == initial_key
+    assert module.dropout.rngs.count.value[0] == 1
+    assert module.dropout.rngs.key.value == initial_key
 
     y2 = forward_block(module, x)
 
@@ -2629,7 +2628,6 @@ class TestPmap(absltest.TestCase):
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
-    @nnx.split_rngs(splits=1)
     @nnx.pmap(axis_size=1)
     def forward_block(module: Block, x):
       return module(x)
@@ -2637,7 +2635,7 @@ class TestPmap(absltest.TestCase):
     rngs = nnx.Rngs(0)
     module = create_block(rngs)
 
-    assert rngs.default.count.value == 1
+    assert module.dropout.rngs.count.value == 0
     assert module.linear.kernel.value.shape == (1, 20, 20)
     assert module.linear.bias.value.shape == (1, 20)
 
@@ -2646,7 +2644,7 @@ class TestPmap(absltest.TestCase):
     y = forward_block(module, x)
 
     assert y.shape == (1, 10, 20)
-    assert rngs.default.count.value == 2
+    assert module.dropout.rngs.count.value == 1
 
     y2 = forward_block(module, x)
 
@@ -2676,10 +2674,10 @@ class TestPmap(absltest.TestCase):
       return module(x)
 
     rngs = nnx.Rngs(0)
-    initial_key = rngs.default.key.value
     module = create_block(rngs)
+    initial_key = module.dropout.rngs.key.value
 
-    assert rngs.default.count.value == 2
+    assert module.dropout.rngs.count.value == 0
     assert module.linear.kernel.value.shape == (din, dout)
     assert module.linear.bias.value.shape == (dout,)
 
@@ -2688,14 +2686,14 @@ class TestPmap(absltest.TestCase):
     y = forward_block(module, x)
 
     assert y.shape == (1, 5, dout)
-    assert rngs.default.count.value == 3
+    assert module.dropout.rngs.count.value == 1
 
     y2 = forward_block(module, x)
 
     # dropout is working!
     assert not jnp.allclose(y, y2)
 
-    assert rngs.default.key.value == initial_key
+    assert module.dropout.rngs.key.value == initial_key
 
 
 class TestCond(absltest.TestCase):

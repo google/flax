@@ -47,7 +47,6 @@ class ScanMLP(nnx.Module):
     self.layers = create_block(rngs)
 
   def __call__(self, x: jax.Array) -> jax.Array:
-    @nnx.split_rngs(splits=self.n_layers)
     @nnx.scan
     def scan_fn(x: jax.Array, block: Block):
       x = block(x)

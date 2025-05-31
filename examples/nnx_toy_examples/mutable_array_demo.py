@@ -259,10 +259,10 @@ eval_model.set_attributes(use_stats=True, deterministic=True)
 # compute the loss by calling the model with the inputs.
 @jax.jit
 def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
-  treedef, params, nondiff = nnx.split(model, nnx.Param, ...)
+  graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
 
   def loss_fn(params):
-    model = nnx.merge(treedef, params, nondiff)
+    model = nnx.merge(graphdef, params, nondiff)
     loss = jnp.mean((model(x, rngs=rngs) - y) ** 2)
     return loss
 

@@ -764,7 +764,7 @@ class Conv(Module):
       kernel_size_dilated = [
         (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
-      zero_pad: tp.List[tuple[int, int]] = [(0, 0)]
+      zero_pad: list[tuple[int, int]] = [(0, 0)]
       pads = (
         zero_pad
         + [((k - 1) // 2, k // 2) for k in kernel_size_dilated]

@@ -84,7 +84,11 @@ class SGD(nnx.Object):
 
     self.lr = lr
     self.params = params
-    self.momentum: nnx.State = jax.tree.map(init_optimizer_state, self.params)
+    self.momentum: nnx.State = jax.tree.map(
+      init_optimizer_state,
+      self.params,
+      is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState),
+    )
     self.decay = decay
 
   def update(self, grads: nnx.State):
@@ -92,11 +96,17 @@ class SGD(nnx.Object):
       params: nnx.Variable, momentum: SGDState, grad: nnx.VariableState
     ):
       # v_t = β * v_{t-1} + (1 - β) * ∇J(θ_t)
-      momentum.value = self.decay * momentum + (1 - self.decay) * grad.value
+      momentum[...] = self.decay * momentum[...] + (1 - self.decay) * grad[...]
       # θ_{t+1} = θ_t - α * v_t
-      params.value -= self.lr * momentum
+      params[...] -= self.lr * momentum[...]
 
-    jax.tree.map(update_fn, self.params, self.momentum, grads)
+    jax.tree.map(
+      update_fn,
+      self.params,
+      self.momentum,
+      grads,
+      is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState),
+    )
 
 
 @nnx.jit
