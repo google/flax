@@ -1,0 +1,11 @@
+absl-py==2.2.2
+clu==0.0.12
+flax==0.10.6
+# jax==0.6.0
+# --find-links https://storage.googleapis.com/jax-releases/jax_releases.html
+# jaxlib==0.6.0+cuda12.cudnn9
+ml-collections==0.1.1
+numpy==2.1.3
+optax==0.2.4
+sentencepiece==0.2.0
+jaxtyping==0.3.2
