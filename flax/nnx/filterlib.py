@@ -31,7 +31,7 @@ Filter = tp.Union[FilterLiteral, tuple['Filter', ...], list['Filter']]
 
 def to_predicate(filter: Filter) -> Predicate:
   """Converts a Filter to a predicate function.
-  See `Using Filters <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+  See `Using Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
   """
 
   if isinstance(filter, str):
