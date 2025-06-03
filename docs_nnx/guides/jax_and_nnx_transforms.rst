@@ -27,7 +27,7 @@ arguments - such as ``nnx.Module``, ``nnx.Rngs``, ``nnx.Optimizer``, and so on -
 will be mutated.
 - In comparison, these kinds of objects aren't recognized in JAX transformations.
 
-The Flax NNX `Functional API <https://flax.readthedocs.io/en/latest/nnx/nnx_basics.html#the-functional-api>`_
+The Flax NNX `Functional API <https://flax.readthedocs.io/en/latest/nnx_basics.html#the-flax-functional-api>`_
 provides a way to convert graph structures to `pytrees <https://jax.readthedocs.io/en/latest/working-with-pytrees.html>`__
 and back. By doing this at every function boundary you can effectively use graph structures with any
 JAX transforms and propagate state updates in a way consistent with functional purity.
