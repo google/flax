@@ -132,7 +132,11 @@ def get_partition_spec(tree: A) -> A:
     return _maybe_replicate(x)
 
   return jax.tree.map(
-    f, tree, is_leaf=lambda x: isinstance(x, variablelib.VariableState)
+      f,
+      tree,
+      is_leaf=lambda x: isinstance(
+          x, (variablelib.VariableState, variablelib.Variable)
+      ),
   )
 
 
