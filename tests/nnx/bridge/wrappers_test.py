@@ -97,14 +97,18 @@ class TestCompatibility(absltest.TestCase):
         w = self.param('w', nn.initializers.lecun_normal(), (4, 3))
         return x @ w
 
+      def rngs(self):
+        raise ValueError('This should not be called because ToNNX has .rngs')
+
     x = jax.random.normal(jax.random.key(0), (2, 4))
     model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0))
-    bridge.lazy_init(model, x, method=model.module.dot)
-    y = model(x, method=model.module.dot)
+    bridge.lazy_init(model.dot, x)
+    y = model.dot(x)
     np.testing.assert_allclose(y, x @ nnx.state(model)['w'].value)
     # lazy_init only initialized param w inside dot(), so calling __call__ should fail
     with self.assertRaises(flax.errors.ScopeParamNotFoundError):
       y = model(x)
+    assert isinstance(model.rngs, nnx.Rngs)
 
   def test_linen_to_nnx_mutable(self):
     class Foo(nn.Module):
