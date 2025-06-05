@@ -236,7 +236,7 @@ def vmap(
       addition to integers and None, :class:`StateAxes`  can be used to control
       how graph nodes like Modules are vectorized by specifying the axes to be
       applied to substates of the graph node given a `Filter
-      <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+      <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
     out_axes: An integer, None, or pytree indicating where the mapped axis
       should appear in the output (see `jax.vmap
       <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
@@ -454,7 +454,7 @@ def pmap(
       addition to integers and None, :class:`StateAxes`  can be used to control
       how graph nodes like Modules are vectorized by specifying the axes to be
       applied to substates of the graph node given a `Filter
-      <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+      <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
     out_axes: An integer, None, or pytree indicating where the mapped axis
       should appear in the output (see `jax.vmap
       <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
