@@ -147,15 +147,16 @@ def scan(
 
     broadcast_body = functools.partial(body_fn, init_mode=True)
 
-    carry_avals = jax.tree_util.tree_map(
-        lambda x: core.ShapedArray(jnp.shape(x), jnp.result_type(x)), init
-    )
-    scan_avals = jax.tree_util.tree_map(
-        lambda x: core.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x)), xs
-    )
-    input_avals = (carry_avals, scan_avals)
+    init_flat, carry_tree = jax.tree.flatten(init)
+    xs_flat, scan_tree = jax.tree.flatten(xs)
+    carry_avals = [core.ShapedArray(jnp.shape(x), jnp.result_type(x))
+                   for x in init_flat]
+    scan_avals = [core.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x))
+                  for x in xs_flat]
+    in_avals = [*carry_avals, *scan_avals]
+    in_tree = jax.tree_util.treedef_tuple((carry_tree, scan_tree))
+    assert all(isinstance(a, core.AbstractValue) for a in in_avals), in_avals
 
-    in_avals, in_tree = jax.tree_util.tree_flatten(input_avals)
     debug_info = jax.api_util.debug_info("flax scan", broadcast_body,
                                          (in_tree,), {})
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
