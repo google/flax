@@ -18,7 +18,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from flax import nnx
+from flax import nnx, config
 from flax.nnx import rnglib
 from flax.nnx.module import Module, first_from
 from flax.nnx.nn import dtypes, initializers
@@ -264,8 +264,6 @@ class BatchNorm(Module):
     rngs: rng key.
   """
 
-  __data__ = ('mean', 'var', 'scale', 'bias')
-
   def __init__(
     self,
     num_features: int,
@@ -360,11 +358,18 @@ class BatchNorm(Module):
         use_fast_variance=self.use_fast_variance,
         mask=mask,
       )
+      # stop_gradient only for flax_mutable_array
+      if config.flax_mutable_array:
+        stop_gradient = jax.lax.stop_gradient
+      else:
+        stop_gradient = lambda x: x
 
-      self.mean[...] = (
-        self.momentum * self.mean.value + (1 - self.momentum) * mean
+      self.mean[...] = stop_gradient(
+        self.momentum * self.mean[...] + (1 - self.momentum) * mean
       )
-      self.var[...] = self.momentum * self.var.value + (1 - self.momentum) * var
+      self.var[...] = stop_gradient(
+        self.momentum * self.var[...] + (1 - self.momentum) * var
+      )
 
     return _normalize(
       x,
@@ -435,8 +440,6 @@ class LayerNorm(Module):
         calculation for the variance.
     rngs: rng key.
   """
-
-  __data__ = ('scale', 'bias')
 
   def __init__(
     self,
@@ -570,8 +573,6 @@ class RMSNorm(Module):
     rngs: rng key.
   """
 
-  __data__ = ('scale',)
-
   def __init__(
     self,
     num_features: int,
@@ -640,6 +641,7 @@ class RMSNorm(Module):
       self.dtype,
       self.epsilon,
     )
+
 
 class GroupNorm(Module):
   """Group normalization (arxiv.org/abs/1803.08494).
@@ -714,8 +716,6 @@ class GroupNorm(Module):
       calculation for the variance.
     rngs: rng key.
   """
-
-  __data__ = ('scale', 'bias')
 
   def __init__(
     self,

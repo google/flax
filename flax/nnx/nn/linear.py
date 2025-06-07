@@ -26,6 +26,7 @@ from flax import nnx
 from flax.nnx import rnglib, variablelib
 from flax.nnx.module import Module, first_from
 from flax.nnx.nn import dtypes, initializers
+from flax import nnx
 from flax.typing import (
   Dtype,
   Shape,
@@ -140,8 +141,6 @@ class LinearGeneral(Module):
       promoted dtype.
     rngs: rng key.
   """
-
-  __data__ = ('kernel', 'bias')
 
   def __init__(
     self,
@@ -330,8 +329,6 @@ class Linear(Module):
     rngs: rng key.
   """
 
-  __data__ = ('kernel', 'bias')
-
   def __init__(
     self,
     in_features: int,
@@ -435,8 +432,6 @@ class Einsum(Module):
       Should support same signature as `jnp.einsum`.
     rngs: rng key.
   """
-
-  __data__ = ('kernel', 'bias')
 
   def __init__(
     self,
@@ -647,8 +642,6 @@ class Conv(Module):
     rngs: rng key.
   """
 
-  __data__ = ('kernel', 'bias', 'mask')
-
   def __init__(
     self,
     in_features: int,
@@ -764,7 +757,7 @@ class Conv(Module):
       kernel_size_dilated = [
         (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
-      zero_pad: tp.List[tuple[int, int]] = [(0, 0)]
+      zero_pad: list[tuple[int, int]] = [(0, 0)]
       pads = (
         zero_pad
         + [((k - 1) // 2, k // 2) for k in kernel_size_dilated]
@@ -904,8 +897,6 @@ class ConvTranspose(Module):
       promoted dtype.
     rngs: rng key.
   """
-
-  __data__ = ('kernel', 'bias', 'mask')
 
   def __init__(
     self,
@@ -1156,8 +1147,6 @@ class Embed(Module):
       and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
   """
-
-  __data__ = ('embedding',)
 
   def __init__(
     self,
