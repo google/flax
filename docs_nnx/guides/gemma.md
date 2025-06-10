@@ -58,6 +58,8 @@ Now, load the Gemma model you want to try. The code in the next cell utilizes [`
 
 **Note:** For larger models, such as `gemma 7b` and `gemma 7b-it` (instruct), you may require a hardware accelerator with plenty of memory, such as the NVIDIA A100.
 
+**Note:** To avoid 403 error when downloading the model, you need to consent to the license for Gemma models on Kaggle. To do that, open https://www.kaggle.com/models/google/gemma/flax/ in the browser and click on "Download" button choosing any version of Gemma model. In the next window you will be proposed to agree with Gemma models usage license. Once, this step is done, you will be able to download the model using the code below.
+
 ```{code-cell} ipython3
 from IPython.display import clear_output
 
