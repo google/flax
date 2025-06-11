@@ -411,7 +411,7 @@ class Sampler:
       input_strings: input prompts to feed to the model for sampling.
       total_generation_steps: number of generation steps. will correspond to the
         longest prompt in the batch.
-      echo: whgether to return the prompt as part of the output sample.
+      echo: whether to return the prompt as part of the output sample.
       return_logits: whether to return per-step logits used during generation.
       forbidden_tokens: list of tokens that are forbidden to be generated. Each
         token must map to a single token id in the vocab.
