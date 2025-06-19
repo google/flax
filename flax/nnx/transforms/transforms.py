@@ -47,7 +47,7 @@ MA = tp.TypeVar('MA', bound=Module)
 N = tp.TypeVar('N', bound=Module)
 StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
-Leaves = tp.List[Leaf]
+Leaves = list[Leaf]
 Index = int
 
 

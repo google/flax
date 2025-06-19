@@ -26,10 +26,21 @@ from flax import nnx
 class TrainState(nnx.TrainState):
   batch_stats: nnx.State
 
+class Dict(nnx.Module):
+  items: nnx.Data[dict]
+
+  def __init__(self, *args, **kwargs):
+    self.items = dict(*args, **kwargs)
+
+  def __getitem__(self, key):
+    return self.items[key]
+
+  def __setitem__(self, key, value):
+    self.items[key] = value
 
 class TestHelpers(absltest.TestCase):
   def test_train_state(self):
-    m = nnx.Dict(a=nnx.Param(1), b=nnx.BatchStat(2))
+    m = Dict(a=nnx.Param(1), b=nnx.BatchStat(2))
 
     graphdef, params, batch_stats = nnx.split(m, nnx.Param, nnx.BatchStat)
 

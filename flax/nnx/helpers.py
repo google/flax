@@ -27,54 +27,18 @@ from flax.nnx.proxy_caller import ApplyCaller
 from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 from flax.training.train_state import struct
+from flax import nnx
 
 A = tp.TypeVar('A')
 M = tp.TypeVar('M', bound=Module)
 TS = tp.TypeVar('TS', bound='TrainState')
 
-
-class Dict(Module, tp.Mapping[str, A]):
-  __data__ = 'all'
-
-  @tp.overload
-  def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /): ...
-
-  @tp.overload
-  def __init__(
-    self, mapping: tp.Optional[tp.Mapping[str, A]] = None, /, **kwargs: A
-  ): ...
-
-  def __init__(self, *args, **kwargs):
-    for name, value in dict(*args, **kwargs).items():
-      setattr(self, name, value)
-
-  def __getitem__(self, key) -> A:
-    return getattr(self, key)
-
-  def __setitem__(self, key, value):
-    setattr(self, key, value)
-
-  def __getattr__(self, key) -> A:
-    return super().__getattribute__(key)
-
-  def __setattr__(self, key, value):
-    super().__setattr__(key, value)
-
-  def __iter__(self) -> tp.Iterator[str]:
-    return (k for k in vars(self) if k != '_object__state')
-
-  def __len__(self) -> int:
-    return len(vars(self))
-
-  def __hash__(self) -> int:
-    return id(self)
-
-
+# TODO(cgarciae): Add tests
 class Sequential(Module):
-  __data__ = ('layers',)
 
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
-    self.layers = list(fns)
+    # TODO: Check there non-Module functions and wrap them in Lambda
+    self.layers = nnx.data(list(fns))
 
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
     output: tp.Any = None

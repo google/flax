@@ -21,7 +21,6 @@ import optax
 
 from flax import nnx
 from flax.nnx import filterlib
-from flax.nnx import variablelib
 from flax.nnx.object import Object
 from flax.nnx.variablelib import Variable, VariableState
 
@@ -31,19 +30,19 @@ M = tp.TypeVar('M', bound=nnx.Module)
 
 
 class OptState(Variable):
-  """Holds any optimizer state."""
+  """Any optimizer state"""
 
   pass
 
 
 class OptArray(OptState):
-  """Holds an array of optimizer state."""
+  """Optimizer state for an array."""
 
   pass
 
 
 class OptVariable(OptState):
-  """Holds Variable state."""
+  """Optimizer state for a Variable."""
 
   source_type: type[Variable]
   pass
@@ -51,7 +50,7 @@ class OptVariable(OptState):
 
 def _wrap_optimizer_state(opt_state):
   def wrap_optimizer_state_fn(x):
-    if isinstance(x, variablelib.VariableState):
+    if isinstance(x, VariableState):
       new_state = x.copy()
       new_state.source_type = x.type
       new_state.type = OptVariable
@@ -62,7 +61,7 @@ def _wrap_optimizer_state(opt_state):
   return jax.tree.map(
     wrap_optimizer_state_fn,
     opt_state,
-    is_leaf=lambda x: isinstance(x, variablelib.VariableState),
+    is_leaf=lambda x: isinstance(x, VariableState),
   )
 
 
@@ -203,7 +202,9 @@ class Optimizer(Object, tp.Generic[M]):
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.model = model
     self.tx = tx
-    self.opt_state = _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
+    self.opt_state = nnx.data(
+      _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
+    )
     self.wrt = wrt
 
   def update(self, grads, **kwargs):
@@ -275,3 +276,111 @@ class Optimizer(Object, tp.Generic[M]):
     self.step.value += 1
     nnx.update(self.model, new_params)
     _update_opt_state(self.opt_state, new_opt_state)
+
+
+def to_opt_state(tree):
+  def _to_opt_state(x):
+    if isinstance(x, Variable | VariableState):
+      opt_state = OptVariable(x[...], **x.get_metadata())  # type: ignore
+    else:
+      opt_state = OptArray(x)
+    return opt_state
+
+  tree = jax.tree.map(
+    _to_opt_state,
+    tree,
+    is_leaf=lambda x: isinstance(x, Variable | VariableState),
+  )
+  return tree
+
+
+class PytreeOptimizer(Object):
+  """Optimizes any pytree of Variables or MutableArrays using Optax.
+
+  Optimizer takes a ``params`` pytree of Variables or MutableArrays and an Optax
+  gradient transformation ``tx``. Internally it stores the optimizer state ``opt_state``
+  as defined by Optax but replaces the leaves with ``OptState`` Variables, for Variable leaves
+  all the metadata is copied over to the new Variable. The ``update`` method takes in the ``params``
+  pytree and the gradients pytree ``grads``, and updates the ``params`` and ``opt_state``
+  in place. ``PytreeOptimizer`` also keeps track of the step count in ``step`` which is
+  also an ``OptState`` Variable.
+
+  In the following example ``nnx.state`` and ``nnx.split`` are used with a
+  ``nnx.Param`` filter to showcase how to only optimize the parameters of
+  a model::
+
+    >>> from flax import config
+    >>> if not config.flax_mutable_array:
+    ...   import pytest
+    ...   pytest.skip('MutableArrays required for this example')
+    ...
+    >>> import jax, jax.numpy as jnp
+    >>> from flax import nnx
+    >>> from flax import config
+    >>> import optax
+    ...
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.bn = nnx.BatchNorm(3, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+    ...   def __call__(self, x):
+    ...     return self.linear2(nnx.relu(self.bn(self.linear1(x))))
+    ...
+    >>> x = jax.random.normal(jax.random.key(0), (5, 2))
+    >>> y = jnp.ones((5, 4))
+    ...
+    >>> model = Model(nnx.Rngs(1))
+    >>> optimizer = nnx.PytreeOptimizer(nnx.state(model, nnx.Param), tx=optax.adam(1e-3))
+    ...
+    >>> @jax.jit
+    ... def train_step(model, optimizer, x, y):
+    ...   graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
+    ...   def loss_fn(params):
+    ...     model = nnx.merge(graphdef, params, nondiff)
+    ...     return ((model(x) - y) ** 2).mean()
+    ...
+    ...   loss, grads = jax.value_and_grad(loss_fn)(nnx.freeze(params))
+    ...   optimizer.update(params, grads)
+    ...   return loss
+    ...
+    >>> loss = train_step(model, optimizer, x, y)
+    >>> loss
+    Array(1.2029127, dtype=float32)
+    >>> optimizer.step.value
+    Array(1, dtype=uint32)
+
+  The key is to make sure that the ``params`` structure passed to
+  ``PytreeOptimizer`` matches the ``params`` and ``grads`` structures
+  passed to the ``update`` method.
+
+  Args:
+    params: The parameters to be optimized.
+    tx: An optax gradient transformation.
+  """
+
+  def __init__(self, params, tx: optax.GradientTransformation):
+    self.tx = tx
+    self.step = OptArray(jnp.array(0, dtype=jnp.uint32))
+    self.opt_state = nnx.data(to_opt_state(tx.init(nnx.freeze(params))))
+
+  def update(self, params, grads, **kwargs):
+    param_arrays = nnx.freeze(nnx.pure(params))
+    grad_arrays = nnx.freeze(nnx.pure(grads))
+    opt_state_arrays = nnx.freeze(nnx.pure(self.opt_state))
+
+    updates, new_opt_state = self.tx.update(
+      grad_arrays, opt_state_arrays, param_arrays, **kwargs
+    )
+    new_params = optax.apply_updates(param_arrays, updates)
+
+    def _update_variable(param, value):
+      param[...] = value
+
+    jax.tree.map(
+      _update_variable,
+      (params, self.opt_state),
+      (new_params, new_opt_state),
+      is_leaf=lambda x: isinstance(x, Variable | VariableState),
+    )
+    self.step[...] += 1
