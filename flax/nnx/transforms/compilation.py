@@ -599,7 +599,7 @@ class Compiled(Stage):
 
   @property
   def input_layouts(self):
-    return self.compiled.input_layouts
+    return self.compiled.input_formats
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
