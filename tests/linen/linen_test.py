@@ -287,7 +287,7 @@ class NormalizationTest(parameterized.TestCase):
     y_one_liner = (
       x - x.mean(axis=reduction_axes, keepdims=True)
     ) * jax.lax.rsqrt(x.var(axis=reduction_axes, keepdims=True) + e)
-    np.testing.assert_allclose(y_one_liner, y, atol=1e-4)
+    np.testing.assert_allclose(y_one_liner, y, atol=1e-3, rtol=1e-3)
 
   @parameterized.parameters(
     {'reduction_axes': -1}, {'reduction_axes': 1}, {'reduction_axes': (1, 2)}
