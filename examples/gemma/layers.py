@@ -20,7 +20,6 @@ from collections.abc import Sequence
 from typing import Any, Union
 
 from flax import nnx
-import flax.linen as nn
 import jax.numpy as jnp
 from jaxtyping import Array, ArrayLike  # pylint: disable=g-importing-member,g-multiple-import
 
@@ -31,9 +30,17 @@ Shape = Sequence[Union[int, Any]]
 class Einsum(nnx.Module):
   """Einsum is a convenience module for parameterized tensor multiplication."""
 
-  def __init__(self, einsum_str: str, shape: Shape, *, rngs: nnx.Rngs):
+  def __init__(
+      self,
+      einsum_str: str,
+      shape: Shape,
+      *,
+      kernel_init: nnx.Initializer = nnx.initializers.normal(),
+      rngs: nnx.Rngs,
+      dtype: Any = jnp.float32,
+  ):
     self.einsum_str = einsum_str
-    self.w = nnx.Param(nn.initializers.normal()(rngs.params(), shape))
+    self.w = nnx.Param(kernel_init(rngs.params(), shape, dtype))
 
   def __call__(self, x: ArrayLike) -> Array:
     return jnp.einsum(self.einsum_str, x, self.w.value)
@@ -46,12 +53,20 @@ class Einsum(nnx.Module):
 class RMSNorm(nnx.Module):
   """RMSNorm layer."""
 
-  def __init__(self, dim: int, *, rngs: nnx.Rngs):
-    self.scale = nnx.Param(nn.initializers.zeros_init()(rngs.params(), dim))
+  def __init__(
+      self,
+      dim: int,
+      *,
+      scale_init: nnx.Initializer = nnx.initializers.zeros_init(),
+      rngs: nnx.Rngs,
+      dtype: Any = jnp.float32,
+  ):
+    self.scale = nnx.Param(scale_init(rngs.params(), dim, dtype))
 
   def __call__(self, x: Array) -> Array:
+    dtype = self.scale.value.dtype
     var = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
-    normed_inputs = jnp.asarray(x * jnp.reciprocal(jnp.sqrt(var + 1e-06)))
+    normed_inputs = jnp.asarray(x * jnp.reciprocal(jnp.sqrt(var + 1e-06)), dtype)
     # normed_inputs is a rank-K tensor, K > 1 (K is typically 2 or 3). scale is
     # a rank-1 tensor. To avoid implicit rank-promotion, reshape scale to
     # a (1, ..., 1, D) tensor, so the rank of scale matches normed_inputs.
