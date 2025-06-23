@@ -26,7 +26,6 @@ import input_pipeline
 # the correct value for the 3 different datasets.
 _TARGET_LENGTH = 32
 _EVAL_TARGET_LENGTH = 48
-_PREDICT_TARGET_LENGTH = 64
 
 
 class InputPipelineTest(absltest.TestCase):
@@ -43,7 +42,6 @@ class InputPipelineTest(absltest.TestCase):
     config.max_corpus_chars = 1000
     config.max_target_length = _TARGET_LENGTH
     config.max_eval_target_length = _EVAL_TARGET_LENGTH
-    # config.max_predict_length = _PREDICT_TARGET_LENGTH
 
     vocab_path = os.path.join(tempfile.mkdtemp(), 'sentencepiece_model')
 

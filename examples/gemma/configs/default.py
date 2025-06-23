@@ -13,11 +13,10 @@
 # limitations under the License.
 
 """Default Hyperparameter configuration."""
-from __future__ import annotations
 
 import dataclasses
 
-from configs.common import MeshRules
+from train import MeshRules, TrainConfig
 
 
 @dataclasses.dataclass(unsafe_hash=True)
@@ -129,11 +128,8 @@ class Config:
   ici_fsdp_parallelism: int = -1
   ici_tensor_parallelism: int = 1
 
-  def replace(self, **kwargs):
-    return dataclasses.replace(self, **kwargs)
 
-
-def get_config():
+def get_config() -> TrainConfig:
   """Get the default hyperparameter configuration."""
   config = Config()
-  return config
+  return TrainConfig(**dataclasses.asdict(config))
