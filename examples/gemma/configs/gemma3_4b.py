@@ -13,11 +13,10 @@
 # limitations under the License.
 
 """Default Hyperparameter configuration."""
-from __future__ import annotations
 
 import dataclasses
 
-from configs.common import MeshRules
+from train import MeshRules, TrainConfig
 
 
 @dataclasses.dataclass(unsafe_hash=True)
@@ -109,7 +108,7 @@ class Config:
     kv='tensor',
     vocab='tensor',
   )
-  data_sharding: tuple[str, ...] = ('data',)
+  data_sharding: tuple[str, ...] = ('data', 'fsdp')
 
   # One axis for each parallelism type may hold a placeholder (-1)
   # value to auto-shard based on available slices and devices.
@@ -133,7 +132,7 @@ class Config:
     return dataclasses.replace(self, **kwargs)
 
 
-def get_config():
+def get_config() -> TrainConfig:
   """Get the default hyperparameter configuration."""
   config = Config()
-  return config
+  return TrainConfig(**dataclasses.asdict(config))

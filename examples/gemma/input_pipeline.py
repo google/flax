@@ -15,12 +15,15 @@
 """Input pipeline for a LM1B dataset."""
 
 import os
+import typing
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import tokenizer
 from clu import deterministic_data
-from configs import default
+
+if typing.TYPE_CHECKING:
+  from train import TrainConfig
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 Features = dict[str, tf.Tensor]
@@ -29,9 +32,6 @@ Features = dict[str, tf.Tensor]
 class NormalizeFeatureNamesOp:
   """Normalizes feature names to 'inputs' and 'targets'."""
 
-  def __init__(self, ds_info: tfds.core.DatasetInfo):
-    self.ds_info = ds_info
-
   def __call__(self, features: Features) -> Features:
     features['inputs'] = features.pop('text')
     # Unnecessary step used for uniformizing with examples/wmt.
@@ -39,13 +39,11 @@ class NormalizeFeatureNamesOp:
     return features
 
 
-def get_raw_dataset(
-  dataset_builder: tfds.core.DatasetBuilder, split: str
-) -> tf.data.Dataset:
+def get_raw_dataset(dataset_name: str, split: str) -> tf.data.Dataset:
   """Loads a raw text dataset and normalizes feature keys.
 
   Args:
-    dataset_builder: TFDS dataset builder that can build `split`.
+    dataset_name: TFDS dataset name.
     split: Split to use. This must be the full split. We shard the split across
       multiple hosts and currently don't support sharding subsplits.
 
@@ -53,25 +51,9 @@ def get_raw_dataset(
     Dataset with source and target language features mapped to 'inputs' and
     'targets'.
   """
-  # TODO: Fix WARNING:absl:
-  # `get_read_instruction_for_host` is DEPRECATED.
-  # Migration instruction: Use `tfds.split_for_jax_process` which is simpler
-  # and nativelly supported by TFDS.
-  # ```
-  # split = tfds.split_for_jax_process('train[75%:]', drop_remainder=True)
-  # ds = tfds.load('my_dataset', split=split)
-  # ```
-
-  num_examples = dataset_builder.info.splits[split].num_examples
-  # TODO: Fix WARNING:absl:`num_examples` is deprecated. Please pass `dataset_info` instead.
-  # TODO: Fix WARNING:absl:`drop_remainder` is deprecated. Please pass `remainder_options` instead.
-  per_host_split = deterministic_data.get_read_instruction_for_host(
-    split, num_examples, drop_remainder=False
-  )
-  ds = dataset_builder.as_dataset(split=per_host_split, shuffle_files=False)
-  ds = ds.map(
-    NormalizeFeatureNamesOp(dataset_builder.info), num_parallel_calls=AUTOTUNE
-  )
+  split = tfds.split_for_jax_process(split, drop_remainder=True)
+  ds = tfds.load(dataset_name, split=split)
+  ds = ds.map(NormalizeFeatureNamesOp(), num_parallel_calls=AUTOTUNE)
   return ds
 
 
@@ -342,7 +324,7 @@ def preprocess_data(
 
 
 def get_datasets(
-  config: default.Config,
+  config: "TrainConfig",
   *,
   n_devices: int,
   vocab_path: str | None = None,
@@ -351,14 +333,13 @@ def get_datasets(
   if vocab_path is None:
     vocab_path = os.path.expanduser('~/lm1b_sentencepiece_model')
 
-  train_ds_builder = tfds.builder(config.dataset_name)
-  train_data = get_raw_dataset(train_ds_builder, 'train')
+  train_data = get_raw_dataset(config.dataset_name, 'train')
 
   if config.eval_dataset_name:
-    eval_ds_builder = tfds.builder(config.eval_dataset_name)
+    eval_dataset_name = config.eval_dataset_name
   else:
-    eval_ds_builder = train_ds_builder
-  eval_data = get_raw_dataset(eval_ds_builder, config.eval_split)
+    eval_dataset_name = config.dataset_name
+  eval_data = get_raw_dataset(eval_dataset_name, config.eval_split)
 
   # Tokenize data.
   sp_processor = tokenizer.load_or_train_tokenizer(

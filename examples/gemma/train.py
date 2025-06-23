@@ -35,7 +35,6 @@ import tensorflow as tf
 import utils
 from absl import logging
 from clu import metric_writers, periodic_actions
-from configs import default
 from jax import random
 from jax.sharding import Mesh, NamedSharding
 from jax.sharding import PartitionSpec as P
@@ -43,6 +42,118 @@ from utils import TrainState
 
 from flax import nnx
 from flax.training import checkpoints, common_utils
+
+
+@dataclasses.dataclass(unsafe_hash=True)
+class MeshRules:
+  embed: str | None = None
+  mlp: str | None = None
+  kv: str | None = None
+  vocab: str | None = None
+
+  def __call__(self, *keys: str) -> tuple[str, ...]:
+    return tuple(
+      getattr(self, key) if key is not None else None
+      for key in keys
+    )
+
+
+@dataclasses.dataclass(unsafe_hash=True)
+class TrainConfig:
+  # Path to load or store sentencepiece vocab file.
+  vocab_path: str | None
+  # Vocabulary size if `vocab_path` is not given.
+  vocab_size: int
+  # Maximum number of characters to use for training.
+  max_corpus_chars: int
+  # Name of TFDS translation dataset to use.
+  dataset_name: str
+  # Optional name of TFDS translation dataset to use for evaluation.
+  eval_dataset_name: str
+  # Optional name of TFDS split to use for evaluation.
+  eval_split: str
+  # Per device batch size for training.
+  per_device_batch_size: int
+  # Per device batch size for training.
+  eval_per_device_batch_size: int
+
+  # Prompt for language model sampling
+  prompts: tuple[str, ...]
+  # Temperature for top_p sampling.
+  sampling_temperature: float
+  # Top-p sampling threshold.
+  sampling_top_p: float
+
+  # Number of steps to take during training.
+  num_train_steps: int
+  # Number of steps to take during evaluation.
+  # Large enough to evaluate all samples: 306_688 / (32 * 8) = 1198
+  num_eval_steps: int
+  # Number of steps to generate predictions.
+  # -1 will use the whole eval dataset.
+  num_predict_steps: int
+  # Base learning rate.
+  learning_rate: float
+  # Linear learning rate warmup.
+  warmup_steps: int
+  # Cross entropy loss label smoothing.
+  label_smoothing: float
+  # Decay factor for AdamW style weight decay.
+  weight_decay: float
+  # Maximum length cutoff for training examples.
+  max_target_length: int
+  # Maximum length cutoff for eval examples.
+  max_eval_target_length: int
+
+  # Gemma transformer name.
+  # Possible values defined in transformer.TransformerConfig:
+  # (gemma_2b, gemma_7b, gemma2_2b, gemma2_9b, gemma2_27b, gemma3_1b, gemma3_4b, ...)
+  transformer_name: str | None
+  # or alternatively define the model using the dict of parameters
+  transformer_params: dict | None
+
+  # Whether to save model checkpoints.
+  save_checkpoints: bool
+  # Whether to restore from existing model checkpoints.
+  restore_checkpoints: bool
+  # Save a checkpoint every these number of steps.
+  checkpoint_every_steps: int
+  # Frequency of eval during training, e.g. every 1_000 steps.
+  eval_every_steps: int
+  # Use bfloat16 mixed precision training instead of float32.
+  use_bfloat16: bool
+  # Integer for PRNG random seed.
+  seed: int
+
+  # Parallelism
+  mesh_axes: tuple[str, ...]
+  axis_rules: MeshRules
+  data_sharding: tuple[str, ...]
+
+  # One axis for each parallelism type may hold a placeholder (-1)
+  # value to auto-shard based on available slices and devices.
+  # By default, product of the DCN axes should equal number of slices
+  # and product of the ICI axes should equal number of devices per slice.
+  # ICI (Inter-Chip Interconnection): A high-speed connection between
+  # sets of TPU chips, which form the TPU network.
+  # DCN (Data Center Network): A connection between the TPU networks;
+  # not as fast as ICI.
+  # ICI has around 100x the bandwidth of DCN, but it is not a general
+  # purpose connection, which is why DCN is necessary for scaling to
+  # extremely large ML models.
+  dcn_data_parallelism: int = -1
+  dcn_fsdp_parallelism: int = 1
+  dcn_tensor_parallelism: int = 1
+  ici_data_parallelism: int = 1
+  ici_fsdp_parallelism: int = -1
+  ici_tensor_parallelism: int = 1
+
+  def replace(self, **kwargs):
+    return dataclasses.replace(self, **kwargs)
+
+  def __post_init__(self):
+    if isinstance(self.axis_rules, dict):
+      self.axis_rules = MeshRules(**self.axis_rules)
 
 
 def rsqrt_schedule(
@@ -274,7 +385,7 @@ def evaluate(
   return eval_summary
 
 
-def train_and_evaluate(config: default.Config, workdir: str):
+def train_and_evaluate(config: TrainConfig, workdir: str):
   """Runs a training and evaluation loop.
 
   Args:
@@ -412,11 +523,14 @@ def train_and_evaluate(config: default.Config, workdir: str):
 
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation('train', step_num=step):
-        batch = next(train_iter)
-        batch = jax.tree.map(lambda x: jnp.asarray(x), batch)
-        state, metrics = jit_train_step(
-          state, batch, learning_rate_fn, 0.0
-        )
+        with report_progress.timed('data'):
+          batch = next(train_iter)
+          batch = jax.tree.map(lambda x: jnp.asarray(x, device=data_sharding), batch)
+
+        with report_progress.timed('train_step'):
+          state, metrics = jit_train_step(
+            state, batch, learning_rate_fn, 0.0
+          )
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.

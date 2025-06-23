@@ -15,18 +15,20 @@
 # Copied over from MaxText (https://github.com/google/maxtext/blob/main/MaxText/max_utils.py).
 
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.experimental import mesh_utils
-from configs import default
 from transformer import TransformerConfig, Transformer
 
 from flax import nnx
 from flax.training import train_state
+
+if TYPE_CHECKING:
+  from train import TrainConfig
 
 Dtype = Any
 Shape = tuple[int, ...]
@@ -40,13 +42,13 @@ class TrainState(train_state.TrainState):
 # -----------------------------------------------------------------------------
 
 
-def create_device_mesh(config: default.Config):
+def create_device_mesh(config: "TrainConfig"):
   """Creates a device mesh with each slice in its own data parallel group. If there is only one slice, uses two replicas."""
   devices = jax.devices()
   num_devices = len(devices)
   try:
     num_slices = 1 + max([d.slice_index for d in devices])
-  except:
+  except AttributeError:
     num_slices = 1
   num_devices_per_slice = num_devices // num_slices
   logging.info(f'Devices: {devices}')
@@ -147,8 +149,8 @@ def setup_initial_state(
     state_mesh_annotations: the mesh annotations for the train state
   """
 
-  # Initialization
-  with mesh:
+  @jax.jit
+  def sharded_init():
     model = constructor(config, rng)
     graphdef, params = nnx.split(model, nnx.Param)
     state = TrainState.create(
@@ -160,6 +162,11 @@ def setup_initial_state(
     state = jax.tree.map(_to_array, state)
     state_spec = nnx.get_partition_spec(state)
     state = jax.lax.with_sharding_constraint(state, state_spec)
+    return state
+
+  # Initialization
+  with jax.sharding.use_mesh(mesh):
+    state = sharded_init()
 
   state_sharding = nnx.get_named_sharding(state, mesh)
   return state, state_sharding
