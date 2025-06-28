@@ -104,7 +104,7 @@ class TestHelpers(absltest.TestCase):
     np.testing.assert_array_equal(out, out_nnx)
 
   def test_nnx_empty_sequential_is_identity(self):
-    iden = nnx.Sequence()
+    iden = nnx.Sequential()
     assert iden(12) == 12
     assert iden(12, 23) == (12, 23)
     assert iden() is None

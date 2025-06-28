@@ -74,7 +74,7 @@ class Sequential(Module):
   __data__ = ('layers',)
 
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
-    self.layers = list(fns) or [Sequence.identity]
+    self.layers = list(fns) or [Sequential.identity]
 
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
     output: tp.Any = None
