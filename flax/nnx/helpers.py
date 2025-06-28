@@ -74,9 +74,12 @@ class Sequential(Module):
   __data__ = ('layers',)
 
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
-    self.layers = list(fns) or [Sequential.identity]
+    self.layers = list(fns)
 
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
+    if len(self.layers) == 0:
+      return Sequential.identity(*args, rngs=rngs, **kwargs)
+
     output: tp.Any = None
 
     for i, f in enumerate(self.layers):
