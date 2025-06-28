@@ -77,6 +77,9 @@ class Sequential(Module):
     self.layers = list(fns)
 
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
+    if len(self.layers) == 0:
+      return Sequential.identity(*args, rngs=rngs, **kwargs)
+
     output: tp.Any = None
 
     for i, f in enumerate(self.layers):
@@ -99,7 +102,17 @@ class Sequential(Module):
 
     return output
 
-
+  @staticmethod
+  def identity(*args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
+      if len(args) == 1:
+        return args[0]
+      elif len(args) > 0:
+        return args
+      elif len(kwargs) > 0:
+        return kwargs
+      else:
+        return None
+  
 class ModuleDefApply(tp.Protocol, tp.Generic[M]):
   def __call__(
     self, state: State, *states: State
