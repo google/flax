@@ -100,7 +100,7 @@ class Sequential(Module):
     return output
 
   @staticmethod
-  def identity(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
+  def identity(*args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
       if len(args) == 1:
         return args[0]
       elif len(args) > 0:
