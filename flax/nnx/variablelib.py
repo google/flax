@@ -224,13 +224,16 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return cls(value, **metadata).to_state()
 
   @property
-  def mutable(self) -> bool | None:
+  def mutable(self) -> bool:
     if is_mutable_array(self.raw_value):
       return True
     elif isinstance(self.raw_value, jax.Array):
       return False
     else:
-      return None
+      raise ValueError(
+        f'mutable is only supported for jax.Array and MutableArray, '
+        f'got {type(self.raw_value).__name__}'
+      )
 
   def get_metadata(self):
     return self._var_metadata
@@ -422,12 +425,16 @@ class Variable(tp.Generic[A], reprlib.Representable):
     if config.flax_mutable_array:
       self.raw_value[key] = value  # type: ignore
     else:
-      if not is_mutable_array(self.raw_value):
-        if not self._trace_state.is_valid():
-          raise errors.TraceContextError(
-            f'Cannot mutate {type(self).__name__} from a different trace level'
-          )
-      if isinstance(self.raw_value, jax.Array):
+      if (
+        not is_mutable_array(self.raw_value)
+        and not self._trace_state.is_valid()
+      ):
+        raise errors.TraceContextError(
+          f'Cannot mutate {type(self).__name__} from a different trace level'
+        )
+      if key == ...:
+        self.value = value
+      elif isinstance(self.raw_value, jax.Array):
         self.raw_value = self.raw_value.at[key].set(value)  # type: ignore
       else:
         self.raw_value[key] = value  # type: ignore
@@ -972,6 +979,18 @@ class VariableState(tp.Generic[A], reprlib.Representable):
   def raw_value(self, value: A) -> None:
     object.__setattr__(self, 'value', value)
 
+  @property
+  def mutable(self) -> bool:
+    if is_mutable_array(self.raw_value):
+      return True
+    elif isinstance(self.raw_value, jax.Array):
+      return False
+    else:
+      raise ValueError(
+        f'mutable is only supported for jax.Array and MutableArray, '
+        f'got {type(self.raw_value).__name__}'
+      )
+
   def __getattribute__(self, name: str) -> None:
     if name == 'value':
       value = object.__getattribute__(self, 'value')
@@ -1280,8 +1299,10 @@ def register_variable_name(
     return partial(register_variable_name, name, overwrite=overwrite)
   typ = tp.cast(type[Variable[A]], typ)
   if not overwrite and name in VariableTypeCache:
-    raise ValueError(f'Name {name} already mapped to type {VariableTypeCache[name]}. '
-                     'To overwrite, call set_variable_name() with `overwrite=True`.')
+    raise ValueError(
+      f'Name {name} already mapped to type {VariableTypeCache[name]}. '
+      'To overwrite, call register_variable_name() with `overwrite=True`.'
+    )
   VariableTypeCache[name] = typ
   return typ
 

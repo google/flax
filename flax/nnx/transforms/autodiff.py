@@ -25,7 +25,7 @@ from flax.nnx import (
   graph,
   variablelib,
 )
-from flax.nnx.statelib import EmptyState, State
+from flax.nnx.statelib import State
 import jax
 import jax.core
 import jax.stages
@@ -427,7 +427,7 @@ def _custom_vjp_split_fn(
     # but we return a TreeNode.from_states which doesn't have a graphdef
     # in order to keep the gradients clean from any metadata
     graphdef, passed = ctx.split(value)
-    broadcast = EmptyState()
+    broadcast = State({})
     nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
     return extract.NodeStates.from_states(passed)
   else:

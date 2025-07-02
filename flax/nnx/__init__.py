@@ -31,7 +31,10 @@ from .graph import GraphDef as GraphDef
 from .graph import GraphState as GraphState
 from .graph import PureState as PureState
 from .object import Object as Object
-from .helpers import Dict as Dict
+from .object import Data as Data
+from .object import data as data
+from .object import register_data_type as register_data_type
+from .object import is_data_type as is_data_type
 from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
@@ -138,7 +141,11 @@ from .variablelib import Param as Param
 from .training import optimizer as optimizer
 from .training.metrics import Metric as Metric
 from .training.metrics import MultiMetric as MultiMetric
+from .training.optimizer import OptState as OptState
+from .training.optimizer import OptArray as OptArray
+from .training.optimizer import OptVariable as OptVariable
 from .training.optimizer import Optimizer as Optimizer
+from .training.optimizer import PytreeOptimizer as PytreeOptimizer
 from .training.optimizer import OptState as OptState
 from .transforms.autodiff import DiffState as DiffState
 from .transforms.autodiff import grad as grad
@@ -180,7 +187,3 @@ from .extract import from_tree as from_tree
 from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
 from . import traversals as traversals
-from .dataclasses import dataclass as dataclass
-from .dataclasses import Static as Static
-from .dataclasses import field as field
-from .dataclasses import static as static

@@ -477,7 +477,7 @@ class TestModule(absltest.TestCase):
   def test_create_abstract_stateful(self):
     linear = nnx.eval_shape(lambda: nnx.Dropout(0.5, rngs=nnx.Rngs(0)))
 
-    assert linear.rngs.default.key.value == jax.ShapeDtypeStruct(
+    assert linear.rngs.key.value == jax.ShapeDtypeStruct(
       (), jax.random.key(0).dtype
     )
 
