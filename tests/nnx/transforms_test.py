@@ -406,16 +406,16 @@ class TestJIT(absltest.TestCase):
     @nnx.jit
     def f(cached_m: nnx.Linear, m: nnx.Linear):
       self.assertIsNot(cached_m, m)
-      self.assertIs(cached_m.kernel, m.kernel)
-      self.assertIs(cached_m.bias, m.bias)
+      self.assertIsNot(cached_m.kernel, m.kernel)
+      self.assertIsNot(cached_m.bias, m.bias)
       return cached_m
 
     cached_f = nnx.cached_partial(f, m)
     cached_m = cached_f(m)
 
     self.assertIsNot(m, cached_m)
-    self.assertIs(m.kernel, cached_m.kernel)
-    self.assertIs(m.bias, cached_m.bias)
+    self.assertIsNot(m.kernel, cached_m.kernel)
+    self.assertIsNot(m.bias, cached_m.bias)
 
     # test that cached m is reused
     cached_m2 = cached_f(m)
@@ -451,6 +451,11 @@ class TestJIT(absltest.TestCase):
     y = compiled(m, x)
     self.assertEqual(m.count.value, 2)
 
+class TestEvalShape(absltest.TestCase):
+  def test_eval_shape(self):
+    abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
+    self.assertIsInstance(abs_model, nnx.Linear)
+    self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
 
 class TestShardMap(absltest.TestCase):
   def test_basic_shardmap(self):

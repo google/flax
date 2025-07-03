@@ -252,7 +252,7 @@ class ToLinen(linen.Module):
   args: tp.Sequence = ()
   kwargs: tp.Mapping[str, tp.Any] = FrozenDict({})
   skip_rng: bool = False
-  metadata_fn: tp.Callable[[variablelib.VariableState], tp.Any] | None = (
+  metadata_fn: tp.Callable[[variablelib.Variable], tp.Any] | None = (
       bv.to_linen_var
   )
 
@@ -310,7 +310,7 @@ class ToLinen(linen.Module):
 
     # group state by collection
     for path, leaf in nnx.to_flat_state(state):
-      type_ = leaf.type if isinstance(leaf, nnx.VariableState) else type(leaf)
+      type_ = leaf.type if isinstance(leaf, nnx.Variable) else type(leaf)
       collection = variablelib.variable_name_from_type(
           type_, allow_register=True
       )
@@ -323,7 +323,7 @@ class ToLinen(linen.Module):
       if self.is_mutable_collection(collection):
 
         def _to_linen_var(x):
-          if isinstance(x, nnx.VariableState):
+          if isinstance(x, nnx.Variable):
             if self.metadata_fn:
               return self.metadata_fn(x)
             else:
@@ -334,7 +334,7 @@ class ToLinen(linen.Module):
         collection_state = jax.tree.map(
             _to_linen_var,
             collection_state,
-            is_leaf=lambda x: isinstance(x, nnx.VariableState),
+            is_leaf=lambda x: isinstance(x, nnx.Variable),
         )
         for k, v in collection_state.items():
           self.put_variable(collection, k, v)
@@ -344,7 +344,7 @@ def to_linen(
     nnx_class: tp.Callable[..., Module],
     *args,
     metadata_fn: (
-        tp.Callable[[variablelib.VariableState], tp.Any] | None
+        tp.Callable[[variablelib.Variable], tp.Any] | None
     ) = bv.to_linen_var,
     name: str | None = None,
     **kwargs,

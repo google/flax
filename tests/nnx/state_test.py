@@ -21,19 +21,19 @@ from jax import numpy as jnp
 
 class StateTest(absltest.TestCase):
   def test_create_state(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
+    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
 
     assert state['a'].value == 1
     assert state['b']['c'].value == 2
 
   def test_get_attr(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
+    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
 
     assert state.a.value == 1
     assert state.b.c.value == 2
 
   def test_set_attr(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
+    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
 
     state.a.value = 3
     state.b.c.value = 4
@@ -42,24 +42,24 @@ class StateTest(absltest.TestCase):
     assert state['b']['c'].value == 4
 
   def test_set_attr_variables(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
+    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
 
     state.a.value = 3
     state.b.c.value = 4
 
-    assert issubclass(state.a.type, nnx.Param)
+    assert isinstance(state.a, nnx.Param)
     assert state.a.value == 3
-    assert issubclass(state.b.c.type, nnx.Param)
+    assert isinstance(state.b.c, nnx.Param)
     assert state.b.c.value == 4
 
   def test_add_nested_attr(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
-    state.b.d = nnx.Param.state(5)
+    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state.b.d = nnx.Param(5)
 
     assert state['b']['d'].value == 5
 
   def test_delete_nested_attr(self):
-    state = nnx.State({'a': nnx.Param.state(1), 'b': {'c': nnx.Param.state(2)}})
+    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
     del state['b']['c']
 
     assert 'c' not in state['b']
@@ -86,9 +86,9 @@ class StateTest(absltest.TestCase):
     assert isinstance(pure_dict['bias'], jax.Array)
     nnx.replace_by_pure_dict(state, jax.tree.map(jnp.zeros_like, pure_dict))
     assert isinstance(state, nnx.State)
-    assert isinstance(state['kernel'], nnx.VariableState)
+    assert isinstance(state['kernel'], nnx.Variable)
     assert jnp.array_equal(state['kernel'].value, jnp.zeros((4, 5)))
-    assert state['kernel'].type == nnx.Param
+    assert type(state['kernel']) == nnx.Param
     nnx.update(module, state)
     assert jnp.array_equal(module(jnp.ones((3, 4))), jnp.zeros((3, 5)))
 
