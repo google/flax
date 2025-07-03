@@ -22,9 +22,9 @@ from flax import nnx
 
 A = tp.TypeVar('A')
 
-class TestVariableState(absltest.TestCase):
+class TestVariable(absltest.TestCase):
   def test_pytree(self):
-    r1 = nnx.VariableState(nnx.Param, 1)
+    r1 = nnx.Param(1)
     self.assertEqual(r1.value, 1)
 
     r2 = jax.tree.map(lambda x: x + 1, r1)
