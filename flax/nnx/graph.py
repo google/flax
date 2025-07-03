@@ -96,6 +96,7 @@ LeafType = tp.Union[
   variablelib.MutableArray,
   MutableArrayOutput,
   NoUpdate,
+  Node,
 ]
 GraphState = State[Key, LeafType]
 GraphFlatState = FlatState[LeafType]
