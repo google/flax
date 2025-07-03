@@ -22,6 +22,7 @@ import jax
 import jax.experimental
 import jax.experimental.shard_map
 from jax.sharding import AbstractMesh, Mesh, PartitionSpec
+from jax._src import sharding_impls
 
 from flax.nnx import (
   extract,
@@ -39,6 +40,8 @@ AxisName = tp.Hashable
 # -------------------------------
 # jit
 # -------------------------------
+
+UNSPECIFIED = sharding_impls.UNSPECIFIED
 
 
 class StateSharding(extract.PrefixMapping):
@@ -139,8 +142,8 @@ class JitFn:
 @tp.overload
 def jit(
   *,
-  in_shardings: tp.Any = None,
-  out_shardings: tp.Any = None,
+  in_shardings: tp.Any = UNSPECIFIED,
+  out_shardings: tp.Any = UNSPECIFIED,
   static_argnums: int | tp.Sequence[int] | None = None,
   static_argnames: str | tp.Iterable[str] | None = None,
   donate_argnums: int | tp.Sequence[int] | None = None,
@@ -155,8 +158,8 @@ def jit(
 def jit(
   fun: tp.Callable[..., tp.Any],
   *,
-  in_shardings: tp.Any = None,
-  out_shardings: tp.Any = None,
+  in_shardings: tp.Any = UNSPECIFIED,
+  out_shardings: tp.Any = UNSPECIFIED,
   static_argnums: int | tp.Sequence[int] | None = None,
   static_argnames: str | tp.Iterable[str] | None = None,
   donate_argnums: int | tp.Sequence[int] | None = None,
@@ -170,8 +173,8 @@ def jit(
 def jit(
   fun: tp.Callable[..., tp.Any] | type[Missing] = Missing,
   *,
-  in_shardings: tp.Any = None,
-  out_shardings: tp.Any = None,
+  in_shardings: tp.Any = UNSPECIFIED,
+  out_shardings: tp.Any = UNSPECIFIED,
   static_argnums: int | tp.Sequence[int] | None = None,
   static_argnames: str | tp.Iterable[str] | None = None,
   donate_argnums: int | tp.Sequence[int] | None = None,
@@ -359,7 +362,7 @@ class JitWrapped:
     abstracted_axes: tp.Optional[tp.Any] = None,
   ):
     functools.update_wrapper(self, fun)
-    kwarg_shardings = None
+    kwarg_shardings = UNSPECIFIED
     self.jax_in_shardings = jax.tree.map(
       lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
       if isinstance(x, StateSharding)
@@ -406,11 +409,11 @@ class JitWrapped:
     pure_args, pure_kwargs = extract.to_tree(
       (args, kwargs),
       prefix=(self.in_shardings, self.kwarg_shardings)
-      if self.in_shardings is not None or self.kwarg_shardings is not None
+      if self.in_shardings is not UNSPECIFIED or self.kwarg_shardings is not UNSPECIFIED
       else None,
       split_fn=_jit_split_fn,
-      check_aliasing=self.in_shardings is not None
-      or self.kwarg_shardings is not None,
+      check_aliasing=self.in_shardings is not UNSPECIFIED
+      or self.kwarg_shardings is not UNSPECIFIED,
       ctxtag=self,
     )
     return pure_args, pure_kwargs

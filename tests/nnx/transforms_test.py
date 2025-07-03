@@ -55,6 +55,10 @@ class Dict(nnx.Module):
 
 
 class TestJIT(absltest.TestCase):
+  @classmethod
+  def setUpClass(cls):
+    jax.config.update('jax_num_cpu_devices', 4)
+
   def test_jit(self):
     m = Dict(a=nnx.Param(1))
 
@@ -400,6 +404,29 @@ class TestJIT(absltest.TestCase):
     config.flax_mutable_array,
     reason='Mutable arrays are not supported with cached_partial',
   )
+  def test_use_mesh(self):
+    n_devices = max(jax.local_device_count() // 2, 1)
+    devices = mesh_utils.create_device_mesh(
+      (n_devices, jax.local_device_count() // n_devices)
+    )
+    mesh = jax.sharding.Mesh(devices, ("a", "b"))
+    pspec = jax.sharding.PartitionSpec("a", "b")
+
+    def fn():
+      return jax.lax.with_sharding_constraint(jnp.ones((4, 4)), pspec)
+
+    nnx_jitted_fn = nnx.jit(fn)
+    ref_jitted_fn = jax.jit(fn)
+
+    with jax.sharding.use_mesh(mesh):
+      out = nnx_jitted_fn()
+      expected = ref_jitted_fn()
+      self.assertEqual(out.sharding.spec, expected.sharding.spec)
+
+  @pytest.mark.skipif(
+    config.flax_mutable_array,
+    reason='Mutable arrays are not supported with cached_partial',
+  )
   def test_cache_args(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
@@ -497,10 +524,10 @@ class TestShardMap(absltest.TestCase):
     self.assertNotIsInstance(w.value.sharding, jax.sharding.NamedSharding)
 
     @nnx.shard_map(mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None)
-    def f(w, b, count):
-      count += 1
-      self.assertEqual(w.shape, (w.shape[0], w.shape[1] // n_devices))
-      self.assertEqual(b.shape, (32,))
+    def f(w_, b_, count_):
+      count_ += 1
+      self.assertEqual(w_.shape, (w.shape[0], w.shape[1] // n_devices))
+      self.assertEqual(b_.shape, (32,))
 
     f(w, b, count)
 
@@ -2330,7 +2357,9 @@ class TestVmap(absltest.TestCase):
     reason='Flax mutable array does not support in_sharding',
   )
   def test_equivalent_state_sharding_mapping(self):
-    m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
+    # weights size should be divisible by 4 as we set
+    # jax.config.update('jax_num_cpu_devices', 4) in TestJIT.setUpClass
+    m = nnx.Linear(3 * 4, 3 * 4, rngs=nnx.Rngs(0))
 
     mesh = jax.sharding.Mesh(jax.devices(), ('mp',))
     sharding = jax.sharding.NamedSharding(
