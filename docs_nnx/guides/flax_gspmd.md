@@ -344,7 +344,7 @@ class LogicalDotReluDot(nnx.Module):
 If you didn't provide all `sharding_rule` annotations in the model definition, you can write a few lines to add it to Flax’s [`nnx.State`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/state.html#flax.nnx.State) of the model, before the call of [`nnx.get_partition_spec`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/spmd.html#flax.nnx.get_partition_spec) or [`nnx.get_named_sharding`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/spmd.html#flax.nnx.get_named_sharding).
 
 ```{code-cell} ipython3
-def add_sharding_rule(vs: nnx.VariableState) -> nnx.VariableState:
+def add_sharding_rule(vs: nnx.Variable) -> nnx.Variable:
   vs.sharding_rules = sharding_rules
   return vs
 
@@ -353,7 +353,7 @@ def create_sharded_logical_model():
   model = LogicalDotReluDot(1024, rngs=nnx.Rngs(0))
   state = nnx.state(model)
   state = jax.tree.map(add_sharding_rule, state,
-                       is_leaf=lambda x: isinstance(x, nnx.VariableState))
+                       is_leaf=lambda x: isinstance(x, nnx.Variable))
   pspecs = nnx.get_partition_spec(state)
   sharded_state = jax.lax.with_sharding_constraint(state, pspecs)
   nnx.update(model, sharded_state)

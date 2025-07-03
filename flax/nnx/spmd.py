@@ -31,12 +31,14 @@ A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 PARTITION_NAME = 'partition_name'
 
+
 class HasSharding(tp.Protocol):
   sharding: tuple[str | None, ...] | None
 
 
 def _has_sharding(x: tp.Any) -> tp.TypeGuard[HasSharding]:
   return hasattr(x, 'sharding') and x.sharding is not None
+
 
 def add_axis(tree: A, index: int, transform_metadata: tp.Mapping) -> A:
   axis_name, other_meta = _get_partition_name_and_metadata(transform_metadata)
@@ -49,24 +51,28 @@ def add_axis(tree: A, index: int, transform_metadata: tp.Mapping) -> A:
     return tuple(iterable)
 
   def _add_axis(x: tp.Any):
-    if isinstance(x, variablelib.VariableState):
-      if _has_sharding(x) and x.sharding is not None:
-        x.sharding = insert_field(x.sharding, index, axis_name)
+    if isinstance(x, variablelib.Variable):
+      metadata = x.get_metadata()
+      if 'sharding' in metadata and metadata['sharding']:
+        sharding = metadata['sharding']
+        x.sharding = insert_field(sharding, index, axis_name)
 
       for k, v in other_meta.items():
         if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
           setattr(x, k, insert_field(t, index, v))
 
-      assert isinstance(x, variablelib.VariableState)
+      assert isinstance(x, variablelib.Variable)
       x.add_axis(index, axis_name)
     return x
 
   return jax.tree.map(
-    _add_axis, tree, is_leaf=lambda x: isinstance(x, variablelib.VariableState)
+    _add_axis, tree, is_leaf=lambda x: isinstance(x, variablelib.Variable)
   )
 
 
-def remove_axis(tree: A, index: int, transform_metadata: tp.Mapping[tp.Any, tp.Any]) -> A:
+def remove_axis(
+  tree: A, index: int, transform_metadata: tp.Mapping[tp.Any, tp.Any]
+) -> A:
   axis_name, other_meta = _get_partition_name_and_metadata(transform_metadata)
 
   def remove_field(fields, index, value):
@@ -75,7 +81,7 @@ def remove_axis(tree: A, index: int, transform_metadata: tp.Mapping[tp.Any, tp.A
     return tuple(iterable)
 
   def _remove_axis(x: tp.Any):
-    if isinstance(x, variablelib.VariableState):
+    if isinstance(x, variablelib.Variable):
       if hasattr(x, 'sharding') and x.sharding is not None:
         x.sharding = remove_field(x.sharding, index, axis_name)
 
@@ -89,12 +95,12 @@ def remove_axis(tree: A, index: int, transform_metadata: tp.Mapping[tp.Any, tp.A
   return jax.tree.map(
     _remove_axis,
     tree,
-    is_leaf=lambda x: isinstance(x, variablelib.VariableState),
+    is_leaf=lambda x: isinstance(x, variablelib.Variable),
   )
 
 
 def _get_partition_name_and_metadata(
-  transform_metadata: tp.Mapping[tp.Any, tp.Any]
+  transform_metadata: tp.Mapping[tp.Any, tp.Any],
 ) -> tuple[str, tp.Mapping[tp.Any, tp.Any]]:
   if PARTITION_NAME not in transform_metadata:
     raise ValueError(
@@ -116,35 +122,31 @@ def get_partition_spec(tree: A) -> A:
       return None
 
   def f(x):
-    if isinstance(x, (variablelib.VariableState, variablelib.Variable)):
-      if hasattr(x, 'sharding') and x.sharding:
-        if core_spmd.get_logical_axis_rules() or hasattr(x, 'sharding_rules'):
+    if isinstance(x, variablelib.Variable):
+      metadata = x.get_metadata()
+      if 'sharding' in metadata and metadata['sharding']:
+        sharding = metadata['sharding']
+        if core_spmd.get_logical_axis_rules() or 'sharding_rules' in metadata:
           context_rules = core_spmd.get_logical_axis_rules()
-          local_rules = getattr(x, 'sharding_rules', ())
+          local_rules = metadata.get('sharding_rules', ())
           rules = core_spmd.composite_rules(context_rules, local_rules)
           return x.replace(
-              PartitionSpec(*core_spmd.from_sharding_rules(x.sharding, rules))
+              PartitionSpec(*core_spmd.from_sharding_rules(sharding, rules))
           )
-        return x.replace(PartitionSpec(*x.sharding))
+        return x.replace(PartitionSpec(*sharding))
       else:
         return x.replace(_maybe_replicate(x.raw_value))
 
     return _maybe_replicate(x)
 
   return jax.tree.map(
-      f,
-      tree,
-      is_leaf=lambda x: isinstance(
-          x, (variablelib.VariableState, variablelib.Variable)
-      ),
+    f, tree, is_leaf=lambda x: isinstance(x, variablelib.Variable)
   )
 
 
 def get_named_sharding(tree: A, mesh: jax.sharding.Mesh) -> A:
   spec = get_partition_spec(tree)
-  sharding = jax.tree.map(
-    lambda p: jax.sharding.NamedSharding(mesh, p), spec
-  )
+  sharding = jax.tree.map(lambda p: jax.sharding.NamedSharding(mesh, p), spec)
   return sharding
 
 
@@ -174,7 +176,7 @@ def _with_sharding_constraint(
 
 
 def _is_spec(x):
-  return x is None or (
+  return x is None or isinstance(x, variablelib.Variable) or (
     isinstance(x, tuple) and all(isinstance(e, str) or e is None for e in x)
   )
 

@@ -36,7 +36,7 @@ from flax.nnx import (
   visualization,
 )
 from flax import config
-from flax.nnx.variablelib import Variable, VariableState, is_mutable_array
+from flax.nnx.variablelib import Variable, is_mutable_array
 from flax.typing import SizeBytes
 
 BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
@@ -598,7 +598,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     elif (
       hasattr(self, key)
       and isinstance(variable := getattr(self, key), Variable)
-      and isinstance(value, VariableState)
+      and isinstance(value, Variable)
     ):
       variable.update_from_state(value)
     else:

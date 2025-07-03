@@ -391,12 +391,12 @@ The variable structure is as follows:
       # params
       {
         'decoder': {
-          'bias': VariableState(type=Param, value=(784,)),
-          'kernel': VariableState(type=Param, value=(256, 784))
+          'bias': Param(value=(784,)),
+          'kernel': Param(value=(256, 784))
         },
         'encoder': {
-          'bias': VariableState(type=Param, value=(256,)),
-          'kernel': VariableState(type=Param, value=(784, 256))
+          'bias': Param(value=(256,)),
+          'kernel': Param(value=(784, 256))
         }
       }
 
@@ -647,8 +647,8 @@ Now inspect the variable pytree on both sides:
       {
         'blocks': {
           'linear': {
-            'bias': VariableState(type=Param, value=(5, 64)),
-            'kernel': VariableState(type=Param, value=(5, 64, 64))
+            'bias': Param(value=(5, 64)),
+            'kernel': Param(value=(5, 64, 64))
           }
         }
       }

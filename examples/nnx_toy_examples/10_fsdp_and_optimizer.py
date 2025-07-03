@@ -87,13 +87,13 @@ class SGD(nnx.Object):
     self.momentum: nnx.State = jax.tree.map(
       init_optimizer_state,
       self.params,
-      is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState),
+      is_leaf=lambda x: isinstance(x, nnx.Variable),
     )
     self.decay = decay
 
   def update(self, grads: nnx.State):
     def update_fn(
-      params: nnx.Variable, momentum: SGDState, grad: nnx.VariableState
+      params: nnx.Variable, momentum: SGDState, grad: nnx.Variable
     ):
       # v_t = β * v_{t-1} + (1 - β) * ∇J(θ_t)
       momentum[...] = self.decay * momentum[...] + (1 - self.decay) * grad[...]
@@ -105,7 +105,7 @@ class SGD(nnx.Object):
       self.params,
       self.momentum,
       grads,
-      is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState),
+      is_leaf=lambda x: isinstance(x, nnx.Variable),
     )
 
 
@@ -118,12 +118,12 @@ def create_model():
     state, nnx.get_named_sharding(state, mesh)
   )
 
-  def get_named_shardings(path: tuple, value: nnx.VariableState):
+  def get_named_shardings(path: tuple, value: nnx.Variable):
     if path[0] == 'params':
-      return value.replace(NamedSharding(mesh, P(*value.sharding)))
+      return NamedSharding(mesh, P(*value.sharding))
     elif path[0] == 'momentum':
       # currently the same as above but in general it could be different
-      return value.replace(NamedSharding(mesh, P(*value.sharding)))
+      return NamedSharding(mesh, P(*value.sharding))
     else:
       raise ValueError(f'Unknown path: {path}')
 
