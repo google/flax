@@ -865,6 +865,20 @@ def remat(
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
 ) -> F | tp.Callable[[F], F]:
+  """A 'lifted' version of the
+  `jax.checkpoint <https://jax.readthedocs.io/en/latest/_autosummary/jax.checkpoint.html>`__
+  (a.k.a. ``jax.remat``).
+
+  ``flax.nnx.remat``, similar to ``jax.checkpoint`` can provide control over, for
+    example, how ``flax.nnx.grad`` values are computed and saved during the forward pass versus
+    how they are recomputed during the backward pass, trading off memory and FLOPs.
+
+  Learn more in `Flax NNX vs JAX Transformations <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`_.
+
+  To learn about ``jax.remat``, go to JAX's
+    `fundamentals of jax.checkpoint <https://jax.readthedocs.io/en/latest/notebooks/autodiff_remat.html#fundamentals-of-jax-checkpoint>`_
+    and `practical notes <https://jax.readthedocs.io/en/latest/notebooks/autodiff_remat.html#practical-notes>`_.
+  """
   if isinstance(f, Missing):
     return functools.partial(
       remat,
@@ -886,18 +900,3 @@ def remat(
       ),
     )
   )
-  """A 'lifted' version of the
-  `jax.checkpoint <https://jax.readthedocs.io/en/latest/_autosummary/jax.checkpoint.html>`__
-  (a.k.a. ``jax.remat``).
-
-  ``flax.nnx.remat``, similar to ``jax.checkpoint`` can provide control over, for
-    example, how ``flax.nnx.grad`` values are computed and saved during the forward pass versus
-    how they are recomputed during the backward pass, trading off memory and FLOPs.
-
-  Learn more in `Flax NNX vs JAX Transformations <https://flax.readthedocs.io/en/latest/guides/jax_and_nnx_transforms.html>`_.
-
-  To learn about ``jax.remat``, go to JAX's
-    `fundamentals of jax.checkpoint <https://jax.readthedocs.io/en/latest/notebooks/autodiff_remat.html#fundamentals-of-jax-checkpoint>`_
-    and `practical notes <https://jax.readthedocs.io/en/latest/notebooks/autodiff_remat.html#practical-notes>`_.
-  """
-
