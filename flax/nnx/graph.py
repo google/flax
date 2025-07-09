@@ -704,7 +704,7 @@ def _graph_flatten(
   ref_outer_index: RefMap | None,
   nodes: list[NodeDefType[tp.Any]],
   attributes: list[tuple[Key, AttrType]],
-  leaves: list[LeafType],
+  leaves: list[tp.Any],
   paths: list[PathParts] | None,
   return_variables: bool,
 ) -> None:

@@ -209,6 +209,26 @@ def linen_rngs_dict(linen_module: linen.Module, add_default: bool = False):
     rngs['default'] = 0
   return rngs
 
+def _get_module_method(module, method: tp.Callable[..., Any] | str | None):
+  if method is None:
+    method = '__call__'
+
+  if isinstance(method, str):
+    attribute_name = method
+    method = getattr(type(module), attribute_name)
+    if not callable(method):
+      class_name = type(module).__name__
+      raise TypeError(
+        f"'{class_name}.{attribute_name}' must be a callable, got"
+        f' {type(method)}.'
+      )
+  if not callable(method):
+    class_name = type(module).__name__
+    raise TypeError(
+      f"'{method}' must be a callable, got {type(method)}."
+    )
+
+  return method
 
 class ToLinen(linen.Module):
   """A wrapper to turn any NNX module into a Linen module.
@@ -257,7 +277,7 @@ class ToLinen(linen.Module):
   )
 
   @linen.compact
-  def __call__(self, *args, **kwargs):
+  def __call__(self, *args, nnx_method: tp.Callable[..., Any] | str | None = None, **kwargs):
     module_kwargs = dict(self.kwargs)
     maybe_add_default = not self.is_initializing()
     def _module_kwargs():
@@ -273,7 +293,8 @@ class ToLinen(linen.Module):
       # TODO: add lazy_init here in case there's an `ToNNX` submodule under `module`.
       # update linen variables before call module to save initial state
       self._update_variables(module)
-      out = module(*args, **kwargs)
+      method_fn = _get_module_method(module, nnx_method)
+      out = method_fn(module, *args, **kwargs)
       return out
 
     # create state
@@ -298,9 +319,20 @@ class ToLinen(linen.Module):
         module, **linen_rngs_dict(self, add_default=maybe_add_default)
     )  # reseed with keys from linen apply call.
 
-    out = module(*args, **kwargs)
+    method_fn = _get_module_method(module, nnx_method)
+    out = method_fn(module, *args, **kwargs)
     self._update_variables(module)
     return out
+
+  def __getattr__(self, name: str):
+    if hasattr(super(), name):
+      return super().__getattribute__(name)
+    maybe_method = getattr(self.nnx_class, name, None)
+    if callable(maybe_method):
+      method = partial(self.__call__, nnx_method=maybe_method)
+      method.__self__ = self
+      return method
+    return super().__getattribute__(name)
 
   def _update_variables(self, module):
     """Store the NNX module's graph def and state inside Linen module variables."""
