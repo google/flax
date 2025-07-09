@@ -317,6 +317,36 @@ class TestCompatibility(absltest.TestCase):
     assert updates['Count']['count'] == 1
     _ = model.apply(variables | updates)
 
+  def test_to_linen_method_call(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.embedding = nnx.bridge.to_linen(nnx.Embed, 2, 3)
+
+      def __call__(self, x):
+        return self.embedding(x)
+
+      def attend(self, x):
+        return self.embedding.attend(x)
+
+    module = Foo()
+    x = jnp.ones((1,), dtype=jnp.int32)
+    z = jnp.ones((1, 3))
+    y , params = module.init_with_output(jax.random.key(0), x)
+    assert y.shape == (1, 3)
+    assert params['params']['embedding']['embedding'].shape == (2, 3)
+    x_out = module.apply(params, z, method='attend')
+    assert x_out.shape == (1, 2)
+
+  def test_to_linen_nnx_method_arg(self):
+    module = nnx.bridge.to_linen(nnx.Embed, 2, 3)
+    x = jnp.ones((1,), dtype=jnp.int32)
+    z = jnp.ones((1, 3))
+    y , params = module.init_with_output(jax.random.key(0), x)
+    assert y.shape == (1, 3)
+    assert params['params']['embedding'].shape == (2, 3)
+    x_out = module.apply(params, z, nnx_method='attend')
+    assert x_out.shape == (1, 2)
+
   def test_nnx_to_linen_mutated_static_data(self):
 
     @nnx.register_variable_name('Count', overwrite=True)
