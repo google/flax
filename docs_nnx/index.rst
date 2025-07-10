@@ -197,6 +197,6 @@ Learn more
    guides/index
    examples/index
    nnx_glossary
-   The Flax philosophy <https://flax.readthedocs.io/en/latest/philosophy.html>
-   How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
+   philosophy
+   contributing
    api_reference/index
