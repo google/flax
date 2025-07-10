@@ -24,6 +24,7 @@ _T = TypeVar('_T')
 class Config:
   flax_use_flaxlib: bool
   flax_mutable_array: bool
+  flax_pytree_module: bool
   flax_max_repr_depth: int | None
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
@@ -271,6 +272,11 @@ flax_mutable_array = bool_flag(
   name='flax_mutable_array',
   default=False,
   help='Whether to use mutable arrays.',
+)
+flax_pytree_module = bool_flag(
+  name='flax_pytree_module',
+  default=True,
+  help='Whether Modules are pytrees by default or not.',
 )
 
 flax_max_repr_depth = int_flag(

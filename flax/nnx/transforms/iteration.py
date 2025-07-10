@@ -652,7 +652,7 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
       )
 
   jax.tree_util.tree_map_with_path(
-    check_carry_same_references, carry_arg, carry_arg_out
+    check_carry_same_references, carry_arg, carry_arg_out, is_leaf=graph.is_graph_node
   )
 
 def _extract_graphdefs(

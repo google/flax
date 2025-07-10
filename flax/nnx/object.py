@@ -335,7 +335,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     _object__state: ObjectState
 
   def __init_subclass__(
-    cls, *, pytree: bool = config.flax_mutable_array, **kwargs
+    cls, *, pytree: bool = config.flax_pytree_module, **kwargs
   ) -> None:
     super().__init_subclass__(**kwargs)
 
@@ -387,7 +387,8 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       value = value.value
       if name not in self._object__nodes:
         self._object__nodes = self._object__nodes.union((name,))
-    elif is_data_type(value):
+    # any attribute that contains known data types will be registered as data
+    elif any(is_data_type(leaf) for leaf in jax.tree.leaves(value, is_leaf=is_data_type)):
       if name not in self._object__nodes:
         self._object__nodes = self._object__nodes.union((name,))
     elif type(self)._object__is_pytree and name not in self._object__nodes:
