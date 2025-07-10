@@ -14,9 +14,11 @@
 # pytype: skip-file
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import functools
 from functools import partial
+import threading
 import typing as tp
 from typing import Any
 from flax import config
@@ -44,7 +46,93 @@ AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
-MUTABLE_DEFAULT = True if config.flax_mutable_array else None
+
+@dataclasses.dataclass
+class VariableContext(threading.local):
+  mutable_variable_stack: list[bool] = dataclasses.field(default_factory=list)
+
+
+VARIABLE_CONTEXT = VariableContext()
+
+
+def using_mutable_arrays() -> bool:
+  """Returns whether Variables are using MutableArrays by default.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> nnx.using_mutable_arrays()
+    False
+    >>> nnx.use_mutable_arrays(True)
+    <...>
+    >>> nnx.using_mutable_arrays()
+    True
+
+  Returns:
+    A boolean indicating if Variables are using MutableArrays by default.
+  """
+  if VARIABLE_CONTEXT.mutable_variable_stack:
+    return VARIABLE_CONTEXT.mutable_variable_stack[-1]
+  else:
+    return config.flax_mutable_array
+
+
+
+def use_mutable_arrays(value: bool, /):
+  """Sets whether Variables should use MutableArrays by default or not.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> # Use MutableArrays by default
+    >>> nnx.use_mutable_arrays(True)
+    <...>
+    >>> # Variable will now use MutableArrays
+    >>> v = nnx.Variable(jax.numpy.ones((2, 3)))
+    >>> v.mutable
+    True
+    >>> v.raw_value
+    MutableArray(...)
+
+  It can also be used as a context manager to temporarily
+  change the default behavior for a block of code::
+
+    >>> nnx.use_mutable_arrays(False)
+    <...>
+    >>> with nnx.use_mutable_arrays(True):
+    ...   v = nnx.Variable(jax.numpy.ones((2, 3)))
+    ...   v.mutable
+    True
+    >>> # it will reset outside
+    >>> v = nnx.Variable(jax.numpy.ones((2, 3)))
+    >>> v.mutable
+    False
+
+  Args:
+    value: A boolean indicating if Variables should use MutableArrays by default.
+
+  Returns:
+    A context manager that resets the context to the previous value.
+  """
+  # prev_value = VARIABLE_CONTEXT.mutable_variable_stack[-1] if VARIABLE_CONTEXT.mutable_variable_stack else None
+  # VARIABLE_CONTEXT.mutable_variable_stack.append(value)
+  if VARIABLE_CONTEXT.mutable_variable_stack:
+    prev_value = VARIABLE_CONTEXT.mutable_variable_stack[-1]
+    VARIABLE_CONTEXT.mutable_variable_stack[-1] = value
+  else:
+    prev_value = None
+    VARIABLE_CONTEXT.mutable_variable_stack.append(value)
+  return _clean_mutable_arrays_context(prev_value)
+
+@contextlib.contextmanager
+def _clean_mutable_arrays_context(prev_value: bool | None):
+  if prev_value is not None:
+    VARIABLE_CONTEXT.mutable_variable_stack.insert(-1, prev_value)
+  try:
+    yield
+  finally:
+    VARIABLE_CONTEXT.mutable_variable_stack.pop()
 
 
 def is_mutable_array(x) -> tp.TypeGuard[MutableArray]:
@@ -134,9 +222,12 @@ class Variable(tp.Generic[A], reprlib.Representable):
     self,
     value: tp.Union[A, VariableMetadata[A]],
     *,
-    mutable: bool | None = MUTABLE_DEFAULT,
+    mutable: bool | None = None,
     **metadata: tp.Any,
   ):
+    if mutable is None:
+      mutable = using_mutable_arrays()
+
     var_t = type(self)
     object.__setattr__(self, '_trace_state', tracers.TraceState())
 
@@ -144,15 +235,13 @@ class Variable(tp.Generic[A], reprlib.Representable):
       metadata.update(value.metadata)
       value = tp.cast(A, value.raw_value)
 
-    if mutable is None:
-      _value = value
-    elif mutable:
+    if mutable:
       if is_mutable_array(value):
         _value = tp.cast(A, value)
       else:
         _value = mutable_array(jnp.asarray(value))
     else:
-      _value = tp.cast(A, jnp.asarray(value))
+      _value = value
 
     object.__setattr__(self, 'raw_value', _value)
 
@@ -227,15 +316,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
   @property
   def mutable(self) -> bool:
-    if is_mutable_array(self.raw_value):
-      return True
-    elif isinstance(self.raw_value, jax.Array):
-      return False
-    else:
-      raise ValueError(
-        f'mutable is only supported for jax.Array and MutableArray, '
-        f'got {type(self.raw_value).__name__}'
-      )
+    return is_mutable_array(self.raw_value)
 
   def get_metadata(self):
     return self._var_metadata
@@ -255,7 +336,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def update_from_state(self, variable_state: Variable[A]):
     object.__setattr__(self, 'raw_value', variable_state.raw_value)
     object.__setattr__(
-        self, '_var_metadata', variable_state._var_metadata.copy()
+      self, '_var_metadata', variable_state._var_metadata.copy()
     )
 
   @property
@@ -272,11 +353,11 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def value(self, value: A):
     if isinstance(value, Variable):
       raise ValueError(
-        'Cannot set value to a Variable, ' 'use `copy_from` method instead'
+        'Cannot set value to a Variable, use `copy_from` method instead'
       )
     if 'on_set_value' in self._var_metadata:
       value = self._var_metadata['on_set_value'](self, value)
-    if config.flax_mutable_array:
+    if self.mutable:
       self.raw_value[...] = value  # type: ignore
     else:
       object.__setattr__(self, 'raw_value', value)
@@ -405,9 +486,9 @@ class Variable(tp.Generic[A], reprlib.Representable):
   # pickle support
   def __getstate__(self):
     return {
-        'raw_value': self.raw_value,
-        '_trace_state': self._trace_state,
-        '_var_metadata': self._var_metadata,
+      'raw_value': self.raw_value,
+      '_trace_state': self._trace_state,
+      '_var_metadata': self._var_metadata,
     }
 
   def __setstate__(self, state):
@@ -423,22 +504,18 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self.value[key]  # type: ignore
 
   def __setitem__(self, key, value) -> None:
-    if config.flax_mutable_array:
-      self.raw_value[key] = value  # type: ignore
+    if not self.mutable and not self._trace_state.is_valid():
+      raise errors.TraceContextError(
+        f'Cannot mutate {type(self).__name__} from a different trace level'
+      )
+    if self.mutable:
+      self.raw_value[key] = value # type: ignore
+    elif key == ...:
+      self.value = value
+    elif isinstance(self.raw_value, jax.Array):
+      self.raw_value = self.raw_value.at[key].set(value)  # type: ignore
     else:
-      if (
-        not is_mutable_array(self.raw_value)
-        and not self._trace_state.is_valid()
-      ):
-        raise errors.TraceContextError(
-          f'Cannot mutate {type(self).__name__} from a different trace level'
-        )
-      if key == ...:
-        self.value = value
-      elif isinstance(self.raw_value, jax.Array):
-        self.raw_value = self.raw_value.at[key].set(value)  # type: ignore
-      else:
-        self.raw_value[key] = value  # type: ignore
+      self.raw_value[key] = value  # type: ignore
 
   def __call__(self, *args, **kwargs) -> tp.Any:
     return self.value(*args, **kwargs)  # type: ignore
@@ -776,6 +853,7 @@ def _variable_flatten_with_keys(x: Variable[tp.Any]):
   node = (jtu.GetAttrKey('value'), x.raw_value)
   return (node,), metadata
 
+
 def _variable_flatten(x: Variable[tp.Any]):
   metadata = tuple(x.get_metadata().items())
   return (x.raw_value,), metadata
@@ -787,6 +865,7 @@ def _variable_unflatten(
   children: tuple[tp.Any],
 ):
   return cls.from_metadata(value=children[0], attributes=dict(static))
+
 
 jax.tree_util.register_pytree_with_keys(
   Variable,
@@ -1036,9 +1115,9 @@ def split_flat_state(
         break
     else:
       raise ValueError(
-          'Non-exhaustive filters, got a non-empty remainder: '
-          f'{path} -> {value}.'
-          '\nUse `...` to match all remaining elements.'
+        'Non-exhaustive filters, got a non-empty remainder: '
+        f'{path} -> {value}.'
+        '\nUse `...` to match all remaining elements.'
       )
 
   return flat_states
@@ -1106,28 +1185,26 @@ _MISSING = _Missing()
 
 @tp.overload
 def register_variable_name(
-    name: str,
-    typ: type[Variable[tp.Any]],
-    *,
-    overwrite: bool = False,
-) -> type[Variable[tp.Any]]:
-  ...
+  name: str,
+  typ: type[Variable[tp.Any]],
+  *,
+  overwrite: bool = False,
+) -> type[Variable[tp.Any]]: ...
 
 
 @tp.overload
 def register_variable_name(
-    name: str,
-    *,
-    overwrite: bool = False,
-) -> tp.Callable[[type[Variable[tp.Any]]], type[Variable[tp.Any]]]:
-  ...
+  name: str,
+  *,
+  overwrite: bool = False,
+) -> tp.Callable[[type[Variable[tp.Any]]], type[Variable[tp.Any]]]: ...
 
 
 def register_variable_name(
-    name: str,
-    typ: type[Variable[A]] | _Missing = _MISSING,
-    *,
-    overwrite=False,
+  name: str,
+  typ: type[Variable[A]] | _Missing = _MISSING,
+  *,
+  overwrite=False,
 ) -> type[Variable[A]] | tp.Callable[[type[Variable[A]]], type[Variable[A]]]:
   """Register a pair of Linen collection name and its NNX type."""
   if typ is _MISSING:

@@ -36,7 +36,7 @@ from flax.nnx import (
   visualization,
 )
 from flax import config
-from flax.nnx.variablelib import Variable, is_mutable_array
+from flax.nnx.variablelib import Variable
 from flax.typing import SizeBytes
 
 BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
@@ -103,6 +103,7 @@ def data(value: A, /) -> A:
 
   """
   return DataAttr(value)  # type: ignore[return-value]
+
 
 def register_data_type(type_: type, /) -> None:
   """Registers a type as pytree data type recognized by Object.
@@ -264,6 +265,7 @@ class ObjectState(reprlib.Representable):
       subtree_renderer=subtree_renderer,
     )
 
+
 def _flatten_object_state(state: ObjectState):
   return (), (state.initializing, state.is_setup)
 
@@ -279,6 +281,7 @@ jax.tree_util.register_pytree_node(
   _unflatten_object_state,
 )
 
+
 class ObjectMeta(ABCMeta):
   if not tp.TYPE_CHECKING:
 
@@ -291,9 +294,18 @@ class ObjectMeta(ABCMeta):
 
 def _graph_node_meta_call(cls: tp.Type[O], *args, **kwargs) -> O:
   node = cls.__new__(cls, *args, **kwargs)
-  vars(node)['_object__state'] = ObjectState()
-  vars(node)['_object__nodes'] = cls._object__nodes
+  vars_obj = vars(node)
+  vars_obj['_object__state'] = ObjectState()
+  vars_obj['_object__nodes'] = cls._object__nodes
   cls._object_meta_construct(node, *args, **kwargs)
+  # register possible new data attributes after initialization
+  for name, value in vars_obj.items():
+    if name not in vars_obj['_object__nodes']:
+      if any(
+        is_data_type(leaf)
+        for leaf in jax.tree.leaves(value, is_leaf=is_data_type)
+      ):
+        vars_obj['_object__nodes'] = vars_obj['_object__nodes'].union((name,))
 
   return node
 
@@ -312,6 +324,7 @@ class ArrayRepr(reprlib.Representable):
     yield reprlib.Attr('shape', self.shape)
     yield reprlib.Attr('dtype', self.dtype)
 
+
 @dataclasses.dataclass(frozen=True, repr=False)
 class MutableArrayRepr(reprlib.Representable):
   shape: tp.Tuple[int, ...]
@@ -326,6 +339,7 @@ class MutableArrayRepr(reprlib.Representable):
     yield reprlib.Attr('shape', self.shape)
     yield reprlib.Attr('dtype', self.dtype)
 
+
 class Object(reprlib.Representable, metaclass=ObjectMeta):
   """Base class for all NNX objects."""
 
@@ -335,7 +349,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     _object__state: ObjectState
 
   def __init_subclass__(
-    cls, *, pytree: bool = config.flax_mutable_array, **kwargs
+    cls, *, pytree: bool = config.flax_pytree_module, **kwargs
   ) -> None:
     super().__init_subclass__(**kwargs)
 
@@ -387,20 +401,12 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       value = value.value
       if name not in self._object__nodes:
         self._object__nodes = self._object__nodes.union((name,))
-    elif is_data_type(value):
-      if name not in self._object__nodes:
-        self._object__nodes = self._object__nodes.union((name,))
-    elif type(self)._object__is_pytree and name not in self._object__nodes:
-      for leaf in jax.tree.leaves(value):
-        if isinstance(leaf, jax.Array) or is_mutable_array(leaf):
-          raise TypeError(
-            f"Trying to set '{name}' to a value containing one or more "
-            f"jax.Array, but '{name}' is not a registered as data. "
-            f"Use 'obj.{name} = nnx.data(...)' to register the attribute as data "
-            f"on assignment, or add '{name}: nnx.Data[{type(value).__name__}]' "
-            f'to the class definition. '
-            f'Got value: {value}'
-          )
+    # any attribute that contains known data types will be registered as data
+    elif name not in self._object__nodes and any(
+      is_data_type(leaf)
+      for leaf in jax.tree.leaves(value, is_leaf=is_data_type)
+    ):
+      self._object__nodes = self._object__nodes.union((name,))
     object.__setattr__(self, name, value)
 
   def _check_valid_context(self, error_msg: tp.Callable[[], str]) -> None:
