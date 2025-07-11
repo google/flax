@@ -241,7 +241,7 @@ class TestOptimizer(parameterized.TestCase):
         rngs=nnx.Rngs(1),
     )
     state = nnx.Optimizer(model, optax.adam(1e-3), wrt=variable)
-    prev_variables, prev_other_variables = nnx.state(model, variable, ...)
+    prev_variables, prev_other_variables = nnx.clone(nnx.state(model, variable, ...))
 
     x = jnp.ones((1, 4))
     y = jnp.ones((1, 10))
@@ -288,7 +288,7 @@ class TestOptimizer(parameterized.TestCase):
         rngs=nnx.Rngs(1),
     )
     state = nnx.Optimizer(model, optax.lbfgs(), wrt=variable)
-    prev_variables, prev_other_variables = nnx.state(model, variable, ...)
+    prev_variables, prev_other_variables = nnx.clone(nnx.state(model, variable, ...))
 
     x = jnp.ones((1, 4))
     y = jnp.ones((1, 10))

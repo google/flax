@@ -62,21 +62,17 @@ Types are not functions of this form. They are treated as `Filter`s because, as 
 
 ```{code-cell} ipython3
 def is_param(path, value) -> bool:
-  return isinstance(value, nnx.Param) or (
-    hasattr(value, 'type') and issubclass(value.type, nnx.Param)
-  )
+  return isinstance(value, nnx.Param)
 
 print(f'{is_param((), nnx.Param(0)) = }')
-print(f'{is_param((), nnx.VariableState(type=nnx.Param, value=0)) = }')
 ```
 
-Such function matches any value that is an instance of [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param) or any value that has a `type` attribute that is a subclass of [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param). Internally Flax NNX uses `OfType` which defines a callable of this form for a given type:
+Such function matches any value that is an instance of [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param). Internally Flax NNX uses `OfType` which defines a callable of this form for a given type:
 
 ```{code-cell} ipython3
 is_param = nnx.OfType(nnx.Param)
 
 print(f'{is_param((), nnx.Param(0)) = }')
-print(f'{is_param((), nnx.VariableState(type=nnx.Param, value=0)) = }')
 ```
 
 ## The `Filter` DSL
