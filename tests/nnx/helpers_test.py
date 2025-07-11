@@ -114,6 +114,14 @@ class TestHelpers(absltest.TestCase):
     out = model.apply(variables, x)
     np.testing.assert_array_equal(out, out_nnx)
 
+  def test_nnx_empty_sequential_is_identity(self):
+    iden = nnx.Sequential()
+    assert iden(12) == 12
+    assert iden(12, 23) == (12, 23)
+    assert iden() is None
+    assert iden(k=2) == {'k': 2}
+
+
 
 if __name__ == '__main__':
   absltest.main()
