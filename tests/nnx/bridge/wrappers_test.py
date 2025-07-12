@@ -347,6 +347,8 @@ class TestCompatibility(absltest.TestCase):
     x_out = module.apply(params, z, nnx_method='attend')
     assert x_out.shape == (1, 2)
 
+
+
   def test_nnx_to_linen_mutated_static_data(self):
 
     @nnx.register_variable_name('Count', overwrite=True)
@@ -511,6 +513,23 @@ class TestCompatibility(absltest.TestCase):
     # TODO: add when we can safely `lazy_init` the NNX module inside `ToLinen` without
     # messing up the stateful part of the NNX module.
     pass
+
+  def test_to_linen_abtract_init(self):
+    test = self
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.a = jnp.array(0.)
+
+      def __call__(self):
+        return self.a
+
+    model = bridge.ToLinen(Foo)
+    y = model.apply({})
+    self.assertIsInstance(y, jax.ShapeDtypeStruct)
+
+    model = bridge.ToLinen(Foo, abstract_init=False)
+    y = model.apply({})
+    self.assertIsInstance(y, jax.Array)
 
 
 if __name__ == '__main__':

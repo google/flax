@@ -264,6 +264,9 @@ class ToLinen(linen.Module):
       NNX module.
     skip_rng: True if this NNX module doesn't need `rngs` arg during
       initialization (not common).
+    abstract_init: if True (default) the NNX module will be initialized under
+      `nnx.eval_shape`, useful to minimize memory consumption, else it will be
+      initialized normally.
 
   Returns:
     A stateful NNX module that behaves the same as the wrapped Linen module.
@@ -272,6 +275,7 @@ class ToLinen(linen.Module):
   args: tp.Sequence = ()
   kwargs: tp.Mapping[str, tp.Any] = FrozenDict({})
   skip_rng: bool = False
+  abstract_init: bool = True
   metadata_fn: tp.Callable[[variablelib.VariableState], tp.Any] | None = (
       bv.to_linen_var
   )
@@ -311,9 +315,12 @@ class ToLinen(linen.Module):
       states = ({},)
 
     # update module state
-    module = nnx.eval_shape(
-        lambda: self.nnx_class(*self.args, **_module_kwargs())
-    )
+    if self.abstract_init:
+      module = nnx.eval_shape(
+          lambda: self.nnx_class(*self.args, **_module_kwargs())
+      )
+    else:
+      module = self.nnx_class(*self.args, **_module_kwargs())
     nnx.update(module, *states)
     nnx.reseed(
         module, **linen_rngs_dict(self, add_default=maybe_add_default)
@@ -379,6 +386,8 @@ def to_linen(
         tp.Callable[[variablelib.VariableState], tp.Any] | None
     ) = bv.to_linen_var,
     name: str | None = None,
+    skip_rng: bool = False,
+    abstract_init: bool = True,
     **kwargs,
 ):
   """Shortcut of `nnx.bridge.ToLinen` if user is not changing any of its default fields."""
@@ -387,5 +396,7 @@ def to_linen(
       args=args,
       kwargs=FrozenDict(kwargs),
       metadata_fn=metadata_fn,
+      skip_rng=skip_rng,
+      abstract_init=abstract_init,
       name=name,
   )
