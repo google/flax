@@ -45,10 +45,14 @@ def check_consistent_aliasing(
   prefix: tp.Any,
   /,
   *,
-  node_prefixes: dict[tp.Any, list[tuple[PathParts, tp.Any]]] | None = None,
+  node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] | None = None,
 ):
+  """Check for consistent aliasing of nodes when extracting graph."""
   if node_prefixes is None:
     node_prefixes = {}
+  
+  # Store variable references for error messages
+  node_id_to_variable: dict[int, tp.Any] = {}
 
   # collect all paths and prefixes for each node
   for path, value in graph.iter_graph(node):
@@ -67,22 +71,31 @@ def check_consistent_aliasing(
         else:
           variable_prefix = prefix
 
-        if value in node_prefixes:
-          paths_prefixes = node_prefixes[value]
+        value_id = id(value)
+        node_id_to_variable[value_id] = value
+        if value_id in node_prefixes:
+          paths_prefixes = node_prefixes[value_id]
           paths_prefixes.append((path, variable_prefix))
         else:
-          node_prefixes[value] = [(path, variable_prefix)]
+          node_prefixes[value_id] = [(path, variable_prefix)]
 
   # check for inconsistent aliasing
   node_msgs = []
-  for node, paths_prefixes in node_prefixes.items():
+  for node_id, paths_prefixes in node_prefixes.items():
     unique_prefixes = {prefix for _, prefix in paths_prefixes}
     if len(unique_prefixes) > 1:
       path_prefix_repr = '\n'.join(
         f'  {"/".join(map(str,path)) if path else "<root>"}: {prefix}'
         for path, prefix in paths_prefixes
       )
-      nodes_msg = f'Node: {type(node)}\n{path_prefix_repr}'
+      # Get the variable type name if available
+      if node_id in node_id_to_variable:
+        variable = node_id_to_variable[node_id]
+        node_type_name = type(variable).__name__
+      else:
+        node_type_name = f'Node ID: {node_id}'
+      
+      nodes_msg = f'Node: {node_type_name}\n{path_prefix_repr}'
       node_msgs.append(nodes_msg)
 
   if node_msgs:
@@ -225,7 +238,7 @@ def to_tree(
 
   assert len(leaf_keys) == len(leaf_prefixes)
   leaves_out = []
-  node_prefixes: dict[tp.Any, list[tuple[PathParts, tp.Any]]] = {}
+  node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] = {}
 
   with graph.split_context(ctxtag) as split_ctx:
     for (keypath, leaf), leaf_prefix in zip(leaf_keys, leaf_prefixes):
