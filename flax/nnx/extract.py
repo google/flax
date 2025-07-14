@@ -50,7 +50,7 @@ def check_consistent_aliasing(
   """Check for consistent aliasing of nodes when extracting graph."""
   if node_prefixes is None:
     node_prefixes = {}
-  
+
   # Store variable references for error messages
   node_id_to_variable: dict[int, tp.Any] = {}
 
@@ -94,7 +94,7 @@ def check_consistent_aliasing(
         node_type_name = type(variable).__name__
       else:
         node_type_name = f'Node ID: {node_id}'
-      
+
       nodes_msg = f'Node: {node_type_name}\n{path_prefix_repr}'
       node_msgs.append(nodes_msg)
 
