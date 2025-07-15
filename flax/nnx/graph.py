@@ -1080,20 +1080,20 @@ def unflatten(  # type: ignore[invalid-annotation]
   index_ref: IndexMap | None = None,
   outer_index_outer_ref: IndexMap | None = None,
 ) -> Node:
-  """Unflattens a graphdef into a node with the given state.
+  """Unflattens a :class:`flax.nnx.GraphDef` into a node with the given state.
 
   Args:
-    graphdef: A GraphDef instance.
-    state: A State instance.
+    graphdef: A :class:`flax.nnx.GraphDef` instance.
+    state: A :class:`flax.nnx.State` instance.
     index_ref: A mapping from indexes to nodes references found during the graph
-      traversal, defaults to None. If not provided, a new empty dictionary is
-      created. This argument can be used to unflatten a sequence of (graphdef, state)
+      traversal. Defaults to ``None``. If it's not provided, a new empty dictionary is
+      created. This argument can be used to unflatten a sequence of ``(graphdef, state)``
       pairs that share the same index space.
     index_ref_cache: A mapping from indexes to existing nodes that can be reused.
-      When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
-      object in an empty state and then filled by the unflatten process, as a result
+      When an reference is reused, :func:`flax.nnx.GraphNodeImpl.clear` is called to leave the
+      object in an empty state and then filled by the ``nnx.unflatten`` process. As a result,
       existing graph nodes are mutated to have the new content/topology
-      specified by the graphdef.
+      specified by the ``graphdef`` (an ``nnx.GraphDef`` instance).
   """
   if isinstance(state, (State, dict)):
     leaves = _get_sorted_leaves(state)
