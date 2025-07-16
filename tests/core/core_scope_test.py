@@ -197,6 +197,10 @@ class ScopeTest(absltest.TestCase):
     self.assertTrue(scope._is_valid_rng(raw_key))
     self.assertFalse(scope._is_valid_rng(random.split(raw_key)))
 
+  def test_rng_check_w_lazy_rng(self):
+    key = random.key(0)
+    self.assertTrue(scope._is_valid_rng(scope.LazyRng.create(key, 1)))
+
   def test_jax_leak_detector(self):
     with jax.check_tracer_leaks(True):
 
