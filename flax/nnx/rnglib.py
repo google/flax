@@ -34,13 +34,7 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 Counts = list[int]
 AxesValue = tp.Union[int, None]
 SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
-_fry_dtype: jnp.dtype | None = None
 
-def get_fry_dtype():
-  global _fry_dtype
-  if _fry_dtype is None:
-    _fry_dtype = jax.eval_shape(lambda: jax.random.key(0)).dtype
-  return _fry_dtype
 
 class RngState(Variable[jax.Array]):
   tag: str
@@ -68,9 +62,9 @@ class RngStream(Object):
     elif isinstance(key, jax.Array) and key.dtype == jnp.uint32:
       key = jax.random.wrap_key_data(key)
 
-    if not isinstance(key, jax.Array) or key.dtype != get_fry_dtype():
+    if not isinstance(key, jax.Array) or not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
       raise ValueError(f'Invalid rng value: {key}, expected a '
-                       f'jax.Array of dtype {get_fry_dtype()}')
+                       f'jax.Array of jax.dtypes.prng_key sub-dtype')
 
     count = jnp.zeros(key.shape, dtype=jnp.uint32)
     self.tag = tag
