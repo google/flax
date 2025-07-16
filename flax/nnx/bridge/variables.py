@@ -97,7 +97,7 @@ def to_linen_var(vs: variablelib.Variable) -> meta.AxisMetadata:
     return linen_type(vs.value, **metadata)
   if is_vanilla_variable(vs):
     return vs.value
-  return NNXMeta(vs.type, vs.value, metadata)
+  return NNXMeta(type(vs), vs.value, metadata)
 
 
 def get_col_name(keypath: tp.Sequence[Any]) -> str:

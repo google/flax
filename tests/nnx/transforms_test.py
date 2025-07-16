@@ -628,9 +628,9 @@ class TestGrad(parameterized.TestCase):
     assert m.a[0] is m.b
     assert isinstance(grads, nnx.State)
     assert grads['a']['0'].value == 2.0
-    assert issubclass(grads['a']['0'].type, nnx.Variable)
+    assert issubclass(type(grads['a']['0']), nnx.Variable)
     assert grads['a']['1'].value == 1.0
-    assert issubclass(grads['a']['1'].type, nnx.Variable)
+    assert issubclass(type(grads['a']['1']), nnx.Variable)
     assert len(nnx.to_flat_state(grads)) == 2
 
     nnx.update(m, grads)
@@ -659,7 +659,7 @@ class TestGrad(parameterized.TestCase):
 
     assert isinstance(grads, nnx.State)
     assert grads['a']['0'].value == 1.0
-    assert issubclass(grads['a']['0'].type, nnx.Param)
+    assert issubclass(type(grads['a']['0']), nnx.Param)
     assert len(grads) == 2
 
     nnx.update(m, grads)
@@ -687,7 +687,7 @@ class TestGrad(parameterized.TestCase):
 
     assert isinstance(grads, nnx.State)
     assert grads['a']['1'].value == 1.0
-    assert issubclass(grads['a']['1'].type, nnx.BatchStat)
+    assert issubclass(type(grads['a']['1']), nnx.BatchStat)
     assert len(grads) == 1
 
     nnx.update(m, grads)
@@ -843,9 +843,9 @@ class TestGrad(parameterized.TestCase):
 
     assert m['a'][0] is m['b']
     assert isinstance(grads, dict)
-    assert issubclass(grads['a'][0].type, nnx.Variable)
+    assert issubclass(type(grads['a'][0]), nnx.Variable)
     assert grads['a'][1].value == 1.0
-    assert issubclass(grads['a'][1].type, nnx.Variable)
+    assert issubclass(type(grads['a'][1]), nnx.Variable)
     assert len(jax.tree.leaves(grads)) == 2
 
     jax.tree.map(

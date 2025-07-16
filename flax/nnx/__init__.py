@@ -204,5 +204,5 @@ if not _tp.TYPE_CHECKING:
       )
     if name not in globals():
       raise AttributeError(f"Module {__name__} has no attribute '{name}'")
-    
+
     return globals()[name]
