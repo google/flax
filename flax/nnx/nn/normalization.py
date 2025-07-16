@@ -202,20 +202,16 @@ class BatchNorm(Module):
     ...                       dtype=jnp.float32, rngs=nnx.Rngs(0))
     >>> jax.tree.map(jnp.shape, nnx.state(layer))
     State({
-      'bias': VariableState(
-        type=Param,
+      'bias': Param(
         value=(6,)
       ),
-      'mean': VariableState(
-        type=BatchStat,
+      'mean': BatchStat(
         value=(6,)
       ),
-      'scale': VariableState(
-        type=Param,
+      'scale': Param(
         value=(6,)
       ),
-      'var': VariableState(
-        type=BatchStat,
+      'var': BatchStat(
         value=(6,)
       )
     })
@@ -223,7 +219,7 @@ class BatchNorm(Module):
     >>> # calculate batch norm on input and update batch statistics
     >>> layer.train()
     >>> y = layer(x)
-    >>> batch_stats1 = nnx.state(layer, nnx.BatchStat)
+    >>> batch_stats1 = nnx.clone(nnx.state(layer, nnx.BatchStat)) # keep a copy
     >>> y = layer(x)
     >>> batch_stats2 = nnx.state(layer, nnx.BatchStat)
     >>> assert (batch_stats1['mean'].value != batch_stats2['mean'].value).all()
@@ -402,12 +398,10 @@ class LayerNorm(Module):
 
     >>> nnx.state(layer)
     State({
-      'bias': VariableState( # 6 (24 B)
-        type=Param,
+      'bias': Param( # 6 (24 B)
         value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
       ),
-      'scale': VariableState( # 6 (24 B)
-        type=Param,
+      'scale': Param( # 6 (24 B)
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )
     })
@@ -540,8 +534,7 @@ class RMSNorm(Module):
 
     >>> nnx.state(layer)
     State({
-      'scale': VariableState( # 6 (24 B)
-        type=Param,
+      'scale': Param( # 6 (24 B)
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )
     })
@@ -666,12 +659,10 @@ class GroupNorm(Module):
     >>> layer = nnx.GroupNorm(num_features=6, num_groups=3, rngs=nnx.Rngs(0))
     >>> nnx.state(layer)
     State({
-      'bias': VariableState( # 6 (24 B)
-        type=Param,
+      'bias': Param( # 6 (24 B)
         value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
       ),
-      'scale': VariableState( # 6 (24 B)
-        type=Param,
+      'scale': Param( # 6 (24 B)
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )
     })

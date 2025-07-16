@@ -192,7 +192,7 @@ class SGD(nnx.Object):
     self.decay = decay
 
     def make_opt_state(x):
-      if isinstance(x, nnx.Variable | nnx.VariableState):
+      if isinstance(x, nnx.Variable):
         return OptState(jnp.zeros_like(x.value), **x.get_metadata())
       else:
         return OptState(jnp.zeros_like(x))
@@ -201,7 +201,7 @@ class SGD(nnx.Object):
       jax.tree.map(
         make_opt_state,
         params,
-        is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState),
+        is_leaf=lambda x: isinstance(x, nnx.Variable),
       )
     )
 
@@ -268,11 +268,11 @@ def test_step(model: Model, x, y):
 
 
 # minimalistic training loop
-total_steps = 10_000
+total_steps = 2_000
 for step, (x, y) in enumerate(dataset(32)):
   train_step(model, optimizer, rngs, x, y)
 
-  if step % 1000 == 0:
+  if step % 200 == 0:
     logs = test_step(eval_model, X, Y)
     print(f'step: {step}, loss: {logs["loss"]}')
 

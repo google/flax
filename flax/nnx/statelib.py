@@ -219,9 +219,7 @@ jax.tree_util.register_pytree_node(
 
 
 class State(MutableMapping[K, V], reprlib.Representable):
-  """A pytree-like structure that contains a ``Mapping`` from hashable and
-  comparable keys to leaves. Leaves can be of any type but :class:`VariableState`
-  and :class:`Variable` are the most common.
+  """A pytree-like ``Mapping`` with hashable and comparable keys.
   """
 
   def __init__(
@@ -491,7 +489,7 @@ def from_flat_state(
 def to_pure_dict(
   state, extract_fn: ExtractValueFn | None = None
 ) -> dict[str, tp.Any]:
-  # Works for nnx.Variable and nnx.VariableState
+  # Works for nnx.Variable
   if extract_fn is None:
     extract_fn = lambda x: x.value if hasattr(x, 'value') else x
   flat_values = {k: extract_fn(x) for k, x in to_flat_state(state)}
@@ -507,7 +505,7 @@ def replace_by_pure_dict(
     except ValueError:
       return x
 
-  # Works for nnx.Variable and nnx.VariableState
+  # Works for nnx.Variable
   if replace_fn is None:
     replace_fn = lambda x, v: x.replace(v) if hasattr(x, 'replace') else v
   current_flat = dict(to_flat_state(state))
@@ -749,7 +747,7 @@ def create_path_filters(state: State):
   flat_state = to_flat_state(state)
   value_paths: dict[tp.Any, set[PathParts]] = {}
   for path, value in flat_state:
-    if isinstance(value, (variablelib.Variable, variablelib.VariableState)):
+    if isinstance(value, variablelib.Variable):
       value = value.raw_value
     value_paths.setdefault(value, set()).add(path)
   return {filterlib.PathIn(*value_paths[value]): value for value in value_paths}

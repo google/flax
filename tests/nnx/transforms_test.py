@@ -451,6 +451,11 @@ class TestJIT(absltest.TestCase):
     y = compiled(m, x)
     self.assertEqual(m.count.value, 2)
 
+class TestEvalShape(absltest.TestCase):
+  def test_eval_shape(self):
+    abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
+    self.assertIsInstance(abs_model, nnx.Linear)
+    self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
 
 class TestShardMap(absltest.TestCase):
   def test_basic_shardmap(self):

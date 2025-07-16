@@ -281,7 +281,7 @@ class TestModule(absltest.TestCase):
 
     intermediates = nnx.pop(m, nnx.Intermediate)
 
-    assert issubclass(intermediates['y'].type, nnx.Intermediate)
+    assert isinstance(intermediates['y'], nnx.Intermediate)
     assert intermediates['y'].value == (3, 11)
 
     assert not hasattr(m, 'y')
@@ -622,13 +622,13 @@ class TestModule(absltest.TestCase):
 
     expected_total = sum(int(np.prod(x.value.shape)) for x in leaves)
     expected_total_params = sum(
-      int(np.prod(x.value.shape)) for x in leaves if x.type is nnx.Param
+      int(np.prod(x.value.shape)) for x in leaves if isinstance(x, nnx.Param)
     )
     expected_total_batch_stats = sum(
-      int(np.prod(x.value.shape)) for x in leaves if x.type is nnx.BatchStat
+      int(np.prod(x.value.shape)) for x in leaves if isinstance(x, nnx.BatchStat)
     )
     expected_total_rng_states = sum(
-      int(np.prod(x.value.shape)) for x in leaves if x.type is nnx.RngState
+      int(np.prod(x.value.shape)) for x in leaves if isinstance(x, nnx.RngState)
     )
 
     foo_repr = repr(obj).replace(',', '').splitlines()
@@ -664,13 +664,13 @@ class TestModuleDataclass:
 
     assert len(state) == 4
     assert state['b'].value == 2
-    assert state['b'].type == nnx.Variable
+    assert isinstance(state['b'], nnx.Variable)
     assert state['c'].value == 3
-    assert state['c'].type == nnx.Param
+    assert isinstance(state['c'], nnx.Param)
     assert state['d'].value == 4
-    assert state['d'].type == nnx.Variable
+    assert isinstance(state['d'], nnx.Variable)
     assert state['e'].value == 5
-    assert state['e'].type == nnx.BatchStat
+    assert isinstance(state['e'], nnx.BatchStat)
 
   def test_post_init(self):
 
@@ -708,7 +708,7 @@ class TestModuleDef:
     graphdef, states = nnx.split(foo)
 
     assert isinstance(states, nnx.State)
-    assert issubclass(states['w'].type, nnx.Param)
+    assert isinstance(states['w'], nnx.Param)
 
     y, _updates = graphdef.apply(states)(x=2.0, rngs=nnx.Rngs(e=1))
 
@@ -732,8 +732,8 @@ class TestModuleDef:
 
     assert isinstance(graphdef.nodes[0], nnx.graph.NodeDef | nnx.graph.NodeRef)
     assert isinstance(state, nnx.State)
-    assert issubclass(state['w'].type, nnx.Param)
-    assert issubclass(state['c'].type, nnx.Variable)
+    assert isinstance(state['w'], nnx.Param)
+    assert isinstance(state['c'], nnx.Variable)
 
     y, (graphdef, state) = graphdef.apply(state)(x=2.0, rngs=nnx.Rngs(e=1))
 

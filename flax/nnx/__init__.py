@@ -172,7 +172,6 @@ from .variablelib import Cache as Cache
 from .variablelib import Intermediate as Intermediate
 from .variablelib import Perturbation as Perturbation
 from .variablelib import Variable as Variable
-from .variablelib import VariableState as VariableState
 from .variablelib import VariableMetadata as VariableMetadata
 from .variablelib import with_metadata as with_metadata
 from .variablelib import variable_type_from_name as variable_type_from_name
@@ -187,3 +186,23 @@ from .extract import from_tree as from_tree
 from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
 from . import traversals as traversals
+
+# alias VariableState
+VariableState = Variable
+
+import typing as _tp
+
+if not _tp.TYPE_CHECKING:
+  def __getattr__(name):
+    if name == "VariableState":
+      import warnings
+      warnings.warn(
+          "'VariableState' was removed, this is just an alias to 'Variable'. "
+          "Plase use 'Variable' directly instead.",
+          DeprecationWarning,
+          stacklevel=2,
+      )
+    if name not in globals():
+      raise AttributeError(f"Module {__name__} has no attribute '{name}'")
+    
+    return globals()[name]
