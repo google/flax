@@ -349,7 +349,7 @@ class ToLinen(linen.Module):
 
     # group state by collection
     for path, leaf in nnx.to_flat_state(state):
-      type_ = leaf.type if isinstance(leaf, nnx.Variable) else type(leaf)
+      type_ = type(leaf)
       collection = variablelib.variable_name_from_type(
           type_, allow_register=True
       )
