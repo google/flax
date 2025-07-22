@@ -133,15 +133,21 @@ class Attention(nnx.Module):
           rngs=rngs,
       )
     else:
+      if num_heads % num_kv_heads != 0:
+        raise ValueError(
+          f"Number of query heads ({num_heads}) must be divisible by "
+          f"number of key/value heads ({num_kv_heads})."
+        )
+
       q_einsum_kernel_init = q_einsum_kernel_init if q_einsum_kernel_init else kernel_init
-      kv_einsum_kernel_init = kv_einsum_kernel_init if kv_einsum_kernel_init else kernel_init
       self.q_einsum = layers.Einsum(
           einsum_str='BTD,NDH->BTNH',
           shape=(num_heads, features, head_dim),
-          kernel_init=kernel_init,
+          kernel_init=q_einsum_kernel_init,
           dtype=dtype,
           rngs=rngs,
       )
+      kv_einsum_kernel_init = kv_einsum_kernel_init if kv_einsum_kernel_init else kernel_init
       self.kv_einsum = layers.Einsum(
           einsum_str='BSD,CKDH->CBSKH',
           shape=(2, num_kv_heads, features, head_dim),
@@ -149,6 +155,7 @@ class Attention(nnx.Module):
           dtype=dtype,
           rngs=rngs,
       )
+
     if self.use_qk_norm:
       self._query_norm = layers.RMSNorm(
         head_dim,
@@ -221,7 +228,7 @@ class Attention(nnx.Module):
       )
       logits = jnp.einsum('BTKGH,BSKH->BTKGS', query_scaled, key_proj)
       logits = logits.reshape(
-        (batch_size, seq_size, self.num_heads, head_dim)
+        (batch_size, seq_size, self.num_heads, -1)
       )
     else:
       logits = jnp.einsum('BTNH,BSNH->BTNS', query_scaled, key_proj)
@@ -248,9 +255,9 @@ class Attention(nnx.Module):
     if use_gqa:
       # Reshape matrices to enable einsums over groups.
       num_groups = self.num_heads // self.num_kv_heads
-      batch_size, seq_size, _, head_dim = probs.shape
+      batch_size, seq_size1, _, _ = probs.shape
       probs = probs.reshape(
-        (batch_size, seq_size, self.num_kv_heads, num_groups, head_dim)
+        (batch_size, seq_size1, self.num_kv_heads, num_groups, -1)
       )
       encoded = jnp.einsum('BTKGS,BSKH->BTKGH', probs, value_proj)
       encoded = encoded.reshape(

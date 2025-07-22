@@ -14,9 +14,10 @@
 # ============================================================================
 """Minimal test for sampler."""
 
+import os
 from collections.abc import Iterable
 
-from absl.testing import absltest
+from absl.testing import absltest, parameterized
 from flax import nnx
 import modules
 import sampler as sampler_lib
@@ -73,7 +74,7 @@ class MockVocab(spm.SentencePieceProcessor):
     return [self._mapping_text_to_id[word] for word in words]
 
 
-class SamplerTest(absltest.TestCase):
+class SamplerTest(parameterized.TestCase):
 
   def assertReasonableTensor(self, array, expected_shape=None):
     self.assertIsNotNone(array)
@@ -518,6 +519,51 @@ class SamplerTest(absltest.TestCase):
     )
 
     self.assertTrue((attn_mask.squeeze(1) == expected_attn_mask).all())
+
+  @parameterized.parameters(
+    {"url": "google/gemma/flax/2b"},
+    {"url": "google/gemma-2/flax/gemma2-2b"},
+    {"url": "google/gemma-3/flax/gemma3-1b"},
+  )
+  def test_models_from_kaggle(self, url):
+    # A smoke test based on guide/gemma.md to ensure models are working correctly
+    # Check Kaggle creds as env var otherwise skip the test
+    has_kaggle_creds = all(k in os.environ for k in ["KAGGLE_USERNAME", "KAGGLE_KEY"])
+    try:
+      import kagglehub
+
+      has_kagglehub_dep = True
+    except ModuleNotFoundError:
+      has_kagglehub_dep = False
+
+    if not (has_kaggle_creds and has_kagglehub_dep):
+      self.skipTest('Skip the test as no Kaggle deps/creds')
+
+    import params as params_lib
+
+    variant = url.split("/")[-1]
+    weights_dir = kagglehub.model_download(url)
+    ckpt_path = f"{weights_dir}/{variant}"
+    vocab_path = f"{weights_dir}/tokenizer.model"
+
+    vocab = spm.SentencePieceProcessor()
+    vocab.Load(vocab_path)
+
+    params = params_lib.load_and_format_params(ckpt_path)
+    transformer = transformer_lib.Transformer.from_params(params)
+    sampler = sampler_lib.Sampler(
+      transformer=transformer,
+      vocab=vocab,
+    )
+
+    input_batch = [
+        "# Python function to compute a square of the input number",
+    ]
+    out_data = sampler(
+      input_strings=input_batch,
+      total_generation_steps=50,
+    )
+    assert "def square(" in out_data.text[0], out_data.text[0]
 
 
 if __name__ == '__main__':
