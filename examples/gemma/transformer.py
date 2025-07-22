@@ -105,6 +105,8 @@ class TransformerConfig:
   global_scale_factor: float = modules.DEFAULT_ROPE_SCALE_FACTOR
   use_qk_norm: bool = False
   sliding_window_size: int | None = None
+  dtype: Any = jnp.float32
+  axis_rules: Any | None = None
 
   def query_pre_attn_scalar(self) -> float:
     """Returns the scalar to multiply the query by before attention."""
@@ -180,215 +182,270 @@ class TransformerConfig:
     raise ValueError('Could not determine Gemma variant from params.')
 
   @classmethod
-  def gemma_2b(cls):
+  def from_version_name(cls, name: str, **override) -> TransformerConfig:
+    possible_names = (
+      "gemma_2b", "gemma_7b",
+      "gemma2_2b", "gemma2_9b", "gemma2_27b",
+      "gemma3_1b", "gemma3_4b", "gemma3_12b", "gemma3_27b",
+    )
+    if name not in possible_names:
+      raise ValueError(
+        f'Unknown version name: {name}. '
+        f'Please choose one of the following: {possible_names}'
+      )
+    if hasattr(cls, name):
+      model_config = getattr(cls, name)(**override)
+      return model_config
+    else:
+      raise RuntimeError(
+        'Something wrong in TransformerConfig code. '
+        f'No attribute {name} in TransformerConfig'
+      )
+
+  @classmethod
+  def from_dict(cls, **config: Any) -> TransformerConfig:
+    # Deserialize query_pre_attn_norm values:
+    if "query_pre_attn_norm" in config:
+      config["query_pre_attn_norm"] = QueryPreAttentionNormalisation(config["query_pre_attn_norm"])
+    else:
+      config["query_pre_attn_norm"] = QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM
+    return cls(**config)
+
+  @classmethod
+  def gemma_2b(cls, **override) -> TransformerConfig:
     num_layers = _NUM_LAYERS_GEMMA_2B
-    return cls(
-        num_layers=num_layers,
-        num_embed=256128,
-        embed_dim=2048,
-        hidden_dim=16384,
-        num_heads=8,
-        head_dim=256,
-        num_kv_heads=1,
-        final_logit_softcap=None,
-        attention_types=(modules.AttentionType.GLOBAL,) * num_layers,
-        use_post_attn_norm=False,
-        use_post_ffw_norm=False,
-    )
+    config = {
+      'num_layers': num_layers,
+      'num_embed': 256128,
+      'embed_dim': 2048,
+      'hidden_dim': 16384,
+      'num_heads': 8,
+      'head_dim': 256,
+      'num_kv_heads': 1,
+      'final_logit_softcap': None,
+      'attention_types': (modules.AttentionType.GLOBAL,) * num_layers,
+      'use_post_attn_norm': False,
+      'use_post_ffw_norm': False,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
   @classmethod
-  def gemma_7b(cls):
+  def gemma_7b(cls, **override):
     num_layers = _NUM_LAYERS_GEMMA_7B
-    return cls(
-        num_layers=num_layers,
-        num_embed=256128,
-        embed_dim=3072,
-        hidden_dim=24576,
-        num_heads=16,
-        head_dim=256,
-        num_kv_heads=16,
-        final_logit_softcap=None,
-        attention_types=(modules.AttentionType.GLOBAL,) * num_layers,
-        use_post_attn_norm=False,
-        use_post_ffw_norm=False,
-    )
+    config = {
+      "num_layers": num_layers,
+      "num_embed": 256128,
+      "embed_dim": 3072,
+      "hidden_dim": 24576,
+      "num_heads": 16,
+      "head_dim": 256,
+      "num_kv_heads": 16,
+      "final_logit_softcap": None,
+      "attention_types": (modules.AttentionType.GLOBAL,) * num_layers,
+      "use_post_attn_norm": False,
+      "use_post_ffw_norm": False,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
   @classmethod
-  def gemma2_2b(cls):
+  def gemma2_2b(cls, **override):
     num_layers = _NUM_LAYERS_GEMMA2_2B
-    return cls(
-        num_layers=num_layers,
-        num_embed=256128,
-        embed_dim=2304,
-        hidden_dim=9216,
-        num_heads=8,
-        head_dim=256,
-        num_kv_heads=4,
-        final_logit_softcap=30.0,
-        attention_types=(
-            modules.AttentionType.LOCAL_SLIDING,
-            modules.AttentionType.GLOBAL,
-        )
-        * int(num_layers / 2),
-        use_post_attn_norm=True,
-        use_post_ffw_norm=True,
-        query_pre_attn_norm=QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
-        attn_logits_soft_cap=50.0,
-        sliding_window_size=4096,
-    )
+    config = {
+      'num_layers': num_layers,
+      'num_embed': 256128,
+      'embed_dim': 2304,
+      'hidden_dim': 9216,
+      'num_heads': 8,
+      'head_dim': 256,
+      'num_kv_heads': 4,
+      'final_logit_softcap': 30.0,
+      'attention_types': (
+        modules.AttentionType.LOCAL_SLIDING,
+        modules.AttentionType.GLOBAL,
+      )
+      * int(num_layers / 2),
+      'use_post_attn_norm': True,
+      'use_post_ffw_norm': True,
+      'query_pre_attn_norm': QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
+      'attn_logits_soft_cap': 50.0,
+      'sliding_window_size': 4096,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
   @classmethod
-  def gemma2_9b(cls):
+  def gemma2_9b(cls, **override):
     num_layers = _NUM_LAYERS_GEMMA2_9B
-    return cls(
-        num_layers=num_layers,
-        num_embed=256128,
-        embed_dim=3584,
-        hidden_dim=28672,
-        num_heads=16,
-        head_dim=256,
-        num_kv_heads=8,
-        final_logit_softcap=30.0,
-        attention_types=(
-            modules.AttentionType.LOCAL_SLIDING,
-            modules.AttentionType.GLOBAL,
-        )
-        * int(num_layers / 2),
-        use_post_attn_norm=True,
-        use_post_ffw_norm=True,
-        attn_logits_soft_cap=50.0,
-        sliding_window_size=4096,
-    )
+    config = {
+      "num_layers": num_layers,
+      "num_embed": 256128,
+      "embed_dim": 3584,
+      "hidden_dim": 28672,
+      "num_heads": 16,
+      "head_dim": 256,
+      "num_kv_heads": 8,
+      "final_logit_softcap": 30.0,
+      "attention_types": (
+          modules.AttentionType.LOCAL_SLIDING,
+          modules.AttentionType.GLOBAL,
+      ) * int(num_layers / 2),
+      "use_post_attn_norm": True,
+      "use_post_ffw_norm": True,
+      "attn_logits_soft_cap": 50.0,
+      "sliding_window_size": 4096,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
   @classmethod
-  def gemma2_27b(cls):
+  def gemma2_27b(cls, **override):
     num_layers = _NUM_LAYERS_GEMMA2_27B
-    return cls(
-        num_layers=num_layers,
-        num_embed=256128,
-        embed_dim=4608,
-        hidden_dim=72728,
-        num_heads=32,
-        head_dim=128,
-        num_kv_heads=16,
-        final_logit_softcap=30.0,
-        use_post_attn_norm=True,
-        use_post_ffw_norm=True,
-        attention_types=(
-            modules.AttentionType.LOCAL_SLIDING,
-            modules.AttentionType.GLOBAL,
-        )
-        * int(num_layers / 2),
-        attn_logits_soft_cap=50.0,
-        sliding_window_size=4096,
-    )
+    config = {
+      "num_layers": num_layers,
+      "num_embed": 256128,
+      "embed_dim": 4608,
+      "hidden_dim": 72728,
+      "num_heads": 32,
+      "head_dim": 128,
+      "num_kv_heads": 16,
+      "final_logit_softcap": 30.0,
+      "use_post_attn_norm": True,
+      "use_post_ffw_norm": True,
+      "attention_types": (
+          modules.AttentionType.LOCAL_SLIDING,
+          modules.AttentionType.GLOBAL,
+      ) * int(num_layers / 2),
+      "attn_logits_soft_cap": 50.0,
+      "sliding_window_size": 4096,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
   @classmethod
-  def gemma3_1b(cls):
+  def gemma3_1b(cls, **override):
     num_layers = _NUM_LAYERS_GEMMA3_1B
-    return cls(
-        num_layers=num_layers,
-        final_logit_softcap=None,
-        num_embed=262144,
-        embed_dim=1152,
-        hidden_dim=6 * 1152,
-        num_heads=4,
-        head_dim=256,
-        num_kv_heads=1,
-        use_post_attn_norm=True,
-        use_post_ffw_norm=True,
-        use_qk_norm=True,
-        attention_types=make_attention_layers_types(
-            GEMMA3_ATTENTION_PATTERN, num_layers
-        ),
-        query_pre_attn_norm=QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
-        attn_logits_soft_cap=None,
-        sliding_window_size=512,
-        transpose_gating_einsum=True,
-        local_base_frequency=10_000,
-        global_base_frequency=1_000_000,
-    )
+    config = {
+      "num_layers": num_layers,
+      "final_logit_softcap": None,
+      "num_embed": 262144,
+      "embed_dim": 1152,
+      "hidden_dim": 6 * 1152,
+      "num_heads": 4,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "use_post_attn_norm": True,
+      "use_post_ffw_norm": True,
+      "use_qk_norm": True,
+      "attention_types": make_attention_layers_types(
+          GEMMA3_ATTENTION_PATTERN, num_layers
+      ),
+      "query_pre_attn_norm": QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
+      "attn_logits_soft_cap": None,
+      "sliding_window_size": 512,
+      "transpose_gating_einsum": True,
+      "local_base_frequency": 10_000,
+      "global_base_frequency": 1_000_000,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
   @classmethod
-  def gemma3_4b(cls):
+  def gemma3_4b(cls, **override):
     num_layers = _NUM_LAYERS_GEMMA3_4B
-    return cls(
-        num_layers=num_layers,
-        final_logit_softcap=None,
-        num_embed=262_144,
-        embed_dim=2560,
-        hidden_dim=2560 * 8 // 2,
-        num_heads=8,
-        head_dim=256,
-        num_kv_heads=4,
-        use_post_attn_norm=True,
-        use_post_ffw_norm=True,
-        use_qk_norm=True,
-        attention_types=make_attention_layers_types(
-            GEMMA3_ATTENTION_PATTERN, num_layers
-        ),
-        query_pre_attn_norm=QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
-        attn_logits_soft_cap=None,
-        sliding_window_size=1024,
-        transpose_gating_einsum=True,
-        local_base_frequency=10_000,
-        global_base_frequency=1_000_000,
-        global_scale_factor=8.0,
-    )
+    config = {
+      "num_layers": num_layers,
+      "final_logit_softcap": None,
+      "num_embed": 262_144,
+      "embed_dim": 2560,
+      "hidden_dim": 2560 * 8 // 2,
+      "num_heads": 8,
+      "head_dim": 256,
+      "num_kv_heads": 4,
+      "use_post_attn_norm": True,
+      "use_post_ffw_norm": True,
+      "use_qk_norm": True,
+      "attention_types": make_attention_layers_types(
+          GEMMA3_ATTENTION_PATTERN, num_layers
+      ),
+      "query_pre_attn_norm": QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
+      "attn_logits_soft_cap": None,
+      "sliding_window_size": 1024,
+      "transpose_gating_einsum": True,
+      "local_base_frequency": 10_000,
+      "global_base_frequency": 1_000_000,
+      "global_scale_factor": 8.0,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
   @classmethod
-  def gemma3_12b(cls):
+  def gemma3_12b(cls, **override):
     num_layers = _NUM_LAYERS_GEMMA3_12B
-    return cls(
-        num_layers=num_layers,
-        final_logit_softcap=None,
-        num_embed=262144,
-        embed_dim=30 * 128,
-        hidden_dim=8 * 30 * 128 // 2,
-        num_heads=16,
-        head_dim=256,
-        num_kv_heads=8,
-        use_post_attn_norm=True,
-        use_post_ffw_norm=True,
-        use_qk_norm=True,
-        attention_types=make_attention_layers_types(
-            GEMMA3_ATTENTION_PATTERN, num_layers
-        ),
-        query_pre_attn_norm=QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
-        attn_logits_soft_cap=None,
-        sliding_window_size=1024,
-        transpose_gating_einsum=True,
-        local_base_frequency=10_000,
-        global_base_frequency=1_000_000,
-        global_scale_factor=8.0,
-    )
+    config = {
+      "num_layers": num_layers,
+      "final_logit_softcap": None,
+      "num_embed": 262144,
+      "embed_dim": 30 * 128,
+      "hidden_dim": 8 * 30 * 128 // 2,
+      "num_heads": 16,
+      "head_dim": 256,
+      "num_kv_heads": 8,
+      "use_post_attn_norm": True,
+      "use_post_ffw_norm": True,
+      "use_qk_norm": True,
+      "attention_types": make_attention_layers_types(
+        GEMMA3_ATTENTION_PATTERN, num_layers
+      ),
+      "query_pre_attn_norm": QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_HEAD_DIM,
+      "attn_logits_soft_cap": None,
+      "sliding_window_size": 1024,
+      "transpose_gating_einsum": True,
+      "local_base_frequency": 10_000,
+      "global_base_frequency": 1_000_000,
+      "global_scale_factor": 8.0,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
   @classmethod
-  def gemma3_27b(cls):
+  def gemma3_27b(cls, **override):
     num_layers = _NUM_LAYERS_GEMMA3_27B
-    return cls(
-        num_layers=num_layers,
-        final_logit_softcap=None,
-        num_embed=262144,
-        embed_dim=5376,
-        hidden_dim=5376 * 8 // 2,
-        num_heads=32,
-        head_dim=128,
-        num_kv_heads=16,
-        use_post_attn_norm=True,
-        use_post_ffw_norm=True,
-        use_qk_norm=True,
-        attention_types=make_attention_layers_types(
-            GEMMA3_ATTENTION_PATTERN, num_layers
-        ),
-        query_pre_attn_norm=QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_EMBED_DIM_DIV_NUM_HEADS,
-        attn_logits_soft_cap=None,
-        sliding_window_size=1024,
-        transpose_gating_einsum=True,
-        local_base_frequency=10_000,
-        global_base_frequency=1_000_000,
-        global_scale_factor=8.0,
-    )
+    config = {
+      "num_layers": num_layers,
+      "final_logit_softcap": None,
+      "num_embed": 262144,
+      "embed_dim": 5376,
+      "hidden_dim": 5376 * 8 // 2,
+      "num_heads": 32,
+      "head_dim": 128,
+      "num_kv_heads": 16,
+      "use_post_attn_norm": True,
+      "use_post_ffw_norm": True,
+      "use_qk_norm": True,
+      "attention_types": make_attention_layers_types(
+          GEMMA3_ATTENTION_PATTERN, num_layers
+      ),
+      "query_pre_attn_norm": QueryPreAttentionNormalisation.BY_ONE_OVER_SQRT_EMBED_DIM_DIV_NUM_HEADS,
+      "attn_logits_soft_cap": None,
+      "sliding_window_size": 1024,
+      "transpose_gating_einsum": True,
+      "local_base_frequency": 10_000,
+      "global_base_frequency": 1_000_000,
+      "global_scale_factor": 8.0,
+    }
+    for key, value in override.items():
+      config[key] = value
+    return cls(**config)
 
 
 def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
@@ -464,36 +521,34 @@ class Transformer(nnx.Module):
     self.embedder = modules.Embedder(
         vocab_size=config.num_embed,
         embed_dim=config.embed_dim,
+        embedding_init=modules.maybe_with_partitioning(
+          nnx.initializers.normal(),
+          config.axis_rules,
+          ("vocab", "embed"),
+        ),
+        dtype=config.dtype,
         rngs=rngs,
     )
     self.layers = [
         modules.Block(
-            num_heads=config.num_heads,
-            num_kv_heads=config.num_kv_heads,
-            embed_dim=config.embed_dim,
-            head_dim=config.head_dim,
-            hidden_dim=config.hidden_dim,
-            sliding_window_size=config.sliding_window_size,
-            use_post_attn_norm=config.use_post_attn_norm,
-            use_post_ffw_norm=config.use_post_ffw_norm,
-            attn_logits_soft_cap=config.attn_logits_soft_cap,
-            attn_type=attn_type,
-            query_pre_attn_scalar=config.query_pre_attn_scalar(),
-            rngs=rngs,
-            rope_base_frequency=config.local_base_frequency
-            if attn_type == modules.AttentionType.LOCAL_SLIDING
-            else config.global_base_frequency,
-            rope_scale_factor=config.local_scale_factor
-            if attn_type == modules.AttentionType.LOCAL_SLIDING
-            else config.global_scale_factor,
-            use_qk_norm=config.use_qk_norm,
-            sow_config=sow_config,
+          config=config,
+          attn_type=attn_type,
+          sow_config=sow_config,
+          rngs=rngs,
         )
         for _, attn_type in zip(
             range(config.num_layers), config.attention_types
         )
     ]
-    self.final_norm = layers.RMSNorm(config.embed_dim, rngs=rngs)
+    self.final_norm = layers.RMSNorm(
+      config.embed_dim,
+      scale_init=modules.maybe_with_partitioning(
+        nnx.initializers.zeros_init(),
+        config.axis_rules,
+        ("embed", ),
+      ),
+      rngs=rngs,
+    )
     self.final_logits_softcap = config.final_logit_softcap
     self.sow_config = sow_config
 
