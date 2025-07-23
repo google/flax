@@ -31,7 +31,7 @@ class TestContainers(absltest.TestCase):
       1,  # type: ignore
       on_set_value=lambda c, x: x + 7,  # type: ignore
     )
-    x.value = 5
+    x[...] = 5
 
     assert x.raw_value == 12
 
@@ -54,7 +54,7 @@ class TestContainers(absltest.TestCase):
         )
 
     module = Foo()
-    module.x.value = 5
+    module.x[...] = 5
 
     assert module.x.value == 12
     assert vars(module)['x'].raw_value == 12
