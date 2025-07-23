@@ -49,6 +49,7 @@ class Linear(nnx.Module):
   def __call__(self, x):
     return x @ self.w + self.b
 
+
 class Block(nnx.Module):
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
     self.linear = Linear(din, dout, rngs=rngs)
@@ -56,6 +57,7 @@ class Block(nnx.Module):
 
   def __call__(self, x):
     return nnx.relu(self.bn(self.linear(x)))
+
 
 class Count(nnx.Variable):
   pass
@@ -95,7 +97,7 @@ def main(argv):
   if mode == 'nnx' or mode == 'all':
     model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
     tx = optax.sgd(1e-3)
-    optimizer = nnx.Optimizer(model, tx)
+    optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
     t0 = time()
 
     @nnx.jit(donate_argnums=(0, 1))
@@ -107,7 +109,7 @@ def main(argv):
         return jnp.mean((y - y_pred) ** 2)
 
       grads: nnx.State = nnx.grad(loss_fn)(model)
-      optimizer.update(grads)
+      optimizer.update(model, grads)
 
     @nnx.jit(donate_argnums=0)
     def test_step_nnx(model: MLP, batch):
@@ -126,7 +128,7 @@ def main(argv):
         break
 
     print('### NNX ###')
-    print(f"final loss: {logs['loss']}")
+    print(f'final loss: {logs["loss"]}')
     total_time = time() - t0
     print('total time:', total_time)
     print(f'time per step: {total_time / total_steps * 1e6:.2f} µs')
@@ -135,7 +137,7 @@ def main(argv):
   if mode == 'jax' or mode == 'all':
     model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
     tx = optax.sgd(1e-3)
-    optimizer = nnx.Optimizer(model, tx)
+    optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
     t0 = time()
 
     @partial(jax.jit, donate_argnums=0)
@@ -148,7 +150,7 @@ def main(argv):
         return jnp.mean((y - y_pred) ** 2)
 
       grads = nnx.grad(loss_fn)(model)
-      optimizer.update(grads)
+      optimizer.update(model,grads)
 
       return nnx.state((model, optimizer))
 
@@ -175,7 +177,7 @@ def main(argv):
     model, optimizer = nnx.merge(graphdef, state)
 
     print('### JAX ###')
-    print(f"final loss: {logs['loss']}")
+    print(f'final loss: {logs["loss"]}')
     total_time = time() - t0
     print('total time:', total_time)
     print(f'time per step: {total_time / total_steps * 1e6:.2f} µs')

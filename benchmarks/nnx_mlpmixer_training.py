@@ -150,7 +150,9 @@ def main(argv):
       channels_mlp_dim=512,
       rngs=rngs,
     )
-    optimizer = nnx.Optimizer(flow, tx=optax.adamw(1e-4))
+    optimizer = nnx.Optimizer(
+      flow, tx=optax.adamw(1e-4), wrt=nnx.Param
+    )
     t0 = time()
 
     mse = lambda a, b: jnp.mean((a - b) ** 2)
@@ -167,7 +169,7 @@ def main(argv):
       loss, grads = nnx.value_and_grad(
         lambda flow: mse(flow(x=x_t, t=t), dx_t)
       )(flow)
-      optimizer.update(grads)
+      optimizer.update(flow, grads)
       return loss
 
     losses = []
@@ -194,7 +196,9 @@ def main(argv):
       channels_mlp_dim=width,
       rngs=rngs,
     )
-    optimizer = nnx.Optimizer(flow, tx=optax.adamw(1e-4))
+    optimizer = nnx.Optimizer(
+      flow, tx=optax.adamw(1e-4), wrt=nnx.Param
+    )
     graphdef, state = nnx.split((flow, optimizer, rngs))
     t0 = time()
 
@@ -213,7 +217,7 @@ def main(argv):
       loss, grads = nnx.value_and_grad(
         lambda flow: mse(flow(x=x_t, t=t), dx_t)
       )(flow)
-      optimizer.update(grads)
+      optimizer.update(flow, grads)
       state = nnx.state((flow, optimizer, rngs))
       return loss, state
 

@@ -125,7 +125,9 @@ import optax
 learning_rate = 0.005
 momentum = 0.9
 
-optimizer = nnx.Optimizer(model, optax.adamw(learning_rate, momentum))
+optimizer = nnx.Optimizer(
+  model, optax.adamw(learning_rate, momentum), wrt=nnx.Param
+)
 metrics = nnx.MultiMetric(
   accuracy=nnx.metrics.Accuracy(),
   loss=nnx.metrics.Average('loss'),
@@ -156,7 +158,7 @@ def train_step(model: CNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, b
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
   (loss, logits), grads = grad_fn(model, batch)
   metrics.update(loss=loss, logits=logits, labels=batch['label'])  # In-place updates.
-  optimizer.update(grads)  # In-place updates.
+  optimizer.update(model, grads)  # In-place updates.
 
 @nnx.jit
 def eval_step(model: CNN, metrics: nnx.MultiMetric, batch):

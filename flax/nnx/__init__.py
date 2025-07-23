@@ -145,7 +145,7 @@ from .training.optimizer import OptState as OptState
 from .training.optimizer import OptArray as OptArray
 from .training.optimizer import OptVariable as OptVariable
 from .training.optimizer import Optimizer as Optimizer
-from .training.optimizer import PytreeOptimizer as PytreeOptimizer
+from .training.optimizer import ModelAndOptimizer as ModelAndOptimizer
 from .training.optimizer import OptState as OptState
 from .transforms.autodiff import DiffState as DiffState
 from .transforms.autodiff import grad as grad

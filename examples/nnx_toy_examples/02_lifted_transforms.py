@@ -60,7 +60,7 @@ class MLP(nnx.Module):
 
 model = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0))
 tx = optax.sgd(1e-3)
-optimizer = nnx.Optimizer(model, tx)
+optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
 
 
 @nnx.jit
@@ -72,7 +72,7 @@ def train_step(model: MLP, optimizer: nnx.Optimizer, batch):
     return jnp.mean((y - y_pred) ** 2)
 
   grads: nnx.State = nnx.grad(loss_fn)(model)
-  optimizer.update(grads)
+  optimizer.update(model, grads)
 
 
 @nnx.jit

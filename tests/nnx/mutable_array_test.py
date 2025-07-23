@@ -485,7 +485,6 @@ class TestMutableArrayNNXTransforms(absltest.TestCase):
   not config.flax_mutable_array, reason='MutableArray not enabled'
 )
 class TestMutableArray(absltest.TestCase):
-
   def test_static(self):
     class C(nnx.Module):
       def __init__(self, meta):
@@ -626,31 +625,69 @@ class TestMutableArray(absltest.TestCase):
     key = rngs()
     self.assertIsInstance(key, jax.Array)
 
-@pytest.mark.skipif(
-  not config.flax_mutable_array, reason='MutableArray not enabled'
-)
-class TestPytreeOptimizer(absltest.TestCase):
-  def test_pytree_optimizer(self):
+
+class TestOptimizer(absltest.TestCase):
+  def test_optimize_arrays(self):
     class Model(nnx.Module):
       def __init__(self, rngs):
-        self.linear1 = nnx.Linear(2, 3, rngs=rngs)
-        self.bn = nnx.BatchNorm(3, rngs=rngs)
-        self.linear2 = nnx.Linear(3, 4, rngs=rngs)
+        self.w = jax.random.uniform(rngs(), (2, 4))
+        self.count = jnp.array(0)
 
       def __call__(self, x):
-        return self.linear2(nnx.relu(self.bn(self.linear1(x))))
+        self.count += 1
+        return x @ self.w
 
     x = jax.random.normal(jax.random.key(0), (5, 2))
     y = jnp.ones((5, 4))
 
-    model = Model(nnx.Rngs(1))
-    optimizer = nnx.PytreeOptimizer(
-      nnx.state(model, nnx.Param), tx=optax.adam(1e-3)
-    )
+    with nnx.use_mutable_arrays(False):
+      wrt = lambda path, x: path[-1] == 'w'
+      model = Model(nnx.Rngs(1))
+      optimizer = nnx.Optimizer(
+        model, tx=optax.adam(1e-3), wrt=wrt
+      )
 
     @jax.jit
     def train_step(model, optimizer, x, y):
-      graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
+      graphdef, params, nondiff = nnx.split(model, wrt, ...)
+
+      def loss_fn(params):
+        model = nnx.merge(graphdef, params, nondiff)
+        return jnp.mean((model(x) - y) ** 2), nnx.state(model, nnx.Not(wrt))
+
+      (loss, updates), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
+      nnx.update(model, updates)
+      optimizer.update(model, grads)
+
+      return loss, model, optimizer
+
+    loss, model, optimizer = train_step(model, optimizer, x, y)
+
+    self.assertNotEqual(loss, 0.0)
+    self.assertEqual(model.count[...], 1)
+    self.assertEqual(optimizer.step[...], 1)
+
+  def test_optimize_mutable_arrays(self):
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        self.w = nnx.mutable_array(jax.random.uniform(rngs(), (2, 4)))
+        self.count = nnx.mutable_array(jnp.array(0))
+
+      def __call__(self, x):
+        self.count[...] += 1
+        return x @ self.w
+
+    x = jax.random.normal(jax.random.key(0), (5, 2))
+    y = jnp.ones((5, 4))
+
+    with nnx.use_mutable_arrays(True):
+      wrt = lambda path, x: path[-1] == 'w'
+      model = Model(nnx.Rngs(1))
+      optimizer = nnx.Optimizer(model, tx=optax.adam(1e-3), wrt=wrt)
+
+    @jax.jit
+    def train_step(model, optimizer, x, y):
+      graphdef, params, nondiff = nnx.split(model, wrt, ...)
 
       def loss_fn(params):
         model = nnx.merge(graphdef, params, nondiff)

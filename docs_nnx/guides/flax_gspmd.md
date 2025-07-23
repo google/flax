@@ -265,7 +265,7 @@ Now the rest of the training loop is pretty conventional - it is almost the same
 - [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/transforms.html#flax.nnx.jit) will adjust and automatically choose the best layout based on how its inputs are already sharded, so try out different shardings for your own model and inputs.
 
 ```{code-cell} ipython3
-optimizer = nnx.Optimizer(sharded_model, optax.adam(1e-3))  # reference sharing
+optimizer = nnx.Optimizer(sharded_model, optax.adam(1e-3), wrt=nnx.Param)
 
 @nnx.jit
 def train_step(model, optimizer, x, y):
@@ -274,7 +274,7 @@ def train_step(model, optimizer, x, y):
     return jnp.mean((y_pred - y) ** 2)
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)
+  optimizer.update(model, grads)
 
   return loss
 

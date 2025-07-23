@@ -121,7 +121,7 @@ model = VAE(
   rngs=nnx.Rngs(0, noise=1),
 )
 
-optimizer = nnx.Optimizer(model, optax.adam(1e-3))
+optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
 
 # %%
@@ -138,7 +138,7 @@ def train_step(model: VAE, optimizer: nnx.Optimizer, x: jax.Array):
     return loss
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)
+  optimizer.update(model, grads)
 
   return loss
 
