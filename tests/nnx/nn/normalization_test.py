@@ -96,8 +96,8 @@ class TestLinenConsistency(parameterized.TestCase):
       use_fast_variance=use_fast_variance,
       rngs=rngs,
     )
-    nnx_model.linear.kernel.value = variables['params']['linear']['kernel']
-    nnx_model.linear.bias.value = variables['params']['linear']['bias']
+    nnx_model.linear.kernel[...] = variables['params']['linear']['kernel']
+    nnx_model.linear.bias[...] = variables['params']['linear']['bias']
 
     nnx_out = nnx_model(x, mask=mask)
     np.testing.assert_array_equal(linen_out, nnx_out)
@@ -169,8 +169,8 @@ class TestLinenConsistency(parameterized.TestCase):
       use_fast_variance=use_fast_variance,
       rngs=rngs,
     )
-    nnx_model.linear.kernel.value = variables['params']['linear']['kernel']
-    nnx_model.linear.bias.value = variables['params']['linear']['bias']
+    nnx_model.linear.kernel[...] = variables['params']['linear']['kernel']
+    nnx_model.linear.bias[...] = variables['params']['linear']['bias']
 
     nnx_out = nnx_model(x, mask=mask)
     np.testing.assert_array_equal(linen_out, nnx_out)
@@ -241,8 +241,8 @@ class TestLinenConsistency(parameterized.TestCase):
       use_fast_variance=use_fast_variance,
       rngs=rngs,
     )
-    nnx_model.linear.kernel.value = variables['params']['linear']['kernel']
-    nnx_model.linear.bias.value = variables['params']['linear']['bias']
+    nnx_model.linear.kernel[...] = variables['params']['linear']['kernel']
+    nnx_model.linear.bias[...] = variables['params']['linear']['bias']
 
     nnx_out = nnx_model(x, mask=mask)
     assert isinstance(linen_out, jax.Array)
@@ -316,8 +316,8 @@ class TestLinenConsistency(parameterized.TestCase):
       use_fast_variance=use_fast_variance,
       rngs=rngs,
     )
-    nnx_model.linear.kernel.value = variables['params']['linear']['kernel']
-    nnx_model.linear.bias.value = variables['params']['linear']['bias']
+    nnx_model.linear.kernel[...] = variables['params']['linear']['kernel']
+    nnx_model.linear.bias[...] = variables['params']['linear']['bias']
 
     nnx_out = nnx_model(x, mask=mask)
     assert isinstance(linen_out, jax.Array)
