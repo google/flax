@@ -1,0 +1,5 @@
+Flax NNX version update from 0.10 to 0.11
+#########################################
+
+In this guide we present the code changes required when we update Flax NNX code to the version 0.11 and later.
+
