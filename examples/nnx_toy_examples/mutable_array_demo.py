@@ -13,10 +13,6 @@
 # limitations under the License.
 
 # %%
-import os
-
-os.environ['FLAX_MUTABLE_ARRAY'] = 'true'
-
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -24,6 +20,8 @@ import numpy as np
 
 from flax import nnx
 
+# activate mutable arrays
+nnx.use_mutable_arrays(True)
 
 # ## Data
 # We create a simple dataset of points sampled from a parabola with some noise.
@@ -151,9 +149,7 @@ class Model(nnx.Module):
 
       self.blocks = nnx.mutable(create_block(rngs.fork(split=num_blocks)))
     else:
-      self.blocks = nnx.data(
-        [Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)]
-      )
+      self.blocks = [Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)]
 
   def __call__(self, x: jax.Array, *, rngs: nnx.Rngs | None = None):
     self.count[...] += 1
@@ -197,13 +193,11 @@ class SGD(nnx.Object):
       else:
         return OptState(jnp.zeros_like(x))
 
-    self.momentum = nnx.data(
-      jax.tree.map(
+    self.momentum = jax.tree.map(
         make_opt_state,
         params,
         is_leaf=lambda x: isinstance(x, nnx.Variable),
       )
-    )
 
   # during the update we simply map over (params, momentum, grads),
   # for each triplet we implement the SGD update rule which updates
@@ -226,11 +220,13 @@ class SGD(nnx.Object):
 # Variables are immutable (only contain Arrays) by default as it can make
 # initialization easier, however this means we have to use 'mutable' to
 # create the MutableArrays that will be updated during training.
+
 rngs = nnx.Rngs(params=0, dropout=1)
 model = Model(
   num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
 )
 optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
+
 # Create a copy of the model structure and set its attributes to eval model.
 # This works because they share the underlying MutableArrays so both models
 # will always be in sync.
@@ -259,7 +255,6 @@ def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
   # 'update' mutates the optimizer's state and the params in place
   # so we don't need to return anything 🚀
   optimizer.update(params, grads)
-
 
 # simple test step that computes the loss
 @jax.jit

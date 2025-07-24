@@ -18,7 +18,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from flax import nnx, config
+from flax import nnx
 from flax.nnx import rnglib
 from flax.nnx.module import Module, first_from
 from flax.nnx.nn import dtypes, initializers
@@ -355,7 +355,7 @@ class BatchNorm(Module):
         mask=mask,
       )
       # stop_gradient only for flax_mutable_array
-      if config.flax_mutable_array:
+      if self.mean.mutable or self.var.mutable:
         stop_gradient = jax.lax.stop_gradient
       else:
         stop_gradient = lambda x: x

@@ -1612,7 +1612,11 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
       return node_cache
     return x
 
-  cached_args = jax.tree.map(create_static_cache, cached_args)
+  cached_args = jax.tree.map(
+    create_static_cache,
+    cached_args,
+    is_leaf=lambda x: is_graph_node(x) or isinstance(x, Variable),
+  )
 
   @functools.wraps(f)
   def cache_args_wrapper(*args, **kwargs):

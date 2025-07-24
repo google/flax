@@ -1072,6 +1072,18 @@ class TestGraphUtils(absltest.TestCase):
 
     self.assertEqual(m.a, 2)
 
+  def test_data_after_init(self):
+    test = self
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.ls = []
+        self.ls.append(jnp.array(1))
+        test.assertNotIn('ls', self._object__nodes)
+
+    m = Foo()
+
+    self.assertIn('ls', m._object__nodes)
+    self.assertLen(jax.tree.leaves(m), 1)
 
 class SimpleModule(nnx.Module):
   pass
