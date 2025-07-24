@@ -3,3 +3,96 @@ Flax NNX version update from 0.10 to 0.11
 
 In this guide we present the code changes required when we update Flax NNX code to the version 0.11 and later.
 
+
+.. testsetup:: v0.11, v0.10
+
+  import jax
+  import jax.numpy as jnp
+  import optax
+  from typing import Any
+
+
+``nnx.scan`` with ``nnx.split_rngs``
+====================================
+
+When using :func:`nnx.scan<flax.nnx.scan>` in the nnx.Module as a decorator over the ``__call__`` method and
+:func:`nnx.split_rngs<flax.nnx.split_rngs>` in the constructor,
+we do not need to decorate the ``__call__`` method with :func:`nnx.split_rngs<flax.nnx.split_rngs>` anymore:
+
+.. codediff::
+  :title: v0.11, v0.10
+  :sync:
+
+  import flax.nnx as nnx
+
+  state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
+
+  class MLP(nnx.Module):
+    @nnx.split_rngs(splits=5)
+    @nnx.vmap(in_axes=(state_axes, state_axes))
+    def __init__(self, rngs: nnx.Rngs):
+      self.linear = nnx.Linear(3, 3, rngs=rngs)
+      self.bn = nnx.BatchNorm(3, rngs=rngs)
+      self.dropout = nnx.Dropout(0.5, rngs=rngs)
+      self.node = nnx.Param(jnp.ones((2,)))
+
+    @nnx.scan(in_axes=(state_axes, nnx.Carry))
+    def __call__(self, x: jax.Array):
+      x = self.linear(x)
+      x = self.bn(x)
+      x = self.dropout(x)
+      x = nnx.gelu(x)
+      return x, None
+
+  ---
+
+  import flax.nnx as nnx
+
+  state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
+
+  class MLP(nnx.Module):
+    @nnx.split_rngs(splits=5)
+    @nnx.vmap(in_axes=(state_axes, state_axes))
+    def __init__(self, rngs: nnx.Rngs):
+      self.linear = nnx.Linear(3, 3, rngs=rngs)
+      self.bn = nnx.BatchNorm(3, rngs=rngs)
+      self.dropout = nnx.Dropout(0.5, rngs=rngs)
+      self.node = nnx.Param(jnp.ones((2,)))
+
+    @nnx.split_rngs(splits=5)
+    @nnx.scan(in_axes=(state_axes, nnx.Carry))
+    def __call__(self, x: jax.Array):
+      x = self.linear(x)
+      x = self.bn(x)
+      x = self.dropout(x)
+      x = nnx.gelu(x)
+      return x, None
+
+
+How to use previous checkpoints in the new version
+==================================================
+
+TODO: Add some text
+
+.. code-block:: python
+
+  def fix_old_checkpoint(path: Path, model: nnx.Module):
+    checkpointer = ocp.StandardCheckpointer()
+    checkpoint = checkpointer.restore(path / "state")
+
+    print("0 Checkpoint: ", jax.tree.map(lambda x: x.shape, checkpoint))
+    print("0 Checkpoint: ", checkpoint["mha"]["out"]["kernel"]["value"].mean())
+
+    # drop rngs keys
+    flat_paths = nnx.traversals.flatten_mapping(checkpoint)
+    flat_paths = {
+        path: value for path, value in flat_paths.items() if "rngs" not in path
+    }
+    checkpoint = nnx.traversals.unflatten_mapping(flat_paths)
+
+    assert False
+    # THIS MODIFIES MODEL'S STRUCTURE
+    nnx.update(model, checkpoint)
+    # full checkpoint
+    new_checkpoint = nnx.state(model)
+    return new_checkpoint
