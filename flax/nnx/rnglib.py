@@ -472,7 +472,7 @@ def split_rngs(
       if variablelib.is_mutable_array(stream.key.raw_value):
         stream.key.raw_value = variablelib.mutable_array(key)
       else:
-        stream.key.value = key
+        stream.key[...] = key
       if squeeze:
         counts_shape = stream.count.shape
       elif isinstance(splits, int):
@@ -484,7 +484,7 @@ def split_rngs(
       if variablelib.is_mutable_array(stream.count.raw_value):
         stream.count.raw_value = variablelib.mutable_array(count)
       else:
-        stream.count.value = count
+        stream.count[...] = count
 
   return SplitBackups(backups)
 
