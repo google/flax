@@ -29,7 +29,7 @@ from flax.nnx.proxy_caller import (
   DelayedAccessor,
 )
 from flax.nnx.statelib import FlatState, State
-from flax.nnx.variablelib import Variable
+from flax.nnx.variablelib import Variable, is_mutable_array
 from flax.typing import Key, PathParts, is_key_like
 import jax
 import numpy as np
@@ -1449,7 +1449,9 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
     current_value = node_dict[key]
 
     # case 2: subgraph is being updated
-    if is_node(current_value):
+    if is_mutable_array(current_value):
+      current_value[...] = value
+    elif is_node(current_value):
       if is_node_leaf(value):
         raise ValueError(f'Expected a subgraph for {key!r}, but got: {value!r}')
       _graph_update_dynamic(current_value, value)
@@ -1546,7 +1548,7 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
     >>> import optax
     ...
     >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    >>> optimizer = nnx.Optimizer(model, optax.adamw(1e-3))
+    >>> optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=nnx.Param)
     ...
     >>> @nnx.jit
     ... def train_step(model, optimizer, x, y):
@@ -1554,7 +1556,7 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
     ...     return jnp.mean((model(x) - y) ** 2)
     ...
     ...   loss, grads = nnx.value_and_grad(loss_fn)(model)
-    ...   optimizer.update(grads)
+    ...   optimizer.update(model, grads)
     ...   return loss
     ...
     >>> cached_train_step = nnx.cached_partial(train_step, model, optimizer)

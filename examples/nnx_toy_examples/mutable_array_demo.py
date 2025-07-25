@@ -20,9 +20,6 @@ import numpy as np
 
 from flax import nnx
 
-# activate mutable arrays
-nnx.use_mutable_arrays(True)
-
 # ## Data
 # We create a simple dataset of points sampled from a parabola with some noise.
 X = np.linspace(-jnp.pi, jnp.pi, 100)[:, None]
@@ -221,11 +218,13 @@ class SGD(nnx.Object):
 # initialization easier, however this means we have to use 'mutable' to
 # create the MutableArrays that will be updated during training.
 
-rngs = nnx.Rngs(params=0, dropout=1)
-model = Model(
-  num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
-)
-optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
+# activate mutable arrays
+with nnx.use_mutable_arrays(True):
+  rngs = nnx.Rngs(params=0, dropout=1)
+  model = Model(
+    num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
+  )
+  optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
 
 # Create a copy of the model structure and set its attributes to eval model.
 # This works because they share the underlying MutableArrays so both models
