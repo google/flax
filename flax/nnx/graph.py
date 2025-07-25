@@ -1420,7 +1420,12 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
         # can happen when using standalone Variables with `grad`
         pass
       else:
-        node.raw_value = value
+        if is_mutable_array(node.raw_value) and (
+          isinstance(value, jax.Array) or is_mutable_array(value)
+        ):
+          node[...] = value[...]
+        else:
+          node.raw_value = value
 
   if isinstance(node, Variable):
     _update_variable(node, state)
@@ -1599,7 +1604,7 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
       variables = flat_state.leaves
       # clone but keep the same variable references
       node_cache = unflatten(
-          graphdef, flat_state, index_ref=index_ref, copy_variables=False
+        graphdef, flat_state, index_ref=index_ref, copy_variables=False
       )
       cached_new_ref_index = RefMap()
       _fp = fingerprint(
@@ -2726,7 +2731,9 @@ def mutable(node: A, /, only: filterlib.Filter = _array_like) -> A:
     A structure with the mutable arrays.
   """
   duplicate_fn = filterlib.to_predicate(only)
-  if (duplicate := find_duplicates(node, duplicate_fn=duplicate_fn)) is not None:
+  if (
+    duplicate := find_duplicates(node, duplicate_fn=duplicate_fn)
+  ) is not None:
     current_path_str, previous_path_str = duplicate
     raise ValueError(
       f"Found duplicate at path '{current_path_str}' and '{previous_path_str}'."
