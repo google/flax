@@ -814,7 +814,7 @@ class TestGrad(parameterized.TestCase):
       loss = jnp.mean(l1[0].kernel * l2[0].kernel) + jnp.mean(
         l1[0].bias * l2[0].bias
       )
-      l1[0].kernel.value = jnp.array(-1.0)
+      l1[0].kernel[...] = jnp.array(-1.0)
       m3 = nnx.Linear(2, 3, rngs=nnx.Rngs(2))
       return loss, m3
 
@@ -866,7 +866,7 @@ class TestCustomVJP(parameterized.TestCase):
     @nnx.custom_vjp
     def f(m1: nnx.Linear, m2: nnx.Linear):
       y = m1.kernel * m2.kernel
-      m1.kernel.value = jnp.array(-1.0)
+      m1.kernel[...] = jnp.array(-1.0)
       return y
 
     def f_fwd(m1, m2):
@@ -2764,7 +2764,7 @@ class TestSwitch(absltest.TestCase):
       def __init__(self):
         self.next_index = 0
         self.linear = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
-        self.linear.kernel.value = jnp.identity(10)
+        self.linear.kernel[...] = jnp.identity(10)
         self.rounds_count = nnx.Variable(jnp.array(0))
 
       def __call__(self, x):
@@ -2806,7 +2806,7 @@ class TestWhileLoop(absltest.TestCase):
       return m, y, c - 1.0
 
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
-    module.kernel.value = jnp.identity(10) * 2
+    module.kernel[...] = jnp.identity(10) * 2
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     _, y, _ = nnx.while_loop(
@@ -2820,7 +2820,7 @@ class TestWhileLoop(absltest.TestCase):
       return m1, (w2,), y, c - 1.0
 
     m1 = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
-    m1.kernel.value = jnp.identity(10) * 2
+    m1.kernel[...] = jnp.identity(10) * 2
     w2 = nnx.Variable(jnp.identity(10) * 0.5)
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
@@ -2835,7 +2835,7 @@ class TestWhileLoop(absltest.TestCase):
       return m, y, c - 1.0
 
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
-    module.kernel.value = jnp.identity(10) * 2
+    module.kernel[...] = jnp.identity(10) * 2
     module = nnx.Sequential(module)
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
@@ -2897,7 +2897,7 @@ class TestWhileLoop(absltest.TestCase):
     def fwd_fn(input):
       m, x, c = input
       m = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(1))
-      m.kernel.value = jnp.identity(10) * 2
+      m.kernel[...] = jnp.identity(10) * 2
       y = m(x)
       return m, y, c - 1.0
 
