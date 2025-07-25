@@ -159,7 +159,7 @@ import optax
 
 # An MLP containing 2 custom `Linear` layers, 1 `nnx.Dropout` layer, 1 `nnx.BatchNorm` layer.
 model = MLP(2, 16, 10, rngs=nnx.Rngs(0))
-optimizer = nnx.Optimizer(model, optax.adam(1e-3))  # reference sharing
+optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
 @nnx.jit  # Automatic state management
 def train_step(model, optimizer, x, y):
@@ -168,7 +168,7 @@ def train_step(model, optimizer, x, y):
     return jnp.mean((y_pred - y) ** 2)
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)  # In place updates.
+  optimizer.update(model, grads)  # In place updates.
 
   return loss
 
