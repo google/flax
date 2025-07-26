@@ -33,7 +33,7 @@ from flax.nnx import variablelib
 import flax.nnx.module as nnx_module
 from flax.nnx.object import Object
 from flax.nnx import variablelib
-from flax.nnx.bridge import variables as bridge_variables
+from flax.nnx import bridge
 import numpy as np
 
 A = tp.TypeVar('A')
@@ -394,7 +394,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       ):
         leaf = variable.value
       else:
-        leaf = bridge_variables.to_linen_var(variable)
+        leaf = bridge.wrappers.to_linen_var(variable)
 
       _variables[collection][path] = leaf
 
@@ -429,7 +429,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     for col_name, linen_collection in variables.items():
 
       def to_variable(value):
-        return bridge_variables.to_nnx_var(col_name, value)
+        return bridge.wrappers.to_nnx_var(col_name, value)
 
       linen_collection = jax.tree.map(
         to_variable,

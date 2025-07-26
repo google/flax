@@ -34,13 +34,6 @@ class TestCompatibility(absltest.TestCase):
     device_mesh = np.array(jax.devices()).reshape(dim1, jax.device_count() // dim1)
     self.mesh = jax.sharding.Mesh(devices=device_mesh, axis_names=('in', 'out'))
 
-  def test_functional(self):
-    # Functional API for NNX Modules
-    functional = bridge.functional(nnx.Linear)(32, 64)
-    state = functional.init(rngs=nnx.Rngs(0))
-    x = jax.numpy.ones((1, 32))
-    y, updates = functional.apply(state)(x)
-
   ##################
   ### LinenToNNX ###
   ##################
@@ -108,7 +101,7 @@ class TestCompatibility(absltest.TestCase):
     # lazy_init only initialized param w inside dot(), so calling __call__ should fail
     with self.assertRaises(flax.errors.ScopeParamNotFoundError):
       y = model(x)
-    assert isinstance(model.rngs, nnx.Rngs)
+    assert isinstance(model.to_nnx__rngs, nnx.Rngs)
 
   def test_linen_to_nnx_mutable(self):
     class Foo(nn.Module):
@@ -254,7 +247,8 @@ class TestCompatibility(absltest.TestCase):
   def test_nnx_to_linen(self):
     model = bridge.to_linen(nnx.Linear, 32, out_features=64)
     x = jax.numpy.ones((1, 32))
-    y, variables = model.init_with_output(jax.random.key(0), x)
+    variables = model.init(jax.random.key(0), x)
+    y = model.apply(variables, x)
     assert y.shape == (1, 64)
     np.testing.assert_allclose(y, x @ variables['params']['kernel'])
 
@@ -275,7 +269,7 @@ class TestCompatibility(absltest.TestCase):
     xkey, pkey, dkey1, dkey2 = jax.random.split(jax.random.key(0), 4)
     x = jax.random.normal(xkey, (2, 4))
     model = LinenOuter()
-    y1, var = model.init_with_output({'params': pkey, 'dropout': dkey1}, x)
+    y1, var = model.init({'params': pkey, 'dropout': dkey1}, x)
     y2 = model.apply(var, x, rngs={'dropout': dkey2})
     assert not jnp.allclose(y1, y2)  # dropout keys are different
 
@@ -514,7 +508,7 @@ class TestCompatibility(absltest.TestCase):
     # messing up the stateful part of the NNX module.
     pass
 
-  def test_to_linen_abtract_init(self):
+  def test_to_linen_paritial_init(self):
     test = self
     class Foo(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
@@ -524,10 +518,6 @@ class TestCompatibility(absltest.TestCase):
         return self.a
 
     model = bridge.ToLinen(Foo)
-    y = model.apply({})
-    self.assertIsInstance(y, jax.ShapeDtypeStruct)
-
-    model = bridge.ToLinen(Foo, abstract_init=False)
     y = model.apply({})
     self.assertIsInstance(y, jax.Array)
 
