@@ -31,7 +31,10 @@ from .graph import GraphDef as GraphDef
 from .graph import GraphState as GraphState
 from .graph import PureState as PureState
 from .object import Object as Object
-from .helpers import Dict as Dict
+from .object import Data as Data
+from .object import data as data
+from .object import register_data_type as register_data_type
+from .object import is_data_type as is_data_type
 from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
@@ -138,7 +141,12 @@ from .variablelib import Param as Param
 from .training import optimizer as optimizer
 from .training.metrics import Metric as Metric
 from .training.metrics import MultiMetric as MultiMetric
+from .training.optimizer import OptState as OptState
+from .training.optimizer import OptArray as OptArray
+from .training.optimizer import OptVariable as OptVariable
 from .training.optimizer import Optimizer as Optimizer
+from .training.optimizer import ModelAndOptimizer as ModelAndOptimizer
+from .training.optimizer import OptState as OptState
 from .transforms.autodiff import DiffState as DiffState
 from .transforms.autodiff import grad as grad
 from .transforms.autodiff import value_and_grad as value_and_grad
@@ -164,7 +172,6 @@ from .variablelib import Cache as Cache
 from .variablelib import Intermediate as Intermediate
 from .variablelib import Perturbation as Perturbation
 from .variablelib import Variable as Variable
-from .variablelib import VariableState as VariableState
 from .variablelib import VariableMetadata as VariableMetadata
 from .variablelib import with_metadata as with_metadata
 from .variablelib import variable_type_from_name as variable_type_from_name
@@ -173,13 +180,31 @@ from .variablelib import register_variable_name as register_variable_name
 from .variablelib import mutable_array as mutable_array
 from .variablelib import MutableArray as MutableArray
 from .variablelib import is_mutable_array as is_mutable_array
+from .variablelib import use_mutable_arrays as use_mutable_arrays
+from .variablelib import using_mutable_arrays as using_mutable_arrays
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree
 from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
 from . import traversals as traversals
-from .dataclasses import dataclass as dataclass
-from .dataclasses import Static as Static
-from .dataclasses import field as field
-from .dataclasses import static as static
+
+# alias VariableState
+VariableState = Variable
+
+import typing as _tp
+
+if not _tp.TYPE_CHECKING:
+  def __getattr__(name):
+    if name == "VariableState":
+      import warnings
+      warnings.warn(
+          "'VariableState' was removed, this is just an alias to 'Variable'. "
+          "Plase use 'Variable' directly instead.",
+          DeprecationWarning,
+          stacklevel=2,
+      )
+    if name not in globals():
+      raise AttributeError(f"Module {__name__} has no attribute '{name}'")
+
+    return globals()[name]

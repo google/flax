@@ -28,19 +28,13 @@ from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
 from flax.nnx.filterlib import All
 from flax.nnx.object import Object
-from flax.typing import MISSING, Missing
+from flax.typing import MISSING, Key, Missing
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 Counts = list[int]
 AxesValue = tp.Union[int, None]
 SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
-_fry_dtype: jnp.dtype | None = None
 
-def get_fry_dtype():
-  global _fry_dtype
-  if _fry_dtype is None:
-    _fry_dtype = jax.eval_shape(lambda: jax.random.key(0)).dtype
-  return _fry_dtype
 
 class RngState(Variable[jax.Array]):
   tag: str
@@ -56,21 +50,21 @@ NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
 
 
 class RngStream(Object):
-  __data__ = ('key', 'count')
 
   def __init__(
     self,
+    key: jax.Array | int,
+    *,
     tag: str,
-    key: jax.Array | int
   ):
     if isinstance(key, int):
       key = jax.random.key(key)
     elif isinstance(key, jax.Array) and key.dtype == jnp.uint32:
       key = jax.random.wrap_key_data(key)
 
-    if not isinstance(key, jax.Array) or key.dtype != get_fry_dtype():
+    if not isinstance(key, jax.Array) or not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
       raise ValueError(f'Invalid rng value: {key}, expected a '
-                       f'jax.Array of dtype {get_fry_dtype()}')
+                       f'jax.Array of jax.dtypes.prng_key sub-dtype')
 
     count = jnp.zeros(key.shape, dtype=jnp.uint32)
     self.tag = tag
@@ -90,90 +84,59 @@ class RngStream(Object):
     key = self()
     if split is not None:
       key = jax.random.split(key, split)
-    return type(self)(self.tag, key)
+    return type(self)(key, tag=self.tag)
 
 
 RngValue = tp.Union[int, jax.Array]
 
 class Rngs(Object):
-  """NNX rng container class. To instantiate the ``Rngs``, pass
-  in an integer, specifying the starting seed. ``Rngs`` can have
-  different "streams", allowing the user to generate different
-  rng keys. For example, to generate a key for the ``params``
-  and ``dropout`` stream::
+  """A small abstraction to manage RNG state.
+
+  ``Rngs`` allows the creation of ``RngStream`` which are used to easily generate new unique
+  random keys on demand. An ``RngStream`` is a wrapper around a JAX random ``key``, and a
+  ``counter``. Every time a key is requested, the counter is incremented and the key is
+  generated from the seed key and the counter by using ``jax.random.fold_in``.
+
+  To create an ``Rngs`` pass in an integer or ``jax.random.key`` to the
+  constructor as a keyword argument with the name of the stream. The key will be used as the
+  starting seed for the stream, and the counter will be initialized to zero. Then call the
+  stream to get a key::
 
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
 
-    >>> rng1 = nnx.Rngs(0, params=1)
-    >>> rng2 = nnx.Rngs(0)
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
 
-    >>> assert rng1.params() != rng2.dropout()
-
-  Because we passed in ``params=1``, the starting seed for
-  ``params`` is ``1``, whereas the starting seed for ``dropout``
-  defaults to the ``0`` we passed in, since we didn't specify
-  a seed for ``dropout``. If we didn't specify a seed for ``params``,
-  then both streams will default to using the ``0`` we passed in::
-
-    >>> rng1 = nnx.Rngs(0)
-    >>> rng2 = nnx.Rngs(0)
-
-    >>> assert rng1.params() == rng2.dropout()
-
-  The ``Rngs`` container class contains a separate counter for
-  each stream. Every time the stream is called to generate a new rng
-  key, the counter increments by ``1``. To generate a new rng key,
-  we fold in the counter value for the current rng stream into its
-  corresponding starting seed. If we try to generate an rng key for
-  a stream we did not specify on instantiation, then the ``default``
-  stream is used (i.e. the first positional argument passed to ``Rngs``
-  during instantiation is the ``default`` starting seed)::
-
-    >>> rng1 = nnx.Rngs(100, params=42)
-    >>> # `params` stream starting seed is 42, counter is 0
-    >>> assert rng1.params() == jax.random.fold_in(jax.random.key(42), 0)
-    >>> # `dropout` stream starting seed is defaulted to 100, counter is 0
-    >>> assert rng1.dropout() == jax.random.fold_in(jax.random.key(100), 0)
-    >>> # empty stream starting seed is defaulted to 100, counter is 1
-    >>> assert rng1() == jax.random.fold_in(jax.random.key(100), 1)
-    >>> # `params` stream starting seed is 42, counter is 1
-    >>> assert rng1.params() == jax.random.fold_in(jax.random.key(42), 1)
-
-  Let's see an example of using ``Rngs`` in a :class:`Module` and
-  verifying the output by manually threading the ``Rngs``::
-
-    >>> class Model(nnx.Module):
-    ...   def __init__(self, rngs):
-    ...     # Linear uses the `params` stream twice for kernel and bias
-    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
-    ...     # Dropout uses the `dropout` stream once
-    ...     self.dropout = nnx.Dropout(0.5, rngs=rngs)
-    ...   def __call__(self, x):
-    ...     return self.dropout(self.linear(x))
-
-    >>> def assert_same(x, rng_seed, **rng_kwargs):
-    ...   model = Model(rngs=nnx.Rngs(rng_seed, **rng_kwargs))
-    ...   out = model(x)
+    >>> param_key1 = rngs.params()
+    >>> param_key2 = rngs.params()
+    >>> dropout_key1 = rngs.dropout()
+    >>> dropout_key2 = rngs.dropout()
     ...
-    ...   # manual forward propagation
-    ...   rngs = nnx.Rngs(rng_seed, **rng_kwargs)
-    ...   kernel = nnx.initializers.lecun_normal()(rngs.params(), (2, 3))
-    ...   assert (model.linear.kernel.value==kernel).all()
-    ...   bias = nnx.initializers.zeros_init()(rngs.params(), (3,))
-    ...   assert (model.linear.bias.value==bias).all()
-    ...   mask = jax.random.bernoulli(rngs.dropout(), p=0.5, shape=(1, 3))
-    ...   # dropout scales the output proportional to the dropout rate
-    ...   manual_out = mask * (jnp.dot(x, kernel) + bias) / 0.5
-    ...   assert (out == manual_out).all()
+    >>> assert param_key1 != dropout_key1
 
-    >>> x = jnp.ones((1, 2))
-    >>> assert_same(x, 0)
-    >>> assert_same(x, 0, params=1)
-    >>> assert_same(x, 0, params=1, dropout=2)
+  Trying to generate a key for a stream that was not specified during construction
+  will result in an error being raised::
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> try:
+    ...   key = rngs.unkown_stream()
+    ... except AttributeError as e:
+    ...   print(e)
+    No RngStream named 'unkown_stream' found in Rngs.
+
+  The ``default`` stream can be created by passing in a key to the constructor without
+  specifying a stream name. When the ``default`` stream is set the ``rngs`` object can be
+  called directly to get a key, and calling streams that were not specified during
+  construction will fallback to ``default``::
+
+    >>> rngs = nnx.Rngs(0, params=1)
+    ...
+    >>> key1 = rngs.default()       # uses 'default'
+    >>> key2 = rngs()               # uses 'default'
+    >>> key3 = rngs.params()        # uses 'params'
+    >>> key4 = rngs.dropout()       # uses 'default'
+    >>> key5 = rngs.unkown_stream() # uses 'default'
   """
-
-  __data__ = 'all'
 
   def __init__(
     self,
@@ -185,14 +148,9 @@ class Rngs(Object):
   ):
     """
     Args:
-      default: the starting seed for the ``default`` stream. Any
-        key generated from a stream that isn't specified in the
-        ``**rngs`` key-word arguments will default to using this
-        starting seed.
-      **rngs: optional key-word arguments to specify starting
-        seeds for different rng streams. The key-word is the
-        stream name and its value is the corresponding starting
-        seed for that stream.
+      default: the starting seed for the ``default`` stream, defaults to None.
+      **rngs: keyword arguments specifying the starting seed for each stream.
+        The key can be an integer or a ``jax.random.key``.
     """
     if default is not None:
       if isinstance(default, tp.Mapping):
@@ -204,19 +162,19 @@ class Rngs(Object):
       if isinstance(key, RngStream):
         key = key.key.value
       stream = RngStream(
-        tag=tag,
         key=key,
+        tag=tag,
       )
       setattr(self, tag, stream)
 
   def _get_stream(self, name: str, error_type: type[Exception]) -> RngStream:
-    rngs_vars = vars(self)
-    if name not in rngs_vars:
-      if 'default' not in rngs_vars:
-        raise error_type(f"No RNG named {name!r} or 'default' found in Rngs.")
-      stream = rngs_vars['default']
+    stream_vars = vars(self)
+    if name not in stream_vars:
+      if 'default' not in stream_vars:
+        raise error_type(f"No RngStream named '{name}' found in Rngs.")
+      stream = stream_vars['default']
     else:
-      stream = rngs_vars[name]
+      stream = stream_vars[name]
 
     return stream
 
@@ -230,19 +188,22 @@ class Rngs(Object):
     return self.default()
 
   def __iter__(self) -> tp.Iterator[str]:
-    for name in vars(self):
-      if name != '_object__state':
+    for name, stream in vars(self).items():
+      if isinstance(stream, RngStream):
         yield name
 
   def __len__(self) -> int:
-    return len(vars(self)) - 1
+    return sum(
+      1 for stream in vars(self).values() if isinstance(stream, RngStream)
+    )
 
   def __contains__(self, name: tp.Any) -> bool:
     return name in vars(self)
 
   def items(self):
-    for name in self:
-      yield name, self[name]
+    for name, stream in vars(self).items():
+      if isinstance(stream, RngStream):
+        yield name, stream
 
   def fork(
     self,
@@ -262,14 +223,28 @@ class Rngs(Object):
       ...
       >>> assert rngs.params() != new_rngs.params()
 
-    ``split`` can be used to additionally split the RNG keys
-    of the newly created Rngs object::
+    ``split`` can be used to split the keys of the newly created ``Rngs`` object::
 
       >>> rngs = nnx.Rngs(params=1, dropout=2)
       >>> new_rngs = rngs.fork(split=5)
       ...
       >>> assert new_rngs.params.key.shape == (5,)
       >>> assert new_rngs.dropout.key.shape == (5,)
+
+    ``split`` also accepts a mapping of
+    `Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__  to
+    split sizes or None to control which streams are split and how they are split::
+
+      >>> rngs = nnx.Rngs(params=1, dropout=2, noise=3)
+      >>> new_rngs = rngs.fork(split={
+      ...  'params': 5,      # split params into 5 keys
+      ...  'dropout': None,  # don't split dropout
+      ...  ...: (2, 5),      # split anything else into 2x5 keys
+      ... })
+      ...
+      >>> assert new_rngs.params.key.shape == (5,)
+      >>> assert new_rngs.dropout.key.shape == ()
+      >>> assert new_rngs.noise.key.shape == (2, 5)
     """
     if split is None:
       split = {}
@@ -423,8 +398,8 @@ def split_rngs(
     ...   return Model(rngs)
     ...
     >>> model = create_model(rngs)
-    >>> model.dropout.rngs.params.key.shape
-    (5,)
+    >>> model.dropout.rngs.key.shape
+    ()
 
   ``split_rngs`` returns a SplitBackups object that can be used to restore the
   original unsplit rng states using :func:`nnx.restore_rngs`, this is useful
@@ -436,7 +411,7 @@ def split_rngs(
     >>> model = create_model(rngs)
     >>> nnx.restore_rngs(backups)
     ...
-    >>> model.dropout.rngs.params.key.shape
+    >>> model.dropout.rngs.key.shape
     ()
 
   SplitBackups can also be used as a context manager to automatically restore
@@ -447,7 +422,7 @@ def split_rngs(
     >>> with nnx.split_rngs(rngs, splits=5, only='params'):
     ...   model = create_model(rngs)
     ...
-    >>> model.dropout.rngs.params.key.shape
+    >>> model.dropout.rngs.key.shape
     ()
 
     >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
@@ -459,7 +434,7 @@ def split_rngs(
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> model = create_model(rngs)
-    >>> model.dropout.rngs.params.key.shape
+    >>> model.dropout.rngs.key.shape
     ()
 
 
@@ -521,18 +496,49 @@ def backup_keys(node: tp.Any, /):
       backups.append((stream, stream.key.raw_value))
   return backups
 
+def _scalars_only(
+  path: tuple[Key, ...], scalar_key: jax.Array, target_shape: tuple[int, ...]
+) -> jax.Array:
+  if target_shape != ():
+    raise ValueError(
+      f'Cannot reseed stream at path {path!r} becuase it has a non-scalar key, '
+      f'found key with shape {target_shape}. If all your multi-dimensional '
+      'keys have unique values on all dimensions, set policy="match_shape", '
+      'else provide a custom reseed policy.'
+    )
+  return scalar_key
 
-def reseed(node, /, **stream_keys: RngValue):
+
+def _match_shape(
+  path: tuple[Key, ...], scalar_key: jax.Array, target_shape: tuple[int, ...]
+) -> jax.Array:
+  if target_shape == ():
+    return scalar_key
+  return jax.random.split(scalar_key, target_shape)
+
+
+def reseed(
+  node,
+  /,
+  *,
+  policy: tp.Literal['scalars_only', 'match_shape']
+  | tp.Callable[
+    [tuple, jax.Array, tuple[int, ...]], jax.Array
+  ] = 'scalars_only',
+  **stream_keys: RngValue,
+):
   """Update the keys of the specified RNG streams with new keys.
 
   Args:
     node: the node to reseed the RNG streams in.
+    policy: defines how the the new scalar key is for each RngStream is used to
+      reseed the stream. If ``'scalars_only'`` is given (the default), an error is raised
+      if the target stream key is not a scalar. If ``'match_shape'`` is given, the new
+      scalar key is split to match the shape of the target stream key. A callable
+      of the form ``(path, scalar_key, target_shape) -> new_key`` can be passed to
+      define a custom reseeding policy.
     **stream_keys: a mapping of stream names to new keys. The keys can be
-      either integers or jax arrays. If an integer is passed in, then the
-      key will be generated using ``jax.random.key``.
-
-  Raises:
-    ValueError: if an existing stream key is not a scalar.
+      either integers or ``jax.random.key``.
 
   Example::
 
@@ -558,19 +564,23 @@ def reseed(node, /, **stream_keys: RngValue):
     >>> jnp.allclose(y1, y2)
     Array(True, dtype=bool)
   """
-  for _, stream in graph.iter_graph(node):
+  if policy == 'scalars_only':
+    policy = _scalars_only
+  elif policy == 'match_shape':
+    policy = _match_shape
+  elif not callable(policy):
+    raise ValueError(
+      f'policy must be "scalars_only", "match_shape" or a callable, '
+      f'got {policy!r}'
+    )
+  rngs = Rngs(**stream_keys)
+  for path, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
       if stream.key.tag in stream_keys:
-        if stream.key.shape != ():
-          raise ValueError(
-            f'Cannot reseed stream {stream.key.tag!r} with a non-scalar key, '
-            f' found key with shape {stream.key.shape}.'
-          )
-        key = stream_keys[stream.key.tag]
-        if isinstance(key, int):
-          key = jax.random.key(key)
-        stream.key.value = key
-        stream.count.value = jnp.array(0, dtype=jnp.uint32)
+        key = rngs[stream.key.tag]()
+        key = policy(path, key, stream.key.shape)
+        stream.key[...] = key
+        stream.count[...] = jnp.zeros(key.shape, dtype=jnp.uint32)
 
 
 def restore_rngs(backups: tp.Iterable[StreamBackup], /):

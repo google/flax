@@ -7,6 +7,7 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/nnx/i
   :maxdepth: 3
 
   graph
+  object
   module
   nn/index
   rnglib

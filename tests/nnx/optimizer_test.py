@@ -51,15 +51,15 @@ class TestOptimizer(parameterized.TestCase):
     x = jax.random.normal(jax.random.key(0), (1, 2))
     model = module_cls(2, 4, rngs=nnx.Rngs(0))
     tx = optax.adam(1e-3)
-    optimizer = nnx.Optimizer(model, tx)
-    out = optimizer.model(x)
+    optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
+    out = model(x)
     graphdef, optimizer = nnx.split(optimizer)
     optimizer = nnx.merge(graphdef, optimizer)
-    np.testing.assert_allclose(out, optimizer.model(x))
+    np.testing.assert_allclose(out, model(x))
 
   def test_update(self):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    optimizer = nnx.Optimizer(model, optax.adamw(0.1))
+    optimizer = nnx.Optimizer(model, optax.adamw(0.1), wrt=nnx.Param)
 
     def loss_fn(model):
       params = nnx.state(model)
@@ -67,7 +67,7 @@ class TestOptimizer(parameterized.TestCase):
       return loss
 
     grads = nnx.grad(loss_fn)(model)
-    optimizer.update(grads)
+    optimizer.update(model, grads)
 
   def test_sharding_propagation(self):
     model = nnx.Linear(
@@ -80,7 +80,7 @@ class TestOptimizer(parameterized.TestCase):
         ),
         use_bias=False,
     )
-    optimizer = nnx.Optimizer(model, optax.adamw(0.1))
+    optimizer = nnx.Optimizer(model, optax.adamw(0.1), wrt=nnx.Param)
 
     state = nnx.state(optimizer)
     partition_spec = nnx.get_partition_spec(state)
@@ -103,10 +103,10 @@ class TestOptimizer(parameterized.TestCase):
     tx = optimizer(
         1e-3
     )  # TODO: this doesn't work with adam optimizer for some reason
-    state = nnx.Optimizer(model, tx)
+    state = nnx.ModelAndOptimizer(model, tx)
 
     if jit_decorator == jax.jit:
-      model_static, model_state = nnx.split(state.model)
+      model_static, model_state = nnx.split(model)
       loss_fn = lambda graphdef, state, x, y: (
           (nnx.merge(graphdef, state)(x) - y) ** 2
       ).mean()
@@ -114,7 +114,7 @@ class TestOptimizer(parameterized.TestCase):
 
       def jax_jit_train_step(graphdef, state, x, y):
         state = nnx.merge(graphdef, state)
-        model_static, model_state = nnx.split(state.model)
+        model_static, model_state = nnx.split(model)
         grads = jax.grad(loss_fn, argnums=1)(model_static, model_state, x, y)
         state.update(grads)
         return nnx.split(state)
@@ -148,7 +148,7 @@ class TestOptimizer(parameterized.TestCase):
     y = jnp.ones((1, 4))
     model = module_cls(2, 4, rngs=nnx.Rngs(0))
     tx = optimizer(1e-3)
-    state = nnx.Optimizer(model, tx)
+    state = nnx.ModelAndOptimizer(model, tx)
 
     if jit_decorator == jax.jit:
       model_static, model_state = nnx.split(state.model)
@@ -199,7 +199,7 @@ class TestOptimizer(parameterized.TestCase):
       optimizer=[optax.sgd, optax.adam],
   )
   def test_metrics(self, module_cls, optimizer):
-    class TrainState(nnx.Optimizer):
+    class TrainState(nnx.ModelAndOptimizer):
 
       def __init__(self, model, tx, metrics):
         self.metrics = metrics
@@ -241,7 +241,7 @@ class TestOptimizer(parameterized.TestCase):
         rngs=nnx.Rngs(1),
     )
     state = nnx.Optimizer(model, optax.adam(1e-3), wrt=variable)
-    prev_variables, prev_other_variables = nnx.state(model, variable, ...)
+    prev_variables, prev_other_variables = nnx.clone(nnx.state(model, variable, ...))
 
     x = jnp.ones((1, 4))
     y = jnp.ones((1, 10))
@@ -249,9 +249,9 @@ class TestOptimizer(parameterized.TestCase):
     grad_fn = nnx.grad(loss_fn, argnums=nnx.DiffState(0, variable))
 
     def step():
-      grads = grad_fn(state.model, x, y)
+      grads = grad_fn(model, x, y)
       initial_loss = loss_fn(model, x, y)
-      state.update(grads=grads)
+      state.update(model, grads)
       self.assertTrue(loss_fn(model, x, y) < initial_loss)
 
     # Since lora_b is initialized to zeros by default, the gradient flow to lora_a
@@ -288,7 +288,7 @@ class TestOptimizer(parameterized.TestCase):
         rngs=nnx.Rngs(1),
     )
     state = nnx.Optimizer(model, optax.lbfgs(), wrt=variable)
-    prev_variables, prev_other_variables = nnx.state(model, variable, ...)
+    prev_variables, prev_other_variables = nnx.clone(nnx.state(model, variable, ...))
 
     x = jnp.ones((1, 4))
     y = jnp.ones((1, 10))
@@ -299,10 +299,10 @@ class TestOptimizer(parameterized.TestCase):
     loss_fn_split = lambda state: loss_fn(nnx.merge(graphdef, state), x, y)
 
     def step():
-      grads = grad_fn(state.model, x, y)
+      grads = grad_fn(model, x, y)
       initial_loss = loss_fn(model, x, y)
       state.update(
-          grads, grad=grads, value_fn=loss_fn_split, value=initial_loss
+          model, grads, grad=grads, value_fn=loss_fn_split, value=initial_loss
       )
       self.assertTrue(loss_fn(model, x, y) < initial_loss)
 

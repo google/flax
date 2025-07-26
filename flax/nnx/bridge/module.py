@@ -65,7 +65,6 @@ class ModuleState(statelib.State):
 
 
 class Scope(Object):
-  __data__ = ('rngs',)
   def __init__(self, rngs: rnglib.Rngs, mutable: CollectionFilter):
     self.rngs = rngs
     self.mutable = mutable
@@ -224,8 +223,7 @@ class ModuleBase:
 @tpe.dataclass_transform(field_specifiers=(dataclasses.field,))  # type: ignore[not-supported-yet]
 class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
   def __init_subclass__(cls) -> None:
-    cls.__data__ = 'auto'
-    super().__init_subclass__()
+    super().__init_subclass__(pytree=False)
 
     cls = dataclasses.dataclass(repr=False)(cls)
     cls.__hash__ = object.__hash__  # type: ignore[method-assign]
@@ -376,27 +374,27 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     state = graph.state(self)
     _variables: dict = {}
 
-    variable_state: variablelib.VariableState
-    for path, variable_state in statelib.to_flat_state(state):
-      if issubclass(variable_state.type, rnglib.RngState):
+    variable: variablelib.Variable
+    for path, variable in statelib.to_flat_state(state):
+      if isinstance(variable, rnglib.RngState):
         # Don't return RNG states, since Linen doesn't have them.
         continue
 
       try:
-        collection = variablelib.variable_name_from_type(variable_state.type)
+        collection = variablelib.variable_name_from_type(type(variable))
       except ValueError:
-        collection = variable_state.type.__name__
+        collection = type(variable).__name__
 
       if collection not in _variables:
         _variables[collection] = {}
 
       if (
-        isinstance(variable_state, variablelib.VariableState)
-        and not variable_state._var_metadata
+        isinstance(variable, variablelib.Variable)
+        and not variable._var_metadata
       ):
-        leaf = variable_state.value
+        leaf = variable.value
       else:
-        leaf = bridge_variables.to_linen_var(variable_state)
+        leaf = bridge_variables.to_linen_var(variable)
 
       _variables[collection][path] = leaf
 

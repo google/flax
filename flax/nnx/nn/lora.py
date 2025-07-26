@@ -77,21 +77,19 @@ class LoRA(Module):
     lora_param_type: the type of the LoRA params.
   """
 
-  __data__ = ('lora_a', 'lora_b', 'base_module')
-
   def __init__(
-      self,
-      in_features: int,
-      lora_rank: int,
-      out_features: int,
-      *,
-      base_module: tp.Optional[Module] = None,
-      dtype: tp.Optional[Dtype] = None,
-      param_dtype: Dtype = jnp.float32,
-      a_initializer: Initializer = default_a_initializer,
-      b_initializer: Initializer = default_b_initializer,
-      lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
-      rngs: rnglib.Rngs,
+    self,
+    in_features: int,
+    lora_rank: int,
+    out_features: int,
+    *,
+    base_module: tp.Optional[Module] = None,
+    dtype: tp.Optional[Dtype] = None,
+    param_dtype: Dtype = jnp.float32,
+    a_initializer: Initializer = default_a_initializer,
+    b_initializer: Initializer = default_b_initializer,
+    lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
+    rngs: rnglib.Rngs,
   ):
     self.in_features = in_features
     self.out_features = out_features
@@ -101,10 +99,10 @@ class LoRA(Module):
     self.base_module = base_module
 
     self.lora_a = lora_param_type(
-        a_initializer(rngs.params(), (in_features, lora_rank), param_dtype)
+      a_initializer(rngs.params(), (in_features, lora_rank), param_dtype)
     )
     self.lora_b = lora_param_type(
-        b_initializer(rngs.params(), (lora_rank, out_features), param_dtype)
+      b_initializer(rngs.params(), (lora_rank, out_features), param_dtype)
     )
 
   def __call__(self, x: jax.Array):
@@ -157,8 +155,6 @@ class LoRALinear(Linear):
       `zero initializer`.
     lora_param_type: the type of the LoRA params.
   """
-
-  __data__ = ('lora',)  # type: ignore[assignment]
 
   def __init__(
       self,

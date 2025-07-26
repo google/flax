@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flax"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 description = "Flax: A neural network library for JAX designed for flexibility"
 keywords = []
 authors = [
@@ -77,8 +77,10 @@ docs = [
     "ipython_genutils",
     "sphinx-design",
     "jupytext==1.13.8",
-    "dm-haiku",
-    "docutils",
+    "dm-haiku>=0.0.14",
+    # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
+    # ReadTheDocs: https://stackoverflow.com/a/68008428
+    "docutils==0.16",
     # The next packages are for notebooks.
     "matplotlib",
     "scikit-learn",
@@ -188,6 +190,8 @@ filterwarnings = [
     "ignore:.*shape requires ndarray or scalar arguments.*:DeprecationWarning",
     # UserWarning: Sharding info not provided when restoring
     "ignore:.*Sharding info not provided when restoring.*:UserWarning",
+    # UserWarning: pkg_resources is deprecated as an API.
+    "ignore:.*pkg_resources is deprecated as an API.*:UserWarning",
 ]
 
 [tool.coverage.report]

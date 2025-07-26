@@ -35,7 +35,7 @@ class Model(nnx.Module):
     return self.linear_out(x)
   
 model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
-optimizer = nnx.Optimizer(model, optax.adam(1e-3))  # reference sharing
+optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 metrics = nnx.MultiMetric(
   loss=nnx.metrics.Average('loss'),
 )
@@ -47,7 +47,7 @@ def train_step(model, optimizer, metrics, x, y):
     return ((y_pred - y) ** 2).mean()
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)  # in-place updates
+  optimizer.update(model, grads)  # in-place updates
   metrics.update(loss=loss)
 
   return loss
@@ -111,7 +111,7 @@ def jax_train_step(graphdef, state, x, y):
     return ((y_pred - y) ** 2).mean()
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)
+  optimizer.update(model, grads)
   metrics.update(loss=loss)
 
   state = nnx.state((model, optimizer, metrics))

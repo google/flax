@@ -70,8 +70,8 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('Total', table_repr[34])
     self.assertIn('276 (1.1 KB)', table_repr[34])
     self.assertIn('5,790 (23.2 KB)', table_repr[34])
-    self.assertIn('2 (12 B)', table_repr[34])
-    self.assertIn('Total Parameters: 6,068 (24.3 KB)', table_repr[37])
+    self.assertIn('4 (24 B)', table_repr[34])
+    self.assertIn('Total Parameters: 6,070 (24.3 KB)', table_repr[37])
 
   def test_multiple_inputs_and_outputs(self):
     class CustomMLP(nnx.Module):

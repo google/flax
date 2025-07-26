@@ -84,13 +84,13 @@ def main(argv):
   X = np.linspace(0, 1, 100)[:, None]
   Y = 0.8 * X**2 + 0.1 + np.random.normal(0, 0.1, size=X.shape)
 
-  #------------------------------------------------------------
+  # ------------------------------------------------------------
   # NNX
-  #------------------------------------------------------------
+  # ------------------------------------------------------------
   if mode in ['all', 'nnx']:
     model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
     tx = optax.sgd(1e-3)
-    optimizer = nnx.Optimizer(model, tx)
+    optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
     t0 = time()
 
     @nnx.jit
@@ -104,20 +104,19 @@ def main(argv):
     total_time = time() - t0
     time_per_step = total_time / total_steps
     time_per_layer = time_per_step / depth
-    print("### NNX ###")
+    print('### NNX ###')
     print('total time:', total_time)
     print(f'time per step: {time_per_step * 1e6:.2f} µs')
     print(f'time per layer: {time_per_layer * 1e6:.2f} µs')
 
-
-  #------------------------------------------------------------
+  # ------------------------------------------------------------
   # JAX
-  #------------------------------------------------------------
+  # ------------------------------------------------------------
 
   if mode in ['all', 'jax']:
     model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
     tx = optax.sgd(1e-3)
-    optimizer = nnx.Optimizer(model, tx)
+    optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
     t0 = time()
 
     @jax.jit
@@ -132,12 +131,11 @@ def main(argv):
     total_time = time() - t0
     time_per_step = total_time / total_steps
     time_per_layer = time_per_step / depth
-    print("### JAX ###")
+    print('### JAX ###')
     print('total time:', total_time)
     print(f'time per step: {time_per_step * 1e6:.2f} µs')
     print(f'time per layer: {time_per_layer * 1e6:.2f} µs')
     print()
-
 
 
 if __name__ == '__main__':

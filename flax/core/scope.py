@@ -1184,6 +1184,10 @@ def _is_valid_variables(variables: VariableDict) -> bool:
 
 def _is_valid_rng(rng: Array):
   """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
+  # Allow for user-provided LazyRng - useful for compatibility when refactoring.
+  if isinstance(rng, LazyRng):
+    return True
+
   # This check is valid for either new-style or old-style PRNG keys
   if not isinstance(rng, (np.ndarray, jnp.ndarray)):
     return False

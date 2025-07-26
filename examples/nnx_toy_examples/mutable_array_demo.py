@@ -13,17 +13,12 @@
 # limitations under the License.
 
 # %%
-import os
-
-os.environ['FLAX_MUTABLE_ARRAY'] = 'true'
-
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 from flax import nnx
-
 
 # ## Data
 # We create a simple dataset of points sampled from a parabola with some noise.
@@ -42,27 +37,20 @@ def dataset(batch_size):
 # batch normalization, and a dropout layer.
 #
 # In this version we want the Modules to be pytrees so they can be used with JAX transforms
-# so we use a new Pytree type as the base. Pytree implements the pytree protocol but tries
-# to have a programming model that looks more like a regular python class e.g. uses __init__
-# and __call__, but instance are frozen after __init__ is done. A big sintactic difference
-# with current NNnX is that users have to specify which attributes are nodes using the __data__
-# class variable (similar to __slots__).
+# so we use a new Pytree type as the base. The main difference with current NNX is that
+# attributes that contain arrays or other pytrees now need to be explicitly marked as
+# using `nnx.data` to be included in the pytree.
 #
 # Variable changes in a couple of ways:
 # * its now implements the pytree protocol
 # * it can only hold arrays
 # * it has a mutable attribute, when True it will hold a MutableArray
-# * its immutable
 # * [...] is used to access & mutate underlying array
-#
 class Linear(nnx.Module):
-  __data__ = ('w', 'b')
-
-  # we mark 'w' and 'b' as nodes, the rest of the attributes are
-  # are treated as static.
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
     self.din, self.dout = din, dout
     initializer = jax.nn.initializers.lecun_normal()
+    # nnx.data is used mark attributes as pytree data
     # Param, BatchState, and Cache are built-in Variable subtypes
     self.w = nnx.Param(initializer(rngs.params(), (din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
@@ -75,8 +63,6 @@ class Linear(nnx.Module):
 # Block implements linear, batch norm, and dropout. Its behavior
 # is controlled by the 'use_stats' and 'deterministic' flags.
 class Block(nnx.Module):
-  __data__ = ('w', 'b', 'mean', 'var', 'scale', 'bias', 'rng')
-
   def __init__(
     self,
     din: int,
@@ -135,8 +121,6 @@ class Block(nnx.Module):
 
 
 class Model(nnx.Module):
-  __data__ = ('block_in', 'blocks', 'linear_out', 'count')
-
   def __init__(
     self,
     num_blocks: int,
@@ -162,9 +146,7 @@ class Model(nnx.Module):
 
       self.blocks = nnx.mutable(create_block(rngs.fork(split=num_blocks)))
     else:
-      self.blocks = [
-        Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)
-      ]
+      self.blocks = [Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)]
 
   def __call__(self, x: jax.Array, *, rngs: nnx.Rngs | None = None):
     self.count[...] += 1
@@ -198,23 +180,21 @@ class OptState(nnx.Variable): ...
 # hold a reference to them, it only uses the params to initialize its state
 # by creating new OptState Variables that reuse the param's metadata.
 class SGD(nnx.Object):
-  __data__ = ('momentum',)
-
   def __init__(self, params, lr: float, decay: float = 0.9):
     self.lr = lr
     self.decay = decay
 
     def make_opt_state(x):
-      if isinstance(x, nnx.Variable | nnx.VariableState):
+      if isinstance(x, nnx.Variable):
         return OptState(jnp.zeros_like(x.value), **x.get_metadata())
       else:
         return OptState(jnp.zeros_like(x))
 
     self.momentum = jax.tree.map(
-      make_opt_state,
-      params,
-      is_leaf=lambda x: isinstance(x, nnx.Variable | nnx.VariableState),
-    )
+        make_opt_state,
+        params,
+        is_leaf=lambda x: isinstance(x, nnx.Variable),
+      )
 
   # during the update we simply map over (params, momentum, grads),
   # for each triplet we implement the SGD update rule which updates
@@ -232,18 +212,20 @@ class SGD(nnx.Object):
 
     jax.tree.map(update_fn, params, momentum, grads)
 
-
 # ## Training
 # To setup the training loop we first instantiate the model and optimizer.
 # Variables are immutable (only contain Arrays) by default as it can make
 # initialization easier, however this means we have to use 'mutable' to
 # create the MutableArrays that will be updated during training.
 
-rngs = nnx.Rngs(params=0, dropout=1)
-model = Model(
-  num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
-)
-optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
+# activate mutable arrays
+with nnx.use_mutable_arrays(True):
+  rngs = nnx.Rngs(params=0, dropout=1)
+  model = Model(
+    num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
+  )
+  optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
+
 # Create a copy of the model structure and set its attributes to eval model.
 # This works because they share the underlying MutableArrays so both models
 # will always be in sync.
@@ -259,10 +241,10 @@ eval_model.set_attributes(use_stats=True, deterministic=True)
 # compute the loss by calling the model with the inputs.
 @jax.jit
 def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
-  treedef, params, nondiff = nnx.split(model, nnx.Param, ...)
+  graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
 
   def loss_fn(params):
-    model = nnx.merge(treedef, params, nondiff)
+    model = nnx.merge(graphdef, params, nondiff)
     loss = jnp.mean((model(x, rngs=rngs) - y) ** 2)
     return loss
 
@@ -273,7 +255,6 @@ def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
   # so we don't need to return anything 🚀
   optimizer.update(params, grads)
 
-
 # simple test step that computes the loss
 @jax.jit
 def test_step(model: Model, x, y):
@@ -281,11 +262,11 @@ def test_step(model: Model, x, y):
 
 
 # minimalistic training loop
-total_steps = 10_000
+total_steps = 2_000
 for step, (x, y) in enumerate(dataset(32)):
   train_step(model, optimizer, rngs, x, y)
 
-  if step % 1000 == 0:
+  if step % 200 == 0:
     logs = test_step(eval_model, X, Y)
     print(f'step: {step}, loss: {logs["loss"]}')
 

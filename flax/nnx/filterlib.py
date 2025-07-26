@@ -121,9 +121,7 @@ class OfType:
   type: type
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return isinstance(x, self.type) or (
-      hasattr(x, 'type') and issubclass(x.type, self.type)
-    )
+    return isinstance(x, self.type)
 
   def __repr__(self):
     return f'OfType({self.type!r})'

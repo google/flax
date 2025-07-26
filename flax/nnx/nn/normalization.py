@@ -202,20 +202,16 @@ class BatchNorm(Module):
     ...                       dtype=jnp.float32, rngs=nnx.Rngs(0))
     >>> jax.tree.map(jnp.shape, nnx.state(layer))
     State({
-      'bias': VariableState(
-        type=Param,
+      'bias': Param(
         value=(6,)
       ),
-      'mean': VariableState(
-        type=BatchStat,
+      'mean': BatchStat(
         value=(6,)
       ),
-      'scale': VariableState(
-        type=Param,
+      'scale': Param(
         value=(6,)
       ),
-      'var': VariableState(
-        type=BatchStat,
+      'var': BatchStat(
         value=(6,)
       )
     })
@@ -223,7 +219,7 @@ class BatchNorm(Module):
     >>> # calculate batch norm on input and update batch statistics
     >>> layer.train()
     >>> y = layer(x)
-    >>> batch_stats1 = nnx.state(layer, nnx.BatchStat)
+    >>> batch_stats1 = nnx.clone(nnx.state(layer, nnx.BatchStat)) # keep a copy
     >>> y = layer(x)
     >>> batch_stats2 = nnx.state(layer, nnx.BatchStat)
     >>> assert (batch_stats1['mean'].value != batch_stats2['mean'].value).all()
@@ -263,8 +259,6 @@ class BatchNorm(Module):
       calculation for the variance.
     rngs: rng key.
   """
-
-  __data__ = ('mean', 'var', 'scale', 'bias')
 
   def __init__(
     self,
@@ -360,11 +354,18 @@ class BatchNorm(Module):
         use_fast_variance=self.use_fast_variance,
         mask=mask,
       )
+      # stop_gradient only for flax_mutable_array
+      if self.mean.mutable or self.var.mutable:
+        stop_gradient = jax.lax.stop_gradient
+      else:
+        stop_gradient = lambda x: x
 
-      self.mean[...] = (
-        self.momentum * self.mean.value + (1 - self.momentum) * mean
+      self.mean[...] = stop_gradient(
+        self.momentum * self.mean[...] + (1 - self.momentum) * mean
       )
-      self.var[...] = self.momentum * self.var.value + (1 - self.momentum) * var
+      self.var[...] = stop_gradient(
+        self.momentum * self.var[...] + (1 - self.momentum) * var
+      )
 
     return _normalize(
       x,
@@ -397,12 +398,10 @@ class LayerNorm(Module):
 
     >>> nnx.state(layer)
     State({
-      'bias': VariableState( # 6 (24 B)
-        type=Param,
+      'bias': Param( # 6 (24 B)
         value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
       ),
-      'scale': VariableState( # 6 (24 B)
-        type=Param,
+      'scale': Param( # 6 (24 B)
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )
     })
@@ -435,8 +434,6 @@ class LayerNorm(Module):
         calculation for the variance.
     rngs: rng key.
   """
-
-  __data__ = ('scale', 'bias')
 
   def __init__(
     self,
@@ -537,8 +534,7 @@ class RMSNorm(Module):
 
     >>> nnx.state(layer)
     State({
-      'scale': VariableState( # 6 (24 B)
-        type=Param,
+      'scale': Param( # 6 (24 B)
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )
     })
@@ -569,8 +565,6 @@ class RMSNorm(Module):
         calculation for the variance.
     rngs: rng key.
   """
-
-  __data__ = ('scale',)
 
   def __init__(
     self,
@@ -641,6 +635,7 @@ class RMSNorm(Module):
       self.epsilon,
     )
 
+
 class GroupNorm(Module):
   """Group normalization (arxiv.org/abs/1803.08494).
 
@@ -664,12 +659,10 @@ class GroupNorm(Module):
     >>> layer = nnx.GroupNorm(num_features=6, num_groups=3, rngs=nnx.Rngs(0))
     >>> nnx.state(layer)
     State({
-      'bias': VariableState( # 6 (24 B)
-        type=Param,
+      'bias': Param( # 6 (24 B)
         value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
       ),
-      'scale': VariableState( # 6 (24 B)
-        type=Param,
+      'scale': Param( # 6 (24 B)
         value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
       )
     })
@@ -714,8 +707,6 @@ class GroupNorm(Module):
       calculation for the variance.
     rngs: rng key.
   """
-
-  __data__ = ('scale', 'bias')
 
   def __init__(
     self,

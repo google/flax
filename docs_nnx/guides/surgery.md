@@ -106,14 +106,14 @@ gdef, abs_state = nnx.split(abs_model)
 pprint(abs_state)
 ```
 
-When you fill every `nnx.VariableState` pytree leaf's `value` attributes with real `jax.Array`s, the abstract model becomes equivalent to a real model.
+When you fill every `nnx.Variable` pytree leaf's `value` attributes with real `jax.Array`s, the abstract model becomes equivalent to a real model.
 
 ```{code-cell} ipython3
 model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
-abs_state['linear1']['kernel'].value = model.linear1.kernel
-abs_state['linear1']['bias'].value = model.linear1.bias
-abs_state['linear2']['kernel'].value = model.linear2.kernel
-abs_state['linear2']['bias'].value = model.linear2.bias
+abs_state['linear1']['kernel'].value = model.linear1.kernel.value
+abs_state['linear1']['bias'].value = model.linear1.bias.value
+abs_state['linear2']['kernel'].value = model.linear2.kernel.value
+abs_state['linear2']['bias'].value = model.linear2.bias.value
 nnx.update(abs_model, abs_state)
 np.testing.assert_allclose(abs_model(x), model(x))  # They are equivalent now!
 ```
@@ -232,12 +232,4 @@ print(f'Number of JAX Arrays in memory at start: {len(jax.live_arrays())}')
 good_model = partial_init(old_state, nnx.Rngs(42))
 print(f'Number of JAX Arrays in memory at end: {len(jax.live_arrays())}'
       ' (2 new created - lora_a and lora_b)')
-```
-
-```{code-cell} ipython3
-
-```
-
-```{code-cell} ipython3
-
 ```

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import dataclasses
+from functools import partial
 import typing as tp
 from typing import Any
 
@@ -30,7 +31,6 @@ from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 import jax
 from jax import tree_util as jtu
-from flax import config
 
 M = tp.TypeVar('M', bound=Module)
 
@@ -87,9 +87,7 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
     _set_initializing(module, False)
   return fn
 
-PYTREE_DEFAULT = 'auto' if config.flax_mutable_array else None
-
-class ToNNX(Module):
+class ToNNX(Module, pytree=False):
   """A wrapper to turn any Linen module into an NNX module.
 
   The result NNX module can be used standalone with all NNX APIs, or as a submodule of
@@ -119,8 +117,6 @@ class ToNNX(Module):
     A stateful NNX module that behaves the same as the wrapped Linen module.
   """
 
-  __data__ = 'auto'
-
   def __init__(
     self,
     module: linen.Module,
@@ -132,6 +128,16 @@ class ToNNX(Module):
   def lazy_init(self, *args, **kwargs):
     """A shortcut of calling `nnx.bridge.lazy_init()` upon this module."""
     return lazy_init(self, *args, **kwargs)
+
+  def __getattr__(self, name: str):
+    if hasattr(super(), name):
+      return super().__getattribute__(name)
+    maybe_method = getattr(self.module.__class__, name, None)
+    if callable(maybe_method):
+      method = partial(self.__call__, method=maybe_method)
+      method.__self__ = self
+      return method
+    return super().__getattribute__(name)
 
   def __call__(
     self, *args: Any, rngs: tp.Optional[Rngs] = None,
@@ -155,8 +161,11 @@ class ToNNX(Module):
         setattr(self, attr_name, value)
 
     else:
-      nnx_attrs = {k: v for k, v in vars(self).items()
-                   if k not in ['module', 'rngs', '_object__state']}
+      nnx_attrs = {
+        k: v
+        for k, v in vars(self).items()
+        if k not in ['module', 'rngs'] and not k.startswith('_object__')
+      }
       variables = bv.nnx_attrs_to_linen_vars(nnx_attrs)
 
       _rngs = (
@@ -200,6 +209,26 @@ def linen_rngs_dict(linen_module: linen.Module, add_default: bool = False):
     rngs['default'] = 0
   return rngs
 
+def _get_module_method(module, method: tp.Callable[..., Any] | str | None):
+  if method is None:
+    method = '__call__'
+
+  if isinstance(method, str):
+    attribute_name = method
+    method = getattr(type(module), attribute_name)
+    if not callable(method):
+      class_name = type(module).__name__
+      raise TypeError(
+        f"'{class_name}.{attribute_name}' must be a callable, got"
+        f' {type(method)}.'
+      )
+  if not callable(method):
+    class_name = type(module).__name__
+    raise TypeError(
+      f"'{method}' must be a callable, got {type(method)}."
+    )
+
+  return method
 
 class ToLinen(linen.Module):
   """A wrapper to turn any NNX module into a Linen module.
@@ -235,6 +264,9 @@ class ToLinen(linen.Module):
       NNX module.
     skip_rng: True if this NNX module doesn't need `rngs` arg during
       initialization (not common).
+    abstract_init: if True (default) the NNX module will be initialized under
+      `nnx.eval_shape`, useful to minimize memory consumption, else it will be
+      initialized normally.
 
   Returns:
     A stateful NNX module that behaves the same as the wrapped Linen module.
@@ -243,12 +275,13 @@ class ToLinen(linen.Module):
   args: tp.Sequence = ()
   kwargs: tp.Mapping[str, tp.Any] = FrozenDict({})
   skip_rng: bool = False
-  metadata_fn: tp.Callable[[variablelib.VariableState], tp.Any] | None = (
+  abstract_init: bool = True
+  metadata_fn: tp.Callable[[variablelib.Variable], tp.Any] | None = (
       bv.to_linen_var
   )
 
   @linen.compact
-  def __call__(self, *args, **kwargs):
+  def __call__(self, *args, nnx_method: tp.Callable[..., Any] | str | None = None, **kwargs):
     module_kwargs = dict(self.kwargs)
     maybe_add_default = not self.is_initializing()
     def _module_kwargs():
@@ -264,7 +297,8 @@ class ToLinen(linen.Module):
       # TODO: add lazy_init here in case there's an `ToNNX` submodule under `module`.
       # update linen variables before call module to save initial state
       self._update_variables(module)
-      out = module(*args, **kwargs)
+      method_fn = _get_module_method(module, nnx_method)
+      out = method_fn(module, *args, **kwargs)
       return out
 
     # create state
@@ -281,17 +315,31 @@ class ToLinen(linen.Module):
       states = ({},)
 
     # update module state
-    module = nnx.eval_shape(
-        lambda: self.nnx_class(*self.args, **_module_kwargs())
-    )
+    if self.abstract_init:
+      module = nnx.eval_shape(
+          lambda: self.nnx_class(*self.args, **_module_kwargs())
+      )
+    else:
+      module = self.nnx_class(*self.args, **_module_kwargs())
     nnx.update(module, *states)
     nnx.reseed(
         module, **linen_rngs_dict(self, add_default=maybe_add_default)
     )  # reseed with keys from linen apply call.
 
-    out = module(*args, **kwargs)
+    method_fn = _get_module_method(module, nnx_method)
+    out = method_fn(module, *args, **kwargs)
     self._update_variables(module)
     return out
+
+  def __getattr__(self, name: str):
+    if hasattr(super(), name):
+      return super().__getattribute__(name)
+    maybe_method = getattr(self.nnx_class, name, None)
+    if callable(maybe_method):
+      method = partial(self.__call__, nnx_method=maybe_method)
+      method.__self__ = self
+      return method
+    return super().__getattribute__(name)
 
   def _update_variables(self, module):
     """Store the NNX module's graph def and state inside Linen module variables."""
@@ -301,7 +349,7 @@ class ToLinen(linen.Module):
 
     # group state by collection
     for path, leaf in nnx.to_flat_state(state):
-      type_ = leaf.type if isinstance(leaf, nnx.VariableState) else type(leaf)
+      type_ = type(leaf)
       collection = variablelib.variable_name_from_type(
           type_, allow_register=True
       )
@@ -314,7 +362,7 @@ class ToLinen(linen.Module):
       if self.is_mutable_collection(collection):
 
         def _to_linen_var(x):
-          if isinstance(x, nnx.VariableState):
+          if isinstance(x, nnx.Variable):
             if self.metadata_fn:
               return self.metadata_fn(x)
             else:
@@ -325,7 +373,7 @@ class ToLinen(linen.Module):
         collection_state = jax.tree.map(
             _to_linen_var,
             collection_state,
-            is_leaf=lambda x: isinstance(x, nnx.VariableState),
+            is_leaf=lambda x: isinstance(x, nnx.Variable),
         )
         for k, v in collection_state.items():
           self.put_variable(collection, k, v)
@@ -335,9 +383,11 @@ def to_linen(
     nnx_class: tp.Callable[..., Module],
     *args,
     metadata_fn: (
-        tp.Callable[[variablelib.VariableState], tp.Any] | None
+        tp.Callable[[variablelib.Variable], tp.Any] | None
     ) = bv.to_linen_var,
     name: str | None = None,
+    skip_rng: bool = False,
+    abstract_init: bool = True,
     **kwargs,
 ):
   """Shortcut of `nnx.bridge.ToLinen` if user is not changing any of its default fields."""
@@ -346,5 +396,7 @@ def to_linen(
       args=args,
       kwargs=FrozenDict(kwargs),
       metadata_fn=metadata_fn,
+      skip_rng=skip_rng,
+      abstract_init=abstract_init,
       name=name,
   )

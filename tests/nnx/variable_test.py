@@ -22,9 +22,9 @@ from flax import nnx
 
 A = tp.TypeVar('A')
 
-class TestVariableState(absltest.TestCase):
+class TestVariable(absltest.TestCase):
   def test_pytree(self):
-    r1 = nnx.VariableState(nnx.Param, 1)
+    r1 = nnx.Param(1)
     self.assertEqual(r1.value, 1)
 
     r2 = jax.tree.map(lambda x: x + 1, r1)
@@ -93,6 +93,30 @@ class TestVariableState(absltest.TestCase):
 
     self.assertEqual(v1.value, 5)
 
+  def test_mutable_array_context(self):
+    with nnx.use_mutable_arrays(False):
+      v = nnx.Variable(jnp.array(1.0))
+      self.assertFalse(nnx.using_mutable_arrays())
+      self.assertFalse(nnx.is_mutable_array(v.raw_value))
+
+      with nnx.use_mutable_arrays(True):
+        v = nnx.Variable(jnp.array(1.0))
+        self.assertTrue(nnx.using_mutable_arrays())
+        self.assertTrue(nnx.is_mutable_array(v.raw_value))
+
+      v = nnx.Variable(jnp.array(2.0))
+      self.assertFalse(nnx.is_mutable_array(v.raw_value))
+      self.assertFalse(nnx.using_mutable_arrays())
+
+      nnx.use_mutable_arrays(True)
+
+      v = nnx.Variable(jnp.array(0.0))
+      self.assertTrue(nnx.using_mutable_arrays())
+      self.assertTrue(nnx.is_mutable_array(v.raw_value))
+
+    v = nnx.Variable(jnp.array(1.0))
+    self.assertFalse(nnx.using_mutable_arrays())
+    self.assertFalse(nnx.is_mutable_array(v.raw_value))
 
 if __name__ == '__main__':
   absltest.main()

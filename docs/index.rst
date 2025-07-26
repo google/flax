@@ -323,7 +323,7 @@ Notable examples in Flax include:
    glossary
    faq
    developer_notes/index
-   philosophy
-   contributing
+   The Flax philosophy <https://flax.readthedocs.io/en/latest/philosophy.html>
+   How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
    api_reference/index
    Flax NNX <https://flax.readthedocs.io/en/latest/index.html>

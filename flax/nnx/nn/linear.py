@@ -26,6 +26,7 @@ from flax import nnx
 from flax.nnx import rnglib, variablelib
 from flax.nnx.module import Module, first_from
 from flax.nnx.nn import dtypes, initializers
+from flax import nnx
 from flax.typing import (
   Dtype,
   Shape,
@@ -140,8 +141,6 @@ class LinearGeneral(Module):
       promoted dtype.
     rngs: rng key.
   """
-
-  __data__ = ('kernel', 'bias')
 
   def __init__(
     self,
@@ -302,12 +301,10 @@ class Linear(Module):
     >>> layer = nnx.Linear(in_features=3, out_features=4, rngs=nnx.Rngs(0))
     >>> jax.tree.map(jnp.shape, nnx.state(layer))
     State({
-      'bias': VariableState(
-        type=Param,
+      'bias': Param(
         value=(4,)
       ),
-      'kernel': VariableState(
-        type=Param,
+      'kernel': Param(
         value=(3, 4)
       )
     })
@@ -329,8 +326,6 @@ class Linear(Module):
       promoted dtype.
     rngs: rng key.
   """
-
-  __data__ = ('kernel', 'bias')
 
   def __init__(
     self,
@@ -435,8 +430,6 @@ class Einsum(Module):
       Should support same signature as `jnp.einsum`.
     rngs: rng key.
   """
-
-  __data__ = ('kernel', 'bias')
 
   def __init__(
     self,
@@ -647,8 +640,6 @@ class Conv(Module):
     rngs: rng key.
   """
 
-  __data__ = ('kernel', 'bias', 'mask')
-
   def __init__(
     self,
     in_features: int,
@@ -764,7 +755,7 @@ class Conv(Module):
       kernel_size_dilated = [
         (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
-      zero_pad: tp.List[tuple[int, int]] = [(0, 0)]
+      zero_pad: list[tuple[int, int]] = [(0, 0)]
       pads = (
         zero_pad
         + [((k - 1) // 2, k // 2) for k in kernel_size_dilated]
@@ -904,8 +895,6 @@ class ConvTranspose(Module):
       promoted dtype.
     rngs: rng key.
   """
-
-  __data__ = ('kernel', 'bias', 'mask')
 
   def __init__(
     self,
@@ -1115,8 +1104,7 @@ class Embed(Module):
     >>> layer = nnx.Embed(num_embeddings=5, features=3, rngs=nnx.Rngs(0))
     >>> nnx.state(layer)
     State({
-      'embedding': VariableState( # 15 (60 B)
-        type=Param,
+      'embedding': Param( # 15 (60 B)
         value=Array([[ 0.57966787, -0.523274  , -0.43195742],
                [-0.676289  , -0.50300646,  0.33996582],
                [ 0.41796115, -0.59212935,  0.95934135],
@@ -1156,8 +1144,6 @@ class Embed(Module):
       and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
   """
-
-  __data__ = ('embedding',)
 
   def __init__(
     self,

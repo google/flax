@@ -47,7 +47,7 @@ MA = tp.TypeVar('MA', bound=Module)
 N = tp.TypeVar('N', bound=Module)
 StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
-Leaves = tp.List[Leaf]
+Leaves = list[Leaf]
 Index = int
 
 
@@ -146,7 +146,7 @@ def eval_shape(
   def _eval_shape_fn(*args, **kwargs):
     args, kwargs = extract.from_tree((args, kwargs))
     out = f(*args, **kwargs)
-    return extract.to_tree(graph.freeze(out))
+    return graph.freeze(extract.to_tree(out), allow_duplicates=True)
 
   out = jax.eval_shape(_eval_shape_fn, *args, **kwargs)
   return extract.from_tree(out)
