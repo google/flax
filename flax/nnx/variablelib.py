@@ -334,10 +334,17 @@ class Variable(tp.Generic[A], reprlib.Representable):
     self._var_metadata.update(other.get_metadata())
 
   def update_from_state(self, variable_state: Variable[A]):
-    object.__setattr__(self, 'raw_value', variable_state.raw_value)
-    object.__setattr__(
-      self, '_var_metadata', variable_state._var_metadata.copy()
-    )
+    if self.mutable and (
+      variable_state.mutable or isinstance(variable_state.raw_value, jax.Array)
+    ):
+      self.raw_value[...] = variable_state.raw_value[...] # type: ignore
+    else:
+      object.__setattr__(self, 'raw_value', variable_state.raw_value)
+
+    if self._var_metadata != variable_state._var_metadata:
+      object.__setattr__(
+        self, '_var_metadata', variable_state._var_metadata.copy()
+      )
 
   @property
   def value(self) -> A:
@@ -509,7 +516,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
     if self.mutable:
-      self.raw_value[key] = value # type: ignore
+      self.raw_value[key] = value  # type: ignore
     elif key == ...:
       self.value = value
     elif isinstance(self.raw_value, jax.Array):
