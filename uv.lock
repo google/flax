@@ -36,6 +36,15 @@ wheels = [
 ]
 
 [[package]]
+name = "aiofiles"
+version = "24.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/03/a88171e277e8caa88a4c77808c20ebb04ba74cc4681bf1e9416c862de237/aiofiles-24.1.0.tar.gz", hash = "sha256:22a075c9e5a3810f0c2e48f3008c94d68c65d763b9b03857924c99e57355166c", size = 30247 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/45/30bb92d442636f570cb5651bc661f52b610e2eec3f891a5dc3a4c3667db0/aiofiles-24.1.0-py3-none-any.whl", hash = "sha256:b4ec55f4195e3eb5d7abd1bf7e061763e864dd4954231fb8539a0ef8bb8260e5", size = 15896 },
+]
+
+[[package]]
 name = "alabaster"
 version = "0.7.16"
 source = { registry = "https://pypi.org/simple" }
@@ -2278,10 +2287,11 @@ wheels = [
 
 [[package]]
 name = "orbax-checkpoint"
-version = "0.11.19"
+version = "0.11.20"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
+    { name = "aiofiles" },
     { name = "etils", extra = ["epath", "epy"] },
     { name = "humanize" },
     { name = "jax" },
@@ -2294,9 +2304,9 @@ dependencies = [
     { name = "tensorstore" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/18/07/367e728c69dbb0dcf51bc9b1fd4476d9e31eb37aab763698991fabc0c2c7/orbax_checkpoint-0.11.19.tar.gz", hash = "sha256:6f7f2cd89644e1892f2adf17dfa2ad29253712b22374ca9d6b02129922d46795", size = 346028 }
+sdist = { url = "https://files.pythonhosted.org/packages/db/5c/6e3e81146e2b000180176852e1c30a7674ba9c563bedc51d07f551030a6c/orbax_checkpoint-0.11.20.tar.gz", hash = "sha256:7bea7fd196befd8822297a737edeeecf6b0df0188d763facd1ab97b9bacd9926", size = 357795 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/69/7f0e6bc634a22c5085e225fbad3e8df34d42a37458be3f4984d8eb6a4048/orbax_checkpoint-0.11.19-py3-none-any.whl", hash = "sha256:f9a9b007db8b7e7175d5be30afd754c4a29cae6d4a631cbe34cb9eb5b6cbd96f", size = 490278 },
+    { url = "https://files.pythonhosted.org/packages/5c/72/1c195dda30337e0e1079c5adf958120f947cafe738195127024a344df776/orbax_checkpoint-0.11.20-py3-none-any.whl", hash = "sha256:32170d74c92bf1c1adf967fc8e5a762b5b9e2073cd905ce772b799f30a0b45a7", size = 510894 },
 ]
 
 [[package]]

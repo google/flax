@@ -1,4 +1,4 @@
-Evolution from Flax Linen to NNX
+Flax Linen to Flax NNX
 ################################
 
 This guide demonstrates the differences between Flax Linen and Flax NNX models, providing side-by-side example code to help you migrate to the Flax NNX API from Flax Linen.

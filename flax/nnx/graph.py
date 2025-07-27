@@ -20,6 +20,8 @@ import functools
 import threading
 import typing as tp
 
+import jax.experimental
+
 from flax import config
 from flax.nnx import filterlib, reprlib, traversals, variablelib
 from flax.nnx import statelib
@@ -1149,7 +1151,7 @@ def _graph_unflatten(
     state: A mapping from attribute names to variables or subgraphs.
     index_to_ref: A mapping from indexes to nodes that have been traversed.
       If a node is already in the cache, it won't be traversed again.
-    index_ref_cache: A mapping from indexes to existing nodes that can be reused.
+f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes to existing nodes that can be reused.
       When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
       object in an empty state and then filled by the unflatten process, as a result
       existing graph nodes are mutated to have the new content/topology
@@ -1178,14 +1180,12 @@ def _graph_unflatten(
         f"Expected a MutableArrayOutput type but got '{leaf.value}.'"
       )
     elif type(leaf) is MutableArrayOutput:
-      mutable_array = variablelib.mutable_array(leaf.value)
+      mutable_array = jax.experimental.mutable_array(leaf.value)
     elif variablelib.is_mutable_array(leaf):
       mutable_array = leaf
-    elif isinstance(leaf, jax.Array):
+    else:
       # here we allow merging frozen arrays and will not create a new mutable array
       mutable_array = leaf
-    else:
-      raise ValueError(f'Found unexpected type for MutableArray, got {leaf}')
 
     index_ref[mutable_arraydef.index] = mutable_array
     return mutable_array
