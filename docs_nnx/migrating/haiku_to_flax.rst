@@ -1,4 +1,4 @@
-Migrating from Haiku to Flax
+Haiku to Flax NNX
 ############################
 
 This guide demonstrates the differences between Haiku and Flax NNX models, providing side-by-side example code to help you migrate to the Flax NNX API from Haiku.

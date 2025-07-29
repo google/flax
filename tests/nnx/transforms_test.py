@@ -457,6 +457,13 @@ class TestEvalShape(absltest.TestCase):
     self.assertIsInstance(abs_model, nnx.Linear)
     self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
 
+  def test_eval_shape_mutable_array(self):
+    with nnx.use_mutable_arrays(True):
+      abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
+    self.assertIsInstance(abs_model, nnx.Linear)
+    self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
+    self.assertEqual(abs_model.kernel.shape, (1, 2))
+
 class TestShardMap(absltest.TestCase):
   def test_basic_shardmap(self):
     n_devices = jax.local_device_count()

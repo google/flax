@@ -116,8 +116,7 @@ from .rnglib import RngStream as RngStream
 from .rnglib import RngState as RngState
 from .rnglib import RngKey as RngKey
 from .rnglib import RngCount as RngCount
-from .rnglib import ForkStates as ForkStates
-from .rnglib import fork as fork
+from .rnglib import fork_rngs as fork_rngs
 from .rnglib import reseed as reseed
 from .rnglib import split_rngs as split_rngs
 from .rnglib import restore_rngs as restore_rngs

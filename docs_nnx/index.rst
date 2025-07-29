@@ -189,12 +189,13 @@ Learn more
 
 .. toctree::
    :hidden:
-   :maxdepth: 2
+   :maxdepth: 3
 
    nnx_basics
    mnist_tutorial
    why
    guides/index
+   migrating/index
    examples/index
    nnx_glossary
    philosophy

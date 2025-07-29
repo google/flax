@@ -150,7 +150,7 @@ nb_execution_excludepatterns = [
   'transfer_learning.ipynb',  # <-- transformers requires flax<=0.7.0
   'flax/nnx',  # exclude nnx
   'guides/demo.ipynb',  # TODO(cgarciae): broken, remove or update
-  'guides/gemma.ipynb',
+  'examples/gemma.ipynb',
   'guides/bridge_guide.ipynb',  # TODO(cgarciae): broken, bridge doesn't support Linen sow yet
 ]
 # raise exceptions on execution so CI can catch errors

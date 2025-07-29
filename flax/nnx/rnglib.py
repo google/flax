@@ -21,12 +21,9 @@ import jax.numpy as jnp
 
 from flax import errors, struct
 from flax.nnx import graph
-from flax.nnx import statelib
 from flax.nnx import variablelib
-from flax.nnx.statelib import State
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
-from flax.nnx.filterlib import All
 from flax.nnx.object import Object
 from flax.typing import MISSING, Key, Missing
 
@@ -264,48 +261,6 @@ class Rngs(Object):
     return Rngs(**keys)
 
 
-class ForkStates(tp.NamedTuple):
-  split_keys: State
-  split_counts: State
-  broadcast_keys: State
-  broadcast_counts: State
-
-
-def fork(
-  state: State,
-  split_filter: filterlib.Filter,
-  split_pattern: SplitPattern,
-) -> ForkStates:
-  if split_pattern is None:
-    raise RuntimeError('Split pattern cannot be None, this is a bug.')
-
-  num_splits: int | tuple[int, ...]
-  if isinstance(split_pattern, int):
-    num_splits = split_pattern
-  else:
-    num_splits = tuple(x if x is not None else 1 for x in split_pattern)
-
-  split_keys, split_counts, broadcast_keys, broadcast_counts = (
-    statelib.split_state(
-      state,
-      All(split_filter, RngKey),
-      All(split_filter, RngCount),
-      RngKey,
-      RngCount,
-    )
-  )
-
-  def split_key(key: tp.Any) -> jax.Array:
-    if not isinstance(key, jax.Array):
-      raise TypeError(f'key must be a jax.Array, got {type(key)}')
-
-    return jax.random.split(key, num_splits)
-
-  split_keys = jax.tree.map(split_key, split_keys)
-
-  return ForkStates(split_keys, split_counts, broadcast_keys, broadcast_counts)
-
-
 StreamBackup = (
   tuple[RngStream, jax.Array, jax.Array] | tuple[RngStream, jax.Array]
 )
@@ -485,6 +440,158 @@ def split_rngs(
         stream.count.raw_value = variablelib.mutable_array(count)
       else:
         stream.count.value = count
+
+  return SplitBackups(backups)
+
+@tp.overload
+def fork_rngs(
+  node: tp.Any,
+  /,
+  *,
+  split: tp.Mapping[filterlib.Filter, int | tuple[int, ...] | None]
+    | int
+    | None = None,
+) -> SplitBackups: ...
+@tp.overload
+def fork_rngs(
+  *,
+  split: tp.Mapping[filterlib.Filter, int | tuple[int, ...] | None]
+    | int
+    | None = None,
+) -> tp.Callable[[F], F]: ...
+def fork_rngs(
+  node: tp.Any = MISSING,
+  /,
+  *,
+  split: tp.Mapping[filterlib.Filter, int | tuple[int, ...] | None]
+    | int
+    | None = None,
+) -> SplitBackups | tp.Callable[[F], F]:
+  """Splits the (nested) Rng states of the given node.
+
+  Args:
+    node: the base node containing the rng states to split.
+    splits: an integer or tuple of integers specifying the
+      shape of the split rng keys.
+    only: a Filter selecting which rng states to split.
+
+  Returns:
+    A SplitBackups iterable if ``node`` is provided, otherwise a
+    decorator that splits the rng states of the inputs to the
+    decorated function.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> _ = nnx.split_rngs(rngs, splits=5)
+    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    ((5,), (5,))
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> _ = nnx.split_rngs(rngs, splits=(2, 5))
+    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    ((2, 5), (2, 5))
+
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
+    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    ((5,), ())
+
+  Once split, random state can be used with transforms like :func:`nnx.vmap`::
+
+    >>> class Model(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5, rngs=rngs)
+    ...
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
+    ...
+    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
+    ...
+    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    ... def create_model(rngs):
+    ...   return Model(rngs)
+    ...
+    >>> model = create_model(rngs)
+    >>> model.dropout.rngs.key.shape
+    ()
+
+  ``split_rngs`` returns a SplitBackups object that can be used to restore the
+  original unsplit rng states using :func:`nnx.restore_rngs`, this is useful
+  when you only want to split the rng states temporarily::
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    ...
+    >>> backups = nnx.split_rngs(rngs, splits=5, only='params')
+    >>> model = create_model(rngs)
+    >>> nnx.restore_rngs(backups)
+    ...
+    >>> model.dropout.rngs.key.shape
+    ()
+
+  SplitBackups can also be used as a context manager to automatically restore
+  the rng states when exiting the context::
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    ...
+    >>> with nnx.split_rngs(rngs, splits=5, only='params'):
+    ...   model = create_model(rngs)
+    ...
+    >>> model.dropout.rngs.key.shape
+    ()
+
+    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
+    ...
+    >>> @nnx.split_rngs(splits=5, only='params')
+    ... @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    ... def create_model(rngs):
+    ...   return Model(rngs)
+    ...
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> model = create_model(rngs)
+    >>> model.dropout.rngs.key.shape
+    ()
+
+
+  """
+  if isinstance(node, Missing):
+
+    def fork_rngs_decorator(f: F) -> F:
+      @functools.wraps(f)
+      def fork_rngs_wrapper(*args, **kwargs):
+        with fork_rngs((args, kwargs), split=split):
+          return f(*args, **kwargs)
+
+      return tp.cast(F, fork_rngs_wrapper)
+
+    return fork_rngs_decorator  # type: ignore[bad-return-type]
+
+  if split is None:
+    split = {...: None}
+  elif isinstance(split, int | tuple):
+    split = {...: split}
+
+  predicate_splits = {
+    filterlib.to_predicate(k): v for k, v in split.items()
+  }
+  backups: list[StreamBackup] = []
+  for path, stream in graph.iter_graph(node):
+    for predicate, splits in predicate_splits.items():
+      if (
+        isinstance(stream, RngStream)
+        and predicate((*path, 'key'), stream.key)
+        and predicate((*path, 'count'), stream.count)
+      ):
+        forked_stream = stream.fork(split=splits)
+        # backup the original stream state
+        backups.append((stream, stream.key.raw_value, stream.count.raw_value))
+        # apply the forked key and count to the original stream
+        stream.key.raw_value = forked_stream.key.raw_value
+        stream.count.raw_value = forked_stream.count.raw_value
 
   return SplitBackups(backups)
 
