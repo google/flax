@@ -180,7 +180,7 @@ Learn more
 
       .. card:: :material-regular:`history_edu;2em` The Flax philosophy
          :class-card: sd-text-black sd-bg-light
-         :link: philosophy.html
+         :link: https://flax.readthedocs.io/en/latest/philosophy.html
 
    .. grid-item::
       :columns: 6 6 6 4
