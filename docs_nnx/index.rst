@@ -194,6 +194,7 @@ Learn more
    nnx_basics
    mnist_tutorial
    why
+   key_concepts
    guides/index
    migrating/index
    examples/index
