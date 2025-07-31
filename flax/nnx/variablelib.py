@@ -31,7 +31,6 @@ from flax.nnx import filterlib, reprlib, tracers, visualization
 from flax.typing import Missing, PathParts, SizeBytes
 import jax.tree_util as jtu
 import jax.numpy as jnp
-from jax._src.core import mutable_array, MutableArray
 from jax._src.state.types import AbstractRef
 
 A = tp.TypeVar('A')
@@ -46,6 +45,15 @@ AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
+if hasattr(jax, 'array_ref') and hasattr(jax, 'ArrayRef'):
+  from jax import array_ref # type: ignore[import-untyped]
+  from jax import ArrayRef  # type: ignore[import-untyped]
+else:
+  from jax.experimental import mutable_array, MutableArray
+  array_ref = mutable_array
+  ArrayRef = MutableArray
+  # temp workaround future proof correct repr
+  MutableArray.__repr__ = lambda self: 'ArrayRef' + repr(self._buf)[5:] # type: ignore[method-assign]
 
 @dataclasses.dataclass
 class VariableContext(threading.local):
@@ -55,62 +63,62 @@ class VariableContext(threading.local):
 VARIABLE_CONTEXT = VariableContext()
 
 
-def using_mutable_arrays() -> bool:
-  """Returns whether Variables are using MutableArrays by default.
+def using_refs() -> bool:
+  """Returns whether Variables are using ArrayRefs by default.
 
   Example::
 
     >>> from flax import nnx
     ...
-    >>> nnx.using_mutable_arrays()
+    >>> nnx.using_refs()
     False
-    >>> nnx.use_mutable_arrays(True)
+    >>> nnx.use_refs(True)
     <...>
-    >>> nnx.using_mutable_arrays()
+    >>> nnx.using_refs()
     True
 
   Returns:
-    A boolean indicating if Variables are using MutableArrays by default.
+    A boolean indicating if Variables are using ArrayRefs by default.
   """
   if VARIABLE_CONTEXT.mutable_variable_stack:
     return VARIABLE_CONTEXT.mutable_variable_stack[-1]
   else:
-    return config.flax_mutable_array
+    return config.flax_array_ref
 
 
 
-def use_mutable_arrays(value: bool, /):
-  """Sets whether Variables should use MutableArrays by default or not.
+def use_refs(value: bool, /):
+  """Sets whether Variables should use ArrayRefs by default or not.
 
   Example usage::
 
     >>> from flax import nnx
-    >>> # Use MutableArrays by default
-    >>> nnx.use_mutable_arrays(True)
+    >>> # Use ArrayRefs by default
+    >>> nnx.use_refs(True)
     <...>
-    >>> # Variable will now use MutableArrays
+    >>> # Variable will now use ArrayRefs
     >>> v = nnx.Variable(jax.numpy.ones((2, 3)))
-    >>> v.mutable
+    >>> v.has_ref
     True
     >>> v.raw_value
-    MutableArray(...)
+    ArrayRef(...)
 
   It can also be used as a context manager to temporarily
   change the default behavior for a block of code::
 
-    >>> nnx.use_mutable_arrays(False)
+    >>> nnx.use_refs(False)
     <...>
-    >>> with nnx.use_mutable_arrays(True):
+    >>> with nnx.use_refs(True):
     ...   v = nnx.Variable(jax.numpy.ones((2, 3)))
-    ...   v.mutable
+    ...   v.has_ref
     True
     >>> # it will reset outside
     >>> v = nnx.Variable(jax.numpy.ones((2, 3)))
-    >>> v.mutable
+    >>> v.has_ref
     False
 
   Args:
-    value: A boolean indicating if Variables should use MutableArrays by default.
+    value: A boolean indicating if Variables should use ArrayRefs by default.
 
   Returns:
     A context manager that resets the context to the previous value.
@@ -135,9 +143,9 @@ def _clean_mutable_arrays_context(prev_value: bool | None):
     VARIABLE_CONTEXT.mutable_variable_stack.pop()
 
 
-def is_mutable_array(x) -> tp.TypeGuard[MutableArray]:
-  return isinstance(x, jax.Array | AbstractRef | MutableArray) and isinstance(
-    jax.typeof(x), AbstractRef | MutableArray
+def is_array_ref(x) -> tp.TypeGuard[ArrayRef]:
+  return isinstance(x, jax.Array | AbstractRef | ArrayRef) and isinstance(
+    jax.typeof(x), AbstractRef | ArrayRef
   )
 
 
@@ -222,11 +230,11 @@ class Variable(tp.Generic[A], reprlib.Representable):
     self,
     value: tp.Union[A, VariableMetadata[A]],
     *,
-    mutable: bool | None = None,
+    use_ref: bool | None = None,
     **metadata: tp.Any,
   ):
-    if mutable is None:
-      mutable = using_mutable_arrays()
+    if use_ref is None:
+      use_ref = using_refs()
 
     var_t = type(self)
     object.__setattr__(self, '_trace_state', tracers.TraceState())
@@ -235,11 +243,11 @@ class Variable(tp.Generic[A], reprlib.Representable):
       metadata.update(value.metadata)
       value = tp.cast(A, value.raw_value)
 
-    if mutable:
-      if is_mutable_array(value):
+    if use_ref:
+      if is_array_ref(value):
         _value = tp.cast(A, value)
       else:
-        _value = mutable_array(jnp.asarray(value))
+        _value = array_ref(jnp.asarray(value))
     else:
       _value = value
 
@@ -271,7 +279,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
   def __setattr__(self, name: str, value: tp.Any):
     if not self._trace_state.is_valid() and (
-      name != 'value' or not self.mutable
+      name != 'value' or not self.has_ref
     ):
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
@@ -315,8 +323,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return type(self)
 
   @property
-  def mutable(self) -> bool:
-    return is_mutable_array(self.raw_value)
+  def has_ref(self) -> bool:
+    return is_array_ref(self.raw_value)
 
   def get_metadata(self):
     return self._var_metadata
@@ -334,8 +342,8 @@ class Variable(tp.Generic[A], reprlib.Representable):
     self._var_metadata.update(other.get_metadata())
 
   def update_from_state(self, variable_state: Variable[A]):
-    if self.mutable and (
-      variable_state.mutable or isinstance(variable_state.raw_value, jax.Array)
+    if self.has_ref and (
+      variable_state.has_ref or isinstance(variable_state.raw_value, jax.Array)
     ):
       self.raw_value[...] = variable_state.raw_value[...] # type: ignore
     else:
@@ -349,7 +357,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
   @property
   def value(self) -> A:
     value = self.raw_value
-    if is_mutable_array(value):
+    if is_array_ref(value):
       value = value[...]
 
     if 'on_get_value' in self._var_metadata:
@@ -364,7 +372,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       )
     if 'on_set_value' in self._var_metadata:
       value = self._var_metadata['on_set_value'](self, value)
-    if self.mutable:
+    if self.has_ref:
       self.raw_value[...] = value  # type: ignore
     else:
       object.__setattr__(self, 'raw_value', value)
@@ -511,11 +519,11 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self.value[key]  # type: ignore
 
   def __setitem__(self, key, value) -> None:
-    if not self.mutable and not self._trace_state.is_valid():
+    if not self.has_ref and not self._trace_state.is_valid():
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
-    if self.mutable:
+    if self.has_ref:
       self.raw_value[key] = value  # type: ignore
     elif key == ...:
       self.value = value

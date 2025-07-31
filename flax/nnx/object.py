@@ -147,7 +147,7 @@ def is_data_type(value: tp.Any, /) -> bool:
   Data types are:
   - jax.Arrays
   - np.ndarrays
-  - MutableArrays
+  - ArrayRefs
   - Variables (Param, BatchStat, RngState, etc.)
   - All graph nodes (Object, Module, Rngs, etc.)
   - Any type registered with `nnx.register_data_type`
@@ -335,7 +335,7 @@ class MutableArrayRepr(reprlib.Representable):
     return MutableArrayRepr(array.shape, array.dtype)
 
   def __nnx_repr__(self):
-    yield reprlib.Object(type='MutableArray', same_line=True)
+    yield reprlib.Object(type='ArrayRef', same_line=True)
     yield reprlib.Attr('shape', self.shape)
     yield reprlib.Attr('dtype', self.dtype)
 
@@ -468,7 +468,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
             return value.replace(
               raw_value=jax.tree.map(to_shape_dtype, value.raw_value)
             )
-          elif variablelib.is_mutable_array(value) and np.prod(value.shape) > 1:
+          elif variablelib.is_array_ref(value) and np.prod(value.shape) > 1:
             return MutableArrayRepr(value.shape, value.dtype)
           elif (
             isinstance(value, (np.ndarray, jax.Array))

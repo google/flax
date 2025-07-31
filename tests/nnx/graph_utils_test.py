@@ -22,7 +22,6 @@ import numpy as np
 from flax import linen, nnx, struct
 import jax
 import jax.numpy as jnp
-from flax import config
 
 
 class List(nnx.Module):
@@ -72,10 +71,7 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0][1].value == 2
     assert flat_state[1][1].value == 4
 
-    if config.flax_mutable_array:
-      assert len(refmap) == 4  # 2 Variables + 2 MutableArrays
-    else:
-      assert len(refmap) == 2  # 2 Variables
+    assert len(refmap) == 2  # 2 Variables
     assert a['b'] in refmap
     assert g[3] in refmap
 
@@ -91,10 +87,8 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0][...] == 2
     assert flat_state[1][...] == 4
 
-    if config.flax_mutable_array:
-      assert len(refmap) == 2  # 2 Variables + 2 MutableArrays
-    else:
-      assert len(refmap) == 2  # 2 Variables
+
+    assert len(refmap) == 2  # 2 Variables
     assert a['b'] in refmap
     assert g[3] in refmap
 
