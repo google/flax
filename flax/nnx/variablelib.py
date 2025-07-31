@@ -449,7 +449,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     yield reprlib.Object(type=type(self).__name__, comment=comment)
     yield reprlib.Attr('value', self.raw_value)
     for name, value in self._var_metadata.items():
-      yield reprlib.Attr(name, repr(value))
+      yield reprlib.Attr(name, value)
 
   def __treescope_repr__(self, path, subtree_renderer):
     size_bytes = SizeBytes.from_any(self.value)

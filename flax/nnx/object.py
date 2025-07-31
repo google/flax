@@ -420,17 +420,13 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     return graph.merge(graphdef, state)
 
   def __nnx_repr__(self):
-    if OBJECT_CONTEXT.node_stats is None:
+    if OBJECT_CONTEXT.node_stats is None or id(self) not in OBJECT_CONTEXT.node_stats:
       node_stats: dict[int, dict[type[Variable], SizeBytes]] = {}
       _collect_stats(self, node_stats)
       OBJECT_CONTEXT.node_stats = node_stats
       stats = node_stats[id(self)]
       clear_node_stats = True
     else:
-      if id(self) not in OBJECT_CONTEXT.node_stats:
-        raise RuntimeError(
-          f"Object '{type(self).__name__}' not found in node stats. This is a bug."
-        )
       stats = OBJECT_CONTEXT.node_stats[id(self)]
       clear_node_stats = False
 

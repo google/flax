@@ -129,6 +129,8 @@ def get_partition_spec(tree: A) -> A:
         if core_spmd.get_logical_axis_rules() or 'sharding_rules' in metadata:
           context_rules = core_spmd.get_logical_axis_rules()
           local_rules = metadata.get('sharding_rules', ())
+          if local_rules is None:
+            local_rules = ()
           rules = core_spmd.composite_rules(context_rules, local_rules)
           return x.replace(
               PartitionSpec(*core_spmd.from_sharding_rules(sharding, rules))
