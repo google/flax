@@ -90,6 +90,12 @@ class FrozenDict(Mapping[K, V]):
   def __reduce__(self):
     return FrozenDict, (self.unfreeze(),)
 
+  def get(self, key, default=None):
+    """Get an item from the FrozenDict."""
+    if key in self._dict:
+      return self[key]
+    return default
+
   def pretty_repr(self, num_spaces=4):
     """Returns an indented representation of the nested dictionary."""
 
