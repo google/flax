@@ -124,7 +124,10 @@ from .spmd import PARTITION_NAME as PARTITION_NAME
 from .spmd import get_partition_spec as get_partition_spec
 from .spmd import get_named_sharding as get_named_sharding
 from .spmd import with_partitioning as with_partitioning
-from .spmd import with_sharding_constraint as with_sharding_constraint
+from .spmd import shard_variable as shard_variable
+from .spmd import shard_model as shard_model
+from .spmd import sharded_init as sharded_init
+from .spmd import get_abstract_state as get_abstract_state
 from .statelib import State as State
 from .statelib import to_flat_state as to_flat_state
 from .statelib import from_flat_state as from_flat_state
