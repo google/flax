@@ -16,10 +16,38 @@ import contextlib
 import dataclasses
 import threading
 
+import jax
+from jax.sharding import PartitionSpec
+from flax.core import meta
 from flax.typing import (
     LogicalRules,
     Sharding,
 )
+
+def get_pspec(sharding_names, sharding_rules = None) -> PartitionSpec:
+  """Given an `nnx.Variable`, return its `PartitionSpec`."""
+  if get_logical_axis_rules() or sharding_rules:
+    context_rules = get_logical_axis_rules()
+    rules = composite_rules(context_rules, sharding_rules)
+    return PartitionSpec(*from_sharding_rules(sharding_names, rules))
+  return PartitionSpec(*sharding_names)
+
+
+def shard_value(value, sharding_names, sharding_rules, require_mesh=True):
+  if not sharding_names:
+    return value
+  if not meta.global_mesh_defined():
+    if require_mesh:
+      raise ValueError(
+        'A mesh context is required if creating a variable with annotation '
+        f' {sharding_names=}. If running this on CPU for debugging, make a'
+        ' dummy mesh like `jax.make_mesh(((1, 1)), (<your mesh axes>))`.')
+    return value
+  pspec = get_pspec(sharding_names, sharding_rules)
+  return jax.lax.with_sharding_constraint(value, pspec)
+
+
+
 
 # Dynamic Axis Mapping Context
 # ------------------------------------------------------------------------------
@@ -60,6 +88,10 @@ def logical_axis_rules(rules: LogicalRules):
 def composite_rules(rule1, rule2):
   if not rule1 and not rule2:
     return ()
+  if rule1 and not rule2:
+    return rule1
+  if rule2 and not rule1:
+    return rule2
   rules = {alias: value for alias, value in rule1}
   for alias, value in rule2:
     if alias in rules and rules[alias] != value:

@@ -287,21 +287,24 @@ class TestBridgeModule(absltest.TestCase):
         b = self.param('b', nnx.initializers.zeros_init(), (self.dout,))
         return x @ w + b[None]
 
-    foo = Linear(5)
-    x = jnp.ones((3, 2))
+    foo = Linear(6)
+    x = jnp.ones((4, 2))
 
-    variables = foo.init(0, x)
+    mesh = jax.make_mesh((2, 2), ('in', 'out'))
+    with jax.sharding.use_mesh(mesh):
+      variables = foo.init(0, x)
+      y: jax.Array = foo.apply(variables, x)
+
     params = variables['params']
     self.assertIsInstance(params['w'], nn.Partitioned)
-    self.assertEqual(params['w'].value.shape, (2, 5))
+    self.assertEqual(params['w'].value.shape, (2, 6))
     self.assertEqual(params['w'].names, ('in', 'out'))
     self.assertEqual(nn.get_partition_spec(variables)['params']['w'],
                      jax.sharding.PartitionSpec('in', 'out'))
     self.assertIsInstance(params['b'], jax.Array)
-    self.assertEqual(params['b'].shape, (5,))
+    self.assertEqual(params['b'].shape, (6,))
 
-    y: jax.Array = foo.apply(variables, x)
-    self.assertEqual(y.shape, (3, 5))
+    self.assertEqual(y.shape, (4, 6))
 
   def test_pure_nnx_submodule(self):
     class NNXLayer(nnx.Module):
