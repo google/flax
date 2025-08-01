@@ -19,7 +19,7 @@ import numpy as np
 
 from flax import struct
 from flax.nnx import filterlib, graph
-from flax.nnx.object import Object
+from flax.nnx.pytreelib import Pytree
 from flax.nnx.variablelib import Variable
 import jax, jax.numpy as jnp
 
@@ -32,7 +32,7 @@ class MetricState(Variable):
   pass
 
 
-class Metric(Object):
+class Metric(Pytree):
   """Base class for metrics. Any class that subclasses ``Metric`` should
   implement a ``compute``, ``reset`` and ``update`` method."""
 

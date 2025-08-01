@@ -72,7 +72,7 @@ def _collect_stats(
   ] = defaultdict(lambda: defaultdict())
   node_stats[id(node)] = ObjectInfo(path, stats, variable_groups)
 
-  if isinstance(node, nnx.Object):
+  if isinstance(node, nnx.Pytree):
     node._nnx_tabulate_id = id(node)  # type: ignore
     object_types.add(type(node))
 
