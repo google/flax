@@ -165,7 +165,7 @@ def setup_initial_state(
     return state
 
   # Initialization
-  with jax.sharding.use_mesh(mesh):
+  with jax.set_mesh(mesh):
     state = sharded_init()
 
   state_sharding = nnx.get_named_sharding(state, mesh)
