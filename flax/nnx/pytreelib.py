@@ -387,6 +387,14 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       # set correct signature for sphinx
       cls.__signature__ = inspect.signature(cls.__init__)
 
+  # Backward compatibility with PR #4863
+  @property
+  def _object__nodes(self) -> frozenset[str]:
+    return self._pytree__nodes
+  @property
+  def _object__state(self) -> PytreeState:
+    return self._pytree__state
+
   if not tp.TYPE_CHECKING:
 
     def __setattr__(self, name: str, value: Any) -> None:
