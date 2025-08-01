@@ -226,5 +226,5 @@ use the ``is_leaf`` argument to specify that NNX modules and other NNX objects s
   type_names = jax.tree.map(
       lambda x: type(x).__name__,
       modules,
-      is_leaf=lambda x: isinstance(x, nnx.Object)  # <-- specify that NNX objects are leaves
+      is_leaf=lambda x: isinstance(x, nnx.Pytree)  # <-- specify that NNX objects are leaves
   )

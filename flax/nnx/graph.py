@@ -31,7 +31,7 @@ from flax.nnx.proxy_caller import (
   DelayedAccessor,
 )
 from flax.nnx.statelib import FlatState, State
-from flax.nnx.variablelib import Variable, is_mutable_array
+from flax.nnx.variablelib import Variable, is_array_ref
 from flax.typing import Key, PathParts, is_key_like
 import jax
 import numpy as np
@@ -72,7 +72,7 @@ REPEATED = Repeated()
 
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, slots=True, repr=False)
-class MutableArrayOutput(reprlib.Representable):
+class ArrayRefOutput(reprlib.Representable):
   value: jax.Array | NoUpdate | Repeated
 
   def __nnx_repr__(self):
@@ -94,8 +94,8 @@ LeafType = tp.Union[
   Variable,
   jax.Array,
   np.ndarray,
-  variablelib.MutableArray,
-  MutableArrayOutput,
+  variablelib.ArrayRef,
+  ArrayRefOutput,
   NoUpdate,
 ]
 GraphState = State[Key, LeafType]
@@ -103,7 +103,7 @@ GraphFlatState = FlatState[LeafType]
 
 
 def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[LeafType]:
-  return isinstance(x, LeafType) or variablelib.is_mutable_array(x)  # type: ignore[misc, arg-type]
+  return isinstance(x, LeafType) or variablelib.is_array_ref(x)  # type: ignore[misc, arg-type]
 
 
 class IndexMap(dict[Index, tp.Any]):
@@ -252,7 +252,7 @@ def is_node(x: tp.Any) -> bool:
 
 
 def is_graph_node(x: tp.Any) -> bool:
-  return type(x) in GRAPH_REGISTRY or variablelib.is_mutable_array(x)
+  return type(x) in GRAPH_REGISTRY or variablelib.is_array_ref(x)
 
 
 def is_node_type(x: type[tp.Any]) -> bool:
@@ -349,7 +349,7 @@ class VariableDef(reprlib.Representable, tp.Generic[Node]):
   index: int
   outer_index: int | None
   metadata: HashableMapping[str, tp.Any]
-  mutable_arraydef: MutableArrayDef | NodeRef | None
+  array_refdef: ArrayRefDef | NodeRef | None
 
   def with_no_outer_index(self) -> VariableDef:
     return VariableDef(
@@ -357,9 +357,9 @@ class VariableDef(reprlib.Representable, tp.Generic[Node]):
       index=self.index,
       outer_index=None,
       metadata=self.metadata,
-      mutable_arraydef=self.mutable_arraydef.with_no_outer_index()
-      if isinstance(self.mutable_arraydef, MutableArrayDef)
-      else self.mutable_arraydef,
+      array_refdef=self.array_refdef.with_no_outer_index()
+      if isinstance(self.array_refdef, ArrayRefDef)
+      else self.array_refdef,
     )
 
   def with_same_outer_index(self) -> VariableDef:
@@ -368,9 +368,9 @@ class VariableDef(reprlib.Representable, tp.Generic[Node]):
       index=self.index,
       outer_index=self.index,
       metadata=self.metadata,
-      mutable_arraydef=self.mutable_arraydef.with_same_outer_index()
-      if isinstance(self.mutable_arraydef, MutableArrayDef)
-      else self.mutable_arraydef,
+      array_refdef=self.array_refdef.with_same_outer_index()
+      if isinstance(self.array_refdef, ArrayRefDef)
+      else self.array_refdef,
     )
 
   def __nnx_repr__(self):
@@ -402,18 +402,18 @@ if config.flax_use_flaxlib:
 
 
 @dataclasses.dataclass(frozen=True, repr=False)
-class MutableArrayDef(reprlib.Representable):
+class ArrayRefDef(reprlib.Representable):
   index: int
   outer_index: int | None
 
   def with_no_outer_index(self):
-    return MutableArrayDef(
+    return ArrayRefDef(
       index=self.index,
       outer_index=None,
     )
 
   def with_same_outer_index(self):
-    return MutableArrayDef(
+    return ArrayRefDef(
       index=self.index,
       outer_index=self.index,
     )
@@ -500,7 +500,7 @@ NodeDefType = tp.Union[
   NodeDef[Node],
   NodeRef[Node],
   VariableDef[Node],
-  MutableArrayDef,
+  ArrayRefDef,
 ]
 
 
@@ -703,9 +703,9 @@ def _graph_flatten(
 
   is_graph_node_ = type(node_impl) is GraphNodeImpl
   is_variable = isinstance(node, Variable)
-  is_mutable_array = variablelib.is_mutable_array(node)
+  is_array_ref = variablelib.is_array_ref(node)
 
-  # only cache graph nodes, we don't add mutable arrays here
+  # only cache graph nodes, we don't add array refs here
   # as they are added in the make_mutable_arraydef function
   if is_graph_node_ or is_variable:
     index = len(ref_index)
@@ -713,35 +713,35 @@ def _graph_flatten(
   else:
     index = None
 
-  def make_mutable_arraydef(value: variablelib.MutableArray):
+  def make_mutable_arraydef(value: variablelib.ArrayRef):
     if value in ref_index:
       index = ref_index[value]
       return NodeRef(index), REPEATED
     else:
       index = len(ref_index)
       ref_index[value] = index
-    output_value: NoUpdate | MutableArrayOutput | variablelib.MutableArray
+    output_value: NoUpdate | ArrayRefOutput | variablelib.ArrayRef
     if ref_outer_index is not None:
       if value in ref_outer_index:
         outer_index = ref_outer_index[value]
         output_value = NO_UPDATE
-        mutable_arraydef = MutableArrayDef(index=index, outer_index=outer_index)
+        array_refdef = ArrayRefDef(index=index, outer_index=outer_index)
       else:
-        output_value = MutableArrayOutput(value[...])
-        mutable_arraydef = MutableArrayDef(index=index, outer_index=None)
+        output_value = ArrayRefOutput(value[...])
+        array_refdef = ArrayRefDef(index=index, outer_index=None)
     else:
       output_value = value
-      mutable_arraydef = MutableArrayDef(index=index, outer_index=None)
-    return mutable_arraydef, output_value
+      array_refdef = ArrayRefDef(index=index, outer_index=None)
+    return array_refdef, output_value
 
   if is_variable:
     assert isinstance(node, Variable)
     assert index is not None
     prev_inner_value = node.raw_value
-    if variablelib.is_mutable_array(prev_inner_value):
-      mutable_arraydef, inner_value = make_mutable_arraydef(prev_inner_value)
+    if variablelib.is_array_ref(prev_inner_value):
+      array_refdef, inner_value = make_mutable_arraydef(prev_inner_value)
     else:
-      mutable_arraydef = None
+      array_refdef = None
       inner_value = prev_inner_value
     if path is None:
       leaf = inner_value
@@ -755,7 +755,7 @@ def _graph_flatten(
       index=index,
       outer_index=ref_outer_index.get(node, None) if ref_outer_index else None,
       metadata=HashableMapping(node._var_metadata),
-      mutable_arraydef=mutable_arraydef,
+      array_refdef=array_refdef,
     )
     if type(inner_value) is not Repeated:
       assert not isinstance(leaf, Repeated)
@@ -765,14 +765,14 @@ def _graph_flatten(
         paths.append(tuple(path))
     nodes.append(variabledef)
     return
-  elif is_mutable_array:
-    mutable_arraydef, leaf = make_mutable_arraydef(node)  # type: ignore[arg-type]
+  elif is_array_ref:
+    array_refdef, leaf = make_mutable_arraydef(node)  # type: ignore[arg-type]
     if not isinstance(leaf, Repeated):
       leaves.append(leaf)
       if path is not None:
         assert paths is not None
         paths.append(tuple(path))
-    nodes.append(mutable_arraydef)
+    nodes.append(array_refdef)
     return
   elif not is_pytree_node_ and not is_graph_node_:
     # unkown leaf
@@ -815,14 +815,14 @@ def _graph_flatten(
         leaves,
         paths,
       )
-    elif variablelib.is_mutable_array(value):
+    elif variablelib.is_array_ref(value):
       attributes.append((key, MUTABLE_ARRAY_ATTR))
-      mutable_arraydef, leaf = make_mutable_arraydef(value)
+      array_refdef, leaf = make_mutable_arraydef(value)
       if not isinstance(leaf, Repeated):
         leaves.append(leaf)
         if paths is not None:
           paths.append(tuple(path))  # type: ignore
-      nodes.append(mutable_arraydef)
+      nodes.append(array_refdef)
     elif isinstance(value, (jax.Array, np.ndarray)):
       attributes.append((key, ARRAY_ATTR))
       if paths is not None:
@@ -1109,7 +1109,7 @@ def unflatten(  # type: ignore[invalid-annotation]
     leaves_iter = iter(leaves)
     nodedef = next(node_iter)
     assert not isinstance(nodedef, NodeRef)
-    if isinstance(nodedef, MutableArrayDef):
+    if isinstance(nodedef, ArrayRefDef):
       node_impl = None
     else:
       node_impl = get_node_impl_for_type(nodedef.type)
@@ -1158,37 +1158,37 @@ f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes 
       specified by the nodedef.
   """
 
-  def get_mutable_array(mutable_arraydef: MutableArrayDef, leaf):
-    assert type(mutable_arraydef) is MutableArrayDef
+  def get_mutable_array(array_refdef: ArrayRefDef, leaf):
+    assert type(array_refdef) is ArrayRefDef
     if (
       outer_index_outer_ref is not None
-      and mutable_arraydef.outer_index is not None
-      and mutable_arraydef.outer_index in outer_index_outer_ref
+      and array_refdef.outer_index is not None
+      and array_refdef.outer_index in outer_index_outer_ref
     ):
-      # if mutable array exists, update it
-      mutable_array = outer_index_outer_ref[mutable_arraydef.outer_index]
-      if not variablelib.is_mutable_array(mutable_array):
+      # if array ref exists, update it
+      array_ref = outer_index_outer_ref[array_refdef.outer_index]
+      if not variablelib.is_array_ref(array_ref):
         raise RuntimeError(
-          f'Expected a MutableArray type but got {mutable_array}.'
+          f'Expected a ArrayRef type but got {array_ref}.'
         )
       if type(leaf) is not NoUpdate:
         raise RuntimeError(
-          f'Expected a no update for MutableArray but got {leaf}.'
+          f'Expected a no update for ArrayRef but got {leaf}.'
         )
     elif type(leaf) in (NoUpdate, Repeated):
       raise ValueError(
-        f"Expected a MutableArrayOutput type but got '{leaf.value}.'"
+        f"Expected a ArrayRefOutput type but got '{leaf.value}.'"
       )
-    elif type(leaf) is MutableArrayOutput:
-      mutable_array = jax.experimental.mutable_array(leaf.value)
-    elif variablelib.is_mutable_array(leaf):
-      mutable_array = leaf
+    elif type(leaf) is ArrayRefOutput:
+      array_ref = variablelib.array_ref(leaf.value)
+    elif variablelib.is_array_ref(leaf):
+      array_ref = leaf
     else:
-      # here we allow merging frozen arrays and will not create a new mutable array
-      mutable_array = leaf
+      # here we allow merging frozen arrays and will not create a new array ref
+      array_ref = leaf
 
-    index_ref[mutable_arraydef.index] = mutable_array
-    return mutable_array
+    index_ref[array_refdef.index] = array_ref
+    return array_ref
 
   if type(nodedef) is NodeRef:
     return index_ref[nodedef.index]
@@ -1197,24 +1197,24 @@ f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes 
     variabledef = tp.cast(VariableDef[Variable], nodedef)
     # its a unseen variable, create a new one
 
-    if variabledef.mutable_arraydef is not None:
-      if type(variabledef.mutable_arraydef) is NodeRef:
-        value = index_ref[variabledef.mutable_arraydef.index]
+    if variabledef.array_refdef is not None:
+      if type(variabledef.array_refdef) is NodeRef:
+        value = index_ref[variabledef.array_refdef.index]
       else:
         value = next(leaves_iter)
-        assert type(variabledef.mutable_arraydef) is MutableArrayDef
+        assert type(variabledef.array_refdef) is ArrayRefDef
         if isinstance(value, Variable):
           value = value.copy() if copy_variables else value
           inner_value = value.raw_value
-          mutable_array = get_mutable_array(
-            variabledef.mutable_arraydef, inner_value
+          array_ref = get_mutable_array(
+            variabledef.array_refdef, inner_value
           )
-          if mutable_array is not inner_value:
-            value.raw_value = mutable_array
+          if array_ref is not inner_value:
+            value.raw_value = array_ref
         else:
-          # if value is an array or mutable array, we need call get_mutable_array
+          # if value is an array or array ref, we need call get_mutable_array
           # to register it in the index_ref
-          value = get_mutable_array(variabledef.mutable_arraydef, value)
+          value = get_mutable_array(variabledef.array_refdef, value)
     else:
       value = next(leaves_iter)
       if isinstance(value, Variable) and copy_variables:
@@ -1246,10 +1246,10 @@ f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes 
     index_ref[variabledef.index] = variable
     return variable  # type: ignore[return-value]
 
-  if type(nodedef) is MutableArrayDef:
+  if type(nodedef) is ArrayRefDef:
     leaf = next(leaves_iter)
-    mutable_array = get_mutable_array(nodedef, leaf)
-    return mutable_array  # type: ignore[return-value]
+    array_ref = get_mutable_array(nodedef, leaf)
+    return array_ref  # type: ignore[return-value]
 
   assert type(nodedef) is NodeDef
   if node_impl is None:
@@ -1266,18 +1266,18 @@ f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes 
       if type(value) is Static:
         children.append((key, value.value))  # type: ignore[attribute-error]
       elif type(value) is MutableArrayAttr:
-        mutable_arraydef = next(node_iter)
+        array_refdef = next(node_iter)
         assert (
-          type(mutable_arraydef) is MutableArrayDef
-          or type(mutable_arraydef) is NodeRef
+          type(array_refdef) is ArrayRefDef
+          or type(array_refdef) is NodeRef
         )
-        if type(mutable_arraydef) is NodeRef:
-          mutable_array = index_ref[mutable_arraydef.index]
+        if type(array_refdef) is NodeRef:
+          array_ref = index_ref[array_refdef.index]
         else:
-          assert type(mutable_arraydef) is MutableArrayDef
+          assert type(array_refdef) is ArrayRefDef
           leaf = next(leaves_iter)
-          mutable_array = get_mutable_array(mutable_arraydef, leaf)
-        children.append((key, mutable_array))
+          array_ref = get_mutable_array(array_refdef, leaf)
+        children.append((key, array_ref))
       elif type(value) is ArrayAttr:
         array = next(leaves_iter)
         children.append((key, array))
@@ -1420,8 +1420,8 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
         # can happen when using standalone Variables with `grad`
         pass
       else:
-        if is_mutable_array(node.raw_value) and (
-          isinstance(value, jax.Array) or is_mutable_array(value)
+        if is_array_ref(node.raw_value) and (
+          isinstance(value, jax.Array) or is_array_ref(value)
         ):
           node[...] = value[...]
         else:
@@ -1454,7 +1454,7 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
     current_value = node_dict[key]
 
     # case 2: subgraph is being updated
-    if is_mutable_array(current_value):
+    if is_array_ref(current_value):
       current_value[...] = value
     elif is_node(current_value):
       if is_node_leaf(value):
@@ -2279,7 +2279,7 @@ def _to_nested_state(
 ) -> tuple[tp.Any, ...]:
   if not graphdef.nodes or type(graphdef.nodes[0]) in (
     VariableDef,
-    MutableArrayDef,
+    ArrayRefDef,
   ):
     states = tuple(
       flat_state[0][1] if flat_state else State({})
@@ -2622,52 +2622,52 @@ def find_duplicates(
 
 def _mutable_like(path, x):
   return (
-    isinstance(x, Variable) and x.mutable
-  ) or variablelib.is_mutable_array(x)
+    isinstance(x, Variable) and x.has_ref
+  ) or variablelib.is_array_ref(x)
 
 
-def freeze(
+def to_arrays(
   node: A,
   /,
   *,
   only: filterlib.Filter = _mutable_like,
   allow_duplicates: bool = False,
 ) -> A:
-  """Converts a structure of mutable arrays to regular arrays.
+  """Converts a structure of array refs to regular arrays.
 
   Example::
     >>> from flax import nnx
     >>> import jax
     >>> import jax.numpy as jnp
     ...
-    >>> node = [nnx.mutable_array(jnp.array(1.0)), jnp.array(2.0)]
-    >>> assert nnx.is_mutable_array(node[0])
+    >>> node = [nnx.array_ref(jnp.array(1.0)), jnp.array(2.0)]
+    >>> assert nnx.is_array_ref(node[0])
     ...
-    >>> frozen_node = nnx.freeze(node)
+    >>> frozen_node = nnx.to_arrays(node)
     >>> assert isinstance(frozen_node[0], jax.Array)
 
-  If the structure contains duplicate mutable arrays, a ValueError is raised::
+  If the structure contains duplicate array refs, a ValueError is raised::
 
-    >>> shared_array = nnx.mutable_array(jnp.array(1.0))
+    >>> shared_array = nnx.array_ref(jnp.array(1.0))
     >>> node = [shared_array, shared_array]
     >>> try:
-    ...   nnx.freeze(node)
+    ...   nnx.to_arrays(node)
     ... except ValueError as e:
     ...   print(e)
     Found duplicate at path '[1]' and '[0]'.
 
   ``only`` is a `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
-  that can be used to specify which mutable arrays to freeze::
+  that can be used to specify which array refs to freeze::
 
-    >>> node = [nnx.mutable_array(jnp.array(1.0)), nnx.mutable_array(jnp.array(2.0))]
-    >>> frozen_node = nnx.freeze(node, only=lambda path, x: path[0] == 0)
+    >>> node = [nnx.array_ref(jnp.array(1.0)), nnx.array_ref(jnp.array(2.0))]
+    >>> frozen_node = nnx.to_arrays(node, only=lambda path, x: path[0] == 0)
     ...
     >>> assert isinstance(frozen_node[0], jax.Array)
-    >>> assert isinstance(frozen_node[1], nnx.MutableArray)
+    >>> assert isinstance(frozen_node[1], nnx.ArrayRef)
 
   Args:
-    node: A structure potentially containing mutable arrays.
-    only: A Filter to specify which mutable arrays to freeze.
+    node: A structure potentially containing array refs.
+    only: A Filter to specify which array refs to freeze.
   Returns:
     A structure with the frozen arrays.
   """
@@ -2688,11 +2688,11 @@ def freeze(
 
 
 def _array_like(path, x):
-  return (isinstance(x, Variable) and not x.mutable) or isinstance(x, jax.Array)
+  return (isinstance(x, Variable) and not x.has_ref) or isinstance(x, jax.Array)
 
 
-def mutable(node: A, /, only: filterlib.Filter = _array_like) -> A:
-  """Converts a structure of arrays to mutable arrays.
+def to_refs(node: A, /, only: filterlib.Filter = _array_like) -> A:
+  """Converts a structure of arrays to array refs.
 
   Example::
 
@@ -2700,35 +2700,35 @@ def mutable(node: A, /, only: filterlib.Filter = _array_like) -> A:
     >>> import jax
     >>> import jax.numpy as jnp
     ...
-    >>> node = [jnp.array(1.0), nnx.mutable_array(jnp.array(2.0))]
-    >>> mutable_node = nnx.mutable(node)
-    >>> assert nnx.is_mutable_array(mutable_node[0])
-    >>> assert nnx.is_mutable_array(mutable_node[1])
+    >>> node = [jnp.array(1.0), nnx.array_ref(jnp.array(2.0))]
+    >>> mutable_node = nnx.to_refs(node)
+    >>> assert nnx.is_array_ref(mutable_node[0])
+    >>> assert nnx.is_array_ref(mutable_node[1])
 
   If the structure contains duplicate arrays a ValueError is raised::
 
     >>> shared_array = jnp.array(1.0)
     >>> node = [shared_array, shared_array]
     >>> try:
-    ...   nnx.mutable(node)
+    ...   nnx.to_refs(node)
     ... except ValueError as e:
     ...   print(e)
     Found duplicate at path '[1]' and '[0]'.
 
   ``only`` is a `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
-  that can be used to specify which arrays to convert to mutable arrays.
+  that can be used to specify which arrays to convert to array refs.
 
     >>> node = [jnp.array(1.0), jnp.array(2.0)]
-    >>> mutable_node = nnx.mutable(node, only=lambda path, x: path[0] == 0)
+    >>> mutable_node = nnx.to_refs(node, only=lambda path, x: path[0] == 0)
     ...
-    >>> assert isinstance(mutable_node[0], nnx.MutableArray)
+    >>> assert isinstance(mutable_node[0], nnx.ArrayRef)
     >>> assert isinstance(mutable_node[1], jax.Array)
 
   Args:
     node: A structure potentially containing arrays.
-    only: A Filter to specify which arrays to convert to mutable arrays.
+    only: A Filter to specify which arrays to convert to array refs.
   Returns:
-    A structure with the mutable arrays.
+    A structure with the array refs.
   """
   duplicate_fn = filterlib.to_predicate(only)
   if (
@@ -2739,7 +2739,7 @@ def mutable(node: A, /, only: filterlib.Filter = _array_like) -> A:
       f"Found duplicate at path '{current_path_str}' and '{previous_path_str}'."
     )
   graphdef, frozen_state, rest = split(node, only, ...)  # type: ignore[misc]
-  mutable_state = jax.tree.map(variablelib.mutable_array, frozen_state)
+  mutable_state = jax.tree.map(variablelib.array_ref, frozen_state)
   node = merge(graphdef, mutable_state, rest)
   return node
 
@@ -2906,8 +2906,8 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
     >>> for path, value in nnx.iter_graph(graph):
     ...   print(path, type(value).__name__)
     ...
-    (0, '_object__nodes') frozenset
-    (0, '_object__state') ObjectState
+    (0, '_pytree__nodes') frozenset
+    (0, '_pytree__state') PytreeState
     (0, 'b') Param
     (0, 'din') int
     (0, 'dout') int
@@ -2929,7 +2929,7 @@ def _iter_graph(
     visited.add(id(node))
     node_impl = get_node_impl(node)
     if node_impl is None and not (
-      isinstance(node, Variable) or variablelib.is_mutable_array(node)
+      isinstance(node, Variable) or variablelib.is_array_ref(node)
     ):
       raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
     assert node_impl is not None

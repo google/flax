@@ -59,7 +59,7 @@ Example::
   import dataclasses
 
   @dataclasses.dataclass
-  class Foo(nnx.Object):
+  class Foo(nnx.Pytree):
     a: nnx.Data[int]  # Annotates `a` as pytree data
     b: str            # `b` is not pytree data
 
@@ -86,7 +86,7 @@ def data(value: A, /) -> A:
     from flax import nnx
     import jax
 
-    class Foo(nnx.Object):
+    class Foo(nnx.Pytree):
       def __init__(self):
         self.data_attr = nnx.data(42)  # pytree data
         self.static_attr = "hello"     # static attribute
@@ -124,7 +124,7 @@ def register_data_type(type_: type, /) -> None:
 
     nnx.register_data_type(MyType)
 
-    class Foo(nnx.Object):
+    class Foo(nnx.Pytree):
       def __init__(self, a):
         self.a = MyType(a)  # Automatically registered as data
         self.b = "hello"     # str not registered as data
@@ -147,7 +147,7 @@ def is_data_type(value: tp.Any, /) -> bool:
   Data types are:
   - jax.Arrays
   - np.ndarrays
-  - MutableArrays
+  - ArrayRefs
   - Variables (Param, BatchStat, RngState, etc.)
   - All graph nodes (Object, Module, Rngs, etc.)
   - Any type registered with `nnx.register_data_type`
@@ -233,7 +233,7 @@ class ObjectContext(threading.local):
 OBJECT_CONTEXT = ObjectContext()
 
 
-class ObjectState(reprlib.Representable):
+class PytreeState(reprlib.Representable):
   __slots__ = ('_trace_state', '_initializing', '_is_setup')
 
   def __init__(self, initializing: bool = False, is_setup: bool = False):
@@ -266,46 +266,47 @@ class ObjectState(reprlib.Representable):
     )
 
 
-def _flatten_object_state(state: ObjectState):
+def _flatten_pytree_state(state: PytreeState):
   return (), (state.initializing, state.is_setup)
 
 
-def _unflatten_object_state(static: tuple[bool, bool], _):
+def _unflatten_pytree_state(static: tuple[bool, bool], _):
   initializing, setup = static
-  return ObjectState(initializing, setup)
+  return PytreeState(initializing, setup)
 
 
 jax.tree_util.register_pytree_node(
-  ObjectState,
-  _flatten_object_state,
-  _unflatten_object_state,
+  PytreeState,
+  _flatten_pytree_state,
+  _unflatten_pytree_state,
 )
 
 
-class ObjectMeta(ABCMeta):
+class PytreeMeta(ABCMeta):
   if not tp.TYPE_CHECKING:
 
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
       return _graph_node_meta_call(cls, *args, **kwargs)
 
-  def _object_meta_construct(cls, self, *args, **kwargs):
+  def _pytree_meta_construct(cls, self, *args, **kwargs):
     self.__init__(*args, **kwargs)
 
+ObjectMeta = PytreeMeta
 
 def _graph_node_meta_call(cls: tp.Type[O], *args, **kwargs) -> O:
   node = cls.__new__(cls, *args, **kwargs)
   vars_obj = vars(node)
-  vars_obj['_object__state'] = ObjectState()
-  vars_obj['_object__nodes'] = cls._object__nodes
-  cls._object_meta_construct(node, *args, **kwargs)
+  vars_obj['_pytree__state'] = PytreeState()
+  vars_obj['_pytree__nodes'] = cls._pytree__nodes
+  cls._pytree_meta_construct(node, *args, **kwargs)
   # register possible new data attributes after initialization
   for name, value in vars_obj.items():
-    if name not in vars_obj['_object__nodes']:
+    if name not in vars_obj['_pytree__nodes']:
       if any(
         is_data_type(leaf)
         for leaf in jax.tree.leaves(value, is_leaf=is_data_type)
       ):
-        vars_obj['_object__nodes'] = vars_obj['_object__nodes'].union((name,))
+        vars_obj['_pytree__nodes'] = vars_obj['_pytree__nodes'].union((name,))
 
   return node
 
@@ -335,18 +336,17 @@ class MutableArrayRepr(reprlib.Representable):
     return MutableArrayRepr(array.shape, array.dtype)
 
   def __nnx_repr__(self):
-    yield reprlib.Object(type='MutableArray', same_line=True)
+    yield reprlib.Object(type='ArrayRef', same_line=True)
     yield reprlib.Attr('shape', self.shape)
     yield reprlib.Attr('dtype', self.dtype)
 
 
-class Object(reprlib.Representable, metaclass=ObjectMeta):
+class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   """Base class for all NNX objects."""
 
   if tp.TYPE_CHECKING:
-    _object__nodes: frozenset[str]
-    _object__is_pytree: bool
-    _object__state: ObjectState
+    _pytree__nodes: frozenset[str]
+    _pytree__state: PytreeState
 
   def __init_subclass__(
     cls, *, pytree: bool = config.flax_pytree_module, **kwargs
@@ -363,25 +363,24 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
       init=cls._graph_node_init,  # type: ignore
     )
 
-    cls._object__is_pytree = pytree
-    parent_nodes: tp.Iterable[str] = getattr(cls, '_object__nodes', ())
+    parent_nodes: tp.Iterable[str] = getattr(cls, '_pytree__nodes', ())
 
     all_nodes: set[str] = set(parent_nodes)
 
-    all_nodes.add('_object__state')
+    all_nodes.add('_pytree__state')
     # add DataTag attributes
     type_: type
     for name, type_ in cls.__annotations__.items():
       if type_ != tp.ClassVar and DataTag in getattr(type_, '__metadata__', ()):
         all_nodes.add(name)
-    cls._object__nodes = frozenset(all_nodes)
+    cls._pytree__nodes = frozenset(all_nodes)
 
     if pytree:
       jax.tree_util.register_pytree_with_keys(
         cls,
-        flatten_with_keys=cls._object__flatten_with_paths,
-        unflatten_func=cls._object__unflatten,
-        flatten_func=cls._object__flatten,
+        flatten_with_keys=cls._pytree__flatten_with_paths,
+        unflatten_func=cls._pytree__unflatten,
+        flatten_func=cls._pytree__flatten,
       )
 
     if BUILDING_DOCS:
@@ -399,18 +398,18 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     )
     if type(value) is DataAttr:
       value = value.value
-      if name not in self._object__nodes:
-        self._object__nodes = self._object__nodes.union((name,))
+      if name not in self._pytree__nodes:
+        self._pytree__nodes = self._pytree__nodes.union((name,))
     # any attribute that contains known data types will be registered as data
-    elif name not in self._object__nodes and any(
+    elif name not in self._pytree__nodes and any(
       is_data_type(leaf)
       for leaf in jax.tree.leaves(value, is_leaf=is_data_type)
     ):
-      self._object__nodes = self._object__nodes.union((name,))
+      self._pytree__nodes = self._pytree__nodes.union((name,))
     object.__setattr__(self, name, value)
 
   def _check_valid_context(self, error_msg: tp.Callable[[], str]) -> None:
-    if not self._object__state.trace_state.is_valid():
+    if not self._pytree__state.trace_state.is_valid():
       raise errors.TraceContextError(error_msg())
 
   def __deepcopy__(self: O, memo=None) -> O:
@@ -464,7 +463,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
             return value.replace(
               raw_value=jax.tree.map(to_shape_dtype, value.raw_value)
             )
-          elif variablelib.is_mutable_array(value) and np.prod(value.shape) > 1:
+          elif variablelib.is_array_ref(value) and np.prod(value.shape) > 1:
             return MutableArrayRepr(value.shape, value.dtype)
           elif (
             isinstance(value, (np.ndarray, jax.Array))
@@ -543,9 +542,9 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
   # -------------------------
   # Pytree Definition
   # -------------------------
-  def _object__flatten_with_paths(self):
+  def _pytree__flatten_with_paths(self):
     obj_vars = vars(self)
-    type_nodes = self._object__nodes
+    type_nodes = self._pytree__nodes
     node_names: list[str] = []
     node_attrs: list[tuple[tp.Any, tp.Any]] = []
     static_attrs: list[tuple[str, tp.Any]] = []
@@ -558,9 +557,9 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
 
     return node_attrs, (tuple(node_names), tuple(static_attrs))
 
-  def _object__flatten(self):
+  def _pytree__flatten(self):
     obj_vars = vars(self)
-    type_nodes = self._object__nodes
+    type_nodes = self._pytree__nodes
     node_names: list[str] = []
     node_attrs: list[tp.Any] = []
     static_attrs: list[tuple[str, tp.Any]] = []
@@ -574,7 +573,7 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
     return node_attrs, (tuple(node_names), tuple(static_attrs))
 
   @classmethod
-  def _object__unflatten(
+  def _pytree__unflatten(
     cls,
     static: tuple[tuple[str, ...], tuple[tuple[str, tp.Any], ...]],
     node_attrs: tp.Iterable[tp.Any],
@@ -621,3 +620,5 @@ class Object(reprlib.Representable, metaclass=ObjectMeta):
 
   def _graph_node_init(self, attributes: tp.Iterable[tuple[str, tp.Any]]):
     vars(self).update(attributes)
+
+Object = Pytree
