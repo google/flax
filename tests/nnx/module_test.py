@@ -65,7 +65,7 @@ class Dict(nnx.Module):
     super().__setattr__(key, value)
 
   def __iter__(self) -> tp.Iterator[str]:
-    return (k for k in vars(self) if k != '_object__state')
+    return (k for k in vars(self) if k != '_pytree__state')
 
   def __len__(self) -> int:
     return len(vars(self))
@@ -77,7 +77,7 @@ class TestModule(absltest.TestCase):
 
     foo = Foo()
 
-    assert hasattr(foo, '_object__state')
+    assert hasattr(foo, '_pytree__state')
 
   def test_trace_level(self):
     m = Dict(a=nnx.Param(1))
