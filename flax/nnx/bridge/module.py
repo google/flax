@@ -65,12 +65,14 @@ class ModuleState(statelib.State):
 
 
 class Scope(Object):
-  def __init__(self, rngs: rnglib.Rngs, mutable: CollectionFilter):
+  def __init__(self, module: Module, rngs: rnglib.Rngs, mutable: CollectionFilter):
+    self.module = module
     self.rngs = rngs
     self.mutable = mutable
 
-  def copy(self):
-    return Scope(self.rngs, self.mutable)
+  def copy(self, new_module):
+    # Never copy the module - always fill in a new one
+    return Scope(new_module, self.rngs, self.mutable)
 
 
 class _HasSetup(tp.Protocol):
@@ -104,7 +106,7 @@ def _bind_module(parent: Module, module: Module) -> Module:
   for _, value in reversed(list(graph.iter_graph(module))):
     if isinstance(value, Module):
       if module.scope is None:
-        value.scope = parent.scope.copy()  # type: ignore[attribute-error]
+        value.scope = parent.scope.copy(value)  # type: ignore[attribute-error]
       _maybe_call_setup(value)
   return module
 
@@ -280,8 +282,9 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         'Parameters must be initialized in `setup()` or in a method '
         'wrapped in `@compact`'
       )
-    if hasattr(self, name):
-      value = getattr(self, name)
+    module = self.scope.module
+    if hasattr(module, name):
+      value = getattr(module, name)
       # TODO(cgarciae): implement reservations
       # if self._name_taken(name):
       #   raise errors.NameInUseError('param', name, self.__class__.__name__)
@@ -310,10 +313,10 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
 
       variable = variablelib.Param(value)
     else:
-      value = init_fn(self.make_rng('params'), *init_args, **init_kwargs)
+      value = init_fn(module.make_rng('params'), *init_args, **init_kwargs)
       variable = variablelib.Param(value)
 
-    setattr(self, name, variable)
+    setattr(module, name, variable)
     return variable
 
   def variable(  # type: ignore[invalid-annotation]
@@ -333,9 +336,10 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         'Variables must be initialized in `setup()` or in a method '
         'wrapped in `@compact`'
       )
+    module = self.scope.module
 
-    if hasattr(self, name):
-      value = getattr(self, name)
+    if hasattr(module, name):
+      value = getattr(module, name)
       # TODO(cgarciae): implement reservations
       # if self._name_taken(name):
       #   raise errors.NameInUseError('param', name, self.__class__.__name__)
@@ -367,7 +371,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       value = init_fn(*init_args, **init_kwargs)
       variable = variable_type(value)
 
-    setattr(self, name, variable)
+    setattr(module, name, variable)
     return variable
 
   def _get_variables(self) -> tp.Mapping:
@@ -475,7 +479,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       if isinstance(value, Object):
         value._object__state._initializing = _initialize
       if isinstance(value, Module):
-        value.scope = Scope(rngs, mutable)
+        value.scope = Scope(value, rngs, mutable)
         _maybe_call_setup(value)
 
     MODULE_CONTEXT.module_stack.append(
@@ -571,3 +575,7 @@ def _get_unbound_fn(method_or_fn: tp.Callable) -> tp.Callable:
 
   return method_or_fn
 
+
+def share_scope(parent: Module, child: Module):
+  """Behaves like `linen.share_scope`, for a pair of parent and child modules."""
+  child.scope = parent.scope

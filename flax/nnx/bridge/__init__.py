@@ -27,6 +27,7 @@ from .module import AttrPriority as AttrPriority
 from .module import compact as compact
 from .module import current_context as current_context
 from .module import current_module as current_module
+from .module import share_scope as share_scope
 from .interop import nnx_in_bridge_mdl as nnx_in_bridge_mdl
 from .interop import linen_in_bridge_mdl as linen_in_bridge_mdl
 from flax.nnx.nn import initializers as initializers
