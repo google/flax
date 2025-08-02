@@ -69,7 +69,7 @@ class RngStream(Object):
     self.count = RngCount(count, tag=tag)
 
   def __call__(self) -> jax.Array:
-    if not self.count.mutable and not self.count._trace_state.is_valid():
+    if not self.count.has_ref and not self.count._trace_state.is_valid():
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
@@ -424,7 +424,7 @@ def split_rngs(
       key = jax.random.split(key, splits)
       if squeeze:
         key = key[0]
-      if variablelib.is_mutable_array(stream.key.raw_value):
+      if variablelib.is_array_ref(stream.key.raw_value):
         stream.key.raw_value = variablelib.mutable_array(key)
       else:
         stream.key.value = key
@@ -436,7 +436,7 @@ def split_rngs(
         counts_shape = (*splits, *stream.count.shape)
 
       count = jnp.zeros(counts_shape, dtype=jnp.uint32)
-      if variablelib.is_mutable_array(stream.count.raw_value):
+      if variablelib.is_array_ref(stream.count.raw_value):
         stream.count.raw_value = variablelib.mutable_array(count)
       else:
         stream.count.value = count

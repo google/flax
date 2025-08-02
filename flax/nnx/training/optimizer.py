@@ -210,10 +210,10 @@ class Optimizer(Object, tp.Generic[M]):
       **kwargs: additional keyword arguments passed to the tx.update, to support
       ``GradientTransformationExtraArgs``, such as ``optax.scale_by_backtracking_linesearch``.
     """
-    param_arrays = nnx.freeze(nnx.pure(nnx.state(model, self.wrt)))
-    grad_arrays = nnx.freeze(nnx.pure(nnx.state(grads)))
-    opt_state_arrays = nnx.freeze(nnx.pure(self.opt_state))
-    kwargs_arrays = nnx.freeze(nnx.pure(kwargs))
+    param_arrays = nnx.to_arrays(nnx.pure(nnx.state(model, self.wrt)))
+    grad_arrays = nnx.to_arrays(nnx.pure(nnx.state(grads)))
+    opt_state_arrays = nnx.to_arrays(nnx.pure(self.opt_state))
+    kwargs_arrays = nnx.to_arrays(nnx.pure(kwargs))
 
     updates, new_opt_state = self.tx.update(
       grad_arrays, opt_state_arrays, param_arrays, **kwargs_arrays

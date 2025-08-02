@@ -403,8 +403,6 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       for collection, flat_state in _variables.items()
     }
 
-    # _variables = nnx.freeze(_variables)
-
     return _variables
 
   @property
