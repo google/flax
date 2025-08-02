@@ -24,7 +24,7 @@ from flax.nnx import graph
 from flax.nnx import variablelib
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
-from flax.nnx.pytreelib import Pytree
+from flax.nnx.object import Object
 from flax.typing import MISSING, Key, Missing
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
@@ -46,7 +46,7 @@ class RngKey(RngState): ...
 NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
 
 
-class RngStream(Pytree):
+class RngStream(Object):
 
   def __init__(
     self,
@@ -69,7 +69,7 @@ class RngStream(Pytree):
     self.count = RngCount(count, tag=tag)
 
   def __call__(self) -> jax.Array:
-    if not self.count.has_ref and not self.count._trace_state.is_valid():
+    if not self.count.mutable and not self.count._trace_state.is_valid():
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
@@ -86,7 +86,7 @@ class RngStream(Pytree):
 
 RngValue = tp.Union[int, jax.Array]
 
-class Rngs(Pytree):
+class Rngs(Object):
   """A small abstraction to manage RNG state.
 
   ``Rngs`` allows the creation of ``RngStream`` which are used to easily generate new unique
@@ -424,8 +424,8 @@ def split_rngs(
       key = jax.random.split(key, splits)
       if squeeze:
         key = key[0]
-      if variablelib.is_array_ref(stream.key.raw_value):
-        stream.key.raw_value = variablelib.array_ref(key)
+      if variablelib.is_mutable_array(stream.key.raw_value):
+        stream.key.raw_value = variablelib.mutable_array(key)
       else:
         stream.key.value = key
       if squeeze:
@@ -436,8 +436,8 @@ def split_rngs(
         counts_shape = (*splits, *stream.count.shape)
 
       count = jnp.zeros(counts_shape, dtype=jnp.uint32)
-      if variablelib.is_array_ref(stream.count.raw_value):
-        stream.count.raw_value = variablelib.array_ref(count)
+      if variablelib.is_mutable_array(stream.count.raw_value):
+        stream.count.raw_value = variablelib.mutable_array(count)
       else:
         stream.count.value = count
 

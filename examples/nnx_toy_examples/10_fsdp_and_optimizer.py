@@ -75,7 +75,7 @@ class SGDState(nnx.Variable):
   pass
 
 
-class SGD(nnx.Pytree):
+class SGD(nnx.Object):
   def __init__(self, params: nnx.State, lr, decay=0.9):
     def init_optimizer_state(variable: nnx.Variable):
       return SGDState(

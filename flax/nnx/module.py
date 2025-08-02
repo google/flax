@@ -24,7 +24,7 @@ from flax.nnx import (
   graph,
 )
 from flax.nnx import variablelib as variableslib
-from flax.nnx.pytreelib import Pytree, PytreeMeta
+from flax.nnx.object import Object, ObjectMeta
 from flax.nnx.graph import GraphState
 from flax.typing import Key, Path, PathParts
 
@@ -40,13 +40,13 @@ tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
 
-class ModuleMeta(PytreeMeta):
+class ModuleMeta(ObjectMeta):
   # we keep a trivial derived class just in case we need to
   # add more functionality in the future
   pass
 
 
-class Module(Pytree, metaclass=ModuleMeta):
+class Module(Object, metaclass=ModuleMeta):
   """Base class for all neural network modules.
 
   Layers and models should subclass this class.

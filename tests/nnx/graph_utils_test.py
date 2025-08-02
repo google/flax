@@ -22,6 +22,7 @@ import numpy as np
 from flax import linen, nnx, struct
 import jax
 import jax.numpy as jnp
+from flax import config
 
 
 class List(nnx.Module):
@@ -71,7 +72,10 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0][1].value == 2
     assert flat_state[1][1].value == 4
 
-    assert len(refmap) == 2  # 2 Variables
+    if config.flax_mutable_array:
+      assert len(refmap) == 4  # 2 Variables + 2 MutableArrays
+    else:
+      assert len(refmap) == 2  # 2 Variables
     assert a['b'] in refmap
     assert g[3] in refmap
 
@@ -87,8 +91,10 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0][...] == 2
     assert flat_state[1][...] == 4
 
-
-    assert len(refmap) == 2  # 2 Variables
+    if config.flax_mutable_array:
+      assert len(refmap) == 2  # 2 Variables + 2 MutableArrays
+    else:
+      assert len(refmap) == 2  # 2 Variables
     assert a['b'] in refmap
     assert g[3] in refmap
 
@@ -546,9 +552,9 @@ class TestGraphUtils(absltest.TestCase):
 
     class Foo(nnx.Module):
       def __call__(self):
-        test.assertTrue(self._pytree__state.initializing)
+        test.assertTrue(self._object__state.initializing)
         self = nnx.merge(*nnx.split(self))
-        test.assertTrue(self._pytree__state.initializing)
+        test.assertTrue(self._object__state.initializing)
 
     module = Foo()
     nnx.bridge.lazy_init(module)
@@ -1072,11 +1078,11 @@ class TestGraphUtils(absltest.TestCase):
       def __init__(self):
         self.ls = []
         self.ls.append(jnp.array(1))
-        test.assertNotIn('ls', self._pytree__nodes)
+        test.assertNotIn('ls', self._object__nodes)
 
     m = Foo()
 
-    self.assertIn('ls', m._pytree__nodes)
+    self.assertIn('ls', m._object__nodes)
     self.assertLen(jax.tree.leaves(m), 1)
 
 class SimpleModule(nnx.Module):

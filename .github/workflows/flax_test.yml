@@ -79,6 +79,29 @@ jobs:
     - name: Test importing Flax
       run: |
         uv run python -c "import flax"
+  test-mutable-array:
+    name: Run MutableArray tests
+    needs: [pre-commit, commit-count, test-import]
+    runs-on: ubuntu-24.04-16core
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - name: Set up Python 3.11
+      id: setup_python
+      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+      with:
+        python-version: 3.11
+    - name: Setup uv
+      uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
+      with:
+        version: "0.3.0"
+    - name: Install dependencies
+      run: |
+        uv sync --extra all --extra testing --extra docs
+        uv pip install -U git+https://github.com/jax-ml/jax.git
+    - name: Run MutableArray tests
+      run: |
+        source .venv/bin/activate
+        FLAX_MUTABLE_ARRAY=true pytest tests/nnx/mutable_array_test.py
 
   tests:
     name: Run Tests

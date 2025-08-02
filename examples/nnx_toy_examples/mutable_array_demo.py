@@ -40,6 +40,12 @@ def dataset(batch_size):
 # so we use a new Pytree type as the base. The main difference with current NNX is that
 # attributes that contain arrays or other pytrees now need to be explicitly marked as
 # using `nnx.data` to be included in the pytree.
+#
+# Variable changes in a couple of ways:
+# * its now implements the pytree protocol
+# * it can only hold arrays
+# * it has a mutable attribute, when True it will hold a MutableArray
+# * [...] is used to access & mutate underlying array
 class Linear(nnx.Module):
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
     self.din, self.dout = din, dout
@@ -97,7 +103,7 @@ class Block(nnx.Module):
       mean = jnp.mean(x, axis=0)
       var = jnp.var(x, axis=0)
       # ema updates
-      # stop gradient is used until a ArrayRef supports updates from grad tracers
+      # stop gradient is used until a MutableArray supports updates from grad tracers
       sg = jax.lax.stop_gradient
       self.mean[...] = sg(self.mu * self.mean[...] + (1 - self.mu) * mean)
       self.var[...] = sg(self.mu * self.var[...] + (1 - self.mu) * var)
@@ -125,7 +131,7 @@ class Model(nnx.Module):
     use_scan: bool = True,
     rngs: nnx.Rngs,
   ):
-    self.count: nnx.ArrayRef = nnx.array_ref(jnp.array(0))
+    self.count: nnx.MutableArray = nnx.mutable_array(jnp.array(0))
     self.block_in = Block(din, dhidden, rngs=rngs)
     self.linear_out = Linear(dhidden, dout, rngs=rngs)
 
@@ -136,9 +142,9 @@ class Model(nnx.Module):
 
       @jax.vmap
       def create_block(rngs, /):
-        return nnx.to_arrays(Block(dhidden, dhidden, rngs=rngs))
+        return nnx.freeze(Block(dhidden, dhidden, rngs=rngs))
 
-      self.blocks = nnx.to_refs(create_block(rngs.fork(split=num_blocks)))
+      self.blocks = nnx.mutable(create_block(rngs.fork(split=num_blocks)))
     else:
       self.blocks = [Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)]
 
@@ -169,11 +175,11 @@ class OptState(nnx.Variable): ...
 
 
 # Optimizer are an interesting case as they are inherently stateful and
-# pose a good use case for ArrayRef. Here we implement SGD with
+# pose a good use case for MutableArray. Here we implement SGD with
 # momentum. The optimizer receives the params as constructor arguments but doesn't
 # hold a reference to them, it only uses the params to initialize its state
 # by creating new OptState Variables that reuse the param's metadata.
-class SGD(nnx.Pytree):
+class SGD(nnx.Object):
   def __init__(self, params, lr: float, decay: float = 0.9):
     self.lr = lr
     self.decay = decay
@@ -199,7 +205,7 @@ class SGD(nnx.Pytree):
     momentum = nnx.pure(self.momentum)
 
     def update_fn(
-      param: nnx.ArrayRef, momentum: nnx.ArrayRef, grad: jax.Array
+      param: nnx.MutableArray, momentum: nnx.MutableArray, grad: jax.Array
     ):
       momentum[...] = self.decay * momentum[...] + (1 - self.decay) * grad[...]
       param[...] -= self.lr * momentum[...]
@@ -207,8 +213,13 @@ class SGD(nnx.Pytree):
     jax.tree.map(update_fn, params, momentum, grads)
 
 # ## Training
+# To setup the training loop we first instantiate the model and optimizer.
+# Variables are immutable (only contain Arrays) by default as it can make
+# initialization easier, however this means we have to use 'mutable' to
+# create the MutableArrays that will be updated during training.
 
-with nnx.use_refs(True):
+# activate mutable arrays
+with nnx.use_mutable_arrays(True):
   rngs = nnx.Rngs(params=0, dropout=1)
   model = Model(
     num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
@@ -216,7 +227,7 @@ with nnx.use_refs(True):
   optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
 
 # Create a copy of the model structure and set its attributes to eval model.
-# This works because they share the underlying ArrayRefs so both models
+# This works because they share the underlying MutableArrays so both models
 # will always be in sync.
 eval_model = nnx.merge(*nnx.split(model))
 eval_model.set_attributes(use_stats=True, deterministic=True)
@@ -238,8 +249,8 @@ def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
     return loss
 
   # For the time being we have to use 'freeze' make the Variables immutable
-  # as 'jax.grad' doesn't support ArrayRefs yet.
-  grads = jax.grad(loss_fn)(nnx.to_arrays(params))
+  # as 'jax.grad' doesn't support MutableArrays yet.
+  grads = jax.grad(loss_fn)(nnx.freeze(params))
   # 'update' mutates the optimizer's state and the params in place
   # so we don't need to return anything 🚀
   optimizer.update(params, grads)

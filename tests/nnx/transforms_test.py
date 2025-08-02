@@ -18,13 +18,14 @@ import typing as tp
 
 from absl.testing import absltest
 from absl.testing import parameterized
+import pytest
 from flax import nnx
 from flax.nnx.transforms import general
 import jax
 from jax.experimental import checkify, mesh_utils
 import jax.numpy as jnp
 import numpy as np
-from flax import errors
+from flax import errors, config
 
 
 class List(nnx.Module):
@@ -68,19 +69,19 @@ class TestJIT(absltest.TestCase):
     assert out == 1.0
 
   def test_mutable_array_input_output(self):
-    m = nnx.array_ref(jnp.array(1.0))
+    m = nnx.mutable_array(jnp.array(1.0))
 
     @nnx.jit
-    def f(m: nnx.ArrayRef):
+    def f(m: nnx.MutableArray):
       m[...] += 1.0
-      m2 = nnx.array_ref(jnp.array(10.0))
+      m2 = nnx.mutable_array(jnp.array(10.0))
       return m2, m
 
     m2, m_out = f(m)
 
     self.assertEqual(m[...], 2.0)
     self.assertIs(m, m_out)
-    self.assertTrue(nnx.is_array_ref(m2))
+    self.assertTrue(nnx.is_mutable_array(m2))
 
   def test_simple_double_call(self):
     n = 0
@@ -360,6 +361,10 @@ class TestJIT(absltest.TestCase):
     assert m.ref is m
     assert m2 is m
 
+  @pytest.mark.skipif(
+    config.flax_mutable_array,
+    reason='Mutable arrays are not supported with in_shardings',
+  )
   def test_apply_shardings(self):
     n_devices = max(jax.local_device_count() // 2, 1)
     devices = mesh_utils.create_device_mesh(
@@ -391,6 +396,10 @@ class TestJIT(absltest.TestCase):
 
     self.assertIsInstance(m.kernel.value.sharding, jax.sharding.NamedSharding)
 
+  @pytest.mark.skipif(
+    config.flax_mutable_array,
+    reason='Mutable arrays are not supported with cached_partial',
+  )
   def test_cache_args(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
@@ -449,7 +458,7 @@ class TestEvalShape(absltest.TestCase):
     self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
 
   def test_eval_shape_mutable_array(self):
-    with nnx.use_refs(True):
+    with nnx.use_mutable_arrays(True):
       abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
     self.assertIsInstance(abs_model, nnx.Linear)
     self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
@@ -1761,7 +1770,7 @@ class TestScan(absltest.TestCase):
     x = jnp.arange(5)
     count = jnp.array(0)
 
-    class Foo(nnx.Pytree):
+    class Foo(nnx.Object):
       @nnx.split_rngs(splits=5)
       @nnx.vmap(axis_size=5)
       def __init__(self, rngs: nnx.Rngs):
@@ -2328,6 +2337,10 @@ class TestVmap(absltest.TestCase):
 
     f(m, m, m)
 
+  @pytest.mark.skipif(
+    config.flax_mutable_array,
+    reason='Flax mutable array does not support in_sharding',
+  )
   def test_equivalent_state_sharding_mapping(self):
     m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
 
@@ -2671,7 +2684,7 @@ class TestCond(absltest.TestCase):
         )
 
     @dataclasses.dataclass
-    class Foo(nnx.Pytree):
+    class Foo(nnx.Object):
       timestep: nnx.Data[TimeStep]
 
       def update(self):
@@ -2724,7 +2737,7 @@ class TestCond(absltest.TestCase):
     self.assertEqual(x.value, 4)
 
   def test_cond_and_vmap(self):
-    class Env(nnx.Pytree):
+    class Env(nnx.Object):
       def __init__(self):
         self.index = nnx.Variable(jnp.arange(8))
         self.step = nnx.Variable(jnp.zeros((8,), jnp.uint32))
@@ -2928,19 +2941,19 @@ class TestWhileLoop(absltest.TestCase):
     np.testing.assert_array_equal(y, x * 2 * 3)
 
   def test_fori_loop_with_sharing(self):
-    class A(nnx.Pytree):
+    class A(nnx.Object):
       def __init__(self):
         self.params = nnx.Param(jnp.zeros((10,), dtype=int))
 
-    class B(nnx.Pytree):
+    class B(nnx.Object):
       def __init__(self, a: A):
         self.a = a
 
-    class C(nnx.Pytree):
+    class C(nnx.Object):
       def __init__(self, a: A):
         self.a = a
 
-    class D(nnx.Pytree):
+    class D(nnx.Object):
       def __init__(self):
         self.a = A()
         self.b = B(self.a)
@@ -3032,7 +3045,7 @@ class TestSplitMergeInputs(absltest.TestCase):
     class EnvState(nnx.Variable[nnx.A]):
       pass
 
-    class Env(nnx.Pytree):
+    class Env(nnx.Object):
       def __init__(self):
         self.index = EnvState(jnp.arange(8))
         self.step = EnvState(jnp.zeros((8,), jnp.uint32))

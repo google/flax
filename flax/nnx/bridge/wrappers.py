@@ -26,7 +26,7 @@ from flax.nnx import variablelib
 from flax.nnx.bridge import variables as bv
 from flax.nnx.bridge import module as bdg_module
 from flax.nnx.module import Module
-from flax.nnx.pytreelib import Pytree
+from flax.nnx.object import Object
 from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 import jax
@@ -65,8 +65,8 @@ def functional(cls: tp.Type[M]) -> tp.Callable[..., Functional[M]]:
 
 def _set_initializing(module: Module, initializing: bool):
   for k, value in graph.iter_graph(module):
-    if isinstance(value, Pytree):
-      value._pytree__state._initializing = initializing
+    if isinstance(value, Object):
+      value._object__state._initializing = initializing
 
 
 def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
@@ -147,7 +147,7 @@ class ToNNX(Module, pytree=False):
     # Shape-based lazy init of the flax variables
     if not rngs:
       rngs = self.rngs
-    if self._pytree__state.initializing:
+    if self._object__state.initializing:
       _rngs = (
         {name: stream() for name, stream in rngs.items()} if rngs else {}
       )
@@ -164,7 +164,7 @@ class ToNNX(Module, pytree=False):
       nnx_attrs = {
         k: v
         for k, v in vars(self).items()
-        if k not in ['module', 'rngs'] and not k.startswith('_pytree__')
+        if k not in ['module', 'rngs'] and not k.startswith('_object__')
       }
       variables = bv.nnx_attrs_to_linen_vars(nnx_attrs)
 

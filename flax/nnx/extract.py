@@ -18,7 +18,7 @@ import typing as tp
 import jax
 
 from flax import struct
-from flax.nnx.pytreelib import Pytree
+from flax.nnx.object import Object
 from flax.typing import Missing, PathParts
 from flax.nnx import graph, variablelib
 
@@ -57,7 +57,7 @@ def check_consistent_aliasing(
   # collect all paths and prefixes for each node
   for path, value in graph.iter_graph(node):
     if graph.is_graph_node(value) or isinstance(value, graph.Variable):
-      if isinstance(value, Pytree):
+      if isinstance(value, Object):
         value._check_valid_context(
           lambda: f'Trying to extract graph node from different trace level, got {value!r}'
         )
