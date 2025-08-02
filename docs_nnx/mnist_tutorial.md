@@ -83,16 +83,20 @@ class CNN(nnx.Module):
 
   def __init__(self, *, rngs: nnx.Rngs):
     self.conv1 = nnx.Conv(1, 32, kernel_size=(3, 3), rngs=rngs)
+    self.batch_norm1 = nnx.BatchNorm(32, rngs=rngs)
+    self.dropout1 = nnx.Dropout(rate=0.025, rngs=rngs)
     self.conv2 = nnx.Conv(32, 64, kernel_size=(3, 3), rngs=rngs)
+    self.batch_norm2 = nnx.BatchNorm(64, rngs=rngs)
     self.avg_pool = partial(nnx.avg_pool, window_shape=(2, 2), strides=(2, 2))
     self.linear1 = nnx.Linear(3136, 256, rngs=rngs)
+    self.dropout2 = nnx.Dropout(rate=0.025, rngs=rngs)
     self.linear2 = nnx.Linear(256, 10, rngs=rngs)
 
   def __call__(self, x):
-    x = self.avg_pool(nnx.relu(self.conv1(x)))
-    x = self.avg_pool(nnx.relu(self.conv2(x)))
+    x = self.avg_pool(nnx.relu(self.batch_norm1(self.dropout1(self.conv1(x)))))
+    x = self.avg_pool(nnx.relu(self.batch_norm2(self.conv2(x))))
     x = x.reshape(x.shape[0], -1)  # flatten
-    x = nnx.relu(self.linear1(x))
+    x = nnx.relu(self.dropout2(self.linear1(x)))
     x = self.linear2(x)
     return x
 
@@ -158,7 +162,7 @@ def train_step(model: CNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, b
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
   (loss, logits), grads = grad_fn(model, batch)
   metrics.update(loss=loss, logits=logits, labels=batch['label'])  # In-place updates.
-  optimizer.update(model, grads)  # In-place updates.
+  optimizer.update(grads)  # In-place updates.
 
 @nnx.jit
 def eval_step(model: CNN, metrics: nnx.MultiMetric, batch):
@@ -196,6 +200,7 @@ for step, batch in enumerate(train_ds.as_numpy_iterator()):
   # - The train state's model parameters
   # - The optimizer state
   # - The training loss and accuracy batch metrics
+  model.train() # Switch to train mode
   train_step(model, optimizer, metrics, batch)
 
   if step > 0 and (step % eval_every == 0 or step == train_steps - 1):  # One training epoch has passed.
@@ -205,6 +210,7 @@ for step, batch in enumerate(train_ds.as_numpy_iterator()):
     metrics.reset()  # Reset the metrics for the test set.
 
     # Compute the metrics on the test set after each training epoch.
+    model.eval() # Switch to eval mode
     for test_batch in test_ds.as_numpy_iterator():
       eval_step(model, metrics, test_batch)
 
@@ -239,7 +245,7 @@ def pred_step(model: CNN, batch):
   return logits.argmax(axis=1)
 ```
 
-Note that we use `.eval()` to ensure that the model is in evaluation mode, even though we are not using `Dropout` or `BatchNorm` in this model, `.eval()` ensure that the outputs are deterministic.
+We call .eval() before inference so Dropout is disabled and BatchNorm uses stored running stats. It is used during inference to suppress gradients and ensure deterministic, resource-efficient output.
 
 ```{code-cell} ipython3
 :outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e
