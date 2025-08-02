@@ -312,7 +312,7 @@ class TestIntegration(absltest.TestCase):
         x = nnx.relu(self.dropout(self.bn(self.linear(x))))
         return self.linear_out(x)
 
-    with nnx.use_mutable_arrays(True):
+    with nnx.use_refs(True):
       model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
       optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
@@ -323,7 +323,7 @@ class TestIntegration(absltest.TestCase):
         model =  nnx.merge(graphdef, params, nondiff)
         return ((model(x) - y) ** 2).mean() # call methods directly
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.freeze(params))
+      loss, grads = jax.value_and_grad(loss_fn)(nnx.to_arrays(params))
       optimizer.update(model, grads)  # in-place updates
 
       return loss

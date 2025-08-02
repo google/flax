@@ -354,8 +354,8 @@ class BatchNorm(Module):
         use_fast_variance=self.use_fast_variance,
         mask=mask,
       )
-      # stop_gradient only for flax_mutable_array
-      if self.mean.mutable or self.var.mutable:
+      # stop_gradient only for flax_array_ref
+      if self.mean.has_ref or self.var.has_ref:
         stop_gradient = jax.lax.stop_gradient
       else:
         stop_gradient = lambda x: x
