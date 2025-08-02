@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from typing import Any, Union
 
 from flax import nnx
+import jax
 import jax.numpy as jnp
 from jaxtyping import Array, ArrayLike  # pylint: disable=g-importing-member,g-multiple-import
 
@@ -66,7 +67,7 @@ class RMSNorm(nnx.Module):
   def __call__(self, x: Array) -> Array:
     dtype = self.scale.value.dtype
     var = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
-    normed_inputs = jnp.asarray(x * jnp.reciprocal(jnp.sqrt(var + 1e-06)), dtype)
+    normed_inputs = jnp.asarray(x * jax.lax.rsqrt(var + 1e-06), dtype=dtype)
     # normed_inputs is a rank-K tensor, K > 1 (K is typically 2 or 3). scale is
     # a rank-1 tensor. To avoid implicit rank-promotion, reshape scale to
     # a (1, ..., 1, D) tensor, so the rank of scale matches normed_inputs.
