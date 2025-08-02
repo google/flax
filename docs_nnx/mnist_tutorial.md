@@ -27,7 +27,6 @@ Let’s get started!
 If `flax` is not installed in your Python environment, use `pip` to install the package from PyPI (below, just uncomment the code in the cell if you are working from Google Colab/Jupyter Notebook):
 
 ```{code-cell} ipython3
-:tags: [skip-execution]
 
 # !pip install flax
 ```
@@ -111,7 +110,6 @@ nnx.display(model)
 Let's put the CNN model to the test!  Here, you’ll perform a forward pass with arbitrary data and print the results.
 
 ```{code-cell} ipython3
-:outputId: 2c580f41-bf5d-40ec-f1cf-ab7f319a84da
 
 import jax.numpy as jnp  # JAX NumPy
 
@@ -174,7 +172,6 @@ In the code above, the [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_ref
 
 > **Note:** The code shows how to perform several in-place updates to the model, the optimizer, and the metrics, but _state updates_ were not explicitly returned. This is because Flax NNX transformations respect _reference semantics_ for Flax NNX objects, and will propagate the state updates of the objects passed as input arguments. This is a key feature of Flax NNX that allows for a more concise and readable code. You can learn more in [Why Flax NNX](https://flax.readthedocs.io/en/latest/why.html).
 
-+++
 
 ## 6. Train and evaluate the model
 
@@ -183,7 +180,6 @@ on the test set after each epoch, and log the training and testing metrics (the 
 the accuracy) during the process. Typically this leads to the model achieving around 99% accuracy.
 
 ```{code-cell} ipython3
-:outputId: 258a2c76-2c8f-4a9e-d48b-dde57c342a87
 
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
@@ -248,7 +244,6 @@ def pred_step(model: CNN, batch):
 We call .eval() before inference so Dropout is disabled and BatchNorm uses stored running stats. It is used during inference to suppress gradients and ensure deterministic, resource-efficient output.
 
 ```{code-cell} ipython3
-:outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e
 
 test_batch = test_ds.as_numpy_iterator().next()
 pred = pred_step(model, test_batch)
