@@ -26,8 +26,7 @@ Let’s get started!
 
 If `flax` is not installed in your Python environment, use `pip` to install the package from PyPI (below, just uncomment the code in the cell if you are working from Google Colab/Jupyter Notebook):
 
-```{code-cell} ipython3
-
+```{code-cell}
 # !pip install flax
 ```
 
@@ -35,7 +34,7 @@ If `flax` is not installed in your Python environment, use `pip` to install the 
 
 First, you need to load the MNIST dataset and then prepare the training and testing sets via Tensorflow Datasets (TFDS). You normalize image values, shuffle the data and divide it into batches, and prefetch samples to enhance performance.
 
-```{code-cell} ipython3
+```{code-cell}
 import tensorflow_datasets as tfds  # TFDS to download MNIST.
 import tensorflow as tf  # TensorFlow / `tf.data` operations.
 
@@ -73,7 +72,7 @@ test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1)
 
 Create a CNN for classification with Flax NNX by subclassing `nnx.Module`:
 
-```{code-cell} ipython3
+```{code-cell}
 from flax import nnx  # The Flax NNX API.
 from functools import partial
 
@@ -109,8 +108,7 @@ nnx.display(model)
 
 Let's put the CNN model to the test!  Here, you’ll perform a forward pass with arbitrary data and print the results.
 
-```{code-cell} ipython3
-
+```{code-cell}
 import jax.numpy as jnp  # JAX NumPy
 
 y = model(jnp.ones((1, 28, 28, 1)))
@@ -121,7 +119,7 @@ y
 
 In Flax NNX, you need to create an `nnx.Optimizer` object to manage the model's parameters and apply gradients during training. `nnx.Optimizer` receives the model's reference, so that it can update its parameters, and an [Optax](https://optax.readthedocs.io/) optimizer to define the update rules. Additionally, you will define an `nnx.MultiMetric` object to keep track of the `Accuracy` and the `Average` loss.
 
-```{code-cell} ipython3
+```{code-cell}
 import optax
 
 learning_rate = 0.005
@@ -146,7 +144,7 @@ In addition to the `loss`, during training and testing you will also get the `lo
 
 During training - the `train_step` - you will use `nnx.value_and_grad` to compute the gradients and update the model's parameters using the `optimizer` you have already defined. And during both training and testing (the `eval_step`), the `loss` and `logits` will be used to calculate the metrics.
 
-```{code-cell} ipython3
+```{code-cell}
 def loss_fn(model: CNN, batch):
   logits = model(batch['image'])
   loss = optax.softmax_cross_entropy_with_integer_labels(
@@ -179,8 +177,7 @@ Now, you can train the CNN model using batches of data for 10 epochs, evaluate t
 on the test set after each epoch, and log the training and testing metrics (the loss and
 the accuracy) during the process. Typically this leads to the model achieving around 99% accuracy.
 
-```{code-cell} ipython3
-
+```{code-cell}
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
 
@@ -232,7 +229,7 @@ for step, batch in enumerate(train_ds.as_numpy_iterator()):
 
 Create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
 
-```{code-cell} ipython3
+```{code-cell}
 model.eval() # Switch to evaluation mode.
 
 @nnx.jit
@@ -243,8 +240,7 @@ def pred_step(model: CNN, batch):
 
 We call .eval() before inference so Dropout is disabled and BatchNorm uses stored running stats. It is used during inference to suppress gradients and ensure deterministic, resource-efficient output.
 
-```{code-cell} ipython3
-
+```{code-cell}
 test_batch = test_ds.as_numpy_iterator().next()
 pred = pred_step(model, test_batch)
 
