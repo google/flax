@@ -148,3 +148,24 @@ def has_keyword_arg(func: tp.Callable[..., tp.Any], name: str) -> bool:
     and param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
     for param in inspect.signature(func).parameters.values()
   )
+
+
+@jax.jit
+def fix_checkpoint(checkpoint, model_class: nnx.Module, rngs: nnx.Rngs):
+  # drop rngs keys
+  flat_paths = nnx.traversals.flatten_mapping(checkpoint)
+  flat_paths = {
+      path[:-1] if path[-1] == "value" else path: value  # remove "value" suffix
+      for path, value in flat_paths.items()
+      if "rngs" not in path  # remove rngs paths
+  }
+  checkpoint = nnx.traversals.unflatten_mapping(flat_paths)
+
+  # initialize new model with given rngs
+  model = model_class(rngs=rngs)
+  # overwrite model parameters with checkpoint
+  nnx.update(model, checkpoint)
+  # get full checkpoint with new rngs
+  new_checkpoint = nnx.state(model)
+
+  return new_checkpoint
