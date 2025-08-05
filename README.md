@@ -10,6 +10,7 @@
 | [**Quick install**](#quick-install)
 | [**What does Flax look like?**](#what-does-flax-look-like)
 | [**Documentation**](https://flax.readthedocs.io/)
+| [**Release Notes**](https://github.com/google/flax/releases)
 
 Released in 2024, Flax NNX is a new simplified Flax API that is designed to make
 it easier to create, inspect, debug, and analyze neural networks in
