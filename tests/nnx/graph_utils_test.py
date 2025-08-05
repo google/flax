@@ -1079,6 +1079,45 @@ class TestGraphUtils(absltest.TestCase):
     self.assertIn('ls', m._pytree__nodes)
     self.assertLen(jax.tree.leaves(m), 1)
 
+  def test_update_dict(self):
+    node = {
+      'a': {
+        'b': 1,
+        'c': nnx.Param(2),
+        'd': 3,
+      },
+    }
+
+    updates = {
+      'a': {
+        'b': 4,
+        'c': 10,
+      },
+    }
+
+    nnx.update(node, updates)
+
+    self.assertEqual(node['a']['b'], 4)
+    self.assertEqual(node['a']['c'].value, 10)
+    self.assertEqual(node['a']['d'], 3)
+
+  def test_pop_dict(self):
+    node = {
+      'a': {
+        'b': jnp.array(1),
+        'c': nnx.Param(2),
+        'd': jnp.array(3.0),
+      },
+    }
+    lt_2 = lambda _, x: x < 2
+    popped = nnx.pop(node, (nnx.Param, lt_2))
+
+    self.assertEqual(popped['a']['b'], 1)
+    self.assertEqual(popped['a']['c'].value, 2)
+    self.assertEqual(node['a']['d'], 3.0)
+    self.assertLen(jax.tree.leaves(node), 1)
+    self.assertLen(jax.tree.leaves(popped), 2)
+
 class SimpleModule(nnx.Module):
   pass
 

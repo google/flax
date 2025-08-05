@@ -196,6 +196,8 @@ class GraphNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
 @dataclasses.dataclass(frozen=True, slots=True)
 class PytreeNodeImpl(NodeImplBase[Node, Leaf, AuxData]):
   unflatten: tp.Callable[[tp.Sequence[tuple[Key, Leaf]], AuxData], Node]
+  set_key: tp.Callable[[Node, Key, Leaf], None] | None
+  pop_key: tp.Callable[[Node, Key], Leaf] | None
 
 
 NodeImpl = tp.Union[
@@ -234,12 +236,19 @@ def register_pytree_node_type(
   type: type,
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[Key, Leaf]], AuxData]],
   unflatten: tp.Callable[[tp.Sequence[tuple[Key, Leaf]], AuxData], Node],
+  *,
+  set_key: tp.Callable[[Node, Key, Leaf], None] | None = None,
+  pop_key: tp.Callable[[Node, Key], Leaf] | None = None,
 ):
   if type in PYTREE_REGISTRY:
     raise ValueError(f'Node type {type} is already registered.')
 
   PYTREE_REGISTRY[type] = PytreeNodeImpl(
-    type=type, flatten=flatten, unflatten=unflatten
+    type=type,
+    flatten=flatten,
+    unflatten=unflatten,
+    set_key=set_key,
+    pop_key=pop_key,
   )
 
 
@@ -1146,16 +1155,16 @@ def _graph_unflatten(
 ) -> Node:
   """Recursive helper for graph_unflatten.
 
-  Args:
-    nodedef: A GraphDef instance or an index to a node in the cache.
-    state: A mapping from attribute names to variables or subgraphs.
-    index_to_ref: A mapping from indexes to nodes that have been traversed.
-      If a node is already in the cache, it won't be traversed again.
-f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes to existing nodes that can be reused.
-      When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
-      object in an empty state and then filled by the unflatten process, as a result
-      existing graph nodes are mutated to have the new content/topology
-      specified by the nodedef.
+    Args:
+      nodedef: A GraphDef instance or an index to a node in the cache.
+      state: A mapping from attribute names to variables or subgraphs.
+      index_ref: A mapping from indexes to nodes that have been traversed.
+        If a node is already in the cache, it won't be traversed again.
+      outer_index_outer_ref: A mapping from indexes to existing nodes that can be reused.
+        When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
+        object in an empty state and then filled by the unflatten process, as a result
+        existing graph nodes are mutated to have the new content/topology
+        specified by the nodedef.
   """
 
   def get_mutable_array(array_refdef: ArrayRefDef, leaf):
@@ -1168,13 +1177,9 @@ f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes 
       # if array ref exists, update it
       array_ref = outer_index_outer_ref[array_refdef.outer_index]
       if not variablelib.is_array_ref(array_ref):
-        raise RuntimeError(
-          f'Expected a ArrayRef type but got {array_ref}.'
-        )
+        raise RuntimeError(f'Expected a ArrayRef type but got {array_ref}.')
       if type(leaf) is not NoUpdate:
-        raise RuntimeError(
-          f'Expected a no update for ArrayRef but got {leaf}.'
-        )
+        raise RuntimeError(f'Expected a no update for ArrayRef but got {leaf}.')
     elif type(leaf) in (NoUpdate, Repeated):
       raise ValueError(
         f"Expected a ArrayRefOutput type but got '{leaf.value}.'"
@@ -1206,9 +1211,7 @@ f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes 
         if isinstance(value, Variable):
           value = value.copy() if copy_variables else value
           inner_value = value.raw_value
-          array_ref = get_mutable_array(
-            variabledef.array_refdef, inner_value
-          )
+          array_ref = get_mutable_array(variabledef.array_refdef, inner_value)
           if array_ref is not inner_value:
             value.raw_value = array_ref
         else:
@@ -1268,8 +1271,7 @@ f0f6619b-dde6-4466-b699-61c47f268d6b    index_ref_cache: A mapping from indexes 
       elif type(value) is MutableArrayAttr:
         array_refdef = next(node_iter)
         assert (
-          type(array_refdef) is ArrayRefDef
-          or type(array_refdef) is NodeRef
+          type(array_refdef) is ArrayRefDef or type(array_refdef) is NodeRef
         )
         if type(array_refdef) is NodeRef:
           array_ref = index_ref[array_refdef.index]
@@ -1392,7 +1394,7 @@ def _graph_pop(
 
     for state, predicate in zip(flat_states, predicates):
       if predicate(node_path, value):
-        if isinstance(node_impl, PytreeNodeImpl):
+        if node_impl.pop_key is None:
           raise ValueError(
             f'Cannot pop key {name!r} from node of type {type(node).__name__}'
           )
@@ -1441,7 +1443,7 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
   for key, value in state.items():
     # case 1: new state is being added
     if key not in node_dict:
-      if isinstance(node_impl, PytreeNodeImpl):
+      if node_impl.set_key is None:
         raise ValueError(
           f'Cannot set key {key!r} on immutable node of '
           f'type {type(node).__name__}'
@@ -1460,22 +1462,16 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
       if is_node_leaf(value):
         raise ValueError(f'Expected a subgraph for {key!r}, but got: {value!r}')
       _graph_update_dynamic(current_value, value)
-    else:
-      if isinstance(current_value, jax.Array | np.ndarray):
-        if isinstance(node_impl, PytreeNodeImpl):
-          raise ValueError(
-            f'Cannot set key {key!r} on immutable node of '
-            f'type {type(node).__name__}'
-          )
-        node_impl.set_key(node, key, value)
-        continue
-      elif not isinstance(current_value, Variable):
-        # case 3: state leaf is being updated
-        raise ValueError(
-          f'Trying to update a non-Variable attribute {key!r} with a Variable: '
-          f'{value!r}'
-        )
+    elif isinstance(current_value, Variable):
       _update_variable(current_value, value)
+    elif node_impl.set_key is not None:
+      node_impl.set_key(node, key, value)
+    else:
+      raise ValueError(
+        f'Cannot set key {key!r} on immutable node of '
+        f'type {type(node).__name__}'
+      )
+
 
 
 # --------------------------------------------------------
@@ -2621,9 +2617,7 @@ def find_duplicates(
 
 
 def _mutable_like(path, x):
-  return (
-    isinstance(x, Variable) and x.has_ref
-  ) or variablelib.is_array_ref(x)
+  return (isinstance(x, Variable) and x.has_ref) or variablelib.is_array_ref(x)
 
 
 def to_arrays(
@@ -3021,6 +3015,8 @@ PYTREE_NODE_IMPL = PytreeNodeImpl(
   type=GenericPytree,
   flatten=_flatten_pytree,
   unflatten=_unflatten_pytree,  # type: ignore
+  set_key=None,
+  pop_key=None,
 )
 
 # common pytrees
@@ -3036,11 +3032,31 @@ register_pytree_node_type(
   flatten=lambda x: (list(enumerate(x)), None),
   unflatten=lambda nodes, _: tuple(value for _, value in nodes),  # type: ignore
 )
+
+
+def _mutable_mapping_set_key(x: tp.MutableMapping[Key, tp.Any], key: Key, value: tp.Any):
+  x[key] = value
+
+
+def _mutable_mapping_pop_key(x: tp.MutableMapping[Key, tp.Any], key: Key):
+  x.pop(key)
+
+
 # dict
 register_pytree_node_type(
   dict,
   flatten=lambda x: (sorted(x.items()), None),
-  unflatten=lambda nodes, _: {key: value for key, value in nodes},  # type: ignore
+  unflatten=lambda nodes, _: dict(nodes),  # type: ignore
+  set_key=_mutable_mapping_set_key,
+  pop_key=_mutable_mapping_pop_key,
+)
+# State
+register_pytree_node_type(
+  State,
+  flatten=lambda x: (sorted(x.raw_mapping.items()), None),
+  unflatten=lambda nodes, _: State(nodes),  # type: ignore
+  set_key=_mutable_mapping_set_key,
+  pop_key=_mutable_mapping_pop_key,
 )
 # None
 register_pytree_node_type(
@@ -3048,3 +3064,4 @@ register_pytree_node_type(
   flatten=lambda x: ([], None),
   unflatten=lambda _, __: None,  # type: ignore
 )
+
