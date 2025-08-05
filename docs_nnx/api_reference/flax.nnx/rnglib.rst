@@ -8,4 +8,5 @@ rnglib
    :members: __init__
 .. autoclass:: RngStream
    :members:
+.. autofunction:: split_rngs
 .. autofunction:: reseed
