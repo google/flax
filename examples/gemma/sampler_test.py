@@ -229,7 +229,7 @@ class SamplerTest(absltest.TestCase):
         transformer_config, rngs=nnx.Rngs(params=0)
     )
     # Pre-cook the embedding matrix so that the output is deterministic.
-    transformer.embedder.input_embedding.value = jnp.eye(
+    transformer.embedder.input_embedding[...] = jnp.eye(
         vocab.GetPieceSize(), 32
     )
     sampler = sampler_lib.Sampler(
