@@ -102,9 +102,9 @@ class TestConvLinenConsistency(parameterized.TestCase):
       precision=precision,
     )
     variables = model.init(key, x)
-    model_nnx.kernel.value = variables['params']['kernel']
+    model_nnx.kernel[...] = variables['params']['kernel']
     if use_bias:
-      model_nnx.bias.value = variables['params']['bias']
+      model_nnx.bias[...] = variables['params']['bias']
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
@@ -171,10 +171,10 @@ class TestConvLinenConsistency(parameterized.TestCase):
       precision=precision,
     )
     variables = model.init(key, x)
-    model_nnx.kernel.value = variables['params']['kernel']
+    model_nnx.kernel[...] = variables['params']['kernel']
     if use_bias:
       assert model_nnx.bias is not None
-      model_nnx.bias.value = variables['params']['bias']
+      model_nnx.bias[...] = variables['params']['bias']
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
