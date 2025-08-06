@@ -192,5 +192,13 @@ class TestRngs(absltest.TestCase):
 
     np.testing.assert_allclose(y1, y2)
 
+  def test_random_helpers(self):
+    rngs = nnx.Rngs(0)
+
+    x1 = rngs.normal((2, 3))
+    x2 = rngs.default.normal((2, 3))
+
+    self.assertFalse(jnp.allclose(x1, x2))
+
 if __name__ == '__main__':
   absltest.main()
