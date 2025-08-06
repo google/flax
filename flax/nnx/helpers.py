@@ -152,6 +152,15 @@ def has_keyword_arg(func: tp.Callable[..., tp.Any], name: str) -> bool:
 
 @jax.jit
 def fix_checkpoint(checkpoint, model_class: nnx.Module, rngs: nnx.Rngs):
+  """Removes RNG keys from a >0.11 checkpoints
+  Args:
+    checkpoint: (pytree) The checkpoint to be fixed.
+    model_class: (nnx.Module) The class defining the model in the checkpoint.
+    rngs: (nnx.Rngs) The random number generator to use in the fixed checkpoint.
+  Returns:
+    The fixed checkpoint (pytree)
+  """
+
   # drop rngs keys
   flat_paths = nnx.traversals.flatten_mapping(checkpoint)
   flat_paths = {
