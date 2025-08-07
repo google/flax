@@ -24,6 +24,7 @@ import numpy as np
 from jax.experimental import mesh_utils
 from transformer import TransformerConfig, Transformer
 
+
 from flax import nnx
 from flax.training import train_state
 
@@ -32,6 +33,12 @@ if TYPE_CHECKING:
 
 Dtype = Any
 Shape = tuple[int, ...]
+
+# JAX version compatibility
+if hasattr(jax.sharding, 'use_mesh'):
+  set_mesh = jax.sharding.use_mesh
+else:
+  set_mesh = jax.set_mesh
 
 
 class TrainState(train_state.TrainState):
@@ -165,7 +172,7 @@ def setup_initial_state(
     return state
 
   # Initialization
-  with jax.set_mesh(mesh):
+  with set_mesh(mesh):
     state = sharded_init()
 
   state_sharding = nnx.get_named_sharding(state, mesh)

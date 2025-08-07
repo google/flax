@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 
 import jax
@@ -25,6 +24,12 @@ import flax
 from flax import linen as nn
 from flax import nnx
 from flax.nnx import bridge
+
+# JAX version compatibility
+if hasattr(jax.sharding, 'use_mesh'):
+  set_mesh = jax.sharding.use_mesh
+else:
+  set_mesh = jax.set_mesh
 
 
 class TestCompatibility(absltest.TestCase):
@@ -151,8 +156,10 @@ class TestCompatibility(absltest.TestCase):
   def test_linen_to_nnx_metadata(self):
     linen_module = nn.Dense(
       features=64,
-      kernel_init=nn.with_partitioning(nn.initializers.lecun_normal(), ('in', 'out')),
-      bias_init=nn.with_logical_partitioning(nn.initializers.zeros_init(), ('out-alias',),
+      kernel_init=nn.with_partitioning(nn.initializers.lecun_normal(),
+                                       ('in', 'out')),
+      bias_init=nn.with_logical_partitioning(nn.initializers.zeros_init(),
+                                             ('out-alias',),
                                              rules=(('out-alias', 'out'),)),
       )
     x = jax.numpy.ones((1, 32))
@@ -162,21 +169,21 @@ class TestCompatibility(absltest.TestCase):
     def create_sharded_nnx_module(x):
       model = bridge.lazy_init(bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)), x)
       state = nnx.state(model)
-      sharded_state = nnx.with_sharding_constraint(state, nnx.get_partition_spec(state))
+      sharded_state = jax.lax.with_sharding_constraint(state, nnx.get_partition_spec(state))
       nnx.update(model, sharded_state)
       return model
-    with self.mesh:
+    with set_mesh(self.mesh):
       nnx_model = create_sharded_nnx_module(x)
 
     # nn.Partitioned metadata boxes translated into valid nnx.Variable boxes.
     self.assertIsInstance(linen_vars['params']['kernel'], nn.Partitioned)
     self.assertIsInstance(linen_vars['params']['bias'], nn.LogicallyPartitioned)
     self.assertIsInstance(nnx_model.kernel, nnx.Variable)
-    assert nnx_model.kernel.sharding == ('in', 'out')
+    assert nnx_model.kernel.sharding_names == ('in', 'out')
     assert nnx_model.kernel.value.sharding.is_equivalent_to(
-      jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('in', 'out')), ndim=2)
+      jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('in', 'out')), ndim=2), f'{nnx_model.kernel.value.sharding = }'
 
-    assert nnx_model.bias.sharding == ('out-alias',)
+    assert nnx_model.bias.sharding_names == ('out-alias',)
     assert nnx_model.bias.sharding_rules == (('out-alias', 'out'),)
     assert nnx_model.bias.value.sharding.is_equivalent_to(
       jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('out',)), ndim=1)
@@ -396,11 +403,13 @@ class TestCompatibility(absltest.TestCase):
       nnx.Linear, 32, 64,
       kernel_init=nnx.with_partitioning(nnx.initializers.lecun_normal(), ('in', 'out')))
     x = jax.numpy.ones((1, 32))
-    y, variables = model.init_with_output(jax.random.key(0), x)
+    with set_mesh(self.mesh):
+      y, variables = model.init_with_output(jax.random.key(0), x)
+      pspec_tree = nn.get_partition_spec(variables)
     assert y.shape == (1, 64)
     self.assertIsInstance(variables['params']['kernel'], nnx.bridge.NNXMeta)
-    assert variables['params']['kernel'].metadata['sharding'] == ('in', 'out')
-    self.assertEqual(nn.get_partition_spec(variables)['params']['kernel'],
+    assert variables['params']['kernel'].metadata['sharding_names'] == ('in', 'out')
+    self.assertEqual(pspec_tree['params']['kernel'],
                      jax.sharding.PartitionSpec('in', 'out'))
     np.testing.assert_allclose(y, x @ variables['params']['kernel'].value)
 
@@ -476,8 +485,8 @@ class TestCompatibility(absltest.TestCase):
       def __call__(self, x):
         dot = bridge.to_linen(NNXInner, x.shape[-1], self.dout, self.dropout_rate, name='dot')
         logical_init = nn.with_logical_partitioning(
-          nn.initializers.lecun_normal(), ('out-alias',), rules=(('out-alias', 'out')))
-        b = self.param('b', logical_init, (1, self.dout))
+          nn.initializers.lecun_normal(), ('out-alias',), rules=(('out-alias', 'out'),))
+        b = self.param('b', logical_init, (2, self.dout))
         return dot(x) + b
 
     class NNXOuter(nnx.Module):
@@ -490,24 +499,26 @@ class TestCompatibility(absltest.TestCase):
     x = jax.random.normal(jax.random.key(0), (2, 4))
 
     # Test the RNG
-    model = bridge.lazy_init(NNXOuter(dout=3, dropout_rate=0.5,
-                                      rngs=nnx.Rngs(default=1, dropout=2)), x)
-    nnx.reseed(model, dropout=2)
-    y1, y2 = model(x), model(x)
-    # The dropout key of lowest NNX level still changes over stateful calls
-    assert not jnp.allclose(y1, y2)
-    # Another reseed resets the RNG key back
-    nnx.reseed(model, dropout=2)
-    np.testing.assert_array_equal(y1, model(x))
+    with set_mesh(self.mesh):
+      model = bridge.lazy_init(NNXOuter(dout=6, dropout_rate=0.5,
+                                        rngs=nnx.Rngs(default=1, dropout=2)), x)
+      nnx.reseed(model, dropout=2)
+      y1, y2 = model(x), model(x)
+      # The dropout key of lowest NNX level still changes over stateful calls
+      assert not jnp.allclose(y1, y2)
+      # Another reseed resets the RNG key back
+      nnx.reseed(model, dropout=2)
+      np.testing.assert_array_equal(y1, model(x))
 
     # Test the param value with disabled dropout
-    model = bridge.lazy_init(NNXOuter(dout=3, dropout_rate=0.,
-                                      rngs=nnx.Rngs(default=1, dropout=2)), x)
-    w, b = model.inner.dot['w'], model.inner.b
+    with set_mesh(self.mesh):
+      model = bridge.lazy_init(NNXOuter(dout=6, dropout_rate=0.,
+                                        rngs=nnx.Rngs(default=1, dropout=2)), x)
+      w, b = model.inner.dot['w'], model.inner.b
+      np.testing.assert_allclose(model(x), x @ w + b)
     self.assertIsInstance(w, nnx.Param)
-    np.testing.assert_allclose(model(x), x @ w + b)
-    assert hasattr(w, 'sharding') and w.sharding == ('in', 'out')
-    assert hasattr(b, 'sharding') and b.sharding == ('out-alias', )
+    assert hasattr(w, 'sharding_names') and w.sharding_names == ('in', 'out')
+    assert hasattr(b, 'sharding_names') and b.sharding_names == ('out-alias', )
 
   def test_linen_nnx_linen(self):
     # TODO: add when we can safely `lazy_init` the NNX module inside `ToLinen` without

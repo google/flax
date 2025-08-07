@@ -33,7 +33,6 @@ from collections.abc import Callable, Sequence
 
 import jax
 from jax import lax
-from jax.interpreters import pxla
 
 from flax import struct
 from flax.core import meta
@@ -61,17 +60,6 @@ class _UnassignedAxis:
 
 
 _unassigned_axis = _UnassignedAxis()
-
-
-def is_cpu_platform(mesh: jax.sharding.Mesh | None):
-  if mesh is None:
-    if _global_mesh_defined():
-      device = pxla.thread_resources.env.physical_mesh.devices.reshape(-1)[0]
-    else:
-      device = jax.devices()[0]
-  else:
-    device = mesh.devices.reshape(-1)[0]
-  return device.platform == 'cpu'
 
 
 def _mesh_assignment_free(new_assignment, existing_assignments):
@@ -188,12 +176,6 @@ def logical_to_mesh_sharding(
   )
 
 
-def _global_mesh_defined() -> bool:
-  """Checks if global mesh resource environment is defined."""
-  env = pxla.thread_resources.env
-  return env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
-
-
 class RulesFallback(enum.Enum):
   """How a sharding constraint should behave when no matching rule is found."""
 
@@ -208,7 +190,7 @@ def _with_sharding_constraint(
   mesh: jax.sharding.Mesh | None = None,
 ):
   """Wrapper for lax.with_sharding_constraint, no-op on cpu or outside jit."""
-  if is_cpu_platform(mesh) or (not _global_mesh_defined() and mesh is None):
+  if not meta.global_mesh_defined() and mesh is None:
     return x
   else:
     if mesh is not None and axis_resources is not None:
@@ -292,7 +274,7 @@ class LogicallyPartitioned(meta.Partitioned):
 
   def unbox(self, apply_constraint=True) -> Any:
     """Returns the wrapped value with the partitioning constraint applied."""
-    if apply_constraint and (_global_mesh_defined() or self.mesh is not None):
+    if apply_constraint and (meta.global_mesh_defined() or self.mesh is not None):
       return with_logical_constraint(
         self.value,
         self.get_partition_spec(),
@@ -306,7 +288,7 @@ class LogicallyPartitioned(meta.Partitioned):
     """Return a dict of metadata that can translate into an `nnx.Variable`."""
     metadata = vars(self)
     if 'names' in metadata:
-      metadata['sharding'] = metadata.pop('names')
+      metadata['sharding_names'] = metadata.pop('names')
     if 'rules' in metadata:
       metadata['sharding_rules'] = metadata.pop('rules')
     return metadata
@@ -314,7 +296,7 @@ class LogicallyPartitioned(meta.Partitioned):
   @classmethod
   def from_nnx_metadata(cls, metadata: dict[str, Any]):
     """Given a dict of `nnx.Variable` format metadata, create a `nn.LogicallyPartitioned`."""
-    metadata['names'] = metadata.pop('sharding')
+    metadata['names'] = metadata.pop('sharding_names')
     metadata['rules'] = metadata.pop('sharding_rules')
     fields = {x.name for x in dataclasses.fields(cls)}
     return cls(**{k: v for k, v in metadata.items() if k in fields})
