@@ -10,9 +10,9 @@ build:
   tools:
     python: "3.11"
 
-# Build documentation in the docs/ directory with Sphinx
+# Build documentation in the docs_nnx/ directory with Sphinx
 sphinx:
-  configuration: docs/conf.py
+  configuration: docs_nnx/conf.py
 
 # Optionally build your docs in additional formats such as PDF and ePub
 formats:
