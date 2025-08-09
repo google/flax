@@ -31,6 +31,7 @@
 
 import os
 import sys
+import doctest
 
 sys.path.insert(0, os.path.abspath('..'))
 # Include local extension.
@@ -161,6 +162,7 @@ nb_execution_raise_on_error = True
 always_document_param_types = True
 
 # -- doctest configuration -------------------------------------------------
+doctest_default_flags = doctest.NORMALIZE_WHITESPACE
 doctest_global_setup = """
 import jax
 import jax.numpy as jnp
