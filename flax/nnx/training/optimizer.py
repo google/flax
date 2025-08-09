@@ -169,7 +169,7 @@ class Optimizer(Pytree, tp.Generic[M]):
     def __getattribute__(self, name: str) -> tp.Any:
       if name == 'model' and name not in vars(self):
         raise AttributeError(
-          f"{type(self).__name__} does have attribute 'model' since Flax 0.11.0. "
+          f"{type(self).__name__} does not have attribute 'model' since Flax 0.11.0. "
           "To keep the previous behavior, use nnx.ModelAndOptimizer instead of nnx.Optimizer."
         )
       return super().__getattribute__(name)
