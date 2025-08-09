@@ -269,7 +269,7 @@ class ToLinen(linen.Module):
       initialized normally.
 
   Returns:
-    A stateful NNX module that behaves the same as the wrapped Linen module.
+    A Linen module that behaves the same as the wrapped NNX module.
   """
   nnx_class: tp.Callable[..., Module]
   args: tp.Sequence = ()
