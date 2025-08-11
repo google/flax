@@ -21,6 +21,7 @@ Activation functions
 .. autofunction:: relu6 as relu6,
 .. autofunction:: selu
 .. autofunction:: sigmoid
+.. autofunction:: identity
 .. autofunction:: silu
 .. autofunction:: soft_sign
 .. autofunction:: softmax

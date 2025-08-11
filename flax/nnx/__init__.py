@@ -80,6 +80,7 @@ from .nn.activations import relu as relu
 from .nn.activations import relu6 as relu6
 from .nn.activations import selu as selu
 from .nn.activations import sigmoid as sigmoid
+from .nn.activations import identity as identity
 from .nn.activations import silu as silu
 from .nn.activations import soft_sign as soft_sign
 from .nn.activations import softmax as softmax
