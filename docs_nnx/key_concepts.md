@@ -81,7 +81,7 @@ Your code likely needs more than one `jax.Array`. A **pytree** is a container st
 
 Many things are pytrees: Python dicts, lists, tuples, dataclasses, and more. The key is that a pytree can be "flattened" into multiple children, which are either pytrees or individual leaves - a `jax.Array` counts as a leaf. Other metadata of a pytree are stored in the `PyTreeDef` object, allowing "unflattening" to restore the old pytree.
 
-Pytree is the primary data holder in JAX. When JAX transforms see a pytree argument, they automatically trace its internal `jax.Array`s when compiling. Therefore, it's crucial to organize your data as pytrees. You can register your own classes as pytree nodes. [JAX pytree documentation](https://docs.jax.dev/en/latest/working-with-pytrees.html) has a thorough overview on pytrees and JAX APIs to manipulate them. 
+Pytree is the primary data holder in JAX. When JAX transforms see a pytree argument, they automatically trace its internal `jax.Array`s when compiling. Therefore, it's crucial to organize your data as pytrees. You can use [`flax.struct.dataclass`](https://flax.readthedocs.io/en/latest/api_reference/flax.struct.html#flax.struct.dataclass) to quickly construct a pytree node dataclass, or register your own classes via JAX API. [JAX pytree documentation](https://docs.jax.dev/en/latest/working-with-pytrees.html) has a thorough overview on pytrees and JAX APIs to manipulate them. 
 
 In Flax, a `Module` is a pytree, and variables are its flattenable data. This means you can directly run JAX transforms upon a Flax model.
 
@@ -103,7 +103,7 @@ linear = jax.tree.unflatten(treedef, [value for _, value in arrays])
      [ 0.6772455   0.2807398 ]
      [ 0.16276604  0.16813846]
      [ 0.310975   -0.43336964]]
-    treedef = PyTreeDef(CustomNode(Linear[(('_pytree__state', 'bias', 'kernel'), (('_pytree__nodes', frozenset({'kernel', '_pytree__state', 'bias'})), ('bias_init', <function zeros at 0x117826700>), ('dot_general', <function dot_general at 0x1172aa480>), ('dtype', None), ('in_features', 4), ('kernel_init', <function variance_scaling.<locals>.init at 0x120f45260>), ('out_features', 2), ('param_dtype', <class 'jax.numpy.float32'>), ('precision', None), ('promote_dtype', <function promote_dtype at 0x120f45440>), ('use_bias', True)))], [CustomNode(PytreeState[(False, False)], []), CustomNode(Param[()], [*]), CustomNode(Param[()], [*])]))
+    treedef = PyTreeDef(CustomNode(Linear[(('_pytree__state', 'bias', 'kernel'), (('_object__nodes', frozenset({'kernel', '_pytree__state', 'bias'})), ('bias_init', <function zeros at 0x117826700>), ('dot_general', <function dot_general at 0x1172aa480>), ('dtype', None), ('in_features', 4), ('kernel_init', <function variance_scaling.<locals>.init at 0x120f45260>), ('out_features', 2), ('param_dtype', <class 'jax.numpy.float32'>), ('precision', None), ('promote_dtype', <function promote_dtype at 0x120f45440>), ('use_bias', True)))], [CustomNode(ObjectState[(False, False)], []), CustomNode(Param[()], [*]), CustomNode(Param[()], [*])]))
 
 
 
