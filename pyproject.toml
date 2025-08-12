@@ -37,9 +37,6 @@ classifiers = [
 dynamic = ["version", "readme"]
 
 [project.optional-dependencies]
-all = [
-    "matplotlib",  # only needed for tensorboard export
-]
 testing = [
     "clu",
     "clu<=0.0.9; python_version<'3.10'",

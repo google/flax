@@ -1,16 +1,18 @@
+# Deprecation
+
+This folder contains the deprecated Flax Linen documentation. For the latest Flax NNX docs, check out the `docs_nnx` folder.
+
 # Where to find the docs
 
-The FLAX documentation can be found here:
-https://flax.readthedocs.io/en/latest/
+The FLAX Linen documentation can be found here: https://flax-linen.readthedocs.io/en/latest/
 
 # How to build the docs
 
 1. Clone the `flax` repository with `git clone https://github.com/google/flax.git`.
-2. In the main `flax` folder, install the required dependencies using `pip install -r docs/requirements.txt`.
-3. Install [`pandoc`](https://pandoc.org): `pip install pandoc`.
-4. [Optional] If you need to make any local changes to the docs, create and switch to a branch. Make your changes to the docs in that branch.
-5. To build the docs, in the `flax/docs` folder run the make script: `make html`. Alternatively, install [`entr`](https://github.com/eradman/entr/), which helps run arbitrary commands when files change. Then run `find ../ ! -regex '.*/[\.|\_].*' | entr -s 'make html'`.
-6. If the build is successful, you should get the `The HTML pages are in _build/html.` message. You can preview the docs in `flax/docs/_build/html`.
+1. In the main `flax` folder, install the required dependencies using `uv pip install -e .[docs]`.
+1. [Optional] If you need to make any local changes to the docs, create and switch to a branch. Make your changes to the docs in that branch.
+1. To build the docs, in the `flax/docs` folder run the make script: `make html`. Alternatively, install [`entr`](https://github.com/eradman/entr/), which helps run arbitrary commands when files change. Then run `find ../ ! -regex '.*/[\.|\_].*' | entr -s 'make html'`.
+1. If the build is successful, you should get the `The HTML pages are in _build/html.` message. You can preview the docs in `flax/docs/_build/html`.
 
 # How to run embedded code tests
 
