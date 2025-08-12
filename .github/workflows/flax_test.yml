@@ -85,19 +85,19 @@ jobs:
     needs: [pre-commit, commit-count, test-import]
     runs-on: ubuntu-24.04-16core
     strategy:
+      # Make sure to change `github_check_runs` in `copy.bara.sky` if you change the tests here.
       matrix:
         python-version: ['3.11', '3.12']
-        test-type: [doctest, pytest, pytype, mypy]
+        test-type: [doctest, pytest]
         jax-version: [newest]
-        exclude:
-          - test-type: pytype
-            python-version: '3.11'
-          - test-type: mypy
-            python-version: '3.11'
         include:
-          - python-version: '3.11'
-            test-type: pytest
-            jax-version: '0.6.0'  # keep in sync with jax pin in pyproject.toml
+          # keep in sync with internal type checking
+          - python-version: '3.12'
+            test-type: pytype
+            jax-version: 'newest'
+          - python-version: '3.12'
+            test-type: mypy
+            jax-version: 'newest'
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - name: Set up Python ${{ matrix.python-version }}
