@@ -96,8 +96,8 @@ class Average(Metric):
 
   def reset(self) -> None:
     """Reset this ``Metric``."""
-    self.total.value = jnp.array(0, dtype=jnp.float32)
-    self.count.value = jnp.array(0, dtype=jnp.int32)
+    self.total[...] = jnp.array(0, dtype=jnp.float32)
+    self.count[...] = jnp.array(0, dtype=jnp.int32)
 
   def update(self, **kwargs) -> None:
     """In-place update this ``Metric``. This method will use the value from
@@ -170,9 +170,9 @@ class Welford(Metric):
 
   def reset(self) -> None:
     """Reset this ``Metric``."""
-    self.count.value = jnp.array(0, dtype=jnp.uint32)
-    self.mean.value = jnp.array(0, dtype=jnp.float32)
-    self.m2.value = jnp.array(0, dtype=jnp.float32)
+    self.count[...] = jnp.array(0, dtype=jnp.uint32)
+    self.mean[...] = jnp.array(0, dtype=jnp.float32)
+    self.m2[...] = jnp.array(0, dtype=jnp.float32)
 
   def update(self, **kwargs) -> None:
     """In-place update this ``Metric``. This method will use the value from
