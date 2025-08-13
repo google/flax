@@ -15,6 +15,7 @@
 """Flax specific traceback_util functions."""
 
 from jax._src import traceback_util as jax_traceback_util
+from jax.extend import source_info_util
 
 from flax import config
 
@@ -38,7 +39,7 @@ def register_exclusion(path):
   _flax_exclusions.add(path)
   if _flax_filter_tracebacks:
     jax_traceback_util.register_exclusion(path)
-
+    source_info_util.register_exclusion(path)
 
 def hide_flax_in_tracebacks():
   """Hides Flax internal stack frames in tracebacks."""
