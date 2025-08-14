@@ -93,8 +93,10 @@ def _logical_to_mesh_axes(
   if rules is None:
     rules = get_logical_axis_rules()
   axis_name_counts = collections.Counter(array_dim_names)
+  # None and special values such as PartitionSpec.UNCONSTRAINED can appear more
+  # then once.
   dups = tuple(
-    k for k, v in axis_name_counts.items() if v > 1 and k is not None
+      k for k, v in axis_name_counts.items() if v > 1 and isinstance(k, str)
   )
   if dups:
     raise ValueError(
