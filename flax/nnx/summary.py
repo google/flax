@@ -520,8 +520,10 @@ def _unflatten_to_simple_structure(xs: list[tuple[tuple[tp.Any, ...], tp.Any]]):
             cursor[key] = {}
       cursor = cursor[key]
     if isinstance(cursor, list):
-      assert path[-1] == len(cursor)
-      cursor.append(value)
+      # Handle gaps in indices caused by JAX tree flattening omitting empty containers
+      while len(cursor) <= path[-1]:
+        cursor.append(None)
+      cursor[path[-1]] = value
     else:
       assert isinstance(cursor, dict)
       cursor[path[-1]] = value
