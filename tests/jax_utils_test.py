@@ -16,7 +16,7 @@
 
 from functools import partial
 import os
-import re
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -27,22 +27,6 @@ import jax.numpy as jnp
 import numpy as np
 
 NDEV = 4
-
-_xla_device_count_flag_regexp = (
-  r'[-]{0,2}xla_force_host_platform_device_count=(\d+)?(\s|$)'
-)
-
-
-def set_n_cpu_devices(n: int):
-  xla_flags = os.getenv('XLA_FLAGS', '')
-  xla_flags = re.sub(_xla_device_count_flag_regexp, '', xla_flags)
-  os.environ['XLA_FLAGS'] = ' '.join(
-    [f'--xla_force_host_platform_device_count={n}'] + xla_flags.split()
-  )
-
-
-def setUpModule():
-  set_n_cpu_devices(NDEV)
 
 
 class PadShardUnpadTest(chex.TestCase):

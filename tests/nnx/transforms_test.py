@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
+
 import dataclasses
 from functools import partial
 import typing as tp
@@ -25,6 +28,12 @@ from jax.experimental import checkify, mesh_utils
 import jax.numpy as jnp
 import numpy as np
 from flax import errors
+
+# JAX version compatibility
+if hasattr(jax.sharding, 'use_mesh'):
+  set_mesh = jax.sharding.use_mesh
+else:
+  set_mesh = jax.set_mesh
 
 
 class List(nnx.Module):
@@ -502,7 +511,7 @@ class TestShardMap(absltest.TestCase):
     @nnx.shard_map(mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None)
     def f(w, b, count):
       count += 1
-      self.assertEqual(w.shape, (w.shape[0], w.shape[1] // n_devices))
+      self.assertEqual(w.shape, (16, 32 // n_devices))
       self.assertEqual(b.shape, (32,))
 
     f(w, b, count)
@@ -600,8 +609,6 @@ class TestShardMap(absltest.TestCase):
       return jax.lax.psum(y, 'model')
 
     y = f(m, x)
-
-    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
 
 
 class TestGrad(parameterized.TestCase):
@@ -1699,10 +1706,10 @@ class TestScan(absltest.TestCase):
           3,
           3,
           kernel_init=nnx.with_metadata(
-            nnx.initializers.lecun_normal(), sharding=('din', 'dout')
+            nnx.initializers.lecun_normal(), sharding_names=('din', 'dout')
           ),
           bias_init=nnx.with_metadata(
-            nnx.initializers.zeros_init(), sharding=('dout',)
+            nnx.initializers.zeros_init(), sharding_names=('dout',)
           ),
           rngs=rngs,
         )
@@ -1714,27 +1721,30 @@ class TestScan(absltest.TestCase):
         x = self.linear(x)
         # test sharding layer axes is not present inside scan
         test.assertEqual(self.linear.kernel.shape, (3, 3))
-        test.assertEqual(self.linear.kernel.sharding, ('din', 'dout'))
+        test.assertEqual(self.linear.kernel.sharding_names, ('din', 'dout'))
         test.assertEqual(self.linear.bias.shape, (3,))
-        test.assertEqual(self.linear.bias.sharding, ('dout',))
+        test.assertEqual(self.linear.bias.sharding_names, ('dout',))
         return x, None
 
-    m = MLP(rngs=nnx.Rngs(0))
+    mesh = jax.make_mesh(((1, 1, 1)), ('layers', 'din', 'dout'))
+    with set_mesh(mesh):
+      m = MLP(rngs=nnx.Rngs(0))
 
     # test sharding layers axes is set
     self.assertEqual(m.linear.kernel.shape, (5, 3, 3))
-    self.assertEqual(m.linear.kernel.sharding, ('layers', 'din', 'dout'))
+    self.assertEqual(m.linear.kernel.sharding_names, ('layers', 'din', 'dout'))
     self.assertEqual(m.linear.bias.shape, (5, 3))
-    self.assertEqual(m.linear.bias.sharding, ('layers', 'dout'))
+    self.assertEqual(m.linear.bias.sharding_names, ('layers', 'dout'))
 
     x = jnp.ones((1, 3))
-    y, out = m(x)
+    with set_mesh(mesh):
+      y, out = m(x)
 
     # test sharding axes is preserved
     self.assertEqual(m.linear.kernel.shape, (5, 3, 3))
-    self.assertEqual(m.linear.kernel.sharding, ('layers', 'din', 'dout'))
+    self.assertEqual(m.linear.kernel.sharding_names, ('layers', 'din', 'dout'))
     self.assertEqual(m.linear.bias.shape, (5, 3))
-    self.assertEqual(m.linear.bias.sharding, ('layers', 'dout'))
+    self.assertEqual(m.linear.bias.sharding_names, ('layers', 'dout'))
 
   def test_cache_tracing_simple(self):
     n = 0
@@ -2329,7 +2339,7 @@ class TestVmap(absltest.TestCase):
     f(m, m, m)
 
   def test_equivalent_state_sharding_mapping(self):
-    m = nnx.Linear(3, 3, rngs=nnx.Rngs(0))
+    m = nnx.Linear(4, 4, rngs=nnx.Rngs(0))
 
     mesh = jax.sharding.Mesh(jax.devices(), ('mp',))
     sharding = jax.sharding.NamedSharding(
@@ -2348,7 +2358,7 @@ class TestVmap(absltest.TestCase):
   def test_captured_module_in_return_error(self):
     class Foo(nnx.Module):
       def __init__(self):
-        self.a = jnp.zeros((5, 5))
+        self.a = jnp.zeros((4, 4))
 
     m = Foo()
 
@@ -2360,7 +2370,7 @@ class TestVmap(absltest.TestCase):
       errors.TraceContextError,
       r'Trying to extract graph node from different trace level.*Foo',
     ):
-      x = jnp.zeros((5,))
+      x = jnp.zeros((4,))
       f(x)
 
   def test_vmap_and_cond_passthrough(self):
@@ -2489,9 +2499,12 @@ class TestVmap(absltest.TestCase):
         ),
       )
 
-    m = create_block(nnx.Rngs(0))
+
+    mesh = jax.make_mesh(((1, 1, 1)), ('a', 'b', 'c'))
+    with set_mesh(mesh):
+      m = create_block(nnx.Rngs(0))
     self.assertEqual(m.kernel.value.shape, (5, 16, 32))
-    self.assertEqual(m.kernel.sharding, ('c', 'a', 'b'))
+    self.assertEqual(m.kernel.sharding_names, ('c', 'a', 'b'))
 
   def test_state_axes_from_state(self):
     class Model(nnx.Module):
