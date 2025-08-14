@@ -268,6 +268,9 @@ class Variable(tp.Generic[A], reprlib.Representable):
     if hasattr(var_t, 'on_remove_axis') and 'on_remove_axis' not in metadata:
       metadata['on_remove_axis'] = var_t.on_remove_axis
 
+    if 'sharding' in metadata:
+      metadata['sharding_names'] = metadata.pop('sharding')
+
     object.__setattr__(self, '_var_metadata', metadata)
     # run create_value hooks
     object.__setattr__(self, 'raw_value', self.create_value(self.raw_value))

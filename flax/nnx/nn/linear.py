@@ -156,7 +156,6 @@ class LinearGeneral(Module):
     bias_init: Initializer = default_bias_init,
     precision: PrecisionLike = None,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
-    # Deprecated. Will be removed.
     dot_general: DotGeneralT | None = None,
     dot_general_cls: tp.Any = None,
     rngs: rnglib.Rngs,

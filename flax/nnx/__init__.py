@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from flax.core.spmd import logical_axis_rules as logical_axis_rules
 from flax.linen.pooling import avg_pool as avg_pool
 from flax.linen.pooling import max_pool as max_pool
 from flax.linen.pooling import min_pool as min_pool
@@ -127,7 +128,7 @@ from .spmd import PARTITION_NAME as PARTITION_NAME
 from .spmd import get_partition_spec as get_partition_spec
 from .spmd import get_named_sharding as get_named_sharding
 from .spmd import with_partitioning as with_partitioning
-from .spmd import with_sharding_constraint as with_sharding_constraint
+from .spmd import get_abstract_model as get_abstract_model
 from .statelib import State as State
 from .statelib import to_flat_state as to_flat_state
 from .statelib import from_flat_state as from_flat_state

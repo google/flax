@@ -391,19 +391,19 @@ Let's see an example of this in action:
 
 ```{code-cell} ipython3
 class Weights(nnx.Module):
-  def __init__(self, array: jax.Array, sharding: tuple[str | None, ...]):
-    self.param = nnx.Param(array, sharding=sharding)
+  def __init__(self, array: jax.Array, sharding_names: tuple[str | None, ...]):
+    self.param = nnx.Param(array, sharding_names=sharding_names)
 
-m = Weights(jnp.ones((3, 4, 5)), sharding=('a', 'b', None))
+m = Weights(jnp.ones((3, 4, 5)), sharding_names=('a', 'b', None))
 
 @nnx.vmap(in_axes=1, transform_metadata={nnx.PARTITION_NAME: 'b'})
 def f(m: Weights):
   print(f'Inner {m.param.shape = }')
-  print(f'Inner {m.param.sharding = }')
+  print(f'Inner {m.param.sharding_names = }')
 
 f(m)
 print(f'Outter {m.param.shape = }')
-print(f'Outter {m.param.sharding = }')
+print(f'Outter {m.param.sharding_names = }')
 ```
 
 Here, you added a `sharding` metadata to the `nnx.Param` variables, and used `transform_metadata` to update the `sharding` metadata to reflect the axis changes. Specifically, you can see that the first axis `b` was removed from the `sharding` metadata when inside of `nnx.vmap`, and then added back when outside of `nnx.vmap`.
@@ -413,9 +413,9 @@ You can verify that this also works when `nnx.Module`s are created inside the tr
 ```{code-cell} ipython3
 @nnx.vmap(out_axes=1, axis_size=4, transform_metadata={nnx.PARTITION_NAME: 'b'})
 def init_vmap():
-  return Weights(jnp.ones((3, 5)), sharding=('a', None))
+  return Weights(jnp.ones((3, 5)), sharding_names=('a', None))
 
 m = init_vmap()
 print(f'Outter {m.param.shape = }')
-print(f'Outter {m.param.sharding = }')
+print(f'Outter {m.param.sharding_names = }')
 ```
