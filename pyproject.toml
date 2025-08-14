@@ -39,7 +39,6 @@ dynamic = ["version", "readme"]
 [project.optional-dependencies]
 testing = [
     "clu",
-    "clu<=0.0.9; python_version<'3.10'",
     "einops",
     "gymnasium[atari, accept-rom-license]",
     "jaxlib",
@@ -57,9 +56,9 @@ testing = [
     "sentencepiece",
     "tensorflow_text>=2.11.0; platform_system!='Darwin'",
     "tensorflow_datasets",
-    "tensorflow>=2.12.0", # to fix Numpy np.bool8 deprecation error
+    "tensorflow>=2.20.0",
     "torch",
-    "treescope>=0.1.1; python_version>='3.10'",
+    "treescope>=0.1.1",
     "cloudpickle>=3.0.0",
     "ale-py>=0.10.2",
 ]
