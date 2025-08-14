@@ -87,7 +87,7 @@ jobs:
     strategy:
       # Make sure to change `github_check_runs` in `copy.bara.sky` if you change the tests here.
       matrix:
-        python-version: ['3.11', '3.12']
+        python-version: ['3.11', '3.12', '3.13']
         test-type: [doctest, pytest]
         jax-version: [newest]
         include:
