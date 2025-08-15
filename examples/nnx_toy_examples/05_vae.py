@@ -138,7 +138,7 @@ def train_step(model: VAE, optimizer: nnx.Optimizer, x: jax.Array):
     return loss
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(model, grads)
+  optimizer.update(grads)
 
   return loss
 
