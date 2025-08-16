@@ -161,6 +161,26 @@ class TestMutableArrayGraph(absltest.TestCase):
     self.assertIsNot(m2, m3)
     self.assertIsNot(m2.a, m3.a)
 
+  def test_to_arrays_example(self):
+
+    node = [jnp.array(1.0), nnx.array_ref(jnp.array(2.0))]
+    mutable_node = nnx.to_refs(node)
+    assert nnx.is_array_ref(mutable_node[0])
+    assert nnx.is_array_ref(mutable_node[1])
+
+    shared_array = jnp.array(1.0)
+    node = [shared_array, shared_array]
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found duplicate at path'
+    ):
+      nnx.to_refs(node)
+
+    node = [jnp.array(1.0), jnp.array(2.0)]
+    mutable_node = nnx.to_refs(node, only=lambda path, x: path[0] == 0)
+    assert isinstance(mutable_node[0], nnx.ArrayRef)
+    assert isinstance(mutable_node[1], jax.Array)
+
   def test_freeze_and_mutable_with_filter(self):
     class Foo(nnx.Module):
       def __init__(self):

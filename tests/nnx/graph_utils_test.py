@@ -1118,6 +1118,19 @@ class TestGraphUtils(absltest.TestCase):
     self.assertLen(jax.tree.leaves(node), 1)
     self.assertLen(jax.tree.leaves(popped), 2)
 
+  def test_find_duplicates(self):
+    class SharedModules(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.a = nnx.Linear(1, 1, rngs=rngs)
+        self.b = nnx.Linear(1, 1, rngs=rngs)
+        self.c = self.a  # shared Module
+
+    model = SharedModules(nnx.Rngs(0))
+    duplicates = nnx.find_duplicates(model)
+
+    self.assertLen(duplicates, 1)
+    self.assertEqual(duplicates[0], [('a',), ('c',)])
+
 class SimpleModule(nnx.Module):
   pass
 

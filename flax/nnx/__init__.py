@@ -52,6 +52,7 @@ from .graph import pop as pop
 from .graph import state as state
 from .graph import graphdef as graphdef
 from .graph import iter_graph as iter_graph
+from .graph import find_duplicates as find_duplicates
 from .graph import call as call
 from .graph import SplitContext as SplitContext
 from .graph import split_context as split_context
