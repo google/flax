@@ -11,7 +11,6 @@ jupytext:
 # Array Refs (experimental)
 
 ```{code-cell} ipython3
-import jax.experimental
 from flax import nnx
 import jax
 import jax.numpy as jnp
@@ -195,12 +194,14 @@ print(get_error(f, x, x))
 class SharedVariables(nnx.Pytree):
   def __init__(self):
     self.a = nnx.Variable(jnp.array(0))
-    self.b = self.a
+    self.b = nnx.Variable(jnp.array(1))
+    self.c = self.a
 
 class SharedModules(nnx.Pytree):
   def __init__(self):
-    self.a = Linear(1, 1, rngs=nnx.Rngs(0))
-    self.b = self.a
+    self.d = Linear(1, 1, rngs=nnx.Rngs(0))
+    self.e = Linear(1, 1, rngs=nnx.Rngs(0))
+    self.f = self.d
 
 @jax.jit
 def g(pytree):
@@ -212,6 +213,14 @@ with nnx.use_refs(True):
 
 print("SharedVariables", get_error(g, shared_variables))
 print("SharedModules", get_error(g, shared_modules))
+```
+
+```{code-cell} ipython3
+if (duplicates := nnx.find_duplicates(shared_variables)):
+  print("shared variables duplicates:", duplicates)
+
+if (duplicates := nnx.find_duplicates(shared_modules)):
+  print("shared modules duplicates:  ", duplicates)
 ```
 
 ```{code-cell} ipython3

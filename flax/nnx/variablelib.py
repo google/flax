@@ -48,7 +48,7 @@ RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 if hasattr(jax, 'array_ref') and hasattr(jax, 'ArrayRef'):
   from jax import array_ref # type: ignore[import-untyped]
   from jax import ArrayRef  # type: ignore[import-untyped]
-else:
+elif not tp.TYPE_CHECKING:
   from jax._src.core import mutable_array, MutableArray
   array_ref = mutable_array
   ArrayRef = MutableArray
