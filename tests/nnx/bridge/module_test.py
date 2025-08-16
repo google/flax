@@ -312,7 +312,7 @@ class TestBridgeModule(absltest.TestCase):
       def __call__(self, x):
         # Required check to avoid state update in `init()`. Can this be avoided?
         if not bridge.current_module().is_initializing():
-          self.count.value = self.count.value + 1
+          self.count[...] = self.count.value + 1
         x = self.linear(x)
         x = self.dropout(x)
         return x
