@@ -195,7 +195,8 @@ Learn more
    mnist_tutorial
    why
    key_concepts
-   guides/index
+   guides_basic
+   guides_advanced
    migrating/index
    examples/index
    nnx_glossary
