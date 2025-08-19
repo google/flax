@@ -35,8 +35,7 @@ Let's begin by creating a Linear `Module`. As shown next, dynamic state is usual
 ```{code-cell} ipython3
 class Linear(nnx.Module):
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-    key = rngs.params()
-    self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
+    self.w = nnx.Param(rngs.params.uniform((din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
     self.din, self.dout = din, dout
 
@@ -128,8 +127,8 @@ class LoraParam(nnx.Param): pass
 class LoraLinear(nnx.Module):
   def __init__(self, linear: Linear, rank: int, rngs: nnx.Rngs):
     self.linear = linear
-    self.A = LoraParam(jax.random.normal(rngs(), (linear.din, rank)))
-    self.B = LoraParam(jax.random.normal(rngs(), (rank, linear.dout)))
+    self.A = LoraParam(rngs.normal((linear.din, rank)))
+    self.B = LoraParam(rngs.normal((rank, linear.dout)))
 
   def __call__(self, x: jax.Array):
     return self.linear(x) + x @ self.A @ self.B
@@ -235,7 +234,7 @@ class Count(nnx.Variable): pass
 
 class StatefulLinear(nnx.Module):
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-    self.w = nnx.Param(jax.random.uniform(rngs(), (din, dout)))
+    self.w = nnx.Param(rngs.uniform((din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
     self.count = Count(jnp.array(0, dtype=jnp.uint32))
 
