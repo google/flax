@@ -247,7 +247,6 @@ class Dense(Module):
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   promote_dtype: PromoteDtypeFn = promote_dtype
-  # Deprecated. Will be removed.
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
 

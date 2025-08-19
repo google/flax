@@ -111,16 +111,9 @@ export FLAX_PROFILE=1
 
 if $RUN_PYTEST; then
   echo "=== RUNNING PYTESTS ==="
-  # Run some test on separate process, avoiding device configs poluting each other
-  PYTEST_IGNORE=
-  for file in "tests/jax_utils_test.py"; do
-      echo "pytest -n auto $file $PYTEST_OPTS"
-      pytest -n auto $file $PYTEST_OPTS
-      PYTEST_IGNORE+=" --ignore=$file"
-  done
   # Run battery of core FLAX API tests.
-  echo "pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE"
-  pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
+  echo "XLA_FLAGS='--xla_force_host_platform_device_count=4' pytest -n auto tests $PYTEST_OPTS"
+  XLA_FLAGS='--xla_force_host_platform_device_count=4' pytest -n auto tests $PYTEST_OPTS
   # Run nnx tests
   pytest -n auto docs/_ext/codediff_test.py $PYTEST_OPTS $PYTEST_IGNORE
   pytest -n auto docs_nnx/_ext/codediff_test.py $PYTEST_OPTS $PYTEST_IGNORE

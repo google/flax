@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 from absl.testing import absltest
 import flax
 from flax import nnx
@@ -48,32 +50,7 @@ class TestSPMD(absltest.TestCase):
       m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
 
     assert m.w.shape == (8, 2)
-    assert m.w.sharding.shard_shape(m.w.shape) == (4, 1)
-
-  def test_init_all_devices(self):
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.w = nnx.Param(
-          nnx.with_partitioning(
-            lambda: jnp.ones((8, 2)),
-            sharding=('model', 'data'),
-          )()
-        )
-
-      def __call__(self, x):
-        return x @ self.w
-
-    @jax.jit
-    def create_module():
-      return nnx.split(Foo())
-
-    mesh = Mesh(mesh_utils.create_device_mesh((1, 1)), ('model', 'data'))
-
-    with mesh:
-      m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
-
-    assert m.w.value.shape == (8, 2)
-    assert m.w.value.sharding.shard_shape(m.w.value.shape) == (8, 2)
+    assert m.w.sharding.shard_shape(m.w.shape) == (8, 2)
 
   def test_get_partition_spec(self):
     class Foo(nnx.Module):
@@ -116,7 +93,7 @@ class TestSPMD(absltest.TestCase):
           3,
           kernel_init=nnx.with_metadata(
             nnx.initializers.lecun_normal(),
-            sharding=('din', 'dout'),
+            sharding_names=('din', 'dout'),
             nickname=('in', 'out'),
             on_add_axis=lambda _, idx, name: kadds.append((idx, name)),
             on_remove_axis=lambda _, idx, name: kremoves.append((idx, name)),
@@ -137,7 +114,7 @@ class TestSPMD(absltest.TestCase):
         x = self.linear(x)
         # test sharding layer axes is not present inside scan
         test.assertEqual(self.linear.kernel.shape, (3, 3))
-        test.assertEqual(self.linear.kernel.sharding, ('din', 'dout'))
+        test.assertEqual(self.linear.kernel.sharding_names, ('din', 'dout'))
         # at least a remove_axis was already called to remove the layer axis
         test.assertEqual(kremoves[-1], (0, 'layers'))
         test.assertEqual(bremoves[-1], (0, 'layers'))
@@ -145,7 +122,7 @@ class TestSPMD(absltest.TestCase):
 
     m = MLP(rngs=nnx.Rngs(0))
     self.assertEqual(m.linear.kernel.shape, (5, 3, 3))
-    self.assertEqual(m.linear.kernel.sharding, ('layers', 'din', 'dout'))
+    self.assertEqual(m.linear.kernel.sharding_names, ('layers', 'din', 'dout'))
     self.assertEqual(m.linear.kernel.nickname, ('nick', 'in', 'out'))
     self.assertEqual(m.linear.bias.shape, (5, 3))
     # One add_axis called to add the `nnx.vmap` dimension

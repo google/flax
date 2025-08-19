@@ -20,6 +20,11 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+# JAX version compatibility
+if hasattr(jax.sharding, 'use_mesh'):
+  set_mesh = jax.sharding.use_mesh
+else:
+  set_mesh = jax.set_mesh
 
 def assert_equal(path, x, y):
   np.testing.assert_array_equal(x, y, err_msg=f'Mismatch at path: {path}')
@@ -70,22 +75,23 @@ class TestOptimizer(parameterized.TestCase):
     optimizer.update(model, grads)
 
   def test_sharding_propagation(self):
-    model = nnx.Linear(
-        2,
-        3,
-        rngs=nnx.Rngs(0),
-        kernel_init=nnx.with_partitioning(
-            nnx.initializers.lecun_normal(),
-            sharding=('a', 'b'),
-        ),
-        use_bias=False,
-    )
-    optimizer = nnx.Optimizer(model, optax.adamw(0.1), wrt=nnx.Param)
+    with set_mesh(jax.make_mesh(((1, 1)), ('a', 'b'))):
+      model = nnx.Linear(
+          2,
+          3,
+          rngs=nnx.Rngs(0),
+          kernel_init=nnx.with_partitioning(
+              nnx.initializers.lecun_normal(),
+              sharding=('a', 'b'),
+          ),
+          use_bias=False,
+      )
+      optimizer = nnx.Optimizer(model, optax.adamw(0.1), wrt=nnx.Param)
 
     state = nnx.state(optimizer)
     partition_spec = nnx.get_partition_spec(state)
 
-    self.assertEqual(state['opt_state'][0]['mu']['kernel'].sharding, ('a', 'b'))
+    self.assertEqual(state['opt_state'][0]['mu']['kernel'].sharding_names, ('a', 'b'))
     self.assertEqual(
       partition_spec['opt_state'][0]['mu']['kernel'].value,
       jax.sharding.PartitionSpec('a', 'b'),
