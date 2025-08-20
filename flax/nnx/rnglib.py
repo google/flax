@@ -17,6 +17,7 @@ import functools
 import typing as tp
 
 import jax
+from jax import random
 import jax.numpy as jnp
 
 from flax import errors, struct
@@ -55,9 +56,9 @@ class RngStream(Pytree):
     tag: str,
   ):
     if isinstance(key, int):
-      key = jax.random.key(key)
+      key = random.key(key)
     elif isinstance(key, jax.Array) and key.dtype == jnp.uint32:
-      key = jax.random.wrap_key_data(key)
+      key = random.wrap_key_data(key)
 
     if not isinstance(key, jax.Array) or not jnp.issubdtype(key.dtype, jax.dtypes.prng_key):
       raise ValueError(f'Invalid rng value: {key}, expected a '
@@ -73,222 +74,222 @@ class RngStream(Pytree):
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
-    key = jax.random.fold_in(self.key[...], self.count[...])
+    key = random.fold_in(self.key[...], self.count[...])
     self.count[...] += 1
     return key
 
   def fork(self, *, split: int | tuple[int, ...] | None = None):
     key = self()
     if split is not None:
-      key = jax.random.split(key, split)
+      key = random.split(key, split)
     return type(self)(key, tag=self.tag)
 
   if tp.TYPE_CHECKING:
-    bits = staticmethod(functools.partial(jax.random.bits, jax.random.key(0)))
+    bits = staticmethod(functools.partial(random.bits, random.key(0)))
     uniform = staticmethod(
-      functools.partial(jax.random.uniform, jax.random.key(0))
+      functools.partial(random.uniform, random.key(0))
     )
     randint = staticmethod(
-      functools.partial(jax.random.randint, jax.random.key(0))
+      functools.partial(random.randint, random.key(0))
     )
     permutation = staticmethod(
-      functools.partial(jax.random.permutation, jax.random.key(0))
+      functools.partial(random.permutation, random.key(0))
     )
-    choice = staticmethod(functools.partial(jax.random.choice, jax.random.key(0)))
-    normal = staticmethod(functools.partial(jax.random.normal, jax.random.key(0)))
+    choice = staticmethod(functools.partial(random.choice, random.key(0)))
+    normal = staticmethod(functools.partial(random.normal, random.key(0)))
     multivariate_normal = staticmethod(
-      functools.partial(jax.random.multivariate_normal, jax.random.key(0))
+      functools.partial(random.multivariate_normal, random.key(0))
     )
     truncated_normal = staticmethod(
-      functools.partial(jax.random.truncated_normal, jax.random.key(0))
+      functools.partial(random.truncated_normal, random.key(0))
     )
     bernoulli = staticmethod(
-      functools.partial(jax.random.bernoulli, jax.random.key(0))
+      functools.partial(random.bernoulli, random.key(0))
     )
-    beta = staticmethod(functools.partial(jax.random.beta, jax.random.key(0)))
-    cauchy = staticmethod(functools.partial(jax.random.cauchy, jax.random.key(0)))
+    beta = staticmethod(functools.partial(random.beta, random.key(0)))
+    cauchy = staticmethod(functools.partial(random.cauchy, random.key(0)))
     dirichlet = staticmethod(
-      functools.partial(jax.random.dirichlet, jax.random.key(0))
+      functools.partial(random.dirichlet, random.key(0))
     )
     exponential = staticmethod(
-      functools.partial(jax.random.exponential, jax.random.key(0))
+      functools.partial(random.exponential, random.key(0))
     )
-    gamma = staticmethod(functools.partial(jax.random.gamma, jax.random.key(0)))
+    gamma = staticmethod(functools.partial(random.gamma, random.key(0)))
     loggamma = staticmethod(
-      functools.partial(jax.random.loggamma, jax.random.key(0))
+      functools.partial(random.loggamma, random.key(0))
     )
     poisson = staticmethod(
-      functools.partial(jax.random.poisson, jax.random.key(0))
+      functools.partial(random.poisson, random.key(0))
     )
-    gumbel = staticmethod(functools.partial(jax.random.gumbel, jax.random.key(0)))
+    gumbel = staticmethod(functools.partial(random.gumbel, random.key(0)))
     categorical = staticmethod(
-      functools.partial(jax.random.categorical, jax.random.key(0))
+      functools.partial(random.categorical, random.key(0))
     )
     laplace = staticmethod(
-      functools.partial(jax.random.laplace, jax.random.key(0))
+      functools.partial(random.laplace, random.key(0))
     )
     logistic = staticmethod(
-      functools.partial(jax.random.logistic, jax.random.key(0))
+      functools.partial(random.logistic, random.key(0))
     )
-    pareto = staticmethod(functools.partial(jax.random.pareto, jax.random.key(0)))
-    t = staticmethod(functools.partial(jax.random.t, jax.random.key(0)))
+    pareto = staticmethod(functools.partial(random.pareto, random.key(0)))
+    t = staticmethod(functools.partial(random.t, random.key(0)))
     chisquare = staticmethod(
-      functools.partial(jax.random.chisquare, jax.random.key(0))
+      functools.partial(random.chisquare, random.key(0))
     )
-    f = staticmethod(functools.partial(jax.random.f, jax.random.key(0)))
+    f = staticmethod(functools.partial(random.f, random.key(0)))
     rademacher = staticmethod(
-      functools.partial(jax.random.rademacher, jax.random.key(0))
+      functools.partial(random.rademacher, random.key(0))
     )
     maxwell = staticmethod(
-      functools.partial(jax.random.maxwell, jax.random.key(0))
+      functools.partial(random.maxwell, random.key(0))
     )
     double_sided_maxwell = staticmethod(
-      functools.partial(jax.random.double_sided_maxwell, jax.random.key(0))
+      functools.partial(random.double_sided_maxwell, random.key(0))
     )
     weibull_min = staticmethod(
-      functools.partial(jax.random.weibull_min, jax.random.key(0))
+      functools.partial(random.weibull_min, random.key(0))
     )
     orthogonal = staticmethod(
-      functools.partial(jax.random.orthogonal, jax.random.key(0))
+      functools.partial(random.orthogonal, random.key(0))
     )
     generalized_normal = staticmethod(
-      functools.partial(jax.random.generalized_normal, jax.random.key(0))
+      functools.partial(random.generalized_normal, random.key(0))
     )
-    ball = staticmethod(functools.partial(jax.random.ball, jax.random.key(0)))
+    ball = staticmethod(functools.partial(random.ball, random.key(0)))
     rayleigh = staticmethod(
-      functools.partial(jax.random.rayleigh, jax.random.key(0))
+      functools.partial(random.rayleigh, random.key(0))
     )
-    wald = staticmethod(functools.partial(jax.random.wald, jax.random.key(0)))
+    wald = staticmethod(functools.partial(random.wald, random.key(0)))
     geometric = staticmethod(
-      functools.partial(jax.random.geometric, jax.random.key(0))
+      functools.partial(random.geometric, random.key(0))
     )
     triangular = staticmethod(
-      functools.partial(jax.random.triangular, jax.random.key(0))
+      functools.partial(random.triangular, random.key(0))
     )
     lognormal = staticmethod(
-      functools.partial(jax.random.lognormal, jax.random.key(0))
+      functools.partial(random.lognormal, random.key(0))
     )
     binomial = staticmethod(
-      functools.partial(jax.random.binomial, jax.random.key(0))
+      functools.partial(random.binomial, random.key(0))
     )
     multinomial = staticmethod(
-      functools.partial(jax.random.multinomial, jax.random.key(0))
+      functools.partial(random.multinomial, random.key(0))
     )
   else:
 
     def bits(self, *args, **kwargs):
-      return jax.random.bits(self(), *args, **kwargs)
+      return random.bits(self(), *args, **kwargs)
 
     def uniform(self, *args, **kwargs):
-      return jax.random.uniform(self(), *args, **kwargs)
+      return random.uniform(self(), *args, **kwargs)
 
     def randint(self, *args, **kwargs):
-      return jax.random.randint(self(), *args, **kwargs)
+      return random.randint(self(), *args, **kwargs)
 
     def permutation(self, *args, **kwargs):
-      return jax.random.permutation(self(), *args, **kwargs)
+      return random.permutation(self(), *args, **kwargs)
 
     def choice(self, *args, **kwargs):
-      return jax.random.choice(self(), *args, **kwargs)
+      return random.choice(self(), *args, **kwargs)
 
     def normal(self, *args, **kwargs):
-      return jax.random.normal(self(), *args, **kwargs)
+      return random.normal(self(), *args, **kwargs)
 
     def multivariate_normal(self, *args, **kwargs):
-      return jax.random.multivariate_normal(self(), *args, **kwargs)
+      return random.multivariate_normal(self(), *args, **kwargs)
 
     def truncated_normal(self, *args, **kwargs):
-      return jax.random.truncated_normal(self(), *args, **kwargs)
+      return random.truncated_normal(self(), *args, **kwargs)
 
     def bernoulli(self, *args, **kwargs):
-      return jax.random.bernoulli(self(), *args, **kwargs)
+      return random.bernoulli(self(), *args, **kwargs)
 
     def beta(self, *args, **kwargs):
-      return jax.random.beta(self(), *args, **kwargs)
+      return random.beta(self(), *args, **kwargs)
 
     def cauchy(self, *args, **kwargs):
-      return jax.random.cauchy(self(), *args, **kwargs)
+      return random.cauchy(self(), *args, **kwargs)
 
     def dirichlet(self, *args, **kwargs):
-      return jax.random.dirichlet(self(), *args, **kwargs)
+      return random.dirichlet(self(), *args, **kwargs)
 
     def exponential(self, *args, **kwargs):
-      return jax.random.exponential(self(), *args, **kwargs)
+      return random.exponential(self(), *args, **kwargs)
 
     def gamma(self, *args, **kwargs):
-      return jax.random.gamma(self(), *args, **kwargs)
+      return random.gamma(self(), *args, **kwargs)
 
     def loggamma(self, *args, **kwargs):
-      return jax.random.loggamma(self(), *args, **kwargs)
+      return random.loggamma(self(), *args, **kwargs)
 
     def poisson(self, *args, **kwargs):
-      return jax.random.poisson(self(), *args, **kwargs)
+      return random.poisson(self(), *args, **kwargs)
 
     def gumbel(self, *args, **kwargs):
-      return jax.random.gumbel(self(), *args, **kwargs)
+      return random.gumbel(self(), *args, **kwargs)
 
     def categorical(self, *args, **kwargs):
-      return jax.random.categorical(self(), *args, **kwargs)
+      return random.categorical(self(), *args, **kwargs)
 
     def laplace(self, *args, **kwargs):
-      return jax.random.laplace(self(), *args, **kwargs)
+      return random.laplace(self(), *args, **kwargs)
 
     def logistic(self, *args, **kwargs):
-      return jax.random.logistic(self(), *args, **kwargs)
+      return random.logistic(self(), *args, **kwargs)
 
     def pareto(self, *args, **kwargs):
-      return jax.random.pareto(self(), *args, **kwargs)
+      return random.pareto(self(), *args, **kwargs)
 
     def t(self, *args, **kwargs):
-      return jax.random.t(self(), *args, **kwargs)
+      return random.t(self(), *args, **kwargs)
 
     def chisquare(self, *args, **kwargs):
-      return jax.random.chisquare(self(), *args, **kwargs)
+      return random.chisquare(self(), *args, **kwargs)
 
     def f(self, *args, **kwargs):
-      return jax.random.f(self(), *args, **kwargs)
+      return random.f(self(), *args, **kwargs)
 
     def rademacher(self, *args, **kwargs):
-      return jax.random.rademacher(self(), *args, **kwargs)
+      return random.rademacher(self(), *args, **kwargs)
 
     def maxwell(self, *args, **kwargs):
-      return jax.random.maxwell(self(), *args, **kwargs)
+      return random.maxwell(self(), *args, **kwargs)
 
     def double_sided_maxwell(self, *args, **kwargs):
-      return jax.random.double_sided_maxwell(self(), *args, **kwargs)
+      return random.double_sided_maxwell(self(), *args, **kwargs)
 
     def weibull_min(self, *args, **kwargs):
-      return jax.random.weibull_min(self(), *args, **kwargs)
+      return random.weibull_min(self(), *args, **kwargs)
 
     def orthogonal(self, *args, **kwargs):
-      return jax.random.orthogonal(self(), *args, **kwargs)
+      return random.orthogonal(self(), *args, **kwargs)
 
     def generalized_normal(self, *args, **kwargs):
-      return jax.random.generalized_normal(self(), *args, **kwargs)
+      return random.generalized_normal(self(), *args, **kwargs)
 
     def ball(self, *args, **kwargs):
-      return jax.random.ball(self(), *args, **kwargs)
+      return random.ball(self(), *args, **kwargs)
 
     def rayleigh(self, *args, **kwargs):
-      return jax.random.rayleigh(self(), *args, **kwargs)
+      return random.rayleigh(self(), *args, **kwargs)
 
     def wald(self, *args, **kwargs):
-      return jax.random.wald(self(), *args, **kwargs)
+      return random.wald(self(), *args, **kwargs)
 
     def geometric(self, *args, **kwargs):
-      return jax.random.geometric(self(), *args, **kwargs)
+      return random.geometric(self(), *args, **kwargs)
 
     def triangular(self, *args, **kwargs):
-      return jax.random.triangular(self(), *args, **kwargs)
+      return random.triangular(self(), *args, **kwargs)
 
     def lognormal(self, *args, **kwargs):
-      return jax.random.lognormal(self(), *args, **kwargs)
+      return random.lognormal(self(), *args, **kwargs)
 
     def binomial(self, *args, **kwargs):
-      return jax.random.binomial(self(), *args, **kwargs)
+      return random.binomial(self(), *args, **kwargs)
 
     def multinomial(self, *args, **kwargs):
-      return jax.random.multinomial(self(), *args, **kwargs)
+      return random.multinomial(self(), *args, **kwargs)
 
 
 RngValue = tp.Union[int, jax.Array]
@@ -392,95 +393,95 @@ class Rngs(Pytree):
     return self.default()
 
   if tp.TYPE_CHECKING:
-    bits = staticmethod(functools.partial(jax.random.bits, jax.random.key(0)))
+    bits = staticmethod(functools.partial(random.bits, random.key(0)))
     uniform = staticmethod(
-      functools.partial(jax.random.uniform, jax.random.key(0))
+      functools.partial(random.uniform, random.key(0))
     )
     randint = staticmethod(
-      functools.partial(jax.random.randint, jax.random.key(0))
+      functools.partial(random.randint, random.key(0))
     )
     permutation = staticmethod(
-      functools.partial(jax.random.permutation, jax.random.key(0))
+      functools.partial(random.permutation, random.key(0))
     )
-    choice = staticmethod(functools.partial(jax.random.choice, jax.random.key(0)))
-    normal = staticmethod(functools.partial(jax.random.normal, jax.random.key(0)))
+    choice = staticmethod(functools.partial(random.choice, random.key(0)))
+    normal = staticmethod(functools.partial(random.normal, random.key(0)))
     multivariate_normal = staticmethod(
-      functools.partial(jax.random.multivariate_normal, jax.random.key(0))
+      functools.partial(random.multivariate_normal, random.key(0))
     )
     truncated_normal = staticmethod(
-      functools.partial(jax.random.truncated_normal, jax.random.key(0))
+      functools.partial(random.truncated_normal, random.key(0))
     )
     bernoulli = staticmethod(
-      functools.partial(jax.random.bernoulli, jax.random.key(0))
+      functools.partial(random.bernoulli, random.key(0))
     )
-    beta = staticmethod(functools.partial(jax.random.beta, jax.random.key(0)))
-    cauchy = staticmethod(functools.partial(jax.random.cauchy, jax.random.key(0)))
+    beta = staticmethod(functools.partial(random.beta, random.key(0)))
+    cauchy = staticmethod(functools.partial(random.cauchy, random.key(0)))
     dirichlet = staticmethod(
-      functools.partial(jax.random.dirichlet, jax.random.key(0))
+      functools.partial(random.dirichlet, random.key(0))
     )
     exponential = staticmethod(
-      functools.partial(jax.random.exponential, jax.random.key(0))
+      functools.partial(random.exponential, random.key(0))
     )
-    gamma = staticmethod(functools.partial(jax.random.gamma, jax.random.key(0)))
+    gamma = staticmethod(functools.partial(random.gamma, random.key(0)))
     loggamma = staticmethod(
-      functools.partial(jax.random.loggamma, jax.random.key(0))
+      functools.partial(random.loggamma, random.key(0))
     )
     poisson = staticmethod(
-      functools.partial(jax.random.poisson, jax.random.key(0))
+      functools.partial(random.poisson, random.key(0))
     )
-    gumbel = staticmethod(functools.partial(jax.random.gumbel, jax.random.key(0)))
+    gumbel = staticmethod(functools.partial(random.gumbel, random.key(0)))
     categorical = staticmethod(
-      functools.partial(jax.random.categorical, jax.random.key(0))
+      functools.partial(random.categorical, random.key(0))
     )
     laplace = staticmethod(
-      functools.partial(jax.random.laplace, jax.random.key(0))
+      functools.partial(random.laplace, random.key(0))
     )
     logistic = staticmethod(
-      functools.partial(jax.random.logistic, jax.random.key(0))
+      functools.partial(random.logistic, random.key(0))
     )
-    pareto = staticmethod(functools.partial(jax.random.pareto, jax.random.key(0)))
-    t = staticmethod(functools.partial(jax.random.t, jax.random.key(0)))
+    pareto = staticmethod(functools.partial(random.pareto, random.key(0)))
+    t = staticmethod(functools.partial(random.t, random.key(0)))
     chisquare = staticmethod(
-      functools.partial(jax.random.chisquare, jax.random.key(0))
+      functools.partial(random.chisquare, random.key(0))
     )
-    f = staticmethod(functools.partial(jax.random.f, jax.random.key(0)))
+    f = staticmethod(functools.partial(random.f, random.key(0)))
     rademacher = staticmethod(
-      functools.partial(jax.random.rademacher, jax.random.key(0))
+      functools.partial(random.rademacher, random.key(0))
     )
     maxwell = staticmethod(
-      functools.partial(jax.random.maxwell, jax.random.key(0))
+      functools.partial(random.maxwell, random.key(0))
     )
     double_sided_maxwell = staticmethod(
-      functools.partial(jax.random.double_sided_maxwell, jax.random.key(0))
+      functools.partial(random.double_sided_maxwell, random.key(0))
     )
     weibull_min = staticmethod(
-      functools.partial(jax.random.weibull_min, jax.random.key(0))
+      functools.partial(random.weibull_min, random.key(0))
     )
     orthogonal = staticmethod(
-      functools.partial(jax.random.orthogonal, jax.random.key(0))
+      functools.partial(random.orthogonal, random.key(0))
     )
     generalized_normal = staticmethod(
-      functools.partial(jax.random.generalized_normal, jax.random.key(0))
+      functools.partial(random.generalized_normal, random.key(0))
     )
-    ball = staticmethod(functools.partial(jax.random.ball, jax.random.key(0)))
+    ball = staticmethod(functools.partial(random.ball, random.key(0)))
     rayleigh = staticmethod(
-      functools.partial(jax.random.rayleigh, jax.random.key(0))
+      functools.partial(random.rayleigh, random.key(0))
     )
-    wald = staticmethod(functools.partial(jax.random.wald, jax.random.key(0)))
+    wald = staticmethod(functools.partial(random.wald, random.key(0)))
     geometric = staticmethod(
-      functools.partial(jax.random.geometric, jax.random.key(0))
+      functools.partial(random.geometric, random.key(0))
     )
     triangular = staticmethod(
-      functools.partial(jax.random.triangular, jax.random.key(0))
+      functools.partial(random.triangular, random.key(0))
     )
     lognormal = staticmethod(
-      functools.partial(jax.random.lognormal, jax.random.key(0))
+      functools.partial(random.lognormal, random.key(0))
     )
     binomial = staticmethod(
-      functools.partial(jax.random.binomial, jax.random.key(0))
+      functools.partial(random.binomial, random.key(0))
     )
     multinomial = staticmethod(
-      functools.partial(jax.random.multinomial, jax.random.key(0))
+      functools.partial(random.multinomial, random.key(0))
     )
   else:
 
@@ -835,7 +836,7 @@ def split_rngs(
     ):
       key = stream()
       backups.append((stream, stream.key.raw_value, stream.count.raw_value))
-      key = jax.random.split(key, splits)
+      key = random.split(key, splits)
       if squeeze:
         key = key[0]
       if variablelib.is_array_ref(stream.key.raw_value):
@@ -1035,7 +1036,7 @@ def _match_shape(
 ) -> jax.Array:
   if target_shape == ():
     return scalar_key
-  return jax.random.split(scalar_key, target_shape)
+  return random.split(scalar_key, target_shape)
 
 
 def reseed(
