@@ -14,20 +14,22 @@
 
 import os
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
+
 from absl.testing import absltest
-import flax
 from flax import nnx
 import jax
-from jax.experimental import mesh_utils
 import jax.numpy as jnp
-from jax.sharding import Mesh, PartitionSpec
+from jax.sharding import PartitionSpec as P, NamedSharding
 import optax
 
 
 class TestSPMD(absltest.TestCase):
-  def test_init(self):
+
+  def setUp(self):
     if jax.device_count() < 4:
       self.skipTest('At least 4 devices required')
+
+  def test_init(self):
     class Foo(nnx.Module):
       def __init__(self):
         self.w = nnx.Param(
@@ -44,15 +46,42 @@ class TestSPMD(absltest.TestCase):
     def create_module():
       return nnx.split(Foo())
 
-    mesh = Mesh(mesh_utils.create_device_mesh((2, 2)), ('model', 'data'))
+    mesh = jax.make_mesh((2, 2), ('model', 'data'))
+
+    with jax.set_mesh(mesh):
+      m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
+      x = jax.device_put(jnp.zeros((4, 8)), P(None, 'model'))
+      y = m(x)
+
+    assert m.w.shape == (8, 2)
+    assert m.w.sharding.shard_shape(m.w.shape) == (4, 1)
+
+  def test_init_all_devices(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.w = nnx.Param(
+          nnx.with_partitioning(
+            lambda: jnp.ones((8, 2)),
+            sharding=('model', 'data'),
+          )()
+        )
+
+      def __call__(self, x):
+        return x @ self.w
+
+    @jax.jit
+    def create_module():
+      return nnx.split(Foo())
+
+    mesh = jax.make_mesh((1, 1), ('model', 'data'))
 
     with mesh:
       m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
 
-    assert m.w.shape == (8, 2)
-    assert m.w.sharding.shard_shape(m.w.shape) == (8, 2)
+    assert m.w.value.shape == (8, 2)
+    assert m.w.value.sharding.shard_shape(m.w.value.shape) == (8, 2)
 
-  def test_get_partition_spec(self):
+  def test_shard_optimizer_state(self):
     class Foo(nnx.Module):
       def __init__(self):
         self.w = nnx.Param(
@@ -65,17 +94,21 @@ class TestSPMD(absltest.TestCase):
       def __call__(self, x):
         return x @ self.w
 
-    graphdef, params = nnx.split(Foo())
-    state = nnx.TrainState.create(
-      graphdef,
-      params=params,
-      tx=optax.adam(1e-3),
-    )
-    state_spec = nnx.get_partition_spec(state)
+    mesh = jax.make_mesh(((2, 2)), ('row', 'col'))
+    with jax.set_mesh(mesh):
+      graphdef, params = nnx.split(Foo())
+      state = nnx.TrainState.create(
+        graphdef,
+        params=params,
+        tx=optax.adam(1e-3),
+      )
 
-    assert state_spec.params['w'].value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].mu['w'].value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].nu['w'].value == PartitionSpec('row', 'col')
+    assert state.params['w'].sharding.is_equivalent_to(
+      NamedSharding(mesh, P('row', 'col')), ndim=2)
+    assert state.opt_state[0].mu['w'].sharding.is_equivalent_to(
+      NamedSharding(mesh, P('row', 'col')), ndim=2)
+    assert state.opt_state[0].nu['w'].sharding.is_equivalent_to(
+      NamedSharding(mesh, P('row', 'col')), ndim=2)
 
   def test_add_remove_axis_in_transform(self):
     test = self
@@ -89,8 +122,8 @@ class TestSPMD(absltest.TestCase):
       )
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(
-          3,
-          3,
+          4,
+          4,
           kernel_init=nnx.with_metadata(
             nnx.initializers.lecun_normal(),
             sharding_names=('din', 'dout'),
@@ -113,18 +146,20 @@ class TestSPMD(absltest.TestCase):
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         # test sharding layer axes is not present inside scan
-        test.assertEqual(self.linear.kernel.shape, (3, 3))
+        test.assertEqual(self.linear.kernel.shape, (4, 4))
         test.assertEqual(self.linear.kernel.sharding_names, ('din', 'dout'))
         # at least a remove_axis was already called to remove the layer axis
         test.assertEqual(kremoves[-1], (0, 'layers'))
         test.assertEqual(bremoves[-1], (0, 'layers'))
         return x, None
 
-    m = MLP(rngs=nnx.Rngs(0))
-    self.assertEqual(m.linear.kernel.shape, (5, 3, 3))
+    mesh = jax.make_mesh(((1, 2, 2)), ('layers', 'din', 'dout'))
+    with jax.set_mesh(mesh):
+      m = MLP(rngs=nnx.Rngs(0))
+    self.assertEqual(m.linear.kernel.shape, (5, 4, 4))
     self.assertEqual(m.linear.kernel.sharding_names, ('layers', 'din', 'dout'))
     self.assertEqual(m.linear.kernel.nickname, ('nick', 'in', 'out'))
-    self.assertEqual(m.linear.bias.shape, (5, 3))
+    self.assertEqual(m.linear.bias.shape, (5, 4))
     # One add_axis called to add the `nnx.vmap` dimension
     self.assertEqual(kadds, [(0, 'layers')])
     self.assertEqual(kremoves, [])
@@ -132,7 +167,8 @@ class TestSPMD(absltest.TestCase):
     self.assertEqual(bremoves, [])
 
     # One remove_axis and one add_axis called when in and out of `nnx.scan`
-    y = m(jnp.ones((5, 3)))
+    with jax.set_mesh(mesh):
+       _ = m(jnp.ones((5, 4)))
     self.assertEqual(kadds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(kremoves, [(0, 'layers')])
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
@@ -158,18 +194,68 @@ class TestSPMD(absltest.TestCase):
       def __call__(self, x):
         return x @ self.w + self.b
 
-    graphdef, params = nnx.split(Foo())
-    state = nnx.TrainState.create(
-        graphdef,
-        params=params,
-        tx=optax.adam(1e-3),
-    )
-    with flax.core.spmd.logical_axis_rules((('col-alias', 'col'),)):
-      state_spec = nnx.get_partition_spec(state)
+    mesh = jax.make_mesh(((1, 2, 2)), ('layers', 'row', 'col'))
+    with jax.set_mesh(mesh), nnx.logical_axis_rules((('col-alias', 'col'),)):
+      model = Foo()
+      optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
-    assert state_spec.params['w'].value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].mu['w'].value == PartitionSpec('row', 'col')
-    assert state_spec.opt_state[0].nu['w'].value == PartitionSpec('row', 'col')
+
+    assert model.w.sharding.is_equivalent_to(
+      NamedSharding(mesh, P('row', 'col')), ndim=2)
+    assert optimizer.opt_state[0].mu['w'].sharding.is_equivalent_to(
+      NamedSharding(mesh, P('row', 'col')), ndim=2)
+    assert optimizer.opt_state[0].nu['w'].sharding.is_equivalent_to(
+      NamedSharding(mesh, P('row', 'col')), ndim=2)
+
+  def test_get_abstract_model(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(
+          8, 8, rngs=rngs, use_bias=False,
+          kernel_init=nnx.with_partitioning(
+            nnx.initializers.lecun_normal(), (None, 'model')))
+        self.shared = self.linear.kernel
+
+    mesh = jax.make_mesh(((2, 2)), ('batch', 'model'))
+    gdef, abs_state = nnx.get_abstract_model(lambda: Foo(nnx.Rngs(0)), mesh)
+    assert len(jax.tree.leaves(abs_state)) == 1
+    assert jax.tree.leaves(abs_state)[0].sharding.is_equivalent_to(
+      NamedSharding(mesh, P(None, 'model')), ndim=2)
+
+
+def old_create_sharded_model(model_ctor, rngs, mesh):
+  @nnx.jit(static_argnums=(0,))
+  def _create_sharded_model(model_ctor, rngs):
+    model = model_ctor(rngs)
+    state = nnx.state(model)
+    pspecs = nnx.get_partition_spec(state)
+    sharded_state = jax.lax.with_sharding_constraint(state, pspecs)
+    nnx.update(model, sharded_state)
+    return model, state
+
+  with mesh:
+    model, state = _create_sharded_model(model_ctor, rngs)
+  state_sharding = nnx.get_named_sharding(state, mesh)
+  return model, state_sharding
+
+
+class TestSPMDBackwardCompat(absltest.TestCase):
+
+  def test_basic(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim, rngs):
+        self.linear = nnx.Linear(
+            dim, dim, rngs=rngs,
+            kernel_init=nnx.with_partitioning(nnx.initializers.lecun_normal(),
+                                              ('fsdp', 'tp')))
+
+    mesh = jax.make_mesh(((2, 2)), ('fsdp', 'tp'))
+    with jax.set_mesh(mesh):
+      r = nnx.Rngs(0)
+      m, _ = old_create_sharded_model(lambda r: Foo(8, r), r, mesh)
+    assert m.linear.kernel.sharding.is_equivalent_to(
+      NamedSharding(mesh, P('fsdp', 'tp')), ndim=2)
+
 
 
 if __name__ == '__main__':

@@ -54,9 +54,13 @@ import jax
 from jax import numpy as jnp
 from jax.sharding import Mesh, PartitionSpec, NamedSharding
 
+import flax
 from flax import nnx
 
 import optax # Optax for common losses and optimizers.
+
+# TODO: Update doc according to `4844-var-eager-sharding.md`.
+flax.config.update('flax_always_shard_variable', False)
 ```
 
 ```{code-cell} ipython3

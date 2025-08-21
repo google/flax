@@ -29,12 +29,6 @@ import jax.numpy as jnp
 import numpy as np
 from flax import errors
 
-# JAX version compatibility
-if hasattr(jax.sharding, 'use_mesh'):
-  set_mesh = jax.sharding.use_mesh
-else:
-  set_mesh = jax.set_mesh
-
 
 
 class TestJIT(absltest.TestCase):
@@ -1702,7 +1696,7 @@ class TestScan(absltest.TestCase):
         return x, None
 
     mesh = jax.make_mesh(((1, 1, 1)), ('layers', 'din', 'dout'))
-    with set_mesh(mesh):
+    with jax.set_mesh(mesh):
       m = MLP(rngs=nnx.Rngs(0))
 
     # test sharding layers axes is set
@@ -1712,7 +1706,7 @@ class TestScan(absltest.TestCase):
     self.assertEqual(m.linear.bias.sharding_names, ('layers', 'dout'))
 
     x = jnp.ones((1, 3))
-    with set_mesh(mesh):
+    with jax.set_mesh(mesh):
       y, out = m(x)
 
     # test sharding axes is preserved
@@ -2476,7 +2470,7 @@ class TestVmap(absltest.TestCase):
 
 
     mesh = jax.make_mesh(((1, 1, 1)), ('a', 'b', 'c'))
-    with set_mesh(mesh):
+    with jax.set_mesh(mesh):
       m = create_block(nnx.Rngs(0))
     self.assertEqual(m.kernel.value.shape, (5, 16, 32))
     self.assertEqual(m.kernel.sharding_names, ('c', 'a', 'b'))
