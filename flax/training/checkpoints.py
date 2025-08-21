@@ -1117,7 +1117,7 @@ def restore_checkpoint(
       restore_kwargs['restore_args'] = orbax_utils.restore_args_from_target(
         target
       )
-      if isinstance(orbax_checkpointer._handler, ocp.PyTreeCheckpointHandler):  # pylint: disable=protected-access
+      if isinstance(orbax_checkpointer._handler, ocp.PyTreeCheckpointHandler) or isinstance(orbax_checkpointer._handler, ocp.ArrayCheckpointHandler):  # pylint: disable=protected-access
         restore_kwargs[
           'transforms'
         ] = orbax_utils.maybe_construct_transformations(
