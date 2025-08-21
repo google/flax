@@ -27,6 +27,7 @@ import jax
 import treescope  # type: ignore[import-untyped]
 
 from flax import errors
+from flax.core import spmd as core_spmd
 from flax.nnx import filterlib, reprlib, tracers, visualization
 from flax.typing import Missing, PathParts, SizeBytes
 import jax.tree_util as jtu
@@ -273,7 +274,15 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
     object.__setattr__(self, '_var_metadata', metadata)
     # run create_value hooks
-    object.__setattr__(self, 'raw_value', self.create_value(self.raw_value))
+    value = self.create_value(self.raw_value)
+
+    # shard the value if applicable
+    if 'sharding_names' in metadata and config.flax_always_shard_variable:
+      value = core_spmd.shard_value(
+        value, metadata['sharding_names'], metadata.get('sharding_rules', None),
+        metadata.get('mesh', None))
+
+    object.__setattr__(self, 'raw_value', value)
 
   def __getattr__(self, name: str) -> tp.Any:
     if name in object.__getattribute__(self, '_var_metadata'):
