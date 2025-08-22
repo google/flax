@@ -53,7 +53,7 @@ class OptVariable(OptState):
 def to_opt_state(tree):
   def _to_opt_state(x):
     if isinstance(x, Variable):
-      opt_state = OptVariable(x[...], **x.get_metadata())  # type: ignore
+      opt_state = OptVariable(x.value, **x.get_metadata())  # type: ignore
     else:
       opt_state = OptArray(x)
     return opt_state
