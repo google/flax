@@ -9,4 +9,5 @@ rnglib
 .. autoclass:: RngStream
    :members:
 .. autofunction:: split_rngs
+.. autofunction:: fork_rngs
 .. autofunction:: reseed

@@ -265,7 +265,7 @@ class TestIntegration(absltest.TestCase):
   def test_replace_by_pure_dict(self):
     class MLPs(nnx.Module):
       def __init__(self, dim, rngs: nnx.Rngs):
-        self.layers = []
+        self.layers = nnx.List()
         for _ in range(4):
           self.layers.append(nnx.Linear(dim, dim, rngs=rngs, use_bias=False))
 
@@ -292,12 +292,10 @@ class TestIntegration(absltest.TestCase):
 
       # Restore as a pure dictionary.
       restored_pure_dict = checkpointer.restore(ckpt_dir / 'pure_dict')
-      nnx.display(restored_pure_dict)
+      restored_pure_dict = nnx.statelib.restore_int_paths(restored_pure_dict)
 
-      abstract_model = nnx.eval_shape(lambda: MLPs(4, rngs=nnx.Rngs(0)))
-      graphdef, abstract_state = nnx.split(abstract_model)
-      nnx.replace_by_pure_dict(abstract_state, restored_pure_dict)
-      model = nnx.merge(graphdef, abstract_state)
+      model = nnx.eval_shape(lambda: MLPs(4, rngs=nnx.Rngs(0)))
+      nnx.update(model, restored_pure_dict)
       assert model(x).shape == (3, 4)  # The model still works!
 
   def test_example_mutable_arrays(self):

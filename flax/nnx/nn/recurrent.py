@@ -141,7 +141,7 @@ class LSTMCell(RNNCellBase):
     if keep_rngs:
       self.rngs = rngs.carry.fork()
     else:
-      self.rngs = None
+      self.rngs = nnx.data(None)
 
     # input and recurrent layers are summed so only one needs a bias.
     dense_i = partial(
@@ -296,7 +296,7 @@ class OptimizedLSTMCell(RNNCellBase):
     if keep_rngs:
       self.rngs = rngs.carry.fork()
     else:
-      self.rngs = None
+      self.rngs = nnx.data(None)
 
     # input and recurrent layers are summed so only one needs a bias.
     self.dense_i = Linear(
@@ -436,7 +436,7 @@ class SimpleCell(RNNCellBase):
     if keep_rngs:
       self.rngs = rngs.carry.fork()
     else:
-      self.rngs = None
+      self.rngs = nnx.data(None)
 
     # self.hidden_features = carry.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
@@ -558,7 +558,7 @@ class GRUCell(RNNCellBase):
     if keep_rngs:
       self.rngs = rngs.carry.fork()
     else:
-      self.rngs = None
+      self.rngs = nnx.data(None)
 
     # Combine input transformations into a single linear layer
     self.dense_i = Linear(
@@ -679,7 +679,7 @@ class RNN(Module):
     elif isinstance(rngs, rnglib.Rngs):
       self.rngs = rngs.carry.fork()
     elif rngs is False:
-      self.rngs = None
+      self.rngs = nnx.data(None)
     else:
       raise ValueError(
         'Expected rngs to be a jax.Array, int, Rngs, or bool. '

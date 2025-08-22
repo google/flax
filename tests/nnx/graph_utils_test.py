@@ -24,27 +24,6 @@ import jax
 import jax.numpy as jnp
 
 
-class List(nnx.Module):
-  def __init__(self, items):
-    self.items = nnx.data(list(items))
-
-  def __getitem__(self, idx):
-    return self.items[idx]
-
-  def __setitem__(self, idx, value):
-    self.items[idx] = value
-
-
-class Dict(nnx.Module):
-  def __init__(self, *args, **kwargs):
-    self.items = nnx.data(dict(*args, **kwargs))
-
-  def __getitem__(self, key):
-    return self.items[key]
-
-  def __setitem__(self, key, value):
-    self.items[key] = value
-
 
 class StatefulLinear(nnx.Module):
   def __init__(self, din, dout, rngs):
@@ -93,8 +72,8 @@ class TestGraphUtils(absltest.TestCase):
     assert g[3] in refmap
 
   def test_unflatten(self):
-    a = Dict(a=1, b=nnx.Param(2))
-    g = List([a, 3, a, nnx.Param(4)])
+    a = nnx.Dict(a=1, b=nnx.Param(2))
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     graphdef, state = nnx.split(g)
     g = nnx.merge(graphdef, state)
@@ -129,8 +108,8 @@ class TestGraphUtils(absltest.TestCase):
     self.assertIs(x1, x)
 
   def test_unflatten_pure_dict(self):
-    a = Dict(a=1, b=nnx.Param(2))
-    g = List([a, 3, a, nnx.Param(4)])
+    a = nnx.Dict(a=1, b=nnx.Param(2))
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     graphdef, state = nnx.split(g)
     pure_state = nnx.to_pure_dict(state)
@@ -149,8 +128,8 @@ class TestGraphUtils(absltest.TestCase):
     assert g[0] is not g[2]
 
   def test_unflatten_empty(self):
-    a = Dict({'a': 1, 'b': nnx.Param(2)})
-    g = List([a, 3, a, nnx.Param(4)])
+    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     graphdef, state = nnx.split(g)
 
@@ -158,8 +137,8 @@ class TestGraphUtils(absltest.TestCase):
       nnx.graph.unflatten(graphdef, nnx.State({}))
 
   def test_unflatten_return_variables(self):
-    a = Dict({'a': 1, 'b': nnx.Param(2)})
-    g = List([a, 3, a, nnx.Param(4)])
+    a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     graphdef, state = nnx.graph.flatten(
       g, with_paths=True
@@ -453,7 +432,7 @@ class TestGraphUtils(absltest.TestCase):
   def test_cached_unflatten_add_self_reference(self):
     class Foo(nnx.Module):
       def __init__(self):
-        self.ref = None
+        self.ref = nnx.data(None)
 
     def f(m: Foo):
       m.ref = m
@@ -596,7 +575,7 @@ class TestGraphUtils(absltest.TestCase):
     self.assertFalse(hasattr(ctx, 'ctxtag'))
 
   def test_split_merge_context_example(self):
-    m1 = Dict({})
+    m1 = nnx.Dict({})
     with nnx.update_context('example'):
       with nnx.split_context('example') as ctx:
         graphdef, state = ctx.split(m1)
@@ -1072,12 +1051,12 @@ class TestGraphUtils(absltest.TestCase):
       def __init__(self):
         self.ls = []
         self.ls.append(jnp.array(1))
-        test.assertNotIn('ls', self._pytree__nodes)
 
-    m = Foo()
-
-    self.assertIn('ls', m._pytree__nodes)
-    self.assertLen(jax.tree.leaves(m), 1)
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found unexpected Arrays on static attribute'
+    ):
+      m = Foo()
 
   def test_update_dict(self):
     node = {

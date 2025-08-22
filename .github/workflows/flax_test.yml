@@ -82,7 +82,7 @@ jobs:
 
   tests:
     name: Run Tests
-    needs: [pre-commit, commit-count, test-import]
+    needs: [pre-commit, commit-count]
     runs-on: ubuntu-24.04-16core
     strategy:
       # Make sure to change `github_check_runs` in `copy.bara.sky` if you change the tests here.
