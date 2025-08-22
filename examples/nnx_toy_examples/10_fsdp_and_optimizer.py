@@ -83,12 +83,12 @@ class SGD(nnx.Pytree):
       )
 
     self.lr = lr
-    self.params = params
-    self.momentum: nnx.State = jax.tree.map(
+    self.params = nnx.data(params)
+    self.momentum: nnx.State = nnx.data(jax.tree.map(
       init_optimizer_state,
       self.params,
       is_leaf=lambda x: isinstance(x, nnx.Variable),
-    )
+    ))
     self.decay = decay
 
   def update(self, grads: nnx.State):
@@ -120,10 +120,10 @@ def create_model():
 
   def get_named_shardings(path: tuple, value: nnx.Variable):
     if path[0] == 'params':
-      return NamedSharding(mesh, P(*value.sharding))
+      return NamedSharding(mesh, P(*value.sharding_names))
     elif path[0] == 'momentum':
       # currently the same as above but in general it could be different
-      return NamedSharding(mesh, P(*value.sharding))
+      return NamedSharding(mesh, P(*value.sharding_names))
     else:
       raise ValueError(f'Unknown path: {path}')
 

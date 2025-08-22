@@ -247,7 +247,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       if is_array_ref(value):
         _value = tp.cast(A, value)
       else:
-        _value = array_ref(jnp.asarray(value))
+        _value = array_ref(jnp.asarray(value)) # type: ignore[assignment]
     else:
       _value = value
 

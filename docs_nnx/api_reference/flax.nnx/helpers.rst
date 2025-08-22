@@ -7,5 +7,9 @@ helpers
 
 .. autoclass:: Sequential
    :members:
+.. autoclass:: List
+   :members:
+.. autoclass:: Dict
+   :members:
 .. autoclass:: TrainState
    :members:
