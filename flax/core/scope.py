@@ -948,17 +948,17 @@ class Scope:
       # catch it with an error message.
       # NOTE: We could consider moving this to `self.`
       abs_value = jax.eval_shape(
-        lambda: init_fn(random.key(0), *init_args, **init_kwargs)
+          lambda: init_fn(random.key(0), *init_args, **init_kwargs)
       )
       abs_value_flat = jax.tree_util.tree_leaves(abs_value)
       value_flat = jax.tree_util.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
-        # NOTE: We could check dtype consistency here as well but it's
-        # usefuleness is less obvious. We might intentionally change the dtype
-        # for inference to a half float type for example.
+        # NOTE: We could check dtype consistency here as well but its usefulness
+        # is less obvious. We might intentionally change the dtype for inference
+        # to a half float type for example.
         if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
-            name, self.path_text, np.shape(abs_val), np.shape(val)
+              name, self.path_text, np.shape(val), np.shape(abs_val)
           )
     else:
       if not self.is_mutable_collection('params'):
