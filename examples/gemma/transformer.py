@@ -447,6 +447,14 @@ class TransformerConfig:
       config[key] = value
     return cls(**config)
 
+  def __post_init__(self):
+      if self.num_heads != self.num_kv_heads:
+        if self.num_heads % self.num_kv_heads != 0:
+          raise ValueError(
+            f"Number of query heads ({self.num_heads}) must be divisible by "
+            f"number of key/value heads ({self.num_kv_heads})."
+          )
+
 
 def _map_linen_var_names(key: tuple[str, ...]) -> tuple[str | int, ...]:
   """Maps linen variable names to nnx variable names."""
