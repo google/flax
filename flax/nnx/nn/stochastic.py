@@ -21,6 +21,7 @@ from jax import lax, random
 
 from flax.nnx import rnglib
 from flax.nnx.module import Module, first_from
+from flax import nnx
 
 
 class Dropout(Module):
@@ -86,7 +87,7 @@ class Dropout(Module):
     elif isinstance(rngs, rnglib.RngStream):
       self.rngs = rngs.fork()
     elif rngs is None:
-      self.rngs = None
+      self.rngs = nnx.data(None)
     else:
       raise TypeError(
         f'rngs must be a Rngs, RngStream or None, but got {type(rngs)}.'

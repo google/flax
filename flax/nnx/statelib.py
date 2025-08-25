@@ -496,6 +496,19 @@ def to_pure_dict(
   return traversals.unflatten_mapping(flat_values)
 
 
+def restore_int_paths(pure_dict: dict[str, tp.Any]):
+  def try_convert_int(x):
+    try:
+      return int(x)
+    except ValueError:
+      return x
+
+  fixed = {
+      tuple(map(try_convert_int, path)): value
+      for path, value in traversals.flatten_mapping(pure_dict).items()
+  }
+  return traversals.unflatten_mapping(fixed)
+
 def replace_by_pure_dict(
   state, pure_dict: dict[str, tp.Any], replace_fn: SetValueFn | None = None
 ):
