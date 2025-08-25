@@ -25,7 +25,8 @@ import jax
 import tensorflow as tf
 import tensorflow_text as tftxt
 from absl import logging
-from sentencepiece import SentencePieceTrainer, SentencePieceProcessor
+from sentencepiece import SentencePieceProcessor
+from sentencepiece import SentencePieceTrainer
 
 Features = dict[str, tf.Tensor]
 
@@ -190,5 +191,5 @@ class TokenizeOp:
 
 def load_sentencepiece_processor(vocab_path: str):
   spp = SentencePieceProcessor()
-  spp.load(vocab_path)
+  spp.Load(vocab_path)
   return spp
