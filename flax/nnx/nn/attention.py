@@ -414,8 +414,8 @@ class MultiHeadAttention(Module):
         rngs=rngs,
       )
     else:
-      self.query_ln = None
-      self.key_ln = None
+      self.query_ln = nnx.data(None)
+      self.key_ln = nnx.data(None)
 
     self.out = LinearGeneral(
       in_features=(self.num_heads, self.head_dim),
@@ -433,9 +433,9 @@ class MultiHeadAttention(Module):
     )
     self.rngs = rngs.dropout.fork() if keep_rngs and dropout_rate > 0 else None
 
-    self.cached_key: nnx.Cache[Array] | None = None
-    self.cached_value: nnx.Cache[Array] | None = None
-    self.cache_index: nnx.Cache[Array] | None = None
+    self.cached_key: nnx.Cache[Array] | None = nnx.data(None)
+    self.cached_value: nnx.Cache[Array] | None = nnx.data(None)
+    self.cache_index: nnx.Cache[Array] | None = nnx.data(None)
 
   def __call__(
     self,

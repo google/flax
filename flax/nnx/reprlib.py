@@ -233,7 +233,7 @@ def get_repr(obj: Representable) -> str:
 
 class MappingReprMixin(Representable):
   def __nnx_repr__(self):
-    yield Object(type='', kv_sep=': ', start='{', end='}')
+    yield Object(type=type(self), kv_sep=': ', start='({', end='})')
 
     for key, value in self.items():  # type: ignore
       yield Attr(colorized(key), value, use_raw_key=True)

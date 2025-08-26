@@ -119,7 +119,7 @@ class TestObject(absltest.TestCase):
 
     foo = Foo(42)
 
-    self.assertTrue(nnx.is_data_type(foo.a))
+    self.assertTrue(nnx.is_data(foo.a))
     self.assertEqual(jax.tree.leaves(foo), [MyType(value=42)])
 
 
