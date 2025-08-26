@@ -73,7 +73,7 @@ REPEATED = Repeated()
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, slots=True, repr=False)
 class ArrayRefOutput(reprlib.Representable):
-  value: jax.Array | NoUpdate | Repeated
+  value: jax.Array
 
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
