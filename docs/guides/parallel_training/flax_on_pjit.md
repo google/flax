@@ -35,13 +35,6 @@ Import some necessary dependencies.
 **Note:** This guide uses the `--xla_force_host_platform_device_count=8` flag to emulate multiple devices in a CPU environment in a Google Colab/Jupyter Notebook. You don't need this if you are already using a multi-device TPU environment.
 
 ```{code-cell} ipython3
-:tags: [skip-execution]
-
-# Once Flax v0.6.10 is released, there is no need to do this.
-# ! pip3 install -qq "git+https://github.com/google/flax.git@main#egg=flax"
-```
-
-```{code-cell} ipython3
 import os
 os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=8'
 ```
