@@ -204,9 +204,9 @@ class TestIntegration(absltest.TestCase):
     @jax.jit
     def train_step(params, counts, x, y):
       def loss_fn(params):
-        y_pred, (_, updates) = graphdef.apply(params, counts)(x)
-        loss = jax.numpy.mean((y_pred - y) ** 2)
-        return loss, nnx.filter_state(updates, Count)
+        model = nnx.merge(graphdef, params, counts, copy=True)
+        loss = jax.numpy.mean((model(x) - y) ** 2)
+        return loss, nnx.state(model, Count)
 
       # compute gradient
       grads, counts = jax.grad(loss_fn, has_aux=True)(params)

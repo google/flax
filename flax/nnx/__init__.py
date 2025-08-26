@@ -208,7 +208,4 @@ if not _tp.TYPE_CHECKING:
           DeprecationWarning,
           stacklevel=2,
       )
-    if name not in globals():
-      raise AttributeError(f"Module {__name__} has no attribute '{name}'")
-
-    return globals()[name]
+    raise AttributeError(f"Module {__name__} has no attribute '{name}'")
