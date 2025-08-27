@@ -200,7 +200,7 @@ class TestMutableArrayGraph(absltest.TestCase):
     self.assertTrue(m3.a.has_ref)
     self.assertTrue(m3.b.has_ref)
     self.assertIsNot(m2, m3)
-    self.assertIsNot(m.a, m3.a)
+    self.assertIs(m.a, m3.a)
 
   def test_freeze_duplicate_error(self):
     class Foo(nnx.Module):

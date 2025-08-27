@@ -1072,7 +1072,7 @@ def unflatten(  # type: ignore[invalid-annotation]
   *,
   index_ref: IndexMap | None = None,
   outer_index_outer_ref: IndexMap | None = None,
-  copy_variables: bool = True,
+  copy_variables: bool = False,
 ) -> Node:
   """Unflattens a graphdef into a node with the given state.
 
@@ -1835,6 +1835,7 @@ class MergeContext:
       _state,
       index_ref=self.index_ref,
       outer_index_outer_ref=outer_index_outer_ref,
+      copy_variables=True,
     )
     return node
 
@@ -2307,6 +2308,7 @@ def merge(  # type: ignore[invalid-annotation]
   state: tp.Any,
   /,
   *states: tp.Any,
+  copy: bool = False,
 ) -> A:
   """The inverse of :func:`flax.nnx.split`.
 
@@ -2348,6 +2350,7 @@ def merge(  # type: ignore[invalid-annotation]
     graphdef: A :class:`flax.nnx.GraphDef` object.
     state: A :class:`flax.nnx.State` object.
     *states: Additional :class:`flax.nnx.State` objects.
+    copy: Whether to create new copies of the Variables in the states, defaults to ``False``.
   Returns:
     The merged :class:`flax.nnx.Module`.
   """
@@ -2357,7 +2360,7 @@ def merge(  # type: ignore[invalid-annotation]
     _state = state
   else:
     _state = _merge_to_flat_state((state, *states))
-  node = unflatten(graphdef, _state)
+  node = unflatten(graphdef, _state, copy_variables=copy)
   return node
 
 
@@ -2592,7 +2595,7 @@ def clone(node: Node) -> Node:
     A deep copy of the :class:`Module` object.
   """
   graphdef, state = split(node)
-  return merge(graphdef, state)
+  return merge(graphdef, state, copy=True)
 
 
 def _mutable_like(path, x):
