@@ -473,7 +473,7 @@ Choosing when to use a device or logical axis depends on how much you want to co
 
 ## Save the data
 
-To save the cross-device array, you can use [`flax.training.checkpoints`](https://flax.readthedocs.io/en/latest/_modules/flax/training/checkpoints.html), as shown in the [Save and load checkpoints guide - Multi-host/multi-process checkpointing](https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#multi-host-multi-process-checkpointing). This is especially required if you are running on a multi-host environment (for example, a TPU pod).
+To save the cross-device array, you can use Orbax as shown in the [Save and load checkpoints guide - Multi-host/multi-process checkpointing](https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#multi-host-multi-process-checkpointing). This is especially required if you are running on a multi-host environment (for example, a TPU pod).
 
 In practice, you might want to save the raw `jax.Array` pytree as checkpoint, instead of the wrapped `Partitioned` values, to reduce complexity. You can restore it as-is and put it back into an annotated pytree with `flax.linen.meta.replace_boxed()`.
 
