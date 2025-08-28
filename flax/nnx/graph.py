@@ -1081,15 +1081,15 @@ def unflatten(  # type: ignore[invalid-annotation]
     state: A State instance.
     index_ref: A mapping from indexes to nodes references found during the graph
       traversal, defaults to None. If not provided, a new empty dictionary is
-      created. This argument can be used to unflatten a sequence of (graphdef, state)
-      pairs that share the same index space.
-    index_ref_cache: A mapping from indexes to existing nodes that can be reused.
-      When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
-      object in an empty state and then filled by the unflatten process, as a result
-      existing graph nodes are mutated to have the new content/topology
-      specified by the graphdef.
-    copy_variables: If True (default), variables in the state will be copied onto
-      the new new structure, else variables will be shared.
+      created. This argument can be used to unflatten a sequence of (graphdef,
+      state) pairs that share the same index space.
+    index_ref_cache: A mapping from indexes to existing nodes that can be
+      reused. When an reference is reused, ``GraphNodeImpl.clear`` is called to
+      leave the object in an empty state and then filled by the unflatten
+      process, as a result existing graph nodes are mutated to have the new
+      content/topology specified by the graphdef.
+    copy_variables: If True variables in the state will be copied onto the new
+      new structure, else variables will be shared. Default is False.
   """
   if isinstance(state, (State, dict)):
     leaves = _get_sorted_leaves(state)
