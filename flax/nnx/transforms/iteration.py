@@ -56,7 +56,7 @@ class Carry:
 # -------------------------------
 
 
-class StateAxes(extract.PrefixMapping):
+class StateAxes(extract.PrefixMapping, tp.Mapping):
 
   def __init__(
     self,
@@ -100,6 +100,15 @@ class StateAxes(extract.PrefixMapping):
 
   def items(self):
     return zip(self.filters, self.axes)
+
+  def __getitem__(self, key):
+    return self.axes[self.filters.index(key)]
+
+  def __iter__(self):
+    return iter(self.filters)
+
+  def __len__(self):
+    return len(self.filters)
 
   def __eq__(self, other):
     return (
