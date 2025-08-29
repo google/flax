@@ -15,30 +15,28 @@
 """Provides op for tokenizing a dataset."""
 
 import dataclasses
-import os
 import tempfile
 import time
-from typing import Any
+import shutil
+from pathlib import Path
+from typing import Any, Iterable
 from collections.abc import Iterable
 
 import jax
-import tensorflow as tf
-import tensorflow_text as tftxt
+import numpy as np
 from absl import logging
 from sentencepiece import SentencePieceTrainer, SentencePieceProcessor
 
-Features = dict[str, tf.Tensor]
-
 
 def _dump_chars_to_textfile(
-  dataset: tf.data.Dataset,
+  dataset: Iterable,
   maxchars: int = int(1e7),
   data_keys=('inputs', 'targets'),
 ) -> tuple[str, int]:
   """Write part of a TFDS sentence dataset to lines in a text file.
 
   Args:
-    dataset: tf.dataset containing string-data.
+    dataset: Grain dataset containing string-data.
     maxchars: int: approximate number of characters to save from dataset.
     data_keys: Tuple[str]: what keys in dataset to dump from.
 
@@ -46,21 +44,22 @@ def _dump_chars_to_textfile(
     name of temp file with dataset bytes, exact number of characters dumped.
   """
   char_count = 0
-  ds_iter = dataset.as_numpy_iterator()
+  ds_iter = iter(dataset)
   with tempfile.NamedTemporaryFile(
-    delete=False, prefix='/tmp/ds_chars'
+    mode="w+b", delete=False, prefix='/tmp/ds_chars'
   ) as outfp:
     while char_count < maxchars:
       example = next(ds_iter)
       for k in data_keys:
-        line = example[k] + b'\n'
+        data = example[k]
+        line = (data.encode() if isinstance(data, str) else data) + b'\n'
         char_count += len(line)
         outfp.write(line)
   return outfp.name, char_count
 
 
 def _train_sentencepiece(
-  dataset: tf.data.Dataset,
+  dataset: Any,
   *,
   vocab_size: int,
   maxchars: int = int(1e7),
@@ -69,14 +68,14 @@ def _train_sentencepiece(
   character_coverage: float = 1.0,
   data_keys=('inputs', 'targets'),
   pad_id: int = 0,
-  eos_id: int = 1,
-  bos_id: int = 2,
   unk_id: int = 3,
+  bos_id: int = 2,
+  eos_id: int = 1,
 ):
   """Train SentencePiece tokenizer from subset of tf dataset.
 
   Args:
-    dataset: tf.dataset
+    dataset: Grain dataset
     vocab_size: int: size of vocab tokens to train.
     maxchars: int: number of characters to use for sentencepiece training.
     model_path: str: path of model file to save vocab model to.
@@ -86,17 +85,14 @@ def _train_sentencepiece(
       and 1.0 for other languages with small character set.
     data_keys: Tuple[str]: keys of dataset to use for training.
     pad_id: int: pad piece id
-    eos_id: int: end of sentence piece id
-    bos_id: int: begin of sentence piece id
     unk_id: int: unknown piece id
-
+    bos_id: int: begin of sentence piece id
+    eos_id: int: end of sentence piece id
   Returns:
     path to the trained sentencepiece vocabulary model.
   """
-  if model_path.startswith('gs://'):
-    abs_model_path = model_path
-  else:
-    abs_model_path = os.path.abspath(os.path.expanduser(model_path))
+  model_path = Path(model_path)
+  abs_model_path = model_path.expanduser().absolute().resolve()
   fname, _ = _dump_chars_to_textfile(
     dataset, maxchars=maxchars, data_keys=data_keys
   )
@@ -111,7 +107,6 @@ def _train_sentencepiece(
       f'--character_coverage={character_coverage}',
       f'--model_prefix={model_fp.name}',
       f'--model_type={model_type}',
-      # Setup ids for PAD, EOS, BOS, UNK as 0, 1, 2, 3
       # Default values:
       # --unk_id (Override UNK (<unk>) id.)  type: int32 default: 0
       # --bos_id (Override BOS (<s>) id. Set -1 to disable BOS.)  type: int32 default: 1
@@ -128,34 +123,19 @@ def _train_sentencepiece(
   if jax.process_index() == 0:
     # Use an intermediate filename that is renamed to the target name to address
     # create and fill delays.
-    copy_rename_path = abs_model_path + '.rntmp'
-    tf.io.gfile.copy(model_fp.name + '.model', copy_rename_path, overwrite=True)
-    tf.io.gfile.rename(copy_rename_path, abs_model_path, overwrite=True)
+    copy_rename_path = abs_model_path.with_suffix('.rntmp')
+    shutil.copyfile(model_fp.name + '.model', copy_rename_path)
+    shutil.move(copy_rename_path, abs_model_path)
     logging.info('copied %s to %s', model_fp.name + '.model', abs_model_path)
   else:
-    while not tf.io.gfile.exists(abs_model_path):
+    while not abs_model_path.exists():
       time.sleep(1)
     time.sleep(1)
-  return abs_model_path
-
-
-def _load_sentencepiece_tokenizer(
-  model_path: str,
-  add_bos: bool = False,
-  add_eos: bool = True,
-  reverse: bool = False,
-):
-  """Load a tf-text SentencePiece tokenizer from given model filepath."""
-  with tf.io.gfile.GFile(model_path, 'rb') as model_fp:
-    sp_model = model_fp.read()
-  sp_tokenizer = tftxt.SentencepieceTokenizer(
-    model=sp_model, add_bos=add_bos, add_eos=add_eos, reverse=reverse
-  )
-  return sp_tokenizer
+  return str(abs_model_path)
 
 
 def load_or_train_tokenizer(
-  dataset: tf.data.Dataset,
+  dataset: Any,
   *,
   vocab_path: str,
   vocab_size: int,
@@ -164,8 +144,8 @@ def load_or_train_tokenizer(
 ):
   """Loads the tokenizer at `vocab_path` or trains a one from `dataset`."""
   try:
-    return _load_sentencepiece_tokenizer(vocab_path)
-  except tf.errors.NotFoundError:
+    return load_sentencepiece_processor(vocab_path)
+  except (OSError, TypeError):
     logging.info('SentencePiece vocab not found, building one from data.')
     vocab_path = _train_sentencepiece(
       dataset,
@@ -174,17 +154,19 @@ def load_or_train_tokenizer(
       model_path=vocab_path,
       data_keys=data_keys,
     )
-    return _load_sentencepiece_tokenizer(vocab_path)
+    return load_sentencepiece_processor(vocab_path)
 
 
 @dataclasses.dataclass
 class TokenizeOp:
-  sp_tokenizer: Any
+  sp_processor: SentencePieceProcessor
   data_keys: Iterable[str] = ('inputs', 'targets')
 
-  def __call__(self, features: Features) -> Features:
+  def __call__(self, features: dict[str, str]) -> dict[str, np.ndarray]:
     for k in self.data_keys:
-      features[k] = self.sp_tokenizer.tokenize(features[k])
+      features[k] = np.array(
+        self.sp_processor.EncodeAsIds(features[k], add_eos=True, add_bos=True), dtype=np.int32
+      )
     return features
 
 
