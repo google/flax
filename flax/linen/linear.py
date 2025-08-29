@@ -337,6 +337,7 @@ class Einsum(Module):
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   promote_dtype: PromoteDtypeFn = promote_dtype
+  preferred_element_type: Dtype | None = None
 
   @compact
   def __call__(self, inputs: Array, einsum_str: str | None = None) -> Array:
@@ -386,7 +387,13 @@ class Einsum(Module):
       inputs, kernel, bias, dtype=self.dtype
     )
 
-    y = jnp.einsum(einsum_str, inputs, kernel, precision=self.precision)
+    y = jnp.einsum(
+      einsum_str,
+      inputs,
+      kernel,
+      precision=self.precision,
+      preferred_element_type=self.preferred_element_type,
+    )
 
     if bias is not None:
       y += jnp.reshape(bias, broadcasted_bias_shape)
@@ -942,6 +949,7 @@ class ConvTranspose(Module):
   bias_init: Initializer = initializers.zeros_init()
   transpose_kernel: bool = False
   promote_dtype: PromoteDtypeFn = promote_dtype
+  preferred_element_type: Dtype | None = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -1037,6 +1045,7 @@ class ConvTranspose(Module):
       rhs_dilation=kernel_dilation,
       transpose_kernel=self.transpose_kernel,
       precision=self.precision,
+      preferred_element_type=self.preferred_element_type,
     )
 
     if self.padding == 'CIRCULAR':

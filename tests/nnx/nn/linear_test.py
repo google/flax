@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
 import typing as tp
 
 import jax
@@ -26,13 +27,36 @@ from flax import nnx
 from flax.typing import Dtype, PrecisionLike, Shape
 
 
-class TestLinearGeneral:
-  def test_basic(self):
-    module = nnx.LinearGeneral(2, 3, rngs=nnx.Rngs(0))
+class TestLinearGeneral(parameterized.TestCase):
+  @parameterized.product(
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    precision=[Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
+    preferred_element_type=[None, jnp.float32],
+  )
+  def test_basic(
+    self,
+    dtype,
+    param_dtype,
+    precision,
+    preferred_element_type,
+  ):
+    module = nnx.LinearGeneral(
+      2,
+      3,
+      rngs=nnx.Rngs(0),
+      dtype=dtype,
+      param_dtype=param_dtype,
+      precision=precision,
+      preferred_element_type=preferred_element_type,
+    )
     y = module(jnp.ones((1, 2)))
 
     assert y.shape == (1, 3)
+    if preferred_element_type is not None:
+      assert y.dtype == preferred_element_type
     assert module.kernel.value.shape == (2, 3)
+    assert module.kernel.value.dtype == param_dtype
     assert module.bias.value is not None
     assert module.bias.value.shape == (3,)
 
@@ -52,6 +76,7 @@ class TestLinenConsistency(parameterized.TestCase):
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
     precision=[Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
+    preferred_element_type=[None, jnp.float32],
   )
   def test_nnx_linear_equivalence(
     self,
@@ -59,6 +84,7 @@ class TestLinenConsistency(parameterized.TestCase):
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     precision: PrecisionLike,
+    preferred_element_type: tp.Optional[Dtype],
   ):
     key = jax.random.key(42)
     rngs = nnx.Rngs(42)
@@ -74,16 +100,25 @@ class TestLinenConsistency(parameterized.TestCase):
         dtype=dtype,
         param_dtype=param_dtype,
         precision=precision,
+        preferred_element_type=preferred_element_type,
         rngs=rngs,
       ),
       rngs,
     )
+    if preferred_element_type is not None:
+      dot_general = partial(
+        jax.lax.dot_general,
+        preferred_element_type=preferred_element_type,
+      )
+    else:
+      dot_general = None
     model = linen.Dense(
       OUT_FEATURES,
       use_bias=use_bias,
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,
+      dot_general=dot_general,
     )
     variables = model.init(key, x)
     model_nnx.kernel.value = variables['params']['kernel']
@@ -101,6 +136,7 @@ class TestLinenConsistency(parameterized.TestCase):
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
     precision=[Precision.DEFAULT, Precision.HIGH, Precision.HIGHEST],
+    preferred_element_type=[None, jnp.float32],
   )
   def test_nnx_einsum_equivalence(
     self,
@@ -109,6 +145,7 @@ class TestLinenConsistency(parameterized.TestCase):
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     precision: PrecisionLike,
+    preferred_element_type: tp.Optional[Dtype],
   ):
     key = jax.random.key(42)
     rngs = nnx.Rngs(42)
@@ -123,6 +160,7 @@ class TestLinenConsistency(parameterized.TestCase):
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,
+      preferred_element_type=preferred_element_type,
       rngs=rngs,
     )
     model = linen.Einsum(
@@ -132,6 +170,7 @@ class TestLinenConsistency(parameterized.TestCase):
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,
+      preferred_element_type=preferred_element_type,
     )
 
     variables = model.init(key, x)
