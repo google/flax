@@ -63,7 +63,7 @@ Important thing here is that we created a `train_step()` function that uses `nnx
 
 ## Asynchronous dispatch
 
-Asynchronous dispatch is a feature of JAX where it runs operations in the background whenever possible so Python can continue executing other code. This can be use to absorve the cost of data loading and in this case the overhead of `nnx.jit` and similar transforms. In general, as the amount of computation JAX has to perform per iteration increases the more it is able to absorve the python overhead since eventually the JAX computation will be the main blocker and programs with different overhead will have the same performance. This could be achieved in a couple of ways:
+Asynchronous dispatch is a feature of JAX where it runs operations in the background whenever possible so Python can continue executing other code. This can be use to absorb the cost of data loading and in this case the overhead of `nnx.jit` and similar transforms. In general, as the amount of computation JAX has to perform per iteration increases the more it is able to absorb the python overhead since eventually the JAX computation will be the main blocker and programs with different overhead will have the same performance. This could be achieved in a couple of ways:
 
 * Increasing the batch size.
 * Increasing the model size.
