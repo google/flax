@@ -73,7 +73,7 @@ REPEATED = Repeated()
 @jax.tree_util.register_dataclass
 @dataclasses.dataclass(frozen=True, slots=True, repr=False)
 class ArrayRefOutput(reprlib.Representable):
-  value: jax.Array | NoUpdate | Repeated
+  value: jax.Array
 
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
@@ -1072,7 +1072,7 @@ def unflatten(  # type: ignore[invalid-annotation]
   *,
   index_ref: IndexMap | None = None,
   outer_index_outer_ref: IndexMap | None = None,
-  copy_variables: bool = True,
+  copy_variables: bool = False,
 ) -> Node:
   """Unflattens a graphdef into a node with the given state.
 
@@ -1081,15 +1081,15 @@ def unflatten(  # type: ignore[invalid-annotation]
     state: A State instance.
     index_ref: A mapping from indexes to nodes references found during the graph
       traversal, defaults to None. If not provided, a new empty dictionary is
-      created. This argument can be used to unflatten a sequence of (graphdef, state)
-      pairs that share the same index space.
-    index_ref_cache: A mapping from indexes to existing nodes that can be reused.
-      When an reference is reused, ``GraphNodeImpl.clear`` is called to leave the
-      object in an empty state and then filled by the unflatten process, as a result
-      existing graph nodes are mutated to have the new content/topology
-      specified by the graphdef.
-    copy_variables: If True (default), variables in the state will be copied onto
-      the new new structure, else variables will be shared.
+      created. This argument can be used to unflatten a sequence of (graphdef,
+      state) pairs that share the same index space.
+    index_ref_cache: A mapping from indexes to existing nodes that can be
+      reused. When an reference is reused, ``GraphNodeImpl.clear`` is called to
+      leave the object in an empty state and then filled by the unflatten
+      process, as a result existing graph nodes are mutated to have the new
+      content/topology specified by the graphdef.
+    copy_variables: If True variables in the state will be copied onto the new
+      new structure, else variables will be shared. Default is False.
   """
   if isinstance(state, (State, dict)):
     leaves = _get_sorted_leaves(state)
@@ -1835,6 +1835,7 @@ class MergeContext:
       _state,
       index_ref=self.index_ref,
       outer_index_outer_ref=outer_index_outer_ref,
+      copy_variables=True,
     )
     return node
 
@@ -2307,6 +2308,7 @@ def merge(  # type: ignore[invalid-annotation]
   state: tp.Any,
   /,
   *states: tp.Any,
+  copy: bool = False,
 ) -> A:
   """The inverse of :func:`flax.nnx.split`.
 
@@ -2348,6 +2350,7 @@ def merge(  # type: ignore[invalid-annotation]
     graphdef: A :class:`flax.nnx.GraphDef` object.
     state: A :class:`flax.nnx.State` object.
     *states: Additional :class:`flax.nnx.State` objects.
+    copy: Whether to create new copies of the Variables in the states, defaults to ``False``.
   Returns:
     The merged :class:`flax.nnx.Module`.
   """
@@ -2357,7 +2360,7 @@ def merge(  # type: ignore[invalid-annotation]
     _state = state
   else:
     _state = _merge_to_flat_state((state, *states))
-  node = unflatten(graphdef, _state)
+  node = unflatten(graphdef, _state, copy_variables=copy)
   return node
 
 
@@ -2592,7 +2595,7 @@ def clone(node: Node) -> Node:
     A deep copy of the :class:`Module` object.
   """
   graphdef, state = split(node)
-  return merge(graphdef, state)
+  return merge(graphdef, state, copy=True)
 
 
 def _mutable_like(path, x):

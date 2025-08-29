@@ -56,7 +56,7 @@ class Carry:
 # -------------------------------
 
 
-class StateAxes(extract.PrefixMapping):
+class StateAxes(extract.PrefixMapping, tp.Mapping):
 
   def __init__(
     self,
@@ -100,6 +100,15 @@ class StateAxes(extract.PrefixMapping):
 
   def items(self):
     return zip(self.filters, self.axes)
+
+  def __getitem__(self, key):
+    return self.axes[self.filters.index(key)]
+
+  def __iter__(self):
+    return iter(self.filters)
+
+  def __len__(self):
+    return len(self.filters)
 
   def __eq__(self, other):
     return (
@@ -652,7 +661,11 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
       )
 
   jax.tree_util.tree_map_with_path(
-    check_carry_same_references, carry_arg, carry_arg_out, is_leaf=graph.is_graph_node
+      check_carry_same_references,
+      carry_arg,
+      carry_arg_out,
+      is_leaf=lambda x: graph.is_graph_node(x)
+      and not isinstance(x, variablelib.Variable),
   )
 
 def _extract_graphdefs(
@@ -1306,9 +1319,6 @@ def scan(
     return out
 
   return scan_wrapper  # type: ignore
-
-
-
 
 
 # -------------------------------

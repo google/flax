@@ -283,9 +283,9 @@ class ScopeParamShapeError(FlaxError):
 
   def __init__(self, param_name, scope_path, value_shape, init_shape):
     super().__init__(
-      f'Initializer expected to generate shape {init_shape} '
-      f'but got shape {value_shape} instead for parameter '
-      f'"{param_name}" in "{scope_path}".'
+        f'For parameter "{param_name}" in "{scope_path}", the given '
+        f'initializer is expected to generate shape {init_shape}, but the '
+        f'existing parameter it received has shape {value_shape}.'
     )
 
 

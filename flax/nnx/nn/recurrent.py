@@ -685,7 +685,7 @@ class RNN(Module):
         'Expected rngs to be a jax.Array, int, Rngs, or bool. '
         f'Got {type(rngs)}.'
       )
-    self.state_axes = state_axes or {...: iteration.Carry}  # type: ignore
+    self.state_axes = state_axes or nnx.StateAxes({...: iteration.Carry})  # type: ignore
     self.broadcast_rngs = broadcast_rngs
 
   def __call__(
