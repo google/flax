@@ -29,7 +29,6 @@ if typing.TYPE_CHECKING:
   from train import TrainConfig
 
 
-
 Features = dict[str, np.ndarray]
 
 
