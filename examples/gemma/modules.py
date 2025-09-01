@@ -50,20 +50,26 @@ class Embedder(nnx.Module):
       embed_dim: int,
       *,
       embedding_init: nnx.Initializer = nnx.initializers.normal(),
-      dtype: Any = jnp.float32,
+      dtype: jnp.dtype = jnp.float32,
+      weight_dtype: jnp.dtype = jnp.float32,
       rngs: nnx.Rngs,
   ):
+    self.dtype = dtype
+    self.weight_dtype = weight_dtype
     self.input_embedding = nnx.Param(
-        embedding_init(rngs.params(), (vocab_size, embed_dim), dtype)
+        embedding_init(rngs.params(), (vocab_size, embed_dim), self.weight_dtype)
     )
 
   def encode(self, x: ArrayLike) -> Array:
-    x = self.input_embedding[(x,)]
-    x *= jnp.sqrt(x.shape[-1]).astype(x.dtype)
+    embedding = jnp.asarray(self.input_embedding[...], self.dtype)
+    x = embedding[(x,)]
+    x *= jnp.sqrt(x.shape[-1])
     return x
 
   def decode(self, x: ArrayLike) -> Array:
-    return jnp.dot(x, self.input_embedding.T)
+    x = jnp.asarray(x, self.dtype)
+    embedding = jnp.asarray(self.input_embedding, self.dtype)
+    return jnp.dot(x, embedding.T, preferred_element_type=self.dtype)
 
   @property
   def embed_dim(self):
@@ -93,7 +99,8 @@ class Attention(nnx.Module):
       sliding_window_size: int | None = None,
       use_qk_norm: bool = False,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
-      dtype: Any = jnp.float16,
+      dtype: jnp.dtype = jnp.float32,
+      weight_dtype: jnp.dtype = jnp.float32,
       kernel_init: nnx.Initializer = nnx.initializers.normal(),
       scale_init: nnx.Initializer = nnx.initializers.zeros_init(),
       attn_vec_einsum_kernel_init: nnx.Initializer | None = None,
@@ -116,6 +123,7 @@ class Attention(nnx.Module):
         shape=(num_heads, head_dim, features),
         kernel_init=attn_vec_einsum_kernel_init,
         dtype=dtype,
+        weight_dtype=weight_dtype,
         rngs=rngs,
     )
     self.rope_base_frequency = rope_base_frequency
@@ -130,6 +138,7 @@ class Attention(nnx.Module):
           shape=(3, num_heads, features, head_dim),
           kernel_init=qkv_einsum_kernel_init,
           dtype=dtype,
+          weight_dtype=weight_dtype,
           rngs=rngs,
       )
     else:
@@ -145,6 +154,7 @@ class Attention(nnx.Module):
           shape=(num_heads, features, head_dim),
           kernel_init=kernel_init,
           dtype=dtype,
+          weight_dtype=weight_dtype,
           rngs=rngs,
       )
       kv_einsum_kernel_init = kv_einsum_kernel_init if kv_einsum_kernel_init else kernel_init
@@ -153,6 +163,7 @@ class Attention(nnx.Module):
           shape=(2, num_kv_heads, features, head_dim),
           kernel_init=kv_einsum_kernel_init,
           dtype=dtype,
+          weight_dtype=weight_dtype,
           rngs=rngs,
       )
 
@@ -161,12 +172,14 @@ class Attention(nnx.Module):
         head_dim,
         scale_init=scale_init,
         dtype=dtype,
+        weight_dtype=weight_dtype,
         rngs=rngs,
       )
       self._key_norm = layers.RMSNorm(
         head_dim,
         scale_init=scale_init,
         dtype=dtype,
+        weight_dtype=weight_dtype,
         rngs=rngs,
       )
 
@@ -306,7 +319,7 @@ class Attention(nnx.Module):
       self,
       cache_size: int,
       batch_size: int,
-      dtype: jnp.dtype = jnp.bfloat16,
+      dtype: jnp.dtype = jnp.float32,
   ) -> LayerCache:
     return {
         'v': jnp.zeros(
@@ -335,7 +348,8 @@ class FeedForward(nnx.Module):
       down_proj_kernel_init: nnx.Initializer | None = None,
       rngs: nnx.Rngs,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
-      dtype: Any = jnp.float32,
+      dtype: jnp.dtype = jnp.float32,
+      weight_dtype: jnp.dtype = jnp.float32,
   ):
     gate_proj_kernel_init = gate_proj_kernel_init if gate_proj_kernel_init else kernel_init
     self.gate_proj = nnx.Linear(
@@ -345,6 +359,7 @@ class FeedForward(nnx.Module):
         rngs=rngs,
         kernel_init=gate_proj_kernel_init,
         dtype=dtype,
+        param_dtype=weight_dtype,
     )
     up_proj_kernel_init = up_proj_kernel_init if up_proj_kernel_init else kernel_init
     self.up_proj = nnx.Linear(
@@ -354,6 +369,7 @@ class FeedForward(nnx.Module):
         rngs=rngs,
         kernel_init=up_proj_kernel_init,
         dtype=dtype,
+        param_dtype=weight_dtype,
     )
     down_proj_kernel_init = down_proj_kernel_init if down_proj_kernel_init else kernel_init
     self.down_proj = nnx.Linear(
@@ -363,6 +379,7 @@ class FeedForward(nnx.Module):
         rngs=rngs,
         kernel_init=down_proj_kernel_init,
         dtype=dtype,
+        param_dtype=weight_dtype,
     )
     self.sow_config = sow_config
 
@@ -408,12 +425,14 @@ class Block(nnx.Module):
     attn_logits_soft_cap = config.attn_logits_soft_cap
     use_qk_norm = config.use_qk_norm
     dtype = config.dtype
+    weight_dtype = config.weight_dtype
 
     self.pre_attention_norm = layers.RMSNorm(
       embed_dim,
       scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
       rngs=rngs,
       dtype=dtype,
+      weight_dtype=weight_dtype,
     )
     self.attn = Attention(
         num_heads=num_heads,
@@ -446,6 +465,7 @@ class Block(nnx.Module):
         ),
         scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         dtype=dtype,
+        weight_dtype=weight_dtype,
     )
     if use_post_attn_norm:
       self.post_attention_norm = layers.RMSNorm(
@@ -453,6 +473,7 @@ class Block(nnx.Module):
         scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         rngs=rngs,
         dtype=dtype,
+        weight_dtype=weight_dtype,
       )
     else:
       self.post_attention_norm = None
@@ -462,6 +483,7 @@ class Block(nnx.Module):
       scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
       rngs=rngs,
       dtype=dtype,
+      weight_dtype=weight_dtype,
     )
     self.mlp = FeedForward(
         features=embed_dim,
@@ -480,6 +502,8 @@ class Block(nnx.Module):
         ),
         rngs=rngs,
         sow_config=sow_config,
+        dtype=dtype,
+        weight_dtype=weight_dtype,
     )
     if use_post_ffw_norm:
       self.post_ffw_norm = layers.RMSNorm(
@@ -487,6 +511,7 @@ class Block(nnx.Module):
         scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         rngs=rngs,
         dtype=dtype,
+        weight_dtype=weight_dtype,
       )
     else:
       self.post_ffw_norm = None
@@ -527,7 +552,7 @@ class Block(nnx.Module):
       self,
       cache_size: int,
       batch_size: int,
-      dtype: jnp.dtype = jnp.bfloat16,
+      dtype: jnp.dtype = jnp.float32,
   ) -> LayerCache:
     return self.attn.init_cache(
         cache_size=cache_size,
