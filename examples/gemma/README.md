@@ -8,7 +8,7 @@ This example is based on `lm1b_nnx` example script.
 
 ### Requirements
 
-*   TensorFlow datasets `lm1b` need to be downloaded and prepared (see below).
+*   TensorFlow datasets `lm1b` needs to be downloaded and prepared (see below).
     A sentencepiece tokenizer vocabulary will be automatically generated
     and saved on each training run.
 *   This example additionally depends on the `sentencepiece` and [`grain`](https://google-grain.readthedocs.io/en/latest/) packages.

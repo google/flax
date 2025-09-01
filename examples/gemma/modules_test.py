@@ -17,11 +17,13 @@
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
+from jax.sharding import AxisType
 import modules
 import transformer as transformer_lib
 import jax
 import jax.numpy as jnp
 import numpy as np
+
 
 
 class EmbedderTest(parameterized.TestCase):
@@ -241,6 +243,8 @@ class FeedForwardTest(parameterized.TestCase):
 
 
 class BlockTest(parameterized.TestCase):
+  def setUp(self):
+    self.mesh = jax.make_mesh((1, 1, 1), ("data", "fsdp", "tensor"), (AxisType.Auto,) * 3)
 
   @parameterized.parameters(
       dict(
@@ -284,171 +288,157 @@ class BlockTest(parameterized.TestCase):
         attention_types=[],
     )
 
-    block = modules.Block(
+    with jax.set_mesh(self.mesh):
+      block = modules.Block(
         config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
-    )
-    cache = block.init_cache(
+      )
+      cache = block.init_cache(
         cache_size=cache_size,
         batch_size=batch_size,
         dtype=jnp.float32,
-    )
+      )
 
-    new_cache, outputs = block(inputs, jnp.array([[0]]), cache, attn_mask)
+      new_cache, outputs = block(inputs, jnp.array([[0]]), cache, attn_mask)
 
-    self.assertEqual(block.post_attention_norm is not None, use_post_attn_norm)
-    self.assertEqual(new_cache['k'].shape, expected_cache_shape)
-    self.assertEqual(outputs.shape, expected_output_shape)
+      self.assertEqual(block.post_attention_norm is not None, use_post_attn_norm)
+      self.assertEqual(new_cache['k'].shape, expected_cache_shape)
+      self.assertEqual(outputs.shape, expected_output_shape)
 
   @parameterized.parameters(
       dict(
-          num_heads=1,
-          embed_dim=1,
-          head_dim=2,
-          cache_size=1,
-          batch_size=1,
+        num_heads=1,
+        embed_dim=1,
+        head_dim=2,
+        cache_size=1,
+        batch_size=1,
       ),
   )
   def test_post_attention_norm(
-      self,
-      num_heads,
-      embed_dim,
-      head_dim,
-      cache_size,
-      batch_size,
+    self,
+    num_heads,
+    embed_dim,
+    head_dim,
+    cache_size,
+    batch_size,
   ):
     inputs = jnp.ones((batch_size, 1, embed_dim))
     attn_mask = jnp.ones((batch_size, 1, cache_size))
 
+    common_kwargs = {
+      "num_heads": num_heads,
+      "num_kv_heads": num_heads,
+      "embed_dim": embed_dim,
+      "head_dim": head_dim,
+      "hidden_dim": 1,
+      "use_post_ffw_norm": False,
+      "final_logit_softcap": None,
+      "num_layers": -1,
+      "num_embed": -1,
+      "attention_types": [],
+    }
     normed_block_config = transformer_lib.TransformerConfig(
-        num_heads=num_heads,
-        num_kv_heads=num_heads,
-        embed_dim=embed_dim,
-        head_dim=head_dim,
-        hidden_dim=1,
-        use_post_attn_norm=True,
-        use_post_ffw_norm=False,
-        final_logit_softcap=None,
-        num_layers=-1,
-        num_embed=-1,
-        attention_types=[],
+      use_post_attn_norm=True,
+      **common_kwargs,
     )
-    normed_block = modules.Block(
+    unnormed_block_config = transformer_lib.TransformerConfig(
+      use_post_attn_norm=False,
+      **common_kwargs,
+    )
+
+    with jax.set_mesh(self.mesh):
+      normed_block = modules.Block(
         normed_block_config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
-    )
-
-    unnormed_block_config = transformer_lib.TransformerConfig(
-        num_heads=num_heads,
-        num_kv_heads=num_heads,
-        embed_dim=embed_dim,
-        head_dim=head_dim,
-        hidden_dim=1,
-        use_post_attn_norm=False,
-        use_post_ffw_norm=False,
-        final_logit_softcap=None,
-        num_layers=-1,
-        num_embed=-1,
-        attention_types=[],
-    )
-    unnormed_block = modules.Block(
+      )
+      unnormed_block = modules.Block(
         unnormed_block_config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
-    )
-
-    # Ok to use the same cache for both blocks.
-    cache = normed_block.init_cache(
+      )
+      # Ok to use the same cache for both blocks.
+      cache = normed_block.init_cache(
         cache_size=cache_size,
         batch_size=batch_size,
         dtype=jnp.float32,
-    )
+      )
+      all_outputs = []
+      for block in (normed_block, unnormed_block):
+        _, outputs = block(inputs, jnp.array([[0]]), cache, attn_mask)
+        all_outputs.append(outputs)
 
-    all_outputs = []
-    for block in (normed_block, unnormed_block):
-      _, outputs = block(inputs, jnp.array([[0]]), cache, attn_mask)
-      all_outputs.append(outputs)
-
-    normed_output, unnormed_output = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
-    self.assertTrue(jnp.not_equal(normed_output, unnormed_output).all())
+      normed_output, unnormed_output = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
+      self.assertTrue(jnp.not_equal(normed_output, unnormed_output).all())
 
   @parameterized.parameters(
       dict(
-          num_heads=1,
-          embed_dim=1,
-          head_dim=2,
-          cache_size=1,
-          batch_size=1,
+        num_heads=1,
+        embed_dim=1,
+        head_dim=2,
+        cache_size=1,
+        batch_size=1,
       ),
   )
   def test_post_ffw_norm(
-      self,
-      num_heads,
-      embed_dim,
-      head_dim,
-      cache_size,
-      batch_size,
+    self,
+    num_heads,
+    embed_dim,
+    head_dim,
+    cache_size,
+    batch_size,
   ):
     inputs = jnp.ones((batch_size, 1, embed_dim))
     attn_mask = jnp.ones((batch_size, 1, cache_size))
 
+    common_kwargs = {
+      "num_heads": num_heads,
+      "num_kv_heads": num_heads,
+      "embed_dim": embed_dim,
+      "head_dim": head_dim,
+      "hidden_dim": 1,
+      "use_post_attn_norm": False,
+      "final_logit_softcap": None,
+      "num_layers": -1,
+      "num_embed": -1,
+      "attention_types": [],
+    }
     normed_block_config = transformer_lib.TransformerConfig(
-        num_heads=num_heads,
-        num_kv_heads=num_heads,
-        embed_dim=embed_dim,
-        head_dim=head_dim,
-        hidden_dim=1,
-        use_post_attn_norm=False,
-        use_post_ffw_norm=True,
-        final_logit_softcap=None,
-        num_layers=-1,
-        num_embed=-1,
-        attention_types=[],
+      use_post_ffw_norm=True,
+      **common_kwargs,
     )
-    normed_block = modules.Block(
+    unnormed_block_config = transformer_lib.TransformerConfig(
+      use_post_ffw_norm=False,
+      **common_kwargs
+    )
+
+    with jax.set_mesh(self.mesh):
+      normed_block = modules.Block(
         normed_block_config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
-    )
-
-    unnormed_block_config = transformer_lib.TransformerConfig(
-        num_heads=num_heads,
-        num_kv_heads=num_heads,
-        embed_dim=embed_dim,
-        head_dim=head_dim,
-        hidden_dim=1,
-        use_post_attn_norm=False,
-        use_post_ffw_norm=False,
-        final_logit_softcap=None,
-        num_layers=-1,
-        num_embed=-1,
-        attention_types=[],
-    )
-    unnormed_block = modules.Block(
+      )
+      unnormed_block = modules.Block(
         unnormed_block_config,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
-    )
+      )
 
-    # Ok to use the same cache for both blocks.
-    cache = normed_block.init_cache(
+      # Ok to use the same cache for both blocks.
+      cache = normed_block.init_cache(
         cache_size=cache_size,
         batch_size=batch_size,
         dtype=jnp.float32,
-    )
+      )
 
-    all_outputs = []
-    for block in (normed_block, unnormed_block):
-      _, outputs = block(inputs, jnp.array([[0]]), cache, attn_mask)
-      all_outputs.append(outputs)
+      all_outputs = []
+      for block in (normed_block, unnormed_block):
+        _, outputs = block(inputs, jnp.array([[0]]), cache, attn_mask)
+        all_outputs.append(outputs)
 
-    normed_output, unnormed_output = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
-    print(normed_output.shape, unnormed_output.shape)
-    print(f"{normed_output=}")
-    print(f"{unnormed_output=}")
-    self.assertTrue(jnp.not_equal(normed_output, unnormed_output).all())
+      normed_output, unnormed_output = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
+      self.assertTrue(jnp.not_equal(normed_output, unnormed_output).all())
 
 
 if __name__ == '__main__':

@@ -39,12 +39,17 @@ class Einsum(nnx.Module):
       kernel_init: nnx.Initializer = nnx.initializers.normal(),
       rngs: nnx.Rngs,
       dtype: Any = jnp.float32,
+      weight_dtype: Any = jnp.float32,
   ):
+    self.dtype = dtype
+    self.weight_dtype = weight_dtype
     self.einsum_str = einsum_str
-    self.w = nnx.Param(kernel_init(rngs.params(), shape, dtype))
+    self.w = nnx.Param(kernel_init(rngs.params(), shape, weight_dtype))
 
   def __call__(self, x: ArrayLike) -> Array:
-    return jnp.einsum(self.einsum_str, x, self.w[...])
+    x = jnp.asarray(x, self.dtype)
+    w = jnp.asarray(self.w[...], self.dtype)
+    return jnp.einsum(self.einsum_str, x, w)
 
   @property
   def shape(self) -> Shape:
@@ -61,16 +66,16 @@ class RMSNorm(nnx.Module):
       scale_init: nnx.Initializer = nnx.initializers.zeros_init(),
       rngs: nnx.Rngs,
       dtype: Any = jnp.float32,
+      weight_dtype: Any = jnp.float32,
   ):
-    self.scale = nnx.Param(scale_init(rngs.params(), dim, dtype))
+    self.dtype = dtype
+    self.weight_dtype = weight_dtype
+    self.scale = nnx.Param(scale_init(rngs.params(), dim, weight_dtype))
 
   def __call__(self, x: Array) -> Array:
-    dtype = self.scale.dtype
-    var = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
-    normed_inputs = jnp.asarray(x * jax.lax.rsqrt(var + 1e-06), dtype=dtype)
-    # normed_inputs is a rank-K tensor, K > 1 (K is typically 2 or 3). scale is
-    # a rank-1 tensor. To avoid implicit rank-promotion, reshape scale to
-    # a (1, ..., 1, D) tensor, so the rank of scale matches normed_inputs.
-    scale = jnp.expand_dims(self.scale, axis=range(len(x.shape) - 1))
-    normed_inputs = normed_inputs * (1 + scale)
+    x = jnp.asarray(x, self.dtype)
+    mean2 = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
+    normed_inputs = jnp.asarray(x * jax.lax.rsqrt(mean2 + 1e-06), dtype=self.dtype)
+    scale = jnp.asarray(self.scale, self.dtype)
+    normed_inputs = normed_inputs * (1.0 + scale)
     return normed_inputs

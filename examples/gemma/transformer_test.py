@@ -18,11 +18,14 @@ from collections import defaultdict
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
+from jax.sharding import AxisType
+import jax
+import jax.numpy as jnp
+import numpy as np
 import modules
 import sow_lib
 import transformer as transformer_lib
-import jax.numpy as jnp
-import numpy as np
+
 
 
 def create_fake_params(config: transformer_lib.TransformerConfig):
@@ -85,49 +88,52 @@ def create_fake_params(config: transformer_lib.TransformerConfig):
 
 class TransformerTest(parameterized.TestCase):
 
+  def setUp(self):
+    self.mesh = jax.make_mesh((1, 1, 1), ("data", "fsdp", "tensor"), (AxisType.Auto,) * 3)
+
   @parameterized.parameters(
       # Prime number to ease shape tracing
       dict(
-          num_layers=3,
-          num_embed=17,
-          embed_dim=2,
-          num_heads=4,
-          num_kv_heads=2,
-          hidden_dim=11,
-          head_dim=8,
-          cache_size=29,
-          batch_size=7,
-          sequence_length=18,
-          expected_outputs_shape=(7, 18, 17),  # batch_size, seq_size, num_embed
-          expected_cache_shape=(7, 29, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
+        num_layers=3,
+        num_embed=17,
+        embed_dim=2,
+        num_heads=4,
+        num_kv_heads=2,
+        hidden_dim=11,
+        head_dim=8,
+        cache_size=29,
+        batch_size=7,
+        sequence_length=18,
+        expected_outputs_shape=(7, 18, 17),  # batch_size, seq_size, num_embed
+        expected_cache_shape=(7, 29, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
       dict(
-          num_layers=3,
-          num_embed=4,
-          embed_dim=2,
-          num_heads=2,
-          num_kv_heads=1,
-          hidden_dim=4,
-          head_dim=4,
-          cache_size=2,
-          batch_size=1,
-          sequence_length=1,
-          expected_outputs_shape=(1, 1, 4),  # batch_size, seq_size, num_embed
-          expected_cache_shape=(1, 2, 1, 4),  # batch_size, cache_size, num_kv_heads, head_dim
+        num_layers=3,
+        num_embed=4,
+        embed_dim=2,
+        num_heads=2,
+        num_kv_heads=1,
+        hidden_dim=4,
+        head_dim=4,
+        cache_size=2,
+        batch_size=1,
+        sequence_length=1,
+        expected_outputs_shape=(1, 1, 4),  # batch_size, seq_size, num_embed
+        expected_cache_shape=(1, 2, 1, 4),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
       dict(
-          num_layers=3,
-          num_embed=7,
-          embed_dim=5,
-          num_heads=4,
-          num_kv_heads=2,
-          hidden_dim=6,
-          head_dim=8,
-          cache_size=9,
-          batch_size=1,
-          sequence_length=1,
-          expected_outputs_shape=(1, 1, 7),  # batch_size, seq_size, num_embed
-          expected_cache_shape=(1, 9, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
+        num_layers=3,
+        num_embed=7,
+        embed_dim=5,
+        num_heads=4,
+        num_kv_heads=2,
+        hidden_dim=6,
+        head_dim=8,
+        cache_size=9,
+        batch_size=1,
+        sequence_length=1,
+        expected_outputs_shape=(1, 1, 7),  # batch_size, seq_size, num_embed
+        expected_cache_shape=(1, 9, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
   )
   def test_transformer(
@@ -147,37 +153,39 @@ class TransformerTest(parameterized.TestCase):
   ):
 
     config = transformer_lib.TransformerConfig(
-        num_layers=num_layers,
-        num_embed=num_embed,
-        embed_dim=embed_dim,
-        hidden_dim=hidden_dim,
-        num_heads=num_heads,
-        head_dim=head_dim,
-        num_kv_heads=num_kv_heads,
-        final_logit_softcap=None,
-        attention_types=[modules.AttentionType.GLOBAL] * num_layers,
-        use_post_attn_norm=False,
-        use_post_ffw_norm=False,
+      num_layers=num_layers,
+      num_embed=num_embed,
+      embed_dim=embed_dim,
+      hidden_dim=hidden_dim,
+      num_heads=num_heads,
+      head_dim=head_dim,
+      num_kv_heads=num_kv_heads,
+      final_logit_softcap=None,
+      attention_types=[modules.AttentionType.GLOBAL] * num_layers,
+      use_post_attn_norm=False,
+      use_post_ffw_norm=False,
     )
     attention_mask = jnp.ones((batch_size, 1, cache_size), dtype=jnp.bool)
-    transformer = transformer_lib.Transformer(
+
+    with jax.set_mesh(self.mesh):
+      transformer = transformer_lib.Transformer(
         config=config, rngs=nnx.Rngs(params=0)
-    )
-    cache = transformer.init_cache(
+      )
+      cache = transformer.init_cache(
         cache_size=cache_size,
         batch_size=batch_size,
         dtype=jnp.float32,
-    )
+      )
 
-    outputs, cache = transformer(
+      outputs, cache = transformer(
         jnp.tile(jnp.arange(sequence_length), (batch_size, 1)),
         jnp.tile(jnp.arange(sequence_length), (batch_size, 1)),
         cache,
         attention_mask,
-    )
+      )
 
-    self.assertEqual(outputs.shape, expected_outputs_shape)
-    self.assertEqual(cache['layer_0']['v'].shape, expected_cache_shape)
+      self.assertEqual(outputs.shape, expected_outputs_shape)
+      self.assertEqual(cache['layer_0']['v'].shape, expected_cache_shape)
 
   @parameterized.parameters(
       ('final_logit_softcap',),
@@ -221,34 +229,35 @@ class TransformerTest(parameterized.TestCase):
         **(params | no_soft_cap_args)
     )
 
-    all_outputs = []
-    for config in [config_soft_cap, config_no_soft_cap]:
-      transformer = transformer_lib.Transformer(
+    with jax.set_mesh(self.mesh):
+      all_outputs = []
+      for config in [config_soft_cap, config_no_soft_cap]:
+        transformer = transformer_lib.Transformer(
           config=config, rngs=nnx.Rngs(params=1)
-      )
-      cache = transformer.init_cache(
+        )
+        cache = transformer.init_cache(
           cache_size=cache_size,
           batch_size=batch_size,
           dtype=jnp.float32,
-      )
+        )
 
-      outputs, _ = transformer(
+        outputs, _ = transformer(
           jnp.array([[5]]), jnp.array([[2]]), cache, attention_mask
-      )
-      all_outputs.append(outputs)
+        )
+        all_outputs.append(outputs)
 
-    soft_cap_outputs, no_soft_cap_outputs = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
+      soft_cap_outputs, no_soft_cap_outputs = all_outputs  # pylint: disable=unbalanced-tuple-unpacking
 
-    # Ensure that values aren't equal coming out of computation
-    self.assertFalse((soft_cap_outputs == no_soft_cap_outputs).all())
+      # Ensure that values aren't equal coming out of computation
+      self.assertFalse((soft_cap_outputs == no_soft_cap_outputs).all())
 
-    # Run soft capping manually
-    manual_soft_cap_logits = no_soft_cap_outputs / soft_cap_val
-    manual_soft_cap_logits = jnp.tanh(manual_soft_cap_logits) * soft_cap_val
+      # Run soft capping manually
+      manual_soft_cap_logits = no_soft_cap_outputs / soft_cap_val
+      manual_soft_cap_logits = jnp.tanh(manual_soft_cap_logits) * soft_cap_val
 
-    np.testing.assert_array_almost_equal(
+      np.testing.assert_array_almost_equal(
         manual_soft_cap_logits, soft_cap_outputs, 1e-5
-    )
+      )
 
   @parameterized.parameters([
       dict(
@@ -272,17 +281,18 @@ class TransformerTest(parameterized.TestCase):
       )
   ])
   def test_creates_cache(self, config, cache_size, keys, k_shape, v_shape):
-    transformer = transformer_lib.Transformer(
+    with jax.set_mesh(self.mesh):
+      transformer = transformer_lib.Transformer(
         config=config, rngs=nnx.Rngs(params=0)
-    )
-    cache = transformer.init_cache(
+      )
+      cache = transformer.init_cache(
         cache_size=cache_size,
         batch_size=1,
         dtype=jnp.float32,
-    )
-    self.assertEqual(list(cache.keys()), keys)
-    self.assertEqual(cache['layer_0']['k'].shape, k_shape)
-    self.assertEqual(cache['layer_0']['v'].shape, v_shape)
+      )
+      self.assertEqual(list(cache.keys()), keys)
+      self.assertEqual(cache['layer_0']['k'].shape, k_shape)
+      self.assertEqual(cache['layer_0']['v'].shape, v_shape)
 
   @parameterized.parameters([
       dict(
@@ -310,117 +320,119 @@ class TransformerTest(parameterized.TestCase):
       config: transformer_lib.TransformerConfig,
   ):
     cache_size = 6
-
     token_input = jnp.ones((batch_size, seq_size), dtype=jnp.int32)
-    transformer = transformer_lib.Transformer(
+
+    with jax.set_mesh(self.mesh):
+      transformer = transformer_lib.Transformer(
         config=config, rngs=nnx.Rngs(params=0)
-    )
-    empty_cache = transformer.init_cache(
+      )
+      empty_cache = transformer.init_cache(
         cache_size=cache_size,
         batch_size=batch_size,
         dtype=jnp.float32,
-    )
-    attention_mask = jnp.ones(
+      )
+      attention_mask = jnp.ones(
         (batch_size, seq_size, cache_size), dtype=jnp.bool
-    )
-    positions = transformer_lib.build_positions_from_mask(token_input != 0)
+      )
+      positions = transformer_lib.build_positions_from_mask(token_input != 0)
 
-    output_cache, _ = transformer(
+      output_cache, _ = transformer(
         token_input, positions, empty_cache, attention_mask
-    )
+      )
 
-    attention_mask = jnp.ones((batch_size, seq_size, seq_size), dtype=jnp.bool)
-    output_none, cache_none = transformer(
+      attention_mask = jnp.ones((batch_size, seq_size, seq_size), dtype=jnp.bool)
+      output_none, cache_none = transformer(
         token_input, positions, None, attention_mask
-    )
+      )
 
-    self.assertIsNone(cache_none)
-    np.testing.assert_array_almost_equal(output_cache, output_none, 1e-5)
+      self.assertIsNone(cache_none)
+      np.testing.assert_array_almost_equal(output_cache, output_none, 1e-5)
 
   def test_attention_types(
-      self,
+    self,
   ):
-
     config = transformer_lib.TransformerConfig(
-        num_layers=2,
-        num_embed=4,
-        embed_dim=2,
-        hidden_dim=12,
-        num_heads=3,
-        head_dim=4,
-        num_kv_heads=3,
-        final_logit_softcap=None,
-        attention_types=[modules.AttentionType.GLOBAL] * 2,
-        use_post_attn_norm=False,
-        use_post_ffw_norm=False,
+      num_layers=2,
+      num_embed=4,
+      embed_dim=2,
+      hidden_dim=12,
+      num_heads=3,
+      head_dim=4,
+      num_kv_heads=3,
+      final_logit_softcap=None,
+      attention_types=[modules.AttentionType.GLOBAL] * 2,
+      use_post_attn_norm=False,
+      use_post_ffw_norm=False,
     )
-    transformer = transformer_lib.Transformer(
+    with jax.set_mesh(self.mesh):
+      transformer = transformer_lib.Transformer(
         config=config, rngs=nnx.Rngs(params=0)
-    )
-    cache = transformer.init_cache(
+      )
+      cache = transformer.init_cache(
         cache_size=6,
         batch_size=1,
         dtype=jnp.float32,
-    )
-    self.assertTrue(cache)
+      )
+      self.assertTrue(cache)
 
   @parameterized.parameters(
       dict(
-          config=transformer_lib.TransformerConfig(
-              num_layers=2,
-              num_embed=4,
-              embed_dim=2,
-              hidden_dim=12,
-              num_heads=10,
-              head_dim=4,
-              num_kv_heads=5,
-              final_logit_softcap=None,
-              attention_types=[modules.AttentionType.GLOBAL] * 2,
-              use_post_attn_norm=False,
-              use_post_ffw_norm=False,
-          ),
+        config=transformer_lib.TransformerConfig(
+          num_layers=2,
+          num_embed=4,
+          embed_dim=2,
+          hidden_dim=12,
+          num_heads=10,
+          head_dim=4,
+          num_kv_heads=5,
+          final_logit_softcap=None,
+          attention_types=[modules.AttentionType.GLOBAL] * 2,
+          use_post_attn_norm=False,
+          use_post_ffw_norm=False,
+        ),
       ),
       dict(
-          config=transformer_lib.TransformerConfig(
-              num_layers=2,
-              num_embed=4,
-              embed_dim=2,
-              hidden_dim=12,
-              num_heads=5,
-              head_dim=4,
-              num_kv_heads=5,
-              final_logit_softcap=None,
-              attention_types=[modules.AttentionType.GLOBAL] * 2,
-              use_post_attn_norm=True,
-              use_post_ffw_norm=True,
-          ),
+        config=transformer_lib.TransformerConfig(
+          num_layers=2,
+          num_embed=4,
+          embed_dim=2,
+          hidden_dim=12,
+          num_heads=5,
+          head_dim=4,
+          num_kv_heads=5,
+          final_logit_softcap=None,
+          attention_types=[modules.AttentionType.GLOBAL] * 2,
+          use_post_attn_norm=True,
+          use_post_ffw_norm=True,
+        ),
       ),
       dict(
-          config=transformer_lib.TransformerConfig(
-              num_layers=2,
-              num_embed=4,
-              embed_dim=5,
-              hidden_dim=12,
-              num_heads=6,
-              head_dim=4,
-              num_kv_heads=3,
-              final_logit_softcap=None,
-              attention_types=[modules.AttentionType.GLOBAL] * 2,
-              use_post_attn_norm=True,
-              use_post_ffw_norm=True,
-          ),
+        config=transformer_lib.TransformerConfig(
+          num_layers=2,
+          num_embed=4,
+          embed_dim=5,
+          hidden_dim=12,
+          num_heads=6,
+          head_dim=4,
+          num_kv_heads=3,
+          final_logit_softcap=None,
+          attention_types=[modules.AttentionType.GLOBAL] * 2,
+          use_post_attn_norm=True,
+          use_post_ffw_norm=True,
+        ),
       ),
   )
   def test_load_from_params(self, config):
     params = create_fake_params(config)
-    transformer = transformer_lib.Transformer.from_params(params, config)
-    logits, _ = transformer(
+    with jax.set_mesh(self.mesh):
+      transformer = transformer_lib.Transformer.from_params(params, config)
+      logits, _ = transformer(
         last_tokens=jnp.tile(jnp.arange(3), (2, 1)),
         positions=jnp.tile(jnp.arange(3), (2, 1)),
         cache=None,
         attention_mask=jnp.ones((2, 1, 3), dtype=jnp.bool),
-    )
-    self.assertEqual(logits.shape, (2, 3, 4))
+      )
+      self.assertEqual(logits.shape, (2, 3, 4))
 
   @parameterized.parameters([
       sow_lib.SowConfig(embeddings=True),
@@ -449,101 +461,102 @@ class TransformerTest(parameterized.TestCase):
     attention_mask = jnp.ones(
         (batch_size, sequence_length, sequence_length), dtype=jnp.bool
     )
-    transformer = transformer_lib.Transformer(
+    with jax.set_mesh(self.mesh):
+      transformer = transformer_lib.Transformer(
         config=config, rngs=nnx.Rngs(params=0), sow_config=sow_config
-    )
-    transformer(
+      )
+      transformer(
         jnp.tile(jnp.arange(sequence_length), (batch_size, 1)),
         jnp.tile(jnp.arange(sequence_length), (batch_size, 1)),
         None,
         attention_mask,
-    )
-
-    if sow_config.embeddings:
-      self.assertTrue(hasattr(transformer, 'embeddings'))
-      embeddings = transformer.embeddings[0]
-      self.assertEqual(
-          embeddings.shape,
-          (batch_size, sequence_length, config.embed_dim),
       )
-    else:
-      self.assertFalse(hasattr(transformer, 'embeddings'))
 
-    for layer in transformer.layers:
-      if sow_config.rs_after_attention:
-        self.assertTrue(hasattr(layer, 'rs_after_attention'))
-        rs_after_attention = layer.rs_after_attention[0]
-        self.assertIsNotNone(rs_after_attention)
+      if sow_config.embeddings:
+        self.assertTrue(hasattr(transformer, 'embeddings'))
+        embeddings = transformer.embeddings[0]
         self.assertEqual(
-            rs_after_attention.shape,
+            embeddings.shape,
             (batch_size, sequence_length, config.embed_dim),
         )
       else:
-        self.assertFalse(hasattr(layer, 'rs_after_attention'))
-      if sow_config.rs_after_ffw:
-        self.assertTrue(hasattr(layer, 'rs_after_ffw'))
-        rs_after_ffw = layer.rs_after_ffw[0]
-        self.assertIsNotNone(rs_after_ffw)
-        self.assertEqual(
-            rs_after_ffw.shape,
-            (batch_size, sequence_length, config.embed_dim),
-        )
-      else:
-        self.assertFalse(hasattr(layer, 'rs_after_ffw'))
-      if sow_config.attn_logits_topk:
-        self.assertTrue(hasattr(layer.attn, 'logits_topk_values'))
-        attn_logits_topk_values = layer.attn.logits_topk_values[0]
-        self.assertIsNotNone(attn_logits_topk_values)
-        self.assertEqual(
-            attn_logits_topk_values.shape,
-            (
-                batch_size,
-                sequence_length,
-                config.num_heads,
-                sow_config.attn_logits_topk,
-            ),
-        )
-        self.assertTrue(hasattr(layer.attn, 'logits_topk_indices'))
-        attn_logits_topk_indices = layer.attn.logits_topk_indices[0]
-        self.assertIsNotNone(attn_logits_topk_indices)
-        self.assertEqual(
-            attn_logits_topk_indices.shape,
-            (
-                batch_size,
-                sequence_length,
-                config.num_heads,
-                sow_config.attn_logits_topk,
-            ),
-        )
-      else:
-        self.assertFalse(hasattr(layer.attn, 'logits_topk_values'))
-        self.assertFalse(hasattr(layer.attn, 'logits_topk_indices'))
-      if sow_config.mlp_hidden_topk:
-        self.assertTrue(hasattr(layer.mlp, 'hidden_topk_values'))
-        ffw_hidden_topk_values = layer.mlp.hidden_topk_values[0]
-        self.assertIsNotNone(ffw_hidden_topk_values)
-        self.assertEqual(
-            ffw_hidden_topk_values.shape,
-            (
-                batch_size,
-                sequence_length,
-                sow_config.mlp_hidden_topk,
-            ),
-        )
-        self.assertTrue(hasattr(layer.mlp, 'hidden_topk_indices'))
-        ffw_hidden_topk_indices = layer.mlp.hidden_topk_indices[0]
-        self.assertIsNotNone(ffw_hidden_topk_indices)
-        self.assertEqual(
-            ffw_hidden_topk_indices.shape,
-            (
-                batch_size,
-                sequence_length,
-                sow_config.mlp_hidden_topk,
-            ),
-        )
-      else:
-        self.assertFalse(hasattr(layer.mlp, 'hidden_topk_values'))
-        self.assertFalse(hasattr(layer.mlp, 'hidden_topk_indices'))
+        self.assertFalse(hasattr(transformer, 'embeddings'))
+
+      for layer in transformer.layers:
+        if sow_config.rs_after_attention:
+          self.assertTrue(hasattr(layer, 'rs_after_attention'))
+          rs_after_attention = layer.rs_after_attention[0]
+          self.assertIsNotNone(rs_after_attention)
+          self.assertEqual(
+              rs_after_attention.shape,
+              (batch_size, sequence_length, config.embed_dim),
+          )
+        else:
+          self.assertFalse(hasattr(layer, 'rs_after_attention'))
+        if sow_config.rs_after_ffw:
+          self.assertTrue(hasattr(layer, 'rs_after_ffw'))
+          rs_after_ffw = layer.rs_after_ffw[0]
+          self.assertIsNotNone(rs_after_ffw)
+          self.assertEqual(
+              rs_after_ffw.shape,
+              (batch_size, sequence_length, config.embed_dim),
+          )
+        else:
+          self.assertFalse(hasattr(layer, 'rs_after_ffw'))
+        if sow_config.attn_logits_topk:
+          self.assertTrue(hasattr(layer.attn, 'logits_topk_values'))
+          attn_logits_topk_values = layer.attn.logits_topk_values[0]
+          self.assertIsNotNone(attn_logits_topk_values)
+          self.assertEqual(
+              attn_logits_topk_values.shape,
+              (
+                  batch_size,
+                  sequence_length,
+                  config.num_heads,
+                  sow_config.attn_logits_topk,
+              ),
+          )
+          self.assertTrue(hasattr(layer.attn, 'logits_topk_indices'))
+          attn_logits_topk_indices = layer.attn.logits_topk_indices[0]
+          self.assertIsNotNone(attn_logits_topk_indices)
+          self.assertEqual(
+              attn_logits_topk_indices.shape,
+              (
+                  batch_size,
+                  sequence_length,
+                  config.num_heads,
+                  sow_config.attn_logits_topk,
+              ),
+          )
+        else:
+          self.assertFalse(hasattr(layer.attn, 'logits_topk_values'))
+          self.assertFalse(hasattr(layer.attn, 'logits_topk_indices'))
+        if sow_config.mlp_hidden_topk:
+          self.assertTrue(hasattr(layer.mlp, 'hidden_topk_values'))
+          ffw_hidden_topk_values = layer.mlp.hidden_topk_values[0]
+          self.assertIsNotNone(ffw_hidden_topk_values)
+          self.assertEqual(
+              ffw_hidden_topk_values.shape,
+              (
+                  batch_size,
+                  sequence_length,
+                  sow_config.mlp_hidden_topk,
+              ),
+          )
+          self.assertTrue(hasattr(layer.mlp, 'hidden_topk_indices'))
+          ffw_hidden_topk_indices = layer.mlp.hidden_topk_indices[0]
+          self.assertIsNotNone(ffw_hidden_topk_indices)
+          self.assertEqual(
+              ffw_hidden_topk_indices.shape,
+              (
+                  batch_size,
+                  sequence_length,
+                  sow_config.mlp_hidden_topk,
+              ),
+          )
+        else:
+          self.assertFalse(hasattr(layer.mlp, 'hidden_topk_values'))
+          self.assertFalse(hasattr(layer.mlp, 'hidden_topk_indices'))
 
 
 if __name__ == '__main__':

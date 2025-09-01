@@ -20,7 +20,8 @@ import tempfile
 import time
 import shutil
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 from absl import logging
 import jax
