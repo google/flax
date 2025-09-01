@@ -64,6 +64,8 @@ from .graph import to_arrays as to_arrays
 from .graph import to_refs as to_refs
 from .graph import pure as pure
 from .graph import cached_partial as cached_partial
+from .graph import flatten as flatten
+from .graph import unflatten as unflatten
 from .nn import initializers as initializers
 from .nn.activations import celu as celu
 from .nn.activations import elu as elu

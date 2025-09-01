@@ -26,3 +26,10 @@ graph
 
 .. autofunction:: update_context
 .. autofunction:: current_update_context
+
+.. autofunction:: find_duplicates
+.. autofunction:: pure
+.. autofunction:: to_refs
+.. autofunction:: to_arrays
+.. autofunction:: flatten
+.. autofunction:: unflatten
