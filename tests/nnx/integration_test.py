@@ -28,6 +28,59 @@ A = tp.TypeVar('A')
 
 
 class TestIntegration(absltest.TestCase):
+
+  def test_basic_example(self):
+    class Model(nnx.Module):
+
+      def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dmid, rngs=rngs)
+        self.bn = nnx.BatchNorm(dmid, rngs=rngs)
+        self.dropout = nnx.Dropout(0.2, rngs=rngs)
+        self.linear_out = nnx.Linear(dmid, dout, rngs=rngs)
+
+      def __call__(self, x):
+        x = nnx.relu(self.dropout(self.bn(self.linear(x))))
+        return self.linear_out(x)
+
+    model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
+    train_model = nnx.set_mode(
+        model, deterministic=False, use_running_average=False
+    )
+    eval_model = nnx.set_mode(
+        model, deterministic=True, use_running_average=True
+    )
+    optimizer = nnx.Optimizer(train_model, optax.adam(1e-3), wrt=nnx.Param)
+
+    self.assertEqual(train_model.dropout.deterministic, False)
+    self.assertEqual(train_model.bn.use_running_average, False)
+    self.assertEqual(eval_model.dropout.deterministic, True)
+    self.assertEqual(eval_model.bn.use_running_average, True)
+    self.assertIs(train_model.dropout.rngs.count, eval_model.dropout.rngs.count)
+
+    @nnx.jit  # automatic state management for JAX transforms
+    def train_step(model, optimizer, x, y):
+      def loss_fn(model):
+        y_pred = model(x)
+        return jnp.mean((y_pred - y) ** 2)
+
+      loss, grads = nnx.value_and_grad(loss_fn)(model)
+      optimizer.update(model, grads)  # in-place updates
+
+      return loss
+
+    @nnx.jit
+    def eval_step(model, x, y):
+      y_pred = model(x)
+      return jnp.mean((y_pred - y) ** 2)
+
+    x = jax.random.normal(jax.random.key(0), (8, 2))
+    y = jax.random.normal(jax.random.key(1), (8, 3))
+
+    train_step(train_model, optimizer, x, y)
+    self.assertEqual(train_model.dropout.rngs.count.value, 1)
+    eval_step(eval_model, x, y)
+    self.assertEqual(train_model.dropout.rngs.count.value, 1)
+
   def test_shared_modules(self):
     class Block(nnx.Module):
       def __init__(self, linear: nnx.Linear, *, rngs):
@@ -319,7 +372,7 @@ class TestIntegration(absltest.TestCase):
       graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
       def loss_fn(params):
         model =  nnx.merge(graphdef, params, nondiff)
-        return ((model(x) - y) ** 2).mean() # call methods directly
+        return ((model(x) - y) ** 2).mean()
 
       loss, grads = jax.value_and_grad(loss_fn)(nnx.to_arrays(params))
       optimizer.update(model, grads)  # in-place updates
