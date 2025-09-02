@@ -2612,6 +2612,7 @@ def to_arrays(
   """Converts a structure of array refs to regular arrays.
 
   Example::
+
     >>> from flax import nnx
     >>> import jax
     >>> import jax.numpy as jnp
@@ -2875,6 +2876,7 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
   root. Repeated nodes are visited only once. Leaves include static values.
 
   Example::
+
     >>> from flax import nnx
     >>> import jax.numpy as jnp
     ...
