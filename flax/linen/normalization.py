@@ -117,6 +117,8 @@ def _compute_stats(
   axes = _canonicalize_axes(x.ndim, axes)
 
   def maybe_distributed_mean(*xs, mask=None):
+    if mask is not None:
+      mask = jnp.asarray(mask, dtype=bool)
     mus = tuple(x.mean(axes, where=mask) for x in xs)
     if axis_name is None:
       return mus if len(xs) > 1 else mus[0]
