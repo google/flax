@@ -5,6 +5,7 @@
 # Flax: A neural network library and ecosystem for JAX designed for flexibility
 
 [![Flax - Test](https://github.com/google/flax/actions/workflows/flax_test.yml/badge.svg)](https://github.com/google/flax/actions/workflows/flax_test.yml)
+[![PyPI version](https://img.shields.io/pypi/v/flax)](https://pypi.org/project/flax/)
 
 [**Overview**](#overview)
 | [**Quick install**](#quick-install)
