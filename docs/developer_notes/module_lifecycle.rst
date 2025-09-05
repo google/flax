@@ -237,7 +237,7 @@ Pure functions have many advantages but when using JAX they are often essential.
 Cloning
 ===============================================
 
-To make this approach work reliably we need well-defined cloning behavior. Rather than relying on a complex nested cloning procedure like Python's ``deepcopy``, Flax enforces that a ``Module`` is exactly defined by its construction arguments. Therefore cloning a Module reduces to calling the constructor with its original construction arguments. Because ``Module`` acts as an immutable dataclass, the construction arguments are mapped directly to instance attributes. Non-construction attributes that are computed in ``setup`` or ``__post_init__`` should also depend only on the construciton arguments to ensure a well-defined clone.
+To make this approach work reliably we need well-defined cloning behavior. Rather than relying on a complex nested cloning procedure like Python's ``deepcopy``, Flax enforces that a ``Module`` is exactly defined by its construction arguments. Therefore cloning a Module reduces to calling the constructor with its original construction arguments. Because ``Module`` acts as an immutable dataclass, the construction arguments are mapped directly to instance attributes. Non-construction attributes that are computed in ``setup`` or ``__post_init__`` should also depend only on the construction arguments to ensure a well-defined clone.
 
 Bind
 ===============================================
