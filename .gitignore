@@ -23,3 +23,4 @@ flaxlib_src/subprojects
 
 # custom
 /tmp-files
+.env # test
