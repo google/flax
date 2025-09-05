@@ -379,6 +379,17 @@ class BatchNorm(Module):
       self.epsilon,
     )
 
+  def set_mode(
+      self,
+      train: bool | None = None,
+      use_running_average: bool | None = None,
+      **kwargs,
+  ):
+    if use_running_average is not None:
+      self.use_running_average = use_running_average
+    elif train is not None:
+      self.use_running_average = not train
+
 
 class LayerNorm(Module):
   """Layer normalization (https://arxiv.org/abs/1607.06450).
