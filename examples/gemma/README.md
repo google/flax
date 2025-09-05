@@ -1,8 +1,9 @@
 
 ## Language modeling
+
 Trains Gemma model on the One Billion Word Benchmark (lm1b; Chelba *et al.*, 2013).
 
-This example is based on `lm1b_nnx` example script and similarly uses linear learning rate warmup and inverse square root learning rate schedule.
+This example is based on `lm1b_nnx` example script.
 
 
 ### Requirements
@@ -10,11 +11,17 @@ This example is based on `lm1b_nnx` example script and similarly uses linear lea
 *   TensorFlow datasets `lm1b` need to be downloaded and prepared (see below).
     A sentencepiece tokenizer vocabulary will be automatically generated
     and saved on each training run.
-*   This example additionally depends on the `sentencepiece` and `tensorflow-text` packages.
+*   This example additionally depends on the `sentencepiece` and [`grain`](https://google-grain.readthedocs.io/en/latest/) packages.
 
 ### Downloading the LM1B Datasets
 
-We recommend downloading and preparing the TFDS datasets beforehand. You can download and prepare LM1B datasets using TFDS directly: `python -m tensorflow_datasets.scripts.download_and_prepare --datasets=lm1b`.
+We recommend downloading and preparing the TFDS datasets beforehand. You can download and prepare LM1B datasets using TFDS directly:
+```bash
+tfds build lm1b --file_format=array_record
+# To specify the location of downloaded dataset:
+# tfds build lm1b --file_format=array_record --data_dir=~/tensorflow_datasets/
+# export TFDS_DATA_DIR=~/tensorflow_datasets/
+```
 
 #### Using Cloud Storage FUSE for TPUs
 

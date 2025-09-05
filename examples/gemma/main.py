@@ -19,7 +19,6 @@ that can be easily tested and imported in Colab.
 """
 
 import jax
-import tensorflow as tf
 import train
 from absl import app, flags, logging
 from clu import platform
@@ -38,12 +37,16 @@ flags.mark_flags_as_required(['workdir'])
 
 
 def main(argv):
+
+  # We are using CLU (https://github.com/google/CommonLoopUtils)
+  # for logging, profiling and TensorBoard and it imports tensorflow
+  # Below command prevents TF to allocate memory on the GPUs.
+  import tensorflow as tf
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
+
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
-
-  # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
-  # it unavailable to JAX.
-  tf.config.experimental.set_visible_devices([], 'GPU')
 
   logging.info('JAX process: %d / %d', jax.process_index(), jax.process_count())
   logging.info('JAX local devices: %r', jax.local_devices())
