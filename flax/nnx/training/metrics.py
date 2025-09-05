@@ -392,7 +392,7 @@ class MultiMetric(Metric):
     self._metric_names = []
     for metric_name, metric in metrics.items():
       self._metric_names.append(metric_name)
-      vars(self)[metric_name] = metric
+      setattr(self, metric_name, metric)
 
   def reset(self) -> None:
     """Reset all underlying ``Metric``'s."""

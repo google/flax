@@ -86,7 +86,6 @@ def using_refs() -> bool:
     return config.flax_array_ref
 
 
-
 def use_refs(value: bool, /):
   """Sets whether Variables should use ArrayRefs by default or not.
 
@@ -247,7 +246,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
       if is_array_ref(value):
         _value = tp.cast(A, value)
       else:
-        _value = array_ref(jnp.asarray(value))  # type: ignore[assignment]
+        _value = array_ref(jnp.asarray(value))  # type: ignore[assignment]  # type: ignore[assignment]
     else:
       _value = value
 
@@ -394,10 +393,12 @@ class Variable(tp.Generic[A], reprlib.Representable):
       self._var_metadata['on_remove_axis'](self, axis_index, axis_name)
 
   @tp.overload
-  def replace(self, value: B, **kwargs) -> Variable[B]: ...
+  def replace(self, value: B, **kwargs) -> Variable[B]:
+    ...
 
   @tp.overload
-  def replace(self, **kwargs) -> Variable[A]: ...
+  def replace(self, **kwargs) -> Variable[A]:
+    ...
 
   def replace(self, value: tp.Any = Missing, **kwargs) -> Variable[tp.Any]:
     if value is not Missing:

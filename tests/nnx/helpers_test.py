@@ -26,21 +26,10 @@ from flax import nnx
 class TrainState(nnx.TrainState):
   batch_stats: nnx.State
 
-class Dict(nnx.Module):
-  items: nnx.Data[dict]
-
-  def __init__(self, *args, **kwargs):
-    self.items = dict(*args, **kwargs)
-
-  def __getitem__(self, key):
-    return self.items[key]
-
-  def __setitem__(self, key, value):
-    self.items[key] = value
 
 class TestHelpers(absltest.TestCase):
   def test_train_state(self):
-    m = Dict(a=nnx.Param(1), b=nnx.BatchStat(2))
+    m = nnx.Dict(a=nnx.Param(1), b=nnx.BatchStat(2))
 
     graphdef, params, batch_stats = nnx.split(m, nnx.Param, nnx.BatchStat)
 
@@ -121,6 +110,54 @@ class TestHelpers(absltest.TestCase):
     assert iden() is None
     assert iden(k=2) == {'k': 2}
 
+  def test_dict_mutable_mapping(self):
+    d = nnx.Dict({'a': 1, 'b': 2})
+    self.assertEqual(d['a'], 1)
+    self.assertEqual(d['b'], 2)
+    self.assertEqual(len(d), 2)
+
+    d['c'] = 3
+    self.assertEqual(d['c'], 3)
+    self.assertEqual(len(d), 3)
+
+    del d['a']
+    self.assertEqual(len(d), 2)
+    with self.assertRaises(AttributeError):
+      _ = d['a']
+
+    self.assertSetEqual(set(d), {'b', 'c'})
+
+  def test_list_mutable_sequence(self):
+    l = nnx.List([1, 2, 3])
+    self.assertEqual(len(l), 3)
+    self.assertEqual(l[0], 1)
+    self.assertEqual(l[1], 2)
+    self.assertEqual(l[2], 3)
+
+    l.append(4)
+    self.assertEqual(len(l), 4)
+    self.assertEqual(l[3], 4)
+
+    l.insert(1, 5)
+    self.assertEqual(len(l), 5)
+    self.assertEqual(l[0], 1)
+    self.assertEqual(l[1], 5)
+    self.assertEqual(l[2], 2)
+    self.assertEqual(l[3], 3)
+    self.assertEqual(l[4], 4)
+
+    del l[2]
+    self.assertEqual(len(l), 4)
+    self.assertEqual(l[0], 1)
+    self.assertEqual(l[1], 5)
+    self.assertEqual(l[2], 3)
+    self.assertEqual(l[3], 4)
+
+    l[1:3] = [6, 7]
+    self.assertEqual(l[1], 6)
+    self.assertEqual(l[2], 7)
+
+    self.assertEqual(l[1:3], [6, 7])
 
 
 if __name__ == '__main__':

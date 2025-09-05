@@ -326,6 +326,12 @@ class HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
   def __repr__(self) -> str:
     return repr(self._mapping)
 
+  def update(self, other: tp.Mapping[HA, HB]) -> HashableMapping[HA, HB]:
+    """Updates the mapping with another mapping."""
+    mapping = dict(self._mapping)
+    mapping.update(other)
+    return HashableMapping(mapping, copy=False)
+
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False)
@@ -2892,7 +2898,7 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
     >>> for path, value in nnx.iter_graph(graph):
     ...   print(path, type(value).__name__)
     ...
-    (0, '_pytree__nodes') frozenset
+    (0, '_pytree__nodes') HashableMapping
     (0, '_pytree__state') PytreeState
     (0, 'b') Param
     (0, 'din') int

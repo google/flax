@@ -87,7 +87,8 @@ def lazy_init(fn: Module | tp.Callable[..., tp.Any], *args, **kwargs):
     _set_initializing(module, False)
   return fn
 
-class ToNNX(Module, pytree=False):
+
+class ToNNX(Module):
   """A wrapper to turn any Linen module into an NNX module.
 
   The result NNX module can be used standalone with all NNX APIs, or as a submodule of
@@ -158,7 +159,7 @@ class ToNNX(Module, pytree=False):
 
       nnx_attrs = bv.linen_vars_to_nnx_attrs(variables)
       for attr_name, value in nnx_attrs.items():
-        setattr(self, attr_name, value)
+        setattr(self, attr_name, nnx.data(value))
 
     else:
       nnx_attrs = {
@@ -191,9 +192,9 @@ class ToNNX(Module, pytree=False):
       for attr_name, value in nnx_attrs.items():
         if hasattr(self, attr_name) and isinstance(value, dict):
           original_tree = getattr(self, attr_name)
-          setattr(self, attr_name, original_tree | value)
+          setattr(self, attr_name, nnx.data(original_tree | value))
         else:
-          setattr(self, attr_name, value)
+          setattr(self, attr_name, nnx.data(value))
 
     return out
 

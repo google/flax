@@ -529,7 +529,7 @@ class Transformer(nnx.Module):
         dtype=config.dtype,
         rngs=rngs,
     )
-    self.layers = [
+    self.layers = nnx.List([
         modules.Block(
           config=config,
           attn_type=attn_type,
@@ -539,7 +539,7 @@ class Transformer(nnx.Module):
         for _, attn_type in zip(
             range(config.num_layers), config.attention_types
         )
-    ]
+    ])
     self.final_norm = layers.RMSNorm(
       config.embed_dim,
       scale_init=modules.maybe_with_partitioning(

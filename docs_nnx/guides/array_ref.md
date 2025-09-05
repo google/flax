@@ -58,6 +58,10 @@ with nnx.use_refs(True):
 print(f"{variable.has_ref = }")
 ```
 
+Mention `nnx.use_refs` can be used as global flag
+
++++
+
 ### Changing Status
 
 ```{code-cell} ipython3

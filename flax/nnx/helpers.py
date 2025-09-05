@@ -20,25 +20,228 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from flax.nnx import graph
+from flax.nnx import graph, reprlib
 from flax.nnx.graph import GraphDef
 from flax.nnx.module import Module
 from flax.nnx.proxy_caller import ApplyCaller
 from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 from flax.training.train_state import struct
-from flax import nnx
 
 A = tp.TypeVar('A')
 M = tp.TypeVar('M', bound=Module)
 TS = tp.TypeVar('TS', bound='TrainState')
 
-# TODO(cgarciae): Add tests
+class Dict(reprlib.MappingReprMixin, Module, tp.MutableMapping[str, A]):
+  """A Module that implements a mutable mapping.
+
+  This class provides a way to store and manipulate a mapping of keys to values
+  contained a mixed set of data (e.g. Array, Variables, Modules) and static
+  (e.g. functions, strings) types.
+
+  Example:
+    >>> from flax import nnx
+    ...
+    >>> rngs = nnx.Rngs(0)
+    >>> layers = nnx.Dict({
+    ...     'kernel1': nnx.Linear(1, 32, rngs=rngs),   # data
+    ...     'activation1': nnx.relu,                   # static
+    ...     'kernel2': nnx.Linear(32, 1, rngs=rngs),   # data
+    ... })
+  """
+  @tp.overload
+  def __init__(self, iterable: tp.Iterable[tp.Tuple[str, A]], /): ...
+
+  @tp.overload
+  def __init__(
+    self, mapping: tp.Optional[tp.Mapping[str, A]] = None, /, **kwargs: A
+  ): ...
+
+  def __init__(self, *args, **kwargs):
+    for name, value in dict(*args, **kwargs).items():
+      setattr(self, name, value)
+
+  def __getitem__(self, key) -> A:
+    return getattr(self, key)
+
+  def __setitem__(self, key, value):
+    setattr(self, key, value)
+
+  def __iter__(self) -> tp.Iterator[str]:
+    return (k for k in vars(self) if not k.startswith('_pytree__'))
+
+  def __len__(self) -> int:
+    length = 0
+    for _ in self:
+      length += 1
+    return length
+
+  def __hash__(self) -> int:
+    return id(self)
+
+  def __delitem__(self, key: str) -> None:
+    delattr(self, key)
+
+  if tp.TYPE_CHECKING:
+    def __getattr__(self, key: str) -> A:
+      ...
+    def __setattr__(self, key: str, value: A) -> None:
+      ...
+
+
+class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
+  """A Module that implements a mutable sequence.
+
+  This class provides a way to store and manipulate a sequence of values
+  contained a mixed set of data (e.g. Array, Variables, Modules) and static
+  (e.g. functions, strings) types.
+
+  Example:
+    >>> from flax import nnx
+    ...
+    >>> rngs = nnx.Rngs(0)
+    >>> layers = nnx.List([
+    ...     nnx.Linear(1, 32, rngs=rngs),  # data
+    ...     nnx.relu,                      # static
+    ...     nnx.Linear(32, 1, rngs=rngs),  # data
+    ... ])
+  """
+  def __init__(self, it: tp.Iterable[A] | None = None, /):
+    """
+    Args:
+      it: An iterable of values to initialize the list.
+    """
+    self._length: int = 0
+    if it is not None:
+      for value in it:
+        self.append(value)
+
+  def _getattr(self, key) -> A:
+    return vars(self)[key]  # type: ignore[unsupported-operands]
+
+  def _delattr(self, key) -> None:
+    vars(self).pop(key)
+
+  def __len__(self) -> int:
+    return self._length
+
+  def append(self, value: A) -> None:
+    self._setattr(self._length, value)
+    self._length += 1
+
+  def insert(self, index: int, value: A) -> None:
+    if index < 0:
+      index += self._length
+    if index < 0:
+      index = 0
+    if index > self._length:
+      index = self._length
+
+    # Shift elements to the right
+    for i in range(self._length, index, -1):
+      self._setattr(i, self._getattr(i - 1))
+
+    # Insert the new value
+    self._setattr(index, value)
+    self._length += 1
+
+  def __iter__(self) -> tp.Iterator[A]:
+    for i in range(self._length):
+      yield self._getattr(i)
+
+  @tp.overload
+  def __getitem__(self, index: int) -> A: ...
+  @tp.overload
+  def __getitem__(self, index: slice) -> tp.List[A]: ...
+  def __getitem__(self, index: int | slice) -> A | tp.List[A]:
+    if isinstance(index, int):
+      if index < 0:
+        index += self._length
+      if index < 0 or index >= self._length:
+        raise IndexError('Index out of bounds')
+      return self._getattr(index)
+    elif isinstance(index, slice):
+      idxs = list(range(self._length))[index]
+      return [self._getattr(i) for i in idxs]
+    else:
+      raise TypeError('Invalid index type')
+
+  def __setitem__(self, index: int | slice, value: A | tp.Iterable[A]) -> None:
+    if isinstance(index, int):
+      if index < 0:
+        index += self._length
+      if index < 0 or index >= self._length:
+        raise IndexError('Index out of bounds')
+      self._setattr(index, value)
+    elif isinstance(index, slice):
+      if not isinstance(value, tp.Iterable):
+        raise TypeError('Expected an iterable')
+      values = list(value)
+      idxs = list(range(self._length))[index]
+      if len(idxs) != len(values):
+        raise ValueError('Length mismatch')
+      for i, v in zip(idxs, values):
+        self._setattr(i, v)
+    else:
+      raise TypeError('Invalid index type')
+
+  def __delitem__(self, index: int | slice) -> None:
+    if isinstance(index, int):
+      if index < 0:
+        index += self._length
+      if index < 0 or index >= self._length:
+        raise IndexError('Index out of bounds')
+      self._delattr(index)
+      for i in range(index + 1, self._length):
+        self._setattr(i - 1, self._getattr(i))
+      self._length -= 1
+    elif isinstance(index, slice):
+      idxs = list(range(self._length))[index]
+      for i in reversed(idxs):
+        # implement recursively
+        del self[i]
+    else:
+      raise TypeError('Invalid index type')
+
+  @staticmethod
+  def _pytree__key_sort_fn(item: tuple[tp.Any, tp.Any]) -> tuple[int, tp.Any]:
+    key, _ = item
+    if isinstance(key, int):
+      return (0, key)
+    elif isinstance(key, str):
+      return (1, key)
+    else:
+      raise ValueError(f'Unsupported key type: {type(key)!r}')
+
 class Sequential(Module):
+  """A Module that applies a sequence of callables.
+
+  This class provides a way to store and manipulate a sequence of callables
+  (e.g. layers, activation functions) and apply them in order.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+    ...
+    >>> rngs = nnx.Rngs(0)
+    >>> model = nnx.Sequential(
+    ...   nnx.Linear(1, 4, rngs=rngs),  # data
+    ...   nnx.relu,                     # static
+    ...   nnx.Linear(4, 2, rngs=rngs),  # data
+    ... )
+    >>> x = jnp.ones((1, 1))
+    >>> y = model(x)
+    >>> y.shape
+    (1, 2)
+  """
 
   def __init__(self, *fns: tp.Callable[..., tp.Any]):
-    # TODO: Check there non-Module functions and wrap them in Lambda
-    self.layers = nnx.data(list(fns))
+    """
+    Args:
+      *fns: A sequence of callables to apply.
+    """
+    self.layers = List(fns)
 
   def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
     if len(self.layers) == 0:

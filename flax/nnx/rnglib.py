@@ -882,17 +882,17 @@ def fork_rngs(
     | int
     | None = None,
 ) -> SplitBackups | tp.Callable[[F], F]:
-  """Splits the (nested) Rng states of the given node.
+  """Forks the (nested) Rng states of the given node.
 
   Args:
-    node: the base node containing the rng states to split.
-    splits: an integer or tuple of integers specifying the
-      shape of the split rng keys.
-    only: a Filter selecting which rng states to split.
+    node: the base node containing the rng states to fork.
+    split: an integer, tuple of integers, or mapping specifying the
+      shape of the forked rng keys. If a mapping, keys are filters selecting
+      which rng states to fork with the corresponding split shape.
 
   Returns:
     A SplitBackups iterable if ``node`` is provided, otherwise a
-    decorator that splits the rng states of the inputs to the
+    decorator that forks the rng states of the inputs to the
     decorated function.
 
   Example::
@@ -900,22 +900,22 @@ def fork_rngs(
     >>> from flax import nnx
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.split_rngs(rngs, splits=5)
+    >>> _ = nnx.fork_rngs(rngs, split=5)
     >>> rngs.params.key.shape, rngs.dropout.key.shape
     ((5,), (5,))
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.split_rngs(rngs, splits=(2, 5))
+    >>> _ = nnx.fork_rngs(rngs, split=(2, 5))
     >>> rngs.params.key.shape, rngs.dropout.key.shape
     ((2, 5), (2, 5))
 
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
+    >>> _ = nnx.fork_rngs(rngs, split={'params': 5})
     >>> rngs.params.key.shape, rngs.dropout.key.shape
     ((5,), ())
 
-  Once split, random state can be used with transforms like :func:`nnx.vmap`::
+  Once forked, random state can be used with transforms like :func:`nnx.vmap`::
 
     >>> class Model(nnx.Module):
     ...   def __init__(self, rngs):
@@ -923,7 +923,7 @@ def fork_rngs(
     ...     self.dropout = nnx.Dropout(0.5, rngs=rngs)
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
+    >>> _ = nnx.fork_rngs(rngs, split={'params': 5})
     ...
     >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
     ...
@@ -935,13 +935,13 @@ def fork_rngs(
     >>> model.dropout.rngs.key.shape
     ()
 
-  ``split_rngs`` returns a SplitBackups object that can be used to restore the
-  original unsplit rng states using :func:`nnx.restore_rngs`, this is useful
-  when you only want to split the rng states temporarily::
+  ``fork_rngs`` returns a SplitBackups object that can be used to restore the
+  original unforked rng states using :func:`nnx.restore_rngs`, this is useful
+  when you only want to fork the rng states temporarily::
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     ...
-    >>> backups = nnx.split_rngs(rngs, splits=5, only='params')
+    >>> backups = nnx.fork_rngs(rngs, split={'params': 5})
     >>> model = create_model(rngs)
     >>> nnx.restore_rngs(backups)
     ...
@@ -953,7 +953,7 @@ def fork_rngs(
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     ...
-    >>> with nnx.split_rngs(rngs, splits=5, only='params'):
+    >>> with nnx.fork_rngs(rngs, split={'params': 5}):
     ...   model = create_model(rngs)
     ...
     >>> model.dropout.rngs.key.shape
@@ -961,7 +961,7 @@ def fork_rngs(
 
     >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
     ...
-    >>> @nnx.split_rngs(splits=5, only='params')
+    >>> @nnx.fork_rngs(split={'params': 5})
     ... @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
     ... def create_model(rngs):
     ...   return Model(rngs)
@@ -970,8 +970,6 @@ def fork_rngs(
     >>> model = create_model(rngs)
     >>> model.dropout.rngs.key.shape
     ()
-
-
   """
   if isinstance(node, Missing):
 

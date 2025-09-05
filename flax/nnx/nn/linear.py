@@ -240,7 +240,7 @@ class LinearGeneral(Module):
         bias_init_wrap(rngs.params(), bias_shape, self.param_dtype)
       )
     else:
-      self.bias = None
+      self.bias = nnx.data(None)
 
   def __call__(self, inputs: Array) -> Array:
     """Applies a linear transformation to the inputs along multiple dimensions.
@@ -367,7 +367,7 @@ class Linear(Module):
       bias_key = rngs.params()
       self.bias = nnx.Param(bias_init(bias_key, (out_features,), param_dtype))
     else:
-      self.bias = None
+      self.bias = nnx.data(None)
 
     self.in_features = in_features
     self.out_features = out_features
@@ -486,7 +486,7 @@ class Einsum(Module):
       bias_key = rngs.params()
       self.bias = nnx.Param(bias_init(bias_key, bias_shape, param_dtype))
     else:
-      self.bias = None
+      self.bias = nnx.data(None)
 
     self.einsum_str = einsum_str
     self.kernel_shape = kernel_shape
@@ -724,7 +724,7 @@ class Conv(Module):
       bias_key = rngs.params()
       self.bias = nnx.Param(bias_init(bias_key, bias_shape, param_dtype))
     else:
-      self.bias = None
+      self.bias = nnx.data(None)
 
     self.in_features = in_features
     self.out_features = out_features
@@ -1011,7 +1011,7 @@ class ConvTranspose(Module):
         self.bias_init(rngs.params(), (self.out_features,), self.param_dtype)
       )
     else:
-      self.bias = None
+      self.bias = nnx.data(None)
 
   def __call__(self, inputs: Array) -> Array:
     """Applies a transposed convolution to the inputs.
