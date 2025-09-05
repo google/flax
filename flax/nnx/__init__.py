@@ -47,6 +47,10 @@ from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
 from .module import Module as Module
+from .module import set_mode as set_mode
+from .module import train_mode as train_mode
+from .module import eval_mode as eval_mode
+from .module import set_attributes as set_attributes
 from .graph import merge as merge
 from .graph import UpdateContext as UpdateContext
 from .graph import update_context as update_context
@@ -58,6 +62,7 @@ from .graph import pop as pop
 from .graph import state as state
 from .graph import graphdef as graphdef
 from .graph import iter_graph as iter_graph
+from .graph import recursive_map as recursive_map
 from .graph import find_duplicates as find_duplicates
 from .graph import call as call
 from .graph import SplitContext as SplitContext
