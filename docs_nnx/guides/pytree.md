@@ -8,57 +8,116 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
+# Module & Pytree
+
 ```{code-cell} ipython3
 from flax import nnx
 import jax
 import jax.numpy as jnp
 import dataclasses
+from rich import print as pprint
 
-#----------------------
-# helper functions
-#----------------------
 def pytree_structure(pytree, title='pytree structure'):
   print(f"{title}:")
-  for path, value in jax.tree.leaves_with_path(pytree):
-    print(f"- pytree{jax.tree_util.keystr(path)} = {value!r}")
+  path_leaves, treedef = jax.tree.flatten_with_path(pytree)
+  for path, value in path_leaves:
+    print(f" - pytree{jax.tree_util.keystr(path)} = {value!r}")
 ```
 
-## Pytree
+## Pytrees 101
+JAX pytrees are tree structures that can be recursively traversed in order to collect an ordered list of leaves and a definition of the tree structure, this is done via the `jax.tree.flatten` function. Most common pytrees are native python containers like `list`, `dict`, and `tuple`, but interestingly it also include `None`. The example bellow shows how to collect all the integer leaves from a nested structure using `flatten`:
+
+```{code-cell} ipython3
+pytree = [
+  {'a': 1},
+  {
+    'b': 2,
+    'c': (3, 4),
+    'd': None,
+  }
+]
+
+leaves, treedef = jax.tree.flatten(pytree)
+print(f"leaves = {leaves}")
+print(f"treedef = {treedef}")
+```
+
+Note that `None` is not a leaf because its (conveniently) defined as an empty pytree with no children. The main purpose of being able to flatten, apart from collecting the leaves, is being able reconstruct the pytree structure from the tree definition from any sequence of leaves of the same length via the `jax.tree.unflatten` function:
+
+```{code-cell} ipython3
+new_leaves = [x * 10 for x in leaves]
+new_pytree = jax.tree.unflatten(treedef, new_leaves)
+
+print(f"old pytree = {pytree}")
+print(f"new pytree = {new_pytree}")
+```
+
+### Custom Pytrees
+
+```{code-cell} ipython3
+class Foo:
+  def __init__(self):
+    self.a = 1
+    self.b = 2
+    self.c = "hi"
+
+def flatten_foo(foo: Foo):
+  nodes = [foo.a, foo.b]  # sequence of nodes
+  static = (foo.c,) # hashable & equatable structure
+  return nodes, static
+
+def unflatten_foo(static, nodes):
+  foo = object.__new__(Foo)  # create uninitialized instance
+  foo.a = nodes[0]
+  foo.b = nodes[1]
+  foo.c = static[0]
+  return foo
+
+jax.tree_util.register_pytree_node(Foo, flatten_foo, unflatten_foo)
+
+foo = Foo()
+leaves, treedef = jax.tree.flatten(foo)
+print(f"leaves = {leaves}")
+print(f"treedef = {treedef}")
+```
+
+## nnx.Pytree
 
 ```{code-cell} ipython3
 class Linear(nnx.Pytree):
   def __init__(self, din: int, dout: int):
-    self.din, self.dout = din, dout
-    self.w = jnp.ones((din, dout))
-    self.b = jnp.zeros((dout,))
+    self.din = nnx.static(din)
+    self.dout = nnx.static(dout)
+    self.w = nnx.data(jnp.ones((din, dout)))
+    self.b = nnx.data(jnp.zeros((dout,)))
 
 class MLP(nnx.Pytree):
   def __init__(self, num_layers, dim):
-    self.num_layers = num_layers
-    self.layers = nnx.List([Linear(dim, dim) for _ in range(num_layers)])
+    self.num_layers = nnx.static(num_layers)
+    self.layers = nnx.data([
+      Linear(dim, dim) for _ in range(num_layers)
+    ])
 
 pytree = MLP(num_layers=2, dim=1)
 pytree_structure(pytree)
 ```
 
-### Attribute Annotations
-
 ```{code-cell} ipython3
-class Foo(nnx.Pytree):
-  def __init__(self, i: int):
-    self.i = nnx.data(i)  # explicit data
-    self.f = nnx.static(i * 0.5)  # explicit static
-    self.x = jnp.array(42 * i)  # arrays are data
-    self.s = "Hi" + "!" * i  # strings are static
-    self.h = hash(i)  # weak types are static
-    self.u = None  # empty pytrees are static
+class Linear(nnx.Pytree):
+  def __init__(self, din: int, dout: int):
+    self.din = din # static
+    self.dout = dout # static
+    self.w = jnp.ones((din, dout)) # data
+    self.b = jnp.zeros((dout,)) # data
 
-class Bar(nnx.Pytree):
-  def __init__(self):
-    self.ls = nnx.List([Foo(i) for i in range(2)])  # nnx.Pytrees are data
-    self.shapes = (8, 16, 32)  # common pytrees are static
+class MLP(nnx.Pytree):
+  def __init__(self, num_layers, dim):
+    self.num_layers = num_layers # static
+    self.layers = nnx.List([ # data
+      Linear(dim, dim) for _ in range(num_layers)
+    ])
 
-pytree = Bar()
+pytree = MLP(num_layers=2, dim=1)
 pytree_structure(pytree)
 ```
 
@@ -72,14 +131,25 @@ print(f"""
 # ------ STATIC ------------
 {nnx.is_data( 'hello' ) = }                       # strings, arbitrary objects
 {nnx.is_data( 42 ) = }                            # int, float, bool, complex, etc.
-{nnx.is_data( [1, 2.0, 3j, jnp.array(1)] ) = }    # list, dict, tuple, pytrees
+{nnx.is_data( [1, 2.0, 3j, jnp.array(1)] ) = }    # list, dict, tuple, regular pytrees
 """)
 ```
 
-* remove mixed
-* error on nnx.data/nnx.static in pytrees
+### When to use explicit annotations?
 
-+++
+```{code-cell} ipython3
+class Bar(nnx.Pytree):
+  def __init__(self, x, use_bias: bool):
+    self.x = nnx.data(x)  # constrain inputs (e.g. user could pass Array or float)
+    self.y = nnx.data(42)  # force types that are not data by default
+    self.ls = nnx.data([jnp.array(i) for i in range(3)]) # on pytrees
+    self.bias = nnx.data(None)  # optional values that can be data
+    if use_bias:
+      self.bias = nnx.Param(jnp.array(0.0))
+
+pytree = Bar(1.0, True)
+pytree_structure(pytree)
+```
 
 ### Class Annotations
 
@@ -100,23 +170,6 @@ pytree = Bar(
   ls=[Foo(i, "Hi" + "!" * i, jnp.array(42 * i), hash(i)) for i in range(2)],
   shapes=[8, 16, 32]
 )
-pytree_structure(pytree)
-```
-
-#### When to use explicit annotations?
-
-```{code-cell} ipython3
-class Bar(nnx.Pytree):
-  def __init__(self, x, use_bias: bool):
-    self.x = nnx.data(x)  # constrain inputs (e.g. user could pass Array or ShapeDtypeStruct)
-    self.y = nnx.data(42)  # force undefined types
-    self.ls = nnx.data([jnp.array(i) for i in range(3)]) # on pytrees
-    if use_bias:
-      self.bias = nnx.Param(jnp.array(0.0))
-    else:
-      self.bias = nnx.data(None)  # on branches that cause mismatch
-
-pytree = Bar(1.0, True)
 pytree_structure(pytree)
 ```
 
@@ -185,6 +238,27 @@ except ValueError as e:
   print("ValueError:", e)
 ```
 
+### pytree=False
+
+```{code-cell} ipython3
+class Foo(nnx.Pytree, pytree=False):
+  def __init__(self):
+    self.a = [jnp.array(1), jnp.array(2)]  # no checks
+    self.b = "hello" 
+    self.b = jnp.array(3) # no checks
+
+foo = Foo()
+
+@nnx.jit # can use in NNX transformations
+def double(foo: Foo):
+  foo.a = [x * 2 for x in foo.a]
+  foo.b *= 2
+
+double(foo)
+print(f"{ nnx.state(foo) = }")  # can be used with NNX APIs
+print(f"{ jax.tree_util.all_leaves([foo]) = }")  # not a pytree
+```
+
 ### Trace-level awareness
 
 ```{code-cell} ipython3
@@ -207,51 +281,6 @@ except Exception as e:
 ## Module
 
 +++
-
-### set_attributes
-
-```{code-cell} ipython3
-class Block(nnx.Module):
-  def __init__(self, din: int, dout: int, rngs: nnx.Rngs):
-    self.mode = 1
-    self.linear = nnx.Linear(din, dout, rngs=rngs)
-    self.bn = nnx.BatchNorm(dout, rngs=rngs)
-    self.dropout = nnx.Dropout(0.1, rngs=rngs)
-
-  def __call__(self, x):
-    return nnx.relu(self.dropout(self.bn(self.linear(x))))
-  
-model = Block(din=1, dout=2, rngs=nnx.Rngs(0))
-
-print("train:")
-print(f"- {model.mode = }")
-print(f"- {model.bn.use_running_average = }")
-print(f"- {model.dropout.deterministic = }")
-
-# Set attributes for evaluation
-model.set_attributes(deterministic=True, use_running_average=True, mode=2)
-
-print("eval:")
-print(f"- {model.mode = }")
-print(f"- {model.bn.use_running_average = }")
-print(f"- {model.dropout.deterministic = }")
-```
-
-```{code-cell} ipython3
-model = Block(din=1, dout=2, rngs=nnx.Rngs(0))
-
-model.eval(mode=2)  # .set_attributes(deterministic=True, use_running_average=True, mode=2)
-print("eval:")
-print(f"- {model.mode = }")
-print(f"- {model.bn.use_running_average = }")
-print(f"- {model.dropout.deterministic = }")
-
-model.train(mode=1)  # .set_attributes(deterministic=False, use_running_average=False, mode=1)
-print("train:")
-print(f"- {model.mode = }")
-print(f"- {model.bn.use_running_average = }")
-print(f"- {model.dropout.deterministic = }")
-```
 
 ### sow
 
@@ -282,4 +311,25 @@ x = jnp.ones((10, 20))
 y = model(x)
 intermediates = nnx.pop(model, nnx.Intermediate) # extract intermediate values
 print(intermediates)
+```
+
+## Object
+
+```{code-cell} ipython3
+class Foo(nnx.Object): # instead of Foo(nnx.Pytree, pytree=False)
+  def __init__(self):
+    self.a = [jnp.array(1), jnp.array(2)]  # no checks
+    self.b = "hello" 
+    self.b = jnp.array(3) # no checks
+
+foo = Foo()
+
+@nnx.jit # can use in NNX transformations
+def double(foo: Foo):
+  foo.a = [x * 2 for x in foo.a]
+  foo.b *= 2
+
+double(foo)
+print(f"{ nnx.state(foo) = }")  # can be used with NNX APIs
+print(f"{ jax.tree_util.all_leaves([foo]) = }")  # not a pytree
 ```
