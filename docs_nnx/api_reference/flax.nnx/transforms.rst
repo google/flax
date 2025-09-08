@@ -8,6 +8,7 @@ transforms
 .. autofunction:: shard_map
 .. autofunction:: remat
 .. autofunction:: scan
+.. autoclass:: Carry
 .. autofunction:: value_and_grad
 .. autofunction:: vmap
 .. autofunction:: eval_shape
