@@ -316,7 +316,16 @@ class HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
     return len(self._mapping)
 
   def __hash__(self) -> int:
-    return hash(tuple(sorted(self._mapping.items())))
+    # use type-aware sorting to support int keys
+    def _pytree__key_sort_fn(item: tuple[tp.Any, tp.Any]) -> tuple[int, tp.Any]:
+      key, _ = item
+      if isinstance(key, int):
+        return (0, key)
+      elif isinstance(key, str):
+        return (1, key)
+      else:
+        raise ValueError(f'Unsupported key type: {type(key)!r}')
+    return hash(tuple(sorted(self._mapping.items(), key=_pytree__key_sort_fn)))
 
   def __eq__(self, other: tp.Any) -> bool:
     return (
