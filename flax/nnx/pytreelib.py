@@ -162,12 +162,9 @@ def is_data(value: tp.Any, /) -> bool:
     >>> assert nnx.is_data( nnx.Rngs(2) )                       # nnx.Pytrees
     >>> assert nnx.is_data( nnx.Linear(1, 1,rngs=nnx.Rngs(0)) ) # Modules
     ... # ------ STATIC ------------
-    >>> assert not nnx.is_data( 'hello' )                       # strings,
-    arbitrary objects
-    >>> assert not nnx.is_data( 42 )                            # int, float,
-    bool, complex, etc.
-    >>> assert not nnx.is_data( [1, 2.0, 3j, jnp.array(1)] )    # list, dict,
-    tuple, pytrees
+    >>> assert not nnx.is_data( 'hello' )                       # strings, arbitrary objects
+    >>> assert not nnx.is_data( 42 )                            # int, float, bool, complex, etc.
+    >>> assert not nnx.is_data( [1, 2.0, 3j, jnp.array(1)] )    # list, dict, tuple, pytrees
 
 
   Args:
