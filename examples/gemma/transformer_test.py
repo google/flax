@@ -53,7 +53,7 @@ def create_fake_params(config: transformer_lib.TransformerConfig):
           (config.num_heads, config.embed_dim, config.head_dim)
       )
       params[f'layer_{layer_idx}']['attn']['kv_einsum']['w'] = jnp.ones(
-          (config.num_kv_heads, config.embed_dim, config.head_dim)
+          (2, config.num_kv_heads, config.embed_dim, config.head_dim)
       )
 
     # 4. feedforward block params
@@ -97,9 +97,9 @@ class TransformerTest(parameterized.TestCase):
           head_dim=8,
           cache_size=29,
           batch_size=7,
-          sequence_length=17,
-          expected_outputs_shape=(7, 17, 17),
-          expected_cache_shape=(7, 29, 2, 8),
+          sequence_length=18,
+          expected_outputs_shape=(7, 18, 17),  # batch_size, seq_size, num_embed
+          expected_cache_shape=(7, 29, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
       dict(
           num_layers=3,
@@ -112,8 +112,22 @@ class TransformerTest(parameterized.TestCase):
           cache_size=2,
           batch_size=1,
           sequence_length=1,
-          expected_outputs_shape=(1, 1, 4),
-          expected_cache_shape=(1, 2, 1, 4),
+          expected_outputs_shape=(1, 1, 4),  # batch_size, seq_size, num_embed
+          expected_cache_shape=(1, 2, 1, 4),  # batch_size, cache_size, num_kv_heads, head_dim
+      ),
+      dict(
+          num_layers=3,
+          num_embed=7,
+          embed_dim=5,
+          num_heads=4,
+          num_kv_heads=2,
+          hidden_dim=6,
+          head_dim=8,
+          cache_size=9,
+          batch_size=1,
+          sequence_length=1,
+          expected_outputs_shape=(1, 1, 7),  # batch_size, seq_size, num_embed
+          expected_cache_shape=(1, 9, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
   )
   def test_transformer(
@@ -373,6 +387,21 @@ class TransformerTest(parameterized.TestCase):
               embed_dim=2,
               hidden_dim=12,
               num_heads=3,
+              head_dim=4,
+              num_kv_heads=3,
+              final_logit_softcap=None,
+              attention_types=[modules.AttentionType.GLOBAL] * 2,
+              use_post_attn_norm=True,
+              use_post_ffw_norm=True,
+          ),
+      ),
+      dict(
+          config=transformer_lib.TransformerConfig(
+              num_layers=2,
+              num_embed=4,
+              embed_dim=5,
+              hidden_dim=12,
+              num_heads=6,
               head_dim=4,
               num_kv_heads=3,
               final_logit_softcap=None,
