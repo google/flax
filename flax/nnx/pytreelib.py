@@ -42,7 +42,7 @@ from flax.typing import SizeBytes
 BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
 
 A = tp.TypeVar('A')
-O = tp.TypeVar('O', bound='Object')
+P = tp.TypeVar('P', bound='Pytree')
 
 DataAnnotation = '__data__'
 Data = tp.Annotated[A, DataAnnotation]
@@ -162,12 +162,9 @@ def is_data(value: tp.Any, /) -> bool:
     >>> assert nnx.is_data( nnx.Rngs(2) )                       # nnx.Pytrees
     >>> assert nnx.is_data( nnx.Linear(1, 1,rngs=nnx.Rngs(0)) ) # Modules
     ... # ------ STATIC ------------
-    >>> assert not nnx.is_data( 'hello' )                       # strings,
-    arbitrary objects
-    >>> assert not nnx.is_data( 42 )                            # int, float,
-    bool, complex, etc.
-    >>> assert not nnx.is_data( [1, 2.0, 3j, jnp.array(1)] )    # list, dict,
-    tuple, pytrees
+    >>> assert not nnx.is_data( 'hello' )                       # strings, arbitrary objects
+    >>> assert not nnx.is_data( 42 )                            # int, float, bool, complex, etc.
+    >>> assert not nnx.is_data( [1, 2.0, 3j, jnp.array(1)] )    # list, dict, tuple, pytrees
 
 
   Args:
@@ -337,7 +334,7 @@ class PytreeMeta(ABCMeta):
 
 ObjectMeta = PytreeMeta
 
-def _graph_node_meta_call(cls: tp.Type[O], *args, **kwargs) -> O:
+def _graph_node_meta_call(cls: tp.Type[P], *args, **kwargs) -> P:
   node = cls.__new__(cls, *args, **kwargs)
   vars_obj = vars(node)
   vars_obj['_pytree__state'] = PytreeState()
@@ -604,7 +601,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     if not self._pytree__state.trace_state.is_valid():
       raise errors.TraceContextError(error_msg())
 
-  def __deepcopy__(self: O, memo=None) -> O:
+  def __deepcopy__(self: P, memo=None) -> P:
     graphdef, state = graph.split(self)
     graphdef = deepcopy(graphdef)
     state = deepcopy(state)
@@ -810,7 +807,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     return vars(self).pop(key)
 
   @staticmethod
-  def _graph_node_create_empty(node_type: tp.Type[O]) -> O:
+  def _graph_node_create_empty(node_type: tp.Type[P]) -> P:
     node = object.__new__(node_type)
     return node
 
