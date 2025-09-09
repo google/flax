@@ -97,6 +97,7 @@ from .nn.activations import softplus as softplus
 from .nn.activations import standardize as standardize
 from .nn.activations import swish as swish
 from .nn.activations import tanh as tanh
+from .nn.activations import PReLU as PReLU
 from .nn.attention import MultiHeadAttention as MultiHeadAttention
 from .nn.attention import combine_masks as combine_masks
 from .nn.attention import dot_product_attention as dot_product_attention
