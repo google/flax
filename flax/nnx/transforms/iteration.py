@@ -1238,6 +1238,11 @@ def scan(
 
         return forward(x, self.blocks)
 
+      # Alternatively, we can also decorate `self.__call__` method
+      # @nnx.scan(in_axes=(0, nnx.Carry), out_axes=nnx.Carry)
+      # def __call__(self, x):
+      #   return self.blocks(x)
+
     model = Model(2, 4, rngs=nnx.Rngs(0))
     _, params, _ = nnx.split(model, nnx.Param, ...)
     print(params)  # kernel of shape: (2, 4, 4)
@@ -1259,7 +1264,8 @@ def scan(
       input data to scan along. :class:`flax.nnx.Carry` marks the input data as
       loop carry value. None marks the input data as auxiliary input.
     out_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
-      the kind of output args. See ``in_axes`` for details.
+      the kind of output args. See ``in_axes`` for details. Note that If ``in_axes``
+      contains :class:`flax.nnx.Carry` then ``out_axes`` must also contain :class:`flax.nnx.Carry`.
 
   .. _jax.lax.scan: https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>
   """
