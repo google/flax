@@ -140,7 +140,7 @@ html_theme_options = {
 
 # -- Options for myst ----------------------------------------------
 # uncomment line below to avoid running notebooks during development
-# nb_execution_mode = 'off'
+nb_execution_mode = os.environ.get("NB_EXECUTION_MODE", 'off')
 # Notebook cell execution timeout; defaults to 30.
 nb_execution_timeout = 100
 # List of patterns, relative to source directory, that match notebook
