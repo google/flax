@@ -830,6 +830,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   def _graph_node_init(self, attributes: tp.Iterable[tuple[str, tp.Any]]):
     vars(self).update(attributes)
 
+  if tp.TYPE_CHECKING:
+    def __call__(self, *args: tp.Any, **kwargs: tp.Any) -> tp.Any: ...
+
 
 class Object(Pytree, pytree=False):
   """Base class for NNX objects that are not pytrees."""
