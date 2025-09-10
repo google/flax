@@ -396,6 +396,68 @@ class TestLinenConsistency(parameterized.TestCase):
     assert isinstance(linen_out, jax.Array)
     np.testing.assert_array_equal(linen_out, nnx_out)
 
+  @parameterized.product(
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    n_steps=[1, 10],
+    update_stats=[True, False],
+  )
+  def test_nnx_linen_spectralnorm_equivalence(
+    self,
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+    n_steps: int,
+    update_stats: bool,
+  ):
+    class NNXModel(nnx.Module):
+      def __init__(self, dtype, param_dtype, rngs):
+        self.linear = nnx.Linear(5, 4, dtype=dtype,
+                                 param_dtype=param_dtype, rngs=rngs)
+        self.norm_layer = nnx.SpectralNorm(
+          self.linear,
+          n_steps=n_steps,
+          dtype=dtype,
+          param_dtype=param_dtype,
+          update_stats=update_stats,
+          rngs=rngs,
+        )
+
+      def __call__(self, x):
+        return self.norm_layer(x)
+
+    class LinenModel(linen.Module):
+      dtype: tp.Optional[Dtype] = None
+      param_dtype: Dtype = jnp.float32
+
+      def setup(self):
+        self.dense = linen.Dense(
+          4, dtype=self.dtype, param_dtype=self.param_dtype
+        )
+        self.norm_layer = linen.SpectralNorm(self.dense, n_steps=n_steps)
+
+      def __call__(self, x):
+        return self.norm_layer(x, update_stats=update_stats)
+
+    rngs = nnx.Rngs(42)
+    x = jax.random.normal(jax.random.key(0), (10, 5))
+
+    linen_model = LinenModel(dtype=dtype, param_dtype=param_dtype)
+    variables = linen_model.init(jax.random.key(1), x)
+
+    nnx_model = NNXModel(
+      dtype=dtype, param_dtype=param_dtype, rngs=rngs
+    )
+    nnx_model.linear.kernel.value = variables['params']['dense']['kernel']
+    nnx_model.linear.bias.value = variables['params']['dense']['bias']
+
+    var_norm_layer = variables['batch_stats']['norm_layer']
+    nnx_model.norm_layer.batch_stats[("kernel", "u")].value = var_norm_layer['dense/kernel/u']
+    nnx_model.norm_layer.batch_stats[("kernel", "sigma")].value = var_norm_layer['dense/kernel/sigma']
+
+    linen_out = linen_model.apply(variables, x, mutable=['batch_stats'])
+    nnx_out = nnx_model(x)
+    np.testing.assert_array_equal(linen_out[0], nnx_out)
+
 
 if __name__ == '__main__':
   absltest.main()
