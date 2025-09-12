@@ -843,11 +843,14 @@ class InstanceNorm(Module):
   Normalization). i.e. applies a transformation that maintains the mean activation
   within each channel within each example close to 0 and the activation standard
   deviation close to 1.
+
   .. note::
     This normalization operation is identical to LayerNorm and GroupNorm; the
     difference is simply which axes are reduced and the shape of the feature axes
     (i.e. the shape of the learnable scale and bias parameters).
+
   Example usage::
+
     >>> from flax import nnx
     >>> import jax
     >>> import numpy as np
@@ -872,6 +875,7 @@ class InstanceNorm(Module):
     >>> np.testing.assert_allclose(y, y2, atol=1e-7)
     >>> y3 = nnx.GroupNorm(5, num_groups=x.shape[-1], rngs=nnx.Rngs(0))(x)
     >>> np.testing.assert_allclose(y, y3, atol=1e-7)
+
   Args:
     num_features: the number of input features/channels.
     epsilon: A small float added to variance to avoid dividing by zero.
@@ -950,10 +954,12 @@ class InstanceNorm(Module):
 
   def __call__(self, x, *, mask: tp.Optional[jax.Array] = None):
     """Applies instance normalization on the input.
+
     Args:
       x: the inputs
-      mask: Binary array of shape broadcastable to ``inputs`` tensor, indicating
+      mask: Binary array of shape broadcastable to ``inputs`` array, indicating
         the positions for which the mean and variance should be computed.
+
     Returns:
       Normalized inputs (the same shape as inputs).
     """
