@@ -1631,10 +1631,6 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
   def set_value(self, value: A, *, index: tp.Any = MISSING):
     value = jax.tree.map(lambda x: x, value)  # make a copy
-    if isinstance(value, Variable):
-      raise ValueError(
-        'Cannot set value to a Variable, use `copy_from` method instead'
-      )
     if 'on_set_value' in self._var_metadata:
       value = self._var_metadata['on_set_value'](self, value)
     # update _raw_value
@@ -1704,6 +1700,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       value = jax.new_ref(value)
       new_metadata['ref'] = True
 
+    value = jax.tree.map(lambda x: x, value)  # make a copy
     obj = self.from_metadata(value, new_metadata)
     return obj
 
