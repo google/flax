@@ -23,11 +23,15 @@ import jax.numpy as jnp
 from flax.nnx import (
   filterlib,
   graphlib,
+  pytreelib,
 )
 from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
 from flax.nnx.graphlib import GraphState
+from flax.nnx.statelib import split_state, State
+import functools as ft
 from flax.typing import Key, Path, PathParts
+from collections.abc import MutableMapping
 import warnings
 
 A = tp.TypeVar('A')
@@ -172,22 +176,31 @@ class Module(Pytree, metaclass=ModuleMeta):
           variable_type, allow_register=True
       )
 
-    if hasattr(self, name):
-      variable = getattr(self, name)
-      if not isinstance(variable, variableslib.Variable):
-        raise ValueError(
-          f"Expected '{name}' to be a Variable, got {type(variable).__name__}"
-        )
-      elif type(variable) != variable_type:
-        raise ValueError(
-          f"Expected '{name}' to be of type '{variable_type.__name__}', "
-          f"got '{type(variable).__name__}'"
-        )
-      variable.set_value(reduce_fn(variable.get_value(), value))
+    if hasattr(self, '__captures__'):
+      for var in self.__captures__:
+        if type(var) == variable_type:
+          if name in var:
+            var[name] = reduce_fn(var[name], value)
+          else:
+            var[name] = reduce_fn(init_fn(), value)
+          return True
+      else:
+        return False
+    elif hasattr(self, name):
+        variable = getattr(self, name)
+        if not isinstance(variable, variableslib.Variable):
+          raise ValueError(
+            f"Expected '{name}' to be a Variable, got {type(variable).__name__}"
+          )
+        elif type(variable) != variable_type:
+          raise ValueError(
+            f"Expected '{name}' to be of type '{variable_type.__name__}', "
+            f"got '{type(variable).__name__}'"
+          )
+        variable.set_value(reduce_fn(variable.get_value(), value))
     else:
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
-
     return True
 
   def perturb(
@@ -258,16 +271,29 @@ class Module(Pytree, metaclass=ModuleMeta):
       variable_type = variableslib.variable_type_from_name(
           variable_type, allow_register=True
       )
-    if not hasattr(self, name):
-      zeros = jax.tree.map(jnp.zeros_like, value)
-      setattr(self, name, variable_type(zeros))
-    old_value: variableslib.Variable[tp.Any] = getattr(self, name)
-    if not isinstance(old_value, variable_type):
-      raise ValueError(
-        f"Expected '{name}' to be of type '{variable_type.__name__}', "
-        f"got '{type(old_value).__name__}'"
-      )
-    return old_value[...] + value
+
+    if hasattr(self, '__captures__'):
+      for var in self.__captures__:
+        if type(var) == variable_type:
+          if name not in var:
+            zeros = jax.tree.map(jnp.zeros_like, value)
+            var[name] = zeros
+          old_value = var[name]
+          break
+      else:
+        return value
+    elif hasattr(self, name):
+      var = getattr(self, name)
+      if not isinstance(var, variable_type):
+        raise ValueError(
+          f"Expected '{name}' to be of type '{variable_type.__name__}', "
+          f"got '{type(var).__name__}'"
+        )
+      old_value = var.get_value()
+    else:
+      old_value = jax.tree.map(jnp.zeros_like, value)
+      setattr(self, name, variable_type(old_value))
+    return old_value + value
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
     """
@@ -687,3 +713,224 @@ def iter_modules(
       yield path, value
 
 iter_children = graphlib.iter_children
+
+P = tp.ParamSpec("P")
+R = tp.TypeVar("R")
+
+@tp.overload
+def capture(
+  fn: tp.Callable[P, R],
+  *var_types: type[variableslib.Variable],
+  init: tp.Optional[State] = None,
+  method_outputs: tp.Optional[type[variableslib.Variable]] = None
+) -> tp.Callable[P, tuple[R, State]]: ...
+
+@tp.overload
+def capture(
+  fn: type[variableslib.Variable],
+  *var_types: type[variableslib.Variable],
+  init: tp.Optional[State] = None,
+  method_outputs: tp.Optional[type[variableslib.Variable]] = None
+) -> tp.Callable[[tp.Callable[P, R]], tp.Callable[P, tuple[R, State]]]: ...
+
+def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: type[variableslib.Variable],
+  init : tp.Optional[State] = None,
+  method_outputs : tp.Optional[type[variableslib.Variable]] = None
+) -> tp.Callable[P, tuple[R, State]] | tp.Callable[[tp.Callable[P, R]], tp.Callable[P, tuple[R, State]]]:
+    """Wraps a function to capture intermediate values from a module during execution.
+
+    This function wraps a `Callable`, executing it while collecting intermediate values that were stored using
+    ``Module.sow()`` or ``Module.perturb()``.
+
+    The `fn` argument can be either a function, a Module instance, or a bound method.
+    If `fn` is a function, its first argument should be the module in which intermediate values are to be recorded.
+    If `fn` is a bound method, the module used for storage is inferred from the instance.
+    If `fn` is a Module, its `__call__` method will be wrapped.
+
+    Args:
+      fn: The `Callable` to wrap.
+      var_types: Variable types to capture. If None, defaults to [].
+      init: MutableMapping used to initialize perturbation values. This is useful for gradient extraction.
+      method_outputs: If provided, automatically sows the output of each method
+        in the module and its submodules using this variable type.
+
+    Returns:
+      A wrapped function that returns
+      a tuple of (result, *intermediates) where result is the output of the function
+      and each intermediate is a State containing the captured values with the corresponding type in `var_types`.
+
+    Example with manual sowing::
+
+      class Foo(nnx.Module):
+        def __call__(self, x):
+          self.sow(nnx.Intermediate, 'features', x)
+          return x
+
+      model = CNN(rngs=nnx.Rngs(0))
+      forward = nnx.capture(model, nnx.Intermediate)
+      result, intermediates = forward(x)
+      # intermediates['features'] contains the sowed value
+
+    Example with method outputs::
+
+      class Foo(nnx.Module):
+        def features(self, x):
+          return x
+        def classifier(self, x):
+          return x
+        def __call__(self, x):
+          return self.classifier(self.features(x))
+
+      model = CNN(rngs=nnx.Rngs(0))
+      result, intermediates = nnx.capture(
+        model, method_output_type=nnx.Intermediate)(x)
+      # intermediates contains outputs of features(), classifier(), and __call__()
+
+    Example with gradient extraction::
+
+      class Model(nnx.Module):
+        def __call__(self, x):
+          x2 = self.perturb('grad_of_x', x)
+          return 3 * x2
+
+      model = Model()
+      forward = nnx.capture(lambda model, x: model(x), nnx.Perturbation) # Initialize perturbations
+      _, perturbations = forward_capture(model, x)
+
+      # Compute gradients with respect to perturbations
+      loss = nnx.capture(forward, init=perturbations)
+      grads, sowed = nnx.grad(loss, has_aux=True)(model, perturbations, x)
+    """
+
+    # Handle partial evaluation when first arg is a Variable type
+    if isinstance(fn, type) and issubclass(fn, variableslib.Variable):
+      # Partial application: return a function that waits for the actual fn
+      all_var_types = (fn,) + var_types
+      def partial_capture(actual_fn: tp.Callable[P, R] | Module) -> tp.Callable[P, tuple[R, State]]:
+        return capture(actual_fn, *all_var_types, init=init, method_outputs=method_outputs)
+      return partial_capture
+
+    # Handle bound methods and callable Modules
+    module_instance = None
+    if inspect.ismethod(fn) and isinstance(fn.__self__, Module):
+      module_instance = fn.__self__
+    elif isinstance(fn, Module):
+      module_instance = fn
+
+    ft.wraps(fn)
+    def wrapper(*fn_args, **kwargs):
+      if module_instance is None:
+        module = fn_args[0]
+      else:
+        module = module_instance
+
+      # Extract initial values from state
+      state_by_path = _collect_state_by_path(init) if init else {}
+
+      # Initialize __captures__ as a tuple of Variables (one per type)
+      for path, m in iter_modules(module):
+        # Create initial dicts for each variable type
+        initial_dicts = {}
+        for var_type in var_types:
+          initial_dicts[var_type] = {}
+
+        # Populate from state if available
+        if path in state_by_path:
+          for name, var in state_by_path[path].items():
+            var_type = type(var)
+            if var_type not in initial_dicts:
+              initial_dicts[var_type] = {}
+            initial_dicts[var_type][name] = var.get_value()
+
+        # Create the captures tuple
+        captures_tuple = tuple(k(v) for (k,v) in initial_dicts.items())
+        m.__captures__ = pytreelib.data(captures_tuple)
+
+      # Wrap methods with capturing if required
+      if method_outputs:
+        for _, m in iter_modules(module):
+          _add_capturing(type(m), method_outputs)
+
+      try:
+        result = fn(*fn_args, **kwargs)
+      finally:
+
+        # Undo method sowing modification
+        for _, m in iter_modules(module):
+          _remove_capturing(type(m))
+
+      # Extract intermediates manually from __captures__
+      interms = State({})
+      _extract_captures(module, interms, set(var_types))
+      split_states = split_state(interms, *var_types)
+      if len(var_types) == 1:
+        return result, split_states
+      else:
+        return (result, *split_states)
+
+    return wrapper
+
+def _collect_state_by_path(state):
+  """Build a mapping from module path to state Variables."""
+  state_by_path = {}
+
+  def collect(s, path_parts):
+    if isinstance(s, MutableMapping):
+      for key, value in s.items():
+        if isinstance(value, variableslib.Variable):
+          path_tuple = tuple(path_parts)
+          if path_tuple not in state_by_path:
+            state_by_path[path_tuple] = {}
+          state_by_path[path_tuple][key] = value
+        elif isinstance(value, MutableMapping):
+          collect(value, path_parts + [key])
+
+  collect(state, [])
+  return state_by_path
+
+def _navigate_to_path(state, path):
+  """Navigate to a nested path in state, creating dicts as needed."""
+  current = state
+  for part in path:
+    if part not in current:
+      current[part] = State({})
+    current = current[part]
+  return current
+
+def _extract_captures(module, state, var_types):
+  """Extract intermediates from __captures__ tuple into state dict."""
+  for path, mod in iter_modules(module):
+    if hasattr(mod, '__captures__'):
+      captures_tuple = mod.__captures__
+      for var in captures_tuple:
+        if not type(var) in var_types:
+          continue
+        current = _navigate_to_path(state, path)
+        for key, value in var.items():
+          current[key] = type(var)(value)
+      delattr(mod, '__captures__')
+
+
+def _add_capturing(cls, variable_type):
+  """Adds capturing to methods of a Module.
+  Does not instrument superclass methods."""
+  for name, method in cls.__dict__.items():
+    if callable(method) and (not name.startswith('_') or name == '__call__'):
+      if not hasattr(method, '_does_capturing'):
+        def closure(name, method): # Necessary to make 'name' immutable during iteration
+          @ft.wraps(method)
+          def wrapper(self, *args, **kwargs):
+            result = method(self, *args, **kwargs)
+            self.sow(variable_type, name, result)
+            return result
+          wrapper._does_capturing = True
+          setattr(cls, name, wrapper)
+        closure(name, method)
+  return cls
+
+def _remove_capturing(cls):
+  """Remove capturing methods from a Module."""
+  for name, method in cls.__dict__.items():
+    if hasattr(method, '_does_capturing'):
+      setattr(cls, name, method.__wrapped__)
+  return cls

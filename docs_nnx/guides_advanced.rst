@@ -9,3 +9,4 @@ Advanced Guides
    guides/performance
    guides/bridge_guide
    guides/surgery
+   guides/extracting_intermediates
