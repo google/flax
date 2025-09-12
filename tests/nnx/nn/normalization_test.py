@@ -323,6 +323,79 @@ class TestLinenConsistency(parameterized.TestCase):
     assert isinstance(linen_out, jax.Array)
     np.testing.assert_array_equal(linen_out, nnx_out)
 
+  @parameterized.product(
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+    use_fast_variance=[True, False],
+    mask=[None, np.array([True, False, True, False, True, False])],
+  )
+  def test_nnx_linen_instancenorm_equivalence(
+    self,
+    dtype: tp.Optional[Dtype],
+    param_dtype: Dtype,
+    use_fast_variance: bool,
+    mask: tp.Optional[np.ndarray],
+  ):
+    class NNXModel(nnx.Module):
+      def __init__(self, dtype, param_dtype, use_fast_variance, rngs):
+        self.norm_layer = nnx.InstanceNorm(
+          6,
+          dtype=dtype,
+          param_dtype=param_dtype,
+          use_fast_variance=use_fast_variance,
+          rngs=rngs,
+        )
+        self.linear = nnx.Linear(
+          6, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+        )
+
+      def __call__(self, x, *, mask=None):
+        x = self.norm_layer(x, mask=mask)
+        x = self.linear(x)
+        return x
+
+    class LinenModel(linen.Module):
+      dtype: tp.Optional[Dtype] = None
+      param_dtype: Dtype = jnp.float32
+      use_fast_variance: bool = True
+
+      def setup(self):
+        self.norm_layer = linen.InstanceNorm(
+          dtype=self.dtype,
+          param_dtype=self.param_dtype,
+          use_fast_variance=self.use_fast_variance,
+        )
+        self.linear = linen.Dense(
+          4, dtype=self.dtype, param_dtype=self.param_dtype
+        )
+
+      def __call__(self, x, *, mask=None):
+        x = self.norm_layer(x, mask=mask)
+        x = self.linear(x)
+        return x
+
+    rngs = nnx.Rngs(42)
+    x = jax.random.normal(jax.random.key(0), (10, 6))
+
+    linen_model = LinenModel(
+      dtype=dtype, param_dtype=param_dtype, use_fast_variance=use_fast_variance
+    )
+    variables = linen_model.init(jax.random.key(1), x)
+    linen_out = linen_model.apply(variables, x, mask=mask)
+
+    nnx_model = NNXModel(
+      dtype=dtype,
+      param_dtype=param_dtype,
+      use_fast_variance=use_fast_variance,
+      rngs=rngs,
+    )
+    nnx_model.linear.kernel.value = variables['params']['linear']['kernel']
+    nnx_model.linear.bias.value = variables['params']['linear']['bias']
+
+    nnx_out = nnx_model(x, mask=mask)
+    assert isinstance(linen_out, jax.Array)
+    np.testing.assert_array_equal(linen_out, nnx_out)
+
 
 if __name__ == '__main__':
   absltest.main()
