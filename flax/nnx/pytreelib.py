@@ -21,6 +21,7 @@ import threading
 import typing as tp
 from abc import ABCMeta
 from copy import deepcopy
+import warnings
 
 from flax.nnx import variablelib
 import jax
@@ -453,10 +454,20 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   # Backward compatibility with PR #4863
   @property
   def _object__nodes(self):
+    warnings.warn(
+      "'_object__nodes' is deprecated, use '_pytree__nodes' instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self._pytree__nodes
 
   @property
   def _object__state(self):
+    warnings.warn(
+      "'_object__state' is deprecated, use '_pytree__state' instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self._pytree__state
 
   if not tp.TYPE_CHECKING:
