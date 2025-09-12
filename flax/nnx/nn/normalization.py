@@ -859,12 +859,10 @@ class InstanceNorm(Module):
     >>> layer = nnx.InstanceNorm(5, rngs=nnx.Rngs(0))
     >>> nnx.state(layer, nnx.Param)
     State({
-      'bias': VariableState( # 5 (20 B)
-        type=Param,
+      'bias': Param( # 5 (20 B)
         value=Array([0., 0., 0., 0., 0.], dtype=float32)
       ),
-      'scale': VariableState( # 5 (20 B)
-        type=Param,
+      'scale': Param( # 5 (20 B)
         value=Array([1., 1., 1., 1., 1.], dtype=float32)
       )
     })
