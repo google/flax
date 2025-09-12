@@ -49,6 +49,7 @@ from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
 from .module import Module as Module
+from .module import Capture
 from .module import view as view
 from .module import view_info as view_info
 from .module import iter_children as iter_children, iter_modules as iter_modules
@@ -206,6 +207,7 @@ from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree
 from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
+from .capture import capture_intermediates
 from . import traversals as traversals
 
 
