@@ -38,7 +38,12 @@ from jax.nn import (
   standardize,
   swish,
 )
+import jax.numpy as jnp
 from jax.numpy import tanh
+
+from flax import nnx
+from flax.typing import Array, Dtype
+
 
 __all__ = [
   'celu',
@@ -66,4 +71,45 @@ __all__ = [
   'standardize',
   'swish',
   'tanh',
+  'PReLU',
 ]
+
+
+class PReLU(nnx.Module):
+  """Parametric Rectified Linear Unit (PReLU) activation function.
+
+  Note that PReLU is a Flax layer and not a simple activation function, so
+  it needs to be initialized before being called.
+
+  Example::
+
+    >>> import flax.nnx as nnx
+
+    >>> class MLP(nnx.Module):
+    ...   def __init__(self):
+    ...     self.linear = nnx.Linear(3, 2)
+    ...     self.act = nnx.PReLU(negative_slope_init=0.1)
+    ...
+    ...   def __call__(self, x):
+    ...     x = self.linear(x)
+    ...     x = self.act(x)
+    ...     return x
+
+  Args:
+    negative_slope_init: the value to initialize the negative slope (default 0.01).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+  """
+  def __init__(
+    self,
+    negative_slope_init: float = 0.01,
+    param_dtype: Dtype = jnp.float32
+  ):
+    self.negative_slope = nnx.Param(
+      jnp.asarray(negative_slope_init, dtype=param_dtype)
+    )
+    self.param_dtype = param_dtype
+
+  def __call__(self, inputs: Array) -> Array:
+    return jnp.where(
+      inputs >= 0, inputs, jnp.asarray(self.negative_slope.value, inputs.dtype) * inputs
+    )
