@@ -48,6 +48,8 @@ Index = int
 
 
 class Carry:
+  """Helper class for :func:`flax.nnx.scan` function to mark input and output axis as carry.
+  """
   pass
 
 
@@ -1175,6 +1177,98 @@ def scan(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
 ) -> F | tp.Callable[[F], F]:
+  """A Flax NNX transformation of `jax.lax.scan`_.
+
+  Example::
+
+    import jax
+    from flax import nnx
+
+    class Block(nnx.Module):
+      def __init__(self, input_dim, features, *, rngs):
+        self.linear = nnx.Linear(input_dim, features, rngs=rngs)
+        self.dropout = nnx.Dropout(0.1, rngs=rngs)
+
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = self.dropout(x)
+        x = jax.nn.relu(x)
+        return x
+
+    class Model(nnx.Module):
+      def __init__(self, num_layers, features, *, rngs):
+        # In this model implementation we create
+        # multiple blocks using vmap
+
+        # As Block contains dropout op, we prefer
+        # to split RNG into num_layers of RNGs
+        # using @nnx.split_rngs decorator.
+        # Next, nnx.vmap creates a vectorized version of Block.
+        # in_axes and out_axes define vectorization axis
+        # of the input splitted rngs and the output Block instance.
+        # Both axes should be 0.
+        @nnx.split_rngs(splits=num_layers)
+        @nnx.vmap(in_axes=(0,), out_axes=0)
+        def create_block(rngs: nnx.Rngs):
+          return Block(features, features, rngs=rngs)
+
+        self.blocks = create_block(rngs)
+        self.num_layers = num_layers
+
+      def __call__(self, x):
+        # Forward pass method implementation
+
+        # We use nnx.scan to apply sequentially the blocks
+        # on the input, for example with num_layers=3
+        # output = block[0](x)
+        # output = block[1](output)
+        # output = block[2](output)
+        #
+        # In `forward` function defined below:
+        # - x represents the loop carry value
+        # - model is the data to scan along the leading axis
+        # nnx.scan args:
+        # - in_axes marks the inputs: x is marked as carry
+        # and the model is to scan along the axis 0
+        # - out_axes marks the output as carry
+        @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=nnx.Carry)
+        def forward(x, model):
+          x = model(x)
+          return x
+
+        return forward(x, self.blocks)
+
+      # Alternatively, we can also decorate `self.__call__` method
+      # @nnx.scan(in_axes=(0, nnx.Carry), out_axes=nnx.Carry)
+      # def __call__(self, x):
+      #   return self.blocks(x)
+
+    model = Model(2, 4, rngs=nnx.Rngs(0))
+    _, params, _ = nnx.split(model, nnx.Param, ...)
+    print(params)  # kernel of shape: (2, 4, 4)
+
+    x = jnp.arange(5 * 4, dtype="float32").reshape((5, 4))
+    y = model(x)
+    print(y.shape)  # shape: (5, 4)
+
+  Args:
+    f: a Python function to be scanned
+    length: optional integer specifying the number of loop iterations
+    reverse: optional boolean specifying whether to run the scan iteration
+      forward (the default) or in reverse
+    unroll: optional positive int or bool specifying, in the underlying
+      operation of the scan primitive, how many scan iterations to unroll
+      within a single iteration of a loop.
+    in_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
+      the kind of input args. Integer value would specify the axis of corresponding
+      input data to scan along. :class:`flax.nnx.Carry` marks the input data as
+      loop carry value. None marks the input data as auxiliary input.
+    out_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
+      the kind of output args. See ``in_axes`` for details. Note that If ``in_axes``
+      contains :class:`flax.nnx.Carry` then ``out_axes`` must also contain :class:`flax.nnx.Carry`.
+
+  .. _jax.lax.scan: https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>
+  """
   if f is Missing:
     return functools.partial(
         scan,
