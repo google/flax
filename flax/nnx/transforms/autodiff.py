@@ -139,7 +139,7 @@ def _grad_general(
     def _grad_split_fn(
       ctx: graph.SplitContext, path, prefix: DiffState | None, value
     ):
-      if prefix is None:
+      if prefix is None or (prefix.argnum == -1 and isinstance(value, variablelib.Variable)):
         nondiff_states.append(None)
         return extract.NodeStates.from_split(*ctx.split(value))
       else:
