@@ -2583,7 +2583,7 @@ def pop(
     return states
 
 
-def clone(node: Node) -> Node:
+def clone(node: Node, variables: bool = True) -> Node:
   """Create a deep copy of the given graph node.
 
   Example usage::
@@ -2597,11 +2597,13 @@ def clone(node: Node) -> Node:
 
   Args:
     node: A graph node object.
+    variables: If ``True`` (default) copies of the :class:`Variable` objects are created,
+      otherwise the Variables are shared between the original and cloned node.
   Returns:
     A deep copy of the :class:`Module` object.
   """
   graphdef, state = split(node)
-  return merge(graphdef, state, copy=True)
+  return merge(graphdef, state, copy=variables)
 
 
 def _mutable_like(path, x):
