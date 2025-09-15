@@ -256,9 +256,9 @@ class State(MutableMapping[K, V], reprlib.Representable):
 
   def __getitem__(self, key: K) -> State | V:  # type: ignore
     value = self._mapping[key]
-    if isinstance(value, tp.Mapping):
+    if isinstance(value, dict):
       return type(self)(value, _copy=False)
-    return value
+    return value  # type: ignore[return-value]
 
   def __getattr__(self, key: K) -> State | V:  # type: ignore[misc]
     if '_mapping' not in vars(self) or key not in self._mapping:
