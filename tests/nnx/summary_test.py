@@ -98,5 +98,38 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('float32[1,8]', table_repr[6])
 
 
+  def test_no_dup_flops(self):
+    class Model(nnx.Module):
+      def g(self, x):
+        return x**2
+      def __call__(self, x):
+        return self.g(x)
+    m = Model()
+    x = jnp.ones(4)
+    table_rep = nnx.tabulate(m, x, compute_flops=True)
+    table_lines = table_rep.splitlines()
+    self.assertEqual(sum(" g " in l for l in table_lines), 1)
+
+
+  def test_flops(self):
+    class Model(nnx.Module):
+      def __init__(self):
+        self.weight = nnx.Param(jnp.ones(4))
+
+      def __call__(self, x1):
+        return jnp.sum((x1 * self.weight)**2)
+    m = Model()
+    x = jnp.ones(4)
+    table_repr1 = nnx.tabulate(
+      m, x, compute_flops=True
+    ).splitlines()
+    self.assertIn('flops', table_repr1[2])
+    self.assertNotIn('vjp_flops', table_repr1[2])
+    table_repr2 = nnx.tabulate(
+      m, x, compute_flops=True, compute_vjp_flops=True
+    ).splitlines()
+    self.assertIn('vjp_flops', table_repr2[2])
+
+
 if __name__ == '__main__':
   absltest.main()
