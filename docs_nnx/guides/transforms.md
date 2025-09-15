@@ -390,18 +390,21 @@ To achieve this, Flax NNX transforms provide a non-standard `transform_metadata`
 Let's see an example of this in action:
 
 ```{code-cell} ipython3
+mesh = jax.make_mesh((1, 1), ('a', 'b'))
+
 class Weights(nnx.Module):
   def __init__(self, array: jax.Array, sharding_names: tuple[str | None, ...]):
     self.param = nnx.Param(array, sharding_names=sharding_names)
-
-m = Weights(jnp.ones((3, 4, 5)), sharding_names=('a', 'b', None))
 
 @nnx.vmap(in_axes=1, transform_metadata={nnx.PARTITION_NAME: 'b'})
 def f(m: Weights):
   print(f'Inner {m.param.shape = }')
   print(f'Inner {m.param.sharding_names = }')
 
-f(m)
+with jax.set_mesh(mesh):
+  m = Weights(jnp.ones((3, 4, 5)), sharding_names=('a', 'b', None))
+  f(m)
+
 print(f'Outter {m.param.shape = }')
 print(f'Outter {m.param.sharding_names = }')
 ```
@@ -415,7 +418,8 @@ You can verify that this also works when `nnx.Module`s are created inside the tr
 def init_vmap():
   return Weights(jnp.ones((3, 5)), sharding_names=('a', None))
 
-m = init_vmap()
+with jax.set_mesh(mesh):
+  m = init_vmap()
 print(f'Outter {m.param.shape = }')
 print(f'Outter {m.param.sharding_names = }')
 ```

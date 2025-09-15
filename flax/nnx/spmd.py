@@ -23,12 +23,6 @@ from flax.typing import (
 import jax
 from jax.sharding import PartitionSpec
 
-# JAX version compatibility
-if hasattr(jax.sharding, 'use_mesh'):
-  set_mesh = jax.sharding.use_mesh
-else:
-  set_mesh = jax.set_mesh
-
 A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 PARTITION_NAME = 'partition_name'
@@ -171,7 +165,7 @@ def get_named_sharding(tree: A, mesh: jax.sharding.Mesh) -> A:
 
 
 def get_abstract_model(init_fn, mesh):
-  with set_mesh(mesh):
+  with jax.set_mesh(mesh):
     abs_model = eval_shape(init_fn)
     gdef, abs_state = graph.split(abs_model)
     abs_state = jax.tree.map(

@@ -29,12 +29,6 @@ from flax import nnx
 from flax.nnx import bridge
 from flax.nnx.bridge.module import MODULE_CONTEXT
 
-# JAX version compatibility
-if hasattr(jax.sharding, 'use_mesh'):
-  set_mesh = jax.sharding.use_mesh
-else:
-  set_mesh = jax.set_mesh
-
 
 class TestBridgeModule(absltest.TestCase):
   def test_update(self):
@@ -297,7 +291,7 @@ class TestBridgeModule(absltest.TestCase):
     x = jnp.ones((4, 2))
 
     mesh = jax.make_mesh((2, 2), ('in', 'out'))
-    with set_mesh(mesh):
+    with jax.set_mesh(mesh):
       variables = foo.init(0, x)
       y: jax.Array = foo.apply(variables, x)
 
