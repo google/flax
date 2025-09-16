@@ -80,7 +80,7 @@ def train_step(state: TrainState, batch):
   x, y = batch
 
   def loss_fn(params):
-    model = nnx.merge(state.graphdef, params, state.counts)
+    model = nnx.merge(state.graphdef, params, state.counts, copy=True)
     y_pred = model(x)
     loss = jnp.mean((y - y_pred) ** 2)
     counts = nnx.state(model, Count)

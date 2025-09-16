@@ -56,15 +56,15 @@ class MLP(nnx.Module):
   def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
     self.w1 = nnx.Param(
       nnx.initializers.lecun_normal()(rngs.params(), (din, dmid)),
-      sharding=mesh_rules('embed', 'mlp'),
+      sharding_names=mesh_rules('embed', 'mlp'),
     )
     self.b1 = nnx.Param(
       jnp.zeros((dmid,)),
-      sharding=mesh_rules('mlp'),
+      sharding_names=mesh_rules('mlp'),
     )
     self.w2 = nnx.Param(
       nnx.initializers.lecun_normal()(rngs.params(), (dmid, dout)),
-      sharding=mesh_rules('embed', 'mlp'),
+      sharding_names=mesh_rules('embed', 'mlp'),
     )
 
   def __call__(self, x: jax.Array):
@@ -113,29 +113,14 @@ class SGD(nnx.Pytree):
 def create_model():
   model = MLP(1, 32, 1, rngs=nnx.Rngs(0))
   optimizer = SGD(nnx.variables(model, nnx.Param), 0.01, decay=0.9)
-  state = nnx.state(optimizer)
-  sharded_state = jax.lax.with_sharding_constraint(
-    state, nnx.get_named_sharding(state, mesh)
-  )
-
-  def get_named_shardings(path: tuple, value: nnx.Variable):
-    if path[0] == 'params':
-      return NamedSharding(mesh, P(*value.sharding_names))
-    elif path[0] == 'momentum':
-      # currently the same as above but in general it could be different
-      return NamedSharding(mesh, P(*value.sharding_names))
-    else:
-      raise ValueError(f'Unknown path: {path}')
-
-  named_shardings = nnx.map_state(get_named_shardings, state)
-  sharded_state = jax.lax.with_sharding_constraint(state, named_shardings)
-  nnx.update(optimizer, sharded_state)
   return model, optimizer
 
+with jax.set_mesh(mesh):
+  model, optimizer = create_model()
 
-model, optimizer = create_model()
-
+print('Model parameters sharding:')
 jax.debug.visualize_array_sharding(model.w1.value)
+print('Optimizer momentum sharding:')
 jax.debug.visualize_array_sharding(optimizer.momentum['w1'].value)
 
 
