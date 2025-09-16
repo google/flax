@@ -1,7 +1,9 @@
 - Start Date: 2025-09-12
 - FLIP PR: [#4844](https://github.com/google/flax/pull/4844)
 
-# Summary
+# FLIP 4844: Variable eager sharding
+
+## Summary
 [summary]: #summary
 
 Simplify the creation of sharded NNX models. When a sharding annotation is provided, all `nnx.Variable` creation will **require a mesh context** and automatically be sharded as annotated.
@@ -37,13 +39,9 @@ with mesh:
 
 User can turn off this feature in two ways:
 
-### Global config flag
+* **Global config flag**: Run `flax.config.update('flax_always_shard_variable', False)` before running any NNX model initialization.
 
-Run `flax.config.update('flax_always_shard_variable', False)` before running any NNX model initialization.
-
-### Variable-specific flag
-
-Create a specific variable with metadata `eager_sharding=False`, such as: `nnx.Param(..., eager_sharding=False)`.
+* **Variable-specific flag**: Create a specific variable with metadata `eager_sharding=False`, such as: `nnx.Param(..., eager_sharding=False)`.
 
 
 # Implementation
