@@ -48,6 +48,13 @@ In this guide we use a standard FSDP layout and shard our devices on two axes - 
 auto_mesh = jax.make_mesh((2, 4), ('data', 'model'))
 ```
 
+> Compatibility Note: This guide covers the [eager sharding feature](https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html) that greatly simplifies creating sharded model. If your project already used Flax GSPMD API on version `flax<0.12`, you might have turned the feature off to keep your code working. Check the flag and read on to learn how to use the feature.
+
+```{code-cell} ipython3
+import flax
+assert flax.config.flax_always_shard_variable is True
+```
+
 ## Shard a single-array model
 
 Let's begin by sharding the simplest component possible - a Flax variable.
