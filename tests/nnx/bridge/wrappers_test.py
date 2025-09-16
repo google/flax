@@ -25,12 +25,6 @@ from flax import linen as nn
 from flax import nnx
 from flax.nnx import bridge
 
-# JAX version compatibility
-if hasattr(jax.sharding, 'use_mesh'):
-  set_mesh = jax.sharding.use_mesh
-else:
-  set_mesh = jax.set_mesh
-
 
 class TestCompatibility(absltest.TestCase):
   def setUp(self):
@@ -172,7 +166,7 @@ class TestCompatibility(absltest.TestCase):
       sharded_state = jax.lax.with_sharding_constraint(state, nnx.get_partition_spec(state))
       nnx.update(model, sharded_state)
       return model
-    with set_mesh(self.mesh):
+    with jax.set_mesh(self.mesh):
       nnx_model = create_sharded_nnx_module(x)
 
     # nn.Partitioned metadata boxes translated into valid nnx.Variable boxes.
@@ -403,7 +397,7 @@ class TestCompatibility(absltest.TestCase):
       nnx.Linear, 32, 64,
       kernel_init=nnx.with_partitioning(nnx.initializers.lecun_normal(), ('in', 'out')))
     x = jax.numpy.ones((1, 32))
-    with set_mesh(self.mesh):
+    with jax.set_mesh(self.mesh):
       y, variables = model.init_with_output(jax.random.key(0), x)
       pspec_tree = nn.get_partition_spec(variables)
     assert y.shape == (1, 64)
@@ -499,7 +493,7 @@ class TestCompatibility(absltest.TestCase):
     x = jax.random.normal(jax.random.key(0), (2, 4))
 
     # Test the RNG
-    with set_mesh(self.mesh):
+    with jax.set_mesh(self.mesh):
       model = bridge.lazy_init(NNXOuter(dout=6, dropout_rate=0.5,
                                         rngs=nnx.Rngs(default=1, dropout=2)), x)
       nnx.reseed(model, dropout=2)
@@ -511,7 +505,7 @@ class TestCompatibility(absltest.TestCase):
       np.testing.assert_array_equal(y1, model(x))
 
     # Test the param value with disabled dropout
-    with set_mesh(self.mesh):
+    with jax.set_mesh(self.mesh):
       model = bridge.lazy_init(NNXOuter(dout=6, dropout_rate=0.,
                                         rngs=nnx.Rngs(default=1, dropout=2)), x)
       w, b = model.inner.dot['w'], model.inner.b

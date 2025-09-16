@@ -284,3 +284,9 @@ flax_max_repr_depth = int_flag(
   default=None,
   help='Maximum depth of reprs for nested flax objects. Default is None (no limit).',
 )
+
+flax_always_shard_variable = bool_flag(
+  name='flax_always_shard_variable',
+  default=True,
+  help='Whether a `nnx.Variable` should always automatically be sharded if it contains sharding annotations.',
+)

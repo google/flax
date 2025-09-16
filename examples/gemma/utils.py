@@ -34,12 +34,6 @@ if TYPE_CHECKING:
 Dtype = Any
 Shape = tuple[int, ...]
 
-# JAX version compatibility
-if hasattr(jax.sharding, 'use_mesh'):
-  set_mesh = jax.sharding.use_mesh
-else:
-  set_mesh = jax.set_mesh
-
 
 class TrainState(train_state.TrainState):
   graphdef: nnx.GraphDef[Transformer]
@@ -172,7 +166,7 @@ def setup_initial_state(
     return state
 
   # Initialization
-  with set_mesh(mesh):
+  with jax.set_mesh(mesh):
     state = sharded_init()
 
   state_sharding = nnx.get_named_sharding(state, mesh)
