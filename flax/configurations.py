@@ -26,6 +26,7 @@ class Config:
   flax_array_ref: bool
   flax_pytree_module: bool
   flax_max_repr_depth: int | None
+  flax_always_shard_variable: bool
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
 
