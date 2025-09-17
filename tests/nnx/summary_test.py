@@ -97,6 +97,73 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('float32[1,8]', table_repr[5])
     self.assertIn('float32[1,8]', table_repr[6])
 
+  def test_tabulate_empty_dict_first_arg(self):
+    class Model(nnx.Module):
+      def subroutine(self, foo, x):
+        return x
+
+      def __call__(self, x):
+        return self.subroutine({}, x)
+
+    model = Model()
+    out = nnx.tabulate(
+      model, jnp.zeros((1, 8)), depth=1, console_kwargs=CONSOLE_TEST_KWARGS
+    )
+    # Ensure empty dict argument is preserved and array input is shown
+    self.assertIn('{}', out)
+    self.assertIn('float32[1,8]', out)
+
+  def test_tabulate_empty_dict_last_arg(self):
+    class Model(nnx.Module):
+      def subroutine(self, foo, x):
+        return x
+
+      def __call__(self, x):
+        return self.subroutine(x, {})
+
+    model = Model()
+    out = nnx.tabulate(
+      model, jnp.zeros((1, 8)), depth=1, console_kwargs=CONSOLE_TEST_KWARGS
+    )
+    # Ensure trailing empty dict is not dropped
+    self.assertIn('{}', out)
+
+  def test_tabulate_empty_dict_and_none_kwarg(self):
+    class Model(nnx.Module):
+      def subroutine(self, x, *, foo=None):
+        return x
+
+      def __call__(self, x):
+        # One call with empty dict, one with None
+        _ = self.subroutine(x, foo={})
+        return self.subroutine(x, foo=None)
+
+    model = Model()
+    out = nnx.tabulate(
+      model, jnp.zeros((1, 8)), depth=2, console_kwargs=CONSOLE_TEST_KWARGS
+    )
+    # Distinguish {} and None in output
+    self.assertIn('{}', out)
+    self.assertIn('None', out)
+
+  def test_tabulate_original_user_repro(self):
+    class Model(nnx.Module):
+      def __init__(self):
+        self.foo = {}
+
+      def subroutine(self, foo, x):
+        return x
+
+      def __call__(self, x):
+        return self.subroutine(self.foo, x)
+
+    model = Model()
+    out = nnx.tabulate(
+      model, jnp.zeros((1, 1024)), depth=1, console_kwargs=CONSOLE_TEST_KWARGS
+    )
+    # Should not crash and should show the empty dict argument
+    self.assertIn('{}', out)
+
 
 if __name__ == '__main__':
   absltest.main()
