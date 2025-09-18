@@ -2795,7 +2795,7 @@ def call(
   used to call methods on the underlying graph node. When a method is called, the
   output is returned along with a new (GraphDef, State) pair that represents the
   updated state of the graph node. ``call`` is equivalent to :func:`merge` > ``method``
-  > :func:`split`` but is more convenient to use in pure JAX functions.
+  > :func:`split` but is more convenient to use in pure JAX functions.
 
   Example::
 
