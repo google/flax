@@ -233,16 +233,17 @@ class Module(Pytree, metaclass=ModuleMeta):
       >>> assert not hasattr(model, 'xgrad')  # perturbation requires a sample input run
       >>> _ = model(x)
       >>> assert model.xgrad.value.shape == (1, 3)   # same as the intermediate value
+      >>> graphdef, params, perturbations = nnx.split(model, nnx.Param, nnx.Perturbation)
 
       >>> # Take gradients on the Param and Perturbation variables
-      >>> @nnx.grad(argnums=nnx.DiffState(argnum=0, filter=nnx.Any(nnx.Param, nnx.Perturbation)))
-      ... def grad_loss(model, inputs, targets):
-      ...   preds = model(inputs)
-      ...   return jnp.square(preds - targets).mean()
+      >>> @nnx.grad(argnums=(0, 1))
+      ... def grad_loss(params, perturbations, inputs, targets):
+      ...   model = nnx.merge(graphdef, params, perturbations)
+      ...   return jnp.mean((model(inputs) - targets) ** 2)
 
-      >>> intm_grads = grad_loss(model, x, y)
-      >>> # `intm_grads.xgrad.value` is the intermediate gradient
-      >>> assert not jnp.array_equal(intm_grads.xgrad.value, jnp.zeros((1, 3)))
+      >>> (grads, perturbations) = grad_loss(params, perturbations, x, y)
+      >>> # `perturbations.xgrad.value` is the intermediate gradient
+      >>> assert not jnp.array_equal(perturbations.xgrad.value, jnp.zeros((1, 3)))
 
     Args:
       name: A string denoting the ``Module`` attribute name for the
