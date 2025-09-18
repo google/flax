@@ -5,6 +5,7 @@ Basic Guides
    :maxdepth: 1
    :caption: Basic
 
+   guides/pytree
    guides/transforms
    guides/filters_guide
    guides/randomness
