@@ -200,10 +200,8 @@ Certain JAX transforms allow the use of pytree prefixes to specify how different
 | Lift type        | JAX transforms                          |
 |------------------|-----------------------------------------|
 | `StateAxes`      | `vmap`, `pmap`, `scan`                  |
-| `StateSharding`  | `jit`, `shard_map`*                     |
+| `StateSharding`  | `jit`, `shard_map`                      |
 | `DiffState`      | `grad`, `value_and_grad`, `custom_vjp`  |
-
-> **Note:** * Flax NNX `shard_map` has not been implemented yet at the time of writing this version of the document.
 
 To specify how to vectorize different sub-states of an object in `nnx.vmap`, the Flax team created a `nnx.StateAxes`. `StateAxes` maps a set of sub-states via Flax NNX [Filters](https://flax.readthedocs.io/en/latest/guides/filters_guide.html) to their corresponding axes, and you can pass the `nnx.StateAxes` to `in_axes` and `out_axes` as if it/they were a pytree prefix.
 
