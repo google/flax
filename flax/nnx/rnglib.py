@@ -623,6 +623,7 @@ class Rngs(Pytree):
     *,
     split: tp.Mapping[filterlib.Filter, int | tuple[int, ...]]
     | int
+    | tuple[int, ...]
     | None = None,
   ):
     """Returns a new Rngs object with new unique RNG keys.
@@ -661,6 +662,8 @@ class Rngs(Pytree):
     if split is None:
       split = {}
     elif isinstance(split, int):
+      split = {...: split}
+    elif isinstance(split, tuple):
       split = {...: split}
 
     split_predicates = {filterlib.to_predicate(k): v for k, v in split.items()}
