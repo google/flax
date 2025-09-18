@@ -141,16 +141,18 @@ def is_data(value: tp.Any, /) -> bool:
   """Checks if a value is a registered data type.
 
   This function checks a the value is registered data type, which means it is
-  automatically recognized as data when assigned a nnx.Pytree attribute.
+  automatically recognized as data when assigned a :class:`flax.nnx.Pytree` attribute.
 
   Data types are:
-  - jax.Arrays
-  - np.ndarrays
-  - ArrayRefs
-  - Variables (Param, BatchStat, RngState, etc.)
-  - All graph nodes (Object, Module, Rngs, etc.)
-  - Any type registered with `nnx.register_data_type`
+
+  - ``jax.Array``
+  - ``np.ndarray``
+  - ``ArrayRef``
+  - Variables (:class:`flax.nnx.Param`, :class:`flax.nnx.BatchStat`, `nnx.RngState`, etc.)
+  - All graph nodes (:class:`flax.nnx.Object`, :class:`flax.nnx.Module`, :class:`flax.nnx.Rngs`, etc.)
+  - Any type registered with :func:`flax.nnx.register_data_type`
   - Any pytree that contains at least one node or leaf element of the above
+
 
   Example::
 
