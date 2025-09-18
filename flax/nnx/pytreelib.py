@@ -646,7 +646,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       OBJECT_CONTEXT.seen_modules_repr.add(id(self))
 
       for name, value in vars(self).items():
-        if name.startswith('_'):
+        if str(name).startswith('_'):
           continue
 
         def to_shape_dtype(value):
@@ -701,7 +701,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         first_line_annotation = None
       children = {}
       for name, value in vars(self).items():
-        if name.startswith('_'):
+        if str(name).startswith('_'):
           continue
         children[name] = value
 
