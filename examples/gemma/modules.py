@@ -126,25 +126,31 @@ class Attention(nnx.Module):
     if num_heads == num_kv_heads:
       qkv_einsum_kernel_init = qkv_einsum_kernel_init if qkv_einsum_kernel_init else kernel_init
       self.qkv_einsum = layers.Einsum(
-          einsum_str='BTD,SNDH->SBTNH',
-          shape=(3, num_heads, features, head_dim),
+          einsum_str='BTD,DSNH->SBTNH',
+          shape=(features, 3, num_heads, head_dim),
           kernel_init=qkv_einsum_kernel_init,
           dtype=dtype,
           rngs=rngs,
       )
     else:
+      if num_heads % num_kv_heads != 0:
+        raise ValueError(
+          f"Number of query heads ({num_heads}) must be divisible by "
+          f"number of key/value heads ({num_kv_heads})."
+        )
+
       q_einsum_kernel_init = q_einsum_kernel_init if q_einsum_kernel_init else kernel_init
       kv_einsum_kernel_init = kv_einsum_kernel_init if kv_einsum_kernel_init else kernel_init
       self.q_einsum = layers.Einsum(
-          einsum_str='BTD,NDH->BTNH',
-          shape=(num_heads, features, head_dim),
+          einsum_str='BTD,DNH->BTNH',
+          shape=(features, num_heads, head_dim),
           kernel_init=kernel_init,
           dtype=dtype,
           rngs=rngs,
       )
       self.kv_einsum = layers.Einsum(
-          einsum_str='BSD,CKDH->CBSKH',
-          shape=(2, num_kv_heads, features, head_dim),
+          einsum_str='BSD,DCKH->CBSKH',
+          shape=(features, 2, num_kv_heads, head_dim),
           kernel_init=kv_einsum_kernel_init,
           dtype=dtype,
           rngs=rngs,
@@ -211,7 +217,16 @@ class Attention(nnx.Module):
           cache['k'], key_proj, slice_indices
       )
 
-    logits = jnp.einsum('BTNH,BSNH->BTNS', query_scaled, key_proj)
+    use_gqa = self.num_kv_heads > 1 and self.num_heads > self.num_kv_heads
+    if use_gqa:
+      num_groups = self.num_heads // self.num_kv_heads
+      bs, seq, _, d  = query_scaled.shape
+      query_scaled = query_scaled.reshape(
+        (bs, seq, self.num_kv_heads, num_groups, d)
+      )
+      logits = jnp.einsum('BTNGH,BSNH->BTNGS', query_scaled, key_proj)
+    else:
+      logits = jnp.einsum('BTNH,BSNH->BTNS', query_scaled, key_proj)
 
     if self.attn_logits_soft_cap is not None:
       logits = jnp.tanh(logits / self.attn_logits_soft_cap)
@@ -228,10 +243,19 @@ class Attention(nnx.Module):
       ) * jnp.tril(all_ones, self.sliding_window_size - 1)
       attn_mask = sliding_mask * attn_mask
 
-    padded_logits = jnp.where((jnp.expand_dims(attn_mask, -2)), logits, K_MASK)
+    # attn_mask.shape: (batch_size, seq_size, seq_size)
+    # logits.shape: (batch_size, seq_size, num_kv_heads, groups, seq_size) if use_gqa
+    #               (batch_size, seq_size, num_kv_heads, seq_size) otherwise
+    mask_expand_dims = (-3, -2) if use_gqa else -2
+    padded_logits = jnp.where((jnp.expand_dims(attn_mask, mask_expand_dims)), logits, K_MASK)
     self.sow_config.maybe_sow_attn_logits_topk(padded_logits, self)
     probs = jax.nn.softmax(padded_logits, axis=-1).astype(key_proj.dtype)
-    encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
+    if use_gqa:
+      encoded = jnp.einsum('BTNGS,BSNH->BTNGH', probs, value_proj)
+      bs, seq, _, _, d  = encoded.shape
+      encoded = encoded.reshape((bs, seq, self.num_heads, d))
+    else:
+      encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
     attn_output = self.attn_vec_einsum(encoded)
 
     if cache is not None:
@@ -252,17 +276,17 @@ class Attention(nnx.Module):
   @property
   def num_heads(self):
     return (
-        self.qkv_einsum.shape[1]
+        self.qkv_einsum.shape[2]
         if self.use_qkv_einsum
-        else self.q_einsum.shape[0]
+        else self.q_einsum.shape[1]
     )
 
   @property
   def num_kv_heads(self):
     return (
-        self.qkv_einsum.shape[1]
+        self.qkv_einsum.shape[2]
         if self.use_qkv_einsum
-        else self.kv_einsum.shape[1]
+        else self.kv_einsum.shape[2]
     )
 
   @property
@@ -297,32 +321,38 @@ class FeedForward(nnx.Module):
       hidden_dim: int,
       *,
       kernel_init: nnx.Initializer = nnx.initializers.normal(),
+      gate_proj_kernel_init: nnx.Initializer | None = None,
+      up_proj_kernel_init: nnx.Initializer | None = None,
+      down_proj_kernel_init: nnx.Initializer | None = None,
       rngs: nnx.Rngs,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
       dtype: Any = jnp.float32,
   ):
+    gate_proj_kernel_init = gate_proj_kernel_init if gate_proj_kernel_init else kernel_init
     self.gate_proj = nnx.Linear(
         in_features=features,
         out_features=hidden_dim,
         use_bias=False,
         rngs=rngs,
-        kernel_init=kernel_init,
+        kernel_init=gate_proj_kernel_init,
         dtype=dtype,
     )
+    up_proj_kernel_init = up_proj_kernel_init if up_proj_kernel_init else kernel_init
     self.up_proj = nnx.Linear(
         in_features=features,
         out_features=hidden_dim,
         use_bias=False,
         rngs=rngs,
-        kernel_init=kernel_init,
+        kernel_init=up_proj_kernel_init,
         dtype=dtype,
     )
+    down_proj_kernel_init = down_proj_kernel_init if down_proj_kernel_init else kernel_init
     self.down_proj = nnx.Linear(
         in_features=hidden_dim,
         out_features=features,
         use_bias=False,
         rngs=rngs,
-        kernel_init=kernel_init,
+        kernel_init=down_proj_kernel_init,
         dtype=dtype,
     )
     self.sow_config = sow_config
@@ -372,11 +402,7 @@ class Block(nnx.Module):
 
     self.pre_attention_norm = layers.RMSNorm(
       embed_dim,
-      scale_init=maybe_with_partitioning(
-        nnx.initializers.zeros_init(),
-        config.axis_rules,
-        ("embed", ),
-      ),
+      scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
       rngs=rngs,
       dtype=dtype,
     )
@@ -394,41 +420,28 @@ class Block(nnx.Module):
         rngs=rngs,
         use_qk_norm=use_qk_norm,
         sow_config=sow_config,
-        attn_vec_einsum_kernel_init=maybe_with_partitioning(
+        attn_vec_einsum_kernel_init=nnx.with_partitioning(
           nnx.initializers.normal(),
-          config.axis_rules,
-          (None, "embed", "kv"),  # sharded array shape: (num_heads, head_dim, features)
+          ("tensor", None, "fsdp"),  # shape: (num_heads, head_dim, embed_dim)
         ),
-        qkv_einsum_kernel_init=maybe_with_partitioning(
+        qkv_einsum_kernel_init=nnx.with_partitioning(
           nnx.initializers.normal(),
-          config.axis_rules,
-          (None, None, "embed", "kv"),  # sharded array shape: (3, num_heads, features, head_dim)
+          ("fsdp", None, "tensor", None),  # shape: (embed_dim, 3, num_heads, head_dim)
         ),
-        q_einsum_kernel_init=maybe_with_partitioning(
+        q_einsum_kernel_init=nnx.with_partitioning(
           nnx.initializers.normal(),
-          config.axis_rules,
-          (None, "embed", "kv"),  # sharded array shape: (num_heads, features, head_dim)
+          ("tensor", "fsdp", None),  # shape: (num_heads, embed_dim, head_dim)
         ),
-        kv_einsum_kernel_init=maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          (None, None, "embed", "kv"),  # sharded array shape: (2, num_kv_heads, features, head_dim)
+        kv_einsum_kernel_init=nnx.with_partitioning(
+          nnx.initializers.normal(), ("fsdp", None, "tensor", None),  # shape: (features, 2, num_kv_heads, head_dim)
         ),
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         dtype=dtype,
     )
     if use_post_attn_norm:
       self.post_attention_norm = layers.RMSNorm(
         embed_dim,
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         rngs=rngs,
         dtype=dtype,
       )
@@ -437,21 +450,24 @@ class Block(nnx.Module):
 
     self.pre_ffw_norm = layers.RMSNorm(
       embed_dim,
-      scale_init=maybe_with_partitioning(
-        nnx.initializers.zeros_init(),
-        config.axis_rules,
-        ("embed", ),
-      ),
+      scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
       rngs=rngs,
       dtype=dtype,
     )
     self.mlp = FeedForward(
         features=embed_dim,
         hidden_dim=hidden_dim,
-        kernel_init=maybe_with_partitioning(
+        gate_proj_kernel_init=nnx.with_partitioning(
           nnx.initializers.normal(),
-          config.axis_rules,
-          ("embed", "mlp"),
+          ("fsdp", "tensor"),
+        ),
+        up_proj_kernel_init=nnx.with_partitioning(
+          nnx.initializers.normal(),
+          ("fsdp", "tensor"),
+        ),
+        down_proj_kernel_init=nnx.with_partitioning(
+          nnx.initializers.normal(),
+          ("tensor", "fsdp"),
         ),
         rngs=rngs,
         sow_config=sow_config,
@@ -459,11 +475,7 @@ class Block(nnx.Module):
     if use_post_ffw_norm:
       self.post_ffw_norm = layers.RMSNorm(
         embed_dim,
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         rngs=rngs,
         dtype=dtype,
       )
@@ -513,9 +525,3 @@ class Block(nnx.Module):
         batch_size=batch_size,
         dtype=dtype,
     )
-
-
-def maybe_with_partitioning(fn, axis_rules, axis_rules_args=()):
-  if axis_rules is None:
-    return fn
-  return nnx.with_partitioning(fn, axis_rules(*axis_rules_args))

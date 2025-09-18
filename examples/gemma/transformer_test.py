@@ -46,14 +46,14 @@ def create_fake_params(config: transformer_lib.TransformerConfig):
     )
     if config.num_heads == config.num_kv_heads:
       params[f'layer_{layer_idx}']['attn']['qkv_einsum']['w'] = jnp.ones(
-          (3, config.num_heads, config.embed_dim, config.head_dim)
+        (config.embed_dim, 3, config.num_heads, config.head_dim)
       )
     else:
       params[f'layer_{layer_idx}']['attn']['q_einsum']['w'] = jnp.ones(
-          (config.num_heads, config.embed_dim, config.head_dim)
+        (config.embed_dim, config.num_heads, config.head_dim)
       )
       params[f'layer_{layer_idx}']['attn']['kv_einsum']['w'] = jnp.ones(
-          (config.num_kv_heads, config.embed_dim, config.head_dim)
+        (config.embed_dim, 2, config.num_kv_heads, config.head_dim)
       )
 
     # 4. feedforward block params
@@ -91,7 +91,7 @@ class TransformerTest(parameterized.TestCase):
           num_layers=3,
           num_embed=17,
           embed_dim=2,
-          num_heads=2,
+          num_heads=4,
           num_kv_heads=2,
           hidden_dim=11,
           head_dim=8,
@@ -175,7 +175,7 @@ class TransformerTest(parameterized.TestCase):
   ):
     cache_size = 2
     batch_size = 1
-    soft_cap_val = 0.001
+    soft_cap_val = 0.0001
 
     attention_mask = jnp.ones((batch_size, 1, cache_size), dtype=jnp.bool)
 
@@ -219,7 +219,7 @@ class TransformerTest(parameterized.TestCase):
       )
 
       outputs, _ = transformer(
-          jnp.array([[1]]), jnp.array([[1]]), cache, attention_mask
+          jnp.array([[5]]), jnp.array([[2]]), cache, attention_mask
       )
       all_outputs.append(outputs)
 
@@ -357,9 +357,9 @@ class TransformerTest(parameterized.TestCase):
               num_embed=4,
               embed_dim=2,
               hidden_dim=12,
-              num_heads=3,
+              num_heads=10,
               head_dim=4,
-              num_kv_heads=3,
+              num_kv_heads=5,
               final_logit_softcap=None,
               attention_types=[modules.AttentionType.GLOBAL] * 2,
               use_post_attn_norm=False,
@@ -372,9 +372,9 @@ class TransformerTest(parameterized.TestCase):
               num_embed=4,
               embed_dim=2,
               hidden_dim=12,
-              num_heads=3,
+              num_heads=5,
               head_dim=4,
-              num_kv_heads=3,
+              num_kv_heads=5,
               final_logit_softcap=None,
               attention_types=[modules.AttentionType.GLOBAL] * 2,
               use_post_attn_norm=True,
