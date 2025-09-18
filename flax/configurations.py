@@ -27,6 +27,7 @@ class Config:
   flax_pytree_module: bool
   flax_max_repr_depth: int | None
   flax_always_shard_variable: bool
+  flax_hijax_variable: bool
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
 
@@ -290,4 +291,9 @@ flax_always_shard_variable = bool_flag(
   name='flax_always_shard_variable',
   default=True,
   help='Whether a `nnx.Variable` should always automatically be sharded if it contains sharding annotations.',
+)
+flax_hijax_variable = bool_flag(
+  name='flax_hijax_variable',
+  default=False,
+  help='Whether to enable HiJAX support for `nnx.Variable`.',
 )
