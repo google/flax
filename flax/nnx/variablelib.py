@@ -77,6 +77,11 @@ def using_refs() -> bool:
     <...>
     >>> nnx.using_refs()
     True
+    >>> nnx.use_refs(False)
+    <...>
+    >>> nnx.using_refs()
+    False
+
 
   Returns:
     A boolean indicating if Variables are using ArrayRefs by default.
@@ -101,7 +106,9 @@ def use_refs(value: bool, /):
     >>> v.has_ref
     True
     >>> v.raw_value
-    ArrayRef(...)
+    Ref(...)
+    >>> nnx.use_refs(False)
+    <...>
 
   It can also be used as a context manager to temporarily
   change the default behavior for a block of code::
