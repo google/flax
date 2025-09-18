@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import defaultdict
 from typing import Any, TypeVar
 import typing as tp
 
 import jax
 from flax import struct
 from flax.core import meta
-from flax.nnx import graph
 from flax.nnx import spmd
 from flax.nnx import traversals
 from flax.nnx import variablelib
@@ -132,18 +130,23 @@ def _recursive_merge(dict1, dict2):
 def linen_vars_to_nnx_attrs(variables: tp.Mapping[str, Any]) -> dict[str, Any]:
   """Convert a dict of Linen-style variables to NNX variables."""
   nnx_vars = jax.tree_util.tree_map_with_path(
-    lambda kp, x: to_nnx_var(get_col_name(kp), x),
-    variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
-  nnx_attrs: dict[str, Any] = defaultdict(dict)
-  for _, col_tree in nnx_vars.items():
-    assert isinstance(col_tree, dict)
-    for attr_name, value in col_tree.items():
-      assert isinstance(attr_name, str)
-      if isinstance(value, tp.Mapping):  # it's a sublayer
-        nnx_attrs[attr_name] = _recursive_merge(nnx_attrs[attr_name], value)
-      else:
-        nnx_attrs[attr_name] = value     # it's a variable on this layer
-  return dict(nnx_attrs)
+      lambda kp, x: to_nnx_var(get_col_name(kp), x),
+      variables,
+      is_leaf=lambda x: not isinstance(x, dict),
+  )
+  flat_paths: dict[tuple, tp.Any] = {}
+  for col_name, col_variables in nnx_vars.items():  # pylint: disable=unused-variable
+    for path, variable in traversals.flatten_mapping(col_variables).items():
+      if path in flat_paths:
+        raise ValueError(
+            f"Found duplicate variable path {path} with variables "
+            f"{flat_paths[path]} and {variable}. "
+            "This is not allowed in NNX."
+        )
+      flat_paths[path] = variable
+
+  nnx_vars = traversals.unflatten_mapping(flat_paths)
+  return nnx_vars
 
 
 def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
@@ -152,9 +155,7 @@ def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
   for kp, v in traversals.flatten_mapping(nnx_attrs).items():
     if isinstance(v, variablelib.Variable):
       col_name = variablelib.variable_name_from_type(type(v))
-      v = to_linen_var(v)
-    elif isinstance(v, graph.GraphDef):
-      col_name = 'nnx'  # an nnx.GraphDef for some ToLinen submodule
+      v = to_linen_var(v.to_state())
     else:
       raise ValueError(f'Cannot infer collection name from value: {v}')
     linen_structured[(col_name, *kp)] = v

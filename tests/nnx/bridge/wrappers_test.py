@@ -107,7 +107,7 @@ class TestCompatibility(absltest.TestCase):
     # lazy_init only initialized param w inside dot(), so calling __call__ should fail
     with self.assertRaises(flax.errors.ScopeParamNotFoundError):
       y = model(x)
-    assert isinstance(model.rngs, nnx.Rngs)
+    assert isinstance(model.to_nnx__rngs, nnx.Rngs)
 
   def test_linen_to_nnx_mutable(self):
     class Foo(nn.Module):
@@ -361,15 +361,16 @@ class TestCompatibility(absltest.TestCase):
         self.count = Count(jnp.array(0))
       def __call__(self):
         self.count += 1
-        self.count_nonzero = Count(jnp.array(1))
+        self.count_nonzero = nnx.Intermediate(jnp.array(1))
 
     model = bridge.ToLinen(Counter, skip_rng=True)
     variables = model.init(jax.random.key(0))
     assert variables['Count']['count'] == 0
 
-    _, updates = model.apply(variables, mutable=['Count'])
+    _, updates = model.apply(variables, mutable=['Count', 'intermediates'])
     assert updates['Count']['count'] == 1
-    assert updates['Count']['count_nonzero'] == 1
+    assert updates['intermediates']['count_nonzero'] == 1
+    del updates['intermediates']
     _ = model.apply(variables | updates)
 
   def test_nnx_to_linen_transforms(self):
@@ -518,23 +519,6 @@ class TestCompatibility(absltest.TestCase):
     # TODO: add when we can safely `lazy_init` the NNX module inside `ToLinen` without
     # messing up the stateful part of the NNX module.
     pass
-
-  def test_to_linen_abtract_init(self):
-    test = self
-    class Foo(nnx.Module):
-      def __init__(self, *, rngs: nnx.Rngs):
-        self.a = jnp.array(0.)
-
-      def __call__(self):
-        return self.a
-
-    model = bridge.ToLinen(Foo)
-    y = model.apply({})
-    self.assertIsInstance(y, jax.ShapeDtypeStruct)
-
-    model = bridge.ToLinen(Foo, abstract_init=False)
-    y = model.apply({})
-    self.assertIsInstance(y, jax.Array)
 
 
 if __name__ == '__main__':
