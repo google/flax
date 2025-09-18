@@ -75,8 +75,8 @@ class AttentionTest(parameterized.TestCase):
   )
   def test_head_dim(self, head_dim):
     attn = modules.Attention(
-        num_heads=2,
-        num_kv_heads=4,
+        num_heads=4,
+        num_kv_heads=2,
         features=5,
         head_dim=head_dim,
         query_pre_attn_scalar=1.0,
@@ -88,8 +88,8 @@ class AttentionTest(parameterized.TestCase):
 
   @parameterized.parameters(
       dict(
-          num_heads=2,
-          num_kv_heads=4,
+          num_heads=4,
+          num_kv_heads=2,
           expected_use_qkv_einsum=False,
       ),
       dict(
