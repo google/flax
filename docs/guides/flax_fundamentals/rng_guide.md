@@ -496,7 +496,7 @@ This section will show examples on how to use `jit` and `shard_map` to use RNG's
 
 +++
 
-When using [`jax.jit`](https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html), we can use RNG's as we did before, but we now include `in_shardings` and `out_shardings` arguments to shard specify how to shard input and output data.
+When using [`jax.jit`](https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html), we can use RNG's as we did before, but we now include `in_shardings` and `out_shardings` arguments to specify how to shard input and output data. The RNG key itself gets replicated (not sharded); `jax.jit` makes each device use it as appropriate for its shard of the data.
 
 For more details on training on multiple devices in Flax using `jax.jit`, see our [Scale up Flax Modules on multiple devices guide](https://flax.readthedocs.io/en/latest/guides/parallel_training/flax_on_pjit.html#) and [lm1b example](https://github.com/google/flax/tree/main/examples/lm1b).
 
