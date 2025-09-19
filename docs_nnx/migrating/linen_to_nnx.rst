@@ -255,7 +255,7 @@ For all the built-in Flax Linen layers and collections, Flax NNX already creates
     def __call__(self, x):
       x = self.linear(x)
       x = self.batchnorm(x)
-      self.count += 1
+      self.count.value += 1
       x = jax.nn.relu(x)
       return x
 

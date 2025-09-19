@@ -73,7 +73,7 @@ class Counter(nnx.Module):
     self.count = Count(jnp.array(0))
 
   def __call__(self):
-    self.count += 1
+    self.count.value += 1
 
 counter = Counter()
 print(f'{counter.count.value = }')
@@ -239,7 +239,7 @@ class StatefulLinear(nnx.Module):
     self.count = Count(jnp.array(0, dtype=jnp.uint32))
 
   def __call__(self, x: jax.Array):
-    self.count += 1
+    self.count.value += 1
     return x @ self.w + self.b
 
 model = StatefulLinear(din=3, dout=5, rngs=nnx.Rngs(0))

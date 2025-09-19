@@ -311,7 +311,7 @@ class NNXMultiCollections(nnx.Module):
     self.count = Count(jnp.array(0))
 
   def __call__(self, x):
-    self.count += 1
+    self.count.value += 1
     return (x @ self.w.value) + self.lora(x)
 
 xkey, pkey, dkey = jax.random.split(jax.random.key(0), 3)
