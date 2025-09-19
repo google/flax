@@ -893,7 +893,7 @@ def _variable_flatten_with_keys(x: Variable[tp.Any]):
 
 
 def _variable_flatten(x: Variable[tp.Any]):
-  metadata = tuple(x.get_metadata().items())
+  metadata = tuple(sorted(x._var_metadata.items()))
   return (x.raw_value,), metadata
 
 
