@@ -747,6 +747,54 @@ class TestOptimizer(absltest.TestCase):
 
     self.assertNotEqual(loss, 0.0)
 
+class TestHijaxVariables(absltest.TestCase):
+  def test_variable_to_hijax(self):
+    hv = nnx.Param.hijax_type(1, a='hi')
+    HiParam = nnx.Param.hijax_type
+
+    self.assertTrue(hv.is_hijax)
+    self.assertIsInstance(hv, HiParam)
+    self.assertIs(nnx.Param.pytree_type, nnx.Param)
+    self.assertIs(HiParam.pytree_type, nnx.Param)
+    self.assertIs(HiParam.hijax_type, HiParam)
+    self.assertEqual(hv.value, 1)
+    self.assertIsInstance(hv, nnx.Param)
+
+    hv.value = 2
+    self.assertEqual(hv.value, 2)
+
+    @jax.jit
+    def set(hv, a):
+      self.assertIsInstance(hv, nnx.Param)
+      hv.value = a
+      self.assertEqual(hv.a, 'hi')
+      self.assertEqual(hv.has_ref, False)
+      hv.value += 5
+      return hv + 2
+
+    y = set(hv, 10)
+    self.assertEqual(hv.value, 15)
+    self.assertEqual(y, 17)
+
+  def test_variable_to_hijax_clean(self):
+    v_low = nnx.Param(1, tag='hi')
+    assert not v_low.is_hijax
+    v_hi = v_low.to_hijax()
+    v_hi.value = 2
+    assert v_hi.is_hijax
+    print()
+    print(v_hi)
+    assert v_hi.value == 2
+
+    @jax.jit
+    def set(v_hi, a):
+      v_hi.value = a
+      print(v_hi)
+      assert v_hi.tag == 'hi'
+
+    set(v_hi, 10)
+
+    assert v_hi.value == 10
 
 if __name__ == '__main__':
   absltest.main()
