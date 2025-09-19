@@ -1107,6 +1107,13 @@ class TestGraphUtils(absltest.TestCase):
     self.assertLen(duplicates, 1)
     self.assertEqual(duplicates[0], [('a',), ('c',)])
 
+  def test_graphdef_hash_with_sequential(self):
+    rngs = nnx.Rngs(0)
+    net = nnx.Sequential(
+        nnx.Linear(2, 1, rngs=rngs),
+    )
+    hash(nnx.graphdef(net))
+
 class SimpleModule(nnx.Module):
   pass
 
