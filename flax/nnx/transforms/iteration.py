@@ -19,6 +19,7 @@ import functools
 import typing as tp
 
 from flax import struct
+from flax import typing
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx import extract, filterlib, graph, spmd, variablelib
 from flax.nnx import statelib
@@ -89,7 +90,7 @@ class StateAxes(extract.PrefixMapping, tp.Mapping):
     return self._axes
 
   def map_prefix(
-    self, path: variablelib.PathParts, variable: variablelib.Variable
+    self, path: typing.PathParts, variable: variablelib.Variable
   ) -> tp.Any:
     for filter, axis in zip(self.filters, self.axes):
       predicate = filterlib.to_predicate(filter)

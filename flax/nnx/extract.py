@@ -18,6 +18,7 @@ import typing as tp
 import jax
 
 from flax import struct
+from flax import typing
 from flax.nnx.pytreelib import Pytree
 from flax.typing import Missing, PathParts
 from flax.nnx import graph, variablelib
@@ -35,7 +36,7 @@ class PrefixMapping(abc.ABC):
   @abc.abstractmethod
   def map_prefix(
     self,
-    path: variablelib.PathParts,
+    path: typing.PathParts,
     variable: variablelib.Variable,
     /,
   ) -> tp.Any: ...
