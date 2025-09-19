@@ -118,5 +118,17 @@ class TestVariable(absltest.TestCase):
     self.assertFalse(nnx.using_refs())
     self.assertFalse(nnx.is_array_ref(v.raw_value))
 
+  def test_get_set_metadata(self):
+    v = nnx.Variable(jnp.array(1.0))
+    self.assertEqual(v.get_metadata(), {})
+    v.set_metadata(a=1, b=2)
+    self.assertEqual(v.get_metadata('a'), 1)
+    self.assertEqual(v.get_metadata('b'), 2)
+    v.set_metadata({'b': 3, 'c': 4})
+    self.assertEqual(v.get_metadata(), {'b': 3, 'c': 4})
+    self.assertEqual(v.get_metadata('b'), 3)
+    self.assertEqual(v.get_metadata('c'), 4)
+
+
 if __name__ == '__main__':
   absltest.main()
