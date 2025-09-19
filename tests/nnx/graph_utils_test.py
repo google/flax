@@ -944,7 +944,7 @@ class TestGraphUtils(absltest.TestCase):
 
     @nnx.jit
     def f(v):
-      v += 1
+      v.value += 1
 
     f(v)
 
@@ -959,7 +959,7 @@ class TestGraphUtils(absltest.TestCase):
     def f(vs):
       self.assertIs(vs[0], vs[1])
       self.assertIsNot(vs[0], vs[2])
-      vs[0] += 10
+      vs[0].value += 10
 
     f(vs)
 
@@ -979,7 +979,7 @@ class TestGraphUtils(absltest.TestCase):
     @nnx.jit
     def increment_var(var, foo):
       self.assertIs(var, foo.var)
-      var += 1
+      var.value += 1
 
     increment_var(var, foo)
     self.assertEqual(foo.var.value, 2)
@@ -996,7 +996,7 @@ class TestGraphUtils(absltest.TestCase):
 
     @nnx.jit
     def stateful_linear(w, b, count, x):
-      count += 1
+      count.value += 1
       return x @ w + b[None]
 
     x = jax.random.normal(rngs(), (1, 2))
