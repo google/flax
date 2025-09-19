@@ -308,7 +308,7 @@ class TestCompatibility(absltest.TestCase):
       def __init__(self):
         self.count = Count(jnp.array(0))
       def __call__(self):
-        self.count += 1
+        self.count.value += 1
 
     model = bridge.ToLinen(Counter, skip_rng=True)
     variables = model.init(jax.random.key(0))
@@ -360,7 +360,7 @@ class TestCompatibility(absltest.TestCase):
       def __init__(self):
         self.count = Count(jnp.array(0))
       def __call__(self):
-        self.count += 1
+        self.count.value += 1
         self.count_nonzero = nnx.Intermediate(jnp.array(1))
 
     model = bridge.ToLinen(Counter, skip_rng=True)

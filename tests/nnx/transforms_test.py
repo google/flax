@@ -1249,7 +1249,7 @@ class TestScan(absltest.TestCase):
     def stack_forward(params, x):
       w, b, count = params
       y = block_forward(w, b, x)
-      count += 1
+      count.value += 1
       return (w, b, count), y
 
     x = jnp.ones((5, 1, 3))
@@ -1297,7 +1297,7 @@ class TestScan(absltest.TestCase):
 
     @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
     def loop(foo: Foo):
-      foo.n += 1
+      foo.n.value += 1
       return foo
 
     foo2 = loop(foo)
@@ -1352,7 +1352,7 @@ class TestScan(absltest.TestCase):
     @nnx.scan(in_axes=0, out_axes=0)
     def loop(foo: Foo, x):
       x = x + 1
-      foo.n += 1
+      foo.n.value += 1
       return x
 
     ys = loop(foo, xs)
@@ -1848,7 +1848,7 @@ class TestRemat(absltest.TestCase):
 
     @nnx.remat
     def linear(w, b, count, x):
-      count += 1
+      count.value += 1
       return x @ w + b[None]
 
     def loss_fn(w, b, count, x):
@@ -2719,7 +2719,7 @@ class TestCond(absltest.TestCase):
       self.assertEqual(env.index.shape, ())
 
       def increment(env: Env):
-        env.step += 1
+        env.step.value += 1
 
       def no_nothing(env: Env):
         pass
