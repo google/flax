@@ -347,8 +347,51 @@ class Variable(tp.Generic[A], reprlib.Representable):
   def has_ref(self) -> bool:
     return is_array_ref(self.raw_value)
 
-  def get_metadata(self):
-    return self._var_metadata
+  @tp.overload
+  def get_metadata(self) -> dict[str, tp.Any]: ...
+  @tp.overload
+  def get_metadata(self, name: str) -> tp.Any: ...
+  def get_metadata(self, name: str | None = None):
+    """Get metadata for the Variable.
+
+    Args:
+      name: The key of the metadata element to get. If not provided, returns
+        the full metadata dictionary.
+    """
+    if name is None:
+      return self._var_metadata
+    return self._var_metadata[name]
+
+  @tp.overload
+  def set_metadata(self, metadata: dict[str, tp.Any], /) -> None: ...
+  @tp.overload
+  def set_metadata(self, **metadata: tp.Any) -> None: ...
+  def set_metadata(self, *args, **kwargs) -> None:
+    """Set metadata for the Variable.
+
+    `set_metadata` can be called in two ways:
+
+    1. By passing a dictionary of metadata as the first argument, this will replace
+      the entire Variable's metadata.
+    2. By using keyword arguments, these will be merged into the existing Variable's
+      metadata.
+    """
+    if not self._trace_state.is_valid():
+      raise errors.TraceContextError(
+        f'Cannot mutate {type(self).__name__} from a different trace level'
+      )
+    if not (bool(args) ^ bool(kwargs)):
+      raise TypeError(
+        'set_metadata takes either a single dict argument or keyword arguments'
+      )
+    if len(args) == 1:
+      self._var_metadata = args[0]
+    elif kwargs:
+      self._var_metadata.update(kwargs)
+    else:
+      raise TypeError(
+        f'set_metadata takes either 1 argument or 1 or more keyword arguments, got args={args}, kwargs={kwargs}'
+      )
 
   def copy_from(self, other: Variable[A]) -> None:
     if type(self) is not type(other):
