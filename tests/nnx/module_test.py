@@ -829,7 +829,7 @@ class TestModuleDef:
 
     module = Foo(rngs=nnx.Rngs(0))
 
-    modules = list(module.iter_modules())
+    modules = list(nnx.iter_modules(module))
 
     assert len(modules) == 5
     assert modules[0][0] == ('dropout',)
@@ -855,7 +855,7 @@ class TestModuleDef:
 
     module = Foo(rngs=nnx.Rngs(0))
 
-    modules = list(module.iter_children())
+    modules = list(nnx.iter_children(module))
 
     assert len(modules) == 2
     assert modules[0][0] == 'dropout'
