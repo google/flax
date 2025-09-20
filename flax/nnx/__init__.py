@@ -200,6 +200,7 @@ from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree
 from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
+from .capture import capture_intms as capture_intms
 from . import traversals as traversals
 
 # alias VariableState

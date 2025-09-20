@@ -40,6 +40,9 @@ tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
 
+CAPTURE_BOX_NAME = '_capture_box'
+
+
 class ModuleMeta(PytreeMeta):
   # we keep a trivial derived class just in case we need to
   # add more functionality in the future
@@ -76,6 +79,40 @@ class Module(Pytree, metaclass=ModuleMeta):
     >>> model = Model(rngs=nnx.Rngs(0))
     >>> y = model(x)
   """
+
+  def capture_fwd(self, name: str, value: jax.Array, prefix = ''):
+    """Record the intermediate gradient of the given value.
+
+    NOTE: This is a work-in-progress feature! Doesn't work in `vmap` or `scan`.
+
+    Only works inside an ``nnx.capture_intermediates`` context.
+    """
+    box = getattr(self, CAPTURE_BOX_NAME, None)
+    if box is not None:
+      box.set({**box.get(), f'{prefix}{name}': jax.lax.stop_gradient(value)})
+    return value
+
+  def capture_bwd(self, name: str, value: jax.Array, prefix = 'grad_') -> jax.Array:
+    """Record the intermediate gradient of the given value.
+
+    NOTE: This is a work-in-progress feature! Doesn't work in `vmap` or `scan`.
+
+    Only works inside an ``nnx.capture_intermediates`` context. Must use this output value for future computations.
+    """
+    box = getattr(self, CAPTURE_BOX_NAME, None)
+    if box is None:
+      return value
+    @jax.custom_vjp
+    def _fn(x):
+      return x
+    def _fn_fwd(x):
+      return x, None
+    def _fn_bwd(_, g):
+      box.set({**box.get(), f'{prefix}{name}': g})
+      return g,
+    _fn.defvjp(_fn_fwd, _fn_bwd)
+    return _fn(value)
+
 
   def sow(
       self,
