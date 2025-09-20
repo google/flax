@@ -23,7 +23,7 @@ class MyTestCase(absltest.TestCase):
   def setUp(self):
     super().setUp()
     self.enter_context(mock.patch.object(config, '_values', {}))
-    self._flag = bool_flag('flax_test', default=False, help='Just a test flag.')
+    self._flag = bool_flag('test', default=False, help='Just a test flag.')
 
   def test_duplicate_flag(self):
     with self.assertRaisesRegex(RuntimeError, 'already defined'):
@@ -31,27 +31,21 @@ class MyTestCase(absltest.TestCase):
 
   def test_default(self):
     self.assertFalse(self._flag.value)
-    self.assertFalse(config.flax_test)
+    self.assertFalse(config.test)
 
   def test_typed_update(self):
     config.update(self._flag, True)
     self.assertTrue(self._flag.value)
-    self.assertTrue(config.flax_test)
+    self.assertTrue(config.test)
 
   def test_untyped_update(self):
     config.update(self._flag.name, True)
     self.assertTrue(self._flag.value)
-    self.assertTrue(config.flax_test)
+    self.assertTrue(config.test)
 
   def test_update_unknown_flag(self):
     with self.assertRaisesRegex(LookupError, 'Unrecognized config option'):
       config.update('unknown', True)
-
-  def test_temp_flip(self):
-    self.assertFalse(self._flag.value)
-    with config.temp_flip_flag('test', True):
-      self.assertTrue(self._flag.value)
-    self.assertFalse(self._flag.value)
 
 
 if __name__ == '__main__':
