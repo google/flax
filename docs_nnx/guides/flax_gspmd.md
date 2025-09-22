@@ -119,7 +119,7 @@ Make note of the following:
 
 * **Additional axis annotation**: Transforms like `vmap` and `scan` will add additional dimensions to the JAX arrays. Unfortunately, in auto sharding mode you will need to use `nnx.vmap` and `nnx.scan` instead of raw JAX transforms, so that both JAX and Flax knows how to shard this dimension. You won't need this in [explicit sharding mode](#explicit-sharding).
 
-* [`jax.lax.with_sharding_constraint](https://docs.jax.dev/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html#constraining-shardings-of-intermediates-in-jitted-code): They can help you to enforce specific shardings on intermediate activations. Only works under an auto mode mesh context.
+* [`jax.lax.with_sharding_constraint`](https://docs.jax.dev/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html#constraining-shardings-of-intermediates-in-jitted-code): They can help you to enforce specific shardings on intermediate activations. Only works under an auto mode mesh context.
 
 ```{code-cell} ipython3
 class DotReluDot(nnx.Module):
@@ -230,7 +230,7 @@ print(restored_model.layers.dot1.kernel.shape)
 
 ## Logical axis annotation
 
-JAX's [automatic](https://jax.readthedocs.io/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html) [SPMD]((https://jax.readthedocs.io/en/latest/glossary.html#term-SPMD)) encourages users to explore different sharding layouts to find the optimal one. To this end, in Flax you have the option to annotate with more descriptive axis names (not just device mesh axis names like `'data'` and `'model'`), as long as you provide a mapping from your alias to the device mesh axes.
+JAX's [automatic](https://jax.readthedocs.io/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html) [SPMD](https://jax.readthedocs.io/en/latest/glossary.html#term-SPMD) encourages users to explore different sharding layouts to find the optimal one. To this end, in Flax you have the option to annotate with more descriptive axis names (not just device mesh axis names like `'data'` and `'model'`), as long as you provide a mapping from your alias to the device mesh axes.
 
 You can provide the mapping along with the annotation as another metadata of the corresponding [`nnx.Variable`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Variable), or overwrite it at top-level. Check out the `LogicalDotReluDot` example below.
 
