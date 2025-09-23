@@ -151,6 +151,9 @@ def _to_dummy_array(x):
   else:
     return x
 
+class NonTreeError(Exception):
+    pass
+
 def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, compute_vjp_flops: bool, *args, **kwargs):
   e = jitted.lower(obj, *args, **kwargs)
   flops = _get_flops(e) if compute_flops else None
@@ -168,6 +171,8 @@ def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, co
 
   vjp_flops = None
   if compute_vjp_flops:
+    if graph.find_duplicates((obj, args, kwargs)):
+      raise NonTreeError("Modules must have a tree-structure to be tabulated. This module contains duplicate nodes.")
     def do_vjp(*args, **kwargs):
       primals, f_vjp = jax.vjp(jitted, *args, **kwargs)
       return f_vjp(primals)
