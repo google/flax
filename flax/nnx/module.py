@@ -268,23 +268,29 @@ class Module(Pytree, metaclass=ModuleMeta):
     return old_value.value + value
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
-    """Recursively iterates over all nested :class:`Module`'s of the current Module, including
-    the current Module. Alias of ``nnx.iter_modules``.
+    """
+    Warning: this method is method is deprecated; use :func:`iter_modules` instead.
+
+    Recursively iterates over all nested :class:`Module`'s of the current Module, including
+    the current Module. Alias of :func:`iter_modules`.
     """
     warnings.warn(
-      "using the 'm.iter_modules()' method is deprecated; use the 'nnx.iter_modules(m)' function instead.",
+      "The 'm.iter_modules()' method is deprecated; use the 'nnx.iter_modules(m)' function instead.",
       DeprecationWarning,
       stacklevel=2,
     )
     yield from iter_modules(self)
 
   def iter_children(self) -> tp.Iterator[tuple[Key, Module]]:
-    """Iterates over all children :class:`Module`'s of the current Module. This
+    """
+    Warning: this method is method is deprecated; use :func:`iter_children` instead.
+
+    Iterates over all children :class:`Module`'s of the current Module. This
     method is similar to :func:`iter_modules`, except it only iterates over the
-    immediate children, and does not recurse further down. Alias of ``nnx.iter_children``.
+    immediate children, and does not recurse further down. Alias of :func:`iter_children`.
     """
     warnings.warn(
-      "using the 'm.iter_children()' method is deprecated; use the 'nnx.iter_children(m)' function instead.",
+      "The 'm.iter_children()' method is deprecated; use the 'nnx.iter_children(m)' function instead.",
       DeprecationWarning,
       stacklevel=2,
     )
@@ -441,7 +447,7 @@ def iter_modules(module: Module) -> tp.Iterator[tuple[PathParts, Module]]:
   """Recursively iterates over all nested :class:`Module`'s of the given Module, including
   the argument.
 
-  ``iter_modules`` creates a generator that yields the path and the Module instance, where
+  Specifically, this function creates a generator that yields the path and the Module instance, where
   the path is a tuple of strings or integers representing the path to the Module from the
   root Module.
 
@@ -482,7 +488,7 @@ def iter_children(module: Module) -> tp.Iterator[tuple[Key, Module]]:
   method is similar to :func:`iter_modules`, except it only iterates over the
   immediate children, and does not recurse further down.
 
-  ``iter_children`` creates a generator that yields the key and the Module instance,
+  Specifically, this function creates a generator that yields the key and the Module instance,
   where the key is a string representing the attribute name of the Module to access
   the corresponding child Module.
 
@@ -503,7 +509,7 @@ def iter_children(module: Module) -> tp.Iterator[tuple[Key, Module]]:
     ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
     ...
     >>> model = Block(2, 5, rngs=nnx.Rngs(0))
-    >>> for path, module in iter_children(model):
+    >>> for path, module in nnx.iter_children(model):
     ...  print(path, type(module).__name__)
     ...
     batch_norm BatchNorm
