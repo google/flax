@@ -64,34 +64,42 @@ nnx.display(rngs)
 
 Note that the `key` attribute does not change when new PRNG keys are generated.
 
-### Standard PRNG key stream names
++++
 
-There are only two standard PRNG key stream names used by Flax NNX's built-in layers, shown in the table below:
+### Using random state with flax Modules.
+
+Almost all flax Modules require a random state for initialization. In a `Linear` layer, for example, we need to sample the weights and biases from the appropriate Normal distribution. Random state is provided using the `rngs` keyword argument at initialization.
+
+```{code-cell} ipython3
+linear = nnx.Linear(20, 10, rngs=rngs)
+```
+
+Specifically, this will use the RngSteam `rngs.params` for weight initialization. The `params` stream is also used for initialization of `nnx.Conv`, `nnx.ConvTranspose`, and `nnx.Embed`.
+
++++
+
+The `nnx.Dropout` module also requires a random state, but it requires this state at *call* time rather than initialization. Once again, we can pass it random state using the `rngs` keyword argument.
+
+```{code-cell} ipython3
+dropout = nnx.Dropout(0.5)
+```
+
+```{code-cell} ipython3
+dropout(jnp.ones(4), rngs=rngs)
+```
+
+The `nnx.Dropout` layer will use the rng's `dropout` stream. This also applies to Modules that use `Dropout` as a sub-Module, like `nnx.MultiHeadAttention`.
+
++++
+
+To summarize, there are only two standard PRNG key stream names used by Flax NNX's built-in layers, shown in the table below:
 
 | PRNG key stream name | Description                                   |
 |----------------------|-----------------------------------------------|
 | `params`             | Used for parameter initialization             |
 | `dropout`            | Used by `nnx.Dropout` to create dropout masks |
 
-- `params` is used by most of the standard layers (such as `nnx.Linear`, `nnx.Conv`, `nnx.MultiHeadAttention`, and so on) during the construction to initialize their parameters.
-- `dropout` is used by `nnx.Dropout` and `nnx.MultiHeadAttention` to generate dropout masks.
-
-Below is a simple example of a model that uses `params` and `dropout` PRNG key streams:
-
-```{code-cell} ipython3
-class Model(nnx.Module):
-  def __init__(self, rngs: nnx.Rngs):
-    self.linear = nnx.Linear(20, 10, rngs=rngs)
-    self.drop = nnx.Dropout(0.1, rngs=rngs)
-
-  def __call__(self, x):
-    return nnx.relu(self.drop(self.linear(x)))
-
-model = Model(nnx.Rngs(params=0, dropout=1))
-
-y = model(x=jnp.ones((1, 20)))
-print(f'{y.shape = }')
-```
++++
 
 ### Default PRNG key stream
 
@@ -104,10 +112,6 @@ rngs = nnx.Rngs(0, params=1)
 key1 = rngs.params() # Call params.
 key2 = rngs.dropout() # Fallback to the default stream.
 key3 = rngs() # Call the default stream directly.
-
-# Test with the `Model` that uses `params` and `dropout`.
-model = Model(rngs)
-y = model(jnp.ones((1, 20)))
 
 nnx.display(rngs)
 ```
@@ -134,9 +138,80 @@ z1 = rngs.normal((2, 3))                 # generates key from rngs.default
 z2 = rngs.params.bernoulli(0.5, (10,)) # generates key from rngs.params
 ```
 
+## Forking random state
+
++++
+
+Say you want to train a model that uses dropout on a batch of data. You don't want to use the same random state for every dropout mask in your batch.  Instead, you want to fork the random state into separate pieces for each layer. This can be accomplished with the `fork` method, as shown below.
+
+```{code-cell} ipython3
+class Model(nnx.Module):
+  def __init__(self, rngs: nnx.Rngs):
+    self.linear = nnx.Linear(20, 10, rngs=rngs)
+    self.drop = nnx.Dropout(0.1)
+
+  def __call__(self, x, rngs):
+    return nnx.relu(self.drop(self.linear(x), rngs=rngs))
+```
+
+```{code-cell} ipython3
+model =  Model(rngs=nnx.Rngs(0))
+```
+
+```{code-cell} ipython3
+@nnx.vmap(in_axes=(None, 0, 0), out_axes=0)
+def train_step(model, x, rngs):
+  out = model(x, rngs=rngs)
+```
+
+```{code-cell} ipython3
+dropout_rngs = nnx.Rngs(1)
+```
+
+```{code-cell} ipython3
+dropout_rngs
+```
+
+```{code-cell} ipython3
+forked_rngs = dropout_rngs.fork(split=5)
+```
+
+```{code-cell} ipython3
+forked_rngs
+```
+
+```{code-cell} ipython3
+train_step(model, jnp.ones((5, 20)), forked_rngs)
+```
+
+The output of `rng.fork` is another `Rng` with keys and counts that have an expanded shape. In the example above, the `RngKey` and `RngCount` of `dropout_rngs` have shape `()`, but in `forked_rngs` they have shape `(5,)`.
+
++++
+
+# Implicit Random State
+
++++
+
+So far, we have looked at passing random state directly to each Module when it gets called. But there's another way to handle call-time randomness in flax: we can bundle the random state into the Module itself. This requires passing the `rngs` keyward argument when initializing the module rather than when calling it. For example, here is how we might construct the simple `Module` we defined earlier using an implicit style.
+
+```{code-cell} ipython3
+class Model(nnx.Module):
+  def __init__(self, rngs: nnx.Rngs):
+    self.linear = nnx.Linear(20, 10, rngs=rngs)
+    self.drop = nnx.Dropout(0.1, rngs=rngs)
+
+  def __call__(self, x):
+    return nnx.relu(self.drop(self.linear(x)))
+
+model = Model(nnx.Rngs(params=0, dropout=1))
+
+y = model(x=jnp.ones((1, 20)))
+print(f'{y.shape = }')
+```
+
 ## Filtering random state
 
-Random state can be manipulated using [Filters](https://flax.readthedocs.io/en/latest/guides/filters_guide.html) just like any other type of state. It can be filtered using types (`nnx.RngState`, `nnx.RngKey`, `nnx.RngCount`) or using strings corresponding to the stream names (refer to [the Flax NNX `Filter` DSL](https://flax.readthedocs.io/en/latest/guides/filters_guide.html#the-filter-dsl)). Here's an example using `nnx.state` with various filters to select different substates of the `Rngs` inside a `Model`:
+Implicit random state can be manipulated using [Filters](https://flax.readthedocs.io/en/latest/guides/filters_guide.html) just like any other type of state. It can be filtered using types (`nnx.RngState`, `nnx.RngKey`, `nnx.RngCount`) or using strings corresponding to the stream names (refer to [the Flax NNX `Filter` DSL](https://flax.readthedocs.io/en/latest/guides/filters_guide.html#the-filter-dsl)). Here's an example using `nnx.state` with various filters to select different substates of the `Rngs` inside a `Model`:
 
 ```{code-cell} ipython3
 model = Model(nnx.Rngs(params=0, dropout=1))
@@ -157,7 +232,7 @@ In Haiku and Flax Linen, random states are explicitly passed to `Module.apply` e
 
 In Flax NNX, there are two ways to approach this:
 
-1. By passing an `nnx.Rngs` object through the `__call__` stack manually. Standard layers like `nnx.Dropout` and `nnx.MultiHeadAttention` accept the `rngs` argument if you want to have tight control over the random state.
+1. By passing an `nnx.Rngs` object through the `__call__` stack manually, as shown previously. 
 2. By using `nnx.reseed` to set the random state of the model to a specific configuration. This option is less intrusive and can be used even if the model is not designed to enable manual control over the random state.
 
 `nnx.reseed` is a function that accepts an arbitrary graph node (this includes [pytrees](https://jax.readthedocs.io/en/latest/working-with-pytrees.html#working-with-pytrees) of `nnx.Module`s) and some keyword arguments containing the new seed or key value for the `nnx.RngStream`s specified by the argument names. `nnx.reseed` will then traverse the graph and update the random state of the matching `nnx.RngStream`s, this includes both setting the `key` to a possibly new value and resetting the `count` to zero.
@@ -180,12 +255,7 @@ assert jnp.allclose(y1, y3)     # same
 
 ## Splitting PRNG keys
 
-When interacting with [Flax NNX transforms](https://flax.readthedocs.io/en/latest/guides/transforms.html) like `nnx.vmap` or `nnx.pmap`, it is often necessary to split the random state such that each replica has its own unique state. This can be done in two ways:
-
-- By manually splitting a key before passing it to one of the `nnx.Rngs` streams; or
-- By using the `nnx.split_rngs` decorator which will automatically split the random state of any `nnx.RngStream`s found in the inputs of the function, and automatically "lower" them once the function call ends.
-
-It is more convenient to use `nnx.split_rngs`, since it works nicely with Flax NNX transforms, so here’s one example:
+When interacting with [Flax NNX transforms](https://flax.readthedocs.io/en/latest/guides/transforms.html) like `nnx.vmap` or `nnx.pmap`, it is often necessary to split the implicit random state such that each replica has its own unique state. This can be done using the `nnx.split_rngs` decorator which will automatically split the random state of any `nnx.RngStream`s found in the inputs of the function, and automatically "lower" them once the function call ends. Here’s an example:
 
 ```{code-cell} ipython3
 rngs = nnx.Rngs(params=0, dropout=1)
