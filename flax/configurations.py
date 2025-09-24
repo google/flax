@@ -72,6 +72,21 @@ class Config:
     values_repr = ', '.join(f'\n  {k}={v!r}' for k, v in self._values.items())
     return f'Config({values_repr}\n)'
 
+  @contextmanager
+  def temp_flip_flag(self, var_name: str, var_value: bool):
+    """Context manager to temporarily flip feature flags for test functions.
+
+    Args:
+      var_name: the config variable name (without the 'flax_' prefix)
+      var_value: the boolean value to set var_name to temporarily
+    """
+    old_value = getattr(self, f'flax_{var_name}')
+    try:
+      self.update(f'flax_{var_name}', var_value)
+      yield
+    finally:
+      self.update(f'flax_{var_name}', old_value)
+
 
 config = Config()
 
@@ -205,22 +220,6 @@ def static_int_env(varname: str, default: int | None) -> int | None:
     raise ValueError(
       f'invalid integer value {val!r} for environment {varname!r}'
     ) from None
-
-
-@contextmanager
-def temp_flip_flag(var_name: str, var_value: bool):
-  """Context manager to temporarily flip feature flags for test functions.
-
-  Args:
-    var_name: the config variable name (without the 'flax_' prefix)
-    var_value: the boolean value to set var_name to temporarily
-  """
-  old_value = getattr(config, f'flax_{var_name}')
-  try:
-    config.update(f'flax_{var_name}', var_value)
-    yield
-  finally:
-    config.update(f'flax_{var_name}', old_value)
 
 
 # Flax Global Configuration Variables:

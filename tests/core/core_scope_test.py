@@ -19,7 +19,7 @@ from jax import numpy as jnp
 from jax import random
 
 from flax import errors
-from flax.configurations import temp_flip_flag
+from flax import config
 from flax.core import Scope, apply, freeze, init, lazy_init, nn, scope
 from flax.core.scope import LazyRng
 
@@ -283,7 +283,7 @@ class ScopeTest(absltest.TestCase):
     with self.assertRaises(errors.LazyInitError):
       init_fn(random.key(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
 
-  @temp_flip_flag('fix_rng_separator', True)
+  @config.temp_flip_flag('fix_rng_separator', True)
   def test_fold_in_static_seperator(self):
     x = LazyRng(random.key(0), ('ab', 'c'))
     y = LazyRng(random.key(0), ('a', 'bc'))
