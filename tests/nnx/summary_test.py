@@ -130,6 +130,60 @@ class SummaryTest(absltest.TestCase):
     ).splitlines()
     self.assertIn('vjp_flops', table_repr2[2])
 
+  def test_nested(self):
+    class Block(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 2, rngs=rngs)
+        self.bn = nnx.BatchNorm(2, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.bn(x)
+        return nnx.relu(x)
+
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        self.block1 = Block(rngs)
+        self.block2 = Block(rngs)
+
+      def __call__(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
+
+    m = Model(nnx.Rngs(0))
+    x = jnp.ones((4, 2))
+    table = nnx.tabulate(m, x, compute_flops=True, compute_vjp_flops=True)
+    # We should see 3 calls per block, plus one overall call
+    self.assertEqual(sum([s.startswith("├─") for s in table.splitlines()]), 7)
+
+  def test_shared(self):
+    class Block(nnx.Module):
+      def __init__(self, linear: nnx.Linear, *, rngs):
+        self.linear = linear
+        self.bn = nnx.BatchNorm(2, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.bn(x)
+        return nnx.relu(x)
+
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        shared = nnx.Linear(2, 2, rngs=rngs)
+        self.block1 = Block(shared, rngs=rngs)
+        self.block2 = Block(shared, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
+
+    m = Model(nnx.Rngs(0))
+    x = jnp.ones((4, 2))
+    table = nnx.tabulate(m, x, compute_vjp_flops=True)
+    # We should see 3 calls per block, plus one overall call, minus the shared call
+    self.assertEqual(sum([s.startswith("├─") for s in table.splitlines()]), 6)
 
 if __name__ == '__main__':
   absltest.main()

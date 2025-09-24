@@ -151,10 +151,15 @@ def _to_dummy_array(x):
   else:
     return x
 
-class NonTreeError(Exception):
-    pass
+def _pure_nnx_vjp(f, model, *args, **kwargs):
+  "Wrap nnx functional api around jax.vjp. Only handles pure method calls."
+  graphdef, state = nnx.split(model)
+  def inner(state, *args, **kwargs):
+    model = nnx.merge(graphdef, state)
+    return f(model, *args, **kwargs)
+  return jax.vjp(inner, state, *args, **kwargs)
 
-def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, compute_vjp_flops: bool, *args, **kwargs):
+def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, *args, **kwargs):
   e = jitted.lower(obj, *args, **kwargs)
   flops = _get_flops(e) if compute_flops else None
   outputs = e.lowered.out_info[2]
@@ -169,15 +174,6 @@ def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, co
   if method_name != '__call__':
     path = (*path, method_name)
 
-  vjp_flops = None
-  if compute_vjp_flops:
-    if graph.find_duplicates((obj, args, kwargs)):
-      raise NonTreeError("Modules must have a tree-structure to be tabulated. This module contains duplicate nodes.")
-    def do_vjp(*args, **kwargs):
-      primals, f_vjp = jax.vjp(jitted, *args, **kwargs)
-      return f_vjp(primals)
-    vjp_flops = _get_flops(jax.jit(do_vjp).lower(obj, *args, **kwargs))
-
   return CallInfo(
     object_id=object_id,
     type=type(obj),
@@ -186,7 +182,6 @@ def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, co
     input_kwargs=input_kwargs_info,
     outputs=output_repr,
     flops=flops,
-    vjp_flops=vjp_flops
   )
 
 
@@ -383,8 +378,19 @@ def tabulate(
   # Get call_info
   rows : list[CallInfo] = [_get_call_info(
     jits[(type(object), name)], name, node_stats, object,
-    compute_flops, compute_vjp_flops, *args, **kwargs)
+    compute_flops, *args, **kwargs)
     for (object, name, args, kwargs) in tracer_args]
+
+  # Add VJP flops if required. This needs to be done separately because calls to `_pure_nnx_vjp`
+  # can result in tracing the jitted functions a second time if there's shared structure.
+  # This would add items to `tracer_args`, resulting in duplicate rows in the table.
+  if compute_vjp_flops:
+    for i, row in enumerate(rows):
+      object, method_name, args, kwargs = tracer_args[i]
+      def do_vjp(*args, **kwargs):
+        primals, f_vjp = _pure_nnx_vjp(jits[(type(object), method_name)], *args, **kwargs)
+        return f_vjp(primals)
+      row.vjp_flops = _get_flops(jax.jit(do_vjp).lower(object, *args, **kwargs))
 
   # Restore the object's original methods
   _overwrite_methods(env)
