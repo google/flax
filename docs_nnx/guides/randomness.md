@@ -258,7 +258,7 @@ class RNNCell(nnx.Module):
   def __call__(self, h, x) -> tuple[jax.Array, jax.Array]:
     h = self.drop(h) # Recurrent dropout.
     y = nnx.relu(self.linear(jnp.concatenate([h, x], axis=-1)))
-    self.count += 1
+    self.count.value += 1
     return y, y
 
   def initial_state(self, batch_size: int):

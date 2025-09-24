@@ -2819,7 +2819,7 @@ def call(
     ...     self.count = Variable(jnp.array(0, dtype=jnp.uint32))
     ...
     ...   def increment(self):
-    ...     self.count += 1
+    ...     self.count.value += 1
     ...
     ...   def __call__(self, x):
     ...     self.increment()
@@ -2853,7 +2853,7 @@ def call(
     ...     self.count = nnx.Variable(jnp.array(0, dtype=jnp.uint32))
     ...
     ...   def increment(self):
-    ...     self.count += 1
+    ...     self.count.value += 1
     ...
     ...   def __call__(self, x):
     ...     self.increment()

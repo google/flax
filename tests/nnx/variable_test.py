@@ -89,7 +89,7 @@ class TestVariable(absltest.TestCase):
 
     self.assertEqual(result, 5)
 
-    v1 += v2
+    v1.value += v2
 
     self.assertEqual(v1.value, 5)
 

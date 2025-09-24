@@ -708,134 +708,82 @@ class Variable(tp.Generic[A], reprlib.Representable):
     return self.value.__ror__(other)  # type: ignore
 
   def __iadd__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__iadd__'):
-      value.__iadd__(other)
-    else:
-      self.value = value.__add__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value += x` instead.'
+    )
 
   def __isub__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__isub__'):
-      value.__isub__(other)
-    else:
-      self.value = value.__sub__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value -= x` instead.'
+    )
 
   def __imul__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__imul__'):
-      value.__imul__(other)
-    else:
-      self.value = value.__mul__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value *= x` instead.'
+    )
 
   def __imatmul__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__imatmul__'):
-      value.__imatmul__(other)
-    else:
-      self.value = value.__matmul__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value @= x` instead.'
+    )
 
   def __itruediv__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__itruediv__'):
-      value.__itruediv__(other)
-    else:
-      self.value = value.__truediv__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value /= x` instead.'
+    )
 
   def __ifloordiv__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__ifloordiv__'):
-      value.__ifloordiv__(other)
-    else:
-      self.value = value.__floordiv__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value //= x`` instead.'
+    )
 
   def __imod__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__imod__'):
-      value.__imod__(other)
-    else:
-      self.value = value.__mod__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value %= x` instead.'
+    )
 
   def __ipow__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__ipow__'):
-      value.__ipow__(other)
-    else:
-      self.value = value.__pow__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value **= x`` instead.'
+    )
 
   def __ilshift__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__ilshift__'):
-      value.__ilshift__(other)
-    else:
-      self.value = value.__lshift__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value <<= x`` instead.'
+    )
 
   def __irshift__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__irshift__'):
-      value.__irshift__(other)
-    else:
-      self.value = value.__rshift__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value >>= x`` instead.'
+    )
 
   def __iand__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__iand__'):
-      value.__iand__(other)
-    else:
-      self.value = value.__and__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value &= x` instead.'
+    )
 
   def __ixor__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__ixor__'):
-      value.__ixor__(other)
-    else:
-      self.value = value.__xor__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value ^= x` instead.'
+    )
 
   def __ior__(self: V, other) -> V:
-    if isinstance(other, Variable):
-      other = other.value
-    value = self.value
-    if hasattr(value, '__ior__'):
-      value.__ior__(other)
-    else:
-      self.value = value.__or__(other)
-    return self
+    raise NotImplementedError(
+      'In-place operations are no longer supported for Variable.\n'
+      'Use `variable.value |= x` instead.'
+    )
 
   def __neg__(self) -> A:
     return self.value.__neg__()  # type: ignore

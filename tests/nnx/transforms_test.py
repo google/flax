@@ -479,7 +479,7 @@ class TestShardMap(absltest.TestCase):
 
     @nnx.shard_map(mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None)
     def f(w, b, count):
-      count += 1
+      count.value += 1
       self.assertEqual(w.shape, (16, 32 // n_devices))
       self.assertEqual(b.shape, (32,))
 
@@ -1249,7 +1249,7 @@ class TestScan(absltest.TestCase):
     def stack_forward(params, x):
       w, b, count = params
       y = block_forward(w, b, x)
-      count += 1
+      count.value += 1
       return (w, b, count), y
 
     x = jnp.ones((5, 1, 3))
@@ -1297,7 +1297,7 @@ class TestScan(absltest.TestCase):
 
     @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
     def loop(foo: Foo):
-      foo.n += 1
+      foo.n.value += 1
       return foo
 
     foo2 = loop(foo)
@@ -1352,7 +1352,7 @@ class TestScan(absltest.TestCase):
     @nnx.scan(in_axes=0, out_axes=0)
     def loop(foo: Foo, x):
       x = x + 1
-      foo.n += 1
+      foo.n.value += 1
       return x
 
     ys = loop(foo, xs)
@@ -1848,7 +1848,7 @@ class TestRemat(absltest.TestCase):
 
     @nnx.remat
     def linear(w, b, count, x):
-      count += 1
+      count.value += 1
       return x @ w + b[None]
 
     def loss_fn(w, b, count, x):
@@ -2360,7 +2360,7 @@ class TestVmap(absltest.TestCase):
       self.assertEqual(env.step.shape, ())
 
       def increment(env: Env):
-        env.step += 1
+        env.step.value += 1
 
       def no_nothing(env: Env):
         pass
@@ -2390,8 +2390,8 @@ class TestVmap(absltest.TestCase):
       self.assertEqual(env.step.shape, ())
 
       def increment(env: Env):
-        env.step += 1
-        env.broadcast += 1
+        env.step.value += 1
+        env.broadcast.value += 1
 
       def no_nothing(env: Env):
         pass
@@ -2719,7 +2719,7 @@ class TestCond(absltest.TestCase):
       self.assertEqual(env.index.shape, ())
 
       def increment(env: Env):
-        env.step += 1
+        env.step.value += 1
 
       def no_nothing(env: Env):
         pass
@@ -2745,7 +2745,7 @@ class TestSwitch(absltest.TestCase):
 
       def __call__(self, x):
         def fn0(m, x):
-          m.rounds_count += 1
+          m.rounds_count.value += 1
           return m.linear(x)
         def fn1(m, x):
           return m.linear(x) * 2
@@ -2929,7 +2929,7 @@ class TestWhileLoop(absltest.TestCase):
         self.c = C(self.a)
 
     def increment(_, d: D) -> D:
-      d.a.params += 1
+      d.a.params.value += 1
       return d
 
     @nnx.jit
@@ -2968,7 +2968,7 @@ class TestSplitMergeInputs(absltest.TestCase):
         self.counter = nnx.BatchStat(jnp.array(0, jnp.uint32))
 
       def __call__(self, x):
-        self.counter += 1
+        self.counter.value += 1
         return super().__call__(x)
 
     model = StatefulLinear(3, 4, rngs=nnx.Rngs(0))
@@ -2990,7 +2990,7 @@ class TestSplitMergeInputs(absltest.TestCase):
         self.count = nnx.BatchStat(jnp.array(0, jnp.uint32))
 
       def increment(self):
-        self.count += 1
+        self.count.value += 1
 
     counter = Counter()
 
