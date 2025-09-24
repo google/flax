@@ -146,7 +146,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('{}', out)
     self.assertIn('None', out)
 
-  def test_tabulate_original_user_repro(self):
+  def test_tabulate_empty_dict_property(self):
     class Model(nnx.Module):
       def __init__(self):
         self.foo = {}

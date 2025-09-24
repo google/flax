@@ -582,7 +582,7 @@ def _unflatten_to_simple_structure(
   if isinstance(original, (list, tuple)) and isinstance(result, list):
     for i in range(len(result), len(original)):
       slot = original[i]
-      result.append(_to_simple(slot) if isinstance(slot, (list, tuple, dict)) else slot)
+      result.append(_to_simple(slot))
   return result
 
 def _as_yaml_str(value) -> str:
