@@ -285,7 +285,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
     # shard the value if applicable
     do_eager_sharding = config.flax_always_shard_variable
     if 'eager_sharding' in metadata:
-      do_eager_sharding = metadata.pop('eager_sharding')
+      do_eager_sharding = metadata['eager_sharding']
     if do_eager_sharding and 'sharding_names' in metadata:
       value = core_spmd.shard_value(
         value, metadata['sharding_names'], metadata.get('sharding_rules', None),
