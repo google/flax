@@ -233,7 +233,7 @@ class TestMutableArrayGraph(absltest.TestCase):
   def test_mutable_array_split_merge_in_variable(self):
     class Foo(nnx.Module):
       def __init__(self):
-        self.a = nnx.Param(nnx.array_ref(1))
+        self.a = nnx.Param(1, use_ref=True)
         self.b = self.a
 
     m = Foo()
@@ -250,20 +250,21 @@ class TestMutableArrayGraph(absltest.TestCase):
   def test_mutable_array_split_merge_in_variable_shared_array(self):
     class Foo(nnx.Module):
       def __init__(self):
-        m_array = nnx.array_ref(1)
-        self.a = nnx.Param(m_array)
-        self.b = nnx.Param(m_array)
+        m_array = 1
+        self.a = nnx.Param(m_array, use_ref=True)
+        self.b = nnx.Param(m_array, use_ref=True)
 
     m = Foo()
-    self.assertIs(m.a.raw_value, m.b.raw_value)
+    self.assertIsNot(m.a.raw_value, m.b.raw_value)
 
     ref_map = nnx.graph.RefMap()
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
-    self.assertLen(state, 1)
-    self.assertLen(ref_map, 4)  # 1 Foo + 2 Param + 1 ArrayRef
+    self.assertLen(state, 2)
+    self.assertLen(ref_map, 5)  # 1 Foo + 2 Param + 2 ArrayRefs
 
     m1 = nnx.merge(graphdef, state)
-    self.assertIs(m1.a.raw_value, m1.b.raw_value)
+    # Each variable will own its own array and ref.
+    self.assertIsNot(m1.a.raw_value, m1.b.raw_value)
     self.assertIsInstance(m1.a, nnx.Param)
 
   def test_mutable_example(self):

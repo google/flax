@@ -242,16 +242,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
     if isinstance(value, VariableMetadata):
       metadata.update(value.metadata)
       value = tp.cast(A, value.raw_value)
+    elif is_array_ref(value):
+      raise ValueError('Cannot pass a ArrayRef directly into Variable init.')
 
-    if use_ref:
-      if is_array_ref(value):
-        _value = tp.cast(A, value)
-      else:
-        _value = array_ref(jnp.asarray(value))  # type: ignore[assignment]  # type: ignore[assignment]
-    else:
-      _value = value
-
-    object.__setattr__(self, 'raw_value', _value)
+    object.__setattr__(self, 'raw_value', value)
 
     if hasattr(var_t, 'on_get_value') and 'on_get_value' not in metadata:
       metadata['on_get_value'] = var_t.on_get_value
@@ -283,6 +277,10 @@ class Variable(tp.Generic[A], reprlib.Representable):
       value = core_spmd.shard_value(
         value, metadata['sharding_names'], metadata.get('sharding_rules', None),
         metadata.get('mesh', None))
+
+    # Create the ref out of the array value
+    if use_ref:
+      value = array_ref(jnp.asarray(value))  # type: ignore[assignment]  # type: ignore[assignment]
 
     object.__setattr__(self, 'raw_value', value)
 
