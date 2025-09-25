@@ -21,5 +21,8 @@ flaxlib_src/subprojects
 # used by direnv
 .envrc
 
+# uv
+uv.lock
+
 # custom
 /tmp-files
