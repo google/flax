@@ -30,9 +30,11 @@ from flax.nnx import (
   statelib,
   variablelib,
 )
-from flax.typing import Missing
+from flax.typing import MISSING, Missing
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
+P = tp.ParamSpec('P')
+R = tp.TypeVar('R')
 Specs = tp.Any
 AxisName = tp.Hashable
 
@@ -150,10 +152,10 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   abstracted_axes: tp.Optional[tp.Any] = None,
-) -> tp.Callable[[tp.Callable[..., tp.Any]], JitWrapped]: ...
+) -> tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]: ...
 @tp.overload
 def jit(
-  fun: tp.Callable[..., tp.Any],
+  fun: tp.Callable[P, R],
   *,
   in_shardings: tp.Any = None,
   out_shardings: tp.Any = None,
@@ -166,9 +168,9 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   abstracted_axes: tp.Optional[tp.Any] = None,
-) -> JitWrapped: ...
+) -> JitWrapped[P, R]: ...
 def jit(
-  fun: tp.Callable[..., tp.Any] | type[Missing] = Missing,
+  fun: tp.Callable[P, R] | Missing = MISSING,
   *,
   in_shardings: tp.Any = None,
   out_shardings: tp.Any = None,
@@ -181,7 +183,7 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   abstracted_axes: tp.Optional[tp.Any] = None,
-) -> JitWrapped | tp.Callable[[tp.Callable[..., tp.Any]], JitWrapped]:
+) -> JitWrapped[P, R] | tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]:
   """
   Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
   arguments.
@@ -302,7 +304,7 @@ def jit(
     A wrapped version of ``fun``, set up for just-in-time compilation.
   """
 
-  if fun is Missing:
+  if isinstance(fun, Missing):
     return functools.partial(
       jit,
       in_shardings=in_shardings,
@@ -317,7 +319,6 @@ def jit(
       inline=inline,
       abstracted_axes=abstracted_axes,
     )  # type: ignore[return-value]
-
   return JitWrapped(
     fun,
     in_shardings=in_shardings,
@@ -334,7 +335,7 @@ def jit(
   )
 
 
-class JitWrapped:
+class JitWrapped(tp.Generic[P, R]):
   """A function ready to be traced, lowered, and compiled.
 
   This protocol reflects the output of functions such as
@@ -345,7 +346,7 @@ class JitWrapped:
 
   def __init__(
     self,
-    fun: tp.Callable[..., tp.Any],
+    fun: tp.Callable[P, R],
     in_shardings: tp.Any,
     out_shardings: tp.Any,
     static_argnums: int | tp.Sequence[int] | None = None,
@@ -359,6 +360,7 @@ class JitWrapped:
     abstracted_axes: tp.Optional[tp.Any] = None,
   ):
     functools.update_wrapper(self, fun)
+    self.fun: tp.Callable[P, R] = fun
     kwarg_shardings = None
     self.jax_in_shardings = jax.tree.map(
       lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
@@ -424,7 +426,7 @@ class JitWrapped:
     )
     return out
 
-  def __call__(self, *args, **kwargs):
+  def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
     # run dynamic_cache_context before update_context
     with graph.update_context(self):
       pure_args, pure_kwargs = self._get_pure_args_kwargs(args, kwargs)
