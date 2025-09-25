@@ -40,14 +40,14 @@ try:
 except ImportError:
   in_ipython = False
 
-# Ensure None is dumped as the string 'None' (and not YAML 'null') for clarity
-try:
-  yaml.SafeDumper.add_representer(
-    type(None),
-    lambda dumper, data: dumper.represent_scalar('tag:yaml.org,2002:str', 'None'),
-  )
-except Exception:
+# Custom YAML dumper to represent None as 'None' string (not YAML 'null') for clarity
+class NoneDumper(yaml.SafeDumper):
   pass
+
+NoneDumper.add_representer(
+  type(None),
+  lambda dumper, data: dumper.represent_scalar('tag:yaml.org,2002:str', 'None'),
+)
 
 class SizeBytes(typing.SizeBytes):
   def __repr__(self) -> str:
@@ -593,9 +593,10 @@ def _as_yaml_str(value) -> str:
   value = _maybe_pytree_to_dict(value)
 
   file = io.StringIO()
-  yaml.safe_dump(
+  yaml.dump(
     value,
     file,
+    Dumper=NoneDumper,
     default_flow_style=False,
     indent=2,
     sort_keys=False,
