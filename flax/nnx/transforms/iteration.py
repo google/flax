@@ -733,7 +733,8 @@ def _scan_split_in(
         if axis is None:
           broadcast_states.append(state)
         elif isinstance(axis, int):
-          state = jax.tree.map(lambda x: jnp.moveaxis(x, axis, 0), state)
+          if axis != 0:
+            state = jax.tree.map(lambda x: jnp.moveaxis(x, axis, 0), state)
           vectorized_states.append(state)
         else:  # axis is Carry
           carry_states.append(state)
@@ -747,7 +748,8 @@ def _scan_split_in(
       )
     elif isinstance(prefix, int):
       graphdef, state = ctx.split(x)
-      state = jax.tree.map(lambda x: jnp.moveaxis(x, prefix, 0), state)
+      if prefix != 0:
+        state = jax.tree.map(lambda x: jnp.moveaxis(x, prefix, 0), state)
       vectorized_states.append(state)
     elif prefix is None:
       graphdef, state = ctx.split(x)
@@ -786,7 +788,9 @@ def _scan_split_in(
           f'Expected an array, got {type(x).__name__} args'
           f'{jax.tree_util.keystr(path)}'
         )
-      return jnp.moveaxis(x, prefix, 0)
+      if prefix != 0:
+        x = jnp.moveaxis(x, prefix, 0)
+      return x
     else:
       raise ValueError(
         f'Invalid axes {prefix} args{jax.tree_util.keystr(path)}'
@@ -929,7 +933,10 @@ def _scan_merge_out(
       for axis in prefix.axes:
         if isinstance(axis, int):
           state = vectorized_states.popleft()
-          state = jax.tree.map(lambda x: jnp.moveaxis(x, 0, axis), state)
+          state = jax.tree.map(
+            lambda x: jnp.moveaxis(x, 0, axis) if axis != 0 else x,
+            state,
+          )
           states.append(state)
         elif axis is None:
           states.append(broadcast_states.popleft())
@@ -940,7 +947,9 @@ def _scan_merge_out(
         len(vectorized_states) == 1 and not vectorized_states[0]
       )
     elif isinstance(prefix, int):
-      state = jax.tree.map(lambda x: jnp.moveaxis(x, 0, prefix), x.state)
+      state = jax.tree.map(
+        lambda x: jnp.moveaxis(x, 0, prefix) if prefix != 0 else x, x.state
+      )
       states.extend((state, *carry_states, *broadcast_states))
     elif prefix is None:
       assert is_input_arg
@@ -973,7 +982,9 @@ def _scan_merge_out(
           f'Expected an array, got {type(x).__name__} at '
           f'{obj_repr}{jax.tree_util.keystr(path)}'
         )
-      return jnp.moveaxis(x, 0, prefix)
+      if prefix != 0:
+        x = jnp.moveaxis(x, 0, prefix)
+      return x
     else:
       obj_repr = 'args' if is_input_arg else 'out'
       raise ValueError(

@@ -778,7 +778,7 @@ def _graph_flatten(
       type=type(node),
       index=index,
       outer_index=ref_outer_index.get(node, None) if ref_outer_index else None,
-      metadata=HashableMapping(node._var_metadata),
+      metadata=HashableMapping(node.get_metadata()),
       array_refdef=array_refdef,
     )
     if type(inner_value) is not Repeated:
@@ -944,7 +944,7 @@ def _graph_fingerprint(
         variable_index = new_ref_index[value] = ctx.next_index
         ctx.next_index += 1
         append_fn(variable_index)
-        for key_value in value._var_metadata.items():
+        for key_value in value.get_metadata().items():
           append_fn(key_value)
     elif not isinstance(value, (jax.Array, np.ndarray)):
       append_fn(value)
@@ -1048,7 +1048,7 @@ def _check_graph_fingerprint(
         # append_fn(variable_index)
         if variable_index != next(fp_iterator):
           return False
-        for key_value in value._var_metadata.items():
+        for key_value in value.get_metadata().items():
           # append_fn(key_value)
           if key_value != next(fp_iterator):
             return False
@@ -2743,6 +2743,80 @@ def to_refs(node: A, /, only: filterlib.Filter = _array_like) -> A:
   graphdef, frozen_state, rest = split(node, only, ...)  # type: ignore[misc]
   mutable_state = jax.tree.map(variablelib.new_ref, frozen_state)
   node = merge(graphdef, mutable_state, rest)
+  return node
+
+def _is_lojax_variable(path, x):
+  return isinstance(x, variablelib.Variable) and not isinstance(
+    x, variablelib.MutableHijaxVariable
+  )
+
+
+def to_hijax(
+  node: A, /, *, only: filterlib.Filter = ..., mutable: bool = True
+) -> A:
+  """ """
+  if not mutable:
+    raise ValueError('to_hijax only supports mutable=True at the moment.')
+
+  only = filterlib.All(_is_lojax_variable, only)
+
+  if all_duplicates := find_duplicates(node, only=only):
+    duplicates_strs = '\n  ---'
+    for node_duplicates in all_duplicates:
+      for path in node_duplicates:
+        path_str = '/'.join(map(str, path))
+        duplicates_strs += f'\n  {path_str}'
+      duplicates_strs += '\n  ---'
+    raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
+
+  def _to_stateful(x):
+    if isinstance(x, jax.Array):
+      return jax.array_ref(x)
+    elif isinstance(x, Variable):
+      if x.has_ref:
+        raise ValueError(
+          'Cannot convert Variable with ArrayRef to MutableHijaxVariable.'
+        )
+      return variablelib._new_mutable_hijax_from_variable(x)
+    return x
+
+  graphdef, frozen_state, rest = split(node, only, ...)  # type: ignore[misc]
+  mutable_state = jax.tree.map(
+    _to_stateful, frozen_state, is_leaf=lambda x: isinstance(x, Variable)
+  )
+  node = merge(graphdef, mutable_state, rest)
+  return node
+
+
+def _is_hijax_variable(path, x):
+  return isinstance(x, variablelib.MutableHijaxVariable)
+
+
+def to_lojax(node: A, /, only: filterlib.Filter = ...) -> A:
+  """ """
+  only = filterlib.All(_is_hijax_variable, only)
+
+  if all_duplicates := find_duplicates(node, only=only):
+    duplicates_strs = '\n  ---'
+    for node_duplicates in all_duplicates:
+      for path in node_duplicates:
+        path_str = '/'.join(map(str, path))
+        duplicates_strs += f'\n  {path_str}'
+      duplicates_strs += '\n  ---'
+    raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
+
+  def _to_stateless(x):
+    if variablelib.is_array_ref(x):
+      return x[...]
+    elif isinstance(x, variablelib.MutableHijaxVariable):
+      return variablelib._get_mutable_hijax_state(x)
+    return x
+
+  graphdef, mutable_state, rest = split(node, only, ...)  # type: ignore[misc]
+  frozen_state = jax.tree.map(
+    _to_stateless, mutable_state, is_leaf=lambda x: isinstance(x, Variable)
+  )
+  node = merge(graphdef, frozen_state, rest)
   return node
 
 
