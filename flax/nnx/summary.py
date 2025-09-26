@@ -367,7 +367,7 @@ def tabulate(
   # Add JIT calculation to each method. We can extract flops and output info from
   # the lowered JITs. We'll only call these jitted values, which guarantees
   # that each method will only be traced (and added to the table) once.
-  jits: dict[tuple[type, str], tp.Callable] = {} # Maps (class, method_name) to jit
+  jits = {} # Maps (class, method_name) to jit
   for key, value in saver_env.items():
     jits[key] = nnx.jit(value)
   _overwrite_methods(jits)
