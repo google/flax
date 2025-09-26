@@ -90,7 +90,7 @@ def _compute_stats(
       this is only used for pmap and shard map. For SPMD jit, you do not need to
       manually synchronize. Just make sure that the axes are correctly annotated
       and XLA:SPMD will insert the necessary collectives.
-    axis_index_groups: Optional axis indices.
+    axis_index_groups: Optional groups of indices within that named axis.
     use_mean: If true, calculate the mean from the input and use it when
       computing the variance. If false, set the mean to zero and compute the
       variance without subtracting the mean.
@@ -300,7 +300,7 @@ class BatchNorm(Module):
       representing subsets of devices to reduce over (default: None). For
       example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
       examples on the first two and last two devices. See ``jax.lax.psum`` for
-      more details.
+      more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
   """
@@ -478,7 +478,7 @@ class LayerNorm(Module):
       representing subsets of devices to reduce over (default: None). For
       example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
       examples on the first two and last two devices. See ``jax.lax.psum`` for
-      more details.
+      more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
   """
@@ -580,7 +580,7 @@ class RMSNorm(Module):
       representing subsets of devices to reduce over (default: None). For
       example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
       examples on the first two and last two devices. See ``jax.lax.psum`` for
-      more details.
+      more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
   """
@@ -703,7 +703,7 @@ class GroupNorm(Module):
       representing subsets of devices to reduce over (default: None). For
       example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
       examples on the first two and last two devices. See ``jax.lax.psum`` for
-      more details.
+      more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
   """
@@ -879,7 +879,7 @@ class InstanceNorm(Module):
       representing subsets of devices to reduce over (default: None). For
       example, ``[[0, 1], [2, 3]]`` would independently batch-normalize over the
       examples on the first two and last two devices. See ``jax.lax.psum`` for
-      more details.
+      more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
   """
