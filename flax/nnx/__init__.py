@@ -67,6 +67,8 @@ from .graph import merge_context as merge_context
 from .graph import variables as variables
 from .graph import to_arrays as to_arrays
 from .graph import to_refs as to_refs
+from .graph import to_hijax as to_hijax
+from .graph import to_lojax as to_lojax
 from .graph import pure as pure
 from .graph import cached_partial as cached_partial
 from .graph import flatten as flatten
@@ -195,6 +197,8 @@ from .variablelib import ArrayRef as ArrayRef
 from .variablelib import is_array_ref as is_array_ref
 from .variablelib import use_refs as use_refs
 from .variablelib import using_refs as using_refs
+from .variablelib import use_hijax as use_hijax
+from .variablelib import using_hijax as using_hijax
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree

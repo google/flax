@@ -15,6 +15,7 @@
 import dataclasses
 from absl.testing import absltest
 import optax
+import pytest
 from flax import nnx
 import flax.errors
 import jax
@@ -747,6 +748,123 @@ class TestOptimizer(absltest.TestCase):
     loss = train_step(model, optimizer, x, y)
 
     self.assertNotEqual(loss, 0.0)
+
+class TestHijaxVariables(absltest.TestCase):
+  def test_variable_to_hijax(self):
+    v_low = nnx.Param(1, a='hi')
+    v_hi = nnx.to_hijax(v_low)
+
+    self.assertTrue(v_hi.is_hijax)
+    self.assertIsInstance(v_hi, nnx.Param._mutable_hijax_type)
+    self.assertEqual(v_hi.value, 1)
+    self.assertIsInstance(v_hi, nnx.Param)
+    assert issubclass(type(v_hi), nnx.Param)
+
+    v_hi.value = 2
+    self.assertEqual(v_hi.value, 2)
+
+    @jax.jit
+    def set(v_hi, a):
+      self.assertIsInstance(v_hi, nnx.Param)
+      self.assertIsInstance(v_hi, nnx.Param._mutable_hijax_type)
+      v_hi.value = a
+      self.assertEqual(v_hi.a, 'hi')
+      self.assertEqual(v_hi.has_ref, False)
+      v_hi.value += 5
+      return v_hi + 2
+
+    y = set(v_hi, 10)
+    self.assertEqual(v_hi.value, 15)
+    self.assertEqual(y, 17)
+
+    v_low = nnx.to_lojax(v_hi)
+    self.assertFalse(v_low.is_hijax)
+    self.assertIsInstance(v_low, nnx.Param)
+
+  def test_variable_to_hijax_clean(self):
+    v_low = nnx.Param(jnp.array([1]), tag='hello')
+    print()
+    print(v_low)
+    assert v_low.is_hijax is False
+    v_hi = nnx.to_hijax(v_low)
+    v_hi.value = jnp.array([2])
+    assert v_hi.is_hijax == 'mutable'
+    print(v_hi)
+    assert v_hi.value == 2
+
+    @jax.jit
+    def set(v_hi, a):
+      v_hi.value = a
+      print(v_hi)
+      assert v_hi.tag == 'hello'
+
+    set(v_hi, 10)
+
+    assert v_hi.value == 10
+
+    v_low = nnx.to_lojax(v_hi)
+
+    assert v_low.is_hijax is False
+    assert v_low.value == 10
+
+  def test_hijax_and_pytree(self):
+    class Foo(nnx.Pytree):
+      def __init__(self, din, dout, rngs: nnx.Rngs):
+        self.w = nnx.Param(rngs.uniform((din, dout)))
+        self.b = nnx.Param(jnp.zeros((dout,)))
+        self.count = nnx.Variable(0)
+
+    foo = Foo(2, 4, nnx.Rngs(1))
+    assert foo.w.is_hijax is False
+    assert foo.b.is_hijax is False
+
+    foo = nnx.to_hijax(foo)
+
+    assert foo.w.is_hijax == 'mutable'
+    assert foo.b.is_hijax == 'mutable'
+
+    @jax.jit
+    def forward(foo, x):
+      foo.count.value += 1
+      return x @ foo.w + foo.b
+
+    x = jnp.ones((1, 2))
+    y = forward(foo, x)
+    assert y.shape == (1, 4)
+    assert foo.count.value == 1
+
+  def test_use_hijax(self):
+    v_low = nnx.Param(1, a='hi')
+    self.assertFalse(v_low.is_hijax)
+
+    v_hi = nnx.Param(1, a='hi', use_hijax='mutable')
+    self.assertEqual(v_hi.is_hijax, 'mutable')
+
+    with nnx.use_hijax('mutable'):
+      v2 = nnx.Param(1, a='hi')
+      self.assertEqual(v2.is_hijax, 'mutable')
+
+  @nnx.use_hijax('mutable')
+  def test_hijax_rngs(self):
+    rngs = nnx.Rngs(0)
+
+    @jax.jit
+    def f(rngs: nnx.Rngs):
+      return rngs()
+
+    k1 = f(rngs)
+    k2 = f(rngs)
+
+    assert k1 != k2
+
+  @pytest.mark.skip(reason='not yet supported')
+  def test_return_hijax_from_transform(self):
+    @jax.jit
+    def create_var():
+      return nnx.Param(1, use_hijax='mutable')
+
+    v = create_var()
+    self.assertEqual(v.is_hijax, 'mutable')
 
 
 if __name__ == '__main__':
