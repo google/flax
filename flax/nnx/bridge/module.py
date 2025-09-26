@@ -390,7 +390,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
 
       if (
         isinstance(variable, variablelib.Variable)
-        and not variable._var_metadata
+        and not variable.get_metadata()
       ):
         leaf = variable.value
       else:
