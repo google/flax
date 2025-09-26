@@ -16,6 +16,7 @@ import os
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 
 from absl.testing import absltest
+from absl.testing import parameterized
 from flax import nnx
 import jax
 import jax.numpy as jnp
@@ -23,7 +24,7 @@ from jax.sharding import PartitionSpec as P, NamedSharding
 import optax
 
 
-class TestSPMD(absltest.TestCase):
+class TestSPMD(parameterized.TestCase):
 
   def setUp(self):
     if jax.device_count() < 4:
@@ -174,7 +175,9 @@ class TestSPMD(absltest.TestCase):
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(bremoves, [(0, 'layers')])
 
-  def test_logical_rules(self):
+  @parameterized.product(use_ref=[True, False])
+  def test_logical_rules(self, use_ref):
+    self.enter_context(nnx.use_refs(use_ref))
     class Foo(nnx.Module):
 
       def __init__(self):
