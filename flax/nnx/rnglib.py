@@ -70,7 +70,7 @@ class RngStream(Pytree):
     self.count = RngCount(count, tag=tag)
 
   def __call__(self) -> jax.Array:
-    if not self.count.has_ref and not self.count._trace_state.is_valid():
+    if not self.count.trace_state.is_valid():
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )

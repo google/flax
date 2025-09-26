@@ -94,28 +94,28 @@ class TestVariable(absltest.TestCase):
     self.assertEqual(v1.value, 5)
 
   def test_mutable_array_context(self):
-    with nnx.use_refs(False):
+    with nnx.use_hijax(False):
       v = nnx.Variable(jnp.array(1.0))
-      self.assertFalse(nnx.using_refs())
+      self.assertFalse(nnx.using_hijax())
       self.assertNotIsInstance(v.raw_value, jax.Ref)
 
-      with nnx.use_refs(True):
+      with nnx.use_hijax(True):
         v = nnx.Variable(jnp.array(1.0))
-        self.assertTrue(nnx.using_refs())
+        self.assertTrue(nnx.using_hijax())
         self.assertIsInstance(v.raw_value, jax.Ref)
 
       v = nnx.Variable(jnp.array(2.0))
       self.assertNotIsInstance(v.raw_value, jax.Ref)
-      self.assertFalse(nnx.using_refs())
+      self.assertFalse(nnx.using_hijax())
 
-      nnx.use_refs(True)
+      nnx.use_hijax(True)
 
       v = nnx.Variable(jnp.array(0.0))
-      self.assertTrue(nnx.using_refs())
+      self.assertTrue(nnx.using_hijax())
       self.assertIsInstance(v.raw_value, jax.Ref)
 
     v = nnx.Variable(jnp.array(1.0))
-    self.assertFalse(nnx.using_refs())
+    self.assertFalse(nnx.using_hijax())
     self.assertNotIsInstance(v.raw_value, jax.Ref)
 
   def test_get_set_metadata(self):

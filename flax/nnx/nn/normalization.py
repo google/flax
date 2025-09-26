@@ -54,7 +54,7 @@ def _compute_stats(
   use_mean: bool = True,
   use_fast_variance: bool = True,
   mask: tp.Optional[Array] = None,
-):
+) -> tuple[Array, Array]:
   """Computes mean and variance statistics.
 
   This implementation takes care of a few important details:
@@ -357,6 +357,8 @@ class BatchNorm(Module):
     feature_axes = _canonicalize_axes(x.ndim, self.axis)
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
 
+    mean: jax.Array
+    var: jax.Array
     if use_running_average:
       mean, var = self.mean.value, self.var.value
     else:
@@ -370,7 +372,7 @@ class BatchNorm(Module):
         mask=mask,
       )
       # stop_gradient only for flax_array_ref
-      if self.mean.has_ref or self.var.has_ref:
+      if self.mean.is_hijax or self.var.is_hijax:
         stop_gradient = jax.lax.stop_gradient
       else:
         stop_gradient = lambda x: x
