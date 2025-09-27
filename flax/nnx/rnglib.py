@@ -843,7 +843,7 @@ def split_rngs(
       if squeeze:
         key = key[0]
       if variablelib.is_array_ref(stream.key.raw_value):
-        stream.key.raw_value = variablelib.array_ref(key)  # type: ignore[assignment]
+        stream.key.raw_value = variablelib.new_ref(key)  # type: ignore[assignment]
       else:
         stream.key.value = key
       if squeeze:
@@ -855,7 +855,7 @@ def split_rngs(
 
       count = jnp.zeros(counts_shape, dtype=jnp.uint32)
       if variablelib.is_array_ref(stream.count.raw_value):
-        stream.count.raw_value = variablelib.array_ref(count)  # type: ignore[assignment]
+        stream.count.raw_value = variablelib.new_ref(count)  # type: ignore[assignment]
       else:
         stream.count.value = count
 

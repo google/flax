@@ -125,7 +125,7 @@ class Model(nnx.Module):
     use_scan: bool = True,
     rngs: nnx.Rngs,
   ):
-    self.count: nnx.ArrayRef = nnx.array_ref(jnp.array(0))
+    self.count: jax.Ref = jax.new_ref(jnp.array(0))
     self.block_in = Block(din, dhidden, rngs=rngs)
     self.linear_out = Linear(dhidden, dout, rngs=rngs)
 
@@ -199,7 +199,7 @@ class SGD(nnx.Pytree):
     momentum = nnx.pure(self.momentum)
 
     def update_fn(
-      param: nnx.ArrayRef, momentum: nnx.ArrayRef, grad: jax.Array
+      param: jax.Ref, momentum: jax.Ref, grad: jax.Array
     ):
       momentum[...] = self.decay * momentum[...] + (1 - self.decay) * grad[...]
       param[...] -= self.lr * momentum[...]
