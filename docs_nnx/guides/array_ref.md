@@ -24,10 +24,10 @@ import optax
 ### Array Refs 101
 
 ```{code-cell} ipython3
-a_ref = nnx.array_ref(jnp.array([1, 2, 3]))
+a_ref = jax.new_ref(jnp.array([1, 2, 3]))
 
 @jax.jit
-def increment(a_ref: nnx.ArrayRef):  # no return!
+def increment(a_ref: jax.Ref):  # no return!
   array: jax.Array = a_ref[...]  # access
   a_ref[...] = array + 1         # update
 
@@ -185,7 +185,7 @@ def get_error(f, *args):
   except Exception as e:
     return f"{type(e).__name__}: {e}"
   
-x = nnx.array_ref(jnp.array(0))
+x = jax.new_ref(jnp.array(0))
 
 @jax.jit
 def f(a, b):

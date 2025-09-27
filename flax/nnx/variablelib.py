@@ -46,15 +46,15 @@ AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
-if hasattr(jax, 'array_ref') and hasattr(jax, 'ArrayRef'):
-  from jax import array_ref # type: ignore[import-untyped]
-  from jax import ArrayRef  # type: ignore[import-untyped]
-elif not tp.TYPE_CHECKING:
-  from jax._src.core import mutable_array, MutableArray
-  array_ref = mutable_array
-  ArrayRef = MutableArray
-  # temp workaround future proof correct repr
-  MutableArray.__repr__ = lambda self: 'ArrayRef' + repr(self._buf)[5:] # type: ignore[method-assign]
+if hasattr(jax, 'new_ref') and hasattr(jax, 'Ref'):
+  from jax import new_ref
+  from jax import Ref
+elif hasattr(jax, 'array_ref') and hasattr(jax, 'ArrayRef'):
+  from jax import array_ref as new_ref # type: ignore[import-untyped]
+  from jax import ArrayRef as Ref  # type: ignore[import-untyped]
+else:
+  from jax.experimental import mutable_array as new_ref
+  from jax.experimental import MutableArray as Ref
 
 @dataclasses.dataclass
 class VariableContext(threading.local):
@@ -150,9 +150,9 @@ def _clean_mutable_arrays_context(prev_value: bool | None):
     VARIABLE_CONTEXT.mutable_variable_stack.pop()
 
 
-def is_array_ref(x) -> tp.TypeGuard[ArrayRef]:
-  return isinstance(x, jax.Array | AbstractRef | ArrayRef) and isinstance(
-    jax.typeof(x), AbstractRef | ArrayRef
+def is_array_ref(x) -> tp.TypeGuard[Ref]:
+  return isinstance(x, jax.Array | AbstractRef | Ref) and isinstance(
+    jax.typeof(x), AbstractRef | Ref
   )
 
 
@@ -287,7 +287,7 @@ class Variable(tp.Generic[A], reprlib.Representable):
 
     # Create the ref out of the array value
     if use_ref:
-      value = array_ref(jnp.asarray(value))  # type: ignore[assignment]  # type: ignore[assignment]
+      value = new_ref(jnp.asarray(value))  # type: ignore[assignment]  # type: ignore[assignment]
 
     object.__setattr__(self, 'raw_value', value)
 
