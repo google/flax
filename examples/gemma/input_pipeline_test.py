@@ -19,6 +19,7 @@ import tempfile
 import numpy as np
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import tensorflow_datasets as tfds
 
 from configs import default
@@ -30,15 +31,14 @@ _TARGET_LENGTH = 32
 _EVAL_TARGET_LENGTH = 48
 
 
-class InputPipelineTest(absltest.TestCase):
+class InputPipelineTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
     if sys.version_info >= (3, 13):
       self.skipTest('Test (and tensorflow-text) does not suport Python 3.13+')
-    self.train_ds, self.eval_ds = self._get_datasets()
 
-  def _get_datasets(self):
+  def _get_datasets(self, input_pipeline_type: str):
     config = default.get_config()
     config.per_device_batch_size = 2
     config.eval_per_device_batch_size = 4
@@ -47,6 +47,7 @@ class InputPipelineTest(absltest.TestCase):
     config.max_target_length = _TARGET_LENGTH
     config.max_eval_target_length = _EVAL_TARGET_LENGTH
     config.prefetch_num_workers = 2
+    config.input_pipeline_type = input_pipeline_type
 
     vocab_path = os.path.join(tempfile.mkdtemp(), 'sentencepiece_model')
 
@@ -59,12 +60,18 @@ class InputPipelineTest(absltest.TestCase):
       train_ds, eval_ds, _ = input_pipeline.get_datasets(config=config, vocab_path=vocab_path)
     return train_ds, eval_ds
 
-  def test_train_ds(self):
+  @parameterized.parameters(
+    {"input_pipeline_type": "grain"},
+    {"input_pipeline_type": "tf"},
+  )
+  def test_train_ds(self, input_pipeline_type):
+    train_ds, _ = self._get_datasets(input_pipeline_type)
+
     expected_shape = [2, _TARGET_LENGTH]
     # For training we pack multiple short examples in one example.
     # *_position and *_segmentation indicate the boundaries.
     counter = 4
-    train_iter = iter(self.train_ds)
+    train_iter = iter(train_ds)
     while counter > 0:
       counter -= 1
       batch = next(train_iter)
@@ -91,15 +98,20 @@ class InputPipelineTest(absltest.TestCase):
         np.asarray(batch["targets_segmentation"][..., :-1]),
       )
       np.testing.assert_array_equal(
-        np.asarray(batch["inputs"][..., 1:]),
-        np.asarray(batch["targets"][..., :-1]),
+        batch["inputs"][..., 1:],
+        batch["targets"][..., :-1],
       )
 
-  def test_eval_ds(self):
+  @parameterized.parameters(
+    {"input_pipeline_type": "grain"},
+    {"input_pipeline_type": "tf"},
+  )
+  def test_eval_ds(self, input_pipeline_type):
+    _, eval_ds = self._get_datasets(input_pipeline_type)
     expected_shape = [4, _EVAL_TARGET_LENGTH]
 
     counter = 4
-    eval_iter = iter(self.eval_ds)
+    eval_iter = iter(eval_ds)
     while counter > 0:
       counter -= 1
       batch = next(eval_iter)

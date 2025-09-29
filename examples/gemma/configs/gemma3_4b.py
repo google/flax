@@ -24,7 +24,7 @@ class Config:
   # Path to load or store sentencepiece vocab file.
   vocab_path: str | None = None
   # Vocabulary size if `vocab_path` is not given.
-  vocab_size: int = 35_000  # lm1b dataset vocab size: 35913  (Gemma expected vocab size: 262_144)
+  vocab_size: int = 35_008  # lm1b dataset vocab size: 35913  (Gemma expected vocab size: 262_144)
   # Maximum number of characters to use for training.
   max_corpus_chars: int = 10**7
   # Name of TFDS translation dataset to use.
@@ -95,7 +95,7 @@ class Config:
   restore_checkpoints: bool = True
   # Save a checkpoint every these number of steps.
   checkpoint_every_steps: int = 10_000
-  # Frequency of eval during training, e.g. every 1_000 steps.
+  # Frequency of eval during training, e.g. every 5_000 steps.
   eval_every_steps: int = 5_000
   # Use bfloat16 mixed precision training instead of float32.
   use_bfloat16: bool = True
@@ -103,26 +103,11 @@ class Config:
   seed: int = 0
 
   # Parallelism
-  mesh_axes: tuple[str, ...] = ('data', 'fsdp', 'tensor')
-  data_sharding: tuple[str, ...] = ('data', 'fsdp')
+  mesh_axes: tuple[str, ...] = ('fsdp', 'tensor')
+  data_sharding: tuple[str, ...] = ('fsdp', )
 
-  # One axis for each parallelism type may hold a placeholder (-1)
-  # value to auto-shard based on available slices and devices.
-  # By default, product of the DCN axes should equal number of slices
-  # and product of the ICI axes should equal number of devices per slice.
-  # ICI (Inter-Chip Interconnection): A high-speed connection between
-  # sets of TPU chips, which form the TPU network.
-  # DCN (Data Center Network): A connection between the TPU networks;
-  # not as fast as ICI.
-  # ICI has around 100x the bandwidth of DCN, but it is not a general
-  # purpose connection, which is why DCN is necessary for scaling to
-  # extremely large ML models.
-  dcn_data_parallelism: int = -1
-  dcn_fsdp_parallelism: int = 1
-  dcn_tensor_parallelism: int = 1
-  ici_data_parallelism: int = 1
-  ici_fsdp_parallelism: int = -1
-  ici_tensor_parallelism: int = 1
+  fsdp_parallelism: int = -1
+  tensor_parallelism: int = 1
 
   def replace(self, **kwargs):
     return dataclasses.replace(self, **kwargs)

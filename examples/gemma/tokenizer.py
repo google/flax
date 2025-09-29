@@ -20,7 +20,7 @@ import tempfile
 import time
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from collections.abc import Iterable
 
 from absl import logging
@@ -45,7 +45,11 @@ def _dump_chars_to_textfile(
     name of temp file with dataset bytes, exact number of characters dumped.
   """
   char_count = 0
-  ds_iter = iter(dataset)
+  if hasattr(dataset, "as_numpy_iterator"):
+    # tf.Dataset case
+    ds_iter = dataset.as_numpy_iterator()
+  else:
+    ds_iter = iter(dataset)
   with tempfile.NamedTemporaryFile(
       mode="w+b", delete=False, prefix='/tmp/ds_chars'
   ) as outfp:
@@ -140,11 +144,19 @@ def load_or_train_tokenizer(
     vocab_size: int,
     max_corpus_chars: int,
     data_keys: tuple[str, str] = ('inputs', 'targets'),
+    tokenizer_type: Literal["spp", "tftxt"] = "spp",
+    pad_id: int = 0,
 ):
   """Loads the tokenizer at `vocab_path` or trains a one from `dataset`."""
+  if tokenizer_type == "spp":
+    load_fn = load_sentencepiece_processor
+  elif tokenizer_type == "tftxt":
+    load_fn = load_sentencepiece_processor_tftxt
+  else:
+    raise ValueError(f"Unknown {tokenizer_type=}")
   try:
-    return load_sentencepiece_processor(vocab_path)
-  except (OSError, TypeError):
+    return load_fn(vocab_path)
+  except Exception:
     logging.info('SentencePiece vocab not found, building one from data.')
     vocab_path = _train_sentencepiece(
         dataset,
@@ -152,16 +164,17 @@ def load_or_train_tokenizer(
         maxchars=max_corpus_chars,
         model_path=vocab_path,
         data_keys=data_keys,
+        pad_id=pad_id,
     )
-    return load_sentencepiece_processor(vocab_path)
+    return load_fn(vocab_path)
 
 
 @dataclasses.dataclass
-class TokenizeOp:
+class TokenizeOpNumpy:
   sp_processor: SentencePieceProcessor
   data_keys: Iterable[str] = ('inputs', 'targets')
 
-  def __call__(self, features: dict[str, str]) -> dict[str, np.ndarray]:
+  def __call__(self, features: dict[str, Any]) -> dict[str, Any]:
     for k in self.data_keys:
       features[k] = np.array(
         self.sp_processor.EncodeAsIds(features[k], add_eos=True, add_bos=True), dtype=np.int32
@@ -169,7 +182,30 @@ class TokenizeOp:
     return features
 
 
+@dataclasses.dataclass
+class TokenizeOpTFTensor:
+  sp_tokenizer: Any
+  data_keys: Iterable[str] = ('inputs', 'targets')
+
+  def __call__(self, features: dict[str, Any]) -> dict[str, Any]:
+    for k in self.data_keys:
+      features[k] = self.sp_tokenizer.tokenize(features[k])
+    return features
+
+
 def load_sentencepiece_processor(vocab_path: str):
   spp = SentencePieceProcessor()
   spp.Load(vocab_path)
   return spp
+
+
+def load_sentencepiece_processor_tftxt(vocab_path: str):
+  import tensorflow as tf
+  import tensorflow_text as tftxt
+
+  with tf.io.gfile.GFile(vocab_path, 'rb') as model_fp:
+    sp_model = model_fp.read()
+  sp_tokenizer = tftxt.SentencepieceTokenizer(
+    model=sp_model, add_bos=False, add_eos=True, reverse=False
+  )
+  return sp_tokenizer
