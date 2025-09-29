@@ -24,7 +24,7 @@ class Config:
   # Path to load or store sentencepiece vocab file.
   vocab_path: str | None = None
   # Vocabulary size if `vocab_path` is not given.
-  vocab_size: int = 35_000  # lm1b dataset vocab size: 35913  (Gemma expected vocab size: 262_144)
+  vocab_size: int = 35_008  # lm1b dataset vocab size: 35913  (Gemma expected vocab size: 262_144)
   # Maximum number of characters to use for training.
   max_corpus_chars: int = 10**7
   # Name of TFDS translation dataset to use.
@@ -64,7 +64,8 @@ class Config:
   # Number of steps to take during training.
   num_train_steps: int = 500_000
   # Number of steps to take during evaluation.
-  num_eval_steps: int = 500
+  # Large enough to evaluate all samples: 306_688 / (32 * 8) = 1198
+  num_eval_steps: int = 2_000
   # Number of steps to generate predictions.
   # -1 will use the whole eval dataset.
   num_predict_steps: int = 50
@@ -116,7 +117,7 @@ class Config:
   restore_checkpoints: bool = True
   # Save a checkpoint every these number of steps.
   checkpoint_every_steps: int = 10_000
-  # Frequency of eval during training, e.g. every 1_000 steps.
+  # Frequency of eval during training, e.g. every 5_000 steps.
   eval_every_steps: int = 5_000
   # Use bfloat16 mixed precision training instead of float32.
   use_bfloat16: bool = True
@@ -143,10 +144,7 @@ class Config:
   dcn_tensor_parallelism: int = 1
   ici_data_parallelism: int = 1
   ici_fsdp_parallelism: int = -1
-  ici_tensor_parallelism: int = 1
-
-  def replace(self, **kwargs):
-    return dataclasses.replace(self, **kwargs)
+  ici_tensor_parallelism: int = 4
 
 
 def get_config() -> TrainConfig:

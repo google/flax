@@ -161,7 +161,7 @@ class TokenizeOp:
   sp_processor: SentencePieceProcessor
   data_keys: Iterable[str] = ('inputs', 'targets')
 
-  def __call__(self, features: dict[str, str]) -> dict[str, np.ndarray]:
+  def __call__(self, features: dict[str, Any]) -> dict[str, Any]:
     for k in self.data_keys:
       features[k] = np.array(
         self.sp_processor.EncodeAsIds(features[k], add_eos=True, add_bos=True), dtype=np.int32

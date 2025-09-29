@@ -108,6 +108,9 @@ class TransformerConfig:
   sliding_window_size: int | None = None
   dtype: Any = jnp.float32
   weight_dtype: Any = jnp.float32
+  dropout_rate: float = 0.0
+
+  activations_sharding: jax.sharding.Sharding | None = None
 
   def query_pre_attn_scalar(self) -> float:
     """Returns the scalar to multiply the query by before attention."""
@@ -154,7 +157,7 @@ class TransformerConfig:
 
     # set dtype and weight_dtype according to params
     flat_params, _ = jax.tree.flatten(params)
-    wdtypes = set([p.dtype for p in flat_params])
+    wdtypes = {p.dtype for p in flat_params}
     assert len(wdtypes) == 1, wdtypes
     wdtype = next(iter(wdtypes))
     assert wdtype in (jnp.float32, jnp.bfloat16), wdtypes
@@ -538,9 +541,7 @@ class Transformer(nnx.Module):
     self.embedder = modules.Embedder(
         vocab_size=config.num_embed,
         embed_dim=config.embed_dim,
-        embedding_init=nnx.with_partitioning(
-          nnx.initializers.normal(), ("tensor", "fsdp")
-        ),
+        embedding_metadata={"sharding_names": ("tensor", "fsdp")},
         dtype=config.dtype,
         weight_dtype=config.weight_dtype,
         rngs=rngs,
@@ -558,13 +559,15 @@ class Transformer(nnx.Module):
     ])
     self.final_norm = layers.RMSNorm(
       config.embed_dim,
-      scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
+      scale_metadata={"sharding_names": ("tensor", )},
       rngs=rngs,
       dtype=config.dtype,
       weight_dtype=config.weight_dtype,
     )
+    self.final_dropout = nnx.Dropout(config.dropout_rate)
     self.final_logits_softcap = config.final_logit_softcap
     self.sow_config = sow_config
+    self.activations_sharding = config.activations_sharding
 
   def __call__(
       self,
@@ -572,6 +575,7 @@ class Transformer(nnx.Module):
       positions: Array,  # [B, L]
       cache: Cache | None,  # (sequence length L')
       attention_mask: Array,  # [B, L, L']
+      rngs: nnx.Rngs | None = None,
   ) -> tuple[Array, Cache | None]:
     """Transformer forward pass.
 
@@ -583,6 +587,7 @@ class Transformer(nnx.Module):
       positions: input absolute positions.
       cache: Attention KV cache or None.
       attention_mask: transformer input mask.
+      rngs: optional rngs to pass in stochastic layers
 
     Returns:
       predicted_logits, new_cache
@@ -593,6 +598,11 @@ class Transformer(nnx.Module):
     new_cache = None if cache is None else {}
     x = self.embedder.encode(last_tokens)
     self.sow_config.maybe_sow_embeddings(x, self)
+
+    if self.activations_sharding is not None:
+      # Sharding x: [B // (data, fsdp), L, D] -> [B // (data, fsdp), L, D // tensor]
+      x = jax.lax.with_sharding_constraint(x, self.activations_sharding)
+
     for i, layer in enumerate(self.layers):
       layer_name = f'layer_{i}'
       layer_cache = cache[layer_name] if cache else None
@@ -601,11 +611,13 @@ class Transformer(nnx.Module):
           positions,
           layer_cache,
           attention_mask,
+          rngs=rngs,
       )
       if cache is not None:
         new_cache[layer_name] = layer_cache  # pytype: disable=container-type-mismatch
 
     x = self.final_norm(x)
+    x = self.final_dropout(x, rngs=rngs)
     logits = self.embedder.decode(x)
 
     if self.final_logits_softcap is not None:

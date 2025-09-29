@@ -16,7 +16,7 @@
 
 import os
 import dataclasses
-import typing
+import typing as tp
 
 import grain
 import jax
@@ -24,12 +24,13 @@ import numpy as np
 import tensorflow_datasets as tfds
 import tokenizer
 from grain.python import MapTransform, MultiprocessingOptions
+from grain.experimental import pick_performance_config
 
-if typing.TYPE_CHECKING:
+if tp.TYPE_CHECKING:
   from train import TrainConfig
 
 
-Features = dict[str, np.ndarray]
+Features = dict[str, tp.Any]
 
 
 class NormalizeFeatureNamesOp:
@@ -190,9 +191,16 @@ def preprocess_data(
     dataset = dataset.map(lambda x: shift_target_left(x, pad_id=pad_id))
 
   if prefetch_num_workers is None:
-    prefetch_num_workers = min(os.cpu_count() // 2, 32)
-
-  dataset = dataset.mp_prefetch(MultiprocessingOptions(num_workers=prefetch_num_workers))
+    performance_config = pick_performance_config(
+        ds=dataset,
+        ram_budget_mb=1024,
+        max_workers=os.cpu_count() // 2,
+        max_buffer_size=None
+    )
+    mp_optons = performance_config.multiprocessing_options
+  else:
+    mp_optons = MultiprocessingOptions(num_workers=prefetch_num_workers)
+  dataset = dataset.mp_prefetch(mp_optons)
 
   # Move data to jax array
   if data_sharding is not None:
@@ -227,7 +235,10 @@ def get_datasets(
   eval_data = eval_data.map(tokenizer.TokenizeOp(sp_processor))
 
   if data_sharding is not None:
-    n_devices = len(data_sharding.device_set)
+    # We set n_devices to the number of local devices
+    # as we use then jax.make_array_from_process_local_data
+    # to create a large batch = per_device_batch_size * num_local_devices * num_procs
+    n_devices = len(data_sharding.addressable_devices)
   else:
     n_devices = 1
 

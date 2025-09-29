@@ -37,6 +37,7 @@ class Einsum(nnx.Module):
       shape: Shape,
       *,
       kernel_init: nnx.Initializer = nnx.initializers.normal(),
+      kernel_metadata: dict[str, Any] | None = None,
       rngs: nnx.Rngs,
       dtype: Any = jnp.float32,
       weight_dtype: Any = jnp.float32,
@@ -44,7 +45,8 @@ class Einsum(nnx.Module):
     self.dtype = dtype
     self.weight_dtype = weight_dtype
     self.einsum_str = einsum_str
-    self.w = nnx.Param(kernel_init(rngs.params(), shape, weight_dtype))
+    kernel_metadata = kernel_metadata if kernel_metadata else {}
+    self.w = nnx.Param(kernel_init(rngs.params(), shape, weight_dtype), **kernel_metadata)
 
   def __call__(self, x: ArrayLike) -> Array:
     x = jnp.asarray(x, self.dtype)
@@ -64,13 +66,15 @@ class RMSNorm(nnx.Module):
       dim: int,
       *,
       scale_init: nnx.Initializer = nnx.initializers.zeros_init(),
+      scale_metadata: dict[str, Any] | None = None,
       rngs: nnx.Rngs,
       dtype: Any = jnp.float32,
       weight_dtype: Any = jnp.float32,
   ):
     self.dtype = dtype
     self.weight_dtype = weight_dtype
-    self.scale = nnx.Param(scale_init(rngs.params(), dim, weight_dtype))
+    scale_metadata = scale_metadata if scale_metadata else {}
+    self.scale = nnx.Param(scale_init(rngs.params(), dim, weight_dtype), **scale_metadata)
 
   def __call__(self, x: Array) -> Array:
     x = jnp.asarray(x, self.dtype)
