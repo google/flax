@@ -7,6 +7,6 @@ numpy~=2.3
 optax~=0.2
 sentencepiece~=0.2
 jaxtyping~=0.3
-tensorflow~=2.20
+tensorflow-cpu~=2.20
 tensorflow-datasets~=4.9
 grain~=0.2
