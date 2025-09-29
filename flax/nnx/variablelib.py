@@ -46,13 +46,18 @@ AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 RemoveAxisHook = tp.Callable[[V, AxisIndex, AxisName | None], None]
 
+# JAX array refs were renamed a few times between JAX v0.7.0 and v0.8.0.
+# The following ensures we avoid an ImportError or DeprecationWarning.
 if hasattr(jax, 'new_ref') and hasattr(jax, 'Ref'):
+  # JAX v0.7.2 or newer
   from jax import new_ref
   from jax import Ref
 elif hasattr(jax, 'array_ref') and hasattr(jax, 'ArrayRef'):
+  # JAX v0.7.1
   from jax import array_ref as new_ref # type: ignore[import-untyped]
   from jax import ArrayRef as Ref  # type: ignore[import-untyped]
 else:
+  # JAX v0.7.0 or older
   from jax.experimental import mutable_array as new_ref
   from jax.experimental import MutableArray as Ref
 
