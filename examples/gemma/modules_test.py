@@ -19,14 +19,13 @@ from absl.testing import parameterized
 from flax import nnx
 from jax.sharding import AxisType
 import modules
-import transformer as transformer_lib
 import jax
 import jax.numpy as jnp
 import numpy as np
+from transformer_cfg import TransformerConfig, ShardingConfig
 
 
-
-class EmbedderTest(parameterized.TestCase):
+class ScaledEmbedTest(parameterized.TestCase):
 
   @parameterized.parameters(
       dict(
@@ -37,13 +36,13 @@ class EmbedderTest(parameterized.TestCase):
       ),
   )
   def test_encode(self, vocab_size, embed_dim, inputs, expected):
-    embedder = modules.Embedder(
-        vocab_size=vocab_size,
-        embed_dim=embed_dim,
+    embedder = modules.ScaledEmbed(
+        vocab_size,
+        embed_dim,
         rngs=nnx.Rngs(params=0),
     )
-    embedder.input_embedding[...] = jnp.ones((vocab_size, embed_dim))
-    output = embedder.encode(inputs)
+    embedder.embedding.set_value(jnp.ones((vocab_size, embed_dim)))
+    output = embedder(jnp.asarray(inputs))
     np.testing.assert_array_equal(output, jnp.array(expected))
 
   @parameterized.parameters(
@@ -55,13 +54,13 @@ class EmbedderTest(parameterized.TestCase):
       ),
   )
   def test_decode(self, vocab_size, embed_dim, inputs, expected):
-    embedder = modules.Embedder(
-        vocab_size=vocab_size,
-        embed_dim=embed_dim,
+    embedder = modules.ScaledEmbed(
+        vocab_size,
+        embed_dim,
         rngs=nnx.Rngs(params=0),
     )
-    embedder.input_embedding[...] = jnp.ones((vocab_size, embed_dim))
-    output = embedder.decode(jnp.array(inputs))
+    embedder.embedding.set_value(jnp.ones((vocab_size, embed_dim)))
+    output = embedder.attend(jnp.asarray(inputs))
     np.testing.assert_array_equal(output, jnp.array(expected))
 
 
@@ -84,6 +83,7 @@ class AttentionTest(parameterized.TestCase):
         query_pre_attn_scalar=1.0,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
+        shd_config=ShardingConfig.no_sharding()
     )
 
     self.assertEqual(attn.head_dim, head_dim)
@@ -114,6 +114,7 @@ class AttentionTest(parameterized.TestCase):
         query_pre_attn_scalar=1.0,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
+        shd_config=ShardingConfig.no_sharding()
     )
 
     self.assertEqual(attn.use_qkv_einsum, expected_use_qkv_einsum)
@@ -152,6 +153,7 @@ class AttentionTest(parameterized.TestCase):
         query_pre_attn_scalar=1.0,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
+        shd_config=ShardingConfig.no_sharding()
     )
     cache = attn.init_cache(
         cache_size=cache_size,
@@ -186,6 +188,7 @@ class AttentionTest(parameterized.TestCase):
         query_pre_attn_scalar=1.0,
         attn_type=modules.AttentionType.GLOBAL,
         rngs=nnx.Rngs(params=0),
+        shd_config=ShardingConfig.no_sharding()
     )
     cache = attn.init_cache(
         cache_size=cache_size,
@@ -202,6 +205,7 @@ class AttentionTest(parameterized.TestCase):
         attn_type=modules.AttentionType.LOCAL_SLIDING,
         sliding_window_size=sliding_window_size,
         rngs=nnx.Rngs(params=0),
+        shd_config=ShardingConfig.no_sharding()
     )
     _, sliding_output = sliding_attn(
         x, jnp.array([[segment_pos]]), cache, attn_mask
@@ -230,6 +234,7 @@ class FeedForwardTest(parameterized.TestCase):
         features=features,
         hidden_dim=hidden_dim,
         rngs=nnx.Rngs(params=0),
+        shd_config=ShardingConfig.no_sharding(),
     )
     ffw.gate_proj.kernel[...] = jnp.ones((features, hidden_dim))
     ffw.up_proj.kernel[...] = jnp.ones((features, hidden_dim))
@@ -274,7 +279,7 @@ class BlockTest(parameterized.TestCase):
     inputs = jnp.ones((batch_size, 1, embed_dim))
     attn_mask = jnp.ones((batch_size, 1, cache_size))
 
-    config = transformer_lib.TransformerConfig(
+    config = TransformerConfig(
         num_heads=num_heads,
         num_kv_heads=num_heads,
         embed_dim=embed_dim,
@@ -338,11 +343,11 @@ class BlockTest(parameterized.TestCase):
       "num_embed": -1,
       "attention_types": [],
     }
-    normed_block_config = transformer_lib.TransformerConfig(
+    normed_block_config = TransformerConfig(
       use_post_attn_norm=True,
       **common_kwargs,
     )
-    unnormed_block_config = transformer_lib.TransformerConfig(
+    unnormed_block_config = TransformerConfig(
       use_post_attn_norm=False,
       **common_kwargs,
     )
@@ -404,11 +409,11 @@ class BlockTest(parameterized.TestCase):
       "num_embed": -1,
       "attention_types": [],
     }
-    normed_block_config = transformer_lib.TransformerConfig(
+    normed_block_config = TransformerConfig(
       use_post_ffw_norm=True,
       **common_kwargs,
     )
-    unnormed_block_config = transformer_lib.TransformerConfig(
+    unnormed_block_config = TransformerConfig(
       use_post_ffw_norm=False,
       **common_kwargs
     )

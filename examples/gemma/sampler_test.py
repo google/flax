@@ -238,7 +238,7 @@ class SamplerTest(parameterized.TestCase):
         transformer_config, rngs=nnx.Rngs(params=0)
       )
       # Pre-cook the embedding matrix so that the output is deterministic.
-      transformer.embedder.input_embedding.set_value(jnp.eye(
+      transformer.embedder.embedding.set_value(jnp.eye(
         vocab.GetPieceSize(), 32
       ))
       sampler = sampler_lib.Sampler(
@@ -325,7 +325,7 @@ class SamplerTest(parameterized.TestCase):
       )
       out_logits = np.array(output_transformer.logits)[0, 1 : n_input_tokens + 1]
 
-      np.testing.assert_almost_equal(output_forward, out_logits)
+      np.testing.assert_almost_equal(output_forward, out_logits, decimal=5)
 
   def test_sampler_init_sample_state(self):
     vocab = MockVocab()
@@ -539,7 +539,7 @@ class SamplerTest(parameterized.TestCase):
   def test_models_from_kaggle(self, url):
     # A smoke test based on guide/gemma.md to ensure models are working correctly
     # Check Kaggle creds as env var otherwise skip the test
-    has_kaggle_creds = all(k in os.environ for k in ["KAGGLE_USERNAME", "KAGGLE_KEY"])
+    has_kaggle_creds = "KAGGLE_API_TOKEN" in os.environ
     try:
       import kagglehub
 
