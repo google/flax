@@ -107,6 +107,7 @@ class Attention(nnx.Module):
       qkv_einsum_kernel_init: nnx.Initializer | None = None,
       q_einsum_kernel_init: nnx.Initializer | None = None,
       kv_einsum_kernel_init: nnx.Initializer | None = None,
+      dropout_rate: float = 0.0
   ):
     if attn_type == AttentionType.LOCAL_SLIDING and sliding_window_size is None:
       raise ValueError(
@@ -183,12 +184,15 @@ class Attention(nnx.Module):
         rngs=rngs,
       )
 
+    self.dropout = nnx.Dropout(dropout_rate)
+
   def __call__(
       self,
       x: Array,
       segment_pos: Array,
       cache: LayerCache | None,
       attn_mask: Array,
+      rngs: nnx.Rngs | None = None,
   ) -> tuple[LayerCache | None, Array]:
     seq_len = x.shape[1]
 
@@ -264,6 +268,8 @@ class Attention(nnx.Module):
     padded_logits = jnp.where((jnp.expand_dims(attn_mask, -2)), logits, K_MASK)
     self.sow_config.maybe_sow_attn_logits_topk(padded_logits, self)
     probs = jax.nn.softmax(padded_logits, axis=-1).astype(key_proj.dtype)
+
+    probs = self.dropout(probs, rngs=rngs)
 
     if use_gqa:
       # Reshape matrices to enable einsums over groups.
@@ -350,6 +356,7 @@ class FeedForward(nnx.Module):
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
       dtype: jnp.dtype = jnp.float32,
       weight_dtype: jnp.dtype = jnp.float32,
+      dropout_rate: float = 0.0,
   ):
     gate_proj_kernel_init = gate_proj_kernel_init if gate_proj_kernel_init else kernel_init
     self.gate_proj = nnx.Linear(
@@ -381,9 +388,10 @@ class FeedForward(nnx.Module):
         dtype=dtype,
         param_dtype=weight_dtype,
     )
+    self.dropout = nnx.Dropout(dropout_rate)
     self.sow_config = sow_config
 
-  def __call__(self, x: ArrayLike) -> Array:
+  def __call__(self, x: ArrayLike, rngs: nnx.Rngs | None = None) -> Array:
     ff_gate = self.gate_proj(x)
     gate_value = nnx.gelu(ff_gate)
 
@@ -391,6 +399,7 @@ class FeedForward(nnx.Module):
     activations = gate_value * ff1
     self.sow_config.maybe_sow_mlp_hidden_topk(activations, self)
 
+    activations = self.dropout(activations, rngs=rngs)
     outputs = self.down_proj(activations)
     return outputs
 
@@ -461,11 +470,17 @@ class Block(nnx.Module):
           ("tensor", "fsdp", None),  # shape: (num_heads, embed_dim, head_dim)
         ),
         kv_einsum_kernel_init=nnx.with_partitioning(
-          nnx.initializers.normal(), (None, "tensor", "fsdp", None),  # shape: (2, num_kv_heads, embed_dim, head_dim)
+          nnx.initializers.normal(), (
+            None,
+            "tensor" if num_kv_heads > 1 else None,  # Gemma3 1B has num_kv_heads=1
+            "fsdp",
+            None
+          ),  # shape: (2, num_kv_heads, embed_dim, head_dim)
         ),
         scale_init=nnx.with_partitioning(nnx.initializers.zeros_init(), ("tensor", )),
         dtype=dtype,
         weight_dtype=weight_dtype,
+        dropout_rate=config.dropout_rate,
     )
     if use_post_attn_norm:
       self.post_attention_norm = layers.RMSNorm(
@@ -504,6 +519,7 @@ class Block(nnx.Module):
         sow_config=sow_config,
         dtype=dtype,
         weight_dtype=weight_dtype,
+        dropout_rate=config.dropout_rate,
     )
     if use_post_ffw_norm:
       self.post_ffw_norm = layers.RMSNorm(
@@ -515,6 +531,8 @@ class Block(nnx.Module):
       )
     else:
       self.post_ffw_norm = None
+
+    self.dropout = nnx.Dropout(config.dropout_rate)
     self.sow_config = sow_config
 
   def __call__(
@@ -523,6 +541,7 @@ class Block(nnx.Module):
       segment_pos: jax.Array,
       cache: LayerCache | None,
       attn_mask: jax.Array,
+      rngs: nnx.Rngs | None = None,
   ) -> tuple[LayerCache | None, jax.Array]:
 
     # Attention.
@@ -532,6 +551,7 @@ class Block(nnx.Module):
         segment_pos,
         cache,
         attn_mask,
+        rngs=rngs,
     )
     if self.post_attention_norm is not None:
       attn_output = self.post_attention_norm(attn_output)
@@ -540,10 +560,11 @@ class Block(nnx.Module):
 
     # Feed forward.
     ffw_inputs = self.pre_ffw_norm(x)
-    ffw_outputs = self.mlp(ffw_inputs)
+    ffw_outputs = self.mlp(ffw_inputs, rngs=rngs)
     if self.post_ffw_norm is not None:
       ffw_outputs = self.post_ffw_norm(ffw_outputs)
     x += ffw_outputs
+    x = self.dropout(x, rngs=rngs)
     self.sow_config.maybe_sow_rs_after_ffw(x, self)
 
     return cache, x
