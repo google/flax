@@ -143,9 +143,10 @@ class Sampler:
 
   def __init__(
       self,
-      transformer: transformer_lib.Transformer,
+      *,
       vocab: spm.SentencePieceProcessor,
       cache_size: int = 1024,
+      transformer: transformer_lib.Transformer | None = None,
   ):
     """Initializes a sampler for a Gemma model.
 
@@ -156,24 +157,21 @@ class Sampler:
     """
     self.vocab = vocab
     self.cache_size = cache_size
-    graphdef, state = nnx.split(transformer)
-    self._transformer_graphdef: graph.NodeDef = graphdef
-    self._transformer_state: statelib.State = state
+    self.transformer = transformer
     # we separate out state and graph def so that the state can be passed as an
     # argument to _sample_fn, resulting in it not being treated as a static
     # arg. This greatly reduces the size of the HLO and reduces compile time
     self._compiled_sample_fn = jax.jit(self._sample_fn)
 
   @property
-  def transformer(self) -> transformer_lib.Transformer:
-    return nnx.merge(self._transformer_graphdef, self._transformer_state)
-
-  @property
   def transformer_state(self) -> statelib.State:
-    return self._transformer_state
+    assert self.transformer is not None
+    return nnx.state(self.transformer)
 
   @transformer_state.setter
   def transformer_state(self, state: statelib.State) -> statelib.State:
+    assert self.transformer is not None
+
     def check_tree_structure(tree1, tree2):
       if jax.tree_util.tree_structure(tree1) != jax.tree_util.tree_structure(
           tree2
@@ -194,17 +192,19 @@ class Sampler:
             "New state must have the same shape and dtype as the old state."
         )
 
-    check_tree_structure(self._transformer_state, state)
-    self._transformer_state = state
+    check_tree_structure(self.transformer_state, state)
+    nnx.update(self.transformer, state)
 
   @property
   def dtype(self) -> jnp.dtype:
-    return jax.tree_util.tree_leaves(
-        nnx.to_flat_state(self._transformer_state)
-    )[0].dtype
+    assert self.transformer is not None
+    return jax.tree_util.tree_leaves(self.transformer_state)[0].dtype
 
   def _sample_step(
-      self, params: statelib.State, sampler_state: _SamplingState
+      self,
+      graphdef: graph.GraphDef,
+      params: statelib.State,
+      sampler_state: _SamplingState
   ) -> _SamplingState:
     """Performs a single sampling step."""
     batch_size = sampler_state.token_buffer.shape[0]
@@ -219,7 +219,7 @@ class Sampler:
     )
     last_token = last_token.reshape((batch_size, 1))
 
-    transformer = nnx.merge(self._transformer_graphdef, params)
+    transformer = nnx.merge(graphdef, params)
     logits, cache = transformer(
         last_token,
         step_positions,
@@ -295,8 +295,10 @@ class Sampler:
       temperature: float,
       top_p: float,
       seed: jax.Array,
+      dtype: jnp.dtype | None = None,
   ) -> _SamplingState:
     """Initializes the sampling state given input prompts."""
+    dtype = self.dtype if dtype is None else dtype
     batch_size = len(all_input_ids)
     num_input_tokens = [len(input_ids) for input_ids in all_input_ids]
     buffer_size = total_sampling_steps + 1
@@ -324,7 +326,7 @@ class Sampler:
     if include_logits:
       logits_buffer = jnp.zeros(
           (batch_size, buffer_size, self.transformer.num_embed),
-          dtype=jnp.float32,
+          dtype=dtype,
       )
     else:
       logits_buffer = None
@@ -338,13 +340,13 @@ class Sampler:
         cache=self.transformer.init_cache(
             cache_size=self.cache_size,
             batch_size=batch_size,
-            dtype=self.dtype,
+            dtype=dtype,
         ),
         done=done,
         total_sampling_steps=total_sampling_steps,
         forbidden_token_ids=forbidden_token_ids,
         intermediates=self.transformer.init_intermediates(
-            batch_size, buffer_size, self.transformer.sow_config
+            batch_size, buffer_size, self.transformer.sow_config, dtype=dtype
         ),
         temperature=temperature,
         top_p=top_p,
@@ -377,13 +379,14 @@ class Sampler:
 
   def _sample_fn(
       self,
+      graphdef: graph.GraphDef,
       params: statelib.State,
       initial_sampling_state: _SamplingState,
   ) -> _SamplingState:
     """Internal sampling function (to be jitted)."""
 
     def sample_with_params(sampler_state: _SamplingState):
-      return self._sample_step(params, sampler_state)
+      return self._sample_step(graphdef, params, sampler_state)
 
     def cond_fn(sampler_state: _SamplingState):
       return (
@@ -404,6 +407,8 @@ class Sampler:
       temperature: float = 0.0,
       top_p: float = 0.95,
       seed: jax.Array | None = None,
+      dtype: jnp.dtype | None = None,
+      transformer: transformer_lib.Transformer | None = None,
   ) -> SamplerOutput:
     """Samples a completion of the input string.
 
@@ -418,10 +423,16 @@ class Sampler:
       temperature: temperature for sampling.
       top_p: top-p sampling threshold.
       seed: random seed for sampling.
+      dtype: dtype for cache, buffers and intermediates initialization
+      transformer: optional, model to use for sampling
 
     Returns:
       sampler_output: A SamplerOutput object containing the generated samples.
     """
+    assert self.transformer or transformer
+    if transformer is not None:
+      self.transformer = transformer
+
     forbidden_token_ids = None
     if forbidden_tokens is not None:
       forbidden_token_ids = []
@@ -439,6 +450,7 @@ class Sampler:
 
     if seed is None:
       seed = jax.random.PRNGKey(0)
+    dtype = self.dtype if dtype is None else dtype
     initial_sampling_state = self.init_sample_state(
         all_input_ids,
         include_logits=return_logits,
@@ -447,10 +459,12 @@ class Sampler:
         temperature=temperature,
         top_p=top_p,
         seed=seed,
+        dtype=dtype,
     )
 
+    graphdef, state = nnx.split(self.transformer)
     sampling_state = self._compiled_sample_fn(
-        self._transformer_state, initial_sampling_state
+      graphdef, state, initial_sampling_state
     )
 
     masked_token_buffer = self.mask_tokens_after_eos_ids(
