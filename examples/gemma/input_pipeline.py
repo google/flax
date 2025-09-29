@@ -25,6 +25,13 @@ import tensorflow_datasets as tfds
 import tokenizer
 from grain.python import MapTransform, MultiprocessingOptions
 
+try:
+  from grain.experimental import pick_performance_config
+except ImportError:
+  # workaround to fetch pick_performance_config
+  # accidentally unexposed in grain.experimental in v0.2.12
+  from grain._src.python.dataset.transformations.prefetch_autotune import pick_performance_config
+
 if typing.TYPE_CHECKING:
   from train import TrainConfig
 
@@ -190,9 +197,16 @@ def preprocess_data(
     dataset = dataset.map(lambda x: shift_target_left(x, pad_id=pad_id))
 
   if prefetch_num_workers is None:
-    prefetch_num_workers = min(os.cpu_count() // 2, 32)
-
-  dataset = dataset.mp_prefetch(MultiprocessingOptions(num_workers=prefetch_num_workers))
+    performance_config = pick_performance_config(
+        ds=dataset,
+        ram_budget_mb=1024,
+        max_workers=os.cpu_count() // 2,
+        max_buffer_size=None
+    )
+    mp_optons = performance_config.multiprocessing_options
+  else:
+    mp_optons = MultiprocessingOptions(num_workers=prefetch_num_workers)
+  dataset = dataset.mp_prefetch(mp_optons)
 
   # Move data to jax array
   if data_sharding is not None:

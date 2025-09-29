@@ -103,6 +103,7 @@ class TransformerTest(parameterized.TestCase):
         cache_size=29,
         batch_size=7,
         sequence_length=18,
+        dropout_rate=0.0,
         expected_outputs_shape=(7, 18, 17),  # batch_size, seq_size, num_embed
         expected_cache_shape=(7, 29, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
@@ -117,6 +118,7 @@ class TransformerTest(parameterized.TestCase):
         cache_size=2,
         batch_size=1,
         sequence_length=1,
+        dropout_rate=0.0,
         expected_outputs_shape=(1, 1, 4),  # batch_size, seq_size, num_embed
         expected_cache_shape=(1, 2, 1, 4),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
@@ -131,6 +133,7 @@ class TransformerTest(parameterized.TestCase):
         cache_size=9,
         batch_size=1,
         sequence_length=1,
+        dropout_rate=0.3,
         expected_outputs_shape=(1, 1, 7),  # batch_size, seq_size, num_embed
         expected_cache_shape=(1, 9, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
@@ -147,6 +150,7 @@ class TransformerTest(parameterized.TestCase):
       cache_size,
       batch_size,
       sequence_length,
+      dropout_rate,
       expected_outputs_shape,
       expected_cache_shape,
   ):
@@ -163,12 +167,15 @@ class TransformerTest(parameterized.TestCase):
       attention_types=[modules.AttentionType.GLOBAL] * num_layers,
       use_post_attn_norm=False,
       use_post_ffw_norm=False,
+      dropout_rate=dropout_rate,
     )
     attention_mask = jnp.ones((batch_size, 1, cache_size), dtype=jnp.bool)
 
+    seed = 12
+    rngs = nnx.Rngs(params=seed, dropout=seed)
     with jax.set_mesh(self.mesh):
       transformer = transformer_lib.Transformer(
-        config=config, rngs=nnx.Rngs(params=0)
+        config=config, rngs=rngs
       )
       cache = transformer.init_cache(
         cache_size=cache_size,
@@ -181,6 +188,7 @@ class TransformerTest(parameterized.TestCase):
         jnp.tile(jnp.arange(sequence_length), (batch_size, 1)),
         cache,
         attention_mask,
+        rngs=rngs
       )
 
       self.assertEqual(outputs.shape, expected_outputs_shape)

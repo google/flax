@@ -108,6 +108,7 @@ class TransformerConfig:
   sliding_window_size: int | None = None
   dtype: Any = jnp.float32
   weight_dtype: Any = jnp.float32
+  dropout_rate: float = 0.0
 
   def query_pre_attn_scalar(self) -> float:
     """Returns the scalar to multiply the query by before attention."""
@@ -563,6 +564,7 @@ class Transformer(nnx.Module):
       dtype=config.dtype,
       weight_dtype=config.weight_dtype,
     )
+    self.final_dropout = nnx.Dropout(config.dropout_rate)
     self.final_logits_softcap = config.final_logit_softcap
     self.sow_config = sow_config
 
@@ -572,6 +574,7 @@ class Transformer(nnx.Module):
       positions: Array,  # [B, L]
       cache: Cache | None,  # (sequence length L')
       attention_mask: Array,  # [B, L, L']
+      rngs: nnx.Rngs | None = None,
   ) -> tuple[Array, Cache | None]:
     """Transformer forward pass.
 
@@ -583,6 +586,7 @@ class Transformer(nnx.Module):
       positions: input absolute positions.
       cache: Attention KV cache or None.
       attention_mask: transformer input mask.
+      rngs: optional rngs to pass in stochastic layers
 
     Returns:
       predicted_logits, new_cache
@@ -601,11 +605,13 @@ class Transformer(nnx.Module):
           positions,
           layer_cache,
           attention_mask,
+          rngs=rngs,
       )
       if cache is not None:
         new_cache[layer_name] = layer_cache  # pytype: disable=container-type-mismatch
 
     x = self.final_norm(x)
+    x = self.final_dropout(x, rngs=rngs)
     logits = self.embedder.decode(x)
 
     if self.final_logits_softcap is not None:

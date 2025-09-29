@@ -23,7 +23,6 @@ from typing import Any
 from collections.abc import Iterable
 
 import jax
-import tensorflow as tf
 import numpy as np
 from absl import logging
 from sentencepiece import SentencePieceTrainer, SentencePieceProcessor

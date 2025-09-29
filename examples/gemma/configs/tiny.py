@@ -106,9 +106,9 @@ class Config:
   # Whether to restore from existing model checkpoints.
   restore_checkpoints: bool = True
   # Save a checkpoint every these number of steps.
-  checkpoint_every_steps: int = 1000
+  checkpoint_every_steps: int = 5000
   # Frequency of eval during training, e.g. every 1_000 steps.
-  eval_every_steps: int = 2000
+  eval_every_steps: int = 100
   # Use bfloat16 mixed precision training instead of float32.
   use_bfloat16: bool = True
   # Integer for PRNG random seed.

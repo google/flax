@@ -19,8 +19,8 @@ This script trains a Transformer on a LM1B dataset.
 
 # pytype: disable=wrong-arg-count
 # pytype: disable=attribute-error
-
 import dataclasses
+from functools import partial
 from pathlib import Path
 
 import input_pipeline
@@ -35,10 +35,8 @@ import sampler as sampler_lib
 import utils
 from absl import logging
 from clu import metric_writers, periodic_actions
-from jax import random
 from jax.sharding import Mesh, NamedSharding
 from jax.sharding import PartitionSpec as P
-from utils import TrainState
 
 from flax import nnx
 from flax.training import checkpoints, common_utils
@@ -258,13 +256,32 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
   return metrics
 
 
+@partial(jax.jit, static_argnames=("keys_to_remove",))
+def compute_metrics_summary(
+  metrics_list: list[dict[str], jax.Array],
+  keys_to_remove: tuple[str,...] | None = None
+) -> dict[str, jax.Array]:
+  metrics_dict = common_utils.stack_forest(metrics_list)
+
+  if keys_to_remove is not None:
+    for key in keys_to_remove:
+      _ = metrics_dict.pop(key)
+
+  metrics_sums = jax.tree.map(jnp.sum, metrics_dict)
+  denominator = metrics_sums.pop('denominator')
+  summary = jax.tree.map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
+  summary['perplexity'] = jnp.clip(jnp.exp(summary['loss']), max=1.0e4)
+  return summary
+
+
 # Primary training / eval / decode step functions.
 # -----------------------------------------------------------------------------
-
-
 def train_step(
-  state: TrainState,
-  batch,
+  model: nnx.Module,
+  optimizer: nnx.Optimizer,
+  rngs: nnx.Rngs,
+  step: int,
+  batch: dict[str, jax.Array],
   learning_rate_fn,
   label_smoothing: float = 0.0,
   pad_id: int = 0,
@@ -288,15 +305,18 @@ def train_step(
     mask = inputs_segmentation[:, :, None] == inputs_segmentation[:, None, :]  # (B, L, L)
     attention_mask = jnp.logical_and(mask, attention_mask)
 
-  def loss_fn(params):
+  graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
+
+  def loss_fn(params, rngs):
     """loss function used for training."""
-    module = nnx.merge(state.graphdef, params)
+    module = nnx.merge(graphdef, params, nondiff)
 
     logits, _ = module(
       inputs,
       positions=inputs_positions,
       attention_mask=attention_mask,
       cache=None,
+      rngs=rngs,
     )
 
     loss, weight_sum = compute_weighted_cross_entropy(
@@ -305,21 +325,19 @@ def train_step(
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
-  step = state.step
-  lr = learning_rate_fn(step)
+  lr = learning_rate_fn(step + 1)
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grads = grad_fn(state.params)
-  new_state = state.apply_gradients(grads=grads)
+  (_, logits), grads = grad_fn(params, rngs.fork())
+  optimizer.update(model, grads)
+
   metrics = compute_metrics(logits, targets, weights)
   metrics['learning_rate'] = lr
-
-  return new_state, metrics
+  return model, optimizer, rngs, metrics
 
 
 def eval_step(
-  params: nnx.State,
+  model,
   batch,
-  graphdef: nnx.GraphDef[transformer_lib.Transformer],
   label_smoothing: float = 0.0,
   pad_id: int = 0,
 ):
@@ -331,8 +349,7 @@ def eval_step(
   inputs_positions = transformer_lib.build_positions_from_mask(input_mask)
   attention_mask = transformer_lib.make_causal_attn_mask(input_mask)
 
-  module = nnx.merge(graphdef, params)
-  logits, _ = module(
+  logits, _ = model(
     inputs,
     positions=inputs_positions,
     attention_mask=attention_mask,
@@ -345,7 +362,7 @@ def eval_step(
 def evaluate(
   *,
   jit_eval_step,
-  state: TrainState,
+  model: nnx.Module,
   eval_ds: grain.IterDataset,
   num_eval_steps: int,
 ):
@@ -354,16 +371,10 @@ def evaluate(
   eval_metrics = []
   eval_iter = iter(eval_ds)  # pytype: disable=wrong-arg-types
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
-    metrics = jit_eval_step(state.params, eval_batch, state.graphdef)
+    metrics = jit_eval_step(model, eval_batch)
     eval_metrics.append(metrics)
-  eval_metrics = common_utils.stack_forest(eval_metrics)
-  eval_metrics_sums = jax.tree.map(jnp.sum, eval_metrics)
-  eval_denominator = eval_metrics_sums.pop('denominator')
-  eval_summary = jax.tree.map(
-    lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
-    eval_metrics_sums,
-  )
-  return eval_summary
+
+  return compute_metrics_summary(eval_metrics)
 
 
 def train_and_evaluate(config: TrainConfig, workdir: str):
@@ -403,49 +414,55 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
   logging.info('Initializing model, optimizer, and step functions.')
   # Build Model and Optimizer
   # ---------------------------------------------------------------------------
+  # Activations dtype for mixed precision, weights dtype is float32
+  dtype = jnp.bfloat16 if config.use_bfloat16 else jnp.float32
   if config.transformer_name is not None:
     model_config = transformer_lib.TransformerConfig.from_version_name(
       config.transformer_name,
       num_embed=vocab_size,
-      dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
+      dtype=dtype,
     )
   else:
     assert config.transformer_params is not None
     model_config = transformer_lib.TransformerConfig.from_dict(
       **config.transformer_params,
       num_embed=vocab_size,
-      dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
+      dtype=dtype,
     )
 
   start_step = 0
-  rng = jax.random.PRNGKey(config.seed)
-  rng, init_rng = jax.random.split(rng)
-  rng, inference_rng = random.split(rng)
-
-  def constructor(config: transformer_lib.TransformerConfig, key: jax.Array):
-    return transformer_lib.Transformer(config, rngs=nnx.Rngs(params=key))
-
   learning_rate_fn = create_learning_rate_schedule(
     learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
   )
 
-  optimizer = optax.adamw(
-    learning_rate_fn,
-    b1=0.9,
-    b2=0.98,
-    eps=1e-9,
-    weight_decay=config.weight_decay,
-  )
+  rngs = nnx.Rngs(params=config.seed, dropout=config.seed)
 
-  state, state_sharding = utils.setup_initial_state(
-    constructor, optimizer, model_config, init_rng, mesh
-  )
+  with jax.set_mesh(mesh):
+    model = transformer_lib.Transformer(model_config, rngs=rngs)
+    optimizer = nnx.Optimizer(
+      model,
+      tx=optax.adamw(
+        learning_rate_fn,
+        b1=0.9,
+        b2=0.98,
+        eps=1e-9,
+        weight_decay=config.weight_decay,
+      ),
+      wrt=nnx.Param,
+    )
 
   if config.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
-    state = checkpoints.restore_checkpoint(workdir, state)
-    # Grab last step.
-    start_step = int(state.step)
+    target = {
+      "model": nnx.state(model),
+      "optimizer": nnx.state(optimizer),
+      "step": 0,
+    }
+    checkpoint = checkpoints.restore_checkpoint(workdir, target=target)
+
+    nnx.update(model, checkpoint["model"])
+    nnx.update(optimizer, checkpoint["optimizer"])
+    start_step = checkpoint["step"] + 1  # Add +1 to skip saving again the same step
 
   writer = metric_writers.create_default_writer(
     workdir, just_logging=jax.process_index() > 0
@@ -453,40 +470,22 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
   if start_step == 0:
     writer.write_hparams(dataclasses.asdict(config))
 
-  # compile multidevice versions of train/eval/predict step fn.
   jit_train_step = jax.jit(
     train_step,
-    in_shardings=(
-      state_sharding,
-      data_sharding,
-    ),  # type: ignore
-    out_shardings=(state_sharding, None),  # type: ignore
     static_argnames=("learning_rate_fn", "label_smoothing", "pad_id"),
-    donate_argnums=0,
+    donate_argnames=("model", "optimizer"),
   )
 
   jit_eval_step = jax.jit(
     eval_step,
-    in_shardings=(
-      state_sharding.params,
-      data_sharding,
-    ),  # type: ignore
-    out_shardings=None,  # type: ignore
-    static_argnames=("graphdef", "label_smoothing", "pad_id"),
+    static_argnames=("label_smoothing", "pad_id"),
   )
 
   vocab = tokenizer.load_sentencepiece_processor(vocab_path)
-  sampler =  sampler_lib.Sampler(
-    transformer=nnx.merge(state.graphdef, state.params),
-    vocab=vocab,
-    cache_size=1024,
-  )
+  sampler =  sampler_lib.Sampler(vocab=vocab, cache_size=1024)
 
   # Main Train Loop
   # ---------------------------------------------------------------------------
-
-  # We init the first set of dropout PRNG keys, but update it afterwards inside
-  # the main pmap'd training update for performance.
   logging.info('Starting training loop.')
   hooks = []
   report_progress = periodic_actions.ReportProgress(
@@ -497,7 +496,7 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
       report_progress,
       periodic_actions.Profile(logdir=workdir, num_profile_steps=5),
     ]
-  train_metrics = []
+  train_metrics: list[dict[str], jax.Array] = []
   with metric_writers.ensure_flushes(writer):
     for step in range(start_step, config.num_train_steps):
       is_last_step = step == config.num_train_steps - 1
@@ -508,8 +507,11 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
           batch = next(train_iter)
 
         with report_progress.timed('train_step'):
-          state, metrics = jit_train_step(
-            state,
+          model, optimizer, rngs, metrics = jit_train_step(
+            model,
+            optimizer,
+            rngs,
+            step,
             batch,
             learning_rate_fn,
             0.0,  # label_smoothing
@@ -518,63 +520,52 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
-      logging.log_first_n(logging.INFO, 'Finished training step %d.', 5, step)
+      last_metric = train_metrics[-1]
+      logging.log_first_n(
+        logging.INFO,
+        'Finished training step %d. Loss: %.5f',
+        20,
+        step,
+        last_metric['loss'] / last_metric['denominator']
+      )
       for h in hooks:
         h(step)
-
-      # # Write batch loss and lr every step to TB
-      # # without overwhelming the stdout:
-      # tb_writer = writer._writers[-1]
-      # lr = train_metrics[-1]['learning_rate']
-      # train_batch_loss = train_metrics[-1]['loss']
-      # denominator = train_metrics[-1]['denominator']
-      # tb_writer.write_scalars(step, {
-      #   "train_learning_rate": lr,
-      #   "train_loss": train_batch_loss / denominator,
-      # })
 
       # Periodic metric handling.
       if (step > 0 and step % config.eval_every_steps == 0) or is_last_step:
         with report_progress.timed('training_metrics'):
           logging.info('Gathering training metrics.')
-          train_metrics = common_utils.stack_forest(train_metrics)
-          # Remove learning_rate from the summary
-          _ = train_metrics.pop('learning_rate')
-          metrics_sums = jax.tree.map(jnp.sum, train_metrics)
-          denominator = metrics_sums.pop('denominator')
-          summary = jax.tree.map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
-          summary['perplexity'] = jnp.clip(jnp.exp(summary['loss']), max=1.0e4)
+          summary = compute_metrics_summary(train_metrics, keys_to_remove=("learning_rate",))
           summary = {'train_' + k: v for k, v in summary.items()}
           writer.write_scalars(step, summary)
           train_metrics = []
 
         with report_progress.timed('generate_text'):
           # update sampler's transformer state:
-          sampler.transformer_state = state.params
           exemplars = sampler(
             config.prompts,
             total_generation_steps=config.num_predict_steps,
             temperature=config.sampling_temperature,
             top_p=config.sampling_top_p,
-            seed=inference_rng,
+            seed=config.seed,
             echo=True,
+            dtype=dtype,
+            transformer=model,
           )
           writer.write_texts(step, {'samples': exemplars.text})
 
         with report_progress.timed('eval'):
+          model.eval()
           eval_results = evaluate(
             jit_eval_step=jit_eval_step,
-            state=state,
+            model=model,
             eval_ds=eval_ds,
             num_eval_steps=config.num_eval_steps,
-          )
-          # (clipped) perplexity after averaging log-perplexity
-          eval_results['perplexity'] = jnp.clip(
-            jnp.exp(eval_results['loss']), max=1.0e4
           )
           writer.write_scalars(
             step, {'eval_' + k: v for k, v in eval_results.items()}
           )
+          model.train()
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
       save_checkpoint = (
@@ -583,4 +574,10 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
       if config.save_checkpoints and save_checkpoint:
         logging.info('Saving checkpoint step %d.', step)
         with report_progress.timed('checkpoint'):
-          checkpoints.save_checkpoint_multiprocess(workdir, state, step)
+          checkpoint = {
+            "model": nnx.state(model),
+            "optimizer": nnx.state(optimizer),
+            "step": step,
+          }
+          # TODO: use pure orbax, e.g. Checkpoint Manager
+          checkpoints.save_checkpoint_multiprocess(workdir, checkpoint, step)

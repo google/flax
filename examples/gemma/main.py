@@ -37,16 +37,11 @@ flags.mark_flags_as_required(['workdir'])
 
 
 def main(argv):
-
-  # We are using CLU (https://github.com/google/CommonLoopUtils)
-  # for logging, profiling and TensorBoard and it imports tensorflow
-  # Below command prevents TF to allocate memory on the GPUs.
-  import tensorflow as tf
-  tf.config.experimental.set_visible_devices([], 'GPU')
-
-
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
+
+  # Please make sure you have installed tensorflow-cpu package without GPU support.
+  # Otherwise, you have to call: tf.config.experimental.set_visible_devices([], 'GPU')
 
   logging.info('JAX process: %d / %d', jax.process_index(), jax.process_count())
   logging.info('JAX local devices: %r', jax.local_devices())
@@ -60,7 +55,6 @@ def main(argv):
   platform.work_unit().create_artifact(
     platform.ArtifactType.DIRECTORY, FLAGS.workdir, 'workdir'
   )
-
   train.train_and_evaluate(FLAGS.config, FLAGS.workdir)
 
 
