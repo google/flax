@@ -97,26 +97,26 @@ class TestVariable(absltest.TestCase):
     with nnx.use_refs(False):
       v = nnx.Variable(jnp.array(1.0))
       self.assertFalse(nnx.using_refs())
-      self.assertFalse(nnx.is_array_ref(v.raw_value))
+      self.assertNotIsInstance(v.raw_value, jax.Ref)
 
       with nnx.use_refs(True):
         v = nnx.Variable(jnp.array(1.0))
         self.assertTrue(nnx.using_refs())
-        self.assertTrue(nnx.is_array_ref(v.raw_value))
+        self.assertIsInstance(v.raw_value, jax.Ref)
 
       v = nnx.Variable(jnp.array(2.0))
-      self.assertFalse(nnx.is_array_ref(v.raw_value))
+      self.assertNotIsInstance(v.raw_value, jax.Ref)
       self.assertFalse(nnx.using_refs())
 
       nnx.use_refs(True)
 
       v = nnx.Variable(jnp.array(0.0))
       self.assertTrue(nnx.using_refs())
-      self.assertTrue(nnx.is_array_ref(v.raw_value))
+      self.assertIsInstance(v.raw_value, jax.Ref)
 
     v = nnx.Variable(jnp.array(1.0))
     self.assertFalse(nnx.using_refs())
-    self.assertFalse(nnx.is_array_ref(v.raw_value))
+    self.assertNotIsInstance(v.raw_value, jax.Ref)
 
   def test_get_set_metadata(self):
     v = nnx.Variable(jnp.array(1.0))

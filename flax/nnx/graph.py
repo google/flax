@@ -94,7 +94,7 @@ LeafType = tp.Union[
   Variable,
   jax.Array,
   np.ndarray,
-  variablelib.ArrayRef,
+  variablelib.Ref,
   ArrayRefOutput,
   NoUpdate,
 ]
@@ -737,14 +737,14 @@ def _graph_flatten(
   else:
     index = None
 
-  def make_mutable_arraydef(value: variablelib.ArrayRef):
+  def make_mutable_arraydef(value: variablelib.Ref):
     if value in ref_index:
       index = ref_index[value]
       return NodeRef(index), REPEATED
     else:
       index = len(ref_index)
       ref_index[value] = index
-    output_value: NoUpdate | ArrayRefOutput | variablelib.ArrayRef
+    output_value: NoUpdate | ArrayRefOutput | variablelib.Ref
     if ref_outer_index is not None:
       if value in ref_outer_index:
         outer_index = ref_outer_index[value]
@@ -1200,7 +1200,7 @@ def _graph_unflatten(
         f"Expected a ArrayRefOutput type but got '{leaf.value}.'"
       )
     elif type(leaf) is ArrayRefOutput:
-      array_ref = variablelib.array_ref(leaf.value)
+      array_ref = variablelib.new_ref(leaf.value)
     elif variablelib.is_array_ref(leaf):
       array_ref = leaf
     else:
@@ -2634,15 +2634,15 @@ def to_arrays(
     >>> import jax
     >>> import jax.numpy as jnp
     ...
-    >>> node = [nnx.array_ref(jnp.array(1.0)), jnp.array(2.0)]
-    >>> assert nnx.is_array_ref(node[0])
+    >>> node = [jax.new_ref(jnp.array(1.0)), jnp.array(2.0)]
+    >>> assert isinstance(node[0], jax.Ref)
     ...
     >>> frozen_node = nnx.to_arrays(node)
     >>> assert isinstance(frozen_node[0], jax.Array)
 
   If the structure contains duplicate array refs, a ValueError is raised::
 
-    >>> shared_array = nnx.array_ref(jnp.array(1.0))
+    >>> shared_array = jax.new_ref(jnp.array(1.0))
     >>> node = [shared_array, shared_array]
     >>> try:
     ...   nnx.to_arrays(node)
@@ -2657,11 +2657,11 @@ def to_arrays(
   ``only`` is a `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
   that can be used to specify which array refs to freeze::
 
-    >>> node = [nnx.array_ref(jnp.array(1.0)), nnx.array_ref(jnp.array(2.0))]
+    >>> node = [jax.new_ref(jnp.array(1.0)), jax.new_ref(jnp.array(2.0))]
     >>> frozen_node = nnx.to_arrays(node, only=lambda path, x: path[0] == 0)
     ...
     >>> assert isinstance(frozen_node[0], jax.Array)
-    >>> assert isinstance(frozen_node[1], nnx.ArrayRef)
+    >>> assert isinstance(frozen_node[1], jax.Ref)
 
   Args:
     node: A structure potentially containing array refs.
@@ -2697,10 +2697,10 @@ def to_refs(node: A, /, only: filterlib.Filter = _array_like) -> A:
     >>> import jax
     >>> import jax.numpy as jnp
     ...
-    >>> node = [jnp.array(1.0), nnx.array_ref(jnp.array(2.0))]
+    >>> node = [jnp.array(1.0), jax.new_ref(jnp.array(2.0))]
     >>> mutable_node = nnx.to_refs(node)
-    >>> assert nnx.is_array_ref(mutable_node[0])
-    >>> assert nnx.is_array_ref(mutable_node[1])
+    >>> assert isinstance(mutable_node[0], jax.Ref)
+    >>> assert isinstance(mutable_node[1], jax.Ref)
 
   If the structure contains duplicate arrays a ValueError is raised::
 
@@ -2722,7 +2722,7 @@ def to_refs(node: A, /, only: filterlib.Filter = _array_like) -> A:
     >>> node = [jnp.array(1.0), jnp.array(2.0)]
     >>> mutable_node = nnx.to_refs(node, only=lambda path, x: path[0] == 0)
     ...
-    >>> assert isinstance(mutable_node[0], nnx.ArrayRef)
+    >>> assert isinstance(mutable_node[0], jax.Ref)
     >>> assert isinstance(mutable_node[1], jax.Array)
 
   Args:
@@ -2741,7 +2741,7 @@ def to_refs(node: A, /, only: filterlib.Filter = _array_like) -> A:
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
   graphdef, frozen_state, rest = split(node, only, ...)  # type: ignore[misc]
-  mutable_state = jax.tree.map(variablelib.array_ref, frozen_state)
+  mutable_state = jax.tree.map(variablelib.new_ref, frozen_state)
   node = merge(graphdef, mutable_state, rest)
   return node
 

@@ -46,19 +46,19 @@ class TestJIT(absltest.TestCase):
     assert out == 1.0
 
   def test_mutable_array_input_output(self):
-    m = nnx.array_ref(jnp.array(1.0))
+    m = jax.new_ref(jnp.array(1.0))
 
     @nnx.jit
-    def f(m: nnx.ArrayRef):
+    def f(m: jax.Ref):
       m[...] += 1.0
-      m2 = nnx.array_ref(jnp.array(10.0))
+      m2 = jax.new_ref(jnp.array(10.0))
       return m2, m
 
     m2, m_out = f(m)
 
     self.assertEqual(m[...], 2.0)
     self.assertIs(m, m_out)
-    self.assertTrue(nnx.is_array_ref(m2))
+    self.assertIsInstance(m2, jax.Ref)
 
   def test_simple_double_call(self):
     n = 0

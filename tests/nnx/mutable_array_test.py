@@ -135,7 +135,7 @@ class TestMutableArrayGraph(absltest.TestCase):
     nnx.use_refs(cls.using_refs)
 
   def test_split_mutable_array(self):
-    m = nnx.array_ref(1)
+    m = jax.new_ref(1)
     graphdef, state = nnx.split(m)
 
     self.assertIs(m, state)
@@ -163,10 +163,10 @@ class TestMutableArrayGraph(absltest.TestCase):
 
   def test_to_arrays_example(self):
 
-    node = [jnp.array(1.0), nnx.array_ref(jnp.array(2.0))]
+    node = [jnp.array(1.0), jax.new_ref(jnp.array(2.0))]
     mutable_node = nnx.to_refs(node)
-    assert nnx.is_array_ref(mutable_node[0])
-    assert nnx.is_array_ref(mutable_node[1])
+    assert isinstance(mutable_node[0], jax.Ref)
+    assert isinstance(mutable_node[1], jax.Ref)
 
     shared_array = jnp.array(1.0)
     node = [shared_array, shared_array]
@@ -178,7 +178,7 @@ class TestMutableArrayGraph(absltest.TestCase):
 
     node = [jnp.array(1.0), jnp.array(2.0)]
     mutable_node = nnx.to_refs(node, only=lambda path, x: path[0] == 0)
-    assert isinstance(mutable_node[0], nnx.ArrayRef)
+    assert isinstance(mutable_node[0], jax.Ref)
     assert isinstance(mutable_node[1], jax.Array)
 
   def test_freeze_and_mutable_with_filter(self):
@@ -205,7 +205,7 @@ class TestMutableArrayGraph(absltest.TestCase):
   def test_freeze_duplicate_error(self):
     class Foo(nnx.Module):
       def __init__(self):
-        self.a = nnx.array_ref(1)
+        self.a = jax.new_ref(1)
         self.b = self.a
 
     m = Foo()
@@ -216,7 +216,7 @@ class TestMutableArrayGraph(absltest.TestCase):
   def test_mutable_array_split(self):
     class Foo(nnx.Module):
       def __init__(self):
-        self.a = nnx.array_ref(1)
+        self.a = jax.new_ref(1)
         self.b = self.a
 
     m = Foo()
@@ -228,7 +228,7 @@ class TestMutableArrayGraph(absltest.TestCase):
 
     m1 = nnx.merge(graphdef, state)
     self.assertIs(m1.a, m1.b)
-    self.assertIsInstance(m1.a, nnx.ArrayRef)
+    self.assertIsInstance(m1.a, jax.Ref)
 
   def test_mutable_array_split_merge_in_variable(self):
     class Foo(nnx.Module):
@@ -268,15 +268,15 @@ class TestMutableArrayGraph(absltest.TestCase):
     self.assertIsInstance(m1.a, nnx.Param)
 
   def test_mutable_example(self):
-    tree = [jnp.array(1.0), nnx.array_ref(jnp.array(2.0))]
+    tree = [jnp.array(1.0), jax.new_ref(jnp.array(2.0))]
     mutable_tree = nnx.to_refs(tree)
-    assert nnx.is_array_ref(mutable_tree[0])
-    assert nnx.is_array_ref(mutable_tree[1])
+    assert isinstance(mutable_tree[0], jax.Ref)
+    assert isinstance(mutable_tree[1], jax.Ref)
 
   def test_mutable_array_split_freeze(self):
     class Foo(nnx.Module):
       def __init__(self):
-        self.a = nnx.array_ref(1)
+        self.a = jax.new_ref(1)
         self.b = self.a
 
     m = Foo()
@@ -288,7 +288,7 @@ class TestMutableArrayGraph(absltest.TestCase):
 
     m1 = nnx.merge(graphdef, nnx.to_refs(state))
     self.assertIs(m1.a, m1.b)
-    self.assertIsInstance(m1.a, nnx.ArrayRef)
+    self.assertIsInstance(m1.a, jax.Ref)
 
   def test_update_context(self):
     m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
@@ -501,14 +501,14 @@ class TestMutableArrayNNXTransforms(absltest.TestCase):
 
     self.assertIsNot(m_out1, m_out2)
     self.assertIsInstance(m_out2.kernel, nnx.Param)
-    self.assertTrue(nnx.is_array_ref(m_out2.kernel.raw_value))
+    self.assertIsInstance(m_out2.kernel.raw_value, jax.Ref)
 
   def test_jit_mutable(self):
     @dataclasses.dataclass
     class Foo(nnx.Pytree):
-      a: nnx.Data[nnx.ArrayRef]
+      a: nnx.Data[jax.Ref]
 
-    m1 = Foo(a=nnx.array_ref(1))
+    m1 = Foo(a=jax.new_ref(1))
 
     @nnx.jit
     def f(m2: Foo):
@@ -518,7 +518,7 @@ class TestMutableArrayNNXTransforms(absltest.TestCase):
     m_out1 = f(m1)
     self.assertEqual(m_out1.a[...], 2)
     self.assertIs(m_out1, m1)
-    self.assertIsInstance(m_out1.a, nnx.ArrayRef)
+    self.assertIsInstance(m_out1.a, jax.Ref)
 
 
 
@@ -717,8 +717,8 @@ class TestOptimizer(absltest.TestCase):
   def test_optimize_mutable_arrays(self):
     class Model(nnx.Module):
       def __init__(self, rngs):
-        self.w = nnx.array_ref(jax.random.uniform(rngs(), (2, 4)))
-        self.count = nnx.array_ref(jnp.array(0))
+        self.w = jax.new_ref(jax.random.uniform(rngs(), (2, 4)))
+        self.count = jax.new_ref(jnp.array(0))
 
       def __call__(self, x):
         self.count[...] += 1
