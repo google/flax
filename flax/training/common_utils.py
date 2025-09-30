@@ -20,7 +20,6 @@ with helping write pmap-based data-parallel training loops.
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from jax import lax
 
 
@@ -65,7 +64,7 @@ def stack_forest(forest):
     A single pytree of the same structure whose leaves are individually
       stacked arrays.
   """
-  stack_args = lambda *args: np.stack(args)
+  stack_args = lambda *args: jnp.stack(args)
   return jax.tree_util.tree_map(stack_args, *forest)
 
 
