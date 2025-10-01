@@ -29,7 +29,7 @@ import treescope  # type: ignore[import-untyped]
 from flax import errors
 from flax.core import spmd as core_spmd
 from flax.nnx import filterlib, reprlib, tracers, visualization
-from flax.typing import Missing, PathParts, SizeBytes
+from flax.typing import MISSING, Missing, PathParts, SizeBytes
 import jax.tree_util as jtu
 import jax.numpy as jnp
 from jax._src.state.types import AbstractRef
@@ -172,7 +172,14 @@ class VariableMetadata(tp.Generic[A]):
   metadata: tp.Mapping[str, tp.Any] = dataclasses.field(default_factory=dict)
 
 
-class Variable(tp.Generic[A], reprlib.Representable):
+class VariableMeta(type):
+  def __new__(cls, cls_name, bases, attrs):
+    if '__slots__' not in attrs:
+      attrs['__slots__'] = ()
+    return super().__new__(cls, cls_name, bases, attrs)
+
+
+class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
   """The base class for all ``Variable`` types. Create custom ``Variable``
   types by subclassing this class. Numerous NNX graph functions can filter
   for specific ``Variable`` types, for example, :func:`split`, :func:`state`,
@@ -353,47 +360,61 @@ class Variable(tp.Generic[A], reprlib.Representable):
   @tp.overload
   def get_metadata(self) -> dict[str, tp.Any]: ...
   @tp.overload
-  def get_metadata(self, name: str) -> tp.Any: ...
-  def get_metadata(self, name: str | None = None):
+  def get_metadata(self, name: str, default: tp.Any = MISSING) -> tp.Any: ...
+  def get_metadata(
+    self, name: str | None = None, default: tp.Any = MISSING
+  ) -> tp.Any:
     """Get metadata for the Variable.
 
     Args:
       name: The key of the metadata element to get. If not provided, returns
         the full metadata dictionary.
+      default: The default value to return if the metadata key is not found. If
+        not provided and the key is not found, raises a KeyError.
     """
     if name is None:
       return self._var_metadata
+    if name not in self._var_metadata and not isinstance(default, Missing):
+      return default
     return self._var_metadata[name]
 
   @tp.overload
   def set_metadata(self, metadata: dict[str, tp.Any], /) -> None: ...
   @tp.overload
+  def set_metadata(self, name: str, value: tp.Any, /) -> None: ...
+  @tp.overload
   def set_metadata(self, **metadata: tp.Any) -> None: ...
   def set_metadata(self, *args, **kwargs) -> None:
     """Set metadata for the Variable.
 
-    `set_metadata` can be called in two ways:
+    `set_metadata` can be called in 3 ways:
 
     1. By passing a dictionary of metadata as the first argument, this will replace
       the entire Variable's metadata.
-    2. By using keyword arguments, these will be merged into the existing Variable's
-      metadata.
+    2. By passing a name and value as the first two arguments, this will set
+      the metadata entry for the given name to the given value.
+    3. By using keyword arguments, this will update the Variable's metadata
+      with the provided key-value pairs.
     """
     if not self._trace_state.is_valid():
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
-    if not (bool(args) ^ bool(kwargs)):
+    if args and kwargs:
       raise TypeError(
-        'set_metadata takes either a single dict argument or keyword arguments'
+        'Cannot mix positional and keyword arguments in set_metadata'
       )
     if len(args) == 1:
-      self._var_metadata = args[0]
+      self._var_metadata = dict(args[0])
+    elif len(args) == 2:
+      name, value = args
+      self._var_metadata[name] = value
     elif kwargs:
       self._var_metadata.update(kwargs)
     else:
       raise TypeError(
-        f'set_metadata takes either 1 argument or 1 or more keyword arguments, got args={args}, kwargs={kwargs}'
+        f'set_metadata takes either 1 or 2 arguments, or at least 1 keyword argument, '
+        f'got args={args}, kwargs={kwargs}'
       )
 
   def copy_from(self, other: Variable[A]) -> None:
