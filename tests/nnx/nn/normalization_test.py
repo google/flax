@@ -326,6 +326,70 @@ class TestLinenConsistency(parameterized.TestCase):
   @parameterized.product(
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
+    scale_init=[
+      nnx.initializers.ones,
+      nnx.initializers.constant(10.0),
+      nnx.initializers.constant(0.5),
+    ],
+  )
+  def test_nnx_linen_weightnorm_equivalence(
+      self,
+      dtype: tp.Optional[Dtype],
+      param_dtype: Dtype,
+      scale_init: nnx.Initializer,
+  ):
+    class NNXModel(nnx.Module):
+      def __init__(self, dtype, param_dtype, rngs):
+        self.dense = nnx.Linear(
+          8, 4, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+        )
+        self.normed = nnx.WeightNorm(
+          self.dense,
+          use_scale=True,
+          scale_init=scale_init,
+          feature_axes=-1,
+          dtype=dtype,
+          param_dtype=param_dtype,
+          rngs=rngs,
+        )
+
+      def __call__(self, x, *, mask=None):
+        return self.normed(x)
+
+    class LinenModel(linen.Module):
+      dtype: tp.Optional[Dtype] = None
+      param_dtype: Dtype = jnp.float32
+
+      def setup(self):
+        self.dense = linen.Dense(
+          4, dtype=self.dtype, param_dtype=self.param_dtype
+        )
+        self.weight_norm = linen.WeightNorm(
+          self.dense, variable_filter={'kernel'}, scale_init=scale_init
+        )
+
+      def __call__(self, x, *, mask=None):
+        return self.weight_norm(x)
+
+    rngs = nnx.Rngs(42)
+
+    x = jax.random.normal(jax.random.key(0), (10, 8))
+
+    linen_model = LinenModel(dtype=dtype, param_dtype=param_dtype)
+    variables = linen_model.init(jax.random.key(1), x)
+
+    nnx_model = NNXModel(dtype=dtype, param_dtype=param_dtype, rngs=rngs)
+    nnx_model.dense.kernel.value = variables['params']['dense']['kernel']
+    nnx_model.dense.bias.value = variables['params']['dense']['bias']
+
+    linen_out = linen_model.apply(variables, x)
+
+    nnx_out = nnx_model(x)
+    np.testing.assert_array_equal(linen_out, nnx_out)
+
+  @parameterized.product(
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
     use_fast_variance=[True, False],
     mask=[None, np.array([True, False, True, False, True, False])],
   )
