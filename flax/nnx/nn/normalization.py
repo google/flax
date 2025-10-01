@@ -1204,8 +1204,8 @@ class SpectralNorm(Module):
     param = param.reshape(param_shape)
 
     if update_stats:
-      self.batch_stats[path_u][...] = u
-      self.batch_stats[path_sigma][...] = sigma
+      self.batch_stats[path_u].value = u
+      self.batch_stats[path_sigma].value = sigma
 
     dtype = dtypes.canonicalize_dtype(param, u, v, sigma, dtype=self.dtype)
     orig_param.value = jnp.asarray(param, dtype)
