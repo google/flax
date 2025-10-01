@@ -121,9 +121,9 @@ class TestLinenConsistency(parameterized.TestCase):
       dot_general=dot_general,
     )
     variables = model.init(key, x)
-    model_nnx.kernel.value = variables['params']['kernel']
+    model_nnx.kernel[...] = variables['params']['kernel']
     if use_bias:
-      model_nnx.bias.value = variables['params']['bias']
+      model_nnx.bias[...] = variables['params']['bias']
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
@@ -184,10 +184,10 @@ class TestLinenConsistency(parameterized.TestCase):
     np.testing.assert_array_equal(out, out_nnx)
 
     variables = model.init(key, x)
-    model_nnx.kernel.value = variables['params']['kernel']
+    model_nnx.kernel[...] = variables['params']['kernel']
     if bias_shape is not None:
       assert model_nnx.bias is not None
-      model_nnx.bias.value = variables['params']['bias']
+      model_nnx.bias[...] = variables['params']['bias']
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
     assert isinstance(out, jax.Array)
