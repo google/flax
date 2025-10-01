@@ -725,7 +725,7 @@ def diff(state: State, other: State) -> State:
 
   self_flat = to_flat_state(state)
   other_flat = to_flat_state(other)
-  diff = {k: v for k, v in self_flat.items() if k not in other_flat}
+  diff = {k: v for k, v in self_flat if k not in other_flat.paths}
 
   return from_flat_state(diff)
 
