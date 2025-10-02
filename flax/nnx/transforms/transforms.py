@@ -146,7 +146,9 @@ def eval_shape(
   def _eval_shape_fn(*args, **kwargs):
     args, kwargs = extract.from_tree((args, kwargs))
     out = f(*args, **kwargs)
-    return graph.to_arrays(extract.to_tree(out), allow_duplicates=True)
+    return graph.to_lojax(
+      graph.to_arrays(extract.to_tree(out), allow_duplicates=True)
+    )
 
   out = jax.eval_shape(_eval_shape_fn, *args, **kwargs)
   return extract.from_tree(out)
@@ -191,7 +193,7 @@ def checkify(
     ...
     >>> @nnx.jit
     ... def f(m):
-    ...   y = jnp.sin(m.a.value) # error
+    ...   y = jnp.sin(m.a) # error
     ...   return m.a + y
     ...
     >>> m = Foo(a=jnp.inf)

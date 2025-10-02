@@ -96,8 +96,8 @@ class Average(Metric):
 
   def reset(self) -> None:
     """Reset this ``Metric``."""
-    self.total.value = jnp.array(0, dtype=jnp.float32)
-    self.count.value = jnp.array(0, dtype=jnp.int32)
+    self.total[...] = jnp.array(0, dtype=jnp.float32)
+    self.count[...] = jnp.array(0, dtype=jnp.int32)
 
   def update(self, **kwargs) -> None:
     """In-place update this ``Metric``. This method will use the value from
@@ -111,14 +111,14 @@ class Average(Metric):
     if self.argname not in kwargs:
       raise TypeError(f"Expected keyword argument '{self.argname}'")
     values: tp.Union[int, float, jax.Array] = kwargs[self.argname]
-    self.total.value += (
+    self.total[...] += (
       values if isinstance(values, (int, float)) else values.sum()
     )
-    self.count.value += 1 if isinstance(values, (int, float)) else values.size
+    self.count[...] += 1 if isinstance(values, (int, float)) else values.size
 
   def compute(self) -> jax.Array:
     """Compute and return the average."""
-    return self.total.value / self.count.value
+    return self.total / self.count
 
 
 @struct.dataclass
@@ -170,9 +170,9 @@ class Welford(Metric):
 
   def reset(self) -> None:
     """Reset this ``Metric``."""
-    self.count.value = jnp.array(0, dtype=jnp.uint32)
-    self.mean.value = jnp.array(0, dtype=jnp.float32)
-    self.m2.value = jnp.array(0, dtype=jnp.float32)
+    self.count[...] = jnp.array(0, dtype=jnp.uint32)
+    self.mean[...] = jnp.array(0, dtype=jnp.float32)
+    self.m2[...] = jnp.array(0, dtype=jnp.float32)
 
   def update(self, **kwargs) -> None:
     """In-place update this ``Metric``. This method will use the value from
@@ -187,16 +187,14 @@ class Welford(Metric):
       raise TypeError(f"Expected keyword argument '{self.argname}'")
     values: tp.Union[int, float, jax.Array] = kwargs[self.argname]
     count = 1 if isinstance(values, (int, float)) else values.size
-    original_count = self.count.value
-    self.count.value += count
+    original_count = self.count[...]
+    self.count[...] += count
     delta = (
-        values if isinstance(values, (int, float)) else values.mean()
-    ) - self.mean.value
-    self.mean.value += delta * count / self.count.value
+      values if isinstance(values, (int, float)) else values.mean()
+    ) - self.mean
+    self.mean[...] += delta * count / self.count
     m2 = 0.0 if isinstance(values, (int, float)) else values.var() * count
-    self.m2.value += (
-        m2 + delta * delta * count * original_count / self.count
-    )
+    self.m2[...] += m2 + delta * delta * count * original_count / self.count
 
   def compute(self) -> Statistics:
     """Compute and return the mean and variance statistics in a
@@ -206,9 +204,9 @@ class Welford(Metric):
     standard_deviation = variance**0.5
     sem = standard_deviation / (self.count**0.5)
     return Statistics(
-        mean=self.mean.value,
-        standard_error_of_mean=sem,
-        standard_deviation=standard_deviation,
+      mean=self.mean[...],
+      standard_error_of_mean=sem,
+      standard_deviation=standard_deviation,
     )
 
 

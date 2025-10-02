@@ -491,7 +491,7 @@ def to_pure_dict(
 ) -> dict[str, tp.Any]:
   # Works for nnx.Variable
   if extract_fn is None:
-    extract_fn = lambda x: x.value if hasattr(x, 'value') else x
+    extract_fn = lambda x: x.value if isinstance(x, variablelib.Variable) else x
   flat_values = {k: extract_fn(x) for k, x in to_flat_state(state)}
   return traversals.unflatten_mapping(flat_values)
 
@@ -692,11 +692,11 @@ def merge_state(state: tp.Mapping, /, *states: tp.Mapping,
 
     >>> model = Model(rngs=nnx.Rngs(0))
     >>> params, batch_stats = nnx.state(model, nnx.Param, nnx.BatchStat)
-    >>> params['linear']['bias'].value += 1
+    >>> params['linear']['bias'][...] += 1
 
     >>> state = nnx.merge_state(params, batch_stats)
     >>> nnx.update(model, state)
-    >>> assert (model.linear.bias.value == jnp.array([1, 1, 1])).all()
+    >>> assert (model.linear.bias[...] == jnp.array([1, 1, 1])).all()
 
   Args:
     state: A ``State`` object.

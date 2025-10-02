@@ -459,7 +459,8 @@ def tabulate(
         value = variable.value
         value_repr = _render_array(value) if _has_shape_dtype(value) else ''
         metadata = variable.get_metadata()
-
+        metadata.pop('is_hijax')
+        metadata.pop('eager_sharding')
         if metadata:
           attributes[name] = {
             'value': value_repr,

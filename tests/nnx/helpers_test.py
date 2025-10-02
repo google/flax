@@ -88,7 +88,7 @@ class TestHelpers(absltest.TestCase):
       for param in ('kernel', 'bias'):
         variables['params'][f'layers_{layer_index}'][param] = getattr(
           model_nnx.layers[layer_index], param
-        ).value
+        )[...]
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
     np.testing.assert_array_equal(out, out_nnx)
@@ -96,7 +96,7 @@ class TestHelpers(absltest.TestCase):
     variables = model.init(key2, x)
     for layer_index in range(2):
       for param in ('kernel', 'bias'):
-        getattr(model_nnx.layers[layer_index], param).value = variables[
+        getattr(model_nnx.layers[layer_index], param)[...] = variables[
           'params'
         ][f'layers_{layer_index}'][param]
     out_nnx = model_nnx(x)

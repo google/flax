@@ -529,6 +529,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
 
     visited: set[int] = set()
     leaves = jax.tree.leaves(value, is_leaf=_has_visited)
+    leaves = jax.tree.leaves([
+      leaf.raw_value if isinstance(leaf, Variable) else leaf for leaf in leaves
+    ])
     current_is_data = (
         self._pytree__nodes[key] if key in self._pytree__nodes else False
     )

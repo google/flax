@@ -45,17 +45,17 @@ class LoRA(Module):
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
     >>> layer = nnx.LoRA(3, 2, 4, rngs=nnx.Rngs(0))
-    >>> layer.lora_a.value.shape
+    >>> layer.lora_a.shape
     (3, 2)
-    >>> layer.lora_b.value.shape
+    >>> layer.lora_b.shape
     (2, 4)
     >>> # Wrap around existing layer
     >>> linear = nnx.Linear(3, 4, rngs=nnx.Rngs(0))
     >>> wrapper = nnx.LoRA(3, 2, 4, base_module=linear, rngs=nnx.Rngs(1))
     >>> assert wrapper.base_module == linear
-    >>> wrapper.lora_a.value.shape
+    >>> wrapper.lora_a.shape
     (3, 2)
-    >>> layer.lora_b.value.shape
+    >>> layer.lora_b.shape
     (2, 4)
     >>> y = layer(jnp.ones((16, 3)))
     >>> y.shape
@@ -128,13 +128,13 @@ class LoRALinear(Linear):
     >>> import jax, jax.numpy as jnp
     >>> linear = nnx.Linear(3, 4, rngs=nnx.Rngs(0))
     >>> lora_linear = nnx.LoRALinear(3, 4, lora_rank=2, rngs=nnx.Rngs(0))
-    >>> linear.kernel.value.shape
+    >>> linear.kernel.shape
     (3, 4)
-    >>> lora_linear.kernel.value.shape
+    >>> lora_linear.kernel.shape
     (3, 4)
-    >>> lora_linear.lora.lora_a.value.shape
+    >>> lora_linear.lora.lora_a.shape
     (3, 2)
-    >>> jnp.allclose(linear.kernel.value, lora_linear.kernel.value)
+    >>> jnp.allclose(linear.kernel[...], lora_linear.kernel[...])
     Array(True, dtype=bool)
     >>> y = lora_linear(jnp.ones((16, 3)))
     >>> y.shape

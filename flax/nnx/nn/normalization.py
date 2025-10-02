@@ -54,7 +54,7 @@ def _compute_stats(
   use_mean: bool = True,
   use_fast_variance: bool = True,
   mask: tp.Optional[Array] = None,
-):
+) -> tuple[Array, Array]:
   """Computes mean and variance statistics.
 
   This implementation takes care of a few important details:
@@ -237,15 +237,15 @@ class BatchNorm(Module):
     >>> batch_stats1 = nnx.clone(nnx.state(layer, nnx.BatchStat)) # keep a copy
     >>> y = layer(x)
     >>> batch_stats2 = nnx.state(layer, nnx.BatchStat)
-    >>> assert (batch_stats1['mean'].value != batch_stats2['mean'].value).all()
-    >>> assert (batch_stats1['var'].value != batch_stats2['var'].value).all()
+    >>> assert (batch_stats1['mean'][...] != batch_stats2['mean'][...]).all()
+    >>> assert (batch_stats1['var'][...] != batch_stats2['var'][...]).all()
 
     >>> # use stored batch statistics' running average
     >>> layer.eval()
     >>> y = layer(x)
     >>> batch_stats3 = nnx.state(layer, nnx.BatchStat)
-    >>> assert (batch_stats2['mean'].value == batch_stats3['mean'].value).all()
-    >>> assert (batch_stats2['var'].value == batch_stats3['var'].value).all()
+    >>> assert (batch_stats2['mean'][...] == batch_stats3['mean'][...]).all()
+    >>> assert (batch_stats2['var'][...] == batch_stats3['var'][...]).all()
 
   Args:
     num_features: the number of input features.
@@ -357,8 +357,10 @@ class BatchNorm(Module):
     feature_axes = _canonicalize_axes(x.ndim, self.axis)
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
 
+    mean: jax.Array
+    var: jax.Array
     if use_running_average:
-      mean, var = self.mean.value, self.var.value
+      mean, var = self.mean[...], self.var[...]
     else:
       mean, var = _compute_stats(
         x,
@@ -370,7 +372,7 @@ class BatchNorm(Module):
         mask=mask,
       )
       # stop_gradient only for flax_array_ref
-      if self.mean.has_ref or self.var.has_ref:
+      if self.mean.is_hijax or self.var.is_hijax:
         stop_gradient = jax.lax.stop_gradient
       else:
         stop_gradient = lambda x: x
@@ -386,8 +388,8 @@ class BatchNorm(Module):
       x,
       mean,
       var,
-      self.scale.value if self.scale else None,
-      self.bias.value if self.bias else None,
+      self.scale[...] if self.scale else None,
+      self.bias[...] if self.bias else None,
       reduction_axes,
       feature_axes,
       self.dtype,
@@ -521,8 +523,8 @@ class LayerNorm(Module):
       x,
       mean,
       var,
-      self.scale.value if self.scale else None,
-      self.bias.value if self.bias else None,
+      self.scale[...] if self.scale else None,
+      self.bias[...] if self.bias else None,
       self.reduction_axes,
       self.feature_axes,
       self.dtype,
@@ -642,7 +644,7 @@ class RMSNorm(Module):
       x,
       mean,
       var,
-      self.scale.value if self.scale else None,
+      self.scale[...] if self.scale else None,
       None,
       self.reduction_axes,
       self.feature_axes,
@@ -841,8 +843,8 @@ class GroupNorm(Module):
       x,
       mean,
       var,
-      self.scale.value if self.scale else None,
-      self.bias.value if self.bias else None,
+      self.scale[...] if self.scale else None,
+      self.bias[...] if self.bias else None,
       reduction_axes[:-1],
       (self.feature_axis,),
       self.dtype,
@@ -996,8 +998,8 @@ class InstanceNorm(Module):
       x,
       mean,
       var,
-      self.scale.value if self.scale else None,
-      self.bias.value if self.bias else None,
+      self.scale[...] if self.scale else None,
+      self.bias[...] if self.bias else None,
       reduction_axes,
       feature_axes,
       self.dtype,
@@ -1190,7 +1192,7 @@ class SpectralNorm(Module):
         "in the batch stats dict. Parameters of the layer_instance should not change!"
       )
 
-    u = self.batch_stats[path_u].value
+    u = self.batch_stats[path_u][...]
 
     for _ in range(self.n_steps):
       v = _l2_normalize(jnp.matmul(u, param.T), eps=self.epsilon)
@@ -1204,8 +1206,8 @@ class SpectralNorm(Module):
     param = param.reshape(param_shape)
 
     if update_stats:
-      self.batch_stats[path_u].value = u
-      self.batch_stats[path_sigma].value = sigma
+      self.batch_stats[path_u][...] = u
+      self.batch_stats[path_sigma][...] = sigma
 
     dtype = dtypes.canonicalize_dtype(param, u, v, sigma, dtype=self.dtype)
-    orig_param.value = jnp.asarray(param, dtype)
+    orig_param[...] = jnp.asarray(param, dtype)

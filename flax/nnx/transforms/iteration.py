@@ -288,7 +288,7 @@ def vmap(
   ...
   >>> @nnx.vmap(in_axes=(0, None), out_axes=0)
   ... def forward(model, x):
-  ...   return jnp.dot(x, model.w.value)
+  ...   return x @ model.w
   ...
   >>> y = forward(model, x)
   >>> y.shape
@@ -506,7 +506,7 @@ def pmap(
   ...
   >>> @nnx.vmap(in_axes=(0, None), out_axes=0)
   ... def forward(model, x):
-  ...   return jnp.dot(x, model.w.value)
+  ...   return x @ model.w
   ...
   >>> y = forward(model, x)
   >>> y.shape
@@ -1611,7 +1611,7 @@ def fori_loop(lower: int, upper: int,
 
     >>> def fwd_fn(i, input):
     ...   m, x = input
-    ...   m.kernel.value = jnp.identity(10) * i
+    ...   m.kernel[...] = jnp.identity(10) * i
     ...   return m, m(x)
 
     >>> module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))

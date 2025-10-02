@@ -98,8 +98,8 @@ class Block(nnx.Module):
       # ema updates
       # stop gradient is used until a Hijax supports updates from grad tracers
       sg = jax.lax.stop_gradient
-      self.mean.value = sg(self.mu * self.mean + (1 - self.mu) * mean)
-      self.var.value = sg(self.mu * self.var + (1 - self.mu) * var)
+      self.mean[...] = sg(self.mu * self.mean + (1 - self.mu) * mean)
+      self.var[...] = sg(self.mu * self.var + (1 - self.mu) * var)
     x = (x - mean[None]) / jnp.sqrt(var[None] + 1e-5)
     x = x * self.scale + self.bias
     # ----------- dropout -------------------
@@ -146,7 +146,7 @@ class Model(nnx.Module):
       )
 
   def __call__(self, x: jax.Array, *, rngs: nnx.Rngs | None = None):
-    self.count.value += 1
+    self.count[...] += 1
     x = self.block_in(x, rngs=rngs)
 
     # on the forward pass we either iterate over the block
@@ -183,7 +183,7 @@ class SGD(nnx.Pytree):
 
     def make_opt_state(x):
       if isinstance(x, nnx.Variable):
-        return OptState(jnp.zeros_like(x.value), **x.get_metadata())
+        return OptState(jnp.zeros_like(x[...]), **x.get_metadata())
       else:
         return OptState(jnp.zeros_like(x))
 
@@ -198,8 +198,8 @@ class SGD(nnx.Pytree):
       momentum: nnx.Variable[jax.Array],
       grad: nnx.Variable[jax.Array],
     ):
-      momentum.value = self.decay * momentum + (1 - self.decay) * grad
-      param.value -= self.lr * momentum
+      momentum[...] = self.decay * momentum + (1 - self.decay) * grad
+      param[...] -= self.lr * momentum
 
     # is_leaf might not be necesarry as MutableHijaxVariable are not pytreees
     jax.tree.map(update_fn, params, self.momentum, grads)
@@ -207,7 +207,7 @@ class SGD(nnx.Pytree):
 
 # ## Training
 
-nnx.use_hijax('mutable')
+nnx.use_hijax(True)
 rngs = nnx.Rngs(params=0, dropout=1)
 model = Model(
   num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
@@ -236,9 +236,9 @@ def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
     loss = jnp.mean((model(x, rngs=rngs) - y) ** 2)
     return loss
 
-  # For the time being we have to use 'freeze' make the Variables immutable
+  # For the time being we have to use 'to_lojax'
   # as 'jax.grad' doesn't support Hijax types yet.
-  grads = jax.grad(loss_fn)(nnx.stateless(params))
+  grads = jax.grad(loss_fn)(nnx.to_lojax(params))
   # 'update' mutates the optimizer's state and the params in place
   # so we don't need to return anything 🚀
   optimizer.update(params, grads)
@@ -251,11 +251,11 @@ def test_step(model: Model, x, y):
 
 
 # minimalistic training loop
-total_steps = 400
+total_steps = 2_000
 for step, (x, y) in enumerate(dataset(32)):
   train_step(model, optimizer, rngs, x, y)
 
-  if step % 10 == 0:
+  if step % 200 == 0:
     logs = test_step(eval_model, X, Y)
     print(f'step: {step}, loss: {logs["loss"]}')
 
@@ -264,7 +264,7 @@ for step, (x, y) in enumerate(dataset(32)):
 
 # ## Sample
 # Sampling is trivial, just use 'model_eval'
-print('times called:', eval_model.count.value)
+print('times called:', eval_model.count[...])
 
 y_pred = eval_model(X)
 

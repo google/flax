@@ -751,8 +751,8 @@ def custom_vjp(
     ...   (m_updates_g,) = input_updates_g
     ...   m_g = jax.tree.map(lambda x: x, m_updates_g) # create copy
     ...
-    ...   m_g['x'].value = cos_x * out_g * m.y
-    ...   m_g['y'].value = sin_x * out_g
+    ...   m_g['x'][...] = cos_x * out_g * m.y
+    ...   m_g['y'][...] = sin_x * out_g
     ...   return (m_g,)
     ...
     >>> f.defvjp(f_fwd, f_bwd)
@@ -797,7 +797,7 @@ def custom_vjp(
     ...   (m_updates_g,) = input_updates_g
     ...   m_g = jax.tree.map(lambda x: x, m_updates_g) # create copy
     ...
-    ...   m_g.x.value = cos_x * out_g * m.y
+    ...   m_g.x[...] = cos_x * out_g * m.y
     ...   del m_g['y'] # y is not differentiable
     ...   return (m_g,)
 
