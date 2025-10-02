@@ -182,9 +182,7 @@ The output of `rng.fork` is another `Rng` with keys and counts that have an expa
 
 +++
 
-So far, we have looked at passing random state directly to each Module when it gets called. But there's another way to handle call-time randomness in flax: we can bundle the random state into the Module itself. This makes the random state is just another type of state: there's nothing special about it when it comes to Flax NNX transforms, which means that you'll be able to use the Flax NNX state handling APIs of each transform to get the results you want.
-
-Using implicit random state requires passing the `rngs` keyward argument when initializing the module rather than when calling it. For example, here is how we might construct the simple `Module` we defined earlier using an implicit style.
+So far, we have looked at passing random state directly to each Module when it gets called. But there's another way to handle call-time randomness in flax: we can bundle the random state into the Module itself. This makes the random state is just another type of Module state. Using implicit random state requires passing the `rngs` keyward argument when initializing the module rather than when calling it. For example, here is how we might construct the simple `Module` we defined earlier using an implicit style.
 
 ```{code-cell} ipython3
 class Model(nnx.Module):
@@ -201,6 +199,10 @@ y = model(x=jnp.ones((1, 20)))
 print(f'{y.shape = }')
 ```
 
+This implicit state handling style is less verbose than passing RNGs explicitly, and more closely resembles code in other deep learning frameworks like PyTorch. However, as we'll see in the following sections, using implicit state makes it less obvious how to apply jax transformations to your Modules. With explicit state, you can usually use tranforms like `jax.vmap` directly. With implicit state, you'll need to some extra tricks with `nnx.vmap` to make everything work. Because of this additional complexity, we recommend that new flax projects stick to the explicit style.
+
++++
+
 ## Filtering random state
 
 Implicit random state can be manipulated using [Filters](https://flax.readthedocs.io/en/latest/guides/filters_guide.html) just like any other type of state. It can be filtered using types (`nnx.RngState`, `nnx.RngKey`, `nnx.RngCount`) or using strings corresponding to the stream names (refer to [the Flax NNX `Filter` DSL](https://flax.readthedocs.io/en/latest/guides/filters_guide.html#the-filter-dsl)). Here's an example using `nnx.state` with various filters to select different substates of the `Rngs` inside a `Model`:
@@ -211,11 +213,9 @@ model = Model(nnx.Rngs(params=0, dropout=1))
 rng_state = nnx.state(model, nnx.RngState) # All random states.
 key_state = nnx.state(model, nnx.RngKey) # Only PRNG keys.
 count_state = nnx.state(model, nnx.RngCount) # Only counts.
-rng_params_state = nnx.state(model, 'params') # Only `params`.
 rng_dropout_state = nnx.state(model, 'dropout') # Only `dropout`.
-params_key_state = nnx.state(model, nnx.All('params', nnx.RngKey)) # `Params` PRNG keys.
 
-nnx.display(params_key_state)
+nnx.display(rng_dropout_state)
 ```
 
 ## Reseeding
@@ -270,7 +270,7 @@ Here `sample_from_model` is modified by two decorators:
 
 +++
 
-In the previous section, we showed how to use `nnx.vmap` with a module that contained implicit random state. But we can use other `nnx` transformations too! For a more involved example, let’s explore how to implement recurrent dropout on an `RNNCell` using `nnx.scan`.
+In the previous section, we showed how to use `nnx.vmap` with a module that contained implicit random state. But we can use other `nnx` transformations too! Remember: implicit random state isn't different from any other type of Model state, and this applies to Flax NNX transforms too. This means you can use the Flax NNX state handling APIs of each transform to get the results you want. For a more involved example, let’s explore how to implement recurrent dropout on an `RNNCell` using `nnx.scan`.
 
 We'll start by constructing the `RNNCell` class:
 
