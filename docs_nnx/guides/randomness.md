@@ -160,28 +160,18 @@ model =  Model(rngs=nnx.Rngs(0))
 
 ```{code-cell} ipython3
 @nnx.vmap(in_axes=(None, 0, 0), out_axes=0)
-def train_step(model, x, rngs):
-  out = model(x, rngs=rngs)
+def model_forward(model, x, rngs):
+  return model(x, rngs=rngs)
 ```
 
 ```{code-cell} ipython3
 dropout_rngs = nnx.Rngs(1)
-```
-
-```{code-cell} ipython3
-dropout_rngs
-```
-
-```{code-cell} ipython3
 forked_rngs = dropout_rngs.fork(split=5)
+(dropout_rngs, forked_rngs)
 ```
 
 ```{code-cell} ipython3
-forked_rngs
-```
-
-```{code-cell} ipython3
-train_step(model, jnp.ones((5, 20)), forked_rngs)
+model_forward(model, jnp.ones((5, 20)), forked_rngs).shape
 ```
 
 The output of `rng.fork` is another `Rng` with keys and counts that have an expanded shape. In the example above, the `RngKey` and `RngCount` of `dropout_rngs` have shape `()`, but in `forked_rngs` they have shape `(5,)`.
@@ -192,7 +182,9 @@ The output of `rng.fork` is another `Rng` with keys and counts that have an expa
 
 +++
 
-So far, we have looked at passing random state directly to each Module when it gets called. But there's another way to handle call-time randomness in flax: we can bundle the random state into the Module itself. This requires passing the `rngs` keyward argument when initializing the module rather than when calling it. For example, here is how we might construct the simple `Module` we defined earlier using an implicit style.
+So far, we have looked at passing random state directly to each Module when it gets called. But there's another way to handle call-time randomness in flax: we can bundle the random state into the Module itself. This makes the random state is just another type of state: there's nothing special about it when it comes to Flax NNX transforms, which means that you'll be able to use the Flax NNX state handling APIs of each transform to get the results you want.
+
+Using implicit random state requires passing the `rngs` keyward argument when initializing the module rather than when calling it. For example, here is how we might construct the simple `Module` we defined earlier using an implicit style.
 
 ```{code-cell} ipython3
 class Model(nnx.Module):
@@ -253,65 +245,37 @@ assert not jnp.allclose(y1, y2) # different
 assert jnp.allclose(y1, y3)     # same
 ```
 
-## Splitting PRNG keys
+## Forking implicit random state
 
-When interacting with [Flax NNX transforms](https://flax.readthedocs.io/en/latest/guides/transforms.html) like `nnx.vmap` or `nnx.pmap`, it is often necessary to split the implicit random state such that each replica has its own unique state. This can be done using the `nnx.split_rngs` decorator which will automatically split the random state of any `nnx.RngStream`s found in the inputs of the function, and automatically "lower" them once the function call ends. Here’s an example:
+We saw above how to use `rng.fork` when passing explicit random state through [Flax NNX transforms](https://flax.readthedocs.io/en/latest/guides/transforms.html) like `nnx.vmap` or `nnx.pmap`. The decorator `nnx.fork_rngs` allows this for implicit random state. Consider the example below, which generates a batch of samples from the nondeterministic model we defined above.
 
 ```{code-cell} ipython3
-rngs = nnx.Rngs(params=0, dropout=1)
+rng_axes = nnx.StateAxes({'dropout': 0, ...: None})
 
-@nnx.split_rngs(splits=5, only='dropout')
-def f(rngs: nnx.Rngs):
-  print('Inside:')
-  # rngs.dropout() # ValueError: fold_in accepts a single key...
-  nnx.display(rngs)
+@nnx.fork_rngs(split={'dropout': 5})
+@nnx.vmap(in_axes=(rng_axes, None), out_axes=0)
+def sample_from_model(model, x):
+    return model(x)
 
-f(rngs)
-
-print('Outside:')
-rngs.dropout() # works!
-nnx.display(rngs)
+print(sample_from_model(model, x).shape)
 ```
 
-> **Note:** `nnx.split_rngs` allows passing an NNX [`Filter`](https://flax.readthedocs.io/en/latest/guides/filters_guide.html) to the `only` keyword argument in order to select the `nnx.RngStream`s that should be split when inside the function. In such a case, you only need to split the `dropout` PRNG key stream.
+Here `sample_from_model` is modified by two decorators:
+- The function we get from the `nnx.vmap` decorator expects that the random state of the `model` argument has already been split into 5 pieces. It runs the model once for each random key.
+- The function we get from the `nnx.fork_rngs` decorator splits the random state of its `model` argument into five pieces before passing it on to the inner function.
 
 +++
 
-## Transforms
+## Transforming implicit state
 
-As stated before, in Flax NNX the random state is just another type of state. This means that there is nothing special about it when it comes to Flax NNX transforms, which means that you should be able to use the Flax NNX state handling APIs of each transform to get the results you want.
++++
 
-In this section, you will go through two examples of using the random state in Flax NNX transforms - one with `nnx.pmap`, where you will learn how to split the PRNG state, and another one with `nnx.scan`, where you will freeze the PRNG state.
+In the previous section, we showed how to use `nnx.vmap` with a module that contained implicit random state. But we can use other `nnx` transformations too! For a more involved example, let’s explore how to implement recurrent dropout on an `RNNCell` using `nnx.scan`.
 
-### Data parallel dropout
+We'll start by constructing the `RNNCell` class:
 
-In the first example, you’ll explore how to use `nnx.pmap` to call the `nnx.Model` in a data parallel context.
-- Since the `nnx.Model` uses `nnx.Dropout`, you’ll need to split the random state of the `dropout` to ensure that each replica gets different dropout masks.
-- `nnx.StateAxes` is passed to `in_axes` to specify that the `model`'s `dropout` PRNG key stream will be parallelized across axis `0`, and the rest of its state will be replicated.
-- `nnx.split_rngs` is used to split the keys of the `dropout` PRNG key streams into N unique keys, one for each replica.
-
-```{code-cell} ipython3
-model = Model(nnx.Rngs(params=0, dropout=1))
-
-num_devices = jax.local_device_count()
-x = jnp.ones((num_devices, 16, 20))
-state_axes = nnx.StateAxes({'dropout': 0, ...: None})
-
-@nnx.split_rngs(splits=num_devices, only='dropout')
-@nnx.pmap(in_axes=(state_axes, 0), out_axes=0)
-def forward(model: Model, x: jnp.ndarray):
-  return model(x)
-
-y = forward(model, x)
-print(y.shape)
-```
-
-### Recurrent dropout
-
-Next, let’s explore how to implement an `RNNCell` that uses a recurrent dropout. To do this:
-
-- First, you will create an `nnx.Dropout` layer that will sample PRNG keys from a custom `recurrent_dropout` stream.
-- You will apply dropout (`drop`) to the hidden state `h` of the `RNNCell`.
+- First, create an `nnx.Dropout` layer that will sample PRNG keys from a custom `recurrent_dropout` stream.
+- Apply dropout (`drop`) to the hidden state `h` of the `RNNCell`.
 - Then, define an `initial_state` function to create the initial state of the `RNNCell`.
 - Finally, instantiate `RNNCell`.
 
@@ -337,7 +301,7 @@ class RNNCell(nnx.Module):
 cell = RNNCell(8, 16, nnx.Rngs(params=0, recurrent_dropout=1))
 ```
 
-Next, you will use `nnx.scan` over an `unroll` function to implement the `rnn_forward` operation:
+Next, use `nnx.scan` over an `unroll` function to implement the `rnn_forward` operation:
 - The key ingredient of recurrent dropout is to apply the same dropout mask across all time steps. Therefore, to achieve this you will pass `nnx.StateAxes` to `nnx.scan`'s `in_axes`, specifying that the `cell`'s `recurrent_dropout` PRNG stream will be broadcast, and the rest of the `RNNCell`'s state will be carried over.
 - Also, the hidden state `h` will be the `nnx.scan`'s `Carry` variable, and the sequence `x` will be `scan`ned over its axis `1`.
 
