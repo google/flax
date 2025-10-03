@@ -17,6 +17,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import typing as tp
+import inspect
 
 import jax
 import jax.experimental
@@ -128,14 +129,59 @@ class JitFn:
     out = self.f(*args, **kwargs)
 
     args_out, kwargs_out = extract.clear_non_graph_nodes((args, kwargs))
+    # For packaging outputs, do not attempt to broadcast shardings for args_out;
+    # only the function output `out` needs an output sharding prefix.
     pure_args_out, pure_kwargs_out, pure_out = extract.to_tree(
       (args_out, kwargs_out, out),
-      prefix=(self.in_shardings, self.kwarg_shardings, self.out_shardings),
+      prefix=(None, self.kwarg_shardings, self.out_shardings),
       ctxtag=self.ctxtag,
       split_fn=_jit_split_fn,
     )
 
     return pure_args_out, pure_kwargs_out, pure_out
+
+
+def _normalize_static_argnums(
+  fun: tp.Callable[..., tp.Any],
+  static_argnums: int | tp.Sequence[int] | None,
+  static_argnames: str | tp.Iterable[str] | None,
+) -> tuple[int, ...]:
+  """Normalize static args specification to positional indices.
+
+  This mirrors jax.jit's behavior sufficiently for positional static arguments
+  and named arguments resolvable from the function signature.
+  """
+  idxs: set[int] = set()
+  if static_argnums is not None:
+    if isinstance(static_argnums, int):
+      idxs.add(static_argnums)
+    else:
+      idxs.update(static_argnums)
+
+  if static_argnames is not None:
+    if isinstance(static_argnames, str):
+      names = (static_argnames,)
+    else:
+      names = tuple(static_argnames)
+    try:
+      sig = inspect.signature(fun)
+      # Map parameter names to their positional index among positional params.
+      pos_params: list[str] = []
+      for p in sig.parameters.values():
+        if p.kind in (
+          inspect.Parameter.POSITIONAL_ONLY,
+          inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+          pos_params.append(p.name)
+        # skip VAR_POSITIONAL, KEYWORD_ONLY, VAR_KEYWORD
+      name_to_idx = {n: i for i, n in enumerate(pos_params)}
+      for n in names:
+        if n in name_to_idx:
+          idxs.add(name_to_idx[n])
+    except (ValueError, TypeError):
+      # Fallback: if signature inspection fails, ignore static_argnames here.
+      pass
+  return tuple(sorted(idxs))
 
 
 @tp.overload
@@ -362,12 +408,34 @@ class JitWrapped(tp.Generic[P, R]):
     functools.update_wrapper(self, fun)
     self.fun: tp.Callable[P, R] = fun
     kwarg_shardings = None
-    self.jax_in_shardings = jax.tree.map(
-      lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
-      if isinstance(x, StateSharding)
-      else x,
-      in_shardings,
+    # Normalize static argnums/argnames to a tuple of positional indices.
+    self._static_positions: tuple[int, ...] = _normalize_static_argnums(
+      fun, static_argnums, static_argnames
     )
+
+    # Prepare jax_in_shardings for jax.jit by dropping entries that correspond
+    # to static positional arguments when a per-argument sequence is provided.
+    def _map_state_sharding(x):
+      return (
+        extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+        if isinstance(x, StateSharding)
+        else x
+      )
+
+    def _drop_static_from_sequence(seq):
+      # Keep only shardings for dynamic (non-static) positions.
+      result = []
+      for i, v in enumerate(seq):
+        if i not in self._static_positions:
+          result.append(v)
+      return type(seq)(result)
+
+    _in_shardings_mapped = jax.tree.map(_map_state_sharding, in_shardings)
+    if isinstance(_in_shardings_mapped, (tuple, list)) and self._static_positions:
+      self.jax_in_shardings = _drop_static_from_sequence(_in_shardings_mapped)
+    else:
+      # Single spec or no static args: pass through as-is so JAX can broadcast.
+      self.jax_in_shardings = _in_shardings_mapped
     self.jax_out_shardings = jax.tree.map(
       lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
       if isinstance(x, StateSharding)
@@ -378,11 +446,9 @@ class JitWrapped(tp.Generic[P, R]):
     self.jitted_fn = jax.jit(
       JitFn(fun, in_shardings, out_shardings, kwarg_shardings, self),
       in_shardings=self.jax_in_shardings,
-      out_shardings=(
-        self.jax_in_shardings,
-        kwarg_shardings,
-        self.jax_out_shardings,
-      ),
+      # For outputs, rely on propagation for args/kwargs tuples and only
+      # optionally constrain the actual function output via jax_out_shardings.
+      out_shardings=(None, kwarg_shardings, self.jax_out_shardings),
       static_argnums=static_argnums,
       static_argnames=static_argnames,
       donate_argnums=donate_argnums,
@@ -405,14 +471,55 @@ class JitWrapped(tp.Generic[P, R]):
     return functools.partial(self, obj)
 
   def _get_pure_args_kwargs(self, args, kwargs):
+    # Build a prefix for positional arguments that inserts `None` for static
+    # positions so that prefix broadcasting matches the full argument tuple.
+    def _build_positional_prefix():
+      if self.in_shardings is None:
+        return None
+      # Determine number of positional args and number of dynamic args.
+      num_args = len(args)
+      static_set = set(self._static_positions)
+      num_dynamic = num_args - sum(1 for i in range(num_args) if i in static_set)
+
+      # Expand user-provided in_shardings to a per-dynamic-arg sequence.
+      if isinstance(self.in_shardings, (tuple, list)):
+        dyn_specs = list(self.in_shardings)
+        # If user provided a shorter sequence (e.g., as a prefix), do not try
+        # to out-broadcast here; rely on extract/jax to handle deeper trees.
+        # When lengths mismatch with expected dynamic count, we will not index
+        # past available entries.
+      else:
+        # Single spec: broadcast to all dynamic args
+        dyn_specs = [self.in_shardings] * max(num_dynamic, 0)
+
+      # Now interleave dyn_specs into a full positional prefix, inserting
+      # None for static positions.
+      full_prefix: list[tp.Any] = []
+      dyn_idx = 0
+      for i in range(num_args):
+        if i in static_set:
+          full_prefix.append(None)
+        else:
+          # Guard against too-short dyn_specs: fall back to last available or None
+          if dyn_idx < len(dyn_specs):
+            full_prefix.append(dyn_specs[dyn_idx])
+          else:
+            full_prefix.append(None)
+          dyn_idx += 1
+      return type(args)(full_prefix)
+
+    pos_prefix = _build_positional_prefix()
+    prefix = (
+      (pos_prefix, self.kwarg_shardings)
+      if (pos_prefix is not None or self.kwarg_shardings is not None)
+      else None
+    )
+
     pure_args, pure_kwargs = extract.to_tree(
       (args, kwargs),
-      prefix=(self.in_shardings, self.kwarg_shardings)
-      if self.in_shardings is not None or self.kwarg_shardings is not None
-      else None,
+      prefix=prefix,
       split_fn=_jit_split_fn,
-      check_aliasing=self.in_shardings is not None
-      or self.kwarg_shardings is not None,
+      check_aliasing=(pos_prefix is not None) or (self.kwarg_shardings is not None),
       ctxtag=self,
     )
     return pure_args, pure_kwargs
