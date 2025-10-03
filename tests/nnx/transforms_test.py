@@ -420,6 +420,58 @@ class TestJIT(absltest.TestCase):
     y = compiled(m, x)
     self.assertEqual(m.count.value, 2)
 
+  def test_jit_static_no_static_in_shardings(self):
+    """Test nnx.jit with static args but no sharding for static positions."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+    
+    def fn(x, scale: float, use_relu: bool):
+      y = x * scale
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    # Use inputs with negative values so ReLU has an effect
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    scale = 0.5
+
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+    f = nnx.jit(fn, in_shardings=(x_sharding, None), static_argnums=(2,))
+
+    y_relu = f(x, scale, True)
+    y_no_relu = f(x, scale, False)
+
+    # Verify static arg toggles result
+    self.assertNotEqual(y_relu, y_no_relu)
+
+  def test_jit_static_with_extra_static_entry(self):
+    """Test nnx.jit with static args and sharding provided for static positions."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+    
+    def fn(x, scale: float, use_relu: bool):
+      y = x * scale
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    # Use inputs with negative values so ReLU has an effect
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    scale = 0.5
+
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+    g = nnx.jit(
+      fn, in_shardings=(x_sharding, None, None), static_argnums=(2,)
+    )
+
+    y_relu = g(x, scale, True)
+    y_no_relu = g(x, scale, False)
+
+    # Verify static arg toggles result even if user provided an extra sharding entry
+    self.assertNotEqual(y_relu, y_no_relu)
+
 class TestEvalShape(absltest.TestCase):
   def test_eval_shape(self):
     abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
