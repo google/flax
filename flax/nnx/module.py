@@ -27,6 +27,7 @@ from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
 from flax.nnx.graph import GraphState
 from flax.typing import Key, Path, PathParts
+import warnings
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -268,85 +269,33 @@ class Module(Pytree, metaclass=ModuleMeta):
     return old_value.value + value
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
-    """Recursively iterates over all nested :class:`Module`'s of the current Module, including
-    the current Module.
-
-    ``iter_modules`` creates a generator that yields the path and the Module instance, where
-    the path is a tuple of strings or integers representing the path to the Module from the
-    root Module.
-
-    Example::
-
-      >>> from flax import nnx
-      ...
-      >>> class SubModule(nnx.Module):
-      ...   def __init__(self, din, dout, rngs):
-      ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
-      ...
-      >>> class Block(nnx.Module):
-      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
-      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.submodule = SubModule(din, dout, rngs=rngs)
-      ...     self.dropout = nnx.Dropout(0.5)
-      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
-      ...
-      >>> model = Block(2, 5, rngs=nnx.Rngs(0))
-      >>> for path, module in model.iter_modules():
-      ...   print(path, type(module).__name__)
-      ...
-      ('batch_norm',) BatchNorm
-      ('dropout',) Dropout
-      ('linear',) Linear
-      ('submodule', 'linear1') Linear
-      ('submodule', 'linear2') Linear
-      ('submodule',) SubModule
-      () Block
     """
-    for path, value in graph.iter_graph(self):
-      if isinstance(value, Module):
-        yield path, value
+    Warning: this method is method is deprecated; use :func:`iter_modules` instead.
+
+    Recursively iterates over all nested :class:`Module`'s of the current Module, including
+    the current Module. Alias of :func:`iter_modules`.
+    """
+    warnings.warn(
+      "The 'm.iter_modules()' method is deprecated; use the 'nnx.iter_modules(m)' function instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    yield from iter_modules(self)
 
   def iter_children(self) -> tp.Iterator[tuple[Key, Module]]:
-    """Iterates over all children :class:`Module`'s of the current Module. This
-    method is similar to :func:`iter_modules`, except it only iterates over the
-    immediate children, and does not recurse further down.
-
-    ``iter_children`` creates a generator that yields the key and the Module instance,
-    where the key is a string representing the attribute name of the Module to access
-    the corresponding child Module.
-
-    Example::
-
-      >>> from flax import nnx
-      ...
-      >>> class SubModule(nnx.Module):
-      ...   def __init__(self, din, dout, rngs):
-      ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
-      ...
-      >>> class Block(nnx.Module):
-      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
-      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.submodule = SubModule(din, dout, rngs=rngs)
-      ...     self.dropout = nnx.Dropout(0.5)
-      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
-      ...
-      >>> model = Block(2, 5, rngs=nnx.Rngs(0))
-      >>> for path, module in model.iter_children():
-      ...  print(path, type(module).__name__)
-      ...
-      batch_norm BatchNorm
-      dropout Dropout
-      linear Linear
-      submodule SubModule
     """
-    node_impl = graph.get_node_impl(self)
-    assert node_impl is not None
-    node_dict = node_impl.node_dict(self)
-    for key, value in node_dict.items():
-      if isinstance(value, Module):
-        yield key, value
+    Warning: this method is method is deprecated; use :func:`iter_children` instead.
+
+    Iterates over all children :class:`Module`'s of the current Module. This
+    method is similar to :func:`iter_modules`, except it only iterates over the
+    immediate children, and does not recurse further down. Alias of :func:`iter_children`.
+    """
+    warnings.warn(
+      "The 'm.iter_children()' method is deprecated; use the 'nnx.iter_children(m)' function instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    yield from iter_children(self)
 
   def set_attributes(
     self,
@@ -392,7 +341,7 @@ class Module(Pytree, metaclass=ModuleMeta):
     if not filters:
       filters = (True,)
     predicates = tuple(map(filterlib.to_predicate, filters))
-    for path, module in self.iter_modules():
+    for path, module in iter_modules(self):
       for predicate in predicates:
         if predicate(path, module):
           for name, value in attributes.items():
@@ -494,3 +443,84 @@ def first_from(*args: tp.Optional[A], error_msg: str) -> A:
     if arg is not None:
       return arg
   raise ValueError(error_msg)
+
+def iter_modules(module: Module) -> tp.Iterator[tuple[PathParts, Module]]:
+  """Recursively iterates over all nested :class:`Module`'s of the given Module, including
+  the argument.
+
+  Specifically, this function creates a generator that yields the path and the Module instance, where
+  the path is a tuple of strings or integers representing the path to the Module from the
+  root Module.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class SubModule(nnx.Module):
+    ...   def __init__(self, din, dout, rngs):
+    ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.submodule = SubModule(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> model = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> for path, module in nnx.iter_modules(model):
+    ...   print(path, type(module).__name__)
+    ...
+    ('batch_norm',) BatchNorm
+    ('dropout',) Dropout
+    ('linear',) Linear
+    ('submodule', 'linear1') Linear
+    ('submodule', 'linear2') Linear
+    ('submodule',) SubModule
+    () Block
+  """
+  for path, value in graph.iter_graph(module):
+    if isinstance(value, Module):
+      yield path, value
+
+def iter_children(module: Module) -> tp.Iterator[tuple[Key, Module]]:
+  """Iterates over all children :class:`Module`'s of a given Module. This
+  method is similar to :func:`iter_modules`, except it only iterates over the
+  immediate children, and does not recurse further down.
+
+  Specifically, this function creates a generator that yields the key and the Module instance,
+  where the key is a string representing the attribute name of the Module to access
+  the corresponding child Module.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class SubModule(nnx.Module):
+    ...   def __init__(self, din, dout, rngs):
+    ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.submodule = SubModule(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> model = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> for path, module in nnx.iter_children(model):
+    ...  print(path, type(module).__name__)
+    ...
+    batch_norm BatchNorm
+    dropout Dropout
+    linear Linear
+    submodule SubModule
+  """
+  node_impl = graph.get_node_impl(module)
+  assert node_impl is not None
+  node_dict = node_impl.node_dict(module)
+  for key, value in node_dict.items():
+    if isinstance(value, Module):
+      yield key, value
