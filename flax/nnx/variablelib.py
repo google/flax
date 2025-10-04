@@ -315,15 +315,15 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
-    if (
-      name == 'value'
-      or name == 'raw_value'
-      or name == '_var_metadata'
-      or name == '_trace_state'
-    ):
+    try:
       object.__setattr__(self, name, value)
-    else:
-      self._var_metadata[name] = value
+    except AttributeError as e:
+      raise AttributeError(
+        f'Cannot set attribute {name}. '
+        f'To set Variable metadata use either:\n\n'
+        f'  variable.set_metadata({name}=value)\n\nor\n\n'
+        f"  variable.set_metadata('{name}', value)"
+      ) from e
 
   def __delattr__(self, name: str):
     if not self._trace_state.is_valid():
