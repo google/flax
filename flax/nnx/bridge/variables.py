@@ -78,11 +78,11 @@ def is_vanilla_variable(vs: variablelib.Variable) -> bool:
   Returns False only if it has non-empty hooks or any non-built-in attribute.
   """
   for key, value in vs.get_metadata().items():
-    if key.endswith('_hooks'):
-      if value != ():
-        return False
-    else:
-      return False
+    if key in ('is_hijax', 'eager_sharding'):
+      continue
+    if key.endswith('_hooks') and value == ():
+      continue
+    return False
   return True
 
 

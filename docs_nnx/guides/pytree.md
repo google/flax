@@ -155,7 +155,7 @@ pytree_structure(pytree)
 
 The only change we had to do here is use `nnx.List` to signal that `layers` contains `data`, the status of the rest of the attributes can be correctly inferred. The rules that determine if a value is data or not are the following:
 
-* `Array`s, `Variable`s, `ArrayRef`s, and `Pytree`s are data.
+* `Array`s, `Variable`s, `ArrayRef`s, and `nnx.Pytree`s are data.
 * Types registered using `nnx.register_data_type` are data.
 * All other types are static.
 

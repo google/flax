@@ -79,8 +79,8 @@ class TestSPMD(parameterized.TestCase):
     with mesh:
       m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
 
-    assert m.w.value.shape == (8, 2)
-    assert m.w.value.sharding.shard_shape(m.w.value.shape) == (8, 2)
+    assert m.w.shape == (8, 2)
+    assert m.w.sharding.shard_shape(m.w.shape) == (8, 2)
 
   def test_shard_optimizer_state(self):
     class Foo(nnx.Module):
@@ -175,9 +175,9 @@ class TestSPMD(parameterized.TestCase):
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(bremoves, [(0, 'layers')])
 
-  @parameterized.product(use_ref=[True, False])
-  def test_logical_rules(self, use_ref):
-    self.enter_context(nnx.use_refs(use_ref))
+  @parameterized.product(use_hijax=[True, False])
+  def test_logical_rules(self, use_hijax):
+    self.enter_context(nnx.use_hijax(use_hijax))
     class Foo(nnx.Module):
 
       def __init__(self):

@@ -22,7 +22,6 @@ import jax.numpy as jnp
 
 from flax import errors, struct
 from flax.nnx import graph
-from flax.nnx import variablelib
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
 from flax.nnx.pytreelib import Pytree
@@ -70,7 +69,7 @@ class RngStream(Pytree):
     self.count = RngCount(count, tag=tag)
 
   def __call__(self) -> jax.Array:
-    if not self.count.has_ref and not self.count._trace_state.is_valid():
+    if not self.count.trace_state.is_valid():
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
@@ -365,7 +364,7 @@ class Rngs(Pytree):
 
     for tag, key in rngs.items():
       if isinstance(key, RngStream):
-        key = key.key.value
+        key = key.key[...]
       stream = RngStream(
         key=key,
         tag=tag,
@@ -842,10 +841,7 @@ def split_rngs(
       key = random.split(key, splits)
       if squeeze:
         key = key[0]
-      if variablelib.is_array_ref(stream.key.raw_value):
-        stream.key.raw_value = variablelib.new_ref(key)  # type: ignore[assignment]
-      else:
-        stream.key.value = key
+      stream.key.value = key
       if squeeze:
         counts_shape = stream.count.shape
       elif isinstance(splits, int):
@@ -853,11 +849,7 @@ def split_rngs(
       else:
         counts_shape = (*splits, *stream.count.shape)
 
-      count = jnp.zeros(counts_shape, dtype=jnp.uint32)
-      if variablelib.is_array_ref(stream.count.raw_value):
-        stream.count.raw_value = variablelib.new_ref(count)  # type: ignore[assignment]
-      else:
-        stream.count.value = count
+      stream.count.value = jnp.zeros(counts_shape, dtype=jnp.uint32)
 
   return SplitBackups(backups)
 

@@ -27,9 +27,9 @@ class TestLora(absltest.TestCase):
     y = module(x)
 
     assert y.shape == (1, 4)
-    assert module.lora_a.value.shape == (3, 2)
-    assert module.lora_b.value.shape == (2, 4)
-    np.testing.assert_allclose(y, x @ module.lora_a.value @ module.lora_b.value)
+    assert module.lora_a.shape == (3, 2)
+    assert module.lora_b.shape == (2, 4)
+    np.testing.assert_allclose(y, x @ module.lora_a @ module.lora_b)
 
   def test_lora_base_module(self):
     rngs = nnx.Rngs(0)
@@ -40,12 +40,12 @@ class TestLora(absltest.TestCase):
 
     assert y.shape == (1, 4)
     assert module.base_module == linear
-    assert module.base_module.kernel.value.shape == (3, 4)
+    assert module.base_module.kernel.shape == (3, 4)
     assert module.base_module.bias == None
-    assert module.lora_a.value.shape == (3, 2)
-    assert module.lora_b.value.shape == (2, 4)
+    assert module.lora_a.shape == (3, 2)
+    assert module.lora_b.shape == (2, 4)
     np.testing.assert_allclose(
-      y, x @ linear.kernel.value + x @ module.lora_a.value @ module.lora_b.value
+      y, x @ linear.kernel + x @ module.lora_a @ module.lora_b
     )
 
   def test_layer_swap_lora(self):
@@ -70,7 +70,7 @@ class TestLora(absltest.TestCase):
     assert y.shape == (1, 3)
     assert lora_y.shape == (1, 3)
     np.testing.assert_allclose(y, lora_y)
-    a, b = model.linear2.lora_a.value, model.linear2.lora_b.value
+    a, b = model.linear2.lora_a[...], model.linear2.lora_b[...]
     np.testing.assert_allclose(y + model.linear1(x) @ a @ b, lora_y)
 
   def test_layer_swap_loralinear(self):
@@ -99,7 +99,7 @@ class TestLora(absltest.TestCase):
     assert y.shape == (1, 3)
     assert lora_y.shape == (1, 3)
     np.testing.assert_allclose(y, lora_y)
-    a, b = model.linear2.lora.lora_a.value, model.linear2.lora.lora_b.value
+    a, b = model.linear2.lora.lora_a[...], model.linear2.lora.lora_b[...]
     np.testing.assert_allclose(y + model.linear1(x) @ a @ b, lora_y)
 
   def test_lora_param_type(self):
@@ -108,19 +108,19 @@ class TestLora(absltest.TestCase):
     _, lora_params, params = nnx.split(model, nnx.LoRAParam, nnx.Param)
     assert params == {}
     assert ('lora_a' in lora_params) and ('lora_b' in lora_params)
-    np.testing.assert_allclose(lora_params['lora_a'].value, model.lora_a.value)
+    np.testing.assert_allclose(lora_params['lora_a'][...], model.lora_a[...])
 
     model = nnx.LoRA(3, 4, 2, lora_param_type=nnx.Param, rngs=rngs)
     _, params, lora_params = nnx.split(model, nnx.Param, nnx.LoRAParam)
     assert ('lora_a' in params) and ('lora_b' in params)
-    np.testing.assert_allclose(params['lora_a'].value, model.lora_a.value)
+    np.testing.assert_allclose(params['lora_a'][...], model.lora_a[...])
     assert lora_params == {}
 
   def test_dtype(self):
     rngs = nnx.Rngs(0)
     model = nnx.LoRA(3, 4, 2, dtype=jnp.float16, param_dtype=jnp.float32,
                      rngs=rngs)
-    assert model.lora_a.value.dtype == jnp.float32
+    assert model.lora_a.dtype == jnp.float32
     y = model(jnp.ones((1, 3)).astype(jnp.float32))
     assert y.dtype == jnp.float16
 

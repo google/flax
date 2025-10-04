@@ -53,7 +53,7 @@ class OptVariable(OptState):
 def to_opt_state(tree):
   def _to_opt_state(x):
     if isinstance(x, Variable):
-      opt_state = OptVariable(x.value, **x.get_metadata())  # type: ignore
+      opt_state = OptVariable(x[...], **x.get_metadata())  # type: ignore
     else:
       opt_state = OptArray(x)
     return opt_state
@@ -210,10 +210,12 @@ class Optimizer(Pytree, tp.Generic[M]):
       **kwargs: additional keyword arguments passed to the tx.update, to support
       ``GradientTransformationExtraArgs``, such as ``optax.scale_by_backtracking_linesearch``.
     """
-    param_arrays = nnx.to_arrays(nnx.pure(nnx.state(model, self.wrt)))
-    grad_arrays = nnx.to_arrays(nnx.pure(nnx.state(grads)))
-    opt_state_arrays = nnx.to_arrays(nnx.pure(self.opt_state))
-    kwargs_arrays = nnx.to_arrays(nnx.pure(kwargs))
+    param_arrays = nnx.to_lojax(
+      nnx.to_arrays(nnx.pure(nnx.state(model, self.wrt)))
+    )
+    grad_arrays = nnx.to_lojax(nnx.to_arrays(nnx.pure(nnx.state(grads))))
+    opt_state_arrays = nnx.to_lojax(nnx.to_arrays(nnx.pure(self.opt_state)))
+    kwargs_arrays = nnx.to_lojax(nnx.to_arrays(nnx.pure(kwargs)))
 
     updates, new_opt_state = self.tx.update(
       grad_arrays, opt_state_arrays, param_arrays, **kwargs_arrays

@@ -111,5 +111,7 @@ class PReLU(nnx.Module):
 
   def __call__(self, inputs: Array) -> Array:
     return jnp.where(
-      inputs >= 0, inputs, jnp.asarray(self.negative_slope.value, inputs.dtype) * inputs
+      inputs >= 0,
+      inputs,
+      jnp.asarray(self.negative_slope[...], inputs.dtype) * inputs,
     )

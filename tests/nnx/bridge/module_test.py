@@ -124,7 +124,7 @@ class TestBridgeModule(absltest.TestCase):
         count = self.variable(
           'counts', 'count', lambda: jnp.zeros((), jnp.int32)
         )
-        count.value += 1
+        count[...] += 1
 
     model_nnx = FooNNX()
 
@@ -149,8 +149,8 @@ class TestBridgeModule(absltest.TestCase):
     scope = bar.apply({}, rngs=1)
     self.assertIsNone(bar.scope)
 
-    self.assertEqual(scope.rngs.default.key.value, jax.random.key(1))
-    self.assertEqual(scope.rngs.default.count.value, 0)
+    self.assertEqual(scope.rngs.default.key[...], jax.random.key(1))
+    self.assertEqual(scope.rngs.default.count[...], 0)
 
     class Baz(bridge.Module):
       @bridge.compact
@@ -315,7 +315,7 @@ class TestBridgeModule(absltest.TestCase):
       def __call__(self, x):
         # Required check to avoid state update in `init()`. Can this be avoided?
         if not bridge.current_module().is_initializing():
-          self.count.value = self.count.value + 1
+          self.count[...] += 1
         x = self.linear(x)
         x = self.dropout(x)
         return x
@@ -435,7 +435,7 @@ class TestBridgeModule(absltest.TestCase):
     y2 = model.apply(variables, x, rngs={'params': k1, 'dropout': k3})
     assert not jnp.array_equal(y1, y2)
 
-  def test_name(self):
+  def test_name2(self):
     class Foo(bridge.Module):
       name: str
 
