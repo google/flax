@@ -171,8 +171,6 @@ class LinearGeneral(Module):
     self.use_bias = use_bias
     self.dtype = dtype
     self.param_dtype = param_dtype
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.precision = precision
     self.dot_general = dot_general
     self.dot_general_cls = dot_general_cls
@@ -205,7 +203,7 @@ class LinearGeneral(Module):
         np.prod(shape[-n_out_features:]),
       )
       flat_shape = jax.tree.map(int, flat_shape)
-      kernel = self.kernel_init(rng, flat_shape, dtype)
+      kernel = kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, variablelib.VariableMetadata):
         kernel.raw_value = jnp.reshape(kernel.raw_value, shape)
       else:
@@ -228,7 +226,7 @@ class LinearGeneral(Module):
 
       def bias_init_wrap(rng, shape, dtype):
         flat_shape = (int(np.prod(shape)),)
-        bias = self.bias_init(rng, flat_shape, dtype)
+        bias = bias_init(rng, flat_shape, dtype)
         if isinstance(bias, variablelib.VariableMetadata):
           bias.raw_value = jnp.reshape(bias.raw_value, shape)
         else:
@@ -375,8 +373,6 @@ class Linear(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.dot_general = dot_general
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
@@ -494,8 +490,6 @@ class Einsum(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.promote_dtype = promote_dtype
     self.einsum_op = einsum_op
     self.preferred_element_type = preferred_element_type
@@ -739,8 +733,6 @@ class Conv(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.conv_general_dilated = conv_general_dilated
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
@@ -989,8 +981,6 @@ class ConvTranspose(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.transpose_kernel = transpose_kernel
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
@@ -1002,13 +992,13 @@ class ConvTranspose(Module):
 
     self.kernel_shape = kernel_shape
     self.kernel = nnx.Param(
-      self.kernel_init(rngs.params(), kernel_shape, self.param_dtype)
+      kernel_init(rngs.params(), kernel_shape, self.param_dtype)
     )
 
     self.bias: nnx.Param | None
     if self.use_bias:
       self.bias = nnx.Param(
-        self.bias_init(rngs.params(), (self.out_features,), self.param_dtype)
+        bias_init(rngs.params(), (self.out_features,), self.param_dtype)
       )
     else:
       self.bias = nnx.data(None)
@@ -1222,7 +1212,6 @@ class Embed(Module):
     self.features = features
     self.dtype = dtype or self.embedding.value.dtype
     self.param_dtype = param_dtype
-    self.embedding_init = embedding_init
     self.promote_dtype = promote_dtype
 
   def __call__(self, inputs: Array) -> Array:

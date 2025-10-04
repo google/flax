@@ -321,8 +321,6 @@ class BatchNorm(Module):
     self.param_dtype = param_dtype
     self.use_bias = use_bias
     self.use_scale = use_scale
-    self.bias_init = bias_init
-    self.scale_init = scale_init
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
     self.use_fast_variance = use_fast_variance
@@ -490,8 +488,6 @@ class LayerNorm(Module):
     self.param_dtype = param_dtype
     self.use_bias = use_bias
     self.use_scale = use_scale
-    self.bias_init = bias_init
-    self.scale_init = scale_init
     self.reduction_axes = reduction_axes
     self.feature_axes = feature_axes
     self.axis_name = axis_name
@@ -611,7 +607,6 @@ class RMSNorm(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.use_scale = use_scale
-    self.scale_init = scale_init
     self.reduction_axes = reduction_axes
     self.feature_axes = feature_axes
     self.axis_name = axis_name
@@ -793,8 +788,6 @@ class GroupNorm(Module):
     self.param_dtype = param_dtype
     self.use_bias = use_bias
     self.use_scale = use_scale
-    self.bias_init = bias_init
-    self.scale_init = scale_init
     self.reduction_axes = reduction_axes
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
@@ -958,8 +951,6 @@ class InstanceNorm(Module):
     self.param_dtype = param_dtype
     self.use_bias = use_bias
     self.use_scale = use_scale
-    self.bias_init = bias_init
-    self.scale_init = scale_init
     self.feature_axes = feature_axes
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
