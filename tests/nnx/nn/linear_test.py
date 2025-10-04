@@ -240,5 +240,39 @@ class TestPReLUConsistency(parameterized.TestCase):
     )
 
 
+class TestLayersSameGraph(parameterized.TestCase):
+
+  @parameterized.product(
+    module_args_kwargs_initargs=[
+      (nnx.LinearGeneral, (2, (3, 4)), {"rngs": nnx.Rngs(0)}, ("kernel_init", "bias_init")),
+      (nnx.Linear, (2, 4), {"rngs": nnx.Rngs(0)}, ("kernel_init", "bias_init")),
+      (nnx.Einsum, ("ik,kj->ij", 4, 3), {"rngs": nnx.Rngs(0)}, ("kernel_init", "bias_init")),
+      (nnx.Conv, (2, 4, 3), {"rngs": nnx.Rngs(0)}, ("kernel_init", "bias_init")),
+      (nnx.ConvTranspose, (2, 4, 3), {"rngs": nnx.Rngs(0)}, ("kernel_init", "bias_init")),
+      (nnx.Embed, (2, 4), {"rngs": nnx.Rngs(0)}, ("embedding_init",)),
+      (
+        nnx.MultiHeadAttention,
+        (8, 5, 16),
+        {"rngs": nnx.Rngs(0)},
+        ("kernel_init", "out_kernel_init", "bias_init", "out_bias_init"),
+      ),
+      (nnx.BatchNorm, (3, ), {"rngs": nnx.Rngs(0)}, ("scale_init", "bias_init")),
+      (nnx.RMSNorm, (3, ), {"rngs": nnx.Rngs(0)}, ("scale_init", )),
+      (nnx.GroupNorm, (6, 3), {"rngs": nnx.Rngs(0)}, ("scale_init", "bias_init")),
+      (nnx.InstanceNorm, (6,), {"rngs": nnx.Rngs(0)}, ("scale_init", "bias_init")),
+    ],
+  )
+  def test(self, module_args_kwargs_initargs):
+    module_cls, args, kwargs, init_argnames = module_args_kwargs_initargs
+    init_zeros = nnx.initializers.zeros
+    init_ones = nnx.initializers.ones
+    init1_kwargs = {k: init_zeros for k in init_argnames}
+    init2_kwargs = {k: init_ones for k in init_argnames}
+    mod1 = module_cls(*args, **init1_kwargs, **kwargs)
+    mod2 = module_cls(*args, **init2_kwargs, **kwargs)
+    g1, g2 = nnx.graphdef(mod1), nnx.graphdef(mod2)
+    assert g1 == g2
+
+
 if __name__ == '__main__':
   absltest.main()

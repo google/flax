@@ -355,10 +355,6 @@ class MultiHeadAttention(Module):
     self.dropout_rate = dropout_rate
     self.deterministic = deterministic
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.out_kernel_init = out_kernel_init
-    self.bias_init = bias_init
-    self.out_bias_init = out_bias_init
     self.use_bias = use_bias
     self.attention_fn = attention_fn
     self.decode = decode
@@ -381,8 +377,8 @@ class MultiHeadAttention(Module):
       out_features=(self.num_heads, self.head_dim),
       dtype=self.dtype,
       param_dtype=self.param_dtype,
-      kernel_init=self.kernel_init,
-      bias_init=self.bias_init,
+      kernel_init=kernel_init,
+      bias_init=bias_init,
       use_bias=self.use_bias,
       precision=self.precision,
       dot_general=self.qkv_dot_general,
@@ -421,8 +417,8 @@ class MultiHeadAttention(Module):
       in_features=(self.num_heads, self.head_dim),
       out_features=self.out_features,
       axis=(-2, -1),
-      kernel_init=self.out_kernel_init or self.kernel_init,
-      bias_init=self.out_bias_init or self.bias_init,
+      kernel_init=out_kernel_init or kernel_init,
+      bias_init=out_bias_init or bias_init,
       use_bias=self.use_bias,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
