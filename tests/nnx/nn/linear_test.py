@@ -260,6 +260,26 @@ class TestLayersSameGraph(parameterized.TestCase):
       (nnx.RMSNorm, (3, ), {"rngs": nnx.Rngs(0)}, ("scale_init", )),
       (nnx.GroupNorm, (6, 3), {"rngs": nnx.Rngs(0)}, ("scale_init", "bias_init")),
       (nnx.InstanceNorm, (6,), {"rngs": nnx.Rngs(0)}, ("scale_init", "bias_init")),
+      (
+        nnx.LSTMCell, (4, 5),
+        {"rngs": nnx.Rngs(0)},
+        ("kernel_init", "recurrent_kernel_init", "bias_init"),
+      ),
+      (
+        nnx.OptimizedLSTMCell, (4, 5),
+        {"rngs": nnx.Rngs(0)},
+        ("kernel_init", "recurrent_kernel_init", "bias_init"),
+      ),
+      (
+        nnx.SimpleCell, (4, 5),
+        {"rngs": nnx.Rngs(0)},
+        ("kernel_init", "recurrent_kernel_init", "bias_init"),
+      ),
+      (
+        nnx.GRUCell, (4, 5),
+        {"rngs": nnx.Rngs(0)},
+        ("kernel_init", "recurrent_kernel_init", "bias_init"),
+      ),
     ],
   )
   def test(self, module_args_kwargs_initargs):

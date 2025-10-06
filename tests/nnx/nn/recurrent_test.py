@@ -86,11 +86,12 @@ class TestLSTMCell(absltest.TestCase):
     module = nnx.LSTMCell(
       in_features=3,
       hidden_features=4,
-      carry_init=initializers.ones,
       rngs=nnx.Rngs(0),
     )
     x_shape = (1, 3)
-    carry = module.initialize_carry(x_shape, nnx.Rngs(0))
+    carry = module.initialize_carry(
+      x_shape, nnx.Rngs(0), carry_init=initializers.ones
+    )
     c, h = carry
     self.assertTrue(jnp.all(c == 1.0))
     self.assertTrue(jnp.all(h == 1.0))
