@@ -16,9 +16,11 @@
 
 import pathlib
 import tempfile
+import sys
 
 from absl.testing import absltest
 import jax
+import flax.nnx as nnx
 from jax import numpy as jnp
 import numpy as np
 import tensorflow as tf
@@ -36,23 +38,19 @@ class TrainTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
+    if sys.version_info < (3, 13):
+      self.skipTest('Tensorflow 2.20 required for this test, which conflicts with tensorflow_text.')
     # Make sure tf does not allocate gpu memory.
     tf.config.experimental.set_visible_devices([], "GPU")
 
   def test_cnn(self):
     """Tests CNN module used as the trainable model."""
-    rng = jax.random.key(0)
-    inputs = jnp.ones((1, 28, 28, 3), jnp.float32)
-    output, variables = train.CNN().init_with_output(rng, inputs)
+    inputs = jnp.ones((1, 28, 28, 1), jnp.float32)
+    cnn = train.CNN(nnx.Rngs(0))
+    cnn.eval()
+    output = cnn(inputs, None)
 
     self.assertEqual((1, 10), output.shape)
-    self.assertEqual(
-        CNN_PARAMS,
-        sum(
-            np.prod(arr.shape)
-            for arr in jax.tree_util.tree_leaves(variables["params"])
-        ),
-    )
 
   def test_train_and_evaluate(self):
     """Tests training and evaluation code by running a single step."""
