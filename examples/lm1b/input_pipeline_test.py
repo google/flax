@@ -14,6 +14,7 @@
 
 import os
 import pathlib
+import sys
 import tempfile
 
 from absl.testing import absltest
@@ -33,6 +34,8 @@ class InputPipelineTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
+    if sys.version_info >= (3, 13):
+      self.skipTest('Test (and tensorflow-text) does not suport Python 3.13+')
     self.train_ds, self.eval_ds, self.predict_ds = self._get_datasets()
 
   def _get_datasets(self):

@@ -20,12 +20,13 @@ import tempfile
 import time
 from typing import Any, Dict, Tuple
 from collections.abc import Iterable
+import sys
 
 from absl import logging
 import jax
 import tensorflow as tf
-import tensorflow_text as tftxt
-
+if sys.version_info < (3, 13):
+  import tensorflow_text as tftxt
 from sentencepiece import SentencePieceTrainer
 
 Features = dict[str, tf.Tensor]

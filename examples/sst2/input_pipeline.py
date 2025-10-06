@@ -14,13 +14,15 @@
 
 """SST-2 input pipeline."""
 
+import sys
 from typing import Any, Dict, Optional
 
 from absl import logging
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-import tensorflow_text as text
+if sys.version_info < (3, 13):
+  import tensorflow_text as text
 
 import vocabulary
 
@@ -177,7 +179,7 @@ class TextDataset:
       self,
       tfds_name: str = 'glue/sst2',
       vocab_path: str = 'vocab.txt',
-      tokenizer: text.Tokenizer = text.WhitespaceTokenizer(),
+      tokenizer=None,
       split='train',
   ):
     """Initializes the SST2 data source."""
@@ -194,6 +196,8 @@ class TextDataset:
     self.vocab = vocabulary.Vocabulary(vocab_path=vocab_path)
 
     # Convert the sentences to sequences of token IDs and compute length.
+    if tokenizer is None:
+       tokenizer = text.WhitespaceTokenizer()
     self.tokenizer = tokenizer
     self.tf_vocab = vocab_to_hashtable(self.vocab, unk_idx=self.vocab.unk_idx)
     self.examples = self.dataset.map(
