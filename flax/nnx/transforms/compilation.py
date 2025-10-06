@@ -422,20 +422,10 @@ class JitWrapped(tp.Generic[P, R]):
         else x
       )
 
-    def _drop_static_from_sequence(seq):
-      # Keep only shardings for dynamic (non-static) positions.
-      result = []
-      for i, v in enumerate(seq):
-        if i not in self._static_positions:
-          result.append(v)
-      return type(seq)(result)
-
     _in_shardings_mapped = jax.tree.map(_map_state_sharding, in_shardings)
-    if isinstance(_in_shardings_mapped, (tuple, list)) and self._static_positions:
-      self.jax_in_shardings = _drop_static_from_sequence(_in_shardings_mapped)
-    else:
-      # Single spec or no static args: pass through as-is so JAX can broadcast.
-      self.jax_in_shardings = _in_shardings_mapped
+    # Pass through as-is; treat any sequence as dynamic-argument shardings.
+    # JAX validates length against dynamic positional arguments.
+    self.jax_in_shardings = _in_shardings_mapped
     self.jax_out_shardings = jax.tree.map(
       lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
       if isinstance(x, StateSharding)
@@ -479,7 +469,7 @@ class JitWrapped(tp.Generic[P, R]):
       # Determine number of positional args and number of dynamic args.
       num_args = len(args)
       static_set = set(self._static_positions)
-      num_dynamic = num_args - sum(1 for i in range(num_args) if i in static_set)
+      num_dynamic = num_args - len(static_set)
 
       # Expand user-provided in_shardings to a per-dynamic-arg sequence.
       if isinstance(self.in_shardings, (tuple, list)):
@@ -494,19 +484,10 @@ class JitWrapped(tp.Generic[P, R]):
 
       # Now interleave dyn_specs into a full positional prefix, inserting
       # None for static positions.
-      full_prefix: list[tp.Any] = []
-      dyn_idx = 0
-      for i in range(num_args):
-        if i in static_set:
-          full_prefix.append(None)
-        else:
-          # Guard against too-short dyn_specs: fall back to last available or None
-          if dyn_idx < len(dyn_specs):
-            full_prefix.append(dyn_specs[dyn_idx])
-          else:
-            full_prefix.append(None)
-          dyn_idx += 1
-      return type(args)(full_prefix)
+      dyn_iter = iter(dyn_specs)
+      return type(args)(
+        None if i in static_set else next(dyn_iter, None) for i in range(num_args)
+      )
 
     pos_prefix = _build_positional_prefix()
     prefix = (
