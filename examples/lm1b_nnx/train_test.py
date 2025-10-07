@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import pathlib
+import sys
 import tempfile
 
 import jax
@@ -31,6 +32,8 @@ class TrainTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
+    if sys.version_info >= (3, 13):
+      self.skipTest('Test (and tensorflow-text) does not suport Python 3.13+')
     tf.config.experimental.set_visible_devices([], 'GPU')
 
   def test_train_and_evaluate(self):

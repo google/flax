@@ -13,6 +13,8 @@
 # limitations under the License.
 
 """Tests for sst2.train."""
+import sys
+
 from absl.testing import absltest
 from absl.testing import parameterized
 import jax

@@ -15,6 +15,7 @@
 """Provides op for tokenizing a dataset."""
 
 import os
+import sys
 import tempfile
 import time
 from typing import Any, Dict, Tuple
@@ -25,7 +26,8 @@ import dataclasses
 import jax
 from sentencepiece import SentencePieceTrainer
 import tensorflow as tf
-import tensorflow_text as tftxt
+if sys.version_info < (3, 13):
+  import tensorflow_text as tftxt
 
 Features = dict[str, tf.Tensor]
 
