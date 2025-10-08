@@ -534,7 +534,7 @@ class MultiHeadAttention(Module):
         max_length,
         num_heads,
         depth_per_head,
-      ) = self.cached_key.value.shape
+      ) = self.cached_key.shape
       # shape check of cached keys against query input
       expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
       if expected_shape != query.shape:

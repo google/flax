@@ -604,23 +604,26 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
   # --------------------------------------------
   # proxy methods
   # --------------------------------------------
-
-  def __getitem__(self, key) -> jax.Array:
+  @tp.overload
+  def __getitem__(self: Variable[jax.Array], key) -> jax.Array: ...
+  @tp.overload
+  def __getitem__(self: Variable[dict[tp.Any, B]], key) -> B: ...
+  @tp.overload
+  def __getitem__(self: Variable[list[B]], key: int) -> B: ...
+  @tp.overload
+  def __getitem__(self: Variable[tuple[B, ...]], key: int) -> B: ...
+  @tp.overload
+  def __getitem__(self, key) -> tp.Any: ...
+  def __getitem__(self, key):
     return self.value[key]  # type: ignore
 
-  def __setitem__(self, key, value) -> None:
-    if not self.has_ref and not self._trace_state.is_valid():
-      raise errors.TraceContextError(
-        f'Cannot mutate {type(self).__name__} from a different trace level'
-      )
-    if self.has_ref:
-      self.raw_value[key] = value  # type: ignore
-    elif key == ...:
-      self.value = value
-    elif isinstance(self.raw_value, jax.Array):
-      self.raw_value = self.raw_value.at[key].set(value)  # type: ignore
+  def __setitem__(self, key, item_value) -> None:
+    value = self.value
+    if isinstance(value, jax.Array):
+      value = value.at[key].set(item_value)  # type: ignore[assignment]
     else:
-      self.raw_value[key] = value  # type: ignore
+      value[key] = item_value  # type: ignore
+    self.value = value  # type: ignore
 
   def __call__(self, *args, **kwargs) -> tp.Any:
     return self.value(*args, **kwargs)  # type: ignore

@@ -365,7 +365,7 @@ class Rngs(Pytree):
 
     for tag, key in rngs.items():
       if isinstance(key, RngStream):
-        key = key.key.value
+        key = key.key[...]
       stream = RngStream(
         key=key,
         tag=tag,

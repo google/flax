@@ -55,19 +55,19 @@ class TestLinearGeneral(parameterized.TestCase):
     assert y.shape == (1, 3)
     if preferred_element_type is not None:
       assert y.dtype == preferred_element_type
-    assert module.kernel.value.shape == (2, 3)
-    assert module.kernel.value.dtype == param_dtype
-    assert module.bias.value is not None
-    assert module.bias.value.shape == (3,)
+    assert module.kernel.shape == (2, 3)
+    assert module.kernel.dtype == param_dtype
+    assert module.bias is not None
+    assert module.bias.shape == (3,)
 
   def test_basic_multi_features(self):
     module = nnx.LinearGeneral(2, (3, 4), rngs=nnx.Rngs(0))
     y = module(jnp.ones((1, 2)))
 
     assert y.shape == (1, 3, 4)
-    assert module.kernel.value.shape == (2, 3, 4)
-    assert module.bias.value is not None
-    assert module.bias.value.shape == (3, 4)
+    assert module.kernel.shape == (2, 3, 4)
+    assert module.bias is not None
+    assert module.bias.shape == (3, 4)
 
 
 class TestLinenConsistency(parameterized.TestCase):
@@ -174,10 +174,10 @@ class TestLinenConsistency(parameterized.TestCase):
     )
 
     variables = model.init(key, x)
-    variables['params']['kernel'] = model_nnx.kernel.value
+    variables['params']['kernel'] = model_nnx.kernel[...]
     if bias_shape is not None:
       assert model_nnx.bias is not None
-      variables['params']['bias'] = model_nnx.bias.value
+      variables['params']['bias'] = model_nnx.bias[...]
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
     assert isinstance(out, jax.Array)
@@ -236,7 +236,7 @@ class TestPReLUConsistency(parameterized.TestCase):
 
     np.testing.assert_array_equal(loss, expected_loss)
     np.testing.assert_array_equal(
-      expected_grads["params"]["negative_slope"], grads.negative_slope.value
+      expected_grads['params']['negative_slope'], grads.negative_slope[...]
     )
 
 
