@@ -91,7 +91,8 @@ class WithTag:
 class IsDifferentiable:
   def __call__(self, path: PathParts, x: tp.Any):
     del path # unused
-    return hasattr(x, 'differentiable') and x.differentiable
+    # We consider variables without an explicit 'differentiable' attribute set as differentiable
+    return not hasattr(x, 'differentiable') or x.differentiable
 
   def __repr__(self):
     return 'IsDifferentiable()'
