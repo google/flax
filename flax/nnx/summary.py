@@ -676,11 +676,14 @@ def _as_yaml_str(value) -> str:
         filtered.append(_filter_non_serializable(item))
       return type(obj)(filtered)
     else:
-      # Handle any other non-serializable objects
+      # Handle any other non-serializable objects. If YAML cannot represent
+      # the object, fall back to its repr() to avoid serialization errors.
       try:
         yaml.dump(obj, io.StringIO(), Dumper=NoneDumper)
         return obj
-      except:
+      except yaml.representer.RepresenterError:
+        return repr(obj)
+      except Exception:
         return repr(obj)
   
   value = _filter_non_serializable(value)

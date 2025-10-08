@@ -303,32 +303,28 @@ class SummaryTest(absltest.TestCase):
     self.assertEqual(module.param.get_metadata('description'), 'Custom parameter')
     self.assertEqual(module.param.get_metadata('trainable'), True)
 
-  def test_tabulate_with_custom_objects_in_metadata(self):
-    """Test that tabulate handles arbitrary custom objects in metadata."""
-    
-    class CustomObject:
-        def __init__(self, value):
-            self.value = value
-    
-    class VarWithCustomObject(nnx.Variable):
-        pass
+  def test_tabulate_with_custom_nonserializable_metadata(self):
+    """Tabulate should not crash with arbitrary non-serializable metadata objects."""
+
+    class Custom:
+      def __repr__(self):
+        return "<CustomMetadata>"
 
     class Model(nnx.Module):
-        def __init__(self):
-            self.param = VarWithCustomObject(value=jnp.ones(3))
-            # Add a custom object that YAML can't serialize
-            self.param.set_metadata('custom_obj', CustomObject(42))
-            self.param.set_metadata('normal_data', 'preserved')
+      def __init__(self):
+        self.param = nnx.Param(jnp.ones((2, 2)))
+        # Attach a custom, non-serializable object to metadata
+        self.param.set_metadata('custom_obj', Custom())
 
-        def __call__(self, x):
-            return x * self.param.value
+      def __call__(self, x):
+        return x @ self.param.value
 
     module = Model()
-    # Should not raise yaml.representer.RepresenterError
-    table_repr = nnx.tabulate(module, jnp.ones(3), console_kwargs=CONSOLE_TEST_KWARGS)
+    # Should not raise yaml.representer.RepresenterError and should include repr
+    table_repr = nnx.tabulate(module, jnp.ones((1, 2)), console_kwargs=CONSOLE_TEST_KWARGS)
     self.assertIsNotNone(table_repr)
-    # Verify the table was generated
-    self.assertIn('Model Summary', table_repr)
+    # The repr string of Custom should appear in the table output
+    self.assertIn('<CustomMetadata>', table_repr)
 
 if __name__ == '__main__':
   absltest.main()
