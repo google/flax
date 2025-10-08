@@ -133,6 +133,18 @@ class TestVariable(absltest.TestCase):
     x = v.get_metadata('x', default=10)
     self.assertEqual(x, 10)
 
+  def test_differentiable_metadata(self):
+    v = nnx.Variable(jnp.array(1.0))
+    self.assertTrue('differentiable' not in v.get_metadata())
+    v = nnx.Variable(jnp.array(1.0), differentiable=True)
+    self.assertTrue(v.get_metadata('differentiable'))
+    g = jax.grad(lambda x: x ** 2)(v)
+    self.assertEqual(g[...], 2.0)
+    v = nnx.Variable(jnp.array(1.0), differentiable=False)
+    self.assertFalse(v.get_metadata('differentiable'))
+    g = jax.grad(lambda x: x ** 2)(v)
+    self.assertEqual(g[...], 0.0)
+
 
 if __name__ == '__main__':
   absltest.main()

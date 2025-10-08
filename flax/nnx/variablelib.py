@@ -450,6 +450,9 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
     if 'on_get_value' in self._var_metadata:
       value = self._var_metadata['on_get_value'](self, value)
+
+    if not self._var_metadata.get('differentiable', True):
+      value = jax.lax.stop_gradient(value)
     return value
 
   @value.setter

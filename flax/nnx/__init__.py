@@ -28,6 +28,7 @@ from .filterlib import All as All
 from .filterlib import Not as Not
 from .filterlib import Everything as Everything
 from .filterlib import Nothing as Nothing
+from .filterlib import IsDifferentiable as IsDifferentiable
 from .graph import GraphDef as GraphDef
 from .graph import GraphState as GraphState
 from .graph import PureState as PureState
@@ -61,6 +62,7 @@ from .graph import graphdef as graphdef
 from .graph import iter_graph as iter_graph
 from .graph import find_duplicates as find_duplicates
 from .graph import call as call
+from .graph import set_metadata as set_metadata
 from .graph import SplitContext as SplitContext
 from .graph import split_context as split_context
 from .graph import MergeContext as MergeContext

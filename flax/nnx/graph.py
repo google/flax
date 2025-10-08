@@ -30,8 +30,8 @@ from flax.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
 )
-from flax.nnx.statelib import FlatState, State
-from flax.nnx.variablelib import Variable, is_array_ref
+from flax.nnx.statelib import FlatState, State, map_state
+from flax.nnx.variablelib import Variable, is_array_ref, V
 from flax.typing import Key, PathParts, is_key_like
 import jax
 import numpy as np
@@ -2883,6 +2883,45 @@ def call(
     return out, split(node)
 
   return CallableProxy(pure_caller)  # type: ignore
+
+
+def set_metadata(node: A, /, *, only: filterlib.Filter = Variable, **metadata: tp.Mapping[str, tp.Any]) -> A:
+  """Sets the metadata of all :class:`Variable` objects in the given graph node.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+    ...
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self):
+    ...     self.param = nnx.Param(0.0)
+    ...     self.variable = nnx.Variable(0.0)
+    ...
+    >>> node = Foo()
+    ...
+    >>> # set differentiable to False for all nnx.Param objects
+    >>> node = nnx.graph.set_metadata(node, differentiable=False, only=nnx.Param)
+    ...
+    >>> # check that only the nnx.Param was updated
+    >>> assert node.param.get_metadata('differentiable') is False
+
+  Args:
+    node: A graph node object.
+    only: A Filter to specify which :class:`Variable` objects to set metadata for.
+    metadata: Key-value pairs to set as metadata on the :class:`Variable` objects.
+  Returns:
+    The graph node with updated :class:`Variable` metadata.
+  """
+  graphdef, variable_state, rest = split(node, only, ...)
+
+  def _set_metadata(path: PathParts, variable: V) -> V:
+    del path  # unused
+    variable.set_metadata(metadata)
+    return variable
+
+  variable_state = map_state(_set_metadata, variable_state)
+  return merge(graphdef, variable_state, rest)
 
 
 def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
