@@ -17,6 +17,7 @@ from collections import defaultdict
 import dataclasses
 import inspect
 import io
+import types
 import typing as tp
 from types import MappingProxyType
 
@@ -645,6 +646,44 @@ def _as_yaml_str(value) -> str:
 
   value = jax.tree.map(_normalize_values, value)
   value = _maybe_pytree_to_dict(value)
+  
+  # Filter out non-serializable objects before YAML serialization
+  def _filter_non_serializable(obj):
+    """Recursively filter out non-serializable objects."""
+    if isinstance(obj, (jax.Array, np.ndarray)):
+      return str(ArrayRepr.from_array(obj))
+    elif isinstance(obj, dict):
+      filtered = {}
+      for k, v in obj.items():
+        # Skip Variable hooks that cannot be serialized
+        if k in ('on_get_value', 'on_set_value', 'on_create_value', 
+                 'on_add_axis', 'on_remove_axis') and callable(v):
+          continue
+        # Skip other callables except types
+        if callable(v) and not isinstance(v, type):
+          continue
+        if isinstance(v, types.ModuleType):
+          continue
+        filtered[k] = _filter_non_serializable(v)
+      return filtered
+    elif isinstance(obj, (list, tuple)):
+      filtered = []
+      for item in obj:
+        if callable(item) and not isinstance(item, type):
+          continue
+        if isinstance(item, types.ModuleType):
+          continue
+        filtered.append(_filter_non_serializable(item))
+      return type(obj)(filtered)
+    else:
+      # Handle any other non-serializable objects
+      try:
+        yaml.dump(obj, io.StringIO(), Dumper=NoneDumper)
+        return obj
+      except:
+        return repr(obj)
+  
+  value = _filter_non_serializable(value)
 
   file = io.StringIO()
   yaml.dump(
