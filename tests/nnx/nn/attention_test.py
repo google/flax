@@ -25,6 +25,12 @@ import typing as tp
 from absl.testing import parameterized
 from absl.testing import absltest
 
+try:
+  # JAX v0.8.0 and newer
+  from jax import enable_x64
+except ImportError:
+  from jax.experimental import enable_x64
+
 
 class TestMultiHeadAttention(parameterized.TestCase):
   def test_basic(self):
@@ -84,7 +90,7 @@ class TestMultiHeadAttention(parameterized.TestCase):
     assert not intermediates  # empty
 
   def test_autoregressive_decode_with_x64(self):
-    with jax.experimental.enable_x64():
+    with enable_x64():
       x = jnp.ones((1, 4, 4))
       module = nnx.MultiHeadAttention(
         in_features=4,
