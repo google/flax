@@ -16,6 +16,7 @@
 
 import dataclasses
 import os
+import sys
 import tempfile
 import time
 from typing import Any
@@ -23,7 +24,8 @@ from collections.abc import Iterable
 
 import jax
 import tensorflow as tf
-import tensorflow_text as tftxt
+if sys.version_info < (3, 13):
+  import tensorflow_text as tftxt
 from absl import logging
 from sentencepiece import SentencePieceTrainer
 

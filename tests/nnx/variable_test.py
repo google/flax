@@ -128,6 +128,10 @@ class TestVariable(absltest.TestCase):
     self.assertEqual(v.get_metadata(), {'b': 3, 'c': 4})
     self.assertEqual(v.get_metadata('b'), 3)
     self.assertEqual(v.get_metadata('c'), 4)
+    c = v.get_metadata('c')
+    self.assertEqual(c, 4)
+    x = v.get_metadata('x', default=10)
+    self.assertEqual(x, 10)
 
 
 if __name__ == '__main__':

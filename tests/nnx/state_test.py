@@ -95,6 +95,35 @@ class StateTest(absltest.TestCase):
     nnx.update(module, state)
     assert jnp.array_equal(module(jnp.ones((3, 4))), jnp.zeros((3, 5)))
 
+  def test_diff(self):
+    class MLPs(nnx.Module):
+      def __init__(self, dim, rngs: nnx.Rngs, n=4):
+        self.layers = nnx.List()
+        for _ in range(n):
+          self.layers.append(nnx.Linear(dim, dim, rngs=rngs, use_bias=False))
+
+      def __call__(self, x):
+        for layer in self.layers:
+          x = layer(x)
+        return x
+
+    model1 = MLPs(4, rngs=nnx.Rngs(0), n=4)
+    model2 = MLPs(4, rngs=nnx.Rngs(1), n=4)
+    model3 = MLPs(4, rngs=nnx.Rngs(1), n=5)
+
+    self.assertEqual(
+      nnx.statelib.diff(nnx.state(model2), nnx.state(model1)),
+      nnx.state({})
+    )
+    self.assertNotEqual(
+      nnx.statelib.diff(nnx.state(model3), nnx.state(model1)),
+      nnx.state({})
+    )
+    self.assertEqual(
+      nnx.statelib.diff(nnx.state(model1), nnx.state(model3)),
+      nnx.state({})
+    )
+
 
 if __name__ == '__main__':
   absltest.main()

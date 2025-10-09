@@ -47,6 +47,7 @@ from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
 from .module import Module as Module
+from .module import iter_children as iter_children, iter_modules as iter_modules
 from .graph import merge as merge
 from .graph import UpdateContext as UpdateContext
 from .graph import update_context as update_context
@@ -124,6 +125,7 @@ from .nn.normalization import LayerNorm as LayerNorm
 from .nn.normalization import RMSNorm as RMSNorm
 from .nn.normalization import GroupNorm as GroupNorm
 from .nn.normalization import InstanceNorm as InstanceNorm
+from .nn.normalization import SpectralNorm as SpectralNorm
 from .nn.stochastic import Dropout as Dropout
 from .rnglib import Rngs as Rngs
 from .rnglib import RngStream as RngStream
