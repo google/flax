@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
+
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
@@ -69,10 +72,10 @@ class TestOptimizer(parameterized.TestCase):
     optimizer.update(model, grads)
 
   def test_sharding_propagation(self):
-    with jax.set_mesh(jax.make_mesh(((1, 1)), ('a', 'b'))):
+    with jax.set_mesh(jax.make_mesh(((2, 2)), ('a', 'b'))):
       model = nnx.Linear(
           2,
-          3,
+          4,
           rngs=nnx.Rngs(0),
           kernel_init=nnx.with_partitioning(
               nnx.initializers.lecun_normal(),
