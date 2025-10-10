@@ -20,6 +20,7 @@ The data is loaded using tensorflow_datasets.
 
 # See issue #620.
 # pytype: disable=wrong-keyword-args
+from typing import Any, Callable
 
 from absl import logging
 from flax import linen as nn
@@ -49,6 +50,23 @@ class CNN(nn.Module):
     x = nn.relu(x)
     x = nn.Dense(features=10)(x)
     return x
+
+
+def get_fake_batch(batch_size: int) -> Any:
+  """Returns fake data for the given batch size."""
+  rng = jax.random.PRNGKey(0)
+  images = jax.random.randint(rng, (batch_size, 28, 28, 1), 0, 255, jnp.uint8)
+  labels = jax.random.randint(rng, (batch_size,), 0, 10, jnp.int32)
+  return images, labels
+
+
+def get_apply_fn_and_args(
+    config: ml_collections.ConfigDict,
+) -> tuple[Any, tuple[Any, ...], dict[str, Any], tuple[Any, ...]]:
+  """Returns the apply function and args for the given config."""
+  state = create_train_state(jax.random.key(0), config)
+  batch = get_fake_batch(config.batch_size)
+  return apply_model, (state, *batch), dict(), ()
 
 
 @jax.jit

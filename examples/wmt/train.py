@@ -23,12 +23,17 @@ This script trains a Transformer on a WMT dataset.
 import collections
 import functools
 import os
+from typing import Any
 
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
+import bleu
+import decode
+import input_pipeline
+import models
 from flax.training import checkpoints
 from flax.training import common_utils
 from flax.training import dynamic_scale as dynamic_scale_lib
@@ -40,11 +45,6 @@ import numpy as np
 import optax
 import orbax.checkpoint as ocp
 import tensorflow as tf
-
-import bleu
-import decode
-import input_pipeline
-import models
 
 
 class TrainState(train_state.TrainState):
@@ -250,7 +250,7 @@ def train_step(
   if state.dynamic_scale:
     # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
     # params should be restored (= skip this step).
-    select_fn = functools.partial(jnp.where, is_fin)
+    select_fn = functools.partial(jnp.where, is_fin)  # pylint: disable=undefined-variable
     new_state = new_state.replace(
         opt_state=jax.tree_util.tree_map(
             select_fn, new_state.opt_state, state.opt_state
@@ -259,7 +259,7 @@ def train_step(
             select_fn, new_state.params, state.params
         ),
     )
-    metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]
+    metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]  # pylint: disable=undefined-variable
 
   return new_state, metrics
 
@@ -394,6 +394,111 @@ def evaluate(
   return eval_summary
 
 
+def get_fake_batch(batch_size: int) -> Any:
+  """Returns fake data for the given batch size."""
+  rng = jax.random.PRNGKey(0)
+  batch = {}
+  for k in (
+      "inputs",
+      "inputs_position",
+      "inputs_segmentation",
+      "targets",
+      "targets_position",
+      "targets_segmentation",
+  ):
+    batch[k] = jax.random.randint(
+        rng,
+        (batch_size, 256),
+        0,
+        9999999,
+        dtype=jnp.int32,
+    )
+  batch = common_utils.shard(batch)
+  return batch
+
+
+def get_apply_fn_and_args(
+    config: ml_collections.ConfigDict, vocab_size: int | None = None,
+) -> tuple[Any, tuple[Any, ...], dict[str, Any], tuple[Any, ...]]:
+  """Returns the apply function and args for the given config."""
+  if vocab_size is None:
+    vocab_size = config.vocab_size
+  dtype = preferred_dtype(config)
+  learning_rate_fn = create_learning_rate_schedule(
+      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
+  )
+  train_config = models.TransformerConfig(
+      vocab_size=vocab_size,
+      output_vocab_size=vocab_size,
+      share_embeddings=config.share_embeddings,
+      logits_via_embedding=config.logits_via_embedding,
+      dtype=dtype,
+      emb_dim=config.emb_dim,
+      num_heads=config.num_heads,
+      num_layers=config.num_layers,
+      qkv_dim=config.qkv_dim,
+      mlp_dim=config.mlp_dim,
+      max_len=max(config.max_target_length, config.max_eval_target_length),
+      dropout_rate=config.dropout_rate,
+      attention_dropout_rate=config.attention_dropout_rate,
+      deterministic=False,
+      decode=False,
+      kernel_init=nn.initializers.xavier_uniform(),
+      bias_init=nn.initializers.normal(stddev=1e-6),
+  )
+  p_train_step = jax.pmap(
+      functools.partial(
+          train_step,
+          config=train_config,
+          learning_rate_fn=learning_rate_fn,
+          label_smoothing=config.label_smoothing,
+      ),
+      axis_name="batch",
+      donate_argnums=(0,),
+  )  # pytype: disable=wrong-arg-types
+
+  dynamic_scale = None
+  if dtype == jnp.float16:
+    dynamic_scale = dynamic_scale_lib.DynamicScale()
+  eval_config = train_config.replace(deterministic=True)
+  m = models.Transformer(eval_config)
+  rng = jax.random.key(config.seed)
+  rng, init_rng = jax.random.split(rng)
+  input_shape = (config.per_device_batch_size, config.max_target_length)
+  target_shape = (config.per_device_batch_size, config.max_target_length)
+  initial_variables = jax.jit(m.init)(
+      init_rng,
+      jnp.ones(input_shape, jnp.float32),
+      jnp.ones(target_shape, jnp.float32),
+  )
+  state = TrainState.create(
+      apply_fn=m.apply,
+      params=initial_variables["params"],
+      tx=optax.adamw(
+          learning_rate=learning_rate_fn,
+          b1=0.9,
+          b2=0.98,
+          eps=1e-9,
+          weight_decay=config.weight_decay,
+      ),
+      dynamic_scale=dynamic_scale,
+  )
+  state = jax_utils.replicate(state)
+  batch = get_fake_batch(
+      jax.local_device_count() * config.per_device_batch_size
+  )
+
+  # We init the first set of dropout PRNG keys, but update it afterwards inside
+  # the main pmap"d training update for performance.
+  dropout_rngs = jax.random.split(rng, jax.local_device_count())
+  return (
+      jax.jit(p_train_step),
+      (state, batch),
+      dict(dropout_rng=dropout_rngs),
+      (train_config,),
+  )
+
+
 def translate_and_calculate_bleu(
     *,
     p_pred_step,
@@ -497,94 +602,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   logging.info("Initializing model, optimizer, and step functions.")
 
-  dtype = preferred_dtype(config)
-
   # Build Model and Optimizer
   # ---------------------------------------------------------------------------
-  train_config = models.TransformerConfig(
-      vocab_size=vocab_size,
-      output_vocab_size=vocab_size,
-      share_embeddings=config.share_embeddings,
-      logits_via_embedding=config.logits_via_embedding,
-      dtype=dtype,
-      emb_dim=config.emb_dim,
-      num_heads=config.num_heads,
-      num_layers=config.num_layers,
-      qkv_dim=config.qkv_dim,
-      mlp_dim=config.mlp_dim,
-      max_len=max(config.max_target_length, config.max_eval_target_length),
-      dropout_rate=config.dropout_rate,
-      attention_dropout_rate=config.attention_dropout_rate,
-      deterministic=False,
-      decode=False,
-      kernel_init=nn.initializers.xavier_uniform(),
-      bias_init=nn.initializers.normal(stddev=1e-6),
-  )
-  eval_config = train_config.replace(deterministic=True)
-  predict_config = train_config.replace(deterministic=True, decode=True)
-
   start_step = 0
-  rng = jax.random.key(config.seed)
-  rng, init_rng = jax.random.split(rng)
-  input_shape = (config.per_device_batch_size, config.max_target_length)
-  target_shape = (config.per_device_batch_size, config.max_target_length)
-
-  m = models.Transformer(eval_config)
-  initial_variables = jax.jit(m.init)(
-      init_rng,
-      jnp.ones(input_shape, jnp.float32),
-      jnp.ones(target_shape, jnp.float32),
-  )
-
-  # Create train state with Adam optimizer and weight decay.
-  learning_rate_fn = create_learning_rate_schedule(
-      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
-  )
-  dynamic_scale = None
-  if dtype == jnp.float16:
-    dynamic_scale = dynamic_scale_lib.DynamicScale()
-  state = TrainState.create(
-      apply_fn=m.apply,
-      params=initial_variables["params"],
-      tx=optax.adamw(
-          learning_rate=learning_rate_fn,
-          b1=0.9,
-          b2=0.98,
-          eps=1e-9,
-          weight_decay=config.weight_decay,
-      ),
-      dynamic_scale=dynamic_scale,
-  )
-
-  # We access model params only via state.params
-  del initial_variables
-
-  if config.restore_checkpoints:
-    # Restore unreplicated optimizer + model state from last checkpoint.
-    state = checkpoints.restore_checkpoint(workdir, state)
-    # Grab last step.
-    start_step = int(state.step)
-
-  writer = metric_writers.create_default_writer(
-      workdir, just_logging=jax.process_index() > 0
-  )
-  if start_step == 0:
-    writer.write_hparams(dict(config))
-
-  # Replicate state.
-  state = jax_utils.replicate(state)
 
   # compile multidevice versions of train/eval/predict step and cache init fn.
-  p_train_step = jax.pmap(
-      functools.partial(
-          train_step,
-          config=train_config,
-          learning_rate_fn=learning_rate_fn,
-          label_smoothing=config.label_smoothing,
-      ),
-      axis_name="batch",
-      donate_argnums=(0,),
-  )  # pytype: disable=wrong-arg-types
+  p_train_step, (state, _,), kwargs, (train_config,) = (
+      get_apply_fn_and_args(config, vocab_size)
+  )
+  dropout_rngs = kwargs["dropout_rng"]
+  eval_config = train_config.replace(deterministic=True)
+  predict_config = train_config.replace(deterministic=True, decode=True)
   p_eval_step = jax.pmap(
       functools.partial(eval_step, config=eval_config), axis_name="batch"
   )
@@ -604,13 +632,22 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       static_broadcasted_argnums=(3, 4),
   )  # eos token, max_length are constant
 
+  if config.restore_checkpoints:
+    # Restore unreplicated optimizer + model state from last checkpoint.
+    unreplicated_state = jax_utils.unreplicate(state)
+    state = checkpoints.restore_checkpoint(workdir, unreplicated_state)
+    # Grab last step.
+    start_step = int(state.step)
+    state = jax_utils.replicate(state)
+
+  writer = metric_writers.create_default_writer(
+      workdir, just_logging=jax.process_index() > 0
+  )
+  if start_step == 0:
+    writer.write_hparams(dict(config))
+
   # Main Train Loop
   # ---------------------------------------------------------------------------
-
-  # We init the first set of dropout PRNG keys, but update it afterwards inside
-  # the main pmap"d training update for performance.
-  dropout_rngs = jax.random.split(rng, jax.local_device_count())
-  del rng
 
   logging.info("Starting training loop.")
   hooks = []
@@ -649,8 +686,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           metrics_sums = jax.tree_util.tree_map(jnp.sum, train_metrics)
           denominator = metrics_sums.pop("denominator")
           summary = jax.tree_util.tree_map(
-              lambda x: x / denominator, metrics_sums
-          )  # pylint: disable=cell-var-from-loop
+              lambda x: x / denominator, metrics_sums  # pylint: disable=cell-var-from-loop
+          )
           summary["learning_rate"] = lr
           summary = {"train_" + k: v for k, v in summary.items()}
           writer.write_scalars(step, summary)
