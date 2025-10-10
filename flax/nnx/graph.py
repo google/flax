@@ -2885,8 +2885,8 @@ def call(
   return CallableProxy(pure_caller)  # type: ignore
 
 
-def set_metadata(node: A, /, *, only: filterlib.Filter = Variable, **metadata: tp.Mapping[str, tp.Any]) -> A:
-  """Sets the metadata of all :class:`Variable` objects in the given graph node.
+def set_metadata(node: A, /, *, only: filterlib.Filter = Variable, **metadata: tp.Mapping[str, tp.Any]) -> None:
+  """Sets the metadata of all :class:`Variable` objects in the given graph node in-place.
 
   Example::
 
@@ -2901,7 +2901,7 @@ def set_metadata(node: A, /, *, only: filterlib.Filter = Variable, **metadata: t
     >>> node = Foo()
     ...
     >>> # set differentiable to False for all nnx.Param objects
-    >>> node = nnx.graph.set_metadata(node, differentiable=False, only=nnx.Param)
+    >>> nnx.graph.set_metadata(node, differentiable=False, only=nnx.Param)
     ...
     >>> # check that only the nnx.Param was updated
     >>> assert node.param.get_metadata('differentiable') is False
@@ -2910,18 +2910,13 @@ def set_metadata(node: A, /, *, only: filterlib.Filter = Variable, **metadata: t
     node: A graph node object.
     only: A Filter to specify which :class:`Variable` objects to set metadata for.
     metadata: Key-value pairs to set as metadata on the :class:`Variable` objects.
-  Returns:
-    The graph node with updated :class:`Variable` metadata.
   """
-  graphdef, variable_state, rest = split(node, only, ...)
-
   def _set_metadata(path: PathParts, variable: V) -> V:
     del path  # unused
     variable.set_metadata(metadata)
-    return variable
 
-  variable_state = map_state(_set_metadata, variable_state)
-  return merge(graphdef, variable_state, rest)
+  # inplace update of variable_state metadata
+  map_state(_set_metadata, state(node, only))
 
 
 def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:

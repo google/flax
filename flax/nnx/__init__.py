@@ -28,7 +28,6 @@ from .filterlib import All as All
 from .filterlib import Not as Not
 from .filterlib import Everything as Everything
 from .filterlib import Nothing as Nothing
-from .filterlib import IsDifferentiable as IsDifferentiable
 from .graph import GraphDef as GraphDef
 from .graph import GraphState as GraphState
 from .graph import PureState as PureState

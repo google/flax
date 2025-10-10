@@ -88,17 +88,6 @@ class WithTag:
 
 
 @dataclasses.dataclass(frozen=True)
-class IsDifferentiable:
-  def __call__(self, path: PathParts, x: tp.Any):
-    del path # unused
-    # We consider variables without an explicit 'differentiable' attribute set as differentiable
-    return not hasattr(x, 'differentiable') or x.differentiable
-
-  def __repr__(self):
-    return 'IsDifferentiable()'
-
-
-@dataclasses.dataclass(frozen=True)
 class PathContains:
   key: Key
 
