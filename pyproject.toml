@@ -40,7 +40,7 @@ testing = [
     "clu",
     "clu<=0.0.9; python_version<'3.10'",
     "einops",
-    "gymnasium[atari, accept-rom-license]",
+    "gymnasium[atari]",
     "jaxlib",
     "jaxtyping",
     "jraph>=0.0.6dev0",
