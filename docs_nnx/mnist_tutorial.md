@@ -26,7 +26,7 @@ Let’s get started!
 
 If `flax` is not installed in your Python environment, use `pip` to install the package from PyPI (below, just uncomment the code in the cell if you are working from Google Colab/Jupyter Notebook):
 
-```{code-cell}
+```{code-cell} ipython3
 # !pip install flax
 ```
 
@@ -34,7 +34,7 @@ If `flax` is not installed in your Python environment, use `pip` to install the 
 
 First, you need to load the MNIST dataset and then prepare the training and testing sets via Tensorflow Datasets (TFDS). You normalize image values, shuffle the data and divide it into batches, and prefetch samples to enhance performance.
 
-```{code-cell}
+```{code-cell} ipython3
 import tensorflow_datasets as tfds  # TFDS to download MNIST.
 import tensorflow as tf  # TensorFlow / `tf.data` operations.
 
@@ -72,9 +72,10 @@ test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1)
 
 Create a CNN for classification with Flax NNX by subclassing `nnx.Module`:
 
-```{code-cell}
+```{code-cell} ipython3
 from flax import nnx  # The Flax NNX API.
 from functools import partial
+from typing import Optional
 
 class CNN(nnx.Module):
   """A simple CNN model."""
@@ -82,19 +83,19 @@ class CNN(nnx.Module):
   def __init__(self, *, rngs: nnx.Rngs):
     self.conv1 = nnx.Conv(1, 32, kernel_size=(3, 3), rngs=rngs)
     self.batch_norm1 = nnx.BatchNorm(32, rngs=rngs)
-    self.dropout1 = nnx.Dropout(rate=0.025, rngs=rngs)
+    self.dropout1 = nnx.Dropout(rate=0.025)
     self.conv2 = nnx.Conv(32, 64, kernel_size=(3, 3), rngs=rngs)
     self.batch_norm2 = nnx.BatchNorm(64, rngs=rngs)
     self.avg_pool = partial(nnx.avg_pool, window_shape=(2, 2), strides=(2, 2))
     self.linear1 = nnx.Linear(3136, 256, rngs=rngs)
-    self.dropout2 = nnx.Dropout(rate=0.025, rngs=rngs)
+    self.dropout2 = nnx.Dropout(rate=0.025)
     self.linear2 = nnx.Linear(256, 10, rngs=rngs)
 
-  def __call__(self, x):
-    x = self.avg_pool(nnx.relu(self.batch_norm1(self.dropout1(self.conv1(x)))))
+  def __call__(self, x, rngs: Optional[nnx.Rngs] = None):
+    x = self.avg_pool(nnx.relu(self.batch_norm1(self.dropout1(self.conv1(x), rngs=rngs))))
     x = self.avg_pool(nnx.relu(self.batch_norm2(self.conv2(x))))
     x = x.reshape(x.shape[0], -1)  # flatten
-    x = nnx.relu(self.dropout2(self.linear1(x)))
+    x = nnx.relu(self.dropout2(self.linear1(x), rngs=rngs))
     x = self.linear2(x)
     return x
 
@@ -108,10 +109,10 @@ nnx.display(model)
 
 Let's put the CNN model to the test!  Here, you’ll perform a forward pass with arbitrary data and print the results.
 
-```{code-cell}
+```{code-cell} ipython3
 import jax.numpy as jnp  # JAX NumPy
 
-y = model(jnp.ones((1, 28, 28, 1)))
+y = model(jnp.ones((1, 28, 28, 1)), nnx.Rngs(0))
 y
 ```
 
@@ -119,7 +120,7 @@ y
 
 In Flax NNX, you need to create an `nnx.Optimizer` object to manage the model's parameters and apply gradients during training. `nnx.Optimizer` receives the model's reference, so that it can update its parameters, and an [Optax](https://optax.readthedocs.io/) optimizer to define the update rules. Additionally, you will define an `nnx.MultiMetric` object to keep track of the `Accuracy` and the `Average` loss.
 
-```{code-cell}
+```{code-cell} ipython3
 import optax
 
 learning_rate = 0.005
@@ -144,31 +145,31 @@ In addition to the `loss`, during training and testing you will also get the `lo
 
 During training - the `train_step` - you will use `nnx.value_and_grad` to compute the gradients and update the model's parameters using the `optimizer` you have already defined. And during both training and testing (the `eval_step`), the `loss` and `logits` will be used to calculate the metrics.
 
-```{code-cell}
-def loss_fn(model: CNN, batch):
-  logits = model(batch['image'])
+```{code-cell} ipython3
+def loss_fn(model: CNN, rngs: nnx.Rngs, batch):
+  logits = model(batch['image'], rngs)
   loss = optax.softmax_cross_entropy_with_integer_labels(
     logits=logits, labels=batch['label']
   ).mean()
   return loss, logits
 
 @nnx.jit
-def train_step(model: CNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, batch):
+def train_step(model: CNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, rngs: nnx.Rngs, batch):
   """Train for a single step."""
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
-  (loss, logits), grads = grad_fn(model, batch)
+  (loss, logits), grads = grad_fn(model, rngs, batch)
   metrics.update(loss=loss, logits=logits, labels=batch['label'])  # In-place updates.
-  optimizer.update(grads)  # In-place updates.
+  optimizer.update(model, grads)  # In-place updates.
 
 @nnx.jit
-def eval_step(model: CNN, metrics: nnx.MultiMetric, batch):
-  loss, logits = loss_fn(model, batch)
+def eval_step(model: CNN, metrics: nnx.MultiMetric, rngs: nnx.Rngs, batch):
+  loss, logits = loss_fn(model, rngs, batch)
   metrics.update(loss=loss, logits=logits, labels=batch['label'])  # In-place updates.
 ```
 
 In the code above, the [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/transforms.html#flax.nnx.jit) transformation decorator traces the `train_step` function for just-in-time compilation with [XLA](https://www.tensorflow.org/xla), optimizing performance on hardware accelerators, such as Google TPUs and GPUs. `nnx.jit` is a "lifted" version of the `jax.jit` transform that allows its function input and outputs to be Flax NNX objects. Similarly, `nnx.value_and_grad ` is a lifted version of `jax.value_and_grad `. Check out [the lifted transforms guide](https://flax.readthedocs.io/en/latest/guides/transforms.html) to learn more.
 
-> **Note:** The code shows how to perform several in-place updates to the model, the optimizer, and the metrics, but _state updates_ were not explicitly returned. This is because Flax NNX transformations respect _reference semantics_ for Flax NNX objects, and will propagate the state updates of the objects passed as input arguments. This is a key feature of Flax NNX that allows for a more concise and readable code. You can learn more in [Why Flax NNX](https://flax.readthedocs.io/en/latest/why.html).
+> **Note:** The code shows how to perform several in-place updates to the model, the optimizer, the RNG streams and the metrics, but _state updates_ were not explicitly returned. This is because Flax NNX transformations respect _reference semantics_ for Flax NNX objects, and will propagate the state updates of the objects passed as input arguments. This is a key feature of Flax NNX that allows for a more concise and readable code. You can learn more in [Why Flax NNX](https://flax.readthedocs.io/en/latest/why.html).
 
 
 ## 6. Train and evaluate the model
@@ -177,7 +178,7 @@ Now, you can train the CNN model using batches of data for 10 epochs, evaluate t
 on the test set after each epoch, and log the training and testing metrics (the loss and
 the accuracy) during the process. Typically this leads to the model achieving around 99% accuracy.
 
-```{code-cell}
+```{code-cell} ipython3
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
 
@@ -188,13 +189,15 @@ metrics_history = {
   'test_accuracy': [],
 }
 
+rngs = nnx.Rngs(0)
+
 for step, batch in enumerate(train_ds.as_numpy_iterator()):
   # Run the optimization for one step and make a stateful update to the following:
   # - The train state's model parameters
   # - The optimizer state
   # - The training loss and accuracy batch metrics
   model.train() # Switch to train mode
-  train_step(model, optimizer, metrics, batch)
+  train_step(model, optimizer, metrics, rngs, batch)
 
   if step > 0 and (step % eval_every == 0 or step == train_steps - 1):  # One training epoch has passed.
     # Log the training metrics.
@@ -205,7 +208,7 @@ for step, batch in enumerate(train_ds.as_numpy_iterator()):
     # Compute the metrics on the test set after each training epoch.
     model.eval() # Switch to eval mode
     for test_batch in test_ds.as_numpy_iterator():
-      eval_step(model, metrics, test_batch)
+      eval_step(model, metrics, rngs, test_batch)
 
     # Log the test metrics.
     for metric, value in metrics.compute().items():
@@ -229,7 +232,7 @@ for step, batch in enumerate(train_ds.as_numpy_iterator()):
 
 Create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
 
-```{code-cell}
+```{code-cell} ipython3
 model.eval() # Switch to evaluation mode.
 
 @nnx.jit
@@ -240,7 +243,7 @@ def pred_step(model: CNN, batch):
 
 We call .eval() before inference so Dropout is disabled and BatchNorm uses stored running stats. It is used during inference to suppress gradients and ensure deterministic, resource-efficient output.
 
-```{code-cell}
+```{code-cell} ipython3
 test_batch = test_ds.as_numpy_iterator().next()
 pred = pred_step(model, test_batch)
 

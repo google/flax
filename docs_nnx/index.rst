@@ -97,20 +97,20 @@ Basic usage
      def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
        self.linear = nnx.Linear(din, dmid, rngs=rngs)
        self.bn = nnx.BatchNorm(dmid, rngs=rngs)
-       self.dropout = nnx.Dropout(0.2, rngs=rngs)
+       self.dropout = nnx.Dropout(0.2)
        self.linear_out = nnx.Linear(dmid, dout, rngs=rngs)
 
-     def __call__(self, x):
-       x = nnx.relu(self.dropout(self.bn(self.linear(x))))
+     def __call__(self, x, rngs):
+       x = nnx.relu(self.dropout(self.bn(self.linear(x)), rngs=rngs))
        return self.linear_out(x)
 
    model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
    optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
    @nnx.jit  # automatic state management for JAX transforms
-   def train_step(model, optimizer, x, y):
+   def train_step(model, optimizer, x, y, rngs):
      def loss_fn(model):
-       y_pred = model(x)  # call methods directly
+       y_pred = model(x, rngs)  # call methods directly
        return ((y_pred - y) ** 2).mean()
 
      loss, grads = nnx.value_and_grad(loss_fn)(model)
