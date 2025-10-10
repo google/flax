@@ -450,7 +450,6 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
     if 'on_get_value' in self._var_metadata:
       value = self._var_metadata['on_get_value'](self, value)
-
     return value
 
   @value.setter
