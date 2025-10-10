@@ -2601,8 +2601,8 @@ def clone(node: Node, variables: bool = True) -> Node:
 
     >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     >>> cloned_model = nnx.clone(model)
-    >>> model.bias.value += 1
-    >>> assert (model.bias.value != cloned_model.bias.value).all()
+    >>> model.bias[...] += 1
+    >>> assert (model.bias[...] != cloned_model.bias[...]).all()
 
   Args:
     node: A graph node object.
@@ -2669,7 +2669,9 @@ def to_arrays(
   Returns:
     A structure with the frozen arrays.
   """
-  if not allow_duplicates and (all_duplicates := find_duplicates(node, only=only)):
+  if not allow_duplicates and (
+    all_duplicates := find_duplicates(node, only=only)
+  ):
     duplicates_strs = '\n  ---'
     for node_duplicates in all_duplicates:
       for path in node_duplicates:
@@ -2819,7 +2821,7 @@ def call(
     ...     self.count = Variable(jnp.array(0, dtype=jnp.uint32))
     ...
     ...   def increment(self):
-    ...     self.count.value += 1
+    ...     self.count[...] += 1
     ...
     ...   def __call__(self, x):
     ...     self.increment()
@@ -2838,7 +2840,7 @@ def call(
     >>> y, linear_state = forward(x, linear_state)
     ...
     >>> linear = nnx.merge(*linear_state)
-    >>> linear.count.value
+    >>> linear.count[...]
     Array(2, dtype=uint32)
 
   The proxy object returned by ``call`` supports indexing and attribute access
@@ -2853,7 +2855,7 @@ def call(
     ...     self.count = nnx.Variable(jnp.array(0, dtype=jnp.uint32))
     ...
     ...   def increment(self):
-    ...     self.count.value += 1
+    ...     self.count[...] += 1
     ...
     ...   def __call__(self, x):
     ...     self.increment()
@@ -2870,9 +2872,9 @@ def call(
     >>> _, node_state = nnx.call(node_state)['b'].increment()
     ...
     >>> nodes = nnx.merge(*node_state)
-    >>> nodes['a'].count.value
+    >>> nodes['a'].count[...]
     Array(0, dtype=uint32)
-    >>> nodes['b'].count.value
+    >>> nodes['b'].count[...]
     Array(1, dtype=uint32)
   """
 

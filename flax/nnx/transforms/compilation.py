@@ -856,8 +856,8 @@ def shard_map(
 
     y = f(m, x)
 
-    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
-    jax.debug.visualize_array_sharding(m.linear2.kernel.value)
+    jax.debug.visualize_array_sharding(m.linear1.kernel[...])
+    jax.debug.visualize_array_sharding(m.linear2.kernel[...])
 
 
   Alternatively, a ``State`` object with the exact PartitionSpec for each
@@ -894,8 +894,8 @@ def shard_map(
 
     y = f(m, x)
 
-    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
-    jax.debug.visualize_array_sharding(m.linear2.kernel.value)
+    jax.debug.visualize_array_sharding(m.linear1.kernel[...])
+    jax.debug.visualize_array_sharding(m.linear2.kernel[...])
 
   Here ``model_spec`` was created manually but you can also automate
   this process by using ``nnx.get_partition_spec`` to automatically

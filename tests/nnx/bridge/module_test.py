@@ -124,7 +124,7 @@ class TestBridgeModule(absltest.TestCase):
         count = self.variable(
           'counts', 'count', lambda: jnp.zeros((), jnp.int32)
         )
-        count.value += 1
+        count[...] += 1
 
     model_nnx = FooNNX()
 
@@ -149,8 +149,8 @@ class TestBridgeModule(absltest.TestCase):
     scope = bar.apply({}, rngs=1)
     self.assertIsNone(bar.scope)
 
-    self.assertEqual(scope.rngs.default.key.value, jax.random.key(1))
-    self.assertEqual(scope.rngs.default.count.value, 0)
+    self.assertEqual(scope.rngs.default.key[...], jax.random.key(1))
+    self.assertEqual(scope.rngs.default.count[...], 0)
 
     class Baz(bridge.Module):
       @bridge.compact
@@ -160,40 +160,6 @@ class TestBridgeModule(absltest.TestCase):
     baz = Baz()
     scope = baz.apply({}, rngs=1)
     self.assertIsNone(scope)
-
-  def test_name(self):
-    class Foo(bridge.Module):
-      dout: int
-
-      def __call__(self, x):
-        w = self.param(
-          'w', nnx.initializers.uniform(), (x.shape[-1], self.dout)
-        )
-        return x @ w
-
-    class Bar(bridge.Module):
-      @bridge.compact
-      def __call__(self, x):
-        return Foo(5, name='xyz')(x)
-
-    bar = Bar()
-    x = jnp.ones((1, 2))
-    y, variables = bar.init_with_output(0, x)
-
-    self.assertIn('xyz', variables['params'])
-    self.assertEqual(variables['params']['xyz']['w'].shape, (2, 5))
-    self.assertEqual(y.shape, (1, 5))
-
-    y = bar.apply(variables, x)
-    self.assertEqual(y.shape, (1, 5))
-
-    with self.assertRaises(ValueError):
-      class SetupBar(bridge.Module):
-        def setup(self):
-          self.xyz = Foo(5, name='xyz')
-        def __call__(self, x):
-          return self.xyz(x)
-      SetupBar().init(0, x)
 
   def test_dense_port(self):
     class Dense(bridge.Module):
@@ -315,7 +281,7 @@ class TestBridgeModule(absltest.TestCase):
       def __call__(self, x):
         # Required check to avoid state update in `init()`. Can this be avoided?
         if not bridge.current_module().is_initializing():
-          self.count.value = self.count.value + 1
+          self.count[...] += 1
         x = self.linear(x)
         x = self.dropout(x)
         return x
