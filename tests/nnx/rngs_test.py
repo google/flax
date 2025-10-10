@@ -193,12 +193,27 @@ class TestRngs(absltest.TestCase):
     np.testing.assert_allclose(y1, y2)
 
   def test_random_helpers(self):
-    rngs = nnx.Rngs(0)
+    rngs = nnx.Rngs(0, params=1)
 
-    x1 = rngs.normal((2, 3))
-    x2 = rngs.default.normal((2, 3))
+    x_nnx = rngs.normal((2, 3))
+    x_jax = jax.random.normal(jax.random.fold_in(jax.random.key(0), 0), (2, 3))
+    np.testing.assert_allclose(x_nnx, x_jax)
 
-    self.assertFalse(jnp.allclose(x1, x2))
+    x_nnx = rngs.params.uniform((2, 3))
+    x_jax = jax.random.uniform(jax.random.fold_in(jax.random.key(1), 0), (2, 3))
+    np.testing.assert_allclose(x_nnx, x_jax)
+
+    x_nnx = rngs.lecun_normal()((2, 3))
+    x_jax = jax.nn.initializers.lecun_normal()(
+      jax.random.fold_in(jax.random.key(0), 1), (2, 3)
+    )
+    np.testing.assert_allclose(x_nnx, x_jax)
+
+    x_nnx = rngs.params.lecun_uniform()((2, 3))
+    x_jax = jax.nn.initializers.lecun_uniform()(
+      jax.random.fold_in(jax.random.key(1), 1), (2, 3)
+    )
+    np.testing.assert_allclose(x_nnx, x_jax)
 
 if __name__ == '__main__':
   absltest.main()

@@ -23,13 +23,11 @@ If you want to follow explicit sharding style, follow [JAX Explicit Sharding](ht
 ### Setup
 
 ```{code-cell} ipython3
-from typing import *
 from functools import partial
 
-import numpy as np
 import jax
 from jax import numpy as jnp
-from jax.sharding import Mesh, PartitionSpec, NamedSharding, AxisType, reshard
+from jax.sharding import PartitionSpec as P, NamedSharding, AxisType
 import optax
 from flax import nnx
 
@@ -64,11 +62,15 @@ When you define a Flax variable, you can pass in a metadata field called `shardi
 **You must have an existing device mesh** and create a sharding-annotated `nnx.Variable` within its scope. This allows the result variable to be sharded accordingly on those devices. The device mesh can be your actual accelerator mesh, or a dummy fake CPU mesh like in this notebook.
 
 ```{code-cell} ipython3
+rngs = nnx.Rngs(0)
+
 with jax.set_mesh(auto_mesh):
-  w = nnx.Param(nnx.initializers.lecun_normal()(jax.random.key(0), (4, 8)),
-                sharding_names=(None, 'model'))
-  print(w.value.sharding.spec)
-  jax.debug.visualize_array_sharding(w.value)  # already sharded!
+  w = nnx.Param(
+    rngs.lecun_normal()((4, 8)),
+    sharding_names=(None, 'model')
+  )
+  print(w.sharding.spec)
+  jax.debug.visualize_array_sharding(w)  # already sharded!
 ```
 
 ### Initialize with style
@@ -86,8 +88,9 @@ def init_sharded_linear(key):
                     kernel_init=nnx.with_partitioning(init_fn, (None, 'model')))
 
 with jax.set_mesh(auto_mesh):
-  linear = init_sharded_linear(jax.random.key(0))
-  assert linear.kernel.sharding.spec == PartitionSpec(None, 'model') # already sharded!
+  key= rngs()
+  linear = init_sharded_linear(key)
+  assert linear.kernel.sharding.spec == P(None, 'model') # already sharded!
 ```
 
 ### Run the model
@@ -103,7 +106,7 @@ You should still make sure to `jax.jit` for maximum performance, and also to exp
 # In this case, ('data', None) @ (None, 'model') = ('data', 'model')
 with jax.set_mesh(auto_mesh):
   # Create your input data, sharded along `data` dimension, as in data parallelism
-  x = jax.device_put(jnp.ones((16, 4)), PartitionSpec('data', None))
+  x = jax.device_put(jnp.ones((16, 4)), P('data', None))
   
   # Run the model forward function, jitted
   y = jax.jit(lambda m, x: m(x))(linear, x)
@@ -138,8 +141,8 @@ class DotReluDot(nnx.Module):
   def __call__(self, x: jax.Array):
     y = self.dot1(x)
     y = jax.nn.relu(y)
-    y = jax.lax.with_sharding_constraint(y, PartitionSpec('data', 'model'))
-    z = jnp.dot(y, self.w2.value)
+    y = jax.lax.with_sharding_constraint(y, P('data', 'model'))
+    z = jnp.dot(y, self.w2[...])
     return z
 
 class MultiDotReluDot(nnx.Module):
@@ -174,10 +177,8 @@ def train_step(model, optimizer, x, y):
 
 with jax.set_mesh(auto_mesh):
   # Training data
-  input = jax.device_put(jax.random.normal(jax.random.key(1), (8, 1024)),
-                         PartitionSpec('data', None))
-  label = jax.device_put(jax.random.normal(jax.random.key(2), (8, 1024)),
-                         PartitionSpec('data', None))
+  input = jax.device_put(rngs.normal((8, 1024)), P('data', None))
+  label = jax.device_put(rngs.normal((8, 1024)), P('data', None))
   # Model and optimizer
   model = MultiDotReluDot(1024, 2, rngs=nnx.Rngs(0))
   optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
@@ -255,8 +256,8 @@ class LogicalDotReluDot(nnx.Module):
     y = self.dot1(x)
     y = jax.nn.relu(y)
     # Unfortunately the logical aliasing doesn't work on lower-level JAX calls.
-    y = jax.lax.with_sharding_constraint(y, PartitionSpec('data', None))
-    z = jnp.dot(y, self.w2.value)
+    y = jax.lax.with_sharding_constraint(y, P('data', None))
+    z = jnp.dot(y, self.w2[...])
     return z
 
 class LogicalMultiDotReluDot(nnx.Module):
@@ -282,14 +283,14 @@ with jax.set_mesh(auto_mesh), nnx.logical_axis_rules(sharding_rules):
   logical_output = logical_model(input)
 
 # Check out their equivalency with some easier-to-read sharding descriptions.
-assert logical_model.layers.dot1.kernel.value.sharding.is_equivalent_to(
-  NamedSharding(auto_mesh, PartitionSpec(None, None, 'model')), ndim=3
+assert logical_model.layers.dot1.kernel.sharding.is_equivalent_to(
+  NamedSharding(auto_mesh, P(None, None, 'model')), ndim=3
 )
-assert logical_model.layers.w2.value.sharding.is_equivalent_to(
-  NamedSharding(auto_mesh, PartitionSpec(None, 'model', None)), ndim=3
+assert logical_model.layers.w2.sharding.is_equivalent_to(
+  NamedSharding(auto_mesh, P(None, 'model', None)), ndim=3
 )
 assert logical_output.sharding.is_equivalent_to(
-  NamedSharding(auto_mesh, PartitionSpec('data', None)), ndim=2
+  NamedSharding(auto_mesh, P('data', None)), ndim=2
 )
 ```
 
@@ -329,19 +330,19 @@ class ExplicitDotReluDot(nnx.Module):
     init_fn = nnx.initializers.lecun_normal()
     self.dot1 = nnx.Linear(
       depth, depth,
-      kernel_init=partial(init_fn, out_sharding=PartitionSpec(None, 'model')),
+      kernel_init=partial(init_fn, out_sharding=P(None, 'model')),
       use_bias=False,
       rngs=rngs)
     self.w2 = nnx.Param(
-      init_fn(rngs.params(), (depth, depth), out_sharding=PartitionSpec('model', None)),
+      init_fn(rngs.params(), (depth, depth), out_sharding=P('model', None)),
     )
-    self.b2 = nnx.Param(jnp.zeros((depth, ), out_sharding=PartitionSpec(None,)))
+    self.b2 = nnx.Param(jnp.zeros((depth, ), out_sharding=P(None,)))
 
   def __call__(self, x: jax.Array):
     y = self.dot1(x)
     y = jax.nn.relu(y)
-    z = jnp.dot(y, self.w2.value, out_sharding=PartitionSpec('data', None))
-    z = z + self.b2.value
+    z = jnp.dot(y, self.w2[...], out_sharding=P('data', None))
+    z = z + self.b2
     return z
 
 
@@ -363,8 +364,8 @@ class ExplicitMultiDotReluDot(nnx.Module):
 
 with jax.set_mesh(explicit_mesh):
   model = ExplicitMultiDotReluDot(1024, 2, rngs=nnx.Rngs(0))
-  x = jax.device_put(jax.random.normal(jax.random.key(1), (8, 1024)), 
-                     NamedSharding(explicit_mesh, PartitionSpec('data', None)))
+  x = jax.device_put(rngs.normal((8, 1024)),
+                     NamedSharding(explicit_mesh, P('data', None)))
   y = model(x)
 
 print(model.layers.dot1.kernel.sharding.spec)
