@@ -21,8 +21,10 @@ from jax import random
 import jax.numpy as jnp
 
 from flax import errors, struct
+from flax import typing
 from flax.nnx import graph
 from flax.nnx import variablelib
+from flax.nnx.nn import initializers
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
 from flax.nnx.pytreelib import Pytree
@@ -32,6 +34,50 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 Counts = list[int]
 AxesValue = tp.Union[int, None]
 SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
+OutShardingType: tp.TypeAlias = (
+  jax.sharding.NamedSharding | jax.sharding.PartitionSpec | None
+)
+Fargs = tp.ParamSpec('Fargs')
+
+
+@tp.runtime_checkable
+class KeylessInitializer(tp.Protocol):
+  def __call__(
+    self,
+    shape: typing.Shape,
+    dtype: tp.Any | None = None,
+    out_sharding: OutShardingType = None,
+  ) -> jax.Array:
+    raise NotImplementedError
+
+
+def _to_keyless(
+  initializer_constructor: tp.Callable[Fargs, jax.nn.initializers.Initializer],
+) -> tp.Callable[Fargs, KeylessInitializer]:
+  raise NotImplementedError
+
+
+def _function_to_method(random_f):
+  def rngs_random_method(self: Rngs | RngStream, *args, **kwargs) -> jax.Array:
+    return random_f(self(), *args, **kwargs)
+
+  return rngs_random_method
+
+
+def _initializer_to_method(
+  initializer_constructor: tp.Callable[Fargs, jax.nn.initializers.Initializer],
+):
+  def rngs_initializer_method(
+    self: Rngs | RngStream, *args: Fargs.args, **kwargs: Fargs.kwargs
+  ) -> KeylessInitializer:
+    init_fn = initializer_constructor(*args, **kwargs)
+
+    def rngs_keyless_initializer(*init_args, **init_kwargs):
+      return init_fn(self(), *init_args, **init_kwargs)
+
+    return rngs_keyless_initializer
+
+  return rngs_initializer_method
 
 
 class RngState(Variable[jax.Array]):
@@ -84,6 +130,9 @@ class RngStream(Pytree):
       key = random.split(key, split)
     return type(self)(key, tag=self.tag)
 
+  # ----------------------------------------------------------
+  # random functions
+  # ----------------------------------------------------------
   if tp.TYPE_CHECKING:
     bits = staticmethod(functools.partial(random.bits, random.key(0)))
     uniform = staticmethod(
@@ -176,120 +225,88 @@ class RngStream(Pytree):
       functools.partial(random.multinomial, random.key(0))
     )
   else:
+    bits = _function_to_method(random.bits)
+    uniform = _function_to_method(random.uniform)
+    randint = _function_to_method(random.randint)
+    permutation = _function_to_method(random.permutation)
+    choice = _function_to_method(random.choice)
+    normal = _function_to_method(random.normal)
+    multivariate_normal = _function_to_method(random.multivariate_normal)
+    truncated_normal = _function_to_method(random.truncated_normal)
+    bernoulli = _function_to_method(random.bernoulli)
+    beta = _function_to_method(random.beta)
+    cauchy = _function_to_method(random.cauchy)
+    dirichlet = _function_to_method(random.dirichlet)
+    exponential = _function_to_method(random.exponential)
+    gamma = _function_to_method(random.gamma)
+    loggamma = _function_to_method(random.loggamma)
+    poisson = _function_to_method(random.poisson)
+    gumbel = _function_to_method(random.gumbel)
+    categorical = _function_to_method(random.categorical)
+    laplace = _function_to_method(random.laplace)
+    logistic = _function_to_method(random.logistic)
+    pareto = _function_to_method(random.pareto)
+    t = _function_to_method(random.t)
+    chisquare = _function_to_method(random.chisquare)
+    f = _function_to_method(random.f)
+    rademacher = _function_to_method(random.rademacher)
+    maxwell = _function_to_method(random.maxwell)
+    double_sided_maxwell = _function_to_method(random.double_sided_maxwell)
+    weibull_min = _function_to_method(random.weibull_min)
+    orthogonal = _function_to_method(random.orthogonal)
+    generalized_normal = _function_to_method(random.generalized_normal)
+    ball = _function_to_method(random.ball)
+    rayleigh = _function_to_method(random.rayleigh)
+    wald = _function_to_method(random.wald)
+    geometric = _function_to_method(random.geometric)
+    triangular = _function_to_method(random.triangular)
+    lognormal = _function_to_method(random.lognormal)
+    binomial = _function_to_method(random.binomial)
+    multinomial = _function_to_method(random.multinomial)
 
-    def bits(self, *args, **kwargs):
-      return random.bits(self(), *args, **kwargs)
-
-    def uniform(self, *args, **kwargs):
-      return random.uniform(self(), *args, **kwargs)
-
-    def randint(self, *args, **kwargs):
-      return random.randint(self(), *args, **kwargs)
-
-    def permutation(self, *args, **kwargs):
-      return random.permutation(self(), *args, **kwargs)
-
-    def choice(self, *args, **kwargs):
-      return random.choice(self(), *args, **kwargs)
-
-    def normal(self, *args, **kwargs):
-      return random.normal(self(), *args, **kwargs)
-
-    def multivariate_normal(self, *args, **kwargs):
-      return random.multivariate_normal(self(), *args, **kwargs)
-
-    def truncated_normal(self, *args, **kwargs):
-      return random.truncated_normal(self(), *args, **kwargs)
-
-    def bernoulli(self, *args, **kwargs):
-      return random.bernoulli(self(), *args, **kwargs)
-
-    def beta(self, *args, **kwargs):
-      return random.beta(self(), *args, **kwargs)
-
-    def cauchy(self, *args, **kwargs):
-      return random.cauchy(self(), *args, **kwargs)
-
-    def dirichlet(self, *args, **kwargs):
-      return random.dirichlet(self(), *args, **kwargs)
-
-    def exponential(self, *args, **kwargs):
-      return random.exponential(self(), *args, **kwargs)
-
-    def gamma(self, *args, **kwargs):
-      return random.gamma(self(), *args, **kwargs)
-
-    def loggamma(self, *args, **kwargs):
-      return random.loggamma(self(), *args, **kwargs)
-
-    def poisson(self, *args, **kwargs):
-      return random.poisson(self(), *args, **kwargs)
-
-    def gumbel(self, *args, **kwargs):
-      return random.gumbel(self(), *args, **kwargs)
-
-    def categorical(self, *args, **kwargs):
-      return random.categorical(self(), *args, **kwargs)
-
-    def laplace(self, *args, **kwargs):
-      return random.laplace(self(), *args, **kwargs)
-
-    def logistic(self, *args, **kwargs):
-      return random.logistic(self(), *args, **kwargs)
-
-    def pareto(self, *args, **kwargs):
-      return random.pareto(self(), *args, **kwargs)
-
-    def t(self, *args, **kwargs):
-      return random.t(self(), *args, **kwargs)
-
-    def chisquare(self, *args, **kwargs):
-      return random.chisquare(self(), *args, **kwargs)
-
-    def f(self, *args, **kwargs):
-      return random.f(self(), *args, **kwargs)
-
-    def rademacher(self, *args, **kwargs):
-      return random.rademacher(self(), *args, **kwargs)
-
-    def maxwell(self, *args, **kwargs):
-      return random.maxwell(self(), *args, **kwargs)
-
-    def double_sided_maxwell(self, *args, **kwargs):
-      return random.double_sided_maxwell(self(), *args, **kwargs)
-
-    def weibull_min(self, *args, **kwargs):
-      return random.weibull_min(self(), *args, **kwargs)
-
-    def orthogonal(self, *args, **kwargs):
-      return random.orthogonal(self(), *args, **kwargs)
-
-    def generalized_normal(self, *args, **kwargs):
-      return random.generalized_normal(self(), *args, **kwargs)
-
-    def ball(self, *args, **kwargs):
-      return random.ball(self(), *args, **kwargs)
-
-    def rayleigh(self, *args, **kwargs):
-      return random.rayleigh(self(), *args, **kwargs)
-
-    def wald(self, *args, **kwargs):
-      return random.wald(self(), *args, **kwargs)
-
-    def geometric(self, *args, **kwargs):
-      return random.geometric(self(), *args, **kwargs)
-
-    def triangular(self, *args, **kwargs):
-      return random.triangular(self(), *args, **kwargs)
-
-    def lognormal(self, *args, **kwargs):
-      return random.lognormal(self(), *args, **kwargs)
-
-    def binomial(self, *args, **kwargs):
-      return random.binomial(self(), *args, **kwargs)
-
-    def multinomial(self, *args, **kwargs):
-      return random.multinomial(self(), *args, **kwargs)
+  # ----------------------------------------------------------
+  # initializers
+  # ----------------------------------------------------------
+  if tp.TYPE_CHECKING:
+    # skip constant
+    delta_orthogonal = staticmethod(_to_keyless(initializers.delta_orthogonal))
+    glorot_normal = staticmethod(_to_keyless(initializers.glorot_normal))
+    glorot_uniform = staticmethod(_to_keyless(initializers.glorot_uniform))
+    he_normal = staticmethod(_to_keyless(initializers.he_normal))
+    he_uniform = staticmethod(_to_keyless(initializers.he_uniform))
+    kaiming_normal = staticmethod(_to_keyless(initializers.kaiming_normal))
+    kaiming_uniform = staticmethod(_to_keyless(initializers.kaiming_uniform))
+    lecun_normal = staticmethod(_to_keyless(initializers.lecun_normal))
+    lecun_uniform = staticmethod(_to_keyless(initializers.lecun_uniform))
+    # skip normal as it conflicts with jax.random.normal
+    # skip ones
+    # skip orthogonal as it conflicts with jax.random.orthogonal
+    # skip truncated_normal as it conflicts with jax.random.truncated_normal
+    # skip uniform as it conflicts with jax.random.uniform
+    variance_scaling = staticmethod(_to_keyless(initializers.variance_scaling))
+    xavier_normal = staticmethod(_to_keyless(initializers.xavier_normal))
+    xavier_uniform = staticmethod(_to_keyless(initializers.xavier_uniform))
+    # skip zeros
+  else:
+    # skip constant
+    delta_orthogonal = _initializer_to_method(initializers.delta_orthogonal)
+    glorot_normal = _initializer_to_method(initializers.glorot_normal)
+    glorot_uniform = _initializer_to_method(initializers.glorot_uniform)
+    he_normal = _initializer_to_method(initializers.he_normal)
+    he_uniform = _initializer_to_method(initializers.he_uniform)
+    kaiming_normal = _initializer_to_method(initializers.kaiming_normal)
+    kaiming_uniform = _initializer_to_method(initializers.kaiming_uniform)
+    lecun_normal = _initializer_to_method(initializers.lecun_normal)
+    lecun_uniform = _initializer_to_method(initializers.lecun_uniform)
+    # skip normal as it conflicts with jax.random.normal
+    # skip ones
+    # skip orthogonal as it conflicts with jax.random.orthogonal
+    # skip truncated_normal as it conflicts with jax.random.truncated_normal
+    # skip uniform as it conflicts with jax.random.uniform
+    variance_scaling = _initializer_to_method(initializers.variance_scaling)
+    xavier_normal = _initializer_to_method(initializers.xavier_normal)
+    xavier_uniform = _initializer_to_method(initializers.xavier_uniform)
+    # skip zeros
 
 
 RngValue = tp.Union[int, jax.Array]
@@ -392,6 +409,88 @@ class Rngs(Pytree):
   def __call__(self):
     return self.default()
 
+  def __iter__(self) -> tp.Iterator[str]:
+    for name, stream in vars(self).items():
+      if isinstance(stream, RngStream):
+        yield name
+
+  def __len__(self) -> int:
+    return sum(
+      1 for stream in vars(self).values() if isinstance(stream, RngStream)
+    )
+
+  def __contains__(self, name: tp.Any) -> bool:
+    return name in vars(self)
+
+  def items(self):
+    for name, stream in vars(self).items():
+      if isinstance(stream, RngStream):
+        yield name, stream
+
+  def fork(
+    self,
+    /,
+    *,
+    split: tp.Mapping[filterlib.Filter, int | tuple[int, ...]]
+    | int
+    | tuple[int, ...]
+    | None = None,
+  ):
+    """Returns a new Rngs object with new unique RNG keys.
+
+    Example::
+      >>> from flax import nnx
+      ...
+      >>> rngs = nnx.Rngs(params=1, dropout=2)
+      >>> new_rngs = rngs.fork()
+      ...
+      >>> assert rngs.params() != new_rngs.params()
+
+    ``split`` can be used to split the keys of the newly created ``Rngs`` object::
+
+      >>> rngs = nnx.Rngs(params=1, dropout=2)
+      >>> new_rngs = rngs.fork(split=5)
+      ...
+      >>> assert new_rngs.params.key.shape == (5,)
+      >>> assert new_rngs.dropout.key.shape == (5,)
+
+    ``split`` also accepts a mapping of
+    `Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__  to
+    split sizes or None to control which streams are split and how they are split::
+
+      >>> rngs = nnx.Rngs(params=1, dropout=2, noise=3)
+      >>> new_rngs = rngs.fork(split={
+      ...  'params': 5,      # split params into 5 keys
+      ...  'dropout': None,  # don't split dropout
+      ...  ...: (2, 5),      # split anything else into 2x5 keys
+      ... })
+      ...
+      >>> assert new_rngs.params.key.shape == (5,)
+      >>> assert new_rngs.dropout.key.shape == ()
+      >>> assert new_rngs.noise.key.shape == (2, 5)
+    """
+    if split is None:
+      split = {}
+    elif isinstance(split, int):
+      split = {...: split}
+    elif isinstance(split, tuple):
+      split = {...: split}
+
+    split_predicates = {filterlib.to_predicate(k): v for k, v in split.items()}
+    keys: dict[str, RngStream] = {}
+    for name, stream in self.items():
+      for predicate, num_splits in split_predicates.items():
+        if predicate((), stream):
+          keys[name] = stream.fork(split=num_splits)
+          break
+      else:
+        keys[name] = stream.fork()
+
+    return Rngs(**keys)
+
+  # ----------------------------------------------------------
+  # random functions
+  # ----------------------------------------------------------
   if tp.TYPE_CHECKING:
     bits = staticmethod(functools.partial(random.bits, random.key(0)))
     uniform = staticmethod(
@@ -484,199 +583,88 @@ class Rngs(Pytree):
       functools.partial(random.multinomial, random.key(0))
     )
   else:
+    bits = _function_to_method(random.bits)
+    uniform = _function_to_method(random.uniform)
+    randint = _function_to_method(random.randint)
+    permutation = _function_to_method(random.permutation)
+    choice = _function_to_method(random.choice)
+    normal = _function_to_method(random.normal)
+    multivariate_normal = _function_to_method(random.multivariate_normal)
+    truncated_normal = _function_to_method(random.truncated_normal)
+    bernoulli = _function_to_method(random.bernoulli)
+    beta = _function_to_method(random.beta)
+    cauchy = _function_to_method(random.cauchy)
+    dirichlet = _function_to_method(random.dirichlet)
+    exponential = _function_to_method(random.exponential)
+    gamma = _function_to_method(random.gamma)
+    loggamma = _function_to_method(random.loggamma)
+    poisson = _function_to_method(random.poisson)
+    gumbel = _function_to_method(random.gumbel)
+    categorical = _function_to_method(random.categorical)
+    laplace = _function_to_method(random.laplace)
+    logistic = _function_to_method(random.logistic)
+    pareto = _function_to_method(random.pareto)
+    t = _function_to_method(random.t)
+    chisquare = _function_to_method(random.chisquare)
+    f = _function_to_method(random.f)
+    rademacher = _function_to_method(random.rademacher)
+    maxwell = _function_to_method(random.maxwell)
+    double_sided_maxwell = _function_to_method(random.double_sided_maxwell)
+    weibull_min = _function_to_method(random.weibull_min)
+    orthogonal = _function_to_method(random.orthogonal)
+    generalized_normal = _function_to_method(random.generalized_normal)
+    ball = _function_to_method(random.ball)
+    rayleigh = _function_to_method(random.rayleigh)
+    wald = _function_to_method(random.wald)
+    geometric = _function_to_method(random.geometric)
+    triangular = _function_to_method(random.triangular)
+    lognormal = _function_to_method(random.lognormal)
+    binomial = _function_to_method(random.binomial)
+    multinomial = _function_to_method(random.multinomial)
 
-    def bits(self, *args, **kwargs):
-      return self.default.bits(*args, **kwargs)
-
-    def uniform(self, *args, **kwargs):
-      return self.default.uniform(*args, **kwargs)
-
-    def randint(self, *args, **kwargs):
-      return self.default.randint(*args, **kwargs)
-
-    def permutation(self, *args, **kwargs):
-      return self.default.permutation(*args, **kwargs)
-
-    def choice(self, *args, **kwargs):
-      return self.default.choice(*args, **kwargs)
-
-    def normal(self, *args, **kwargs):
-      return self.default.normal(*args, **kwargs)
-
-    def multivariate_normal(self, *args, **kwargs):
-      return self.default.multivariate_normal(*args, **kwargs)
-
-    def truncated_normal(self, *args, **kwargs):
-      return self.default.truncated_normal(*args, **kwargs)
-
-    def bernoulli(self, *args, **kwargs):
-      return self.default.bernoulli(*args, **kwargs)
-
-    def beta(self, *args, **kwargs):
-      return self.default.beta(*args, **kwargs)
-
-    def cauchy(self, *args, **kwargs):
-      return self.default.cauchy(*args, **kwargs)
-
-    def dirichlet(self, *args, **kwargs):
-      return self.default.dirichlet(*args, **kwargs)
-
-    def exponential(self, *args, **kwargs):
-      return self.default.exponential(*args, **kwargs)
-
-    def gamma(self, *args, **kwargs):
-      return self.default.gamma(*args, **kwargs)
-
-    def loggamma(self, *args, **kwargs):
-      return self.default.loggamma(*args, **kwargs)
-
-    def poisson(self, *args, **kwargs):
-      return self.default.poisson(*args, **kwargs)
-
-    def gumbel(self, *args, **kwargs):
-      return self.default.gumbel(*args, **kwargs)
-
-    def categorical(self, *args, **kwargs):
-      return self.default.categorical(*args, **kwargs)
-
-    def laplace(self, *args, **kwargs):
-      return self.default.laplace(*args, **kwargs)
-
-    def logistic(self, *args, **kwargs):
-      return self.default.logistic(*args, **kwargs)
-
-    def pareto(self, *args, **kwargs):
-      return self.default.pareto(*args, **kwargs)
-
-    def t(self, *args, **kwargs):
-      return self.default.t(*args, **kwargs)
-
-    def chisquare(self, *args, **kwargs):
-      return self.default.chisquare(*args, **kwargs)
-
-    def f(self, *args, **kwargs):
-      return self.default.f(*args, **kwargs)
-
-    def rademacher(self, *args, **kwargs):
-      return self.default.rademacher(*args, **kwargs)
-
-    def maxwell(self, *args, **kwargs):
-      return self.default.maxwell(*args, **kwargs)
-
-    def double_sided_maxwell(self, *args, **kwargs):
-      return self.default.double_sided_maxwell(*args, **kwargs)
-
-    def weibull_min(self, *args, **kwargs):
-      return self.default.weibull_min(*args, **kwargs)
-
-    def orthogonal(self, *args, **kwargs):
-      return self.default.orthogonal(*args, **kwargs)
-
-    def generalized_normal(self, *args, **kwargs):
-      return self.default.generalized_normal(*args, **kwargs)
-
-    def ball(self, *args, **kwargs):
-      return self.default.ball(*args, **kwargs)
-
-    def rayleigh(self, *args, **kwargs):
-      return self.default.rayleigh(*args, **kwargs)
-
-    def wald(self, *args, **kwargs):
-      return self.default.wald(*args, **kwargs)
-
-    def geometric(self, *args, **kwargs):
-      return self.default.geometric(*args, **kwargs)
-
-    def triangular(self, *args, **kwargs):
-      return self.default.triangular(*args, **kwargs)
-
-    def lognormal(self, *args, **kwargs):
-      return self.default.lognormal(*args, **kwargs)
-
-    def binomial(self, *args, **kwargs):
-      return self.default.binomial(*args, **kwargs)
-
-    def multinomial(self, *args, **kwargs):
-      return self.default.multinomial(*args, **kwargs)
-
-  def __iter__(self) -> tp.Iterator[str]:
-    for name, stream in vars(self).items():
-      if isinstance(stream, RngStream):
-        yield name
-
-  def __len__(self) -> int:
-    return sum(
-      1 for stream in vars(self).values() if isinstance(stream, RngStream)
-    )
-
-  def __contains__(self, name: tp.Any) -> bool:
-    return name in vars(self)
-
-  def items(self):
-    for name, stream in vars(self).items():
-      if isinstance(stream, RngStream):
-        yield name, stream
-
-  def fork(
-    self,
-    /,
-    *,
-    split: tp.Mapping[filterlib.Filter, int | tuple[int, ...]]
-    | int
-    | tuple[int, ...]
-    | None = None,
-  ):
-    """Returns a new Rngs object with new unique RNG keys.
-
-    Example::
-      >>> from flax import nnx
-      ...
-      >>> rngs = nnx.Rngs(params=1, dropout=2)
-      >>> new_rngs = rngs.fork()
-      ...
-      >>> assert rngs.params() != new_rngs.params()
-
-    ``split`` can be used to split the keys of the newly created ``Rngs`` object::
-
-      >>> rngs = nnx.Rngs(params=1, dropout=2)
-      >>> new_rngs = rngs.fork(split=5)
-      ...
-      >>> assert new_rngs.params.key.shape == (5,)
-      >>> assert new_rngs.dropout.key.shape == (5,)
-
-    ``split`` also accepts a mapping of
-    `Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__  to
-    split sizes or None to control which streams are split and how they are split::
-
-      >>> rngs = nnx.Rngs(params=1, dropout=2, noise=3)
-      >>> new_rngs = rngs.fork(split={
-      ...  'params': 5,      # split params into 5 keys
-      ...  'dropout': None,  # don't split dropout
-      ...  ...: (2, 5),      # split anything else into 2x5 keys
-      ... })
-      ...
-      >>> assert new_rngs.params.key.shape == (5,)
-      >>> assert new_rngs.dropout.key.shape == ()
-      >>> assert new_rngs.noise.key.shape == (2, 5)
-    """
-    if split is None:
-      split = {}
-    elif isinstance(split, int):
-      split = {...: split}
-    elif isinstance(split, tuple):
-      split = {...: split}
-
-    split_predicates = {filterlib.to_predicate(k): v for k, v in split.items()}
-    keys: dict[str, RngStream] = {}
-    for name, stream in self.items():
-      for predicate, num_splits in split_predicates.items():
-        if predicate((), stream):
-          keys[name] = stream.fork(split=num_splits)
-          break
-      else:
-        keys[name] = stream.fork()
-
-    return Rngs(**keys)
+  # ----------------------------------------------------------
+  # initializers
+  # ----------------------------------------------------------
+  if tp.TYPE_CHECKING:
+    # skip constant
+    delta_orthogonal = staticmethod(_to_keyless(initializers.delta_orthogonal))
+    glorot_normal = staticmethod(_to_keyless(initializers.glorot_normal))
+    glorot_uniform = staticmethod(_to_keyless(initializers.glorot_uniform))
+    he_normal = staticmethod(_to_keyless(initializers.he_normal))
+    he_uniform = staticmethod(_to_keyless(initializers.he_uniform))
+    kaiming_normal = staticmethod(_to_keyless(initializers.kaiming_normal))
+    kaiming_uniform = staticmethod(_to_keyless(initializers.kaiming_uniform))
+    lecun_normal = staticmethod(_to_keyless(initializers.lecun_normal))
+    lecun_uniform = staticmethod(_to_keyless(initializers.lecun_uniform))
+    # skip normal as it conflicts with jax.random.normal
+    # skip ones
+    # skip orthogonal as it conflicts with jax.random.orthogonal
+    # skip truncated_normal as it conflicts with jax.random.truncated_normal
+    # skip uniform as it conflicts with jax.random.uniform
+    variance_scaling = staticmethod(_to_keyless(initializers.variance_scaling))
+    xavier_normal = staticmethod(_to_keyless(initializers.xavier_normal))
+    xavier_uniform = staticmethod(_to_keyless(initializers.xavier_uniform))
+    # skip zeros
+  else:
+    # skip constant
+    delta_orthogonal = _initializer_to_method(initializers.delta_orthogonal)
+    glorot_normal = _initializer_to_method(initializers.glorot_normal)
+    glorot_uniform = _initializer_to_method(initializers.glorot_uniform)
+    he_normal = _initializer_to_method(initializers.he_normal)
+    he_uniform = _initializer_to_method(initializers.he_uniform)
+    kaiming_normal = _initializer_to_method(initializers.kaiming_normal)
+    kaiming_uniform = _initializer_to_method(initializers.kaiming_uniform)
+    lecun_normal = _initializer_to_method(initializers.lecun_normal)
+    lecun_uniform = _initializer_to_method(initializers.lecun_uniform)
+    # skip normal as it conflicts with jax.random.normal
+    # skip ones
+    # skip orthogonal as it conflicts with jax.random.orthogonal
+    # skip truncated_normal as it conflicts with jax.random.truncated_normal
+    # skip uniform as it conflicts with jax.random.uniform
+    variance_scaling = _initializer_to_method(initializers.variance_scaling)
+    xavier_normal = _initializer_to_method(initializers.xavier_normal)
+    xavier_uniform = _initializer_to_method(initializers.xavier_uniform)
+    # skip zeros
 
 
 StreamBackup = (
