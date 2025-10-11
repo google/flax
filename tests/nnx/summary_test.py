@@ -252,5 +252,79 @@ class SummaryTest(absltest.TestCase):
     # We should see 3 calls per block, plus one overall call, minus the shared call
     self.assertEqual(sum([s.startswith("├─") for s in table.splitlines()]), 6)
 
+  def test_tabulate_with_variable_hooks(self):
+    """Test that tabulate works with Variables implementing value hooks."""
+    
+    class VarWithSetHook(nnx.Variable):
+        def on_set_value(self, value):
+            # This hook should not cause YAML serialization errors
+            return self.value + 1.0
+
+    class Model(nnx.Module):
+        def __init__(self):
+            self.param = VarWithSetHook(value=0.0)
+
+        def __call__(self, x):
+            return self.param * x
+
+    module = Model()
+    # Should not raise yaml.representer.RepresenterError
+    table_repr = nnx.tabulate(module, 2.0, console_kwargs=CONSOLE_TEST_KWARGS)
+    self.assertIsNotNone(table_repr)
+    # Ensure the table contains expected content
+    self.assertIn('Model Summary', table_repr)
+    self.assertIn('param', table_repr)
+
+  def test_tabulate_with_multiple_hooks_and_metadata(self):
+    """Test tabulate with Variables that have hooks and custom metadata."""
+    
+    class VarWithHooks(nnx.Variable):
+        def on_get_value(self, value):
+            return value
+        
+        def on_set_value(self, value):
+            return value
+
+    class Model(nnx.Module):
+        def __init__(self):
+            self.param = VarWithHooks(value=jnp.ones((2, 3)))
+            # Add custom metadata that should be preserved
+            self.param.set_metadata('description', 'Custom parameter')
+            self.param.set_metadata('trainable', True)
+
+        def __call__(self, x):
+            return jnp.dot(x, self.param.value)
+
+    module = Model()
+    # Should not raise yaml.representer.RepresenterError
+    table_repr = nnx.tabulate(module, jnp.ones((1, 2)), console_kwargs=CONSOLE_TEST_KWARGS)
+    self.assertIsNotNone(table_repr)
+    # Verify custom metadata is preserved in the module
+    self.assertEqual(module.param.get_metadata('description'), 'Custom parameter')
+    self.assertEqual(module.param.get_metadata('trainable'), True)
+
+  def test_tabulate_with_custom_nonserializable_metadata(self):
+    """Tabulate should not crash with arbitrary non-serializable metadata objects."""
+
+    class Custom:
+      def __repr__(self):
+        return "<CustomMetadata>"
+
+    class Model(nnx.Module):
+      def __init__(self):
+        self.param = nnx.Param(jnp.ones((2, 2)))
+        # Attach a custom, non-serializable object to metadata
+        self.param.set_metadata('custom_obj', Custom())
+
+      def __call__(self, x):
+        return x @ self.param.value
+
+    module = Model()
+    # Should not raise yaml.representer.RepresenterError and should include repr
+    table_repr = nnx.tabulate(module, jnp.ones((1, 2)), console_kwargs=CONSOLE_TEST_KWARGS)
+    self.assertIsNotNone(table_repr)
+    # The repr string of Custom should appear in the table output
+    self.assertIn('<CustomMetadata>', table_repr)
+
 if __name__ == '__main__':
   absltest.main()
