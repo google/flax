@@ -45,8 +45,8 @@ print(increment.lower(a_ref).as_text())
 ### Variables Refs
 
 ```{code-cell} ipython3
-variable = nnx.Variable(jnp.array([1, 2, 3]), use_ref=True)
-print(f"{variable.has_ref = }\n")
+variable = nnx.Variable(jnp.array([1, 2, 3]), is_hijax=True)
+print(f"{variable.is_hijax = }\n")
 
 print("[1] =", variable); increment(variable); print("[2] =", variable)
 ```
@@ -55,7 +55,7 @@ print("[1] =", variable); increment(variable); print("[2] =", variable)
 with nnx.use_refs(True):
   variable = nnx.Variable(jnp.array([1, 2, 3]))
 
-print(f"{variable.has_ref = }")
+print(f"{variable.is_hijax = }")
 ```
 
 Mention `nnx.use_refs` can be used as global flag

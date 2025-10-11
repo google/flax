@@ -507,12 +507,8 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       vars(self)[name] = value
 
   def _check_value(self, key, value, new_status: AttributeStatus | None):
-    def _has_arrays(leaves):
-      return any(
-          isinstance(leaf, (np.ndarray, jax.Array))
-          or variablelib.is_array_ref(leaf)
-          for leaf in leaves
-      )
+    def _has_data(leaves):
+      return any(is_data(leaf) for leaf in leaves)
 
     def _get_annotations(leaves):
       return {
@@ -547,7 +543,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
           f' _.{key} = nnx.data(...)\n\n'
       )
 
-    if _has_arrays(leaves):
+    if _has_data(leaves):
       # check no data in nnx.static assignments
       if new_status is not None:
         if not new_status.is_data and new_status.explicit:

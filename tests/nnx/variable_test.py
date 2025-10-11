@@ -25,12 +25,12 @@ A = tp.TypeVar('A')
 class TestVariable(absltest.TestCase):
   def test_pytree(self):
     r1 = nnx.Param(1)
-    self.assertEqual(r1.value, 1)
+    self.assertEqual(r1.get_value(), 1)
 
     r2 = jax.tree.map(lambda x: x + 1, r1)
 
-    self.assertEqual(r1.value, 1)
-    self.assertEqual(r2.value, 2)
+    self.assertEqual(r1.get_value(), 1)
+    self.assertEqual(r2.get_value(), 2)
     self.assertIsNot(r1, r2)
 
   def test_overloads_module(self):
@@ -94,38 +94,41 @@ class TestVariable(absltest.TestCase):
     self.assertEqual(v1[...], 5)
 
   def test_mutable_array_context(self):
-    with nnx.use_refs(False):
+    with nnx.use_hijax(False):
       v = nnx.Variable(jnp.array(1.0))
-      self.assertFalse(nnx.using_refs())
+      self.assertFalse(nnx.using_hijax())
       self.assertNotIsInstance(v.raw_value, jax.Ref)
 
-      with nnx.use_refs(True):
+      with nnx.use_hijax(True):
         v = nnx.Variable(jnp.array(1.0))
-        self.assertTrue(nnx.using_refs())
-        self.assertIsInstance(v.raw_value, jax.Ref)
+        self.assertTrue(nnx.using_hijax())
+        self.assertIsInstance(v.raw_value, jax.Array)
 
       v = nnx.Variable(jnp.array(2.0))
-      self.assertNotIsInstance(v.raw_value, jax.Ref)
-      self.assertFalse(nnx.using_refs())
+      self.assertIsInstance(v.raw_value, jax.Array)
+      self.assertFalse(nnx.using_hijax())
 
-      nnx.use_refs(True)
+      nnx.use_hijax(True)
 
       v = nnx.Variable(jnp.array(0.0))
-      self.assertTrue(nnx.using_refs())
-      self.assertIsInstance(v.raw_value, jax.Ref)
+      self.assertTrue(nnx.using_hijax())
+      self.assertIsInstance(v.raw_value, jax.Array)
 
     v = nnx.Variable(jnp.array(1.0))
-    self.assertFalse(nnx.using_refs())
-    self.assertNotIsInstance(v.raw_value, jax.Ref)
+    self.assertFalse(nnx.using_hijax())
+    self.assertIsInstance(v.raw_value, jax.Array)
 
   def test_get_set_metadata(self):
     v = nnx.Variable(jnp.array(1.0))
-    self.assertEqual(v.get_metadata(), {})
+    self.assertEqual(v.get_metadata(), {'is_hijax': False})
     v.set_metadata(a=1, b=2)
     self.assertEqual(v.get_metadata('a'), 1)
     self.assertEqual(v.get_metadata('b'), 2)
-    v.set_metadata({'b': 3, 'c': 4})
-    self.assertEqual(v.get_metadata(), {'b': 3, 'c': 4})
+    v.set_metadata({'b': 3, 'c': 4, 'is_hijax': False})
+    self.assertEqual(
+      v.get_metadata(),
+      {'b': 3, 'c': 4, 'is_hijax': False},
+    )
     self.assertEqual(v.get_metadata('b'), 3)
     self.assertEqual(v.get_metadata('c'), 4)
     c = v.get_metadata('c')
