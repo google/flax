@@ -43,7 +43,7 @@ class TestContainers(absltest.TestCase):
 
     module = Foo()
 
-    assert module.x.value == 4
+    assert module.x.get_value() == 4
     assert vars(module)['x'].raw_value == 1
 
   def test_module_box(self):

@@ -146,17 +146,17 @@ class TestIntegration(absltest.TestCase):
         key = rngs.params()
         self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
         self.b = nnx.Param(jnp.zeros((dout,)))
-        self.count = State(0)
+        self.count = State(jnp.array(0))
 
       def __call__(self, x):
-        self.count.value += 1
-        return x @ self.w.value + self.b.value[None]
+        self.count[...] += 1
+        return x @ self.w + self.b[None]
 
     model = Linear(din=12, dout=2, rngs=nnx.Rngs(0))
     # forward pass
     x = jnp.ones((8, 12))
     y = model(x)
-    assert model.count.value == 1
+    assert model.count[...] == 1
 
     @nnx.jit
     def train_step(model, x, y):
@@ -176,7 +176,7 @@ class TestIntegration(absltest.TestCase):
 
     # execute the training step
     train_step(model, x, y)
-    assert model.count.value == 2
+    assert model.count[...] == 2
 
   def test_functional_example(self):
     class Count(nnx.Variable[A]):
@@ -187,17 +187,17 @@ class TestIntegration(absltest.TestCase):
         key = rngs.params()
         self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
         self.b = nnx.Param(jnp.zeros((dout,)))
-        self.count = Count(0)
+        self.count = Count(jnp.array(0))
 
       def __call__(self, x):
-        self.count.value += 1
-        return x @ self.w.value + self.b.value[None]
+        self.count[...] += 1
+        return x @ self.w + self.b[None]
 
     model = Linear(din=12, dout=2, rngs=nnx.Rngs(0))
     # forward pass
     x = jnp.ones((8, 12))
     y = model(x)
-    assert model.count.value == 1
+    assert model.count[...] == 1
 
     graphdef, params, counts = nnx.split(model, nnx.Param, Count)
 
@@ -218,7 +218,7 @@ class TestIntegration(absltest.TestCase):
     # execute the training step
     params, counts = train_step(params, counts, x, y)
     model = nnx.merge(graphdef, params, counts)
-    assert model.count.value == 2
+    assert model.count[...] == 2
 
   def test_intermediates_example(self):
     class Linear(nnx.Module):
@@ -228,7 +228,7 @@ class TestIntegration(absltest.TestCase):
         self.b = nnx.Param(jnp.zeros((dout,)))
 
       def __call__(self, x):
-        y = x @ self.w.value + self.b.value[None]
+        y = x @ self.w + self.b[None]
         self.y = nnx.Intermediate(y)
         return y
 
@@ -248,7 +248,7 @@ class TestIntegration(absltest.TestCase):
         self.b = nnx.Param(jnp.zeros((dout,)))
 
       def __call__(self, x):
-        y = x @ self.w.value + self.b.value[None]
+        y = x @ self.w + self.b[None]
         self.y = nnx.Intermediate(y)
         return y
 
@@ -310,7 +310,7 @@ class TestIntegration(absltest.TestCase):
         x = nnx.relu(self.dropout(self.bn(self.linear(x))))
         return self.linear_out(x)
 
-    with nnx.use_refs(True):
+    with nnx.use_hijax(True):
       model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
       optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
@@ -319,9 +319,9 @@ class TestIntegration(absltest.TestCase):
       graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
       def loss_fn(params):
         model =  nnx.merge(graphdef, params, nondiff)
-        return ((model(x) - y) ** 2).mean() # call methods directly
+        return ((model(x) - y) ** 2).mean()  # call methods directly
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.to_arrays(params))
+      loss, grads = jax.value_and_grad(loss_fn)(nnx.to_lojax(params))
       optimizer.update(model, grads)  # in-place updates
 
       return loss

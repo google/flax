@@ -491,7 +491,7 @@ def to_pure_dict(
 ) -> dict[str, tp.Any]:
   # Works for nnx.Variable
   if extract_fn is None:
-    extract_fn = lambda x: x.value if isinstance(x, variablelib.Variable) else x
+    extract_fn = lambda x: x.get_value() if isinstance(x, variablelib.Variable) else x
   flat_values = {k: extract_fn(x) for k, x in to_flat_state(state)}
   return traversals.unflatten_mapping(flat_values)
 

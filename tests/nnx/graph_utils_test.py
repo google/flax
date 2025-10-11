@@ -46,8 +46,8 @@ class TestGraphUtils(absltest.TestCase):
     refmap = nnx.graph.RefMap()
     graphdef, flat_state = nnx.graph.flatten(g, ref_index=refmap)
 
-    assert flat_state[0][1].value == 2
-    assert flat_state[1][1].value == 4
+    assert flat_state[0][1].get_value() == 2
+    assert flat_state[1][1].get_value() == 4
 
     assert len(refmap) == 2  # 2 Variables
     assert a['b'] in refmap
@@ -156,8 +156,8 @@ class TestGraphUtils(absltest.TestCase):
     state[0]['b'][...] = 3
     nnx.update(g, state)
 
-    assert g[0]['b'].value == 3
-    assert g[2]['b'].value == 3
+    assert g[0]['b'][...] == 3
+    assert g[2]['b'][...] == 3
 
   def test_update_from_pure_dict(self):
     a = {'a': 1, 'b': nnx.Param(jnp.array(2))}

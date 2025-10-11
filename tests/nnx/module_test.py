@@ -1,4 +1,5 @@
 # Copyright 2024 The Flax Authors.
+
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -333,13 +334,13 @@ class TestModule(absltest.TestCase):
     m2 = nnx.clone(m)
 
     assert m is not m2
-    assert m2.a[0].value == m2.b.c.value
-    assert m2.a[1].value == m2.b.d.value
+    assert m2.a[0].get_value() == m2.b.c.get_value()
+    assert m2.a[1].get_value() == m2.b.d.get_value()
 
-    assert m.a[0].value == m2.a[0].value
-    assert m.a[1].value == m2.a[1].value
-    assert m.b.c.value == m2.b.c.value
-    assert m.b.d.value == m2.b.d.value
+    assert m.a[0].get_value() == m2.a[0].get_value()
+    assert m.a[1].get_value() == m2.a[1].get_value()
+    assert m.b.c.get_value() == m2.b.c.get_value()
+    assert m.b.d.get_value() == m2.b.d.get_value()
 
   def test_sow_basic(self):
     class Foo(nnx.Module):
@@ -354,12 +355,12 @@ class TestModule(absltest.TestCase):
 
     assert y1 == 3
     assert y2 == 11
-    assert m.y.value == (3, 11)
+    assert m.y.get_value() == (3, 11)
 
     intermediates = nnx.pop(m, nnx.Intermediate)
 
     assert isinstance(intermediates['y'], nnx.Intermediate)
-    assert intermediates['y'].value == (3, 11)
+    assert intermediates['y'].get_value() == (3, 11)
 
     assert not hasattr(m, 'y')
 
@@ -550,13 +551,13 @@ class TestModule(absltest.TestCase):
   def test_create_abstract(self):
     linear = nnx.eval_shape(lambda: nnx.Linear(2, 3, rngs=nnx.Rngs(0)))
 
-    assert linear.kernel.value == jax.ShapeDtypeStruct((2, 3), jnp.float32)
-    assert linear.bias.value == jax.ShapeDtypeStruct((3,), jnp.float32)
+    assert linear.kernel.get_value() == jax.ShapeDtypeStruct((2, 3), jnp.float32)
+    assert linear.bias.get_value() == jax.ShapeDtypeStruct((3,), jnp.float32)
 
   def test_create_abstract_stateful(self):
     linear = nnx.eval_shape(lambda: nnx.Dropout(0.5, rngs=nnx.Rngs(0)))
 
-    assert linear.rngs.key.value == jax.ShapeDtypeStruct(
+    assert linear.rngs.key.get_value() == jax.ShapeDtypeStruct(
       (), jax.random.key(0).dtype
     )
 
@@ -742,13 +743,13 @@ class TestModuleDataclass:
     graphdef, state = nnx.split(m)
 
     assert len(state) == 4
-    assert state['b'].value == 2
+    assert state['b'].get_value() == 2
     assert isinstance(state['b'], nnx.Variable)
-    assert state['c'].value == 3
+    assert state['c'].get_value() == 3
     assert isinstance(state['c'], nnx.Param)
-    assert state['d'].value == 4
+    assert state['d'].get_value() == 4
     assert isinstance(state['d'], nnx.Variable)
-    assert state['e'].value == 5
+    assert state['e'].get_value() == 5
     assert isinstance(state['e'], nnx.BatchStat)
 
   def test_post_init(self):
