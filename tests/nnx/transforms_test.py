@@ -418,6 +418,129 @@ class TestJIT(absltest.TestCase):
     y = compiled(m, x)
     self.assertEqual(m.count[...], 2)
 
+  def test_jit_static_no_static_in_shardings(self):
+    """Test nnx.jit with static args but no sharding for static positions."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+    
+    def fn(x, scale: float, use_relu: bool):
+      y = x * scale
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    # Use inputs with negative values so ReLU has an effect
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    scale = 0.5
+
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+    f = nnx.jit(fn, in_shardings=(x_sharding, None), static_argnums=(2,))
+
+    y_relu = f(x, scale, True)
+    y_no_relu = f(x, scale, False)
+
+    # Verify static arg toggles result
+    self.assertNotEqual(y_relu, y_no_relu)
+
+  def test_jit_static_with_extra_static_entry(self):
+    """Passing sharding for a static argument should raise an error at call time."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+    
+    def fn(x, scale: float, use_relu: bool):
+      y = x * scale
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    # Use inputs with negative values so ReLU has an effect
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    scale = 0.5
+
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+    g = nnx.jit(
+      fn, in_shardings=(x_sharding, None, None), static_argnums=(2,)
+    )
+    # JAX rejects extra shardings beyond dynamic positional arguments.
+    with self.assertRaises(Exception):
+      _ = g(x, scale, True)
+
+  def test_jit_static_with_argnames(self):
+    """Static arg specified via static_argnames is handled correctly."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def fn(x, scale: float, use_relu: bool):
+      y = x * scale
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    scale = 0.5
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+
+    f = nnx.jit(fn, in_shardings=(x_sharding, None), static_argnames=('use_relu',))
+    y_relu = f(x, scale, True)
+    y_no_relu = f(x, scale, False)
+    self.assertNotEqual(y_relu, y_no_relu)
+
+  def test_jit_static_broadcast_in_shardings(self):
+    """Single sharding spec broadcasts over multiple dynamic array args with a static arg present."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def fn(x, y: jnp.ndarray, use_relu: bool):
+      y = x * y
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    y = jnp.ones_like(x)
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+
+    # Provide a single sharding spec; JAX will broadcast it to both dynamic array args.
+    f = nnx.jit(fn, in_shardings=x_sharding, static_argnums=(2,))
+    y_relu = f(x, y, True)
+    y_no_relu = f(x, y, False)
+    self.assertNotEqual(y_relu, y_no_relu)
+
+  def test_jit_static_with_state_sharding(self):
+    """StateSharding works when a static arg is present."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def sharding(*axes):
+      return jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(*axes))
+
+    # Module with parameters to sharding-constrain via StateSharding
+    m = nnx.Linear(4, 4, rngs=nnx.Rngs(0))
+    state_sharding = nnx.StateSharding({
+      nnx.PathContains('kernel'): sharding('data', None),
+      nnx.PathContains('bias'): sharding(None),
+    })
+
+    def fn(model: nnx.Linear, x: jnp.ndarray, use_relu: bool):
+      y = model(x)
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    x_sharding = sharding('data', None)
+
+    # Shard model variables and x; static arg is the third positional arg
+    f = nnx.jit(fn, in_shardings=(state_sharding, x_sharding), static_argnums=(2,))
+    y_relu = f(m, x, True)
+    y_no_relu = f(m, x, False)
+    self.assertNotEqual(y_relu, y_no_relu)
+
 class TestEvalShape(absltest.TestCase):
   def test_eval_shape(self):
     abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
