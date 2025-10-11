@@ -54,9 +54,9 @@ class MLP(nnx.Module):
     self.count[...] += 1
     return self.linear2(jax.nn.relu(self.linear1(x)) * 0.5)
 
-with nnx.use_refs(True):
-  model = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0))
-  optimizer = nnx.Optimizer(model, optax.sgd(learning_rate=0.1), wrt=nnx.Param)
+nnx.variable_mode('hijax')
+model = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0))
+optimizer = nnx.Optimizer(model, optax.sgd(learning_rate=0.1), wrt=nnx.Param)
 
 
 @jax.jit
@@ -67,7 +67,7 @@ def train_step(model, optimizer, x, y):
     model = nnx.merge(graphdef, params, counts)
     return jnp.mean((y - model(x)) ** 2)
 
-  grads = jax.grad(loss_fn)(nnx.to_arrays(params))
+  grads = jax.grad(loss_fn)(nnx.as_lojax(params))
   optimizer.update(model, grads)
 
 
@@ -87,7 +87,7 @@ for step, (x, y) in enumerate(dataset(32)):
   if step >= total_steps - 1:
     break
 
-print('times called:', model.count.value)
+print('times called:', model.count[...])
 
 y_pred = model(X)
 

@@ -49,13 +49,11 @@ class LayerIntermediates:
         if field.name.startswith('attn_'):
           step_value = getattr(
               layer.attn, field.name.replace('attn_', '')
-          ).value[0]
+          )[0]
         elif field.name.startswith('mlp_'):
-          step_value = getattr(layer.mlp, field.name.replace('mlp_', '')).value[
-              0
-          ]
+          step_value = getattr(layer.mlp, field.name.replace('mlp_', ''))[0]
         else:
-          step_value = getattr(layer, field.name).value[0]
+          step_value = getattr(layer, field.name)[0]
       except AttributeError as exc:
         raise ValueError(
             f'Intermediate {field.name} is not in the step intermediates.'
@@ -93,7 +91,7 @@ class TransformerIntermediates:
     if self.embeddings is not None:
       try:
         self.embeddings = self.embeddings.at[:, decoding_step + 1, ...].set(
-            transformer.embeddings.value[0][:, 0, ...]
+            transformer.embeddings[0][:, 0, ...]
         )
       except AttributeError as exc:
         raise ValueError(

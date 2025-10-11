@@ -30,7 +30,8 @@ graph
 
 .. autofunction:: find_duplicates
 .. autofunction:: pure
-.. autofunction:: to_refs
-.. autofunction:: to_arrays
+.. autofunction:: as_ref
+.. autofunction:: as_hijax
+.. autofunction:: as_lojax
 .. autofunction:: flatten
 .. autofunction:: unflatten
