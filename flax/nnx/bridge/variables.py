@@ -78,11 +78,11 @@ def is_vanilla_variable(vs: variablelib.Variable) -> bool:
   Returns False only if it has non-empty hooks or any non-built-in attribute.
   """
   for key, value in vs.get_metadata().items():
-    if key.endswith('_hooks'):
-      if value != ():
-        return False
-    else:
-      return False
+    if key in ('is_hijax', 'eager_sharding'):
+      continue
+    if key.endswith('_hooks') and value == ():
+      continue
+    return False
   return True
 
 
@@ -91,11 +91,11 @@ def to_linen_var(vs: variablelib.Variable) -> meta.AxisMetadata:
   if 'linen_meta_type' in metadata:
     linen_type = metadata['linen_meta_type']
     if hasattr(linen_type, 'from_nnx_metadata'):
-      return linen_type.from_nnx_metadata({'value': vs.value, **metadata})
-    return linen_type(vs.value, **metadata)
+      return linen_type.from_nnx_metadata({'value': vs.get_value(), **metadata})
+    return linen_type(vs.get_value(), **metadata)
   if is_vanilla_variable(vs):
-    return vs.value
-  return NNXMeta(type(vs), vs.value, metadata)
+    return vs.get_value()
+  return NNXMeta(type(vs), vs.get_value(), metadata)
 
 
 def get_col_name(keypath: tp.Sequence[Any]) -> str:
