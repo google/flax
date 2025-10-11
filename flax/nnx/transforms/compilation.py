@@ -19,8 +19,6 @@ import functools
 import typing as tp
 
 import jax
-import jax.experimental
-import jax.experimental.shard_map
 from jax.sharding import AbstractMesh, Mesh, PartitionSpec
 
 from flax.nnx import (
@@ -1001,13 +999,13 @@ def shard_map(
       )
     return out
 
-  shard_map_fn = jax.experimental.shard_map.shard_map(
+  shard_map_fn = jax.shard_map(
     ShardMapFn(f, in_specs, out_specs, kwarg_specs, shard_map_wrapper),
     mesh=mesh,
     in_specs=jax_in_specs,
     out_specs=(jax_in_specs, kwarg_specs, jax_out_specs),  # type: ignore
-    check_rep=check_rep,
-    auto=auto,
+    check_vma=check_rep,
+    axis_names=frozenset(mesh.axis_names) - auto,
   )
 
   shard_map_wrapper.inner = shard_map_fn  # type: ignore
