@@ -8,7 +8,7 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
-# Array Refs (experimental)
+# Hijax (experimental)
 
 ```{code-cell} ipython3
 from flax import nnx
@@ -21,10 +21,13 @@ import optax
 
 +++
 
-### Variables Refs
+### Variables Modes
 
 ```{code-cell} ipython3
-variable = nnx.Variable(jnp.array([1, 2, 3]), mode='hijax')
+variable = nnx.Variable(
+  value=jnp.array([1, 2, 3]),
+  mode='ref' # | 'hijax' | 'lojax' (default)
+)
 print(f"{variable.mode = }\n")
 
 @jax.jit
@@ -36,21 +39,18 @@ print("Before =", variable); increment(variable); print("After =", variable)
 ```
 
 ```{code-cell} ipython3
-# TODO: enable once as_text is fixed
-# print(increment.lower(variable).as_text())
+value = jnp.array(0, dtype=jnp.int32)
+print("hijax =", jax.make_jaxpr(increment)(nnx.Variable(value, mode='hijax')))
+print("ref =", jax.make_jaxpr(increment)(nnx.Variable(value, mode='ref')))
 ```
 
 ```{code-cell} ipython3
-nnx.variable_mode('hijax')
+nnx.variable_mode('ref')
 
 variable = nnx.Variable(jnp.array([1, 2, 3]))
 
 print(f"{variable.mode = }")
 ```
-
-Mention `nnx.use_refs` can be used as global flag
-
-+++
 
 ### Changing Status
 
@@ -58,17 +58,17 @@ Mention `nnx.use_refs` can be used as global flag
 class Linear(nnx.Module):
   def __init__(self, in_features, out_features, rngs: nnx.Rngs):
     self.kernel = nnx.Param(jax.random.normal(rngs(), (in_features, out_features)))
-    self.bias = nnx.Param(jnp.zeros(out_features))
 
   def __call__(self, x):
-    return x @ self.kernel + self.bias[None]
+    return x @ self.kernel
 
-with nnx.variable_mode('lojax'): # use lojax Variables
-  model = Linear(1, 3, rngs=nnx.Rngs(0))
+model = Linear(1, 3, rngs=nnx.Rngs(0))
 
+ref_vars = nnx.as_ref(model)            # convert to ref Variables
 hijax_vars = nnx.as_hijax(model)        # convert to hijax Variables
 pytree_vars = nnx.as_lojax(hijax_vars)  # convert to lojax Variables
 
+print("nnx.as_ref(model) =", ref_vars)
 print("nnx.as_hijax(model) =", hijax_vars)
 print("nnx.as_lojax(refs_model) =", pytree_vars)
 ```
@@ -115,11 +115,11 @@ for _ in range(3):
 ### Scan Over Layers
 
 ```{code-cell} ipython3
-@jax.vmap
+@nnx.vmap  # NOTE: uses nnx.vmap
 def create_stack(rngs):
-  return nnx.as_lojax(Block(2, 64, 2, rngs=rngs))
+  return Block(2, 64, 2, rngs=rngs)
 
-block_stack = nnx.as_hijax(create_stack(nnx.Rngs(0).fork(split=8)))
+block_stack = nnx.as_ref(create_stack(nnx.Rngs(0).fork(split=8)))
 
 def scan_fn(x, block):
   x = block(x)
@@ -135,7 +135,7 @@ print("y = ", y)
 
 +++
 
-### MutableArray Outputs
+### Mutable Outputs
 
 ```{code-cell} ipython3
 @jax.jit
@@ -149,16 +149,16 @@ except Exception as e:
 ```
 
 ```{code-cell} ipython3
-with nnx.variable_mode('lojax'): # <-- disable hijax Variables
-  model = create_model(nnx.Rngs(0))
+@jax.jit
+def create_model(rngs):
+  return nnx.as_lojax(Block(2, 64, 3, rngs=rngs))
 
-model = nnx.as_hijax(model) # convert to mutable after creation
+model = nnx.as_hijax(create_model(nnx.Rngs(0)))
 
 print("model.linear =", model.linear)
 ```
 
 ```{code-cell} ipython3
-# TODO: why does this work?
 @nnx.jit
 def create_model(rngs):
   return Block(2, 64, 3, rngs=rngs)
@@ -188,35 +188,27 @@ print(get_error(f, x, x))
 ```
 
 ```{code-cell} ipython3
-class SharedVariables(nnx.Pytree):
+class Shared(nnx.Pytree):
   def __init__(self):
     self.a = nnx.Variable(jnp.array(0))
-    self.b = nnx.Variable(jnp.array(1))
-    self.c = self.a
-
-class SharedModules(nnx.Pytree):
-  def __init__(self):
-    self.d = Linear(1, 1, rngs=nnx.Rngs(0))
-    self.e = Linear(1, 1, rngs=nnx.Rngs(0))
-    self.f = self.d
+    self.b = self.a
+    self.c = Linear(1, 1, rngs=nnx.Rngs(0))
+    self.d = self.c
 
 @jax.jit
 def g(pytree):
   ...
 
-shared_variables = SharedVariables()
-shared_modules = SharedModules()
+shared = Shared()
 
-print("SharedVariables", get_error(g, shared_variables))
-print("SharedModules", get_error(g, shared_modules))
+print(get_error(g, shared))
 ```
 
 ```{code-cell} ipython3
-if (duplicates := nnx.find_duplicates(shared_variables)):
-  print("shared variables duplicates:", duplicates)
-
-if (duplicates := nnx.find_duplicates(shared_modules)):
-  print("shared modules duplicates:  ", duplicates)
+print("Duplicates found:")
+if (all_duplicates := nnx.find_duplicates(shared)):
+  for duplicates in all_duplicates:
+    print("-", duplicates)
 ```
 
 ```{code-cell} ipython3
@@ -225,10 +217,10 @@ def h(graphdef, state):
   obj = nnx.merge(graphdef, state)
   obj.a[...] += 10
 
-graphdef, state = nnx.split(shared_variables)
-print(state) # split deduplicates the state
+graphdef, state = nnx.split(shared)
+print("before:", state.a) # split deduplicates the state
 
 h(graphdef, state)
 
-print("updated", shared_variables)
+print("after:", shared.a)
 ```

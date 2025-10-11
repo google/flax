@@ -175,9 +175,9 @@ def _set_hijax_state(hijax_var, variable: Variable):
 
 
 def _new_hijax_from_variable(variable: Variable) -> HijaxVariable:
-  mutable_hijax_var = _new_hijax_variable(type(variable))
-  _set_hijax_state(mutable_hijax_var, variable)
-  return mutable_hijax_var
+  hijax_var = _new_hijax_variable(type(variable))
+  _set_hijax_state(hijax_var, variable)
+  return hijax_var
 
 
 
@@ -216,12 +216,10 @@ class NewVariable(hijax.HiPrimitive):
     return HijaxVariable._new(None, {}, var_type)
 
   def jvp(_, primals, tangents, *, treedef, var_type):
-    raise NotImplementedError('jvp not implemented for NewMutableHijaxVariable')
+    raise NotImplementedError('jvp not implemented for NewHijaxVariable')
 
   def transpose(_, *args, treedef, var_type):
-    raise NotImplementedError(
-      'transpose not implemented for NewMutableHijaxVariable'
-    )
+    raise NotImplementedError('transpose not implemented for NewHijaxVariable')
 
 
 new_variable_p = NewVariable(f'new_variable')
@@ -234,20 +232,20 @@ class SetVariable(hijax.HiPrimitive):
     return True  # type: ignore
 
   # TODO: upstream this to Box
-  def impl(self, mutable_hijax_var: HijaxVariable, *leaves, treedef, var_type):
+  def impl(self, hijax_var: HijaxVariable, *leaves, treedef, var_type):
     variable: Variable = jax.tree.unflatten(treedef, leaves)
-    object.__setattr__(mutable_hijax_var, '_raw_value', variable._raw_value)
-    object.__setattr__(mutable_hijax_var, '_metadata', variable._var_metadata)
+    object.__setattr__(hijax_var, '_raw_value', variable._raw_value)
+    object.__setattr__(hijax_var, '_metadata', variable._var_metadata)
     return []
 
   def abstract_eval(self, hijax_var_type, *leaf_avals, treedef, var_type):
     hijax_var_type.mutable_qdd.update(VariableQDD(leaf_avals, treedef))
     return [], {variable_effect}  # TODO better typechecking...
 
-  def to_lojax(_, mutable_hijax_var: HijaxVariable, *leaves, treedef, var_type):
+  def to_lojax(_, hijax_var: HijaxVariable, *leaves, treedef, var_type):
     variable: Variable = jax.tree.unflatten(treedef, leaves)
-    object.__setattr__(mutable_hijax_var, '_raw_value', variable._raw_value)
-    object.__setattr__(mutable_hijax_var, '_metadata', variable._var_metadata)
+    object.__setattr__(hijax_var, '_raw_value', variable._raw_value)
+    object.__setattr__(hijax_var, '_metadata', variable._var_metadata)
     return []
 
   def jvp(_, primals, tangents, *, treedef, var_type):
@@ -269,9 +267,7 @@ class SetVariable(hijax.HiPrimitive):
     return [], []
 
   def transpose(_, *args, treedef, var_type):
-    raise NotImplementedError(
-      'transpose not implemented for SetMutableHijaxVariable'
-    )
+    raise NotImplementedError('transpose not implemented for SetHijaxVariable')
 
 
 set_variable_p = SetVariable(f'set_variable')
@@ -280,11 +276,11 @@ set_variable_p = SetVariable(f'set_variable')
 class GetVariable(hijax.HiPrimitive):
   multiple_results = True
 
-  def abstract_eval(self, variable_ty, *, avals):
+  def abstract_eval(self, abstract_var, *, avals):
     return avals, {variable_effect}
 
-  def to_lojax(_, mutable_hijax_var: HijaxVariable, *, avals):
-    return jax.tree.leaves(mutable_hijax_var._raw_value)
+  def to_lojax(_, hijax_var: HijaxVariable, *, avals):
+    return jax.tree.leaves(hijax_var._raw_value)
 
   def jvp(_, primals, tangents, *, avals):
     (box,), (variable_dot,) = primals, tangents
@@ -296,9 +292,7 @@ class GetVariable(hijax.HiPrimitive):
     )
 
   def transpose(_, *args):
-    raise NotImplementedError(
-      'transpose not implemented for GetMutableHijaxVariable'
-    )
+    raise NotImplementedError('transpose not implemented for GetHijaxVariable')
 
 
 get_variable_p = GetVariable(f'get_variable')
@@ -328,10 +322,10 @@ def _as_hijax_property(name: str, *, get: bool, set: bool) -> property:
       _set_hijax_state(hijax_var, variable)
     return out
 
-  def _setter_wrapper(mutable_hijax_var, value):
-    variable = _get_hijax_state(mutable_hijax_var)
+  def _setter_wrapper(hijax_var, value):
+    variable = _get_hijax_state(hijax_var)
     setattr(variable, name, value)
-    _set_hijax_state(mutable_hijax_var, variable)
+    _set_hijax_state(hijax_var, variable)
 
   _hijax_property = property(
     fget=_getter_wrapper if get else None,
@@ -419,11 +413,11 @@ class HijaxVariable(
     metadata: dict[str, tp.Any],
     var_type: type[Variable[A]],
   ):
-    mutable_hijax_var = object.__new__(cls)
-    object.__setattr__(mutable_hijax_var, '_raw_value', value)
-    object.__setattr__(mutable_hijax_var, '_metadata', metadata)
-    object.__setattr__(mutable_hijax_var, '_var_type', var_type)
-    return mutable_hijax_var
+    hijax_var = object.__new__(cls)
+    object.__setattr__(hijax_var, '_raw_value', value)
+    object.__setattr__(hijax_var, '_metadata', metadata)
+    object.__setattr__(hijax_var, '_var_type', var_type)
+    return hijax_var
 
   __init__ = _as_hijax_method('__init__')
 
@@ -484,8 +478,8 @@ class HijaxVariable(
   def replace(self, *args, **kwargs) -> HijaxVariable:
     variable = _get_hijax_state(self)
     variable = variable.replace(*args, **kwargs)
-    mutable_hijax_var = _new_hijax_from_variable(variable)
-    return mutable_hijax_var
+    hijax_var = _new_hijax_from_variable(variable)
+    return hijax_var
 
   @classmethod
   def from_metadata(cls, value: A, metadata: dict[str, tp.Any]):
@@ -493,8 +487,8 @@ class HijaxVariable(
 
   def copy(self) -> HijaxVariable:
     variable = _get_hijax_state(self)
-    mutable_hijax_var = _new_hijax_from_variable(variable)
-    return mutable_hijax_var
+    hijax_var = _new_hijax_from_variable(variable)
+    return hijax_var
 
   to_state = copy
   __nnx_repr__ = _as_hijax_method('__nnx_repr__')
@@ -736,7 +730,7 @@ class AbstractVariable(tp.Generic[A], hijax.MutableHiType):
     return isinstance(other, AbstractVariable)
 
   def str_short(self, short_dtypes=False, **_) -> str:  # type: ignore
-    return f'MutableHijaxVariable({self._var_type.__name__}())'
+    return f'{self._var_type.__name__}()'
 
   # mutable interface
   def lo_ty_qdd(self, variable_state: VariableQDD) -> list:  # type: ignore
@@ -1223,7 +1217,14 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
   def get_value(self, *, index: tp.Any = MISSING) -> A:
     value = jax.tree.map(lambda x: x, self._raw_value)  # make a copy
     if not isinstance(index, Missing):
-      value = value[index]
+      if is_array_ref(value):
+        value = value[index]
+      elif isinstance(value, jax.Array) and index == ...:
+        pass  # skip trivial access
+      else:
+        value = value[index]
+    elif is_array_ref(value):
+      value = value[...]
     if 'on_get_value' in self._var_metadata:
       value = self._var_metadata['on_get_value'](self, value)
     return value  # type: ignore
@@ -1245,7 +1246,20 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     elif isinstance(self._raw_value, jax.Array) and (
       not isinstance(index, Missing)
     ):
-      self._raw_value = self._raw_value.at[index].set(value)  # type: ignore
+      # check if its a full replace to av
+      if (
+        index == ...
+        and isinstance(value, jax.Array)
+        and value.shape == self._raw_value[index].shape
+        and value.dtype == self._raw_value.dtype
+        and (
+          getattr(value, 'sharding', None)
+          == getattr(self._raw_value, 'sharding', None)
+        )
+      ):
+        self._raw_value = value
+      else:
+        self._raw_value = self._raw_value.at[index].set(value)  # type: ignore
     else:
       self._raw_value = value
 
@@ -1293,11 +1307,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
     # get and update attributes
     # return new instance with updated attributes
-    obj = object.__new__(type(self))
-    # skip __setattr__ for trace_state initialization
-    object.__setattr__(obj, '_trace_state', self._trace_state)
-    obj._raw_value = kwargs.pop('value')
-    obj._var_metadata = self.get_metadata() | kwargs
+    obj = self._new(kwargs.pop('value'), self.get_metadata() | kwargs)
     return obj
 
   @classmethod
@@ -1336,11 +1346,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       raise ValueError(f'Unknown mode: {mode!r}')
 
   def copy(self: Variable[A]) -> Variable[A]:
-    obj = object.__new__(type(self))
-    # skip __setattr__ for trace_state initialization
-    object.__setattr__(obj, '_trace_state', tracers.TraceState())
-    obj._raw_value = self._raw_value
-    obj._var_metadata = self.get_metadata().copy()
+    obj = self._new(self._raw_value, self.get_metadata())
     return obj
 
   to_state = copy

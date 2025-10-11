@@ -775,6 +775,8 @@ def _graph_flatten(
       leaf = inner_value
     else:
       leaf = node  # type: ignore[assignment]
+      if inner_value is not prev_inner_value:
+        leaf.set_raw_value(inner_value)
 
     variabledef = VariableDef(
       type=node.var_type,  # type: ignore
@@ -2696,7 +2698,7 @@ def as_ref(
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
   def _to_refs(jax_path, x):
-    if predicate(to_nnx_path(jax_path), x):
+    if predicate(jax_to_nnx_path(jax_path), x):
       assert isinstance(x, Variable)
       value = _pytree_to_refs(x.get_raw_value())
       metadata = x.get_metadata()
@@ -2734,7 +2736,7 @@ def as_hijax(
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
   def _to_hijax(jax_path, x):
-    if predicate(to_nnx_path(jax_path), x):
+    if predicate(jax_to_nnx_path(jax_path), x):
       assert isinstance(x, Variable)
       value = _pytree_to_arrays(x.get_raw_value())
       metadata = x.get_metadata()
@@ -2771,7 +2773,7 @@ def as_lojax(
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
   def _to_lojax(jax_path, x):
-    if predicate(to_nnx_path(jax_path), x):
+    if predicate(jax_to_nnx_path(jax_path), x):
       assert isinstance(x, Variable)
       value = _pytree_to_arrays(x.get_raw_value())
       metadata = x.get_metadata()
@@ -3151,7 +3153,7 @@ def _key_path_to_key(key: tp.Any) -> Key:
     return str(key)
 
 
-def to_nnx_path(jax_path: tuple, /):
+def jax_to_nnx_path(jax_path: tuple, /):
   return tuple(_key_path_to_key(part) for part in jax_path)
 
 

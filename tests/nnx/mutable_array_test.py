@@ -258,8 +258,8 @@ class TestVariableRefMode(absltest.TestCase):
   def test_mutable_example(self):
     tree = [nnx.Variable(1.0), nnx.Variable(2.0, mode='ref')]
     mutable_tree = nnx.as_ref(tree)
-    assert isinstance(mutable_tree[0].get_raw_value(), jax.Ref)
-    assert isinstance(mutable_tree[1].get_raw_value(), jax.Ref)
+    assert isinstance(mutable_tree[0].get_value(), jax.Ref)
+    assert isinstance(mutable_tree[1].get_value(), jax.Ref)
 
   def test_mutable_array_split_freeze(self):
     class Foo(nnx.Module):
@@ -279,12 +279,7 @@ class TestVariableRefMode(absltest.TestCase):
     self.assertIsInstance(m1.a, jax.Ref)
 
   def test_update_context(self):
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.kernel = jax.new_ref(1)
-        self.bias = jax.new_ref(2)
-
-    m1 = Foo()
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     with nnx.update_context('example'):
       with nnx.split_context('example') as ctx:
         graphdef, state = ctx.split(m1)
@@ -292,15 +287,15 @@ class TestVariableRefMode(absltest.TestCase):
       with nnx.merge_context('example', True) as ctx:
         m2 = ctx.merge(graphdef, state)
 
-      m_out1 = Foo()
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
 
       with nnx.split_context('example') as ctx:
         graphdef_out, state_out = ctx.split((m2, m_out1, m2))
 
-      self.assertIsInstance(state_out[0]['kernel'], nnx.graph.NoUpdate)
-      self.assertIsInstance(state_out[0]['bias'], nnx.graph.NoUpdate)
-      self.assertIsInstance(state_out[1]['kernel'], nnx.graph.ArrayRefOutput)
-      self.assertIsInstance(state_out[1]['bias'], nnx.graph.ArrayRefOutput)
+      self.assertIsInstance(state_out[0]['kernel'].get_value(), nnx.graph.NoUpdate)
+      self.assertIsInstance(state_out[0]['bias'].get_value(), nnx.graph.NoUpdate)
+      self.assertIsInstance(state_out[1]['kernel'].get_value(), nnx.graph.ArrayRefOutput)
+      self.assertIsInstance(state_out[1]['bias'].get_value(), nnx.graph.ArrayRefOutput)
       # 2 ArrayRefOutput + 2 NoUpdate, however, NoUpdate are empty nodes
       self.assertLen(jax.tree.leaves(state_out), 2)
 
@@ -311,12 +306,7 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_update_context_flatten(self):
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.kernel = jax.new_ref(1)
-        self.bias = jax.new_ref(2)
-
-    m1 = Foo()
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     with nnx.update_context('example'):
       with nnx.split_context('example') as ctx:
         graphdef, state = ctx.flatten(m1)
@@ -324,20 +314,20 @@ class TestVariableRefMode(absltest.TestCase):
       with nnx.merge_context('example', True) as ctx:
         m2 = ctx.merge(graphdef, state)
 
-      m_out1 = Foo()
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
 
       with nnx.split_context('example') as ctx:
         graphdef_out, state_out = ctx.flatten((m2, m_out1, m2))
 
       state_out_dict = dict(state_out)
 
-      self.assertIsInstance(state_out_dict[(0, 'kernel')], nnx.graph.NoUpdate)
-      self.assertIsInstance(state_out_dict[(0, 'bias')], nnx.graph.NoUpdate)
+      self.assertIsInstance(state_out_dict[(0, 'kernel')].get_value(), nnx.graph.NoUpdate)
+      self.assertIsInstance(state_out_dict[(0, 'bias')].get_value(), nnx.graph.NoUpdate)
       self.assertIsInstance(
-        state_out_dict[(1, 'kernel')], nnx.graph.ArrayRefOutput
+        state_out_dict[(1, 'kernel')].get_value(), nnx.graph.ArrayRefOutput
       )
       self.assertIsInstance(
-        state_out_dict[(1, 'bias')], nnx.graph.ArrayRefOutput
+        state_out_dict[(1, 'bias')].get_value(), nnx.graph.ArrayRefOutput
       )
       # 2 ArrayRefOutput + 2 NoUpdate, however, NoUpdate are empty nodes
       self.assertLen(jax.tree.leaves(state_out), 2)
@@ -349,34 +339,29 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_update_context_to_tree1(self):
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.kernel = jax.new_ref(1)
-        self.bias = jax.new_ref(2)
-
-    m1 = Foo()
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     with nnx.update_context('example'):
       m1_tree = nnx.to_tree((m1,), ctxtag='example')
 
       (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True)
 
-      m_out1 = Foo()
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
 
       # with nnx.split_context('example') as ctx:
       #   graphdef_out, state_out = ctx.split((m2, m_out1))
       out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example')
 
       self.assertIsInstance(
-        out_tree[0][0].states[0]['kernel'], nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graph.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[0][0].states[0]['bias'], nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['bias'].get_value(), nnx.graph.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['kernel'], nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['kernel'].get_value(), nnx.graph.ArrayRefOutput
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['bias'], nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['bias'].get_value(), nnx.graph.ArrayRefOutput
       )
       self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
 
@@ -393,34 +378,29 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_update_context_to_tree2(self):
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.kernel = jax.new_ref(1)
-        self.bias = jax.new_ref(2)
-
-    m1 = Foo()
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     with nnx.update_context('example') as ctx:
       m1_tree = nnx.to_tree((m1,), ctxtag='example')
 
       (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True)
 
-      m_out1 = Foo()
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
 
       # with nnx.split_context('example') as ctx:
       #   graphdef_out, state_out = ctx.split((m2, m_out1))
       out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example')
 
       self.assertIsInstance(
-        out_tree[0][0].states[0]['kernel'], nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graph.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[0][0].states[0]['bias'], nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['bias'].get_value(), nnx.graph.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['kernel'], nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['kernel'].get_value(), nnx.graph.ArrayRefOutput
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['bias'], nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['bias'].get_value(), nnx.graph.ArrayRefOutput
       )
       self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
 
@@ -437,34 +417,29 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_update_context_to_tree_trivial_prefix(self):
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.kernel = jax.new_ref(1)
-        self.bias = jax.new_ref(2)
-
-    m1 = Foo()
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     with nnx.update_context('example'):
       m1_tree = nnx.to_tree((m1,), ctxtag='example', prefix=0)
 
       (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True, prefix=0)
 
-      m_out1 = Foo()
+      m_out1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
 
       # with nnx.split_context('example') as ctx:
       #   graphdef_out, state_out = ctx.split((m2, m_out1))
       out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example', prefix=0)
 
       self.assertIsInstance(
-        out_tree[0][0].states[0]['kernel'], nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graph.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[0][0].states[0]['bias'], nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['bias'].get_value(), nnx.graph.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['kernel'], nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['kernel'].get_value(), nnx.graph.ArrayRefOutput
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['bias'], nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['bias'].get_value(), nnx.graph.ArrayRefOutput
       )
       self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
 
@@ -480,17 +455,6 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIs(m3, m1)
       self.assertIsNot(m_out2, m_out1)
 
-
-
-class TestMutableArrayNNXTransforms(absltest.TestCase):
-  @classmethod
-  def setUpClass(cls):
-    cls.current_variable_mode = nnx.current_variable_mode()
-    nnx.variable_mode('ref')
-
-  @classmethod
-  def tearDownClass(cls):
-    nnx.variable_mode(cls.current_variable_mode)
 
   def test_simple_jit(self):
     m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
@@ -527,16 +491,6 @@ class TestMutableArrayNNXTransforms(absltest.TestCase):
 
 
 
-class TestMutableArray(absltest.TestCase):
-  @classmethod
-  def setUpClass(cls):
-    cls.current_variable_mode = nnx.current_variable_mode()
-    nnx.variable_mode('hijax')
-
-  @classmethod
-  def tearDownClass(cls):
-    nnx.variable_mode(cls.current_variable_mode)
-
   def test_static(self):
     class C(nnx.Module):
       def __init__(self, meta):
@@ -561,7 +515,7 @@ class TestMutableArray(absltest.TestCase):
   def test_variable_creation(self):
     v = nnx.Variable(jnp.array(1))
     self.assertEqual(v[...], 1)
-    self.assertTrue(v.mode == 'hijax')
+    self.assertTrue(v.mode == 'ref')
 
   def test_variable_metadata(self):
     v = nnx.Variable(jnp.array(1), a=2, b=3)
@@ -585,9 +539,18 @@ class TestMutableArray(absltest.TestCase):
     self.assertEqual(leaves[0].shape, (4,))  # b
     self.assertEqual(leaves[1].shape, ())  # count
     self.assertEqual(leaves[2].shape, (3, 4))  # w
-    self.assertEqual(paths[0], (jax.tree_util.GetAttrKey('b'),))
-    self.assertEqual(paths[1], (jax.tree_util.GetAttrKey('count'),))
-    self.assertEqual(paths[2], (jax.tree_util.GetAttrKey('w'),))
+    self.assertEqual(
+      paths[0],
+      (jax.tree_util.GetAttrKey('b'), jax.tree_util.GetAttrKey('value')),
+    )
+    self.assertEqual(
+      paths[1],
+      (jax.tree_util.GetAttrKey('count'), jax.tree_util.GetAttrKey('value')),
+    )
+    self.assertEqual(
+      paths[2],
+      (jax.tree_util.GetAttrKey('w'), jax.tree_util.GetAttrKey('value')),
+    )
 
     params = jax.tree.unflatten(treedef, leaves)
 
@@ -651,6 +614,7 @@ class TestMutableArray(absltest.TestCase):
       (
         jax.tree_util.GetAttrKey('default'),
         jax.tree_util.GetAttrKey('count'),
+        jax.tree_util.GetAttrKey('value'),
       ),
     )
     self.assertEqual(
@@ -658,6 +622,7 @@ class TestMutableArray(absltest.TestCase):
       (
         jax.tree_util.GetAttrKey('default'),
         jax.tree_util.GetAttrKey('key'),
+        jax.tree_util.GetAttrKey('value'),
       ),
     )
 
