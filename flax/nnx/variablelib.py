@@ -20,6 +20,7 @@ from functools import partial
 import threading
 import typing as tp
 from typing import Any
+import warnings
 
 from flax import config
 from jax._src import hijax
@@ -1124,14 +1125,26 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
   @property
   def value(self) -> A:
-    value = self.raw_value
-    if is_array_ref(value):
-      value = value[...]
-
+    warnings.warn(
+      "'.value' access is now deprecated. For Variable[Array] instances use:\n\n"
+      '  variable[...]\n\n'
+      'For other Variable types use:\n\n'
+      '  variable.get_value()\n',
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.get_value()
 
   @value.setter
   def value(self, value: A):
+    warnings.warn(
+      "'.value' access is now deprecated. For Variable[Array] instances use:\n\n"
+      '  variable[...] = value\n\n'
+      'For other Variable types use:\n\n'
+      '  variable.set_value(value)\n',
+      DeprecationWarning,
+      stacklevel=2,
+    )
     self.set_value(value)
 
   def create_value(self, value: A):
