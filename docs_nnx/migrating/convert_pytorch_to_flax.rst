@@ -121,12 +121,12 @@ Now, if you want to use the weights from this model in Flax, the corresponding F
             self.linear = nnx.Linear(100, 2, rngs=rngs)
 
         def __call__(self, x):
-        x = self.conv(x)
-        # [N, H, W, C] -> [N, C, H, W]
-        x = jnp.transpose(x, (0, 3, 1, 2))
-        x = jnp.reshape(x, (x.shape[0], -1))
-        x = self.linear(x)
-        return x
+            x = self.conv(x)
+            # [N, H, W, C] -> [N, C, H, W]
+            x = jnp.transpose(x, (0, 3, 1, 2))
+            x = jnp.reshape(x, (x.shape[0], -1))
+            x = self.linear(x)
+            return x
 
     j_model = JModel(nnx.Rngs(0))
 
