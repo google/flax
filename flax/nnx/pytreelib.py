@@ -685,7 +685,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   def __treescope_repr__(self, path, subtree_renderer):
     from flax import nnx
 
-    if OBJECT_CONTEXT.node_stats is None:
+    if OBJECT_CONTEXT.node_stats is None or id(self) not in OBJECT_CONTEXT.node_stats:
       node_stats: dict[int, dict[type[Variable], SizeBytes]] = {}
       _collect_stats(self, node_stats)
       OBJECT_CONTEXT.node_stats = node_stats
