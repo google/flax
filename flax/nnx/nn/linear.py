@@ -104,19 +104,19 @@ class LinearGeneral(Module):
     ...
     >>> # equivalent to `nnx.Linear(2, 4)`
     >>> layer = nnx.LinearGeneral(2, 4, rngs=nnx.Rngs(0))
-    >>> layer.kernel.value.shape
+    >>> layer.kernel.shape
     (2, 4)
     >>> # output features (4, 5)
     >>> layer = nnx.LinearGeneral(2, (4, 5), rngs=nnx.Rngs(0))
-    >>> layer.kernel.value.shape
+    >>> layer.kernel.shape
     (2, 4, 5)
-    >>> layer.bias.value.shape
+    >>> layer.bias.shape
     (4, 5)
     >>> # apply transformation on the the second and last axes
     >>> layer = nnx.LinearGeneral((2, 3), (4, 5), axis=(1, -1), rngs=nnx.Rngs(0))
-    >>> layer.kernel.value.shape
+    >>> layer.kernel.shape
     (2, 3, 4, 5)
-    >>> layer.bias.value.shape
+    >>> layer.bias.shape
     (4, 5)
     >>> y = layer(jnp.ones((16, 2, 3)))
     >>> y.shape
@@ -171,8 +171,6 @@ class LinearGeneral(Module):
     self.use_bias = use_bias
     self.dtype = dtype
     self.param_dtype = param_dtype
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.precision = precision
     self.dot_general = dot_general
     self.dot_general_cls = dot_general_cls
@@ -205,7 +203,7 @@ class LinearGeneral(Module):
         np.prod(shape[-n_out_features:]),
       )
       flat_shape = jax.tree.map(int, flat_shape)
-      kernel = self.kernel_init(rng, flat_shape, dtype)
+      kernel = kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, variablelib.VariableMetadata):
         kernel.raw_value = jnp.reshape(kernel.raw_value, shape)
       else:
@@ -228,7 +226,7 @@ class LinearGeneral(Module):
 
       def bias_init_wrap(rng, shape, dtype):
         flat_shape = (int(np.prod(shape)),)
-        bias = self.bias_init(rng, flat_shape, dtype)
+        bias = bias_init(rng, flat_shape, dtype)
         if isinstance(bias, variablelib.VariableMetadata):
           bias.raw_value = jnp.reshape(bias.raw_value, shape)
         else:
@@ -264,8 +262,8 @@ class LinearGeneral(Module):
       for ax in range(inputs.ndim)
       if ax not in axis
     )
-    kernel = self.kernel.value
-    bias = self.bias.value if self.bias is not None else None
+    kernel = self.kernel[...]
+    bias = self.bias[...] if self.bias is not None else None
 
     batch_ind = tuple(range(n_batch_dims))
     contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
@@ -375,8 +373,6 @@ class Linear(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.dot_general = dot_general
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
@@ -390,8 +386,8 @@ class Linear(Module):
     Returns:
       The transformed input.
     """
-    kernel = self.kernel.value
-    bias = self.bias.value if self.bias is not None else None
+    kernel = self.kernel[...]
+    bias = self.bias[...] if self.bias is not None else None
 
     inputs, kernel, bias = self.promote_dtype(
       (inputs, kernel, bias), dtype=self.dtype
@@ -425,9 +421,9 @@ class Einsum(Module):
     >>> import jax.numpy as jnp
     ...
     >>> layer = nnx.Einsum('nta,hab->nthb', (8, 2, 4), (8, 4), rngs=nnx.Rngs(0))
-    >>> layer.kernel.value.shape
+    >>> layer.kernel.shape
     (8, 2, 4)
-    >>> layer.bias.value.shape
+    >>> layer.bias.shape
     (8, 4)
     >>> y = layer(jnp.ones((16, 11, 2)))
     >>> y.shape
@@ -494,8 +490,6 @@ class Einsum(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.promote_dtype = promote_dtype
     self.einsum_op = einsum_op
     self.preferred_element_type = preferred_element_type
@@ -528,8 +522,8 @@ class Einsum(Module):
     inputs, kernel, bias = self.promote_dtype(
       (
         inputs,
-        self.kernel.value,
-        self.bias.value if self.bias is not None else self.bias,
+        self.kernel[...],
+        self.bias[...] if self.bias is not None else self.bias,
       ),
       dtype=self.dtype,
     )
@@ -611,9 +605,9 @@ class Conv(Module):
     >>> # valid padding
     >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3,),
     ...                  padding='VALID', rngs=rngs)
-    >>> layer.kernel.value.shape
+    >>> layer.kernel.shape
     (3, 3, 4)
-    >>> layer.bias.value.shape
+    >>> layer.bias.shape
     (4,)
     >>> out = layer(x)
     >>> out.shape
@@ -622,9 +616,9 @@ class Conv(Module):
     >>> # circular padding with stride 2
     >>> layer = nnx.Conv(in_features=3, out_features=4, kernel_size=(3, 3),
     ...                  strides=2, padding='CIRCULAR', rngs=rngs)
-    >>> layer.kernel.value.shape
+    >>> layer.kernel.shape
     (3, 3, 3, 4)
-    >>> layer.bias.value.shape
+    >>> layer.bias.shape
     (4,)
     >>> out = layer(x)
     >>> out.shape
@@ -739,8 +733,6 @@ class Conv(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.conv_general_dilated = conv_general_dilated
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
@@ -828,12 +820,12 @@ class Conv(Module):
         f'Shapes are: {self.mask.shape}, {self.kernel_shape}'
       )
 
-    kernel = self.kernel.value
+    kernel = self.kernel[...]
 
     if self.mask is not None:
       kernel *= self.mask
 
-    bias = self.bias.value if self.bias is not None else None
+    bias = self.bias[...] if self.bias is not None else None
 
     inputs, kernel, bias = self.promote_dtype(
       (inputs, kernel, bias), dtype=self.dtype
@@ -884,9 +876,9 @@ class ConvTranspose(Module):
     >>> # valid padding
     >>> layer = nnx.ConvTranspose(in_features=3, out_features=4, kernel_size=(3,),
     ...                           padding='VALID', rngs=rngs)
-    >>> layer.kernel.value.shape
+    >>> layer.kernel.shape
     (3, 3, 4)
-    >>> layer.bias.value.shape
+    >>> layer.bias.shape
     (4,)
     >>> out = layer(x)
     >>> out.shape
@@ -896,9 +888,9 @@ class ConvTranspose(Module):
     >>> layer = nnx.ConvTranspose(in_features=3, out_features=4, kernel_size=(6, 6),
     ...                           strides=(2, 2), padding='CIRCULAR',
     ...                           transpose_kernel=True, rngs=rngs)
-    >>> layer.kernel.value.shape
+    >>> layer.kernel.shape
     (6, 6, 4, 3)
-    >>> layer.bias.value.shape
+    >>> layer.bias.shape
     (4,)
     >>> out = layer(jnp.ones((1, 15, 15, 3)))
     >>> out.shape
@@ -989,8 +981,6 @@ class ConvTranspose(Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.precision = precision
-    self.kernel_init = kernel_init
-    self.bias_init = bias_init
     self.transpose_kernel = transpose_kernel
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
@@ -1002,13 +992,13 @@ class ConvTranspose(Module):
 
     self.kernel_shape = kernel_shape
     self.kernel = nnx.Param(
-      self.kernel_init(rngs.params(), kernel_shape, self.param_dtype)
+      kernel_init(rngs.params(), kernel_shape, self.param_dtype)
     )
 
     self.bias: nnx.Param | None
     if self.use_bias:
       self.bias = nnx.Param(
-        self.bias_init(rngs.params(), (self.out_features,), self.param_dtype)
+        bias_init(rngs.params(), (self.out_features,), self.param_dtype)
       )
     else:
       self.bias = nnx.data(None)
@@ -1066,7 +1056,7 @@ class ConvTranspose(Module):
         f'Shapes are: {self.mask.shape}, {kernel_shape}'
       )
 
-    kernel = self.kernel.value
+    kernel = self.kernel[...]
 
     if self.mask is not None:
       kernel *= self.mask
@@ -1075,7 +1065,7 @@ class ConvTranspose(Module):
     if padding_lax == 'CIRCULAR':
       padding_lax = 'VALID'
 
-    bias = self.bias.value if self.bias is not None else None
+    bias = self.bias[...] if self.bias is not None else None
 
     inputs, kernel, bias = self.promote_dtype(
       (inputs, kernel, bias), dtype=self.dtype
@@ -1220,9 +1210,8 @@ class Embed(Module):
 
     self.num_embeddings = num_embeddings
     self.features = features
-    self.dtype = dtype or self.embedding.value.dtype
+    self.dtype = dtype or self.embedding.dtype
     self.param_dtype = param_dtype
-    self.embedding_init = embedding_init
     self.promote_dtype = promote_dtype
 
   def __call__(self, inputs: Array) -> Array:
@@ -1241,7 +1230,7 @@ class Embed(Module):
     # Use take because fancy indexing numpy arrays with JAX indices does not
     # work correctly.
     (embedding,) = self.promote_dtype(
-      (self.embedding.value,), dtype=self.dtype, inexact=False
+      (self.embedding[...],), dtype=self.dtype, inexact=False
     )
     if self.num_embeddings == 1:
       return jnp.broadcast_to(embedding, inputs.shape + (self.features,))
@@ -1261,6 +1250,6 @@ class Embed(Module):
       in NLP models.
     """
     query, embedding = self.promote_dtype(
-      (query, self.embedding.value), dtype=self.dtype
+      (query, self.embedding[...]), dtype=self.dtype
     )
     return jnp.dot(query, embedding.T)

@@ -35,20 +35,20 @@ class TestStochastic:
       return m(x, rngs=rngs)
 
     x = jnp.ones((1, 10))
-    assert m1.rngs is not None and m1.rngs.count.value == 0
+    assert m1.rngs is not None and m1.rngs.count[...] == 0
 
     y1 = f(m1, x)
     assert n == 1
-    assert m1.rngs.count.value == 1
+    assert m1.rngs.count[...] == 1
     y2 = f(m2, x, rngs=rngs2)
     assert n == 2
-    assert rngs2.dropout.count.value == 1
+    assert rngs2.dropout.count[...] == 1
     np.testing.assert_allclose(y1, y2)
 
     y1 = f(m1, x)
-    assert m1.rngs.count.value == 2
+    assert m1.rngs.count[...] == 2
     y2 = f(m2, x, rngs=rngs2)
-    assert rngs2.dropout.count.value == 2
+    assert rngs2.dropout.count[...] == 2
     np.testing.assert_allclose(y1, y2)
 
     assert n == 2

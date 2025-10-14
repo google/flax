@@ -24,6 +24,12 @@ from jax.nn import initializers
 import jax.numpy as jnp
 import numpy as np
 
+try:
+  # JAX v0.8.0 and newer
+  from jax import enable_x64
+except ImportError:
+  from jax.experimental import enable_x64
+
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
@@ -425,7 +431,7 @@ class AttentionTest(parameterized.TestCase):
     self.assertNotIn('intermediates', intermediates)
 
   def test_autoregressive_decode_with_x64(self):
-    with jax.experimental.enable_x64():
+    with enable_x64():
       x = jnp.ones((1, 4, 4))
       module = nn.MultiHeadDotProductAttention(
           num_heads=2,

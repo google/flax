@@ -118,12 +118,12 @@ class Module(Pytree, metaclass=ModuleMeta):
 
       >>> y = model(x)
       >>> assert hasattr(model, 'i')
-      >>> assert len(model.i.value) == 1 # tuple of length 1
-      >>> assert model.i.value[0].shape == (1, 3)
+      >>> assert len(model.i) == 1 # tuple of length 1
+      >>> assert model.i[0].shape == (1, 3)
 
       >>> y = model(x, add=1)
-      >>> assert len(model.i.value) == 2 # tuple of length 2
-      >>> assert (model.i.value[0] + 1 == model.i.value[1]).all()
+      >>> assert len(model.i) == 2 # tuple of length 2
+      >>> assert (model.i[0] + 1 == model.i[1]).all()
 
     Alternatively, a custom init/reduce function can be passed::
 
@@ -146,12 +146,12 @@ class Module(Pytree, metaclass=ModuleMeta):
       >>> model = Model(rngs=nnx.Rngs(0))
 
       >>> y = model(x)
-      >>> assert (model.sum.value == model.product.value).all()
-      >>> intermediate = model.sum.value
+      >>> assert (model.sum[...] == model.product[...]).all()
+      >>> intermediate = model.sum[...]
 
       >>> y = model(x)
-      >>> assert (model.sum.value == intermediate*2).all()
-      >>> assert (model.product.value == intermediate**2).all()
+      >>> assert (model.sum[...] == intermediate*2).all()
+      >>> assert (model.product[...] == intermediate**2).all()
 
     Args:
       variable_type: The :class:`Variable` type for the stored value.
@@ -233,7 +233,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       >>> model = Model(rngs=nnx.Rngs(0))
       >>> assert not hasattr(model, 'xgrad')  # perturbation requires a sample input run
       >>> _ = model(x)
-      >>> assert model.xgrad.value.shape == (1, 3)   # same as the intermediate value
+      >>> assert model.xgrad.shape == (1, 3)   # same as the intermediate value
       >>> graphdef, params, perturbations = nnx.split(model, nnx.Param, nnx.Perturbation)
 
       >>> # Take gradients on the Param and Perturbation variables
@@ -243,8 +243,8 @@ class Module(Pytree, metaclass=ModuleMeta):
       ...   return jnp.mean((model(inputs) - targets) ** 2)
 
       >>> (grads, perturbations) = grad_loss(params, perturbations, x, y)
-      >>> # `perturbations.xgrad.value` is the intermediate gradient
-      >>> assert not jnp.array_equal(perturbations.xgrad.value, jnp.zeros((1, 3)))
+      >>> # `perturbations.xgrad[...]` is the intermediate gradient
+      >>> assert not jnp.array_equal(perturbations.xgrad[...], jnp.zeros((1, 3)))
 
     Args:
       name: A string denoting the ``Module`` attribute name for the
@@ -266,7 +266,7 @@ class Module(Pytree, metaclass=ModuleMeta):
         f"Expected '{name}' to be of type '{variable_type.__name__}', "
         f"got '{type(old_value).__name__}'"
       )
-    return old_value.value + value
+    return old_value[...] + value
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
     """

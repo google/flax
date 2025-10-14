@@ -19,8 +19,6 @@ import functools
 import typing as tp
 
 import jax
-import jax.experimental
-import jax.experimental.shard_map
 from jax.sharding import AbstractMesh, Mesh, PartitionSpec
 
 from flax.nnx import (
@@ -768,31 +766,37 @@ class ShardMapFn:
 
 @tp.overload
 def shard_map(
-  f: F,
-  *,
-  mesh: Mesh | AbstractMesh,
-  in_specs: Specs,
-  out_specs: Specs,
-  check_rep: bool = True,
-  auto: frozenset[AxisName] = frozenset(),
-) -> F: ...
+    f: F,
+    *,
+    mesh: Mesh | AbstractMesh,
+    in_specs: Specs,
+    out_specs: Specs,
+    axis_names: tp.AbstractSet[AxisName] = frozenset(),
+    check_vma: bool = True,
+) -> F:
+  ...
+
+
 @tp.overload
 def shard_map(
-  *,
-  mesh: Mesh | AbstractMesh,
-  in_specs: Specs,
-  out_specs: Specs,
-  check_rep: bool = True,
-  auto: frozenset[AxisName] = frozenset(),
-) -> tp.Callable[[F], F]: ...
+    *,
+    mesh: Mesh | AbstractMesh,
+    in_specs: Specs,
+    out_specs: Specs,
+    axis_names: tp.AbstractSet[AxisName] = frozenset(),
+    check_vma: bool = True,
+) -> tp.Callable[[F], F]:
+  ...
+
+
 def shard_map(
-  f: F | type[Missing] = Missing,
-  *,
-  mesh: Mesh | AbstractMesh,
-  in_specs: Specs,
-  out_specs: Specs,
-  check_rep: bool = True,
-  auto: frozenset[AxisName] = frozenset(),
+    f: F | type[Missing] = Missing,
+    *,
+    mesh: Mesh | AbstractMesh,
+    in_specs: Specs,
+    out_specs: Specs,
+    axis_names: tp.AbstractSet[AxisName] = frozenset(),
+    check_vma: bool = True,
 ) -> F | tp.Callable[[F], F]:
   """
   Lifted version of
@@ -856,8 +860,8 @@ def shard_map(
 
     y = f(m, x)
 
-    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
-    jax.debug.visualize_array_sharding(m.linear2.kernel.value)
+    jax.debug.visualize_array_sharding(m.linear1.kernel[...])
+    jax.debug.visualize_array_sharding(m.linear2.kernel[...])
 
 
   Alternatively, a ``State`` object with the exact PartitionSpec for each
@@ -894,8 +898,8 @@ def shard_map(
 
     y = f(m, x)
 
-    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
-    jax.debug.visualize_array_sharding(m.linear2.kernel.value)
+    jax.debug.visualize_array_sharding(m.linear1.kernel[...])
+    jax.debug.visualize_array_sharding(m.linear2.kernel[...])
 
   Here ``model_spec`` was created manually but you can also automate
   this process by using ``nnx.get_partition_spec`` to automatically
@@ -946,12 +950,12 @@ def shard_map(
   """
   if f is Missing:
     return functools.partial(
-      shard_map,
-      mesh=mesh,
-      in_specs=in_specs,
-      out_specs=out_specs,
-      check_rep=check_rep,
-      auto=auto,
+        shard_map,
+        mesh=mesh,
+        in_specs=in_specs,
+        out_specs=out_specs,
+        axis_names=axis_names,
+        check_vma=check_vma,
     )  # type: ignore[return-value]
   assert not isinstance(f, type)
 
@@ -1001,13 +1005,13 @@ def shard_map(
       )
     return out
 
-  shard_map_fn = jax.experimental.shard_map.shard_map(
-    ShardMapFn(f, in_specs, out_specs, kwarg_specs, shard_map_wrapper),
-    mesh=mesh,
-    in_specs=jax_in_specs,
-    out_specs=(jax_in_specs, kwarg_specs, jax_out_specs),  # type: ignore
-    check_rep=check_rep,
-    auto=auto,
+  shard_map_fn = jax.shard_map(
+      ShardMapFn(f, in_specs, out_specs, kwarg_specs, shard_map_wrapper),
+      mesh=mesh,
+      in_specs=jax_in_specs,
+      out_specs=(jax_in_specs, kwarg_specs, jax_out_specs),  # type: ignore
+      axis_names=axis_names,
+      check_vma=check_vma,
   )
 
   shard_map_wrapper.inner = shard_map_fn  # type: ignore

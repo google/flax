@@ -21,45 +21,57 @@ from jax import numpy as jnp
 
 class StateTest(absltest.TestCase):
   def test_create_state(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State(
+      {'a': nnx.Param(jnp.array(1)), 'b': {'c': nnx.Param(jnp.array(2))}}
+    )
 
-    assert state['a'].value == 1
-    assert state['b']['c'].value == 2
+    assert state['a'][...] == 1
+    assert state['b']['c'][...] == 2
 
   def test_get_attr(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State(
+      {'a': nnx.Param(jnp.array(1)), 'b': {'c': nnx.Param(jnp.array(2))}}
+    )
 
-    assert state.a.value == 1
-    assert state.b.c.value == 2
+    assert state.a[...] == 1
+    assert state.b.c[...] == 2
 
   def test_set_attr(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State(
+      {'a': nnx.Param(jnp.array(1)), 'b': {'c': nnx.Param(jnp.array(2))}}
+    )
 
-    state.a.value = 3
-    state.b.c.value = 4
+    state.a[...] = 3
+    state.b.c[...] = 4
 
-    assert state['a'].value == 3
-    assert state['b']['c'].value == 4
+    assert state['a'][...] == 3
+    assert state['b']['c'][...] == 4
 
   def test_set_attr_variables(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State(
+      {'a': nnx.Param(jnp.array(1)), 'b': {'c': nnx.Param(jnp.array(2))}}
+    )
 
-    state.a.value = 3
-    state.b.c.value = 4
+    state.a[...] = 3
+    state.b.c[...] = 4
 
     assert isinstance(state.a, nnx.Param)
-    assert state.a.value == 3
+    assert state.a[...] == 3
     assert isinstance(state.b.c, nnx.Param)
-    assert state.b.c.value == 4
+    assert state.b.c[...] == 4
 
   def test_add_nested_attr(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
-    state.b.d = nnx.Param(5)
+    state = nnx.State(
+      {'a': nnx.Param(jnp.array(1)), 'b': {'c': nnx.Param(jnp.array(2))}}
+    )
+    state.b.d = nnx.Param(jnp.array(5))
 
-    assert state['b']['d'].value == 5
+    assert state['b']['d'][...] == 5
 
   def test_delete_nested_attr(self):
-    state = nnx.State({'a': nnx.Param(1), 'b': {'c': nnx.Param(2)}})
+    state = nnx.State(
+      {'a': nnx.Param(jnp.array(1)), 'b': {'c': nnx.Param(jnp.array(2))}}
+    )
     del state['b']['c']
 
     assert 'c' not in state['b']
@@ -75,10 +87,10 @@ class StateTest(absltest.TestCase):
     module = Foo(rngs=nnx.Rngs(0))
     state = nnx.state(module)
 
-    assert module.layers[0].kernel.value.shape == (1, 2)
-    assert state.layers[0].kernel.value.shape == (1, 2)
-    assert module.layers[1].kernel.value.shape == (2, 3)
-    assert state.layers[1].kernel.value.shape == (2, 3)
+    assert module.layers[0].kernel.shape == (1, 2)
+    assert state.layers[0].kernel.shape == (1, 2)
+    assert module.layers[1].kernel.shape == (2, 3)
+    assert state.layers[1].kernel.shape == (2, 3)
 
   def test_pure_dict(self):
     module = nnx.Linear(4, 5, rngs=nnx.Rngs(0))
@@ -90,7 +102,7 @@ class StateTest(absltest.TestCase):
     nnx.replace_by_pure_dict(state, jax.tree.map(jnp.zeros_like, pure_dict))
     assert isinstance(state, nnx.State)
     assert isinstance(state['kernel'], nnx.Variable)
-    assert jnp.array_equal(state['kernel'].value, jnp.zeros((4, 5)))
+    assert jnp.array_equal(state['kernel'][...], jnp.zeros((4, 5)))
     assert type(state['kernel']) == nnx.Param
     nnx.update(module, state)
     assert jnp.array_equal(module(jnp.ones((3, 4))), jnp.zeros((3, 5)))

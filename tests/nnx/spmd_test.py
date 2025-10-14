@@ -79,8 +79,8 @@ class TestSPMD(parameterized.TestCase):
     with mesh:
       m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
 
-    assert m.w.value.shape == (8, 2)
-    assert m.w.value.sharding.shard_shape(m.w.value.shape) == (8, 2)
+    assert m.w.shape == (8, 2)
+    assert m.w.sharding.shard_shape(m.w.shape) == (8, 2)
 
   def test_shard_optimizer_state(self):
     class Foo(nnx.Module):

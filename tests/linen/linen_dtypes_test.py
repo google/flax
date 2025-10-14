@@ -15,11 +15,16 @@
 """Tests for flax.linen.dtypes."""
 
 
-import jax
 from absl.testing import absltest
 from jax import numpy as jnp
 
 from flax.linen import dtypes
+
+try:
+  # JAX v0.8.0 and newer
+  from jax import enable_x64
+except ImportError:
+  from jax.experimental import enable_x64
 
 default_float_dtype = jnp.result_type(1.0)
 
@@ -30,7 +35,7 @@ class DtypesTest(absltest.TestCase):
     self.assertEqual(dtypes.canonicalize_dtype(i32, inexact=False), jnp.int32)
 
   def test_inexact_dtype(self):
-    with jax.experimental.enable_x64():
+    with enable_x64():
       i64 = jnp.int64(1)
       self.assertEqual(dtypes.canonicalize_dtype(i64), jnp.float32)
     i32 = jnp.int32(1)

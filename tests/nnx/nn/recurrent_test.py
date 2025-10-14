@@ -86,11 +86,12 @@ class TestLSTMCell(absltest.TestCase):
     module = nnx.LSTMCell(
       in_features=3,
       hidden_features=4,
-      carry_init=initializers.ones,
       rngs=nnx.Rngs(0),
     )
     x_shape = (1, 3)
-    carry = module.initialize_carry(x_shape, nnx.Rngs(0))
+    carry = module.initialize_carry(
+      x_shape, nnx.Rngs(0), carry_init=initializers.ones
+    )
     c, h = carry
     self.assertTrue(jnp.all(c == 1.0))
     self.assertTrue(jnp.all(h == 1.0))
@@ -180,15 +181,15 @@ class TestLSTMCell(absltest.TestCase):
       else:
         nnx_layer = getattr(module_nnx, f'i{gate}')
       linen_params = params_linen[f'i{gate}']
-      nnx_layer.kernel.value = linen_params['kernel']
+      nnx_layer.kernel[...] = linen_params['kernel']
       if nnx_layer.use_bias:
-        nnx_layer.bias.value = linen_params['bias']
+        nnx_layer.bias[...] = linen_params['bias']
       # Hidden kernels (hidden state to gate)
       nnx_layer = getattr(module_nnx, f'h{gate}')
       linen_params = params_linen[f'h{gate}']
-      nnx_layer.kernel.value = linen_params['kernel']
+      nnx_layer.kernel[...] = linen_params['kernel']
       if nnx_layer.use_bias:
-        nnx_layer.bias.value = linen_params['bias']
+        nnx_layer.bias[...] = linen_params['bias']
 
     # Run both modules
     new_carry_nnx, y_nnx = module_nnx(carry_nnx, x)
@@ -421,15 +422,15 @@ class TestRNN(absltest.TestCase):
       else:
         nnx_layer = getattr(cell_nnx, f'i{gate}')
       linen_params = params_linen[f'i{gate}']
-      nnx_layer.kernel.value = linen_params['kernel']
+      nnx_layer.kernel[...] = linen_params['kernel']
       if nnx_layer.use_bias:
-        nnx_layer.bias.value = linen_params['bias']
+        nnx_layer.bias[...] = linen_params['bias']
       # Hidden kernels
       nnx_layer = getattr(cell_nnx, f'h{gate}')
       linen_params = params_linen[f'h{gate}']
-      nnx_layer.kernel.value = linen_params['kernel']
+      nnx_layer.kernel[...] = linen_params['kernel']
       if nnx_layer.use_bias:
-        nnx_layer.bias.value = linen_params['bias']
+        nnx_layer.bias[...] = linen_params['bias']
 
     # Initialize carries
     carry_nnx = cell_nnx.initialize_carry((batch_size, in_features), rngs_nnx)
@@ -634,11 +635,11 @@ class TestRNN(absltest.TestCase):
     )
 
     x = jnp.ones((8, 10, 32))
-    self.assertEqual(model.lstm.cell.recurrent_dropout.rngs.count.value, 0)
+    self.assertEqual(model.lstm.cell.recurrent_dropout.rngs.count[...], 0)
     y = model(x)
 
     self.assertEqual(y.shape, (8, 1))
-    self.assertEqual(model.lstm.cell.recurrent_dropout.rngs.count.value, 1)
+    self.assertEqual(model.lstm.cell.recurrent_dropout.rngs.count[...], 1)
 
 
 if __name__ == '__main__':

@@ -206,8 +206,7 @@ class TestModule(absltest.TestCase):
         self.c = c
 
       def __call__(self, x, *, rngs: nnx.Rngs):
-        key = rngs.e()
-        return self.w.value * x + jax.random.normal(key, ()) + self.c
+        return self.w * x + rngs.e.normal(()) + self.c
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 
@@ -266,38 +265,38 @@ class TestModule(absltest.TestCase):
     assert m['b'] is not m0['b']
 
   def test_cross_barrier(self):
-    m = nnx.Dict(a=nnx.Param(1))
+    m = nnx.Dict(a=nnx.Param(jnp.array(1)))
 
     @jax.jit
     def g(graphdef: nnx.GraphDef[nnx.Dict], state: nnx.State):
       m = nnx.merge(graphdef, state)
-      m.a.value += 1
+      m.a[...] += 1
       return nnx.split(m)
 
     graphdef, state = g(*nnx.split(m))
     m2 = nnx.merge(graphdef, state)
     assert m2 is not m
-    assert m.a.value == 1
-    assert m2.a.value == 2
+    assert m.a[...] == 1
+    assert m2.a[...] == 2
 
   def test_no_rejit(self):
     n = 0
-    m = nnx.Dict(a=nnx.Param(1))
+    m = nnx.Dict(a=nnx.Param(jnp.array(1)))
 
     @jax.jit
     def g(state_and_def):
       nonlocal n
       n += 1
       m = nnx.merge(*state_and_def)
-      m.a.value += 1
+      m.a[...] += 1
       return nnx.split(m)
 
     m2 = nnx.merge(*g(nnx.split(m)))
 
     assert n == 1
     assert m2 is not m
-    assert m.a.value == 1
-    assert m2.a.value == 2
+    assert m.a[...] == 1
+    assert m2.a[...] == 2
 
     g(nnx.split(m))
     assert n == 1
@@ -425,11 +424,13 @@ class TestModule(absltest.TestCase):
     intm_grads = grad_loss(model, x, y)
 
     # Gradient should not be zero
-    self.assertFalse(jnp.array_equal(
-      intm_grads.before_multiply.value, jnp.zeros_like(x)))
+    self.assertFalse(
+      jnp.array_equal(intm_grads.before_multiply[...], jnp.zeros_like(x))
+    )
     # activation * 4 so reverse gradient also * 4
-    np.testing.assert_allclose(intm_grads.after_multiply.value * 4,
-                               intm_grads.before_multiply.value)
+    np.testing.assert_allclose(
+      intm_grads.after_multiply[...] * 4, intm_grads.before_multiply[...]
+    )
 
   def test_update_static_state_submodules(self):
     class Bar(nnx.Module):
@@ -575,14 +576,14 @@ class TestModule(absltest.TestCase):
 
     linear2 = partial_init(state)
 
-    np.testing.assert_allclose(linear.kernel.value, linear2.kernel.value)
-    np.testing.assert_allclose(linear.bias.value, 0)
-    np.testing.assert_allclose(linear2.bias.value, 1)
+    np.testing.assert_allclose(linear.kernel[...], linear2.kernel[...])
+    np.testing.assert_allclose(linear.bias[...], 0)
+    np.testing.assert_allclose(linear2.bias[...], 1)
 
   def test_deepcopy(self):
     class Foo(nnx.Module):
       def __init__(self) -> None:
-        self.a = nnx.Param(1)
+        self.a = nnx.Param(jnp.array(1))
         self.b = [1, 2, 3]
         self.c = nnx.Param(jnp.array([1.0]))
         self.self = self
@@ -590,7 +591,7 @@ class TestModule(absltest.TestCase):
     m1 = Foo()
     m2 = deepcopy(m1)
 
-    assert m1.a.value == m2.a.value
+    assert m1.a[...] == m2.a[...]
     assert vars(m1)['a'] is not vars(m2)['a']
     assert m1.b is not m2.b
     assert m1.c is not m2.c
@@ -698,15 +699,15 @@ class TestModule(absltest.TestCase):
 
     leaves = nnx.to_flat_state(nnx.state(obj)).leaves
 
-    expected_total = sum(int(np.prod(x.value.shape)) for x in leaves)
+    expected_total = sum(int(np.prod(x.shape)) for x in leaves)
     expected_total_params = sum(
-      int(np.prod(x.value.shape)) for x in leaves if isinstance(x, nnx.Param)
+      int(np.prod(x.shape)) for x in leaves if isinstance(x, nnx.Param)
     )
     expected_total_batch_stats = sum(
-      int(np.prod(x.value.shape)) for x in leaves if isinstance(x, nnx.BatchStat)
+      int(np.prod(x.shape)) for x in leaves if isinstance(x, nnx.BatchStat)
     )
     expected_total_rng_states = sum(
-      int(np.prod(x.value.shape)) for x in leaves if isinstance(x, nnx.RngState)
+      int(np.prod(x.shape)) for x in leaves if isinstance(x, nnx.RngState)
     )
 
     foo_repr = repr(obj).replace(',', '').splitlines()
@@ -777,8 +778,7 @@ class TestModuleDef:
         self.c = c
 
       def __call__(self, x, *, rngs: nnx.Rngs):
-        key = rngs.e()
-        return self.w.value * x + jax.random.normal(key, ()) + self.c
+        return self.w * x + rngs.e.normal(()) + self.c
 
     rngs = nnx.Rngs(0)
     foo = Foo(c=1.0, rngs=rngs)
@@ -801,8 +801,7 @@ class TestModuleDef:
         self.c = nnx.Variable(c)
 
       def __call__(self, x, *, rngs: nnx.Rngs):
-        key = rngs.e()
-        return self.w.value * x + jax.random.normal(key, ()) + self.c.value
+        return self.w * x + rngs.e.normal(()) + self.c
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 

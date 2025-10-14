@@ -191,7 +191,7 @@ def checkify(
     ...
     >>> @nnx.jit
     ... def f(m):
-    ...   y = jnp.sin(m.a.value) # error
+    ...   y = jnp.sin(m.a) # error
     ...   return m.a + y
     ...
     >>> m = Foo(a=jnp.inf)
