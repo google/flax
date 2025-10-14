@@ -543,10 +543,8 @@ def _normalize_values(x):
     return f'type[{x.__name__}]'
   elif isinstance(x, ArrayRepr | SimpleObjectRepr):
     return str(x)
-  elif callable(x):
-    return repr(x)
   else:
-    return x
+    return repr(x)
 
 def _maybe_pytree_to_dict(pytree: tp.Any):
   path_leaves = jax.tree_util.tree_flatten_with_path(pytree)[0]
@@ -649,20 +647,16 @@ def _as_yaml_str(value) -> str:
   value = _maybe_pytree_to_dict(value)
 
   file = io.StringIO()
-  try:
-    yaml.dump(
-      value,
-      file,
-      Dumper=NoneDumper,
-      default_flow_style=False,
-      indent=2,
-      sort_keys=False,
-      explicit_end=False,
-    )
-    return file.getvalue().replace('\n...', '').replace("'", '').strip()
-  except yaml.representer.RepresenterError:
-    # Fallback for non-serializable objects not caught by _normalize_values
-    return repr(value)
+  yaml.dump(
+    value,
+    file,
+    Dumper=NoneDumper,
+    default_flow_style=False,
+    indent=2,
+    sort_keys=False,
+    explicit_end=False,
+  )
+  return file.getvalue().replace('\n...', '').replace("'", '').strip()
 
 
 def _render_array(x):
