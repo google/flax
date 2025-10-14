@@ -87,7 +87,7 @@ class TestOptimizer(parameterized.TestCase):
 
     self.assertEqual(state['opt_state'][0]['mu']['kernel'].sharding_names, ('a', 'b'))
     self.assertEqual(
-      partition_spec['opt_state'][0]['mu']['kernel'].value,
+      partition_spec['opt_state'][0]['mu']['kernel'].get_value(),
       jax.sharding.PartitionSpec('a', 'b'),
     )
 
