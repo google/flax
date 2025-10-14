@@ -428,6 +428,54 @@ class Module(Pytree, metaclass=ModuleMeta):
     )
 
 
+def set_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  predicate = filterlib.to_predicate(only)
+
+  def _set_mode_fn(path, node):
+    if hasattr(node, 'set_mode') and predicate(path, node):
+      node.set_mode(**kwargs)
+    return node
+
+  return graph.recursive_map(_set_mode_fn, node)
+
+
+def train_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  return set_mode(
+      node,
+      only=only,
+      train=True,
+      deterministic=False,
+      use_running_average=False,
+      **kwargs,
+  )
+
+
+def eval_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  return set_mode(
+      node,
+      only=only,
+      train=False,
+      deterministic=True,
+      use_running_average=True,
+      **kwargs,
+  )
+
+
+def set_attributes(
+    node: A, /, *, only: filterlib.Filter = ..., **attributes
+) -> A:
+  predicate = filterlib.to_predicate(only)
+
+  def _set_attributes_fn(path, node):
+    if predicate(path, node):
+      for name, value in attributes.items():
+        if hasattr(node, name):
+          setattr(node, name, value)
+    return node
+
+  return graph.recursive_map(_set_attributes_fn, node)
+
+
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:
   """Return the first non-None argument.
 

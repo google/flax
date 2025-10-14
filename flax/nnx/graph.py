@@ -2592,7 +2592,7 @@ def pop(
     return states
 
 
-def clone(node: Node, variables: bool = True) -> Node:
+def clone(node: Node, /, *, variables: bool = True) -> Node:
   """Create a deep copy of the given graph node.
 
   Example usage::
@@ -2940,6 +2940,52 @@ def _iter_graph(
 
   yield path_parts, node
 
+def recursive_map(f: tp.Callable[[PathParts, tp.Any], tp.Any], node: tp.Any, /):
+  node = clone(node, variables=False)
+  path_parts: PathParts = ()
+  visited: set[int] = set()
+  results: dict[int, tp.Any] = {}
+  return _recursive_map(f, node, path_parts, visited, results)
+
+
+def _recursive_map(
+    f: tp.Callable[[PathParts, tp.Any], tp.Any],
+    node: tp.Any,
+    path: PathParts,
+    visited: set[int],
+    results: dict[int, tp.Any],
+) -> tp.Any:
+  node_id = id(node)
+  if node_id in visited:
+    if node_id in results:
+      return results[node_id]
+    path_str = '/'.join(map(str, path))
+    raise ValueError(
+        f"Found cycle in the graph at path '{path_str}'. Node of type"
+        f' {type(node)} has already been visited but has not been returned yet.'
+    )
+  node_impl = get_node_impl(node)
+  if (
+      type(node_impl) is GraphNodeImpl
+      or isinstance(node, Variable)
+      or is_array_ref(node)
+  ):
+    visited.add(node_id)
+  if node_impl is not None:
+    for key, value in node_impl.node_dict(node).items():
+      new_value = _recursive_map(f, value, (*path, key), visited, results)
+      if new_value is not value:
+        if node_impl.set_key is not None and value is not new_value:
+          node_impl.set_key(node, key, new_value)
+        else:
+          raise ValueError(
+              f"Cannot update key '{key}' for node of type '{type(node)}'"
+              ' because the node does not support mutation.'
+          )
+
+  new_node = f(path, node)
+  results[node_id] = new_node
+  return new_node
 
 def find_duplicates(node: tp.Any, /, *, only: filterlib.Filter = ...) -> list[list[PathParts]]:
   """Finds duplicate nodes or node leaves in the given node.
@@ -3110,12 +3156,16 @@ PYTREE_NODE_IMPL = PytreeNodeImpl(
   pop_key=None,
 )
 
+def _list_set_key(x: list[tp.Any], key: int, value: tp.Any):
+  x[key] = value
+
 # common pytrees
 # list
 register_pytree_node_type(
   list,
   flatten=lambda x: (list(enumerate(x)), None),
   unflatten=lambda nodes, _: [value for _, value in nodes],  # type: ignore
+  set_key=_list_set_key,
 )
 # tuple
 register_pytree_node_type(
