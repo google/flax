@@ -589,7 +589,7 @@ class TestRNN(absltest.TestCase):
           **kwargs,
         )
         self.recurrent_dropout = nnx.Dropout(
-          rate=dropout_rate, rng_collection='recurrent_dropout', rngs=rngs
+          rate=dropout_rate, deterministic=False, rng_collection='recurrent_dropout', rngs=rngs
         )
 
       def __call__(self, carry, x):
@@ -615,7 +615,7 @@ class TestRNN(absltest.TestCase):
           dropout_rate=recurrent_dropout_rate,
         )
         self.lstm = nnx.RNN(cell, broadcast_rngs='recurrent_dropout')
-        self.dropout = nnx.Dropout(dropout_rate, rngs=rngs)
+        self.dropout = nnx.Dropout(dropout_rate, deterministic=False, rngs=rngs)
         self.dense = nnx.Linear(
           in_features=hidden_features, out_features=1, rngs=rngs
         )

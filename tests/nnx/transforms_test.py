@@ -1604,8 +1604,7 @@ class TestScan(absltest.TestCase):
         return x, None
 
     module = MLP(rngs=nnx.Rngs(0))
-    # new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
-    new_module = nnx.set_mode(module, deterministic=False)
+    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
 
     assert new_module.linear.kernel.shape == (5, 3, 3)
     assert new_module.linear.bias.shape == (5, 3)
@@ -1882,7 +1881,7 @@ class TestScan(absltest.TestCase):
         self.linear = nnx.Linear(
           hidden_size + input_size, hidden_size, rngs=rngs
         )
-        self.drop = nnx.Dropout(0.1, rngs=rngs)
+        self.drop = nnx.Dropout(0.1, deterministic=False, rngs=rngs)
         self.hidden_size = hidden_size
 
       def __call__(self, carry, x) -> tuple[jax.Array, jax.Array]:
@@ -2503,7 +2502,7 @@ class TestVmap(absltest.TestCase):
     class Model(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
-        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
         self.bn = nnx.BatchNorm(dout, rngs=rngs)
 
       def __call__(self, x):

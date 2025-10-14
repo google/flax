@@ -687,7 +687,7 @@ class TestModule(absltest.TestCase):
     with self.assertRaisesRegex(
         ValueError,
         (
-            "Unused keys found in set_mode: ['unknown']"
+            "Unused keys found in set_mode: \\['unknown'\\]"
         ),
     ):
       nnx.set_mode(block, deterministic=True, use_running_average=True, unknown=True)

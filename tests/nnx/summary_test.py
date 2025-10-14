@@ -26,7 +26,7 @@ class SummaryTest(absltest.TestCase):
       def __init__(self, din, dout, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
         self.bn = nnx.BatchNorm(dout, rngs=rngs)
-        self.dropout = nnx.Dropout(0.2, rngs=rngs)
+        self.dropout = nnx.Dropout(0.2, deterministic=False, rngs=rngs)
 
       def forward(self, x):
         return nnx.relu(self.dropout(self.bn(self.linear(x))))
