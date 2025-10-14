@@ -161,3 +161,4 @@ class Dropout(Module):
   ):
     if deterministic is not None:
       self.deterministic = deterministic
+    return kwargs

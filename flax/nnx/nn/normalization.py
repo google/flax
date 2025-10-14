@@ -402,6 +402,7 @@ class BatchNorm(Module):
       self.use_running_average = use_running_average
     elif train is not None:
       self.use_running_average = not train
+    return kwargs
 
 
 class LayerNorm(Module):

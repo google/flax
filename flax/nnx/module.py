@@ -428,15 +428,28 @@ class Module(Pytree, metaclass=ModuleMeta):
     )
 
 
-def set_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+def set_mode(node: A, /, *, only: filterlib.Filter = ...,  **kwargs) -> A:
   predicate = filterlib.to_predicate(only)
+
+  counts = {k: 0 for k in kwargs}
+  counts["_set_mode_calls"] = 0
 
   def _set_mode_fn(path, node):
     if hasattr(node, 'set_mode') and predicate(path, node):
-      node.set_mode(**kwargs)
+      counts["_set_mode_calls"] += 1
+      unused = node.set_mode(**kwargs)
+      for k in unused:
+        counts[k] += 1
     return node
 
-  return graph.recursive_map(_set_mode_fn, node)
+  out = graph.recursive_map(_set_mode_fn, node)
+
+  set_mode_calls = counts.pop("_set_mode_calls")
+  unused_keys = [k for k, v in counts.items() if v == set_mode_calls]
+  if unused_keys:
+    raise ValueError(f"Unused keys found in set_mode: {unused_keys}")
+
+  return out
 
 
 def train_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:

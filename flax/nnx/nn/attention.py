@@ -642,6 +642,7 @@ class MultiHeadAttention(Module):
               "'max_length' must be provided when initializing cache."
           )
         self.init_cache2(batch_size, max_length, dtype=self.dtype)
+    return kwargs
 
   def init_cache2(
       self, batch_size: int | Shape, max_length: int, dtype: Dtype | None = None

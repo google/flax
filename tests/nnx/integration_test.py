@@ -131,6 +131,56 @@ class TestIntegration(absltest.TestCase):
     assert model.block1.linear.bias is not None
     assert model.block1.bn is not model.block2.bn
 
+  def test_shared_modules_set_mode(self):
+    class Block(nnx.Module):
+      def __init__(self, linear: nnx.Linear, *, rngs):
+        self.linear = linear
+        self.bn = nnx.BatchNorm(2, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.bn(x)
+        return nnx.relu(x)
+
+    class Model(nnx.Module):
+      def __init__(self, *, rngs):
+        shared = nnx.Linear(2, 2, rngs=rngs)
+        self.block1 = Block(shared, rngs=rngs)
+        self.block2 = Block(shared, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
+
+    @nnx.jit
+    def train_step(model: Model, x, y):
+      @nnx.grad
+      def loss_fn(model: Model):
+        y_pred = model(x)
+        return jnp.mean((y - y_pred) ** 2)
+
+      grads = loss_fn(model)
+      nnx.update(
+        model,
+        jax.tree.map(
+          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+        ),
+      )
+
+    model = Model(rngs=nnx.Rngs(0))
+
+    x = np.random.uniform(size=(4, 2))
+    y = np.random.uniform(size=(4, 2))
+    new_model = nnx.set_mode(model, use_running_average=False)
+
+    for _i in range(3):
+      train_step(model, x, y)
+
+    assert new_model.block1.linear is new_model.block2.linear
+    assert new_model.block1.linear.bias is not None
+    assert new_model.block1.bn is not new_model.block2.bn
+
   def test_shared_modules_pure(self):
     class Block(nnx.Module):
       def __init__(self, linear: nnx.Linear, *, rngs: nnx.Rngs):
@@ -180,6 +230,65 @@ class TestIntegration(absltest.TestCase):
     y = np.random.uniform(size=(4, 2))
 
     for _i in range(3):
+      graphdef, state = train_step(state, graphdef, x, y)
+
+    model = nnx.merge(graphdef, state)
+
+    assert model.block1.linear.bias is not None
+    assert model.block2.linear.bias is not None
+    assert model.block1.linear.kernel is model.block2.linear.kernel
+    assert model.block1.linear.bias is model.block2.linear.bias
+    assert model.block1.bn is not model.block2.bn
+
+  def test_shared_modules_pure_set_mode(self):
+    class Block(nnx.Module):
+      def __init__(self, linear: nnx.Linear, *, rngs: nnx.Rngs):
+        self.linear = linear
+        self.bn = nnx.BatchNorm(2, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.bn(x)
+        return nnx.relu(x)
+
+    class Model(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        shared = nnx.Linear(2, 2, rngs=rngs)
+        self.block1 = Block(shared, rngs=rngs)
+        self.block2 = Block(shared, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
+
+    @jax.jit
+    def train_step(state: nnx.State, graphdef: nnx.GraphDef[Model], x, y):
+      model = nnx.merge(graphdef, state)
+      new_model = nnx.set_mode(model, use_running_average=False)
+
+      @nnx.grad
+      def loss_fn(model: Model):
+        y_pred = model(x)
+        return jnp.mean((y - y_pred) ** 2)
+
+      grads = loss_fn(new_model)
+      nnx.update(
+        new_model,
+        jax.tree.map(
+          lambda w, g: w - 0.1 * g, nnx.state(new_model, nnx.Param), grads
+        ),
+      )
+
+      return nnx.split(new_model)
+
+    graphdef: nnx.GraphDef[Model]
+    graphdef, state = nnx.split(Model(rngs=nnx.Rngs(0)))
+
+    x = np.random.uniform(size=(4, 2))
+    y = np.random.uniform(size=(4, 2))
+
+    for _ in range(3):
       graphdef, state = train_step(state, graphdef, x, y)
 
     model = nnx.merge(graphdef, state)
