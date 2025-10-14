@@ -606,13 +606,12 @@ class MultiHeadAttention(Module):
 
   def set_mode(
       self,
-      train: bool | None = None,
       deterministic: bool | None = None,
       decode: bool | None = None,
       batch_size: int | Shape | None = None,
       max_length: int | None = None,
       **kwargs,
-  ):
+  ) -> dict:
     """
     Args:
       train: if True, the module is set to training mode.
@@ -623,8 +622,6 @@ class MultiHeadAttention(Module):
     """
     if deterministic is not None:
       self.deterministic = deterministic
-    elif train is not None:
-      self.deterministic = not train
 
     if decode is not None:
       self.decode = decode

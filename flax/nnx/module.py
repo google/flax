@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import inspect
 import typing as tp
 
 import jax
@@ -429,9 +430,9 @@ class Module(Pytree, metaclass=ModuleMeta):
 
 
 def set_mode(node: A, /, *, only: filterlib.Filter = ...,  **kwargs) -> A:
-  """Creates a new node with static attributes updated according to **kwargs.
-  The new node contains references to jax arrays in the original node.
-  If a kwarg is not found in any module, this method raises a ValueError.
+  """Creates a new node with static attributes updated according to
+  ``**kwargs``. The new node contains references to jax arrays in the original
+  node. If a kwarg is not found in any module, this method raises a ValueError.
 
   Example::
 
@@ -485,6 +486,85 @@ def set_mode(node: A, /, *, only: filterlib.Filter = ...,  **kwargs) -> A:
 
   return out
 
+def set_mode_individual_info(cls: Module, verbose: bool = False) -> str:
+  """Provides info about ``set_mode`` arguments for an individual module without
+  it's submodules.
+  """
+  if verbose:
+    return inspect.getdoc(cls.set_mode)
+  return str(inspect.signature(cls.set_mode))
+
+def set_mode_info(node: A, /, *, only: filterlib.Filter = ..., verbose: bool = True) -> str:
+  """Provides information about the ``set_mode`` arguments for a module and all
+  submodules.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class CustomModel(nnx.Module):
+    ...   def __init__(self, *, rngs):
+    ...       self.bn = nnx.BatchNorm(10, rngs=rngs)
+    ...       self.mha = nnx.MultiHeadAttention(10, 10, 10, 10, 10, rngs=rngs)
+    ...       self.drop = nnx.Dropout(0.1, rngs=rngs)
+    ...
+    >>> model = CustomModel(rngs=nnx.Rngs(0))
+    >>> nnx.set_mode_info(model)
+    BatchNorm:
+      use_running_average: if True, the stored batch statistics will be
+        used instead of computing the batch statistics on the input.
+    Dropout:
+      deterministic: if True, disables dropout masking.
+    MultiHeadAttention:
+      train: if True, the module is set to training mode.
+      deterministic: if True, the module is set to deterministic mode.
+      decode: if True, the module is set to decode mode.
+      batch_size: the batch size to use for the cache.
+      max_length: the max length to use for the cache.
+    >>> nnx.set_mode_info(model, verbose=False)
+    BatchNorm:
+      use_running_average: bool | None = None
+    Dropout:
+      deterministic: 'bool | None' = None
+    MultiHeadAttention:
+      deterministic: 'bool | None' = None
+      decode: 'bool | None' = None
+      batch_size: 'int | Shape | None' = None
+      max_length: 'int | None' = None
+
+  Args:
+    node: the object to display ``set_mode`` information for.
+    only: Filters to select the Modules to display information for.
+    verbose: If true, extracts information from the docstring of each
+      ``set_mode`` method encountered. Otherwise, extracts information
+      from the type signature of each ``set_mode`` method encountered.
+  """
+  predicate = filterlib.to_predicate(only)
+  classes: set[Module] = set()
+
+  def _set_mode_fn(path, node):
+    if hasattr(node, 'set_mode') and predicate(path, node):
+      classes.add(node.__class__)
+    return node
+
+  graph.recursive_map(_set_mode_fn, node)
+
+  classes = sorted(list(classes), key=lambda x: x.__qualname__)
+  out_str = []
+  for c in classes:
+    out_str.append(f"{c.__qualname__}:")
+    arg_str = set_mode_individual_info(c, verbose=verbose)
+    if verbose:
+      first_ind = arg_str.find("\n")
+      out_str.append(arg_str[first_ind+1:])
+    else:
+      last_ind = arg_str.find(", **kwargs")
+      split_args = arg_str[7:last_ind].split(", ")
+      for arg in split_args:
+        out_str.append("  " + arg)
+
+  return "\n".join(out_str)
+
 
 def train_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
   """Creates a new node set to training mode.
@@ -518,7 +598,6 @@ def train_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
   return set_mode(
       node,
       only=only,
-      train=True,
       deterministic=False,
       use_running_average=False,
       **kwargs,
@@ -556,7 +635,6 @@ def eval_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
   return set_mode(
       node,
       only=only,
-      train=False,
       deterministic=True,
       use_running_average=True,
       **kwargs,

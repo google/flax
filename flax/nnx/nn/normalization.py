@@ -394,14 +394,16 @@ class BatchNorm(Module):
 
   def set_mode(
       self,
-      train: bool | None = None,
       use_running_average: bool | None = None,
       **kwargs,
-  ):
+  ) -> dict:
+    """
+    Args:
+      use_running_average: if True, the stored batch statistics will be
+        used instead of computing the batch statistics on the input.
+    """
     if use_running_average is not None:
       self.use_running_average = use_running_average
-    elif train is not None:
-      self.use_running_average = not train
     return kwargs
 
 

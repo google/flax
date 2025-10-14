@@ -158,7 +158,11 @@ class Dropout(Module):
       self,
       deterministic: bool | None = None,
       **kwargs,
-  ):
+  ) -> dict:
+    """
+    Args:
+      deterministic: if True, disables dropout masking.
+    """
     if deterministic is not None:
       self.deterministic = deterministic
     return kwargs
