@@ -429,6 +429,40 @@ class Module(Pytree, metaclass=ModuleMeta):
 
 
 def set_mode(node: A, /, *, only: filterlib.Filter = ...,  **kwargs) -> A:
+  """Creates a new node with static attributes updated according to **kwargs.
+  The new node contains references to jax arrays in the original node.
+  If a kwarg is not found in any module, this method raises a ValueError.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5, deterministic=False)
+    ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=False, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (False, False)
+    >>> new_block = nnx.set_mode(block, deterministic=True, use_running_average=True)
+    >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
+    (True, True)
+
+  ``Filter``'s can be used to set the attributes of specific Modules::
+
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> new_block = nnx.set_mode(block, only=nnx.Dropout, deterministic=True)
+    >>> # Only the dropout will be modified
+    >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
+    (True, False)
+
+  Args:
+    node: the object to create a copy of.
+    only: Filters to select the Modules to set the attributes of.
+    **kwargs: The attributes to set.
+  """
   predicate = filterlib.to_predicate(only)
 
   counts = {k: 0 for k in kwargs}
@@ -453,6 +487,34 @@ def set_mode(node: A, /, *, only: filterlib.Filter = ...,  **kwargs) -> A:
 
 
 def train_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  """Creates a new node set to training mode.
+
+  ``train`` uses ``set_mode`` to recursively set attributes ``deterministic=False``
+  and ``use_running_average=False`` of all nested Modules that have these attributes.
+  Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+  Modules.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     # initialize Dropout and BatchNorm in eval mode
+    ...     self.dropout = nnx.Dropout(0.5, deterministic=True)
+    ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=True, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (True, True)
+    >>> train_block = nnx.train_mode(block)
+    >>> train_block.dropout.deterministic, train_block.batch_norm.use_running_average
+    (False, False)
+
+  Args:
+    **kwargs: additional attributes passed to ``set_attributes``.
+  """
   return set_mode(
       node,
       only=only,
@@ -464,6 +526,33 @@ def train_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
 
 
 def eval_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  """Creates a new node set to evaluation mode.
+
+  ``eval`` uses ``set_mode`` to recursively set attributes ``deterministic=True``
+  and ``use_running_average=True`` of all nested Modules that have these attributes.
+  Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+  Modules.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (False, False)
+    >>> eval_block = nnx.eval_mode(block)
+    >>> eval_block.dropout.deterministic, eval_block.batch_norm.use_running_average
+    (True, True)
+
+  Args:
+    **kwargs: additional attributes passed to ``set_mode``.
+  """
   return set_mode(
       node,
       only=only,
