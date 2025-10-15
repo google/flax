@@ -27,7 +27,7 @@ class Config:
   flax_pytree_module: bool
   flax_max_repr_depth: int | None
   flax_always_shard_variable: bool
-  flax_hijax_variable: bool
+  flax_variable_mode: str
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
 
@@ -201,6 +201,38 @@ def static_bool_env(varname: str, default: bool) -> bool:
     )
 
 
+def str_flag(name: str, *, default: str, help: str) -> FlagHolder[str]:
+  """Set up a string flag.
+
+  Example::
+
+    some_string = str_flag(
+        name='flax_some_string',
+        default='default_value',
+        help='Some string configuration.',
+    )
+
+  Now the ``FLAX_SOME_STRING`` shell environment variable can be used to
+  control the process-level value of the flag, in addition to using e.g.
+  ``config.update("flax_some_string", "new_value")`` directly.
+
+  Args:
+    name: converted to lowercase to define the name of the flag. It is
+      converted to uppercase to define the corresponding shell environment
+      variable.
+    default: a default value for the flag.
+    help: used to populate the docstring of the returned flag holder object.
+
+  Returns:
+    A flag holder object for accessing the value of the flag.
+  """
+  name = name.lower()
+  config._add_option(name, static_str_env(name.upper(), default))
+  fh = FlagHolder[str](name, help)
+  setattr(Config, name, property(lambda _: fh.value, doc=help))
+  return fh
+
+
 def static_int_env(varname: str, default: int | None) -> int | None:
   """Read an environment variable and interpret it as an integer.
 
@@ -220,6 +252,18 @@ def static_int_env(varname: str, default: int | None) -> int | None:
     raise ValueError(
       f'invalid integer value {val!r} for environment {varname!r}'
     ) from None
+
+
+def static_str_env(varname: str, default: str) -> str:
+  """Read an environment variable and interpret it as a string.
+
+  Args:
+    varname: the name of the variable
+    default: the default string value
+  Returns:
+    string return value derived from defaults and environment.
+  """
+  return os.getenv(varname, default)
 
 
 # Flax Global Configuration Variables:
@@ -291,8 +335,8 @@ flax_always_shard_variable = bool_flag(
   default=True,
   help='Whether a `nnx.Variable` should always automatically be sharded if it contains sharding annotations.',
 )
-flax_hijax_variable = bool_flag(
-  name='flax_hijax_variable',
-  default=False,
-  help='Whether to enable HiJAX support for `nnx.Variable`.',
+flax_variable_mode = str_flag(
+  name='flax_variable_mode',
+  default='lojax',
+  help='The variable mode for `nnx.Variable`. Options are "lojax", "hijax", and "ref".',
 )

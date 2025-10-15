@@ -59,7 +59,7 @@ class TestLinenConsistency(parameterized.TestCase):
       NUM_EMBEDDINGS, IN_FEATURES, dtype=dtype, param_dtype=param_dtype
     )
     variables = model.init(key, x)
-    model_nnx.embedding.value = variables['params']['embedding']
+    model_nnx.embedding.set_value(variables['params']['embedding'])
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)

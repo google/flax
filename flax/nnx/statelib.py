@@ -491,7 +491,7 @@ def to_pure_dict(
 ) -> dict[str, tp.Any]:
   # Works for nnx.Variable
   if extract_fn is None:
-    extract_fn = lambda x: x.value if isinstance(x, variablelib.Variable) else x
+    extract_fn = lambda x: x.get_value() if isinstance(x, variablelib.Variable) else x
   flat_values = {k: extract_fn(x) for k, x in to_flat_state(state)}
   return traversals.unflatten_mapping(flat_values)
 
@@ -767,6 +767,6 @@ def create_path_filters(state: State):
   value_paths: dict[tp.Any, set[PathParts]] = {}
   for path, value in flat_state:
     if isinstance(value, variablelib.Variable):
-      value = value.raw_value
+      value = value.get_value()
     value_paths.setdefault(value, set()).add(path)
   return {filterlib.PathIn(*value_paths[value]): value for value in value_paths}

@@ -461,7 +461,7 @@ class TransformerTest(parameterized.TestCase):
 
     if sow_config.embeddings:
       self.assertTrue(hasattr(transformer, 'embeddings'))
-      embeddings = transformer.embeddings.value[0]
+      embeddings = transformer.embeddings[0]
       self.assertEqual(
           embeddings.shape,
           (batch_size, sequence_length, config.embed_dim),
@@ -472,7 +472,7 @@ class TransformerTest(parameterized.TestCase):
     for layer in transformer.layers:
       if sow_config.rs_after_attention:
         self.assertTrue(hasattr(layer, 'rs_after_attention'))
-        rs_after_attention = layer.rs_after_attention.value[0]
+        rs_after_attention = layer.rs_after_attention[0]
         self.assertIsNotNone(rs_after_attention)
         self.assertEqual(
             rs_after_attention.shape,
@@ -482,7 +482,7 @@ class TransformerTest(parameterized.TestCase):
         self.assertFalse(hasattr(layer, 'rs_after_attention'))
       if sow_config.rs_after_ffw:
         self.assertTrue(hasattr(layer, 'rs_after_ffw'))
-        rs_after_ffw = layer.rs_after_ffw.value[0]
+        rs_after_ffw = layer.rs_after_ffw[0]
         self.assertIsNotNone(rs_after_ffw)
         self.assertEqual(
             rs_after_ffw.shape,
@@ -492,7 +492,7 @@ class TransformerTest(parameterized.TestCase):
         self.assertFalse(hasattr(layer, 'rs_after_ffw'))
       if sow_config.attn_logits_topk:
         self.assertTrue(hasattr(layer.attn, 'logits_topk_values'))
-        attn_logits_topk_values = layer.attn.logits_topk_values.value[0]
+        attn_logits_topk_values = layer.attn.logits_topk_values[0]
         self.assertIsNotNone(attn_logits_topk_values)
         self.assertEqual(
             attn_logits_topk_values.shape,
@@ -504,7 +504,7 @@ class TransformerTest(parameterized.TestCase):
             ),
         )
         self.assertTrue(hasattr(layer.attn, 'logits_topk_indices'))
-        attn_logits_topk_indices = layer.attn.logits_topk_indices.value[0]
+        attn_logits_topk_indices = layer.attn.logits_topk_indices[0]
         self.assertIsNotNone(attn_logits_topk_indices)
         self.assertEqual(
             attn_logits_topk_indices.shape,
@@ -520,7 +520,7 @@ class TransformerTest(parameterized.TestCase):
         self.assertFalse(hasattr(layer.attn, 'logits_topk_indices'))
       if sow_config.mlp_hidden_topk:
         self.assertTrue(hasattr(layer.mlp, 'hidden_topk_values'))
-        ffw_hidden_topk_values = layer.mlp.hidden_topk_values.value[0]
+        ffw_hidden_topk_values = layer.mlp.hidden_topk_values[0]
         self.assertIsNotNone(ffw_hidden_topk_values)
         self.assertEqual(
             ffw_hidden_topk_values.shape,
@@ -531,7 +531,7 @@ class TransformerTest(parameterized.TestCase):
             ),
         )
         self.assertTrue(hasattr(layer.mlp, 'hidden_topk_indices'))
-        ffw_hidden_topk_indices = layer.mlp.hidden_topk_indices.value[0]
+        ffw_hidden_topk_indices = layer.mlp.hidden_topk_indices[0]
         self.assertIsNotNone(ffw_hidden_topk_indices)
         self.assertEqual(
             ffw_hidden_topk_indices.shape,
