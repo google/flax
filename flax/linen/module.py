@@ -19,7 +19,6 @@ import dataclasses
 import enum
 import functools
 import inspect
-import sys
 import threading
 import typing
 import weakref
@@ -57,7 +56,6 @@ from flax.core.scope import (
   union_filters,
 )
 from flax.ids import FlaxId, uuid
-from flax.linen import kw_only_dataclasses
 from flax.typing import (
   RNGSequences,
   PRNGKey,
@@ -1061,7 +1059,7 @@ class Module(ModuleBase):
     3. Generate a hash function (if not provided by cls).
     """
     # Check reserved attributes have expected type annotations.
-    annotations = dict(cls.__dict__.get('__annotations__', {}))
+    annotations = inspect.get_annotations(cls)
     if annotations.get('parent', _ParentType) != _ParentType:
       raise errors.ReservedModuleAttributeError(annotations)
     if annotations.get('name', str) not in ('str', str, Optional[str]):
@@ -1081,42 +1079,29 @@ class Module(ModuleBase):
       (
         'parent',
         _ParentType,
-        kw_only_dataclasses.field(
+        dataclasses.field(
           repr=False, default=_unspecified_parent, kw_only=True
         ),
       ),
       (
         'name',
         Optional[str],
-        kw_only_dataclasses.field(default=None, kw_only=True),
+        dataclasses.field(default=None, kw_only=True),
       ),
     ]
 
-    if kw_only:
-      if tuple(sys.version_info)[:3] >= (3, 10, 0):
-        for (
-          name,
-          annotation,  # pytype: disable=invalid-annotation
-          default,
-        ) in extra_fields:
-          setattr(cls, name, default)
-          cls.__annotations__[name] = annotation
-        dataclasses.dataclass(  # type: ignore[call-overload]
-          unsafe_hash='__hash__' not in cls.__dict__,
-          repr=False,
-          kw_only=True,
-        )(cls)
-      else:
-        raise TypeError('`kw_only` is not available before Py 3.10.')
-    else:
-      # Now apply dataclass transform (which operates in-place).
-      # Do generate a hash function only if not provided by the class.
-      kw_only_dataclasses.dataclass(
-        cls,
-        unsafe_hash='__hash__' not in cls.__dict__,
-        repr=False,
-        extra_fields=extra_fields,
-      )  # pytype: disable=wrong-keyword-args
+    for (
+      name,
+      annotation,  # pytype: disable=invalid-annotation
+      default,
+    ) in extra_fields:
+      setattr(cls, name, default)
+      cls.__annotations__[name] = annotation
+    dataclasses.dataclass(  # type: ignore[call-overload]
+      unsafe_hash='__hash__' not in cls.__dict__,
+      repr=False,
+      kw_only=kw_only,
+    )(cls)
 
     cls.__hash__ = _wrap_hash(cls.__hash__)  # type: ignore[method-assign]
 
