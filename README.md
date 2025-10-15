@@ -100,10 +100,10 @@ Example of an MLP:
 ```py
 class MLP(nnx.Module):
   def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
-    self.linear1 = Linear(din, dmid, rngs=rngs)
+    self.linear1 = nnx.Linear(din, dmid, rngs=rngs)
     self.dropout = nnx.Dropout(rate=0.1, rngs=rngs)
     self.bn = nnx.BatchNorm(dmid, rngs=rngs)
-    self.linear2 = Linear(dmid, dout, rngs=rngs)
+    self.linear2 = nnx.Linear(dmid, dout, rngs=rngs)
 
   def __call__(self, x: jax.Array):
     x = nnx.gelu(self.dropout(self.bn(self.linear1(x))))
