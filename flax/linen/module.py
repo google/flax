@@ -1061,7 +1061,7 @@ class Module(ModuleBase):
     3. Generate a hash function (if not provided by cls).
     """
     # Check reserved attributes have expected type annotations.
-    annotations = dict(cls.__dict__.get('__annotations__', {}))
+    annotations = inspect.get_annotations(cls)
     if annotations.get('parent', _ParentType) != _ParentType:
       raise errors.ReservedModuleAttributeError(annotations)
     if annotations.get('name', str) not in ('str', str, Optional[str]):
