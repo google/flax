@@ -133,6 +133,24 @@ class TestVariable(absltest.TestCase):
     x = v.get_metadata('x', default=10)
     self.assertEqual(x, 10)
 
+  def test_set_module_metadata(self):
+    class Module(nnx.Module):
+      def __init__(self):
+        self.v = nnx.Variable(jnp.array(0.0))
+        self.p = nnx.Param(jnp.array(1.0))
+
+    m = Module()
+    self.assertTrue('foo' not in m.v.get_metadata())
+    self.assertTrue('foo' not in m.p.get_metadata())
+    nnx.set_metadata(m, foo='bar')
+    self.assertTrue(m.v.get_metadata() == {'foo': 'bar'})
+    self.assertTrue(m.p.get_metadata() == {'foo': 'bar'})
+
+    self.assertTrue('differentiable' not in m.v.get_metadata())
+    self.assertTrue('differentiable' not in m.p.get_metadata())
+    nnx.set_metadata(m, differentiable=False, only=nnx.Param)
+    self.assertTrue(m.v.get_metadata() == {'foo': 'bar'})
+    self.assertTrue(m.p.get_metadata() == {'foo': 'bar', 'differentiable': False})
 
 if __name__ == '__main__':
   absltest.main()
