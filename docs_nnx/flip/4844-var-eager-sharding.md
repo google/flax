@@ -8,6 +8,8 @@
 
 Simplify the creation of sharded NNX models. When a sharding annotation is provided, all `nnx.Variable` creation will **require a mesh context** and automatically be sharded as annotated.
 
+See [GSPMD Guide](https://flax.readthedocs.io/en/latest/guides/flax_gspmd.html) for a comprehensive guide on how to make sharded NNX models.
+
 # Motivation
 
 To create a sharded model, user should only need to do this:
@@ -42,6 +44,19 @@ User can turn off this feature in two ways:
 * **Global config flag**: Run `flax.config.update('flax_always_shard_variable', False)` before running any NNX model initialization.
 
 * **Variable-specific flag**: Create a specific variable with metadata `eager_sharding=False`, such as: `nnx.Param(..., eager_sharding=False)`.
+
+
+# Flexibility options
+
+For debugging in a CPU environment, make a dummy mesh to run the model:
+
+```python
+mesh = jax.make_mesh(((1, 1, 1)), ('your', 'axes', 'names'))
+with jax.set_mesh(mesh):
+  ...
+```
+
+For JAX explicit mode, remove the `sharding_names=` annotation on the `nnx.Variable`.
 
 
 # Implementation
