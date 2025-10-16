@@ -40,9 +40,7 @@ def shard_value(value, sharding_names, sharding_rules, mesh):
     raise ValueError(
       'An auto mesh context or metadata is required if creating a variable'
       f' with annotation {sharding_names=}. '
-      'If running this on CPU for debugging, make a'
-      ' dummy mesh like `jax.make_mesh(((1, 1)), (<your axis names>))`. '
-      'If running on explicit mode, remove `sharding_names=` annotation.')
+      'For more guidance, see https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html.')
   pspec = get_pspec(sharding_names, sharding_rules)
   if mesh is not None:
     jax.lax.with_sharding_constraint(value, NamedSharding(mesh, pspec))
