@@ -250,7 +250,7 @@ def train_step(
   if state.dynamic_scale:
     # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
     # params should be restored (= skip this step).
-    select_fn = functools.partial(jnp.where, is_fin)
+    select_fn = functools.partial(jnp.where, is_fin)  # pylint: disable=undefined-variable
     new_state = new_state.replace(
         opt_state=jax.tree_util.tree_map(
             select_fn, new_state.opt_state, state.opt_state
@@ -259,7 +259,7 @@ def train_step(
             select_fn, new_state.params, state.params
         ),
     )
-    metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]
+    metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]  # pylint: disable=undefined-variable
 
   return new_state, metrics
 
@@ -649,8 +649,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           metrics_sums = jax.tree_util.tree_map(jnp.sum, train_metrics)
           denominator = metrics_sums.pop("denominator")
           summary = jax.tree_util.tree_map(
-              lambda x: x / denominator, metrics_sums
-          )  # pylint: disable=cell-var-from-loop
+              lambda x: x / denominator, metrics_sums  # pylint: disable=cell-var-from-loop
+          )
           summary["learning_rate"] = lr
           summary = {"train_" + k: v for k, v in summary.items()}
           writer.write_scalars(step, summary)
