@@ -1090,8 +1090,8 @@ def reseed(
       if stream.key.tag in stream_keys:
         key = rngs[stream.key.tag]()
         key = policy(path, key, stream.key.shape)
-        stream.key[...] = key
-        stream.count[...] = jnp.zeros(key.shape, dtype=jnp.uint32)
+        stream.key.value = key
+        stream.count.value = jnp.zeros(key.shape, dtype=jnp.uint32)
 
 
 def restore_rngs(backups: tp.Iterable[StreamBackup], /):
