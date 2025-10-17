@@ -185,12 +185,12 @@ class TestSPMD(parameterized.TestCase):
             nnx.with_partitioning(
                 lambda: jnp.ones((8, 2)),
                 sharding=('row-alias', 'col-alias'),
-                sharding_rules=(('row-alias', 'row'),),
             )()
         )
         self.b = nnx.Param(
             nnx.with_partitioning(
-                lambda: jnp.zeros((2,)), sharding=('col-alias',)
+                lambda: jnp.zeros((2,)), sharding=('col-alias2',),
+                sharding_rules=(('col-alias2', 'col'),),
             )()
         )
 
@@ -198,7 +198,8 @@ class TestSPMD(parameterized.TestCase):
         return x @ self.w + self.b
 
     mesh = jax.make_mesh(((1, 2, 2)), ('layers', 'row', 'col'))
-    with jax.set_mesh(mesh), nnx.logical_axis_rules((('col-alias', 'col'),)):
+    global_rule = (('row-alias', 'row'),('col-alias', 'col'),)
+    with jax.set_mesh(mesh), nnx.logical_axis_rules(global_rule):
       model = Foo()
       optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
