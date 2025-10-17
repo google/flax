@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Training and evaluation logic."""
+from typing import Any
 
 from absl import logging
 from flax import linen as nn
@@ -24,6 +25,7 @@ from jax import random
 import jax.numpy as jnp
 import ml_collections
 import optax
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
@@ -47,6 +49,7 @@ def compute_metrics(recon_x, x, mean, logvar):
 
 
 def train_step(state, batch, z_rng, latents):
+  """Train step."""
   def loss_fn(params):
     recon_x, mean, logvar = models.model(latents).apply(
         {'params': params}, batch, z_rng
@@ -62,6 +65,7 @@ def train_step(state, batch, z_rng, latents):
 
 
 def eval_f(params, images, z, z_rng, latents):
+  """Evaluation function."""
   def eval_model(vae):
     recon_images, mean, logvar = vae(images, z_rng)
     comparison = jnp.concatenate([
@@ -77,8 +81,10 @@ def eval_f(params, images, z, z_rng, latents):
   return nn.apply(eval_model, models.model(latents))({'params': params})
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict):
+def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   """Train and evaulate pipeline."""
+  tf.io.gfile.makedirs(workdir)
+
   rng = random.key(0)
   rng, key = random.split(rng)
 
@@ -116,9 +122,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
         state.params, test_ds, z, eval_rng, config.latents
     )
     vae_utils.save_image(
-        comparison, f'results/reconstruction_{epoch}.png', nrow=8
+        comparison, f'{workdir}/reconstruction_{epoch}.png', nrow=8
     )
-    vae_utils.save_image(sample, f'results/sample_{epoch}.png', nrow=8)
+    vae_utils.save_image(
+        sample, f'{workdir}/sample_{epoch}.png', nrow=8
+    )
 
     print(
         'eval epoch: {}, loss: {:.4f}, BCE: {:.4f}, KLD: {:.4f}'.format(
