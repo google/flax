@@ -146,7 +146,7 @@ def eval_shape(
   def _eval_shape_fn(*args, **kwargs):
     args, kwargs = extract.from_tree((args, kwargs))
     out = f(*args, **kwargs)
-    return graph.to_arrays(extract.to_tree(out), allow_duplicates=True)
+    return graph.as_lojax(graph._pytree_to_arrays(extract.to_tree(out)))
 
   out = jax.eval_shape(_eval_shape_fn, *args, **kwargs)
   return extract.from_tree(out)

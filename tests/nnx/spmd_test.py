@@ -175,9 +175,9 @@ class TestSPMD(parameterized.TestCase):
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(bremoves, [(0, 'layers')])
 
-  @parameterized.product(use_ref=[True, False])
-  def test_logical_rules(self, use_ref):
-    self.enter_context(nnx.use_refs(use_ref))
+  @parameterized.product(variable_mode=['hijax', 'lojax'])
+  def test_logical_rules(self, variable_mode):
+    self.enter_context(nnx.variable_mode(variable_mode))
     class Foo(nnx.Module):
 
       def __init__(self):

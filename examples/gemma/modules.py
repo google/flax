@@ -63,15 +63,15 @@ class Embedder(nnx.Module):
     return x
 
   def decode(self, x: ArrayLike) -> Array:
-    return jnp.dot(x, self.input_embedding.value.T)
+    return jnp.dot(x, self.input_embedding.T)
 
   @property
   def embed_dim(self):
-    return self.input_embedding.value.shape[1]
+    return self.input_embedding.shape[1]
 
   @property
   def num_embed(self):
-    return self.input_embedding.value.shape[0]
+    return self.input_embedding.shape[0]
 
 
 class Attention(nnx.Module):

@@ -44,11 +44,11 @@ class Einsum(nnx.Module):
     self.w = nnx.Param(kernel_init(rngs.params(), shape, dtype))
 
   def __call__(self, x: ArrayLike) -> Array:
-    return jnp.einsum(self.einsum_str, x, self.w.value)
+    return jnp.einsum(self.einsum_str, x, self.w[...])
 
   @property
   def shape(self) -> Shape:
-    return self.w.value.shape
+    return self.w.shape
 
 
 class RMSNorm(nnx.Module):
@@ -65,12 +65,12 @@ class RMSNorm(nnx.Module):
     self.scale = nnx.Param(scale_init(rngs.params(), dim, dtype))
 
   def __call__(self, x: Array) -> Array:
-    dtype = self.scale.value.dtype
+    dtype = self.scale.dtype
     var = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
     normed_inputs = jnp.asarray(x * jax.lax.rsqrt(var + 1e-06), dtype=dtype)
     # normed_inputs is a rank-K tensor, K > 1 (K is typically 2 or 3). scale is
     # a rank-1 tensor. To avoid implicit rank-promotion, reshape scale to
     # a (1, ..., 1, D) tensor, so the rank of scale matches normed_inputs.
-    scale = jnp.expand_dims(self.scale.value, axis=range(len(x.shape) - 1))
+    scale = jnp.expand_dims(self.scale, axis=range(len(x.shape) - 1))
     normed_inputs = normed_inputs * (1 + scale)
     return normed_inputs

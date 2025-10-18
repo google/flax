@@ -25,12 +25,12 @@ A = tp.TypeVar('A')
 class TestVariable(absltest.TestCase):
   def test_pytree(self):
     r1 = nnx.Param(1)
-    self.assertEqual(r1.value, 1)
+    self.assertEqual(r1.get_value(), 1)
 
     r2 = jax.tree.map(lambda x: x + 1, r1)
 
-    self.assertEqual(r1.value, 1)
-    self.assertEqual(r2.value, 2)
+    self.assertEqual(r1.get_value(), 1)
+    self.assertEqual(r2.get_value(), 2)
     self.assertIsNot(r1, r2)
 
   def test_overloads_module(self):
@@ -94,38 +94,41 @@ class TestVariable(absltest.TestCase):
     self.assertEqual(v1[...], 5)
 
   def test_mutable_array_context(self):
-    with nnx.use_refs(False):
+    with nnx.variable_mode('lojax'):
       v = nnx.Variable(jnp.array(1.0))
-      self.assertFalse(nnx.using_refs())
-      self.assertNotIsInstance(v.raw_value, jax.Ref)
+      self.assertEqual(nnx.current_variable_mode(), 'lojax')
+      self.assertNotIsInstance(v[...], jax.Ref)
 
-      with nnx.use_refs(True):
+      with nnx.variable_mode('hijax'):
         v = nnx.Variable(jnp.array(1.0))
-        self.assertTrue(nnx.using_refs())
-        self.assertIsInstance(v.raw_value, jax.Ref)
+        self.assertEqual(nnx.current_variable_mode(), 'hijax')
+        self.assertIsInstance(v[...], jax.Array)
 
       v = nnx.Variable(jnp.array(2.0))
-      self.assertNotIsInstance(v.raw_value, jax.Ref)
-      self.assertFalse(nnx.using_refs())
+      self.assertIsInstance(v[...], jax.Array)
+      self.assertEqual(nnx.current_variable_mode(), 'lojax')
 
-      nnx.use_refs(True)
+      nnx.variable_mode('hijax')
 
       v = nnx.Variable(jnp.array(0.0))
-      self.assertTrue(nnx.using_refs())
-      self.assertIsInstance(v.raw_value, jax.Ref)
+      self.assertEqual(nnx.current_variable_mode(), 'hijax')
+      self.assertIsInstance(v[...], jax.Array)
 
     v = nnx.Variable(jnp.array(1.0))
-    self.assertFalse(nnx.using_refs())
-    self.assertNotIsInstance(v.raw_value, jax.Ref)
+    self.assertEqual(nnx.current_variable_mode(), 'lojax')
+    self.assertIsInstance(v[...], jax.Array)
 
   def test_get_set_metadata(self):
     v = nnx.Variable(jnp.array(1.0))
-    self.assertEqual(v.get_metadata(), {})
+    self.assertEqual(v.get_metadata(), {'mode': 'lojax'})
     v.set_metadata(a=1, b=2)
     self.assertEqual(v.get_metadata('a'), 1)
     self.assertEqual(v.get_metadata('b'), 2)
-    v.set_metadata({'b': 3, 'c': 4})
-    self.assertEqual(v.get_metadata(), {'b': 3, 'c': 4})
+    v.set_metadata({'b': 3, 'c': 4, 'mode': 'lojax'})
+    self.assertEqual(
+      v.get_metadata(),
+      {'b': 3, 'c': 4, 'mode': 'lojax'},
+    )
     self.assertEqual(v.get_metadata('b'), 3)
     self.assertEqual(v.get_metadata('c'), 4)
     c = v.get_metadata('c')
@@ -140,17 +143,20 @@ class TestVariable(absltest.TestCase):
         self.p = nnx.Param(jnp.array(1.0))
 
     m = Module()
-    self.assertTrue('foo' not in m.v.get_metadata())
-    self.assertTrue('foo' not in m.p.get_metadata())
+    self.assertNotIn('foo', m.v.get_metadata())
+    self.assertNotIn('foo', m.p.get_metadata())
     nnx.set_metadata(m, foo='bar')
-    self.assertTrue(m.v.get_metadata() == {'foo': 'bar'})
-    self.assertTrue(m.p.get_metadata() == {'foo': 'bar'})
+    self.assertEqual(m.v.get_metadata(), {'foo': 'bar', 'mode': 'lojax'})
+    self.assertEqual(m.p.get_metadata(), {'foo': 'bar', 'mode': 'lojax'})
 
-    self.assertTrue('differentiable' not in m.v.get_metadata())
-    self.assertTrue('differentiable' not in m.p.get_metadata())
+    self.assertNotIn('differentiable', m.v.get_metadata())
+    self.assertNotIn('differentiable', m.p.get_metadata())
     nnx.set_metadata(m, differentiable=False, only=nnx.Param)
-    self.assertTrue(m.v.get_metadata() == {'foo': 'bar'})
-    self.assertTrue(m.p.get_metadata() == {'foo': 'bar', 'differentiable': False})
+    self.assertEqual(m.v.get_metadata(), {'foo': 'bar', 'mode': 'lojax'})
+    self.assertEqual(
+      m.p.get_metadata(),
+      {'foo': 'bar', 'differentiable': False, 'mode': 'lojax'},
+    )
 
 if __name__ == '__main__':
   absltest.main()
