@@ -127,7 +127,7 @@ def dataclass(cls=None, extra_fields=None, **kwargs):
 
 def _process_class(cls: type[M], extra_fields=None, **kwargs):
   """Transforms `cls` into a dataclass that supports kw_only fields."""
-  if '__annotations__' not in cls.__dict__:
+  if not hasattr(cls, "__annotations__"):
     cls.__annotations__ = {}
 
   # The original __dataclass_fields__ dicts for all base classes.  We will
@@ -174,7 +174,7 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
   for base in reversed(cls.__mro__[1:]):
     if not dataclasses.is_dataclass(base):
       continue
-    base_annotations = base.__dict__.get('__annotations__', {})
+    base_annotations = inspect.get_annotations(base)
     base_dataclass_fields[base] = dict(
       getattr(base, '__dataclass_fields__', {})
     )
@@ -188,7 +188,8 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
         del base.__dataclass_fields__[field_name]
 
   # Remove any keyword-only fields from this class.
-  cls_annotations = cls.__dict__['__annotations__']
+  # Note: in Python 3.14+ cls.__dict__ does not contain __annotation__ key but __annotations_cache__
+  cls_annotations = getattr(cls, "__annotations__")
   for name, annotation in list(cls_annotations.items()):
     value = getattr(cls, name, None)
     if (
