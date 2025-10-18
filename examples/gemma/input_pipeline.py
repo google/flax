@@ -15,15 +15,11 @@
 """Input pipeline for a LM1B dataset."""
 
 import os
-import typing
+from typing import Any
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import tokenizer
-from clu import deterministic_data
-
-if typing.TYPE_CHECKING:
-  from train import TrainConfig
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 Features = dict[str, tf.Tensor]
@@ -324,7 +320,7 @@ def preprocess_data(
 
 
 def get_datasets(
-  config: "TrainConfig",
+  config: Any,
   *,
   n_devices: int,
   vocab_path: str | None = None,
