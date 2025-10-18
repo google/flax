@@ -1094,6 +1094,50 @@ class TestGraphUtils(absltest.TestCase):
     self.assertLen(jax.tree.leaves(node), 1)
     self.assertLen(jax.tree.leaves(popped), 2)
 
+  def test_iter_graph(self):
+    arr0 = jnp.zeros(1)
+    arr1 = jnp.zeros(1)
+    var0 = nnx.Variable(jnp.zeros(1))
+    var1 = nnx.Variable(jnp.zeros(1))
+
+    child = nnx.Module()
+    child.a = var0
+    child.b = arr0
+    child.c = var1
+    child.d = var0
+    child.e = arr1
+    child.f = arr0
+
+    root = nnx.Module()
+    root.a = child
+    root.b = var1
+    root.c = arr1
+    root.d = var1
+    root.e = child
+    root.f = var0
+    root.g = arr1
+
+    nodes = [node for _, node in nnx.iter_graph(root)]
+    count = lambda e: sum(node is e for node in nodes)
+
+    # All internal nodes must be visited exactly once.
+    self.assertEqual(count(var0), 1)
+    self.assertEqual(count(var1), 1)
+    self.assertEqual(count(child), 1)
+    self.assertEqual(count(root), 1)
+
+    # Arrays must not be deduplicated.
+    self.assertEqual(count(arr0), 2)
+    self.assertEqual(count(arr1), 3)
+
+    # Nodes must be yielded in DFS order.
+    expected = [var0, arr0, var1, arr1, arr0, child, arr1, arr1, root]
+    unique = (arr0, arr1, var0, var1, child, root)
+    index = lambda e: next(node is e for node in unique)
+    actual = [node for node in nodes if any(node is e for e in unique)]
+    self.assertEqual(list(map(index, actual)), list(map(index, expected)))
+
+
   def test_find_duplicates(self):
     class SharedModules(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
