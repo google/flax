@@ -73,7 +73,7 @@ class Dropout(Module):
     rate: float,
     *,
     broadcast_dims: Sequence[int] = (),
-    deterministic: bool = False,
+    deterministic: bool | None = None,
     rng_collection: str = 'dropout',
     rngs: rnglib.Rngs | rnglib.RngStream | None = None,
   ):
@@ -153,3 +153,16 @@ class Dropout(Module):
     mask = random.bernoulli(key, p=keep_prob, shape=broadcast_shape)
     mask = jnp.broadcast_to(mask, inputs.shape)
     return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
+
+  def set_mode(
+      self,
+      deterministic: bool | None = None,
+      **kwargs,
+  ) -> dict:
+    """
+    Args:
+      deterministic: if True, disables dropout masking.
+    """
+    if deterministic is not None:
+      self.deterministic = deterministic
+    return kwargs

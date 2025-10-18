@@ -276,7 +276,7 @@ class TestBridgeModule(absltest.TestCase):
     class NNXLayer(nnx.Module):
       def __init__(self, dim, dropout, rngs):
         self.linear = nnx.Linear(dim, dim, use_bias=False, rngs=rngs)
-        self.dropout = nnx.Dropout(dropout, rngs=rngs)
+        self.dropout = nnx.Dropout(dropout, deterministic=False, rngs=rngs)
         self.count = nnx.Intermediate(jnp.array([0.]))
       def __call__(self, x):
         # Required check to avoid state update in `init()`. Can this be avoided?
