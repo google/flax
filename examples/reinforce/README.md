@@ -63,6 +63,7 @@ The implementation tracks various metrics during training:
 ![Reward Plot](training_rewards.png)
 
 2. Trained Agent:
+
 ![CartPole Agent](anim.gif)
 
 ## References
