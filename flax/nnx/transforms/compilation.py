@@ -466,28 +466,23 @@ class JitWrapped(tp.Generic[P, R]):
     def _build_positional_prefix():
       if self.in_shardings is None:
         return None
-      # Determine number of positional args and number of dynamic args.
+      
+      # Always need to handle static positions by inserting None
       num_args = len(args)
       static_set = set(self._static_positions)
-      num_dynamic = num_args - len(static_set)
-
-      # Expand user-provided in_shardings to a per-dynamic-arg sequence.
+      
       if isinstance(self.in_shardings, (tuple, list)):
-        dyn_specs = list(self.in_shardings)
-        # If user provided a shorter sequence (e.g., as a prefix), do not try
-        # to out-broadcast here; rely on extract/jax to handle deeper trees.
-        # When lengths mismatch with expected dynamic count, we will not index
-        # past available entries.
+        # Sequence case: align provided shardings with dynamic positions
+        dyn_iter = iter(self.in_shardings)
+        return type(args)(
+          None if i in static_set else next(dyn_iter, None) for i in range(num_args)
+        )
       else:
-        # Single spec: broadcast to all dynamic args
-        dyn_specs = [self.in_shardings] * max(num_dynamic, 0)
-
-      # Now interleave dyn_specs into a full positional prefix, inserting
-      # None for static positions.
-      dyn_iter = iter(dyn_specs)
-      return type(args)(
-        None if i in static_set else next(dyn_iter, None) for i in range(num_args)
-      )
+        # Single sharding case: broadcast to all dynamic positions
+        # We still need to build the tuple to mark static positions with None
+        return type(args)(
+          None if i in static_set else self.in_shardings for i in range(num_args)
+        )
 
     pos_prefix = _build_positional_prefix()
     prefix = (
