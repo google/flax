@@ -17,8 +17,8 @@ dependencies = [
     "jax>=0.7.1",
     "msgpack",
     "optax",
-    "orbax-checkpoint; python_version<'3.14'",  # temporary skip orbax-checkpoint for py3.14
-    "tensorstore; python_version<'3.14'",  # temporary skip tensorstore for py3.14
+    "orbax-checkpoint",
+    "tensorstore",
     "rich>=11.1",
     "typing_extensions>=4.2",
     "PyYAML>=5.4.1",
