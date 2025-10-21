@@ -252,5 +252,48 @@ class SummaryTest(absltest.TestCase):
     # We should see 3 calls per block, plus one overall call, minus the shared call
     self.assertEqual(sum([s.startswith("├─") for s in table.splitlines()]), 6)
 
+  def test_tabulate_with_variable_hooks(self):
+    """Test that tabulate works with Variables implementing hooks and custom metadata."""
+
+    class Custom:
+      def __repr__(self):
+        return "<CustomMetadata>"
+
+    class VarWithHooks(nnx.Variable):
+        def on_get_value(self, value):
+            return value
+
+        def on_set_value(self, value):
+            return value + 1.0
+
+    class Model(nnx.Module):
+        def __init__(self):
+            # Variable with hooks
+            self.hooked_param = VarWithHooks(value=jnp.ones((2, 3)))
+            self.hooked_param.set_metadata('description', 'Custom parameter')
+            self.hooked_param.set_metadata('trainable', True)
+
+            # Variable with custom non-serializable metadata
+            self.custom_param = nnx.Param(jnp.ones((2, 2)))
+            self.custom_param.set_metadata('custom_obj', Custom())
+
+        def __call__(self, x):
+            return jnp.dot(x, self.hooked_param.value) + self.custom_param.sum()
+
+    module = Model()
+    # Should not raise yaml.representer.RepresenterError
+    table_repr = nnx.tabulate(module, jnp.ones((1, 2)), console_kwargs=CONSOLE_TEST_KWARGS)
+    self.assertIsNotNone(table_repr)
+
+    # Verify table contains expected content
+    self.assertIn('Model Summary', table_repr)
+    self.assertIn('hooked_param', table_repr)
+    self.assertIn('on_set_value', table_repr)
+    self.assertIn('<CustomMetadata>', table_repr)
+
+    # Verify metadata is preserved in the module
+    self.assertEqual(module.hooked_param.get_metadata('description'), 'Custom parameter')
+    self.assertEqual(module.hooked_param.get_metadata('trainable'), True)
+
 if __name__ == '__main__':
   absltest.main()

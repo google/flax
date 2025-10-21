@@ -17,8 +17,8 @@ dependencies = [
     "jax>=0.7.1",
     "msgpack",
     "optax",
-    "orbax-checkpoint",
-    "tensorstore",
+    "orbax-checkpoint; python_version<'3.14'",  # temporary skip orbax-checkpoint for py3.14
+    "tensorstore; python_version<'3.14'",  # temporary skip tensorstore for py3.14
     "rich>=11.1",
     "typing_extensions>=4.2",
     "PyYAML>=5.4.1",
@@ -47,6 +47,10 @@ testing = [
     "ml-collections",
     "mypy",
     "opencv-python",
+    # Set protobuf version for python 3.13+ to prevent error in
+    # examples/mnist/train_test.py::TrainTest::test_train_and_evaluate
+    # Failed to construct dataset "mnist", builder_kwargs "{}": Value out of range: 11594722
+    "protobuf<6; python_version>='3.13'",
     "pytest",
     "pytest-cov",
     "pytest-custom_exit_code",
@@ -56,7 +60,8 @@ testing = [
     "sentencepiece==0.2.0",  # Segfault bug in 0.2.1
     "tensorflow_text>=2.11.0; platform_system!='Darwin' and python_version < '3.13'",
     "tensorflow_datasets",
-    "tensorflow>=2.12.0", # to fix Numpy np.bool8 deprecation error
+    "tensorflow>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
+    "tensorflow>=2.20.0; python_version>='3.13'",
     "torch",
     "treescope>=0.1.1; python_version>='3.10'",
     "cloudpickle>=3.0.0",

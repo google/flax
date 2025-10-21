@@ -544,7 +544,7 @@ def _normalize_values(x):
   elif isinstance(x, ArrayRepr | SimpleObjectRepr):
     return str(x)
   else:
-    return x
+    return repr(x)
 
 def _maybe_pytree_to_dict(pytree: tp.Any):
   path_leaves = jax.tree_util.tree_flatten_with_path(pytree)[0]

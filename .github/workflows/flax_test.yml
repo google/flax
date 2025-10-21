@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11', '3.12']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - name: Set up Python ${{ matrix.python-version }}
@@ -87,7 +87,7 @@ jobs:
     strategy:
       # Make sure to change `github_check_runs` in `copy.bara.sky` if you change the tests here.
       matrix:
-        python-version: ['3.11', '3.12']
+        python-version: ['3.11', '3.12', '3.13']
         test-type: [doctest, pytest]
         jax-version: [newest]
         include:
@@ -100,15 +100,12 @@ jobs:
             jax-version: 'newest'
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - name: Set up Python ${{ matrix.python-version }}
-      id: setup_python
-      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
-      with:
-        python-version: ${{ matrix.python-version }}
     - name: Setup uv
       uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
       with:
         version: "0.8.13"
+        python-version: ${{ matrix.python-version }}
+        enable-cache: true
 
     - name: Install dependencies
       run: |
@@ -162,3 +159,30 @@ jobs:
            "description": "'$status'",
            "context": "github-actions/Build"
            }'
+
+  # This is a temporary workflow to test flax on Python 3.14 and
+  # skipping deps like tensorstore, tensorflow etc
+  tests-python314:
+    name: Run Tests on Python 3.14
+    needs: [pre-commit, commit-count]
+    runs-on: ubuntu-24.04-16core
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - name: Setup uv
+      uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
+      with:
+        version: "0.9.2"
+        python-version: "3.14"
+        activate-environment: true
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv pip install jax msgpack treescope rich typing_extensions PyYAML optax cloudpickle
+        uv pip install pytest pytest-custom_exit_code pytest-xdist pytest-cov
+        uv pip install -e . --no-deps
+    - name: Test with pytest
+      run: |
+        export XLA_FLAGS='--xla_force_host_platform_device_count=4'
+        find tests/ -name "*.py" | grep -vE 'checkpoint|integr|io|tensorboard' | xargs pytest -n auto
+

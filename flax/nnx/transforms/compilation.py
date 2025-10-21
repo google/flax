@@ -186,6 +186,19 @@ def jit(
   Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
   arguments.
 
+  .. note::
+    If jitted function has a model and an optimizer as inputs, we can
+    reduce accelerator's memory usage if we specify them in
+    ``donate_argnums`` or ``donate_argnames``:
+
+      >>> from flax import nnx
+      >>>
+      >>> @nnx.jit(donate_argnames=("model", "optimizer"))
+      ... def func(model: nnx.Module, optimizer: nnx.Optimizer, other_args):
+      ...   pass
+
+    For details please see `this discussion <https://github.com/google/flax/issues/5026>`_.
+
   Args:
     fun: Function to be jitted. ``fun`` should be a pure function, as
       side-effects may only be executed once.

@@ -30,8 +30,8 @@ from flax.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
 )
-from flax.nnx.statelib import FlatState, State
-from flax.nnx.variablelib import Variable, is_array_ref
+from flax.nnx.statelib import FlatState, State, map_state
+from flax.nnx.variablelib import Variable, is_array_ref, V
 from flax.typing import Key, PathParts, is_key_like
 import jax
 import numpy as np
@@ -2423,12 +2423,6 @@ def update(node, state: tp.Any, /, *states: tp.Any) -> None:
   _graph_update_dynamic(node, state)
 
 
-def _variables_generator(node) -> tp.Iterable[tuple[PathParts, Variable]]:
-  for path, value in iter_graph(node):
-    if isinstance(value, Variable):
-      yield path, value
-
-
 @tp.overload
 def state(node, /) -> GraphState: ...
 @tp.overload
@@ -2887,12 +2881,47 @@ def call(
   return CallableProxy(pure_caller)  # type: ignore
 
 
+def set_metadata(node: tp.Any, /, *, only: filterlib.Filter = Variable, **metadata: tp.Mapping[str, tp.Any]) -> None:
+  """Sets the metadata of all :class:`Variable` objects in the given graph node in-place.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+    ...
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self):
+    ...     self.param = nnx.Param(0.0)
+    ...     self.variable = nnx.Variable(0.0)
+    ...
+    >>> node = Foo()
+    ...
+    >>> # set differentiable to False for all nnx.Param objects
+    >>> nnx.set_metadata(node, differentiable=False, only=nnx.Param)
+    ...
+    >>> # check that only the nnx.Param was updated
+    >>> assert node.param.get_metadata('differentiable') is False
+
+  Args:
+    node: A graph node object.
+    only: A Filter to specify which :class:`Variable` objects to set metadata for.
+    metadata: Key-value pairs to set as metadata on the :class:`Variable` objects.
+  """
+  def _set_metadata(path: PathParts, variable: V) -> None:
+    del path  # unused
+    if isinstance(variable, Variable):
+      variable.set_metadata(**metadata)
+
+  # inplace update of variable_state metadata
+  map_state(_set_metadata, state(node, only))
+
+
 def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
   """Iterates over all nested nodes and leaves of the given graph node, including the current node.
 
-  ``iter_graph`` creates a generator that yields path and value pairs, where
-  the path is a tuple of strings or integers representing the path to the value from the
-  root. Repeated nodes are visited only once. Leaves include static values.
+  ``iter_graph`` creates a generator that yields path and value pairs, where the
+  path is a tuple of strings or integers representing the path to the value from
+  the root. Repeated nodes are visited only once. Leaves include static values.
 
   Example::
 
@@ -2921,24 +2950,27 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
     () list
   """
   visited: set[int] = set()
-  path_parts: PathParts = ()
-  yield from _iter_graph(node, visited, path_parts)
+  stack: list[tuple[PathParts, tp.Any, bool]] = [((), node, False)]
+  while stack:
+    # Yield if the node is either a leaf or has been traversed already.
+    path_parts, node, traversed = stack.pop(-1)
+    if traversed or not (is_node(node) or isinstance(node, Variable)):
+      yield path_parts, node
+      continue
 
-
-def _iter_graph(
-  node: tp.Any, visited: set[int], path_parts: PathParts
-) -> tp.Iterator[tuple[PathParts, tp.Any]]:
-  if is_node(node):
+    # Skip if the node has been visited already.
     if id(node) in visited:
-      return
+      continue
     visited.add(id(node))
-    node_impl = get_node_impl(node)
-    if node_impl is not None:
-      node_dict = node_impl.node_dict(node)
-      for key, value in node_dict.items():
-        yield from _iter_graph(value, visited, (*path_parts, key))
 
-  yield path_parts, node
+    # Traverse the node.
+    if (node_impl := get_node_impl(node)) is None:
+      yield path_parts, node
+      continue
+
+    stack.append((path_parts, node, True))
+    for key, child in reversed(node_impl.node_dict(node).items()):
+      stack.append(((*path_parts, key), child, False))
 
 
 def find_duplicates(node: tp.Any, /, *, only: filterlib.Filter = ...) -> list[list[PathParts]]:
