@@ -465,6 +465,14 @@ jax.tree_util.register_pytree_with_keys(
 )
 
 def map_state(f: tp.Callable[[tuple, tp.Any], tp.Any], state: State) -> State:
+  """Map ``f`` over :class:`State` object.
+
+  Arguments:
+    f: A function to be mapped
+    state: A :class:`State` object.
+  Returns:
+    New state :class:`State`.
+  """
   flat_state = to_flat_state(state)
   result = [
     (path, f(path, variable_state)) for path, variable_state in flat_state
@@ -473,6 +481,13 @@ def map_state(f: tp.Callable[[tuple, tp.Any], tp.Any], state: State) -> State:
 
 
 def to_flat_state(state: State) -> FlatState:
+  """Convert state into flat state
+
+  Arguments:
+    state: A :class:`State` object.
+  Returns:
+    Flat state :class:`FlatState`
+  """
   return FlatState(traversals.flatten_to_sequence(state._mapping), sort=True)
 
 
@@ -480,6 +495,13 @@ def from_flat_state(
   flat_state: tp.Mapping[PathParts, V] | tp.Iterable[tuple[PathParts, V]],
   *, cls = State,  # for compatibility with State subclasses
 ) -> State:
+  """Convert flat state object into :class:`State` object.
+
+  Arguments:
+    flat_state: A :class:`FlatState` object.
+  Returns:
+    State :class:`State` object.
+  """
   if not isinstance(flat_state, tp.Mapping):
     flat_state = dict(flat_state)
   nested_state = traversals.unflatten_mapping(flat_state)
@@ -487,8 +509,16 @@ def from_flat_state(
 
 
 def to_pure_dict(
-  state, extract_fn: ExtractValueFn | None = None
+  state: State, extract_fn: ExtractValueFn | None = None
 ) -> dict[str, tp.Any]:
+  """Convert :class:`State` object into pure dictionary state.
+
+  Arguments:
+    state: A :class:`State` object.
+    extract_fn: optional extraction function.
+  Returns:
+    Pure dictionary.
+  """
   # Works for nnx.Variable
   if extract_fn is None:
     extract_fn = lambda x: x.value if isinstance(x, variablelib.Variable) else x
@@ -497,6 +527,33 @@ def to_pure_dict(
 
 
 def restore_int_paths(pure_dict: dict[str, tp.Any]):
+  """Restore integer paths from string value in the dict.
+  This method can be helpful when restoring the state from a checkpoint as
+  pure dictionary:
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import orbax.checkpoint as ocp
+    ...
+    >>> model = nnx.List([nnx.Linear(10, 10, rngs=nnx.Rngs(0)) for _ in range(2)])
+    >>> pure_dict_state = nnx.to_pure_dict(nnx.state(model))
+    >>> list(pure_dict_state.keys())
+    [0, 1]
+    >>> checkpointer = ocp.StandardCheckpointer()
+    >>> checkpointer.save('/tmp/checkpoint/pure_dict', pure_dict_state)
+    >>> restored_pure_dict = checkpointer.restore('/tmp/checkpoint/pure_dict')
+    >>> list(restored_pure_dict.keys())
+    ['0', '1']
+    >>> restored_pure_dict = nnx.restore_int_paths(restored_pure_dict)
+    >>> list(restored_pure_dict.keys())
+    [0, 1]
+
+  Arguments:
+    pure_dict: state as pure dictionary
+  Returns:
+    state as pure dictionary with restored integers paths
+  """
   def try_convert_int(x):
     try:
       return int(x)
@@ -510,8 +567,15 @@ def restore_int_paths(pure_dict: dict[str, tp.Any]):
   return traversals.unflatten_mapping(fixed)
 
 def replace_by_pure_dict(
-  state, pure_dict: dict[str, tp.Any], replace_fn: SetValueFn | None = None
+  state: State, pure_dict: dict[str, tp.Any], replace_fn: SetValueFn | None = None
 ):
+  """Replace input ``state`` values with ``pure_dict`` values.
+
+  Arguments:
+    state: A :class:`State` object.
+    pure_dict: pure dictionary with values to be used for replacement.
+    replace_fn: optional replace function.
+  """
   def try_convert_int(x):
     try:
       return int(x)
@@ -559,7 +623,7 @@ def split_state(
 def split_state(  # type: ignore[misc]
   state: State, first: filterlib.Filter, /, *filters: filterlib.Filter
 ) -> tp.Union[State, tuple[State, ...]]:
-  """Split a ``State`` into one or more ``State``'s. The
+  """Split a :class:`State` into one or more :class:`State`'s. The
   user must pass at least one ``Filter`` (i.e. :class:`Variable`),
   and the filters must be exhaustive (i.e. they must cover all
   :class:`Variable` types in the ``State``).
@@ -675,8 +739,8 @@ def merge_state(state: tp.Mapping, /, *states: tp.Mapping,
   ) -> State:
   """The inverse of :meth:`split() <flax.nnx.State.state.split>`.
 
-  ``merge`` takes one or more ``State``'s and creates
-  a new ``State``.
+  ``merge`` takes one or more :class:`State`'s and creates
+  a new :class:`State`.
 
   Example usage::
 
@@ -699,10 +763,10 @@ def merge_state(state: tp.Mapping, /, *states: tp.Mapping,
     >>> assert (model.linear.bias[...] == jnp.array([1, 1, 1])).all()
 
   Args:
-    state: A ``State`` object.
-    *states: Additional ``State`` objects.
+    state: A :class:`State` object.
+    *states: Additional :class:`State` objects.
   Returns:
-    The merged ``State``.
+    The merged :class:`State`.
   """
   if not states:
     if isinstance(state, cls):

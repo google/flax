@@ -142,11 +142,13 @@ from .spmd import get_partition_spec as get_partition_spec
 from .spmd import get_named_sharding as get_named_sharding
 from .spmd import with_partitioning as with_partitioning
 from .spmd import get_abstract_model as get_abstract_model
+from .statelib import FlatState as FlatState
 from .statelib import State as State
 from .statelib import to_flat_state as to_flat_state
 from .statelib import from_flat_state as from_flat_state
 from .statelib import to_pure_dict as to_pure_dict
 from .statelib import replace_by_pure_dict as replace_by_pure_dict
+from .statelib import restore_int_paths as restore_int_paths
 from .statelib import filter_state as filter_state
 from .statelib import merge_state as merge_state
 from .statelib import split_state as split_state
