@@ -1151,6 +1151,52 @@ class TestGraphUtils(absltest.TestCase):
     self.assertLen(duplicates, 1)
     self.assertEqual(duplicates[0], [('a',), ('c',)])
 
+  def test_resursive_map(self):
+    class Foo(nnx.Pytree):
+      def __init__(self, d):
+        self.d = d
+
+    foo1 = Foo(10)
+    foo2 = Foo(20)
+    bar = [foo1, foo2, foo1]
+    n = 0
+
+    def inc_d(path, node):
+      nonlocal n
+      if isinstance(node, Foo):
+        n += 1
+        node.d += 1
+      return node
+
+    bar2 = nnx.recursive_map(inc_d, bar)
+    self.assertIs(bar2[0], bar2[2])
+    self.assertEqual(bar2[0].d, 11)
+    self.assertEqual(bar2[1].d, 21)
+    self.assertEqual(n, 2)
+
+  def test_resursive_map_replace(self):
+    class Foo(nnx.Pytree):
+      def __init__(self, d):
+        self.d = d
+
+    foo1 = Foo(10)
+    foo2 = Foo(20)
+    bar = [foo1, foo2, foo1]
+    n = 0
+
+    def swap(path, node):
+      nonlocal n
+      if isinstance(node, Foo):
+        n += 1
+        node = Foo(-node.d)
+      return node
+
+    bar2 = nnx.recursive_map(swap, bar)
+    self.assertIs(bar2[0], bar2[2])
+    self.assertEqual(bar2[0].d, -10)
+    self.assertEqual(bar2[1].d, -20)
+    self.assertEqual(n, 2)
+
   def test_graphdef_hash_with_sequential(self):
     rngs = nnx.Rngs(0)
     net = nnx.Sequential(
