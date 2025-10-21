@@ -2973,6 +2973,75 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
       stack.append(((*path_parts, key), child, False))
 
 
+def recursive_map(f: tp.Callable[[PathParts, tp.Any], tp.Any], node: tp.Any, /):
+  """Recursively applies a function to all nodes and leaves of the given graph node.
+  Example::
+    >>> from flax import nnx
+    >>> class MyModule(nnx.Module):
+    ...   def __init__(self, *, rngs: nnx.Rngs):
+    ...     self.lin = nnx.Linear(16, 16, rngs=rngs)
+    ...     self.conv = nnx.Conv(16, 3, 1, 1, rngs=rngs)
+    ...
+    >>> def print_modules(path, node):
+    ...   if isinstance(node, nnx.Module):
+    ...     s = "." + ".".join(path)
+    ...     print(f"Path = {s:<10}{node.__class__.__name__}")
+    ...   return node
+    ...
+    >>> model = MyModule(rngs=nnx.Rngs(0))
+    >>> nnx.recursive_map(print_modules, model)
+    ...
+    Path = .conv     Conv
+    Path = .lin      Linear
+    Path = .         MyModule
+  """
+  node = clone(node, variables=False)
+  path_parts: PathParts = ()
+  visited: set[int] = set()
+  results: dict[int, tp.Any] = {}
+  return _recursive_map(f, node, path_parts, visited, results)
+
+
+def _recursive_map(
+    f: tp.Callable[[PathParts, tp.Any], tp.Any],
+    node: tp.Any,
+    path: PathParts,
+    visited: set[int],
+    results: dict[int, tp.Any],
+) -> tp.Any:
+  node_id = id(node)
+  if node_id in visited:
+    if node_id in results:
+      return results[node_id]
+    path_str = '/'.join(map(str, path))
+    raise ValueError(
+        f"Found cycle in the graph at path '{path_str}'. Node of type"
+        f' {type(node)} has already been visited but has not been returned yet.'
+    )
+  node_impl = get_node_impl(node)
+  if (
+      type(node_impl) is GraphNodeImpl
+      or isinstance(node, Variable)
+      or is_array_ref(node)
+  ):
+    visited.add(node_id)
+  if node_impl is not None:
+    for key, value in node_impl.node_dict(node).items():
+      new_value = _recursive_map(f, value, (*path, key), visited, results)
+      if new_value is not value:
+        if node_impl.set_key is not None and value is not new_value:
+          node_impl.set_key(node, key, new_value)
+        else:
+          raise ValueError(
+              f"Cannot update key '{key}' for node of type '{type(node)}'"
+              ' because the node does not support mutation.'
+          )
+
+  new_node = f(path, node)
+  results[node_id] = new_node
+  return new_node
+
+
 def find_duplicates(node: tp.Any, /, *, only: filterlib.Filter = ...) -> list[list[PathParts]]:
   """Finds duplicate nodes or node leaves in the given node.
 
@@ -3141,6 +3210,8 @@ PYTREE_NODE_IMPL = PytreeNodeImpl(
   set_key=None,
   pop_key=None,
 )
+def _list_set_key(x: list[tp.Any], key: int, value: tp.Any):
+  x[key] = value
 
 # common pytrees
 # list
@@ -3148,6 +3219,7 @@ register_pytree_node_type(
   list,
   flatten=lambda x: (list(enumerate(x)), None),
   unflatten=lambda nodes, _: [value for _, value in nodes],  # type: ignore
+  set_key=_list_set_key,
 )
 # tuple
 register_pytree_node_type(
