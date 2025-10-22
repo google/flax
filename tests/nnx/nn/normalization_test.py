@@ -383,8 +383,11 @@ class TestLinenConsistency(parameterized.TestCase):
     nnx_model.dense.bias.value = variables['params']['dense']['bias']
 
     linen_out = linen_model.apply(variables, x)
-
     nnx_out = nnx_model(x)
+
+    np.testing.assert_array_equal(
+      variables['params']['weight_norm']['dense/kernel/scale'],
+      nnx_model.normed.scales[('kernel',)])
     np.testing.assert_array_equal(linen_out, nnx_out)
 
   @parameterized.product(

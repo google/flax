@@ -904,14 +904,59 @@ class WeightNorm(nnx.Module):
     rngs: rnglib.Rngs,
   ):
     self.layer_instance = layer_instance
-    self.feature_axes = feature_axes
+    self.feature_axes = () if feature_axes is None else feature_axes
     self.use_scale = use_scale
     self.scale_init = scale_init
     self.epsilon = epsilon
     self.dtype = dtype
     self.param_dtype = param_dtype
-    self.variable_filter = variable_filter
-    self.rngs = rngs
+    self.variable_filter = nnx.filterlib.to_predicate(variable_filter)
+    self.scales : tp.Optional[dict] = None
+
+    if use_scale:
+      state = nnx.state(self.layer_instance, nnx.Param)
+      def init_scales(param):
+        feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
+        scale_shape = tuple(param.shape[ax] for ax in feature_axes)
+        return scale_init(rngs['params'], scale_shape)
+      self.scales = nnx.data({
+        path: init_scales(param) for path, param in nnx.to_flat_state(state)
+        if self.variable_filter(path, param)})
+
+  def _weightnorm_inplace(self, path, param):
+      if not self.variable_filter(path, param):
+        return
+
+      if self.feature_axes is None:
+        feature_axes = ()
+        reduction_axes = tuple(range(param.ndim))
+      else:
+        feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
+        reduction_axes = tuple(i for i in range(param.ndim) if i not in feature_axes)
+
+      value_bar = _l2_normalize(param, axis=reduction_axes, eps=self.epsilon)
+
+      if self.use_scale:
+        if path not in self.scales:
+          raise RuntimeError(
+            f"Could not find the scale corresponding to the param {path} "
+            "in scales dict. Parameters of the layer_instance should not change!"
+          )
+        scale_value = self.scales[path]
+
+        if len(feature_axes) < param.ndim:
+          broadcast_shape = [1] * param.ndim
+          for ax in feature_axes:
+            broadcast_shape[ax] = param.shape[ax]
+          scale_value = scale_value.reshape(broadcast_shape)
+        value_bar = value_bar * scale_value
+
+      cast_args = [param]
+      if self.use_scale:
+        cast_args.append(scale_value)
+
+      final_dtype = dtypes.canonicalize_dtype(*cast_args, dtype=self.dtype)
+      param.value = jnp.asarray(value_bar, final_dtype)
 
   def __call__(self, x: Array, *args, **kwargs) -> Array:
     """Compute the l2-norm of the weights in ``self.layer_instance``
@@ -928,50 +973,8 @@ class WeightNorm(nnx.Module):
       Output of the layer using l2-normalized weights.
     """
     state = nnx.state(self.layer_instance)
-
-    def apply_weightnorm(path, var_state):
-      if not self.variable_filter(path, var_state):
-        return var_state
-
-      param_val = jnp.asarray(var_state.value)
-      if self.feature_axes is None:
-        feature_axes = ()
-        reduction_axes = tuple(range(param_val.ndim))
-      else:
-        feature_axes = _canonicalize_axes(param_val.ndim, self.feature_axes)
-        reduction_axes = tuple(i for i in range(param_val.ndim) if i not in feature_axes)
-
-      value_bar = _l2_normalize(param_val, axis=reduction_axes, eps=self.epsilon)
-
-      if self.use_scale:
-        scale_shape = tuple(param_val.shape[ax] for ax in feature_axes)
-        scale_path = path + ("scale",)
-        try:
-          scale_state = state[scale_path]
-          scale_value = scale_state.value
-        except KeyError:
-          key = self.rngs.params()
-          scale_value = self.scale_init(key, scale_shape, self.param_dtype)
-          state[scale_path] = nnx.Param(scale_value)
-
-        if len(feature_axes) < param_val.ndim:
-          broadcast_shape = [1] * param_val.ndim
-          for ax in feature_axes:
-            broadcast_shape[ax] = param_val.shape[ax]
-          scale_value = scale_value.reshape(broadcast_shape)
-        value_bar = value_bar * scale_value
-
-      cast_args = [param_val]
-      if self.use_scale:
-        cast_args.append(scale_value)
-
-      final_dtype = dtypes.canonicalize_dtype(*cast_args, dtype=self.dtype)
-      new_val = jnp.asarray(value_bar, final_dtype)
-
-      return nnx.Param(new_val)
-
-    state = nnx.map_state(apply_weightnorm, state)
-    nnx.update(self.layer_instance, state)
+    for path, param in nnx.to_flat_state(state):
+      self._weightnorm_inplace(path, param)
 
     return self.layer_instance(x, *args, **kwargs)  # type: ignore
 

@@ -27,3 +27,7 @@ Normalization
 .. flax_module::
   :module: flax.nnx
   :class: SpectralNorm
+
+.. flax_module::
+  :module: flax.nnx
+  :class: WeightNorm
