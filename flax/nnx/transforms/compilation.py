@@ -23,6 +23,7 @@ import jax
 import jax.experimental
 import jax.experimental.shard_map
 from jax.sharding import AbstractMesh, Mesh, PartitionSpec
+from jax._src import api_util 
 
 from flax.nnx import (
   extract,
@@ -433,6 +434,23 @@ class JitWrapped(tp.Generic[P, R]):
       out_shardings,
     )
 
+    # Modify in_shardings to include None at static positions
+    if isinstance(in_shardings, (list, tuple)):
+      # reintroduce None values into in_shardings corresponding to static arguments
+      fun_signature = api_util.fun_signature(fun)
+      _, _, static_argnums_resolved, _ = api_util.resolve_argnums(
+          fun,
+          fun_signature,
+          None,
+          None,
+          static_argnums,
+          static_argnames,
+      )
+      in_shardings = list(in_shardings)
+      for static_arg_index in sorted(static_argnums_resolved):
+        in_shardings.insert(static_arg_index, None)
+      in_shardings = tuple(in_shardings)
+
     self.jitted_fn = jax.jit(
       JitFn(fun, in_shardings, out_shardings, kwarg_shardings, self),
       in_shardings=self.jax_in_shardings,
@@ -461,30 +479,20 @@ class JitWrapped(tp.Generic[P, R]):
     return functools.partial(self, obj)
 
   def _get_pure_args_kwargs(self, args, kwargs):
-    # Build a prefix for positional arguments that inserts `None` for static
-    # positions so that prefix broadcasting matches the full argument tuple.
-    def _build_positional_prefix():
+    # Build prefix for extract.to_tree
+    if isinstance(self.in_shardings, (tuple, list)):
+      # Use pre-modified shardings with None at static positions
+      pos_prefix = self.in_shardings
+    else:
+      # Build prefix for single sharding case
       if self.in_shardings is None:
-        return None
-      
-      # Always need to handle static positions by inserting None
-      num_args = len(args)
-      static_set = set(self._static_positions)
-      
-      if isinstance(self.in_shardings, (tuple, list)):
-        # Sequence case: align provided shardings with dynamic positions
-        dyn_iter = iter(self.in_shardings)
-        return type(args)(
-          None if i in static_set else next(dyn_iter, None) for i in range(num_args)
-        )
+        pos_prefix = None
       else:
-        # Single sharding case: broadcast to all dynamic positions
-        # We still need to build the tuple to mark static positions with None
-        return type(args)(
+        num_args = len(args)
+        static_set = set(self._static_positions)
+        pos_prefix = type(args)(
           None if i in static_set else self.in_shardings for i in range(num_args)
         )
-
-    pos_prefix = _build_positional_prefix()
     prefix = (
       (pos_prefix, self.kwarg_shardings)
       if (pos_prefix is not None or self.kwarg_shardings is not None)

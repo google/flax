@@ -543,6 +543,145 @@ class TestJIT(absltest.TestCase):
     y_no_relu = f(m, x, False)
     self.assertNotEqual(y_relu, y_no_relu)
 
+  def test_jit_static_multiple_positions(self):
+    """Test multiple static arguments at different positions."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def fn(x, a: float, b: bool, c: float, d: bool):
+      result = x * a * c
+      if b:
+        result = jnp.maximum(result, 0)
+      if d:
+        result = -result
+      return result.sum()
+
+    x = jnp.array([1.0, -2.0, 3.0, -4.0])
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+    scalar_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
+
+    # Static args at positions 2 and 4
+    jitted = nnx.jit(
+      fn,
+      in_shardings=(x_sharding, scalar_sharding, scalar_sharding),
+      static_argnums=(2, 4)
+    )
+
+    result = jitted(x, 2.0, True, 3.0, False)
+    # With a=2.0, b=True (relu), c=3.0, d=False (no negation)
+    # result = max(x * 2.0 * 3.0, 0).sum() = max(x * 6.0, 0).sum()
+    expected = jnp.maximum(x * 6.0, 0).sum()
+    self.assertAlmostEqual(result, expected)
+
+    # Verify internal state
+    self.assertEqual(len(jitted.in_shardings), 5)
+    self.assertIs(jitted.in_shardings[2], None)
+    self.assertIs(jitted.in_shardings[4], None)
+
+  def test_jit_static_at_boundaries(self):
+    """Test static arguments at start and end positions."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def fn(flag1: bool, x, y, flag2: bool):
+      result = x + y
+      if flag1:
+        result = result * 2
+      if flag2:
+        result = -result
+      return result.sum()
+
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+
+    # Static args at positions 0 and 3
+    jitted = nnx.jit(
+      fn,
+      in_shardings=(x_sharding, x_sharding),
+      static_argnums=(0, 3)
+    )
+
+    x = y = jnp.array([1.0, 2.0, 3.0, 4.0])
+    result = jitted(True, x, y, False)
+
+    # flag1=True means multiply by 2, flag2=False means don't negate
+    expected = ((x + y) * 2).sum()
+    self.assertAlmostEqual(result, expected)
+
+    # Verify internal modifications
+    self.assertEqual(len(jitted.in_shardings), 4)
+    self.assertIs(jitted.in_shardings[0], None)
+    self.assertIs(jitted.in_shardings[3], None)
+
+  def test_jit_static_all_args(self):
+    """Test case where all arguments are static."""
+    def fn(a: int, b: int, c: int):
+      return a + b + c
+
+    # All arguments are static
+    jitted = nnx.jit(fn, in_shardings=(), static_argnums=(0, 1, 2))
+
+    # Verify all positions get None
+    self.assertEqual(len(jitted.in_shardings), 3)
+    self.assertTrue(all(s is None for s in jitted.in_shardings))
+
+    # Test functionality
+    result = jitted(1, 2, 3)
+    self.assertEqual(result, 6)
+
+  def test_jit_static_single_sharding_unchanged(self):
+    """Test that single shardings remain unchanged with static args."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def fn(x, y, flag: bool):
+      return (x + y if flag else x - y).sum()
+
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+
+    # Single sharding with static arg
+    jitted = nnx.jit(fn, in_shardings=x_sharding, static_argnums=(2,))
+
+    # Verify single sharding is not modified
+    self.assertIs(jitted.in_shardings, x_sharding)
+    self.assertNotIsInstance(jitted.in_shardings, (list, tuple))
+
+    # Test functionality
+    x = y = jnp.array([1.0, 2.0, 3.0, 4.0])
+    result1 = jitted(x, y, True)
+    result2 = jitted(x, y, False)
+    self.assertNotEqual(result1, result2)
+
+  def test_jit_static_with_none_shardings(self):
+    """Test that original None values in shardings are preserved."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def fn(x, y, flag: bool, z):
+      return (x + z if flag else x + y).sum()
+
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+
+    # Original shardings have None for y
+    jitted = nnx.jit(
+      fn,
+      in_shardings=(x_sharding, None, x_sharding),
+      static_argnums=(2,)
+    )
+
+    x = z = jnp.array([1.0, 2.0, 3.0, 4.0])
+    y = 3.0  # Scalar, no sharding
+    result = jitted(x, y, True, z)
+
+    # Verify modifications preserve original None
+    self.assertEqual(len(jitted.in_shardings), 4)
+    self.assertIs(jitted.in_shardings[1], None)  # Original None preserved
+    self.assertIs(jitted.in_shardings[2], None)  # Static arg None added
+
+
 class TestEvalShape(absltest.TestCase):
   def test_eval_shape(self):
     abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
