@@ -31,7 +31,6 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 # TODO: add tests and docstrings
 
 
-
 class OptState(Variable):
   """Any optimizer state"""
 
@@ -211,7 +210,7 @@ class Optimizer(Pytree, tp.Generic[M]):
       ``GradientTransformationExtraArgs``, such as ``optax.scale_by_backtracking_linesearch``.
     """
     param_arrays = nnx.to_arrays(nnx.pure(nnx.state(model, self.wrt)))
-    grad_arrays = nnx.to_arrays(nnx.pure(nnx.state(grads)))
+    grad_arrays = nnx.to_arrays(nnx.pure(nnx.state(grads, self.wrt)))
     opt_state_arrays = nnx.to_arrays(nnx.pure(self.opt_state))
     kwargs_arrays = nnx.to_arrays(nnx.pure(kwargs))
 
