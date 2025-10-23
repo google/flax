@@ -17,13 +17,10 @@ from __future__ import annotations
 import dataclasses
 import functools
 import typing as tp
-import inspect
 
 import jax
-import jax.experimental
-import jax.experimental.shard_map
 from jax.sharding import AbstractMesh, Mesh, PartitionSpec
-from jax._src import api_util 
+from jax._src import api_util  # We use fun_signature and resolve_argnums
 
 from flax.nnx import (
   extract,
@@ -130,59 +127,14 @@ class JitFn:
     out = self.f(*args, **kwargs)
 
     args_out, kwargs_out = extract.clear_non_graph_nodes((args, kwargs))
-    # For packaging outputs, do not attempt to broadcast shardings for args_out;
-    # only the function output `out` needs an output sharding prefix.
     pure_args_out, pure_kwargs_out, pure_out = extract.to_tree(
       (args_out, kwargs_out, out),
-      prefix=(None, self.kwarg_shardings, self.out_shardings),
+      prefix=(self.in_shardings, self.kwarg_shardings, self.out_shardings),
       ctxtag=self.ctxtag,
       split_fn=_jit_split_fn,
     )
 
     return pure_args_out, pure_kwargs_out, pure_out
-
-
-def _normalize_static_argnums(
-  fun: tp.Callable[..., tp.Any],
-  static_argnums: int | tp.Sequence[int] | None,
-  static_argnames: str | tp.Iterable[str] | None,
-) -> tuple[int, ...]:
-  """Normalize static args specification to positional indices.
-
-  This mirrors jax.jit's behavior sufficiently for positional static arguments
-  and named arguments resolvable from the function signature.
-  """
-  idxs: set[int] = set()
-  if static_argnums is not None:
-    if isinstance(static_argnums, int):
-      idxs.add(static_argnums)
-    else:
-      idxs.update(static_argnums)
-
-  if static_argnames is not None:
-    if isinstance(static_argnames, str):
-      names = (static_argnames,)
-    else:
-      names = tuple(static_argnames)
-    try:
-      sig = inspect.signature(fun)
-      # Map parameter names to their positional index among positional params.
-      pos_params: list[str] = []
-      for p in sig.parameters.values():
-        if p.kind in (
-          inspect.Parameter.POSITIONAL_ONLY,
-          inspect.Parameter.POSITIONAL_OR_KEYWORD,
-        ):
-          pos_params.append(p.name)
-        # skip VAR_POSITIONAL, KEYWORD_ONLY, VAR_KEYWORD
-      name_to_idx = {n: i for i, n in enumerate(pos_params)}
-      for n in names:
-        if n in name_to_idx:
-          idxs.add(name_to_idx[n])
-    except (ValueError, TypeError):
-      # Fallback: if signature inspection fails, ignore static_argnames here.
-      pass
-  return tuple(sorted(idxs))
 
 
 @tp.overload
@@ -234,6 +186,19 @@ def jit(
   """
   Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
   arguments.
+
+  .. note::
+    If jitted function has a model and an optimizer as inputs, we can
+    reduce accelerator's memory usage if we specify them in
+    ``donate_argnums`` or ``donate_argnames``:
+
+      >>> from flax import nnx
+      >>>
+      >>> @nnx.jit(donate_argnames=("model", "optimizer"))
+      ... def func(model: nnx.Module, optimizer: nnx.Optimizer, other_args):
+      ...   pass
+
+    For details please see `this discussion <https://github.com/google/flax/issues/5026>`_.
 
   Args:
     fun: Function to be jitted. ``fun`` should be a pure function, as
@@ -409,24 +374,12 @@ class JitWrapped(tp.Generic[P, R]):
     functools.update_wrapper(self, fun)
     self.fun: tp.Callable[P, R] = fun
     kwarg_shardings = None
-    # Normalize static argnums/argnames to a tuple of positional indices.
-    self._static_positions: tuple[int, ...] = _normalize_static_argnums(
-      fun, static_argnums, static_argnames
+    self.jax_in_shardings = jax.tree.map(
+      lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+      if isinstance(x, StateSharding)
+      else x,
+      in_shardings,
     )
-
-    # Prepare jax_in_shardings for jax.jit by dropping entries that correspond
-    # to static positional arguments when a per-argument sequence is provided.
-    def _map_state_sharding(x):
-      return (
-        extract.NodeStates.from_prefixes(x.shardings, metadata=x)
-        if isinstance(x, StateSharding)
-        else x
-      )
-
-    _in_shardings_mapped = jax.tree.map(_map_state_sharding, in_shardings)
-    # Pass through as-is; treat any sequence as dynamic-argument shardings.
-    # JAX validates length against dynamic positional arguments.
-    self.jax_in_shardings = _in_shardings_mapped
     self.jax_out_shardings = jax.tree.map(
       lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
       if isinstance(x, StateSharding)
@@ -434,11 +387,10 @@ class JitWrapped(tp.Generic[P, R]):
       out_shardings,
     )
 
-    # Modify in_shardings to include None at static positions
     if isinstance(in_shardings, (list, tuple)):
-      # reintroduce None values into in_shardings corresponding to static arguments
+      # We should reintroduce None values into in_shardings corresponding to static arguments
       fun_signature = api_util.fun_signature(fun)
-      _, _, static_argnums_resolved, _ = api_util.resolve_argnums(
+      _, _, static_argnums, _ = api_util.resolve_argnums(
           fun,
           fun_signature,
           None,
@@ -447,16 +399,21 @@ class JitWrapped(tp.Generic[P, R]):
           static_argnames,
       )
       in_shardings = list(in_shardings)
-      for static_arg_index in sorted(static_argnums_resolved):
+      for static_arg_index in sorted(static_argnums):
         in_shardings.insert(static_arg_index, None)
       in_shardings = tuple(in_shardings)
+
+    jax_out_in_shardings = jax.tree.map(
+      lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+      if isinstance(x, StateSharding)
+      else x,
+      in_shardings,
+    )
 
     self.jitted_fn = jax.jit(
       JitFn(fun, in_shardings, out_shardings, kwarg_shardings, self),
       in_shardings=self.jax_in_shardings,
-      # For outputs, rely on propagation for args/kwargs tuples and only
-      # optionally constrain the actual function output via jax_out_shardings.
-      out_shardings=(None, kwarg_shardings, self.jax_out_shardings),
+      out_shardings=(jax_out_in_shardings, kwarg_shardings, self.jax_out_shardings),
       static_argnums=static_argnums,
       static_argnames=static_argnames,
       donate_argnums=donate_argnums,
@@ -479,31 +436,14 @@ class JitWrapped(tp.Generic[P, R]):
     return functools.partial(self, obj)
 
   def _get_pure_args_kwargs(self, args, kwargs):
-    # Build prefix for extract.to_tree
-    if isinstance(self.in_shardings, (tuple, list)):
-      # Use pre-modified shardings with None at static positions
-      pos_prefix = self.in_shardings
-    else:
-      # Build prefix for single sharding case
-      if self.in_shardings is None:
-        pos_prefix = None
-      else:
-        num_args = len(args)
-        static_set = set(self._static_positions)
-        pos_prefix = type(args)(
-          None if i in static_set else self.in_shardings for i in range(num_args)
-        )
-    prefix = (
-      (pos_prefix, self.kwarg_shardings)
-      if (pos_prefix is not None or self.kwarg_shardings is not None)
-      else None
-    )
-
     pure_args, pure_kwargs = extract.to_tree(
       (args, kwargs),
-      prefix=prefix,
+      prefix=(self.in_shardings, self.kwarg_shardings)
+      if self.in_shardings is not None or self.kwarg_shardings is not None
+      else None,
       split_fn=_jit_split_fn,
-      check_aliasing=(pos_prefix is not None) or (self.kwarg_shardings is not None),
+      check_aliasing=self.in_shardings is not None
+      or self.kwarg_shardings is not None,
       ctxtag=self,
     )
     return pure_args, pure_kwargs
@@ -859,31 +799,37 @@ class ShardMapFn:
 
 @tp.overload
 def shard_map(
-  f: F,
-  *,
-  mesh: Mesh | AbstractMesh,
-  in_specs: Specs,
-  out_specs: Specs,
-  check_rep: bool = True,
-  auto: frozenset[AxisName] = frozenset(),
-) -> F: ...
+    f: F,
+    *,
+    mesh: Mesh | AbstractMesh,
+    in_specs: Specs,
+    out_specs: Specs,
+    axis_names: tp.AbstractSet[AxisName] = frozenset(),
+    check_vma: bool = True,
+) -> F:
+  ...
+
+
 @tp.overload
 def shard_map(
-  *,
-  mesh: Mesh | AbstractMesh,
-  in_specs: Specs,
-  out_specs: Specs,
-  check_rep: bool = True,
-  auto: frozenset[AxisName] = frozenset(),
-) -> tp.Callable[[F], F]: ...
+    *,
+    mesh: Mesh | AbstractMesh,
+    in_specs: Specs,
+    out_specs: Specs,
+    axis_names: tp.AbstractSet[AxisName] = frozenset(),
+    check_vma: bool = True,
+) -> tp.Callable[[F], F]:
+  ...
+
+
 def shard_map(
-  f: F | type[Missing] = Missing,
-  *,
-  mesh: Mesh | AbstractMesh,
-  in_specs: Specs,
-  out_specs: Specs,
-  check_rep: bool = True,
-  auto: frozenset[AxisName] = frozenset(),
+    f: F | type[Missing] = Missing,
+    *,
+    mesh: Mesh | AbstractMesh,
+    in_specs: Specs,
+    out_specs: Specs,
+    axis_names: tp.AbstractSet[AxisName] = frozenset(),
+    check_vma: bool = True,
 ) -> F | tp.Callable[[F], F]:
   """
   Lifted version of
@@ -947,8 +893,8 @@ def shard_map(
 
     y = f(m, x)
 
-    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
-    jax.debug.visualize_array_sharding(m.linear2.kernel.value)
+    jax.debug.visualize_array_sharding(m.linear1.kernel[...])
+    jax.debug.visualize_array_sharding(m.linear2.kernel[...])
 
 
   Alternatively, a ``State`` object with the exact PartitionSpec for each
@@ -985,8 +931,8 @@ def shard_map(
 
     y = f(m, x)
 
-    jax.debug.visualize_array_sharding(m.linear1.kernel.value)
-    jax.debug.visualize_array_sharding(m.linear2.kernel.value)
+    jax.debug.visualize_array_sharding(m.linear1.kernel[...])
+    jax.debug.visualize_array_sharding(m.linear2.kernel[...])
 
   Here ``model_spec`` was created manually but you can also automate
   this process by using ``nnx.get_partition_spec`` to automatically
@@ -1037,12 +983,12 @@ def shard_map(
   """
   if f is Missing:
     return functools.partial(
-      shard_map,
-      mesh=mesh,
-      in_specs=in_specs,
-      out_specs=out_specs,
-      check_rep=check_rep,
-      auto=auto,
+        shard_map,
+        mesh=mesh,
+        in_specs=in_specs,
+        out_specs=out_specs,
+        axis_names=axis_names,
+        check_vma=check_vma,
     )  # type: ignore[return-value]
   assert not isinstance(f, type)
 
@@ -1092,13 +1038,13 @@ def shard_map(
       )
     return out
 
-  shard_map_fn = jax.experimental.shard_map.shard_map(
-    ShardMapFn(f, in_specs, out_specs, kwarg_specs, shard_map_wrapper),
-    mesh=mesh,
-    in_specs=jax_in_specs,
-    out_specs=(jax_in_specs, kwarg_specs, jax_out_specs),  # type: ignore
-    check_rep=check_rep,
-    auto=auto,
+  shard_map_fn = jax.shard_map(
+      ShardMapFn(f, in_specs, out_specs, kwarg_specs, shard_map_wrapper),
+      mesh=mesh,
+      in_specs=jax_in_specs,
+      out_specs=(jax_in_specs, kwarg_specs, jax_out_specs),  # type: ignore
+      axis_names=axis_names,
+      check_vma=check_vma,
   )
 
   shard_map_wrapper.inner = shard_map_fn  # type: ignore

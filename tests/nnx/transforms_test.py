@@ -702,21 +702,7 @@ class TestJIT(absltest.TestCase):
     expected = x * 2
     np.testing.assert_array_equal(result, expected)
 
-  @parameterized.parameters(
-    {
-      'static_config': {'static_argnums': (1, 3)},
-    },
-    {
-      'static_config': {'static_argnums': (0, 2)},
-    },
-    {
-      'static_config': {'static_argnums': (1, 2)},
-    },
-    {
-      'static_config': {'static_argnums': 0},
-    },
-  )
-  def test_multiple_static_argnums_with_shardings(self, static_config):
+  def test_multiple_static_argnums_with_shardings(self):
     """Test multiple static arguments with sharding tuple."""
     n_devices = max(jax.local_device_count() // 2, 1)
     devices = mesh_utils.create_device_mesh(
@@ -730,18 +716,23 @@ class TestJIT(absltest.TestCase):
     def fn(a, b, c, d):
       return (a * b + c * d).sum()
     
+    # Test static_argnums=(1, 3)
     arrays = [jnp.ones(16) * (i + 1) for i in range(4)]
-    
     test_args = arrays.copy()
-    static_argnums = static_config['static_argnums']
-    static_positions = static_argnums if isinstance(static_argnums, tuple) else (static_argnums,)
-    for pos in static_positions:
-      test_args[pos] = 2
+    test_args[1] = 2
+    test_args[3] = 2
     
-    num_dynamic = 4 - len(static_positions)
-    in_shardings = tuple(sharding('a') for _ in range(num_dynamic))
+    jitted = nnx.jit(fn, in_shardings=(sharding('a'), sharding('a')), static_argnums=(1, 3))
+    result = jitted(*test_args)
+    expected = fn(*test_args)
+    self.assertAlmostEqual(result, expected)
     
-    jitted = nnx.jit(fn, in_shardings=in_shardings, **static_config)
+    # Test static_argnums=(0, 2)
+    test_args = arrays.copy()
+    test_args[0] = 2
+    test_args[2] = 2
+    
+    jitted = nnx.jit(fn, in_shardings=(sharding('a'), sharding('a')), static_argnums=(0, 2))
     result = jitted(*test_args)
     expected = fn(*test_args)
     self.assertAlmostEqual(result, expected)
