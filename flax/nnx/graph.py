@@ -2989,7 +2989,7 @@ def recursive_map(f: tp.Callable[[PathParts, tp.Any], tp.Any], node: tp.Any, /):
     ...   return node
     ...
     >>> model = MyModule(rngs=nnx.Rngs(0))
-    >>> nnx.recursive_map(print_modules, model)
+    >>> new_model = nnx.recursive_map(print_modules, model)
     ...
     Path = .conv     Conv
     Path = .lin      Linear
@@ -3219,7 +3219,7 @@ register_pytree_node_type(
   list,
   flatten=lambda x: (list(enumerate(x)), None),
   unflatten=lambda nodes, _: [value for _, value in nodes],  # type: ignore
-  set_key=_list_set_key,
+  set_key=_list_set_key,  # type: ignore
 )
 # tuple
 register_pytree_node_type(
