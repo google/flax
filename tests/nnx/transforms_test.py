@@ -440,13 +440,13 @@ class TestEvalShape(absltest.TestCase):
   def test_eval_shape(self):
     abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
     self.assertIsInstance(abs_model, nnx.Linear)
-    self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
+    self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
 
   def test_eval_shape_mutable_array(self):
-    with nnx.use_refs(True):
+    with nnx.use_hijax(True):
       abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
     self.assertIsInstance(abs_model, nnx.Linear)
-    self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
+    self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
     self.assertEqual(abs_model.kernel.shape, (1, 2))
 
 class TestShardMap(absltest.TestCase):
@@ -800,7 +800,7 @@ class TestGrad(parameterized.TestCase):
       loss = jnp.mean(l1[0].kernel * l2[0].kernel) + jnp.mean(
         l1[0].bias * l2[0].bias
       )
-      l1[0].kernel.value = jnp.array(-1.0)
+      l1[0].kernel.set_value(jnp.array(-1.0))
       m3 = nnx.Linear(2, 3, rngs=nnx.Rngs(2))
       return loss, m3
 

@@ -235,7 +235,7 @@ def _collect_stats(
   node_stats[id(node)] = stats
 
   if isinstance(node, Variable):
-    var_type = type(node)
+    var_type = node.var_type
     if issubclass(var_type, nnx.RngState):
       var_type = nnx.RngState
     size_bytes = SizeBytes.from_any(node.raw_value)
@@ -355,6 +355,7 @@ def _graph_node_meta_call(cls: tp.Type[P], *args, **kwargs) -> P:
   return node
 
 
+@jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False)
 class ArrayRepr(reprlib.Representable):
   shape: tp.Tuple[int, ...]
@@ -507,12 +508,8 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       vars(self)[name] = value
 
   def _check_value(self, key, value, new_status: AttributeStatus | None):
-    def _has_arrays(leaves):
-      return any(
-          isinstance(leaf, (np.ndarray, jax.Array))
-          or variablelib.is_array_ref(leaf)
-          for leaf in leaves
-      )
+    def _has_data(leaves):
+      return any(is_data(leaf) for leaf in leaves)
 
     def _get_annotations(leaves):
       return {
@@ -547,7 +544,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
           f' _.{key} = nnx.data(...)\n\n'
       )
 
-    if _has_arrays(leaves):
+    if _has_data(leaves):
       # check no data in nnx.static assignments
       if new_status is not None:
         if not new_status.is_data and new_status.explicit:
@@ -663,7 +660,8 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         def to_shape_dtype(value):
           if isinstance(value, Variable):
             return value.replace(
-              raw_value=jax.tree.map(to_shape_dtype, value.raw_value)
+              value=jax.tree.map(to_shape_dtype, value.get_value()),
+              _copy_ref=False,
             )
           elif variablelib.is_array_ref(value) and np.prod(value.shape) > 1:
             return MutableArrayRepr(value.shape, value.dtype)
@@ -838,10 +836,10 @@ class Object(Pytree, pytree=False):
   """Base class for NNX objects that are not pytrees."""
 
   def __init_subclass__(cls, **kwargs):
-    pytree = kwargs.pop('pytree', False)
+    pytree = kwargs.pop('immutable', False)
     if pytree is not False:
       raise ValueError(
-        "Object is not a pytree, but 'pytree' was explicitly set to "
+        "Object is not a pytree, but 'immutable' was explicitly set to "
         f'{pytree!r} for type {cls}.'
       )
     super().__init_subclass__(pytree=pytree, **kwargs)

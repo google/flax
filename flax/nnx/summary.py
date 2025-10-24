@@ -455,11 +455,15 @@ def tabulate(
 
     for var_type in variable_types:
       attributes = {}
+      variable: variablelib.Variable
       for name, variable in node_info.variable_groups[var_type].items():
         value = variable.value
         value_repr = _render_array(value) if _has_shape_dtype(value) else ''
         metadata = variable.get_metadata()
-
+        metadata.pop('is_hijax')
+        metadata.pop('has_ref')
+        metadata.pop('is_mutable')
+        metadata.pop('eager_sharding', None)
         if metadata:
           attributes[name] = {
             'value': value_repr,
