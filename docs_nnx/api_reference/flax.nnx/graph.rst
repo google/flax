@@ -14,6 +14,7 @@ graph
 .. autofunction:: graph
 .. autofunction:: graphdef
 .. autofunction:: iter_graph
+.. autofunction:: recursive_map
 .. autofunction:: clone
 .. autofunction:: call
 .. autofunction:: set_metadata
