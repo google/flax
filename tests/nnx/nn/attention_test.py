@@ -89,6 +89,50 @@ class TestMultiHeadAttention(parameterized.TestCase):
     intermediates = nnx.pop(module, nnx.Intermediate)
     assert not intermediates  # empty
 
+  def test_multihead_sow_attention_weights_set_mode(self):
+    class Model(nnx.Module):
+      attention_kwargs: dict
+
+      def __init__(self, attention_kwargs, rng):
+        self.attention_layers = nnx.data([
+          nnx.MultiHeadAttention(**attention_kwargs, rngs=rng) for i in range(3)
+        ])
+
+      def __call__(self, x, sow_weights=False):
+        x = self.attention_layers[0](x, sow_weights=sow_weights)
+        x = self.attention_layers[1](x)
+        x = self.attention_layers[2](x, sow_weights=sow_weights)
+        return x
+
+    rng = nnx.Rngs(0)
+    x = jnp.ones((4, 6, 8))
+
+    module = Model(
+      dict(
+        in_features=8,
+        num_heads=8,
+        kernel_init=nnx.initializers.ones_init(),
+        bias_init=nnx.initializers.zeros_init(),
+        deterministic=False,
+      ),
+      rng,
+    )
+    new_module = nnx.set_mode(module, decode=False)
+
+    _ = new_module(x, True)
+    intermediates = nnx.pop(new_module, nnx.Intermediate)
+    assert intermediates['attention_layers'][0]['attention_weights'][
+      0
+    ].shape == (4, 8, 6, 6)
+    assert 1 not in intermediates['attention_layers']
+    assert intermediates['attention_layers'][2]['attention_weights'][
+      0
+    ].shape == (4, 8, 6, 6)
+
+    _ = new_module(x)
+    intermediates = nnx.pop(new_module, nnx.Intermediate)
+    assert not intermediates  # empty
+
   def test_autoregressive_decode_with_x64(self):
     with enable_x64():
       x = jnp.ones((1, 4, 4))

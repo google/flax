@@ -270,7 +270,7 @@ class TestCompatibility(absltest.TestCase):
     class NNXInner(nnx.Module):
       def __init__(self, din, dout, rngs):
         self.w = nnx.Param(nnx.initializers.lecun_normal()(rngs.params(), (din, dout)))
-        self.dropout = nnx.Dropout(rate=0.5, rngs=rngs)
+        self.dropout = nnx.Dropout(rate=0.5, deterministic=False, rngs=rngs)
       def __call__(self, x):
         return self.dropout(x @ self.w[...])
 
@@ -423,7 +423,7 @@ class TestCompatibility(absltest.TestCase):
     class NNXInner(nnx.Module):
       def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
         self.w = nnx.Param(nnx.initializers.lecun_normal()(rngs.params(), (din, dout)))
-        self.dropout = nnx.Dropout(rate=0.5, rngs=rngs)
+        self.dropout = nnx.Dropout(rate=0.5, deterministic=False, rngs=rngs)
       def __call__(self, x):
         return self.dropout(x @ self.w)
 
@@ -476,7 +476,7 @@ class TestCompatibility(absltest.TestCase):
         self.w = nnx.Param(
           nnx.with_partitioning(nnx.initializers.lecun_normal(), sharding=('in', 'out')
                                 )(rngs.params(), (din, dout)))
-        self.dropout = nnx.Dropout(rate=dropout_rate, rngs=rngs)
+        self.dropout = nnx.Dropout(rate=dropout_rate, deterministic=False, rngs=rngs)
       def __call__(self, x):
         return self.dropout(x @ self.w)
 

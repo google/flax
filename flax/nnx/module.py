@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import inspect
 import typing as tp
 
 import jax
@@ -426,6 +427,261 @@ class Module(Pytree, metaclass=ModuleMeta):
       **attributes,
       raise_if_not_found=False,
     )
+
+
+def set_mode(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool = True,  **kwargs) -> A:
+  """Creates a new node with static attributes updated according to
+  ``**kwargs``. The new node contains references to jax arrays in the original
+  node. If a kwarg is not found in any module, this method raises a ValueError.
+  Class set_mode functions should return any unused kwargs.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5, deterministic=False)
+    ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=False, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (False, False)
+    >>> new_block = nnx.set_mode(block, deterministic=True, use_running_average=True)
+    >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
+    (True, True)
+
+  ``Filter``'s can be used to set the attributes of specific Modules::
+
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> new_block = nnx.set_mode(block, only=nnx.Dropout, deterministic=True)
+    >>> # Only the dropout will be modified
+    >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
+    (True, False)
+
+  Args:
+    node: the object to create a copy of.
+    only: Filters to select the Modules to set the attributes of.
+    **kwargs: The attributes to set.
+  """
+  predicate = filterlib.to_predicate(only)
+
+  counts = {k: 0 for k in kwargs}
+  counts["_set_mode_calls"] = 0
+
+  def _set_mode_fn(path, node):
+    if hasattr(node, 'set_mode') and predicate(path, node):
+      counts["_set_mode_calls"] += 1
+      unused = node.set_mode(**kwargs)
+      for k in unused:
+        counts[k] += 1
+    return node
+
+  out = graph.recursive_map(_set_mode_fn, node)
+
+  if raise_if_not_found:
+    set_mode_calls = counts.pop("_set_mode_calls")
+    unused_keys = [k for k, v in counts.items() if v == set_mode_calls]
+    if unused_keys:
+      raise ValueError(f"Unused keys found in set_mode: {unused_keys}")
+
+  return out
+
+def set_mode_individual_info(cls: Module) -> tuple[str, str]:
+  """Provides info about ``set_mode`` arguments for an individual module without
+  it's submodules. Returns type information followed by the docstring.
+  """
+  return str(inspect.signature(cls.set_mode)), inspect.getdoc(cls.set_mode)
+
+
+def _set_mode_info_parse_types(s: str):
+  last_quote_ind = s.find("' =")
+  if s.startswith("'") and last_quote_ind >= 0:
+    s = s[1:last_quote_ind] + s[last_quote_ind+1:]
+  return s
+
+def set_mode_info(node: A, /, *, only: filterlib.Filter = ...) -> str:
+  """Provides information about the ``set_mode`` arguments for a module and all
+  submodules.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class CustomModel(nnx.Module):
+    ...   def __init__(self, *, rngs):
+    ...       self.bn = nnx.BatchNorm(10, rngs=rngs)
+    ...       self.mha = nnx.MultiHeadAttention(10, 10, 10, 10, 10, rngs=rngs)
+    ...       self.drop = nnx.Dropout(0.1, rngs=rngs)
+    ...
+    >>> model = CustomModel(rngs=nnx.Rngs(0))
+    >>> nnx.set_mode_info(model)
+    BatchNorm:
+      use_running_average: bool | None = None
+        if True, the stored batch statistics will be used instead of computing the batch statistics on the input.
+    Dropout:
+      deterministic: bool | None = None
+        if True, disables dropout masking.
+    MultiHeadAttention:
+      deterministic: bool | None = None
+        if True, the module is set to deterministic mode.
+      decode: bool | None = None
+        if True, the module is set to decode mode.
+      batch_size: int | Shape | None = None
+        the batch size to use for the cache.
+      max_length: int | None = None
+        the max length to use for the cache.
+
+  Args:
+    node: the object to display ``set_mode`` information for.
+    only: Filters to select the Modules to display information for.
+  """
+  predicate = filterlib.to_predicate(only)
+  classes: set[Module] = set()
+
+  def _set_mode_fn(path, node):
+    if hasattr(node, 'set_mode') and predicate(path, node):
+      classes.add(node.__class__)
+    return node
+
+  graph.recursive_map(_set_mode_fn, node)
+
+  classes = sorted(list(classes), key=lambda x: x.__qualname__)
+  out_str = []
+  for c in classes:
+    cls_name = c.__qualname__
+    out_str.append(f"{cls_name}:")
+    sig_str, doc_str = set_mode_individual_info(c)
+
+    # Start with sig_string
+    last_ind = sig_str.find(", **kwargs")
+    split_args = sig_str[7:last_ind].split(", ")
+
+    # Look at the docstring
+    args_ind = doc_str.find("Args:")
+    if args_ind == -1:
+      args_ind = doc_str.find("Arguments:")
+    lines = doc_str[args_ind:].split("\n")[1:]
+
+    if args_ind != -1:
+      # reconstruct the docstring descriptions
+      doc_dict, curr_str_list, varname = dict(), [], None
+      for l in lines:
+        # Check if tabbed over twice
+        if not l.startswith(" "*4):
+          doc_dict[varname] = " ".join(curr_str_list)
+          curr_str_list = []
+          colon_ind = l.find(": ")
+          varname = l[2:colon_ind]
+          curr_str_list.append(l[colon_ind+2:])
+        else:
+          curr_str_list.append(l[4:])
+      doc_dict[varname] = " ".join(curr_str_list)
+
+    for arg in split_args:
+      # Retrieve the var name and type
+      varname, vartype = arg.split(": ")
+      vartype = _set_mode_info_parse_types(vartype)
+      out_str.append(f"  {varname}: {vartype}")
+
+      # Retrieve the docstring
+      if args_ind != -1:
+        out_str.append(" "*4 + doc_dict[varname])
+
+  return "\n".join(out_str)
+
+
+def train_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  """Creates a new node set to training mode.
+
+  ``train`` uses ``set_mode`` to recursively set attributes ``deterministic=False``
+  and ``use_running_average=False`` of all nested Modules that have these attributes.
+  Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+  Modules.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     # initialize Dropout and BatchNorm in eval mode
+    ...     self.dropout = nnx.Dropout(0.5, deterministic=True)
+    ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=True, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (True, True)
+    >>> train_block = nnx.train_mode(block)
+    >>> train_block.dropout.deterministic, train_block.batch_norm.use_running_average
+    (False, False)
+
+  Args:
+    **kwargs: additional attributes passed to ``set_attributes``.
+  """
+  return set_mode(
+      node,
+      only=only,
+      raise_if_not_found=False,
+      deterministic=False,
+      use_running_average=False,
+      **kwargs,
+  )
+
+
+def eval_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  """Creates a new node set to evaluation mode.
+
+  ``eval`` uses ``set_mode`` to recursively set attributes ``deterministic=True``
+  and ``use_running_average=True`` of all nested Modules that have these attributes.
+  Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+  Modules.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (False, False)
+    >>> eval_block = nnx.eval_mode(block)
+    >>> eval_block.dropout.deterministic, eval_block.batch_norm.use_running_average
+    (True, True)
+
+  Args:
+    **kwargs: additional attributes passed to ``set_mode``.
+  """
+  return set_mode(
+      node,
+      only=only,
+      raise_if_not_found=False,
+      deterministic=True,
+      use_running_average=True,
+      **kwargs,
+  )
+
+
+def set_attributes(
+    node: A, /, *, only: filterlib.Filter = ..., **attributes
+) -> A:
+  predicate = filterlib.to_predicate(only)
+
+  def _set_attributes_fn(path, node):
+    if predicate(path, node):
+      for name, value in attributes.items():
+        if hasattr(node, name):
+          setattr(node, name, value)
+    return node
+
+  return graph.recursive_map(_set_attributes_fn, node)
 
 
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:

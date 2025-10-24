@@ -649,6 +649,49 @@ class TestModule(absltest.TestCase):
       raise_if_not_found=False,
     )
 
+  def test_set_mode(self):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    assert block.dropout.deterministic == False
+    assert block.batch_norm.use_running_average == False
+
+    new_block = nnx.set_mode(block, deterministic=True, use_running_average=True)
+    assert new_block.dropout.deterministic == True
+    assert new_block.batch_norm.use_running_average == True
+    assert new_block.linear.kernel is block.linear.kernel
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    new_block = nnx.set_mode(block, only=nnx.Dropout, deterministic=True)
+    # Only the dropout will be modified
+    assert new_block.dropout.deterministic == True
+    assert new_block.batch_norm.use_running_average == False
+
+  def test_set_mode_error(self):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+    #TODO: Get this done
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+
+    with self.assertRaisesRegex(
+        ValueError,
+        (
+            "Unused keys found in set_mode: \\['unknown'\\]"
+        ),
+    ):
+      nnx.set_mode(block, deterministic=True, use_running_average=True, unknown=True)
+
   def test_cloud_pickle(self):
     class Model(nnx.Module):
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
