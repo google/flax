@@ -113,7 +113,10 @@ class JitFn:
   ctxtag: tp.Hashable
 
   def __post_init__(self):
-    functools.update_wrapper(self, self.f)
+    # Prevent overwriting our ctxtag info with the child function's
+    orig_ctxtag = self.ctxtag
+    functools.update_wrapper(self, self.f, updated=())
+    self.ctxtag = orig_ctxtag
 
   def __call__(self, *pure_args, **pure_kwargs):
     args, kwargs = extract.from_tree(

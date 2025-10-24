@@ -191,6 +191,24 @@ class TestJIT(absltest.TestCase):
     assert m.a is a
     assert m.b is b
 
+  def test_jit_custom_vjp(self):
+    @nnx.custom_vjp
+    def f(x, y):
+      return jnp.sin(x) * y
+
+    def f_fwd(x, y):
+      return f(x, y), (jnp.cos(x), jnp.sin(x), y)
+
+    def f_bwd(res, g):
+      cos_x, sin_x, y = res
+      return (cos_x * g * y, sin_x * g)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    nnx_out = nnx.jit(f)(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
+    jax_out = jax.jit(f)(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
+    assert (nnx_out == jax_out).all()
+
   def test_cached_unflatten_same_type(self):
     n = 0
 
