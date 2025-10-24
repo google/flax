@@ -1,0 +1,6 @@
+jax>=0.4.13
+flax==0.10.6
+optax>=0.1.7
+gymnax>=0.0.6
+tqdm>=4.65.0
+orbax-checkpoint>=0.4.0
