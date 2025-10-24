@@ -813,7 +813,7 @@ def shard_map(
 ) -> F | tp.Callable[[F], F]:
   """
   Lifted version of
-  `jax.experimental.shard_map.shard_map <https://docs.jax.dev/en/latest/_autosummary/jax.experimental.shard_map.shard_map.html>`_
+  `jax.shard_map <https://docs.jax.dev/en/latest/_autosummary/jax.shard_map.html>`_
   that can handle Modules / graph nodes as arguments.
 
   Simple data parallel example::
@@ -948,14 +948,12 @@ def shard_map(
       corresponding positional axis. Not mentioning a ``mesh`` axis name
       expresses a promise that the output values are equal along that mesh axis,
       and that rather than concatenating only a single value should be produced.
-    check_rep: If True (default) enable additional validity checks and automatic
-      differentiation optimizations. The validity checks concern whether any mesh
-      axis names not mentioned in ``out_specs`` are consistent with how the outputs
-      of ``f`` are replicated. Must be set False if using a Pallas kernel in ``f``.
-    auto: (experimental) an optional set of axis names from ``mesh`` over which we
-      do not shard the data or map the function, but rather we allow the
-      compiler to control sharding. These names cannot be used in ``in_specs``,
-      ``out_specs``, or in communication collectives in ``f``.
+    axis_names: optional set of axis names from ``mesh`` over which the function ``f``
+      is manual. If empty, ``f``, is manual over all mesh axes.
+    check_vma: optional boolean representing whether to enable additional validity
+      checks and automatic differentiation optimizations. The validity checks concern
+      whether any mesh axis names not mentioned in ``out_specs`` are consistent with
+      how the outputs of ``f`` are replicated.
 
   Returns:
     A callable that applies the input function ``f`` across data sharded according to
