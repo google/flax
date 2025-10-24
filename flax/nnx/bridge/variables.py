@@ -64,7 +64,7 @@ class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
   def get_partition_spec(self) -> jax.sharding.PartitionSpec:
     """Returns the ``Partitionspec`` for this partitioned value."""
     nnx_var = self.to_nnx_variable()
-    spec = spmd.get_partition_spec(nnx_var).raw_value
+    spec = spmd.get_partition_spec(nnx_var).get_raw_value()
     assert isinstance(spec, jax.sharding.PartitionSpec)
     return spec
 

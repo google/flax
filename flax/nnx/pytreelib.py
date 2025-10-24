@@ -238,7 +238,7 @@ def _collect_stats(
     var_type = node.var_type
     if issubclass(var_type, nnx.RngState):
       var_type = nnx.RngState
-    size_bytes = SizeBytes.from_any(node.raw_value)
+    size_bytes = SizeBytes.from_any(node.get_value())
     if size_bytes:
       stats[var_type] = size_bytes
 

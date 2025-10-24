@@ -413,7 +413,7 @@ class ToLinen(linen.Module):
             if self.metadata_fn is not None:
               return self.metadata_fn(x)  # pylint: disable=too-many-function-args
             else:
-              return x.value
+              return x.get_value()
           return x
 
         collection_state = nnx.traversals.unflatten_mapping(flat_state)
