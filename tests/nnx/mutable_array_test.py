@@ -662,7 +662,7 @@ class TestMutableArray(absltest.TestCase):
       paths[1],
       (
         jax.tree_util.GetAttrKey('default'),
-        jax.tree_util.GetAttrKey('key'),
+        jax.tree_util.GetAttrKey('base_key'),
         jax.tree_util.GetAttrKey('value'),
       ),
     )

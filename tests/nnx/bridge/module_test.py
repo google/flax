@@ -149,7 +149,7 @@ class TestBridgeModule(absltest.TestCase):
     scope = bar.apply({}, rngs=1)
     self.assertIsNone(bar.scope)
 
-    self.assertEqual(scope.rngs.default.key[...], jax.random.key(1))
+    self.assertEqual(scope.rngs.default.base_key[...], jax.random.key(1))
     self.assertEqual(scope.rngs.default.count[...], 0)
 
     class Baz(bridge.Module):
@@ -514,4 +514,3 @@ class TestBridgeModule(absltest.TestCase):
 
 if __name__ == '__main__':
   absltest.main()
-

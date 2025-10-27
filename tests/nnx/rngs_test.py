@@ -45,12 +45,12 @@ class TestRngs(absltest.TestCase):
 
     key1 = rngs.params()
     self.assertEqual(rngs.params.count[...], 1)
-    self.assertIs(rngs.params.key[...], key0)
+    self.assertIs(rngs.params.base_key[...], key0)
     self.assertFalse(jnp.allclose(key0, key1))
 
     key2 = rngs.params()
     self.assertEqual(rngs.params.count[...], 2)
-    self.assertIs(rngs.params.key[...], key0)
+    self.assertIs(rngs.params.base_key[...], key0)
     self.assertFalse(jnp.allclose(key1, key2))
 
   def test_rng_trace_level_constraints(self):
