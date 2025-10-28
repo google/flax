@@ -31,7 +31,11 @@ import jax.core
 import jax.stages
 
 from flax.nnx.transforms import general
-from flax.nnx.transforms.transforms import resolve_kwargs
+from flax.nnx.transforms.transforms import (
+  resolve_kwargs,
+  _resolve_bound_callable,
+  _shift_indices,
+)
 from flax.typing import MISSING, Missing
 
 
@@ -312,14 +316,41 @@ def grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
     )
-  return _grad_general(
-    f,
+  # Detect bound nnx.Module methods and normalize to unbound callable.
+  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+
+  # For bound methods, argnums=0 should refer to the module, so we don't shift.
+  # Only shift if argnums > 0, meaning user wants gradients w.r.t. other arguments.
+  if was_bound:
+    def _shift_argnums_for_grad(x):
+      if isinstance(x, int):
+        return x + 1 if x > 0 else 0  # Keep 0 as 0 (module), shift others
+      if isinstance(x, DiffState):
+        return dataclasses.replace(x, argnum=x.argnum + 1 if x.argnum > 0 else 0)
+      return x
+    if isinstance(argnums, (int, DiffState)):
+      argnums = _shift_argnums_for_grad(argnums)  # type: ignore[assignment]
+    else:
+      argnums = tuple(_shift_argnums_for_grad(x) for x in argnums)  # type: ignore[assignment]
+
+  grad_fn = _grad_general(
+    f_unbound,
     argnums,
     has_aux,
     holomorphic,
     allow_int,
     return_value=False,
   )
+
+  if was_bound:
+    @functools.wraps(f)  # type: ignore[arg-type]
+    def wrapper(*args, **kwargs):
+      args = resolve_kwargs(f, args, kwargs)
+      return grad_fn(bound_self, *args)
+
+    return wrapper  # type: ignore[return-value]
+
+  return grad_fn
 
 
 @tp.overload
@@ -366,14 +397,38 @@ def value_and_grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
     )
-  return _grad_general(
-    f,
+  # Detect bound nnx.Module methods and normalize to unbound callable.
+  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    def _shift_argnums_for_grad(x):
+      if isinstance(x, int):
+        return x + 1 if x > 0 else 0  # Keep 0 as 0 (module), shift others
+      if isinstance(x, DiffState):
+        return dataclasses.replace(x, argnum=x.argnum + 1 if x.argnum > 0 else 0)
+      return x
+    if isinstance(argnums, (int, DiffState)):
+      argnums = _shift_argnums_for_grad(argnums)  # type: ignore[assignment]
+    else:
+      argnums = tuple(_shift_argnums_for_grad(x) for x in argnums)  # type: ignore[assignment]
+
+  vg_fn = _grad_general(
+    f_unbound,
     argnums,
     has_aux,
     holomorphic,
     allow_int,
     return_value=True,
   )
+
+  if was_bound:
+    @functools.wraps(f)  # type: ignore[arg-type]
+    def wrapper(*args, **kwargs):
+      args = resolve_kwargs(f, args, kwargs)
+      return vg_fn(bound_self, *args)
+
+    return wrapper  # type: ignore[return-value]
+
+  return vg_fn
 
 # -----------------------------------------------
 # custom_vjp
@@ -881,11 +936,38 @@ def remat(
       policy=policy,
     )  # type: ignore[return-value]
 
-  return resolve_kwargs()(
+  # Detect bound nnx.Module methods and normalize to unbound callable.
+  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+
+  if was_bound:
+    # Adjust index-based args because we will inject the Module as arg0.
+    static_argnums = _shift_indices(static_argnums, +1)  # type: ignore[assignment]
+
+    # Build the existing pipeline on the unbound function.
+    inner = general.merge_inputs(f_unbound, ctxtag='remat')
+    chkpt = jax.checkpoint(
+      inner,
+      prevent_cse=prevent_cse,
+      static_argnums=static_argnums,  # type: ignore[arg-type]
+      policy=policy,
+    )
+    outer = general.split_inputs(chkpt, ctxtag='remat')
+    wrapped = graph.update_context('remat')(outer)
+
+    @functools.wraps(f)  # type: ignore[arg-type]
+    def remat_wrapper(*args, **kwargs):
+      # Resolve kwargs relative to the original function signature.
+      args = resolve_kwargs(f, args, kwargs)
+      return wrapped(bound_self, *args)
+
+    return remat_wrapper  # type: ignore[return-value]
+
+  # Unbound function path: preserve the concise composition used in NNX.
+  return resolve_kwargs()(  # type: ignore[return-value]
     graph.update_context('remat')(
       general.split_inputs(
         jax.checkpoint(
-          general.merge_inputs(f, ctxtag='remat'),
+          general.merge_inputs(f_unbound, ctxtag='remat'),
           prevent_cse=prevent_cse,
           static_argnums=static_argnums,
           policy=policy,

@@ -25,7 +25,11 @@ from flax.nnx import extract, filterlib, graph, spmd, variablelib
 from flax.nnx import statelib
 from flax.nnx.module import Module
 from flax.nnx.statelib import State
-from flax.nnx.transforms.transforms import resolve_kwargs
+from flax.nnx.transforms.transforms import (
+  resolve_kwargs,
+  _resolve_bound_callable,
+  _prepend_in_axes,
+)
 from flax.typing import Leaf, Missing, PytreeDeque
 import jax
 import jax.core
@@ -329,6 +333,11 @@ def vmap(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
+  # Detect bound nnx.Module methods and normalize to unbound callable.
+  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    in_axes = _prepend_in_axes(in_axes, None)
+
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
     if isinstance(x, StateAxes)
@@ -342,7 +351,7 @@ def vmap(
     out_axes,
   )
   vmapped_fn = jax.vmap(
-      VmapFn(f, transform_metadata, in_axes, out_axes),
+      VmapFn(f_unbound, transform_metadata, in_axes, out_axes),
       in_axes=jax_in_axes,
       out_axes=(jax_in_axes, jax_out_axes),
       axis_name=axis_name,
@@ -354,6 +363,8 @@ def vmap(
   @graph.update_context('vmap')
   def vmap_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
+    if was_bound:
+      args = (bound_self, *args)
     pure_args = extract.to_tree(
         args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='vmap'
     )
@@ -551,6 +562,11 @@ def pmap(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
+  # Detect bound nnx.Module methods and normalize to unbound callable.
+  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    in_axes = _prepend_in_axes(in_axes, None)
+
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
     if isinstance(x, StateAxes)
@@ -564,7 +580,7 @@ def pmap(
     out_axes,
   )
   pmapped_fn = jax.pmap(
-      PmapFn(f, transform_metadata, in_axes, out_axes),
+      PmapFn(f_unbound, transform_metadata, in_axes, out_axes),
       axis_name=axis_name,
       in_axes=jax_in_axes,
       out_axes=(jax_in_axes, jax_out_axes),
@@ -579,6 +595,8 @@ def pmap(
   @functools.wraps(f)
   @graph.update_context('pmap')
   def vmap_wrapper(*args):
+    if was_bound:
+      args = (bound_self, *args)
     pure_args = extract.to_tree(
         args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='pmap'
     )
@@ -1293,6 +1311,16 @@ def scan(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
+  # Bound methods are ambiguous for scan (carry vs broadcast vs mapped state).
+  # Require users to pass the unbound function and Module explicitly.
+  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    raise ValueError(
+      'nnx.scan does not support bound methods. Pass the unbound function '
+      '(method.__func__) and the Module as an explicit argument, or use the '
+      'functional API.'
+    )
+
   _check_out_axes(out_axes)
 
   input_carry_argnum = _get_carry_argnum(in_axes, is_in_axes=True)
@@ -1307,7 +1335,7 @@ def scan(
     )
 
   scan_fn = ScanFn(
-    f,
+    f_unbound,
     input_carry_argnum,
     output_carry_argnum,
     in_axes,
