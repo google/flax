@@ -445,7 +445,7 @@ class TestJIT(parameterized.TestCase):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
-    
+
     def fn(x, scale, use_relu):
       y = x * scale
       if use_relu:
@@ -454,8 +454,8 @@ class TestJIT(parameterized.TestCase):
 
     x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
     x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
-    
-    f = nnx.jit(fn, in_shardings=(x_sharding, None), 
+
+    f = nnx.jit(fn, in_shardings=(x_sharding, None),
                 static_argnums=static_argnums, static_argnames=static_argnames)
     y_relu = f(x, 0.5, True)
     y_no_relu = f(x, 0.5, False)
