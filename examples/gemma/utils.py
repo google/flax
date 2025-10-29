@@ -15,7 +15,7 @@
 # Copied over from MaxText (https://github.com/google/maxtext/blob/main/MaxText/max_utils.py).
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import Any
 from collections.abc import Callable
 
 import jax
@@ -27,9 +27,6 @@ from transformer import TransformerConfig, Transformer
 
 from flax import nnx
 from flax.training import train_state
-
-if TYPE_CHECKING:
-  from train import TrainConfig
 
 Dtype = Any
 Shape = tuple[int, ...]
@@ -43,7 +40,7 @@ class TrainState(train_state.TrainState):
 # -----------------------------------------------------------------------------
 
 
-def create_device_mesh(config: "TrainConfig"):
+def create_device_mesh(config: Any):
   """Creates a device mesh with each slice in its own data parallel group. If there is only one slice, uses two replicas."""
   devices = jax.devices()
   num_devices = len(devices)
