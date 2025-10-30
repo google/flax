@@ -144,8 +144,9 @@ class Optimizer(Pytree, tp.Generic[M]):
     Args:
       model: An NNX Module.
       tx: An Optax gradient transformation.
-      wrt: optional argument to filter for which :class:`Variable`'s to keep
-        track of in the optimizer state. These should be the :class:`Variable`'s
+      wrt: filter to specify for which :class:`Variable`'s to keep
+        track of in the optimizer state. It should match the filter used in nnx.grad.
+        These should be the :class:`Variable`'s
         that you plan on updating; i.e. this argument value should match the
         ``wrt``  argument passed to the ``nnx.grad`` call that will generate the
         gradients that will be passed into the ``grads`` argument of the
