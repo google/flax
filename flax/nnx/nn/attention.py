@@ -638,6 +638,51 @@ class MultiHeadAttention(Module):
     self.cached_value = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
 
+  def set_mode(
+      self,
+      deterministic: bool | None = None,
+      decode: bool | None = None,
+      batch_size: int | Shape | None = None,
+      max_length: int | None = None,
+      **kwargs,
+  ) -> dict:
+    """Class method used by ``nnx.set_mode``.
+
+    Args:
+      train: if True, the module is set to training mode.
+      deterministic: if True, the module is set to deterministic mode.
+      decode: if True, the module is set to decode mode.
+      batch_size: the batch size to use for the cache.
+      max_length: the max length to use for the cache.
+    """
+    if deterministic is not None:
+      self.deterministic = deterministic
+
+    if decode is not None:
+      self.decode = decode
+      if (
+          not hasattr(self, 'cached_key')
+          or not hasattr(self, 'cached_value')
+          or not hasattr(self, 'cache_index')
+      ):
+        if batch_size is None:
+          raise TypeError(
+              "'batch_size' must be provided when initializing cache."
+          )
+        if max_length is None:
+          raise TypeError(
+              "'max_length' must be provided when initializing cache."
+          )
+        if isinstance(batch_size, int):
+          batch_size = (batch_size,)
+
+        # initialize cache
+        cache_shape = (*batch_size, max_length, self.num_heads, self.head_dim)
+        self.cached_key = nnx.Cache(jnp.zeros(cache_shape, self.dtype))
+        self.cached_value = nnx.Cache(jnp.zeros(cache_shape, self.dtype))
+        self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
+    return kwargs
+
 
 # mask-making utility functions
 

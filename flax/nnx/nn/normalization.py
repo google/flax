@@ -392,6 +392,21 @@ class BatchNorm(Module):
       self.epsilon,
     )
 
+  def set_mode(
+      self,
+      use_running_average: bool | None = None,
+      **kwargs,
+  ) -> dict:
+    """Class method used by ``nnx.set_mode``.
+
+    Args:
+      use_running_average: if True, the stored batch statistics will be
+        used instead of computing the batch statistics on the input.
+    """
+    if use_running_average is not None:
+      self.use_running_average = use_running_average
+    return kwargs
+
 
 class LayerNorm(Module):
   """Layer normalization (https://arxiv.org/abs/1607.06450).
