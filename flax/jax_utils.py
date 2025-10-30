@@ -25,6 +25,7 @@ import numpy as np
 from jax import core, lax
 from jax.extend import linear_util as lu
 from jax.interpreters import partial_eval as pe
+from typing import Any
 
 
 def _pmap_device_order():
@@ -316,3 +317,41 @@ def pad_shard_unpad(
     return out if static_return else jax.tree_util.tree_map(unpad, out)
 
   return pad_shard_unpad_wrapper
+
+
+class _DictOrList(dict):
+  """Dictionary that should be converted to a list."""
+  is_list: bool = False
+
+def _to_pytree(a):
+  if not isinstance(a, _DictOrList):
+    return a
+  if a.is_list:
+    return [_to_pytree(v) for k, v in sorted(a.items())]
+  else:
+    return {k: _to_pytree(v) for k, v in a.items()}
+
+def _path_ix(a):
+    return a.key if isinstance(a, jax.tree_util.DictKey) else a.idx
+
+def build_tree_from_paths(paths_and_leaves: list[tuple[jax.tree_util.KeyPath, Any]]):
+  """
+  Inverse of ``jax.tree.leaves_with_path``. Builds a PyTree from a list of (path, leaf) pairs.
+  """
+  root = _DictOrList()
+  for path, leaf in paths_and_leaves:
+      if not path: continue
+      current = root
+
+      # Navigate/create structure following the path
+      for key_entry in path[:-1]:
+          k = _path_ix(key_entry)
+          if k not in current:
+              current[k] = _DictOrList()
+          current.is_list = isinstance(key_entry, jax.tree_util.SequenceKey)
+          current = current[k]
+
+      # Set the leaf value
+      current.is_list = isinstance(path[-1], jax.tree_util.SequenceKey)
+      current[_path_ix(path[-1])] = leaf
+  return _to_pytree(root)
