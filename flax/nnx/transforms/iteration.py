@@ -28,7 +28,7 @@ from flax.nnx.statelib import State
 from flax.nnx.transforms.transforms import (
   resolve_kwargs,
   _resolve_bound_callable,
-  _prepend_in_axes,
+  _raise_bound_method_error,
 )
 from flax.typing import Leaf, Missing, PytreeDeque
 import jax
@@ -333,10 +333,10 @@ def vmap(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
-  # Detect bound nnx.Module methods and normalize to unbound callable.
-  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
-    in_axes = _prepend_in_axes(in_axes, None)
+    _raise_bound_method_error('vmap')
 
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
@@ -363,8 +363,6 @@ def vmap(
   @graph.update_context('vmap')
   def vmap_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
-    if was_bound:
-      args = (bound_self, *args)
     pure_args = extract.to_tree(
         args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='vmap'
     )
@@ -562,10 +560,10 @@ def pmap(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
-  # Detect bound nnx.Module methods and normalize to unbound callable.
-  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
-    in_axes = _prepend_in_axes(in_axes, None)
+    _raise_bound_method_error('pmap')
 
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
@@ -595,8 +593,6 @@ def pmap(
   @functools.wraps(f)
   @graph.update_context('pmap')
   def vmap_wrapper(*args):
-    if was_bound:
-      args = (bound_self, *args)
     pure_args = extract.to_tree(
         args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='pmap'
     )
@@ -1313,13 +1309,9 @@ def scan(
 
   # Bound methods are ambiguous for scan (carry vs broadcast vs mapped state).
   # Require users to pass the unbound function and Module explicitly.
-  f_unbound, bound_self, was_bound = _resolve_bound_callable(f)
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
-    raise ValueError(
-      'nnx.scan does not support bound methods. Pass the unbound function '
-      '(method.__func__) and the Module as an explicit argument, or use the '
-      'functional API.'
-    )
+    _raise_bound_method_error('scan')
 
   _check_out_axes(out_axes)
 

@@ -3088,7 +3088,7 @@ class TestCheckify(absltest.TestCase):
 
 
 class TestBoundMethodTransforms(absltest.TestCase):
-  def test_remat_with_bound_method(self):
+  def test_remat_with_bound_method_raises(self):
     class M(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
@@ -3099,13 +3099,10 @@ class TestBoundMethodTransforms(absltest.TestCase):
         return self.linear(x)
 
     m = M(rngs=nnx.Rngs(0))
-    x = jnp.ones((1, 3))
-    f = nnx.remat(m.block)
-    y = f(x)
-    self.assertEqual(y.shape, (1, 3))
-    self.assertEqual(m.count[...], 1)
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.remat(m.block)
 
-  def test_jit_with_bound_method(self):
+  def test_jit_with_bound_method_raises(self):
     class M(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
@@ -3113,12 +3110,10 @@ class TestBoundMethodTransforms(absltest.TestCase):
         return self.linear(x) * scale
 
     m = M(rngs=nnx.Rngs(0))
-    x = jnp.ones((1, 2))
-    jf = nnx.jit(m.apply, static_argnums=1)
-    y = jf(x, 2)
-    self.assertEqual(y.shape, (1, 3))
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.jit(m.apply, static_argnums=1)
 
-  def test_vmap_with_bound_method(self):
+  def test_vmap_with_bound_method_raises(self):
     class M(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
@@ -3126,12 +3121,10 @@ class TestBoundMethodTransforms(absltest.TestCase):
         return self.linear(x)
 
     m = M(rngs=nnx.Rngs(0))
-    x = jnp.ones((5, 2))
-    vf = nnx.vmap(m.__call__, in_axes=(0,), out_axes=0)
-    y = vf(x)
-    self.assertEqual(y.shape, (5, 3))
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.vmap(m.__call__, in_axes=(0,), out_axes=0)
 
-  def test_eval_shape_with_bound_method(self):
+  def test_eval_shape_with_bound_method_raises(self):
     class M(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
@@ -3140,11 +3133,10 @@ class TestBoundMethodTransforms(absltest.TestCase):
 
     m = M(rngs=nnx.Rngs(0))
     x_spec = jax.ShapeDtypeStruct((1, 2), jnp.float32)
-    out_struct = nnx.eval_shape(m.__call__, x_spec)
-    self.assertIsInstance(out_struct, jax.ShapeDtypeStruct)
-    self.assertEqual(out_struct.shape, (1, 3))
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.eval_shape(m.__call__, x_spec)
 
-  def test_grad_with_bound_method(self):
+  def test_grad_with_bound_method_raises(self):
     class M(nnx.Module):
       def __init__(self):
         self.w = nnx.Param(jnp.array(1.0))
@@ -3152,11 +3144,63 @@ class TestBoundMethodTransforms(absltest.TestCase):
         return (self.w * s) ** 2
 
     m = M()
-    gfn = nnx.grad(m.loss)
-    grads = gfn(3.0)
-    # d/dw (w*s)^2 = 2*w*s^2; w=1, s=3 => 18
-    self.assertIn('w', grads)
-    np.testing.assert_allclose(grads['w'][...], 18.0)
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.grad(m.loss)
+
+  def test_value_and_grad_with_bound_method_raises(self):
+    """Test that value_and_grad raises error for bound methods."""
+    class TestModel(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(2, 1, rngs=rngs)
+      
+      def loss_fn(self, x, y):
+        pred = self.linear(x)
+        return jnp.mean((pred - y) ** 2)
+
+    model = TestModel(rngs=nnx.Rngs(0))
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.value_and_grad(model.loss_fn)
+
+  def test_checkify_with_bound_method_raises(self):
+    """Test that checkify raises error for bound methods."""
+    class M(nnx.Module):
+      def __call__(self, x: jax.Array):
+        return x + 1
+    
+    m = M()
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.checkify(m.__call__)
+
+  def test_pmap_with_bound_method_raises(self):
+    """Test that pmap raises error for bound methods."""
+    class M(nnx.Module):
+      def __call__(self, x: jax.Array):
+        return x + 1
+    
+    m = M()
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.pmap(m.__call__)
+
+  def test_shard_map_with_bound_method_raises(self):
+    """Test that shard_map raises error for bound methods."""
+    class M(nnx.Module):
+      def __call__(self, x: jax.Array):
+        return x + 1
+    
+    m = M()
+    mesh = jax.sharding.Mesh(jax.local_devices()[:1], ('data',))
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.shard_map(m.__call__, mesh=mesh, in_specs=None, out_specs=None)
+
+  def test_custom_vjp_with_bound_method_raises(self):
+    """Test that custom_vjp raises error for bound methods."""
+    class M(nnx.Module):
+      def __call__(self, x: jax.Array):
+        return x + 1
+    
+    m = M()
+    with self.assertRaisesRegex(ValueError, 'bound methods'):
+      nnx.custom_vjp(m.__call__)
 
   def test_scan_bound_method_raises(self):
     class M(nnx.Module):
