@@ -291,6 +291,102 @@ class ModelTest(absltest.TestCase):
     for output_nnx, output_linen in zip(outputs_nnx, outputs_linen):
       assert jnp.allclose(output_nnx, output_linen, atol=1e-5)
 
+  def test_forward_eval_set_mode(self):
+    _, config = get_transformer_config(
+      axis_rules=default.MeshRules(
+        embed='model',
+        mlp='data',
+        kv=None,
+        vocab=None,
+      ),
+      deterministic=True,
+      decode=False,
+    )
+    # Set dropout rates to avoid create dropout states
+    config.dropout_rate = 0.0
+    config.attention_dropout_rate = 0.0
+
+    model_nnx = nnx.eval_shape(lambda: TransformerLM(config, rngs=nnx.Rngs(0)))
+    _, params_nnx = nnx.split(model_nnx, nnx.Param)
+
+    model_linen = TransformerLinen(config)
+
+    sample_inputs = random.randint(random.PRNGKey(0), (1, 3), 0, 20)
+    params_linen = model_linen.init(random.key(0), sample_inputs)['params']
+
+    self.transfer_params(config, params_nnx, params_linen)
+    nnx.update(model_nnx, params_nnx)
+
+    det_model = nnx.set_mode(model_nnx, deterministic=True, decode=False)
+    output_nnx = det_model(sample_inputs)
+
+    output_linen: jax.Array = model_linen.apply(
+      {'params': params_linen}, sample_inputs
+    )
+
+    assert jnp.allclose(output_nnx, output_linen, atol=1e-5)
+
+  def test_forward_decode_set_mode(self):
+    batch_size = 2
+
+    _, config = get_transformer_config(
+      axis_rules=default.MeshRules(
+        embed='model',
+        mlp='data',
+        kv=None,
+        vocab=None,
+      ),
+      deterministic=True,
+      decode=True,
+    )
+    # Set dropout rates to avoid create dropout states
+    config.dropout_rate = 0.0
+    config.attention_dropout_rate = 0.0
+
+    model_nnx = nnx.eval_shape(lambda: TransformerLM(config, rngs=nnx.Rngs(0)))
+    for _path, m in model_nnx.iter_modules():
+      if isinstance(m, HasCache):
+        input_shape = (batch_size, config.max_len, config.emb_dim)
+        m.init_cache(input_shape, dtype=config.dtype)
+
+    _, params_nnx, cache_nnx = nnx.split(model_nnx, nnx.Param, nnx.Cache)
+
+    model_linen = TransformerLinen(config)
+
+    flax_init_inputs = random.randint(
+      random.PRNGKey(0), (batch_size, config.max_len), 0, config.vocab_size
+    )
+    ar_decode_inputs = random.randint(
+      random.PRNGKey(0), (3, batch_size, 1), 0, config.vocab_size
+    )
+    variables = model_linen.init(random.key(0), flax_init_inputs)
+    params_linen = variables['params']
+    cache_linen = variables['cache']
+
+    self.transfer_params(config, params_nnx, params_linen)
+    self.transfer_cache(config, cache_nnx, cache_linen)
+    nnx.update(model_nnx, params_nnx, cache_nnx)
+    det_model = nnx.set_mode(model_nnx, deterministic=True, decode=True)
+
+    outputs_nnx = []
+    outputs_linen = []
+
+    for inputs in ar_decode_inputs:
+      output_nnx = det_model(inputs)
+      outputs_nnx.append(output_nnx)
+
+    output_linen: jax.Array
+    for inputs in ar_decode_inputs:
+      output_linen, updates = model_linen.apply(
+        {'params': params_linen, 'cache': cache_linen},
+        inputs,
+        mutable=['cache'],
+      )
+      cache_linen = updates['cache']
+      outputs_linen.append(output_linen)
+
+    for output_nnx, output_linen in zip(outputs_nnx, outputs_linen):
+      assert jnp.allclose(output_nnx, output_linen, atol=1e-5)
 
 if __name__ == '__main__':
   absltest.main()

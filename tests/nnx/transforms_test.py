@@ -1601,6 +1601,38 @@ class TestScan(absltest.TestCase):
 
     assert y.shape == (1, 3)
 
+  def test_complex_set_mode(self):
+    state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
+
+    class MLP(nnx.Module):
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes))
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.node = nnx.Variable(jnp.ones((2,)))
+
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = self.bn(x)
+        x = self.dropout(x)
+        x = nnx.gelu(x)
+        return x, None
+
+    module = MLP(rngs=nnx.Rngs(0))
+    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+
+    assert new_module.linear.kernel.shape == (5, 3, 3)
+    assert new_module.linear.bias.shape == (5, 3)
+    assert new_module.node.shape == (2,)
+
+    x = jnp.ones((1, 3))
+    y, _ = new_module(x)
+
+    assert y.shape == (1, 3)
+
   def test_complex_broadcast_dropout(self):
     state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
 
@@ -1631,6 +1663,39 @@ class TestScan(absltest.TestCase):
 
     x = jnp.ones((1, 3))
     y, _ = module(x)
+
+    assert y.shape == (1, 3)
+
+  def test_complex_broadcast_dropout_set_mode(self):
+    state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
+
+    class MLP(nnx.Module):
+      @nnx.split_rngs(splits=5, only='params')
+      @nnx.vmap(in_axes=(state_axes, state_axes))
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.node = nnx.Variable(jnp.ones((2,)))
+
+      @nnx.split_rngs(splits=5, only='params')
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = self.bn(x)
+        x = self.dropout(x)
+        x = nnx.gelu(x)
+        return x, None
+
+    module = MLP(rngs=nnx.Rngs(params=0, dropout=1))
+    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+
+    assert new_module.linear.kernel.shape == (5, 3, 3)
+    assert new_module.linear.bias.shape == (5, 3)
+    assert new_module.node.shape == (2,)
+
+    x = jnp.ones((1, 3))
+    y, _ = new_module(x)
 
     assert y.shape == (1, 3)
 
@@ -1668,6 +1733,42 @@ class TestScan(absltest.TestCase):
 
     assert y.shape == (1, 3)
     assert out is None
+
+  def test_complex_decorator_set_mode(self):
+    state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
+
+    class Block(nnx.Module):
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes), axis_size=5)
+      def __init__(self, rngs: nnx.Rngs):
+        self.d = 3
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.node = nnx.Variable(jnp.ones((2,)))
+
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = self.bn(x)
+        x = self.dropout(x)
+        x = nnx.gelu(x)
+        return x, None
+
+    module = Block(rngs=nnx.Rngs(0))
+    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+
+    assert new_module.d == 3
+    assert new_module.linear.kernel.shape == (5, 3, 3)
+    assert new_module.linear.bias.shape == (5, 3)
+    assert new_module.node.shape == (2,)
+
+    x = jnp.ones((1, 3))
+    y, out = new_module(x)
+
+    assert y.shape == (1, 3)
+    assert out is None
+
 
   def test_scan_with_sharding(self):
     test = self
