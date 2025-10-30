@@ -1307,8 +1307,6 @@ def scan(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
-  # Bound methods are ambiguous for scan (carry vs broadcast vs mapped state).
-  # Require users to pass the unbound function and Module explicitly.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('scan')

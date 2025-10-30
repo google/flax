@@ -383,7 +383,7 @@ def value_and_grad(
   if was_bound:
     _raise_bound_method_error('value_and_grad')
 
-  vg_fn = _grad_general(
+  return _grad_general(
     f_unbound,
     argnums,
     has_aux,
@@ -391,8 +391,6 @@ def value_and_grad(
     allow_int,
     return_value=True,
   )
-
-  return vg_fn
 
 # -----------------------------------------------
 # custom_vjp

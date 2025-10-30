@@ -360,7 +360,6 @@ def jit(
     backend=backend,
     inline=inline,
     abstracted_axes=abstracted_axes,
-    bound_self=None,
   )
 
 
@@ -387,11 +386,9 @@ class JitWrapped(tp.Generic[P, R]):
     backend: tp.Optional[str] = None,
     inline: bool = False,
     abstracted_axes: tp.Optional[tp.Any] = None,
-    bound_self: tp.Any | None = None,
   ):
     functools.update_wrapper(self, fun)
     self.fun: tp.Callable[P, R] = fun
-    self._bound_self = bound_self
     kwarg_shardings = None
     self.jax_in_shardings = jax.tree.map(
       lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
@@ -436,11 +433,6 @@ class JitWrapped(tp.Generic[P, R]):
     return functools.partial(self, obj)
 
   def _get_pure_args_kwargs(self, args, kwargs):
-    # If this JIT was created from a bound method, inject the Module as arg0
-    # so that graph split/merge can track state mutations.
-    if self._bound_self is not None:
-      args = (self._bound_self, *args)
-
     pure_args, pure_kwargs = extract.to_tree(
       (args, kwargs),
       prefix=(self.in_shardings, self.kwarg_shardings)
