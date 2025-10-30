@@ -654,7 +654,7 @@ class TestMutableArray(absltest.TestCase):
       paths[0],
       (
         jax.tree_util.GetAttrKey('default'),
-        jax.tree_util.GetAttrKey('count'),
+        jax.tree_util.GetAttrKey('base_key'),
         jax.tree_util.GetAttrKey('value'),
       ),
     )
@@ -662,7 +662,7 @@ class TestMutableArray(absltest.TestCase):
       paths[1],
       (
         jax.tree_util.GetAttrKey('default'),
-        jax.tree_util.GetAttrKey('base_key'),
+        jax.tree_util.GetAttrKey('count'),
         jax.tree_util.GetAttrKey('value'),
       ),
     )
