@@ -6,17 +6,17 @@ Experimental API. See the `NNX page <https://flax.readthedocs.io/en/latest/nnx/i
 .. toctree::
   :maxdepth: 3
 
-  bridge
-  filterlib
   graph
-  helpers
+  object
   module
   nn/index
-  object
   rnglib
   spmd
   state
   training/index
   transforms
   variables
+  helpers
   visualization
+  filterlib
+  bridge
