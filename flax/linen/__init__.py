@@ -123,7 +123,7 @@ from .normalization import (
     SpectralNorm as SpectralNorm,
     WeightNorm as WeightNorm,
 )
-from .pooling import (avg_pool as avg_pool, max_pool as max_pool, pool as pool)
+from ..pooling import (avg_pool as avg_pool, max_pool as max_pool, pool as pool)
 from .recurrent import (
     Bidirectional as Bidirectional,
     ConvLSTMCell as ConvLSTMCell,

@@ -35,7 +35,7 @@ from flax.linen.activation import (
     swish as swish,
     tanh as tanh,
 )
-from flax.linen.pooling import (avg_pool as avg_pool, max_pool as max_pool)
+from flax.pooling import (avg_pool as avg_pool, max_pool as max_pool)
 from .attention import (
     dot_product_attention as dot_product_attention,
     multi_head_dot_product_attention as multi_head_dot_product_attention,

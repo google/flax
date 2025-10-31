@@ -13,10 +13,10 @@
 # limitations under the License.
 
 from flax.core.spmd import logical_axis_rules as logical_axis_rules
-from flax.linen.pooling import avg_pool as avg_pool
-from flax.linen.pooling import max_pool as max_pool
-from flax.linen.pooling import min_pool as min_pool
-from flax.linen.pooling import pool as pool
+from flax.pooling import avg_pool as avg_pool
+from flax.pooling import max_pool as max_pool
+from flax.pooling import min_pool as min_pool
+from flax.pooling import pool as pool
 from flax.typing import Initializer as Initializer
 
 from .bridge import wrappers as wrappers
