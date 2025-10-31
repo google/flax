@@ -39,7 +39,7 @@ class Model(nnx.Module):
 
 
 model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
-optimizer = nnx.Optimizer(model, optax.adam(1e-3))  # reference sharing
+optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)  # reference sharing
 
 @nnx.jit  # automatic state management
 def train_step(model, optimizer, x, y):
@@ -48,7 +48,7 @@ def train_step(model, optimizer, x, y):
     return ((y_pred - y) ** 2).mean()
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)  # inplace updates
+  optimizer.update(model, grads)  # inplace updates
 
   return loss
 ```

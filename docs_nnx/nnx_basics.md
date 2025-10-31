@@ -90,30 +90,26 @@ to handle them, as demonstrated in later sections of this guide.
 
 Flax `Module`s can be used to compose other Modules in a nested structure. These can be assigned directly as attributes, or inside an attribute of any (nested) pytree type, such as a `list`, `dict`, `tuple`, and so on.
 
-The example below shows how to define a simple `MLP` by subclassing `Module`. The model consists of two `Linear` layers, a `Dropout` layer, and a `BatchNorm` layer:
+The example below shows how to define a simple `MLP` by subclassing `Module`. The model consists of two `Linear` layers, a `Dropout` layer, and a `BatchNorm` layer. Note that we need to pass the `__call__` method the RNG state that we want the `Dropout` layer to use.
 
 ```{code-cell} ipython3
 class MLP(nnx.Module):
   def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
     self.linear1 = Linear(din, dmid, rngs=rngs)
-    self.dropout = nnx.Dropout(rate=0.1, rngs=rngs)
+    self.dropout = nnx.Dropout(rate=0.1)
     self.bn = nnx.BatchNorm(dmid, rngs=rngs)
     self.linear2 = Linear(dmid, dout, rngs=rngs)
 
-  def __call__(self, x: jax.Array):
-    x = nnx.gelu(self.dropout(self.bn(self.linear1(x))))
+  def __call__(self, x: jax.Array, rngs: nnx.Rngs):
+    x = nnx.gelu(self.dropout(self.bn(self.linear1(x)), rngs=rngs))
     return self.linear2(x)
 
 model = MLP(2, 16, 5, rngs=nnx.Rngs(0))
 
-y = model(x=jnp.ones((3, 2)))
+y = model(x=jnp.ones((3, 2)), rngs=nnx.Rngs(1))
 
 nnx.display(model)
 ```
-
-In Flax, `Dropout` is a stateful module that stores an `Rngs` object, so that it can generate new masks during the forward pass without the need for the user to pass a new key each time.
-
-+++
 
 ### Model surgery
 
@@ -140,7 +136,7 @@ model = MLP(2, 32, 5, rngs=rngs)
 model.linear1 = LoraLinear(model.linear1, 4, rngs=rngs)
 model.linear2 = LoraLinear(model.linear2, 4, rngs=rngs)
 
-y = model(x=jnp.ones((3, 2)))
+y = model(x=jnp.ones((3, 2)), rngs=rngs)
 
 nnx.display(model)
 ```
@@ -161,18 +157,18 @@ model = MLP(2, 16, 10, rngs=nnx.Rngs(0))
 optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
 @nnx.jit  # Automatic state management
-def train_step(model, optimizer, x, y):
-  def loss_fn(model: MLP):
-    y_pred = model(x)
+def train_step(model, optimizer, x, y, rngs):
+  def loss_fn(model: MLP, rngs: nnx.Rngs):
+    y_pred = model(x, rngs)
     return jnp.mean((y_pred - y) ** 2)
 
-  loss, grads = nnx.value_and_grad(loss_fn)(model)
+  loss, grads = nnx.value_and_grad(loss_fn)(model, rngs)
   optimizer.update(model, grads)  # In place updates.
 
   return loss
 
 x, y = jnp.ones((5, 2)), jnp.ones((5, 10))
-loss = train_step(model, optimizer, x, y)
+loss = train_step(model, optimizer, x, y, rngs)
 
 print(f'{loss = }')
 print(f'{optimizer.step.value = }')
@@ -194,23 +190,27 @@ In the code below notice the following:
 1. The custom `create_model` function takes in a key and returns an `MLP` object, since you create five keys and use `nnx.vmap` over `create_model` a stack of 5 `MLP` objects is created.
 2. The `nnx.scan` is used to iteratively apply each `MLP` in the stack to the input `x`.
 3. The nnx.scan (consciously) deviates from `jax.lax.scan` and instead mimics nnx.vmap, which is more expressive. nnx.scan allows specifying multiple inputs, the scan axes of each input/output, and the position of the carry.
-4. `State` updates for the `BatchNorm` and `Dropout` layers are automatically propagated by nnx.scan.
+4. `State` updates for `BatchNorm` layers are automatically propagated by nnx.scan.
+5. The `rngs` object is split into separate streams for each layer using the `fork` method.
 
 ```{code-cell} ipython3
 @nnx.vmap(in_axes=0, out_axes=0)
-def create_model(key: jax.Array):
-  return MLP(10, 32, 10, rngs=nnx.Rngs(key))
+def create_model(rngs):
+  return MLP(10, 32, 10, rngs=rngs)
 
-keys = jax.random.split(jax.random.key(0), 5)
-model = create_model(keys)
-
-@nnx.scan(in_axes=(0, nnx.Carry), out_axes=nnx.Carry)
-def forward(model: MLP, x):
-  x = model(x)
+@nnx.scan(in_axes=(0, 0, nnx.Carry), out_axes=nnx.Carry)
+def forward(model: MLP, rngs: nnx.Rngs, x):
+  x = model(x, rngs)
   return x
+    
+param_rngs = nnx.Rngs(0).fork(split=5)
+model = create_model(param_rngs)
+```
 
+```{code-cell} ipython3
 x = jnp.ones((3, 10))
-y = forward(model, x)
+dropout_rngs = nnx.Rngs(1).fork(split=5)
+y = forward(model, dropout_rngs, x)
 
 print(f'{y.shape = }')
 nnx.display(model)
