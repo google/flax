@@ -28,6 +28,10 @@ from flax.nnx import (
   statelib,
   variablelib,
 )
+from flax.nnx.transforms.transforms import (
+  _resolve_bound_callable,
+  _raise_bound_method_error,
+)
 from flax.typing import MISSING, Missing
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
@@ -216,6 +220,11 @@ def jit(
       JAX keeps a weak reference to ``fun`` for use as a compilation cache key,
       so the object ``fun`` must be weakly-referenceable. Most :class:`Callable`
       objects will already satisfy this requirement.
+
+      .. note::
+        Bound methods (e.g., ``module.method``) are not supported. Use the 
+        decorator form ``@nnx.jit`` on the method definition or call 
+        ``nnx.jit(MyClass.method)(instance, ...)`` with the unbound method.
     in_shardings: Pytree of structure matching that of arguments to ``fun``,
       with all actual arguments replaced by resource assignment specifications.
       It is also valid to specify a pytree prefix (e.g. one value in place of a
@@ -333,8 +342,13 @@ def jit(
       inline=inline,
       abstracted_axes=abstracted_axes,
     )  # type: ignore[return-value]
+  # Detect bound nnx.Module methods and raise error.
+  fun_unbound, _, was_bound = _resolve_bound_callable(fun)
+  if was_bound:
+    _raise_bound_method_error('jit')
+
   return JitWrapped(
-    fun,
+    fun_unbound,
     in_shardings=in_shardings,
     out_shardings=out_shardings,
     static_argnums=static_argnums,
@@ -973,6 +987,11 @@ def shard_map(
     )  # type: ignore[return-value]
   assert not isinstance(f, type)
 
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    _raise_bound_method_error('shard_map')
+
   kwarg_specs = PartitionSpec()
   jax_in_specs = jax.tree.map(
     lambda x: extract.NodeStates(
@@ -1020,7 +1039,7 @@ def shard_map(
     return out
 
   shard_map_fn = jax.shard_map(
-      ShardMapFn(f, in_specs, out_specs, kwarg_specs, shard_map_wrapper),
+      ShardMapFn(f_unbound, in_specs, out_specs, kwarg_specs, shard_map_wrapper),
       mesh=mesh,
       in_specs=jax_in_specs,
       out_specs=(jax_in_specs, kwarg_specs, jax_out_specs),  # type: ignore
