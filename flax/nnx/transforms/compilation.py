@@ -20,6 +20,7 @@ import typing as tp
 
 import jax
 from jax.sharding import AbstractMesh, Mesh, PartitionSpec
+from jax._src import api_util  # We use fun_signature and resolve_argnums
 
 from flax.nnx import (
   extract,
@@ -389,14 +390,33 @@ class JitWrapped(tp.Generic[P, R]):
       out_shardings,
     )
 
+    if isinstance(in_shardings, (list, tuple)):
+      # We should reintroduce None values into in_shardings corresponding to static arguments
+      fun_signature = api_util.fun_signature(fun)
+      _, _, static_argnums, _ = api_util.resolve_argnums(
+          fun,
+          fun_signature,
+          None,
+          None,
+          static_argnums,
+          static_argnames,
+      )
+      in_shardings = list(in_shardings)
+      for static_arg_index in sorted(static_argnums):
+        in_shardings.insert(static_arg_index, None)
+      in_shardings = tuple(in_shardings)
+
+    jax_out_in_shardings = jax.tree.map(
+      lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+      if isinstance(x, StateSharding)
+      else x,
+      in_shardings,
+    )
+
     self.jitted_fn = jax.jit(
       JitFn(fun, in_shardings, out_shardings, kwarg_shardings, self),
       in_shardings=self.jax_in_shardings,
-      out_shardings=(
-        self.jax_in_shardings,
-        kwarg_shardings,
-        self.jax_out_shardings,
-      ),
+      out_shardings=(jax_out_in_shardings, kwarg_shardings, self.jax_out_shardings),
       static_argnums=static_argnums,
       static_argnames=static_argnames,
       donate_argnums=donate_argnums,
