@@ -81,7 +81,7 @@ class PytreeTest(absltest.TestCase):
   def test_consistent_attrs_frozen_dataclass(self):
     @dataclasses.dataclass(frozen=True)
     class Foo(nnx.Pytree):
-      a: nnx.Data[int]
+      a: int = nnx.data()
       b: nnx.Static[int]
       c: jax.Array
 
@@ -760,7 +760,7 @@ class TestModule(absltest.TestCase):
     self.assertIn(str(expected_total_rng_states), foo_repr[0])
 
 
-class TestModuleDataclass:
+class TestModuleDataclass(absltest.TestCase):
   def test_basic(self):
 
     @dataclasses.dataclass
@@ -792,6 +792,51 @@ class TestModuleDataclass:
     assert isinstance(state['d'], nnx.Variable)
     assert state['e'].value == 5
     assert isinstance(state['e'], nnx.BatchStat)
+
+  def test_field_specifiers(self):
+    @nnx.dataclass
+    class Foo(nnx.Pytree):
+      a: int = nnx.static()
+      b: jax.Array = nnx.data()
+
+    m = Foo(a=1, b=jnp.array(2))
+
+    leaves = jax.tree.leaves(m)
+    assert len(leaves) == 1
+    assert leaves[0] == jnp.array(2)
+
+  def test_field_specifiers_forced(self):
+    @nnx.dataclass
+    class Bar(nnx.Pytree):
+      a: int = nnx.data()
+
+    m = Bar(a=1)
+
+    leaves = jax.tree.leaves(m)
+    assert len(leaves) == 1
+    assert leaves[0] == 1
+
+  def test_field_specifiers_with_defaults(self):
+    @nnx.dataclass
+    class Bar(nnx.Pytree):
+      a: int = nnx.data(default=3)
+
+    m = Bar()
+
+    leaves = jax.tree.leaves(m)
+    assert len(leaves) == 1
+    assert leaves[0] == 3
+
+  def test_field_specifiers_array_in_static(self):
+    @nnx.dataclass
+    class Bar(nnx.Pytree):
+      a: jax.Array = nnx.static()
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found unexpected Arrays on value of type',
+    ):
+      m = Bar(a=jnp.array(3))
 
   def test_post_init(self):
 

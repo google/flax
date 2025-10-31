@@ -201,16 +201,16 @@ Annotations can also be added at the type level via `nnx.Static` and `nnx.Data`.
 ```{code-cell} ipython3
 import dataclasses
 
-@dataclasses.dataclass
+@nnx.dataclass
 class Foo(nnx.Pytree):
-  i: nnx.Data[int]
-  s: nnx.Static[str]
+  i: int = nnx.data()
+  s: str = nnx.static()
   x: jax.Array
   a: int
 
-@dataclasses.dataclass
+@nnx.dataclass
 class Bar(nnx.Pytree):
-  ls: nnx.Data[list[Foo]]
+  ls: list[Foo] = nnx.data()
   shapes: list[int]
 
 pytree = Bar(
@@ -218,6 +218,13 @@ pytree = Bar(
   shapes=[8, 16, 32]
 )
 pytree_structure(pytree)
+```
+
+```{code-cell} ipython3
+@dataclasses.dataclass
+class Bar(nnx.Pytree):
+  a: int = nnx.data()
+  b: str # type check error: required after default
 ```
 
 ### Attribute Updates
