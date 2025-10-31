@@ -20,7 +20,7 @@ import jax
 from jax import random
 import jax.numpy as jnp
 
-from flax import errors, struct
+from flax import struct
 from flax import typing
 from flax.nnx import graph
 from flax.nnx import variablelib
@@ -116,10 +116,7 @@ class RngStream(Pytree):
     self.count = RngCount(count, tag=tag)
 
   def __call__(self) -> jax.Array:
-    if not self.count.has_ref and not self.count._trace_state.is_valid():
-      raise errors.TraceContextError(
-        f'Cannot mutate {type(self).__name__} from a different trace level'
-      )
+    self.count._check_can_update()
     key = random.fold_in(self.key[...], self.count[...])
     self.count[...] += 1
     return key
@@ -382,7 +379,7 @@ class Rngs(Pytree):
 
     for tag, key in rngs.items():
       if isinstance(key, RngStream):
-        key = key.key[...]
+        key = key.key.get_value()
       stream = RngStream(
         key=key,
         tag=tag,
