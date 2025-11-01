@@ -36,6 +36,7 @@ from .pytreelib import Pytree as Pytree
 from .pytreelib import Object as Object
 from .pytreelib import Data as Data
 from .pytreelib import Static as Static
+from .pytreelib import dataclass as dataclass
 from .pytreelib import data as data
 from .pytreelib import static as static
 from .pytreelib import register_data_type as register_data_type

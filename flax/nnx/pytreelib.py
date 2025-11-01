@@ -38,7 +38,7 @@ from flax.nnx import (
 )
 from flax import config
 from flax.nnx.variablelib import Variable
-from flax.typing import SizeBytes
+from flax.typing import MISSING, Missing, SizeBytes
 
 BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
 
@@ -71,12 +71,21 @@ Example::
 DATA_REGISTRY: set[type] = set()
 
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class DataAttr:
-  value: tp.Any
-
-
-def data(value: A, /) -> A:
+@tp.overload
+def data(value: A, /) -> A: ...
+@tp.overload
+def data(
+  *,
+  default: A | None = None,
+  default_factory: tp.Callable[[], A] | None = None,
+  init: bool = True,
+  repr: bool = True,
+  hash: bool | None = None,
+  compare: bool = True,
+  metadata: tp.Mapping[str, tp.Any] | None = None,
+  kw_only: bool = False,
+) -> A: ...
+def data(value: tp.Any = MISSING, /, **kwargs) -> tp.Any:
   """Annotates a an attribute as pytree data.
 
   The return value from `data` must be directly assigned to an Object attribute
@@ -103,7 +112,20 @@ def data(value: A, /) -> A:
     A value which will register the attribute as data on assignment.
 
   """
-  return DataAttr(value)  # type: ignore[return-value]
+  if not isinstance(value, Missing) and kwargs:
+    raise TypeError(
+      'nnx.data() accepts either a single positional argument or keyword'
+      ' arguments, but not both.'
+    )
+  metadata = {'nnx_value': value}
+  if 'metadata' in kwargs and kwargs['metadata'] is not None:
+    if 'static' in kwargs['metadata']:
+      raise ValueError(
+        "Cannot use 'static' key in metadata argument for nnx.data."
+      )
+    metadata.update(kwargs.pop('metadata'))
+  metadata['static'] = False
+  return dataclasses.field(**kwargs, metadata=metadata)  # type: ignore[return-value]
 
 
 def register_data_type(type_: type, /) -> None:
@@ -191,13 +213,21 @@ The usage of Static is recommended when type annotations are used already presen
 or required e.g. for dataclasses.
 """
 
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class StaticAttr:
-  value: tp.Any
-
-
-def static(value: A, /) -> A:
+@tp.overload
+def static(value: A, /) -> A: ...
+@tp.overload
+def static(
+  *,
+  default: A | None = None,
+  default_factory: tp.Callable[[], A] | None = None,
+  init: bool = True,
+  repr: bool = True,
+  hash: bool | None = None,
+  compare: bool = True,
+  metadata: tp.Mapping[str, tp.Any] | None = None,
+  kw_only: bool = False,
+) -> A: ...
+def static(value: tp.Any = MISSING, /, **kwargs) -> tp.Any:
   """Annotates a an attribute as static.
 
   The return value from `static` must be directly assigned to an Object
@@ -219,8 +249,25 @@ def static(value: A, /) -> A:
 
   By default ``nnx.Pytree`` will ...
   """
-  return StaticAttr(value)  # type: ignore[return-value]
+  if not isinstance(value, Missing) and kwargs:
+    raise TypeError(
+      'nnx.static() accepts either a single positional argument or keyword'
+      ' arguments, but not both.'
+    )
+  metadata = {'nnx_value': value}
+  if 'metadata' in kwargs and kwargs['metadata'] is not None:
+    if 'static' in kwargs['metadata']:
+      raise ValueError(
+        "Cannot use 'static' key in metadata argument for nnx.static."
+      )
+    metadata.update(kwargs.pop('metadata'))
+  metadata['static'] = True
+  return dataclasses.field(**kwargs, metadata=metadata)  # type: ignore[return-value]
 
+
+@tp.dataclass_transform(field_specifiers=(dataclasses.field, data, static))
+def dataclass(*args, **kwargs):
+  return dataclasses.dataclass(*args, **kwargs)
 
 def _collect_stats(
   node: tp.Any, node_stats: dict[int, dict[type[Variable], SizeBytes]]
@@ -439,6 +486,26 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         elif StaticAnnotation in type_metadata:
           nodes[name] = False
 
+    for name, value in vars(cls).items():
+      if isinstance(value, dataclasses.Field) and 'nnx_value' in value.metadata:
+        if not isinstance(value.metadata['nnx_value'], Missing):
+          raise ValueError(
+            'Cannot use nnx.data or nnx.static with a positional argument for '
+            f'{type(cls).__name__}.{name} class annotation. Use keyword arguments only.'
+          )
+        if value.metadata['static']:
+          is_node = False
+        else:
+          is_node = True
+        if name in nodes and nodes[name] != is_node:
+          raise ValueError(
+            f'Conflicting pytree annotation for attribute'
+            f" '{cls.__name__}.{name}': previously registered as"
+            f' {"data" if nodes[name] else "static"}, but found'
+            f' nnx.{"data" if is_node else "static"}(...) annotation.'
+          )
+        nodes[name] = is_node
+
     cls._pytree__nodes = graph.HashableMapping(nodes, copy=False)
 
     if pytree:
@@ -483,15 +550,11 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     )
     data: bool = False
     explicit: bool = False
-    if type(value) is DataAttr:
-      value = value.value
+    if isinstance(value, dataclasses.Field) and 'nnx_value' in value.metadata:
+      is_static = value.metadata['static']
+      value = value.metadata['nnx_value']
       if self._pytree__is_pytree:
-        data = True
-        explicit = True
-    elif type(value) is StaticAttr:
-      value = value.value
-      if self._pytree__is_pytree:
-        data = False
+        data = not is_static
         explicit = True
     elif self._pytree__is_pytree:
       data = is_data(value)
@@ -516,9 +579,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
 
     def _get_annotations(leaves):
       return {
-          'data' if type(leaf) is DataAttr else 'static'
-          for leaf in leaves
-          if type(leaf) is DataAttr or type(leaf) is StaticAttr
+        'static' if leaf.metadata['static'] else 'data'
+        for leaf in leaves
+        if isinstance(leaf, dataclasses.Field) and 'nnx_value' in leaf.metadata
       }
 
     def _has_visited(x):
