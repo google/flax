@@ -149,9 +149,8 @@ def setup_initial_state(
     state: the initialized train state
     state_mesh_annotations: the mesh annotations for the train state
   """
-
-  @jax.jit
-  def sharded_init():
+  # Initialization
+  with jax.set_mesh(mesh):
     model = constructor(config, rng)
     graphdef, params = nnx.split(model, nnx.Param)
     state = TrainState.create(
@@ -161,13 +160,6 @@ def setup_initial_state(
       graphdef=graphdef,
     )
     state = jax.tree.map(_to_array, state)
-    state_spec = nnx.get_partition_spec(state)
-    state = jax.lax.with_sharding_constraint(state, state_spec)
-    return state
-
-  # Initialization
-  with jax.set_mesh(mesh):
-    state = sharded_init()
 
   state_sharding = nnx.get_named_sharding(state, mesh)
   return state, state_sharding
