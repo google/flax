@@ -623,6 +623,7 @@ def flatten(  # type: ignore[invalid-annotation]
   *,
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
+  convert_to_lojax: bool = False,
 ) -> tuple[GraphDef[Node], FlatState[tp.Any]]: ...
 @tp.overload
 def flatten(  # type: ignore[invalid-annotation]
@@ -632,6 +633,7 @@ def flatten(  # type: ignore[invalid-annotation]
   with_paths: tp.Literal[True],
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
+  convert_to_lojax: bool = False,
 ) -> tuple[
   GraphDef[Node],
   FlatState[tp.Any],
@@ -644,6 +646,7 @@ def flatten(  # type: ignore[invalid-annotation]
   with_paths: tp.Literal[False],
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
+  convert_to_lojax: bool = False,
 ) -> tuple[
   GraphDef[Node],
   list[tp.Any],
@@ -656,6 +659,7 @@ def flatten(  # type: ignore[invalid-annotation]
   with_paths: bool,
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
+  convert_to_lojax: bool = False,
 ) -> tuple[
   GraphDef[Node],
   FlatState[tp.Any] | list[tp.Any],
@@ -667,6 +671,7 @@ def flatten(  # type: ignore[invalid-annotation]
   with_paths: bool = True,
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
+  convert_to_lojax: bool = False,
 ) -> tuple[
   GraphDef[Node],
   FlatState[tp.Any] | list[tp.Any],
@@ -700,6 +705,7 @@ def flatten(  # type: ignore[invalid-annotation]
     attributes,
     leaves,
     paths,
+    convert_to_lojax,
   )
   graphdef: GraphDef = GraphDef(
     nodes=nodes, attributes=attributes, num_leaves=len(leaves)
@@ -721,6 +727,7 @@ def _graph_flatten(
   attributes: list[tuple[Key, AttrType]],
   leaves: list[tp.Any],
   paths: list[PathParts] | None,
+  convert_to_lojax: bool,
 ) -> None:
   is_pytree_node_ = type(node_impl) is PytreeNodeImpl
 
@@ -777,6 +784,8 @@ def _graph_flatten(
       leaf = node  # type: ignore[assignment]
       if inner_value is not prev_inner_value:
         leaf.set_raw_value(inner_value)
+      if convert_to_lojax and leaf.is_hijax:
+        leaf = variablelib._get_hijax_state(leaf)
 
     variabledef = VariableDef(
       type=node.var_type,  # type: ignore
@@ -842,6 +851,7 @@ def _graph_flatten(
         attributes,
         leaves,
         paths,
+        convert_to_lojax,
       )
     elif variablelib.is_array_ref(value):
       attributes.append((key, MUTABLE_ARRAY_ATTR))
@@ -1092,6 +1102,7 @@ def unflatten(  # type: ignore[invalid-annotation]
   index_ref: IndexMap | None = None,
   outer_index_outer_ref: IndexMap | None = None,
   copy_variables: bool = False,
+  convert_to_hijax: bool = False,
 ) -> Node:
   """Unflattens a graphdef into a node with the given state.
 
@@ -1150,6 +1161,7 @@ def unflatten(  # type: ignore[invalid-annotation]
       index_ref,
       outer_index_outer_ref,
       copy_variables,
+      convert_to_hijax,
     )
 
     try:
@@ -1171,6 +1183,7 @@ def _graph_unflatten(
   index_ref: IndexMap,
   outer_index_outer_ref: IndexMap | None,
   copy_variables: bool,
+  convert_to_hijax: bool,
 ) -> Node:
   """Recursive helper for graph_unflatten.
 
@@ -1271,6 +1284,8 @@ def _graph_unflatten(
         variable = variabledef.type.from_metadata(
           value, dict(variabledef.metadata)
         )
+    if convert_to_hijax and variable.is_hijax:
+      variable = variablelib._new_hijax_from_variable(variable)
     index_ref[variabledef.index] = variable
     return variable  # type: ignore[return-value]
 
@@ -1326,6 +1341,7 @@ def _graph_unflatten(
           index_ref,
           outer_index_outer_ref,
           copy_variables,
+          convert_to_hijax,
         )
         children.append((key, subnode))
       else:
@@ -1696,7 +1712,10 @@ class SplitContext:
       ctx.inner_ref_outer_index if ctx and ctx.inner_ref_outer_index else None
     )
     graphdef, flat_state = flatten(
-      node, ref_index=self.ref_index, ref_outer_index=inner_ref_outer_index
+      node,
+      ref_index=self.ref_index,
+      ref_outer_index=inner_ref_outer_index,
+      convert_to_lojax=True,
     )
     flat_states = _split_state(flat_state, filters)
     states = _to_nested_state(graphdef, flat_states)
@@ -1772,6 +1791,7 @@ class SplitContext:
         ref_index=self.ref_index,
         ref_outer_index=ref_outer_index,
         with_paths=with_paths,
+        convert_to_lojax=True,
       )
       if with_paths:
         assert isinstance(flat_state, FlatState)
@@ -1801,6 +1821,7 @@ class SplitContext:
         ref_index=self.ref_index,
         ref_outer_index=ref_outer_index,
         with_paths=with_paths,
+        convert_to_lojax=True,
       )
       if with_paths:
         assert isinstance(flat_state, FlatState)
@@ -1864,6 +1885,7 @@ class MergeContext:
       index_ref=self.index_ref,
       outer_index_outer_ref=outer_index_outer_ref,
       copy_variables=True,
+      convert_to_hijax=True,
     )
     return node
 
@@ -1896,6 +1918,7 @@ class MergeContext:
         graphdef,
         state,
         index_ref=self.index_ref,
+        convert_to_hijax=True,
       )
 
     elif static_cache is not None:
@@ -1938,6 +1961,7 @@ class MergeContext:
             state,
             index_ref=self.index_ref,
             outer_index_outer_ref=outer_index_outer_ref,
+            convert_to_hijax=True,
           )
       else:  # graphdef.outer_index is None
         # its a new node, create it
@@ -1945,6 +1969,7 @@ class MergeContext:
           graphdef,
           state,
           index_ref=self.index_ref,
+          convert_to_hijax=True,
         )
     else:
       outer_index_outer_ref = (
@@ -1955,6 +1980,7 @@ class MergeContext:
         state,
         index_ref=self.index_ref,
         outer_index_outer_ref=outer_index_outer_ref,
+        convert_to_hijax=True,
       )
     return node
 
