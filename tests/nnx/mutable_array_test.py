@@ -913,6 +913,18 @@ class TestHijaxVariables(absltest.TestCase):
 
     self.assertEqual(y.shape, ())
 
+  @nnx.use_hijax(True)
+  def test_nnx_jit(self):
+    v = nnx.Param(jnp.array([1, 2, 3]))
+
+    @nnx.vmap(in_axes=(0,))
+    def f(v):
+      v[...] += 1
+
+    f(v)
+
+    self.assertEqual(v[...], 1)
+
 
 if __name__ == '__main__':
   absltest.main()
