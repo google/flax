@@ -19,6 +19,8 @@ import inspect
 import io
 import typing as tp
 from types import MappingProxyType
+import functools
+from types import SimpleNamespace
 
 import jax
 import numpy as np
@@ -33,6 +35,7 @@ from flax import typing
 from flax.nnx import graph, statelib, variablelib
 
 from functools import wraps
+
 
 try:
   from IPython import get_ipython
@@ -49,6 +52,38 @@ NoneDumper.add_representer(
   type(None),
   lambda dumper, data: dumper.represent_scalar('tag:yaml.org,2002:str', 'None'),
 )
+
+class MaybeJit:
+  """
+  Wraps a function with nnx.jit, but saves the original to run
+  if the function turns out to be non-concrete. We can't get the flops of non-concrete functions,
+  but we should still be able to trace the input and output shapes.
+  """
+  def __init__(self, f):
+      functools.update_wrapper(self, f)
+      self.f = f
+      self.jitted = nnx.jit(f)
+      self.seen = set()
+
+  # implement descriptor protocol so that we can use this as a method
+  def __get__(self, obj, objtype=None):
+    if obj is None:
+      return self
+    return functools.partial(self, obj)
+
+  def __call__(self, *args, **kwargs):
+    try:
+      return self.jitted(*args, **kwargs)
+    except TypeError as e:
+      return self.f(*args, **kwargs)
+
+  def lower(self, *args, **kwargs):
+    try:
+      return self.jitted.lower(*args, **kwargs)
+    except TypeError as e:
+      result = self.f(*args, **kwargs)
+      # Mock a `Lowered` instance with a SimpleNamespace
+      return SimpleNamespace(cost_analysis=-1, lowered=SimpleNamespace(out_info=(None, None, result)))
 
 class SizeBytes(typing.SizeBytes):
   def __repr__(self) -> str:
@@ -133,8 +168,7 @@ class CallInfo:
   object_id: int
   type: type
   path: statelib.PathParts
-  input_args: tuple[tp.Any, ...]
-  input_kwargs: dict[str, tp.Any]
+  inputs_repr: str
   outputs: tp.Any
   flops: int | None = None
   vjp_flops: int | None = None
@@ -151,14 +185,13 @@ class SimpleObjectRepr:
 
 
 def _to_dummy_array(x):
-  if isinstance(x,jax.ShapeDtypeStruct):
+  try:
     return ArrayRepr(x.shape, x.dtype)
-  elif isinstance(x, jax.Array | np.ndarray):
-    return ArrayRepr.from_array(x)
-  elif graph.is_graph_node(x):
-    return SimpleObjectRepr(x)
-  else:
-    return x
+  except:
+    if graph.is_graph_node(x):
+      return SimpleObjectRepr(x)
+    else:
+      return x
 
 def _pure_nnx_vjp(f, model, *args, **kwargs):
   "Wrap nnx functional api around jax.vjp. Only handles pure method calls."
@@ -168,14 +201,10 @@ def _pure_nnx_vjp(f, model, *args, **kwargs):
     return f(model, *args, **kwargs)
   return jax.vjp(inner, state, *args, **kwargs)
 
-def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, *args, **kwargs):
-  e = jitted.lower(obj, *args, **kwargs)
-  flops = _get_flops(e) if compute_flops else None
-  outputs = e.lowered.out_info[2]
+def _get_call_info(lowered, method_name, node_stats, obj, compute_flops, inputs_repr):
+  flops = _get_flops(lowered) if compute_flops else None
+  outputs = lowered.lowered.out_info[2]
   output_repr = jax.tree.map(_to_dummy_array, outputs)
-  input_args_info, input_kwargs_info = jax.tree.map(
-    _to_dummy_array, (args, kwargs)
-  )
   object_id: int = getattr(obj, '_nnx_tabulate_id')
   node_info = node_stats[object_id]
   assert node_info is not None
@@ -187,8 +216,7 @@ def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, *a
     object_id=object_id,
     type=type(obj),
     path=path,
-    input_args=input_args_info,
-    input_kwargs=input_kwargs_info,
+    inputs_repr=inputs_repr,
     outputs=output_repr,
     flops=flops,
   )
@@ -206,13 +234,33 @@ def _create_obj_env(object_types):
         result[(obj_type, name)] = top_method
   return result
 
-def _argsave(tracer_args, f):
+def _argsave(counter, tracer_args, f):
   "Wrap a function to save its arguments"
   n = f.__name__
   @wraps(f)
   def wrapper(obj, *args, **kwargs):
-      tracer_args.append((obj, n, args, kwargs))
-      return f(obj, *args, **kwargs)
+    input_args, input_kwargs = jax.tree.map(
+      _to_dummy_array, (args, kwargs)
+    )
+    inputs_repr = ''
+    if input_args:
+      if len(input_args) == 1 and not input_kwargs:
+        inputs_repr += _as_yaml_str(input_args[0])
+      else:
+        inputs_repr += _as_yaml_str(input_args)
+      if input_kwargs:
+        inputs_repr += '\n'
+    if input_kwargs:
+      inputs_repr += _as_yaml_str(input_kwargs)
+
+    identifier = (inputs_repr, getattr(obj, '_nnx_tabulate_id'))
+    if identifier not in f.seen:
+      counter_val = counter[0]
+      counter[0] += 1
+      lowered = f.lower(obj, *args, **kwargs)
+      tracer_args.append((counter_val, obj, n, lowered, inputs_repr))
+      f.seen.add(identifier)
+    return f(obj, *args, **kwargs)
   return wrapper
 
 def _overwrite_methods(env):
@@ -222,7 +270,7 @@ def _overwrite_methods(env):
 
 def _get_flops(e) -> int:
   cost = e.cost_analysis() or e.compile().cost_analysis()
-  return 0 if cost is None or 'flops' not in cost else int(cost['flops'])
+  return -1 if cost is None or 'flops' not in cost else int(cost['flops'])
 
 def tabulate(
   obj,
@@ -367,39 +415,35 @@ def tabulate(
   # iteration over methods easier.
   env = _create_obj_env(object_types)
 
-  # Modify all the object's methods to save their Tracer arguments.
-  # tracer_args contains (object, name, args, kwargs) tuples.
-  tracer_args: list[tuple[tp.Any, str, tuple, dict[str, tp.Any]]] = []
-  saver_env = {k: _argsave(tracer_args, v) for k,v in env.items()}
-  _overwrite_methods(saver_env)
+  # Modify all the object's methods to save their lowered JIT representations.
+  tracer_args = []
 
-  # Add JIT calculation to each method. We can extract flops and output info from
-  # the lowered JITs. We'll only call these jitted values, which guarantees
-  # that each method will only be traced (and added to the table) once.
-  jits = {} # Maps (class, method_name) to jit
-  for key, value in saver_env.items():
-    jits[key] = nnx.jit(value)
+  # Information is recorded in post-order, but should be presented as a pre-order traversal.
+  # This counter is incremented in pre-order traversal to keep track of the order of calls.
+  counter = [0]
+
+  jits = {k: _argsave(counter, tracer_args, MaybeJit(v)) for k,v in env.items()}
   _overwrite_methods(jits)
 
   # Trace the top function (which indirectly traces all the others)
-  jits[(type(obj), method)].trace(obj, *input_args, **input_kwargs)
+  jits[(type(obj), method)](obj, *input_args, **input_kwargs)
 
   # Get call_info
   rows : list[CallInfo] = [_get_call_info(
-    jits[(type(object), name)], name, node_stats, object,
-    compute_flops, *args, **kwargs)
-    for (object, name, args, kwargs) in tracer_args]
+    lowered, name, node_stats, object,
+    compute_flops, inputs_repr)
+    for (_, object, name, lowered, inputs_repr) in sorted(tracer_args, key=lambda x: x[0])]
 
   # Add VJP flops if required. This needs to be done separately because calls to `_pure_nnx_vjp`
   # can result in tracing the jitted functions a second time if there's shared structure.
   # This would add items to `tracer_args`, resulting in duplicate rows in the table.
-  if compute_vjp_flops:
-    for i, row in enumerate(rows):
-      object, method_name, args, kwargs = tracer_args[i]
-      def do_vjp(*args, **kwargs):
-        primals, f_vjp = _pure_nnx_vjp(jits[(type(object), method_name)], *args, **kwargs)
-        return f_vjp(primals)
-      row.vjp_flops = _get_flops(jax.jit(do_vjp).lower(object, *args, **kwargs))
+  # if compute_vjp_flops:
+  #   for i, row in enumerate(rows):
+  #     object, method_name, args, kwargs = tracer_args[i]
+  #     def do_vjp(*args, **kwargs):
+  #       primals, f_vjp = _pure_nnx_vjp(jits[(type(object), method_name)], *args, **kwargs)
+  #       return f_vjp(primals)
+  #     row.vjp_flops = _get_flops(jax.jit(do_vjp).lower(object, *args, **kwargs))
 
   # Restore the object's original methods
   _overwrite_methods(env)
@@ -436,17 +480,7 @@ def tabulate(
     path_str = '/'.join(map(str, row.path))
     col_reprs.append(path_str)
     col_reprs.append(row.type.__name__)
-    inputs_repr = ''
-    if row.input_args:
-      input_args = row.input_args
-      if len(row.input_args) == 1 and not row.input_kwargs:
-        input_args = row.input_args[0]
-      inputs_repr += _as_yaml_str(input_args)
-      if inputs_repr and row.input_kwargs:
-        inputs_repr += '\n'
-    if row.input_kwargs:
-      inputs_repr += _as_yaml_str(row.input_kwargs)
-    col_reprs.append(inputs_repr)
+    col_reprs.append(row.inputs_repr)
     col_reprs.append(_as_yaml_str(row.outputs))
     if compute_flops:
       col_reprs.append(str(row.flops))
