@@ -714,6 +714,7 @@ def _insert_graphdefs(
 
 def _scan_split_in(
   carry_deque: PytreeDeque[list[State | variablelib.Variable]],
+  carry_graphdefs_deque: PytreeDeque[graph.GraphDef],
   broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   broadcast_arrays: PytreeDeque[Broadcasted],
   /,
@@ -738,10 +739,11 @@ def _scan_split_in(
           vectorized_states.append(state)
         else:  # axis is Carry
           carry_states.append(state)
-
       if not vectorized_states:
         vectorized_states.append(State({}))
       carry_deque.append(carry_states)
+      # Append graphdef to carry_graphdefs_deque to keep it aligned with carry_deque
+      carry_graphdefs_deque.append(graphdef)
       broadcast_deque.append(broadcast_states)
       return extract.NodeStates.from_split(
         graphdef, *vectorized_states, metadata=prefix
@@ -767,6 +769,12 @@ def _scan_split_in(
     if not vectorized_states:
       vectorized_states.append(State({}))
     carry_deque.append(carry_states)
+    carry_graphdefs_deque.append(graphdef)
+    if len(carry_states) > 0:
+      # We should not store carry graphdef in the args as scan call
+      # can change the graphdef of the output carry.
+      # Thus we keep it in carry_graphdefs_deque
+      graphdef = None  # type: ignore[assignment]
     broadcast_deque.append(broadcast_states)
     return extract.NodeStates.from_split(
       graphdef, *vectorized_states, metadata=prefix
@@ -799,6 +807,7 @@ def _scan_split_in(
 
 def _scan_split_out(
   carry_deque: PytreeDeque[list[State | variablelib.Variable]],
+  carry_graphdefs_deque: PytreeDeque[graph.GraphDef],
   broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   /,
   ctx: graph.SplitContext,
@@ -836,6 +845,8 @@ def _scan_split_out(
         vectorized_states.append(State({}))
       if is_input_arg:
         carry_deque.append(carry_states)
+        # Append graphdef to carry_graphdefs_deque to keep it aligned with carry_deque
+        carry_graphdefs_deque.append(graphdef)
         broadcast_deque.append(broadcast_states)
       return extract.NodeStates.from_split(
         graphdef, *vectorized_states, metadata=prefix
@@ -862,6 +873,12 @@ def _scan_split_out(
       vectorized_states.append(State({}))
     if is_input_arg:
       carry_deque.append(carry_states)
+      carry_graphdefs_deque.append(graphdef)
+      if len(carry_states) > 0:
+        # We should not store output carry graphdef in the args_out as it
+        # can be different from the input carry graphdef.
+        # Thus we keep it in carry_graphdefs_deque
+        graphdef = None  # type: ignore[assignment]
       broadcast_deque.append(broadcast_states)
     return extract.NodeStates.from_split(
       graphdef, *vectorized_states, metadata=prefix
@@ -889,6 +906,7 @@ def _scan_split_out(
 
 def _scan_merge_in(
   carry_deque: PytreeDeque[list[State]],
+  carry_graphdefs_deque: PytreeDeque[graph.GraphDef],
   broadcast_deque: PytreeDeque[list[State]],
   broadcast_arrays: PytreeDeque[Broadcasted],
   /,
@@ -900,7 +918,8 @@ def _scan_merge_in(
   if isinstance(x, extract.NodeStates):
     carry_states = carry_deque.popleft()
     broadcast_states = broadcast_deque.popleft()
-    return ctx.merge(x.graphdef, *x.states, *carry_states, *broadcast_states)
+    graphdef = carry_graphdefs_deque.popleft()
+    return ctx.merge(graphdef, *x.states, *carry_states, *broadcast_states)
   elif isinstance(x, Broadcasted):
     assert x.data is None
     return broadcast_arrays.popleft().data
@@ -910,6 +929,7 @@ def _scan_merge_in(
 
 def _scan_merge_out(
   carry_deque: PytreeDeque[list[State]],
+  carry_graphdefs_deque: PytreeDeque[graph.GraphDef],
   broadcast_deque: PytreeDeque[list[State]],
   /,
   ctx: graph.MergeContext,
@@ -925,9 +945,12 @@ def _scan_merge_out(
     if is_input_arg:
       carry_states = deque(carry_deque.popleft())
       broadcast_states = deque(broadcast_deque.popleft())
+      graphdef = carry_graphdefs_deque.popleft()
     else:
       carry_states = deque[State]()
       broadcast_states = deque[State]()
+      graphdef = x.graphdef
+    assert graphdef is not None
     if isinstance(prefix, StateAxes):
       vectorized_states = deque(x.states)
       for axis in prefix.axes:
@@ -962,8 +985,7 @@ def _scan_merge_out(
       raise ValueError(
         f'Invalid axes {prefix} at {obj_repr}{jax.tree_util.keystr(path)}'
       )
-
-    return ctx.merge(x.graphdef, *states)
+    return ctx.merge(graphdef, *states)
   else:
     if isinstance(prefix, StateAxes):
       obj_repr = 'args' if is_input_arg else 'out'
@@ -1000,6 +1022,7 @@ class ScanFn:
   in_axes: tp.Any
   out_axes: tp.Any
   transform_metadata: tp.Mapping[str, tp.Any]
+  carry_graphdefs: PytreeDeque[graph.GraphDef] | None = None
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
@@ -1035,11 +1058,15 @@ class ScanFn:
           pure_args, self.transform_metadata, spmd.remove_axis
       )
 
+    if self.carry_graphdefs is None:
+      self.carry_graphdefs = PytreeDeque()
+    assert len(self.carry_graphdefs) == len(carry_deque)
+
     args: tuple = extract.from_tree(
       pure_args,
       prefix=self.in_axes,
       merge_fn=functools.partial(
-        _scan_merge_in, carry_deque, broadcast_deque, broadcast_arrays
+        _scan_merge_in, carry_deque, self.carry_graphdefs, broadcast_deque, broadcast_arrays
       ),
       is_leaf=lambda x: isinstance(x, (extract.NodeStates, Broadcasted)),
       map_non_graph_nodes=True,
@@ -1091,6 +1118,7 @@ class ScanFn:
       assert carry_arg_out is None
 
     carry_deque_out = PytreeDeque[list[State | variablelib.Variable]]()
+    carry_graphdefs_out = PytreeDeque[graph.GraphDef]()
     _broadcast_deque_out_tmp = PytreeDeque[
       list[State | variablelib.Variable]
     ]()  # discarded
@@ -1099,7 +1127,7 @@ class ScanFn:
       (args_out, out),
       prefix=(self.in_axes, self.out_axes),
       split_fn=functools.partial(
-        _scan_split_out, carry_deque_out, _broadcast_deque_out_tmp
+        _scan_split_out, carry_deque_out, carry_graphdefs_out, _broadcast_deque_out_tmp
       ),
       map_non_graph_nodes=True,
       ctxtag='scan',
@@ -1124,11 +1152,6 @@ class ScanFn:
       assert self.input_carry_argnum is None
       pure_carry_arg_out = None
 
-    # next we have to remove all the index_mappings from the GraphDefs
-    # in the carry outputs because they are not present in the inputs
-    carry_graphdefs: list[graph.GraphDef] = []
-    pure_carry_arg_out = _extract_graphdefs(pure_carry_arg_out, carry_graphdefs)
-
     carry_arg_out = (
       pure_carry_arg_out,
       carry_deque_out,
@@ -1136,7 +1159,7 @@ class ScanFn:
       broadcast_arrays_out,
     )
     scan_out = (
-      carry_graphdefs,
+      carry_graphdefs_out,
       pure_args_out,
       pure_out,
     )
@@ -1327,13 +1350,14 @@ def scan(
       )
 
     carry_deque = PytreeDeque()
+    carry_graphdefs = PytreeDeque()
     broadcast_deque = PytreeDeque()
     broadcast_arrays = PytreeDeque()
     pure_args: tuple = extract.to_tree(
       args,
       prefix=in_axes,
       split_fn=functools.partial(
-        _scan_split_in, carry_deque, broadcast_deque, broadcast_arrays
+        _scan_split_in, carry_deque, carry_graphdefs, broadcast_deque, broadcast_arrays
       ),
       map_non_graph_nodes=True,
       ctxtag='scan',
@@ -1349,6 +1373,10 @@ def scan(
     else:
       assert input_carry_argnum is None
       pure_carry_arg = None
+
+    if len(carry_graphdefs) > 0:
+      # We should store carry graphdefs separately as it can change in the scan call
+      scan_fn.carry_graphdefs = carry_graphdefs
 
     carry = (pure_carry_arg, carry_deque, broadcast_deque, broadcast_arrays)
 
@@ -1368,16 +1396,10 @@ def scan(
         broadcast_arrays_out,
     ) = carry_out
     (
-      carry_graphdefs,
+      carry_graphdefs_out,
       pure_args_out,
       pure_out,
     ) = scan_out
-
-    # next we have to insert all the index_mappings back into the GraphDefs
-    # in the carry outputs
-    pure_carry_arg_out = _insert_graphdefs(
-      pure_carry_arg_out, deque(carry_graphdefs)
-    )
 
     # insert pure carry into pure_args_out
     if input_carry_argnum == 'all':
@@ -1394,7 +1416,7 @@ def scan(
       (pure_args_out, pure_out),
       prefix=(in_axes, out_axes),
       merge_fn=functools.partial(
-        _scan_merge_out, carry_deque_out, broadcast_deque_out
+        _scan_merge_out, carry_deque_out, carry_graphdefs_out, broadcast_deque_out
       ),
       is_leaf=lambda x: isinstance(x, (extract.NodeStates, Broadcasted)),
       map_non_graph_nodes=True,
@@ -1422,6 +1444,7 @@ def scan(
       assert output_carry_argnum is None
       assert carry_arg is None
 
+    scan_fn.carry_graphdefs = None
     return out
 
   return scan_wrapper  # type: ignore
