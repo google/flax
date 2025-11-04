@@ -102,7 +102,7 @@ def _resolve_bound_callable(
 ) -> tuple[tp.Callable[..., tp.Any], tp.Any | None, bool]:
   """Detects and extracts bound methods from NNX Module callables.
 
-  This function unwraps functools.partial layers to reach the underlying 
+  This function unwraps functools.partial layers to reach the underlying
   callable before checking if it's a bound method of an NNX Module.
 
   Args:
@@ -112,7 +112,7 @@ def _resolve_bound_callable(
   Returns:
     A tuple of (unbound_fn, bound_self, was_bound) where:
     - unbound_fn: The unbound function (or original if not bound)
-    - bound_self: The Module instance if f was bound, None otherwise  
+    - bound_self: The Module instance if f was bound, None otherwise
     - was_bound: True if f was a bound method, False otherwise
 
   Note:
@@ -142,7 +142,7 @@ def _resolve_bound_callable(
 
 def _raise_bound_method_error(transform_name: str):
   """Raises a standardized error for bound method usage with NNX transforms.
-  
+
   Args:
     transform_name: Name of the transform (e.g., 'grad', 'jit', 'remat').
   """

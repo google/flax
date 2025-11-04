@@ -222,8 +222,8 @@ def jit(
       objects will already satisfy this requirement.
 
       .. note::
-        Bound methods (e.g., ``module.method``) are not supported. Use the 
-        decorator form ``@nnx.jit`` on the method definition or call 
+        Bound methods (e.g., ``module.method``) are not supported. Use the
+        decorator form ``@nnx.jit`` on the method definition or call
         ``nnx.jit(MyClass.method)(instance, ...)`` with the unbound method.
     in_shardings: Pytree of structure matching that of arguments to ``fun``,
       with all actual arguments replaced by resource assignment specifications.

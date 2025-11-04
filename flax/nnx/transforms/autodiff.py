@@ -379,7 +379,7 @@ def value_and_grad(
     )
   # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
-  
+
   if was_bound:
     _raise_bound_method_error('value_and_grad')
 
@@ -846,12 +846,12 @@ def custom_vjp(
   """
   if isinstance(fun, Missing):
     return functools.partial(custom_vjp, nondiff_argnums=nondiff_argnums)
-  
+
   # Detect bound nnx.Module methods and raise error.
   fun_unbound, _, was_bound = _resolve_bound_callable(fun)
   if was_bound:
     _raise_bound_method_error('custom_vjp')
-    
+
   return CustomVjp(fun_unbound, nondiff_argnums)
 
 

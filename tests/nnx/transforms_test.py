@@ -3152,7 +3152,7 @@ class TestBoundMethodTransforms(absltest.TestCase):
     class TestModel(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 1, rngs=rngs)
-      
+
       def loss_fn(self, x, y):
         pred = self.linear(x)
         return jnp.mean((pred - y) ** 2)
@@ -3166,7 +3166,7 @@ class TestBoundMethodTransforms(absltest.TestCase):
     class M(nnx.Module):
       def __call__(self, x: jax.Array):
         return x + 1
-    
+
     m = M()
     with self.assertRaisesRegex(ValueError, 'bound methods'):
       nnx.checkify(m.__call__)
@@ -3176,7 +3176,7 @@ class TestBoundMethodTransforms(absltest.TestCase):
     class M(nnx.Module):
       def __call__(self, x: jax.Array):
         return x + 1
-    
+
     m = M()
     with self.assertRaisesRegex(ValueError, 'bound methods'):
       nnx.pmap(m.__call__)
@@ -3186,7 +3186,7 @@ class TestBoundMethodTransforms(absltest.TestCase):
     class M(nnx.Module):
       def __call__(self, x: jax.Array):
         return x + 1
-    
+
     m = M()
     mesh = jax.sharding.Mesh(jax.local_devices()[:1], ('data',))
     with self.assertRaisesRegex(ValueError, 'bound methods'):
@@ -3197,7 +3197,7 @@ class TestBoundMethodTransforms(absltest.TestCase):
     class M(nnx.Module):
       def __call__(self, x: jax.Array):
         return x + 1
-    
+
     m = M()
     with self.assertRaisesRegex(ValueError, 'bound methods'):
       nnx.custom_vjp(m.__call__)
