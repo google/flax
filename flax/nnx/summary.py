@@ -170,8 +170,8 @@ class CallInfo:
   path: statelib.PathParts
   inputs_repr: str
   outputs: tp.Any
-  flops: int | None = None
-  vjp_flops: int | None = None
+  flops: int | None
+  vjp_flops: int | None
 
 class SimpleObjectRepr:
   def __init__(self, obj: tp.Any):
@@ -201,7 +201,7 @@ def _pure_nnx_vjp(f, model, *args, **kwargs):
     return f(model, *args, **kwargs)
   return jax.vjp(inner, state, *args, **kwargs)
 
-def _get_call_info(lowered, method_name, node_stats, obj, compute_flops, inputs_repr):
+def _get_call_info(lowered, method_name, node_stats, obj, compute_flops, inputs_repr, vjp_flops):
   flops = _get_flops(lowered) if compute_flops else None
   outputs = lowered.lowered.out_info[2]
   output_repr = jax.tree.map(_to_dummy_array, outputs)
@@ -219,6 +219,7 @@ def _get_call_info(lowered, method_name, node_stats, obj, compute_flops, inputs_
     inputs_repr=inputs_repr,
     outputs=output_repr,
     flops=flops,
+    vjp_flops=vjp_flops
   )
 
 
@@ -234,8 +235,11 @@ def _create_obj_env(object_types):
         result[(obj_type, name)] = top_method
   return result
 
-def _argsave(counter, tracer_args, f):
+def _argsave(counter, tracer_args, f, compute_vjp_flops):
   "Wrap a function to save its arguments"
+  def do_vjp(*args, **kwargs):
+    primals, f_vjp = jax.vjp(f, *args, **kwargs)
+    return f_vjp(primals)
   n = f.__name__
   @wraps(f)
   def wrapper(obj, *args, **kwargs):
@@ -258,7 +262,11 @@ def _argsave(counter, tracer_args, f):
       counter_val = counter[0]
       counter[0] += 1
       lowered = f.lower(obj, *args, **kwargs)
-      tracer_args.append((counter_val, obj, n, lowered, inputs_repr))
+      if compute_vjp_flops:
+        vjp_flops = _get_flops(jax.jit(do_vjp).lower(obj, *args, **kwargs))
+      else:
+        vjp_flops = None
+      tracer_args.append((counter_val, obj, n, lowered, inputs_repr, vjp_flops))
       f.seen.add(identifier)
     return f(obj, *args, **kwargs)
   return wrapper
@@ -415,14 +423,13 @@ def tabulate(
   # iteration over methods easier.
   env = _create_obj_env(object_types)
 
-  # Modify all the object's methods to save their lowered JIT representations.
-  tracer_args = []
-
   # Information is recorded in post-order, but should be presented as a pre-order traversal.
   # This counter is incremented in pre-order traversal to keep track of the order of calls.
   counter = [0]
 
-  jits = {k: _argsave(counter, tracer_args, MaybeJit(v)) for k,v in env.items()}
+  # Modify all the object's methods to save their lowered JIT representations.
+  tracer_args = []
+  jits = {k: _argsave(counter, tracer_args, MaybeJit(v), compute_vjp_flops) for k,v in env.items()}
   _overwrite_methods(jits)
 
   # Trace the top function (which indirectly traces all the others)
@@ -431,19 +438,8 @@ def tabulate(
   # Get call_info
   rows : list[CallInfo] = [_get_call_info(
     lowered, name, node_stats, object,
-    compute_flops, inputs_repr)
-    for (_, object, name, lowered, inputs_repr) in sorted(tracer_args, key=lambda x: x[0])]
-
-  # Add VJP flops if required. This needs to be done separately because calls to `_pure_nnx_vjp`
-  # can result in tracing the jitted functions a second time if there's shared structure.
-  # This would add items to `tracer_args`, resulting in duplicate rows in the table.
-  # if compute_vjp_flops:
-  #   for i, row in enumerate(rows):
-  #     object, method_name, args, kwargs = tracer_args[i]
-  #     def do_vjp(*args, **kwargs):
-  #       primals, f_vjp = _pure_nnx_vjp(jits[(type(object), method_name)], *args, **kwargs)
-  #       return f_vjp(primals)
-  #     row.vjp_flops = _get_flops(jax.jit(do_vjp).lower(object, *args, **kwargs))
+    compute_flops, inputs_repr, vjp_flops)
+    for (_, object, name, lowered, inputs_repr, vjp_flops) in sorted(tracer_args, key=lambda x: x[0])]
 
   # Restore the object's original methods
   _overwrite_methods(env)

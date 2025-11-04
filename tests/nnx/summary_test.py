@@ -193,10 +193,10 @@ class SummaryTest(absltest.TestCase):
     ).splitlines()
     self.assertIn('flops', table_repr1[2])
     self.assertNotIn('vjp_flops', table_repr1[2])
-    # table_repr2 = nnx.tabulate(
-    #   m, x, compute_flops=True, compute_vjp_flops=True
-    # ).splitlines()
-    # self.assertIn('vjp_flops', table_repr2[2])
+    table_repr2 = nnx.tabulate(
+      m, x, compute_flops=True, compute_vjp_flops=True
+    ).splitlines()
+    self.assertIn('vjp_flops', table_repr2[2])
 
   def test_nested(self):
     class Block(nnx.Module):
