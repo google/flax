@@ -48,6 +48,7 @@ from .helpers import TrainState as TrainState
 from .module import M as M
 from .module import Module as Module
 from .module import set_mode as set_mode
+from .module import set_mode_info as set_mode_info
 from .module import train_mode as train_mode
 from .module import eval_mode as eval_mode
 from .module import iter_children as iter_children, iter_modules as iter_modules
