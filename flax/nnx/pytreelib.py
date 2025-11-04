@@ -407,16 +407,18 @@ ObjectMeta = PytreeMeta
 def _graph_node_meta_call(cls: tp.Type[P], *args, **kwargs) -> P:
   node = cls.__new__(cls, *args, **kwargs)
   vars_obj = vars(node)
-  vars_obj['_pytree__state'] = PytreeState()
-  vars_obj['_pytree__nodes'] = cls._pytree__nodes
+  object.__setattr__(node, '_pytree__state', PytreeState())
+  object.__setattr__(node, '_pytree__nodes', cls._pytree__nodes)
   cls._pytree_meta_construct(node, *args, **kwargs)
   if cls._pytree__is_pytree:
     missing: dict[str, bool] = {}
     for name, value in vars(node).items():
-      if name not in vars_obj['_pytree__nodes']:
+      if name not in node._pytree__nodes:
         missing[name] = is_data(value)
     if missing:
-      vars_obj['_pytree__nodes'] = vars_obj['_pytree__nodes'].update(missing)
+      object.__setattr__(
+        node, '_pytree__nodes', node._pytree__nodes.update(missing)
+      )
     check_pytree(node)
 
   return node
@@ -637,11 +639,10 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       if name not in self._pytree__nodes or (
           explicit and self._pytree__nodes[name] != data
       ):
-        vars(self)['_pytree__nodes'] = self._pytree__nodes.update({name: data})
-    if isinstance(name, str):
-      object.__setattr__(self, name, value)
-    else:
-      vars(self)[name] = value
+        object.__setattr__(
+          self, '_pytree__nodes', self._pytree__nodes.update({name: data})
+        )
+    object.__setattr__(self, name, value)
 
   def _check_value(self, key, value, new_status: AttributeStatus | None):
     def _has_data(leaves):
@@ -858,20 +859,26 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     return vars(self).copy()
 
   def __setstate__(self, state):
-    vars(self).update(state)
+    for key, value in state.items():
+      object.__setattr__(self, key, value)
 
   # -------------------------
   # Pytree Definition
   # -------------------------
-  _pytree__key_sort_fn: tp.Callable | None = None
+  _pytree__has_int_keys: bool = False
 
   def _pytree__flatten_with_paths(self):
-    obj_vars = vars(self)
+    obj_items = vars(self).items()
+    if self._pytree__has_int_keys:
+      obj_items = ((_maybe_int(name), value) for name, value in obj_items)
+      key_fn = graph._type_aware_sort
+    else:
+      key_fn = None
     node_attributes = self._pytree__nodes
     node_names: list[str] = []
     node_attrs: list[tuple[tp.Any, tp.Any]] = []
     static_attrs: list[tuple[str, tp.Any]] = []
-    for name, value in sorted(obj_vars.items(), key=self._pytree__key_sort_fn):
+    for name, value in sorted(obj_items, key=key_fn):
       if name in node_attributes and node_attributes[name]:
         node_names.append(name)
         node_attrs.append((
@@ -886,12 +893,17 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     return node_attrs, (tuple(node_names), tuple(static_attrs))
 
   def _pytree__flatten(self):
-    obj_vars = vars(self)
+    obj_items = vars(self).items()
+    if self._pytree__has_int_keys:
+      obj_items = ((_maybe_int(name), value) for name, value in obj_items)
+      key_fn = graph._type_aware_sort
+    else:
+      key_fn = None
     node_attributes = self._pytree__nodes
     node_names: list[str] = []
     node_attrs: list[tp.Any] = []
     static_attrs: list[tuple[str, tp.Any]] = []
-    for name, value in sorted(obj_vars.items(), key=self._pytree__key_sort_fn):
+    for name, value in sorted(obj_items, key=key_fn):
       if name in node_attributes and node_attributes[name]:
         node_names.append(name)
         node_attrs.append(value)
@@ -909,42 +921,47 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     node_names, static_attrs = static
     obj = object.__new__(cls)
     vars_obj = vars(obj)
-    vars_obj.update(zip(node_names, node_attrs, strict=True))
-    vars_obj.update(static_attrs)
+    if cls._pytree__has_int_keys:
+      node_names = tuple(
+        str(name) if isinstance(name, int) else name for name in node_names
+      )
+    for name, value in zip(node_names, node_attrs, strict=True):
+      object.__setattr__(obj, name, value)
+    for name, value in static_attrs:
+      object.__setattr__(obj, name, value)
     return obj
 
   # -------------------------
   # Graph Definition
   # -------------------------
   def _graph_node_flatten(self):
-    nodes = vars(self)
-    nodes = sorted(nodes.items(), key=self._pytree__key_sort_fn)
+    obj_items = vars(self).items()
+    if self._pytree__has_int_keys:
+      obj_items = ((_maybe_int(name), value) for name, value in obj_items)
+      key_fn = graph._type_aware_sort
+    else:
+      key_fn = None
+    nodes = sorted(obj_items, key=key_fn)
     return nodes, type(self)
 
-  def _graph_node_set_key(self, key: str, value: tp.Any):
-    if not isinstance(key, str):
-      raise KeyError(f'Invalid key: {key!r}')
-    elif (
-      hasattr(self, key)
-      and isinstance(variable := getattr(self, key), Variable)
-      and isinstance(value, Variable)
-    ):
-      variable.update_from_state(value)
-    else:
-      setattr(self, key, value)
+  def _graph_node_set_key(self, key, value: tp.Any):
+    if self._pytree__has_int_keys and isinstance(key, int):
+      key = str(key)
+    setattr(self, key, value)
 
-  def _graph_node_pop_key(self, key: str):
-    if not isinstance(key, str):
-      raise KeyError(f'Invalid key: {key!r}')
+  def _graph_node_pop_key(self, key):
+    if self._pytree__has_int_keys and isinstance(key, int):
+      key = str(key)
+    value = getattr(self, key)
     delattr(self, key)
-    return self
+    return value
 
   def __delattr__(self, name: str) -> None:
     if name in self._pytree__nodes:
-      if isinstance(self._pytree__nodes._mapping, tp.MutableMapping):
-        del self._pytree__nodes._mapping[name]
-      else:
-        self._pytree__nodes._mapping = {k: v for k, v in self._pytree__nodes.items() if k != name}
+      mapping = {k: v for k, v in self._pytree__nodes.items() if k != name}
+      object.__setattr__(
+        self, '_pytree__nodes', graph.HashableMapping(mapping, copy=False)
+      )
 
     super().__delattr__(name)
 
@@ -954,10 +971,17 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     return node
 
   def _graph_node_clear(self):
-    vars(self).clear()
+    for name in list(vars(self)):
+      delattr(self, name)
 
   def _graph_node_init(self, attributes: tp.Iterable[tuple[str, tp.Any]]):
-    vars(self).update(attributes)
+    if self._pytree__has_int_keys:
+      attributes = (
+        (str(name) if isinstance(name, int) else name, value)
+        for name, value in attributes
+      )
+    for name, value in attributes:
+      object.__setattr__(self, name, value)
 
   if tp.TYPE_CHECKING:
     def __call__(self, *args: tp.Any, **kwargs: tp.Any) -> tp.Any: ...
@@ -974,3 +998,9 @@ class Object(Pytree, pytree=False):
         f'{pytree!r} for type {cls}.'
       )
     super().__init_subclass__(pytree=pytree, **kwargs)
+
+def _maybe_int(x):
+  try:
+    return int(x)
+  except (ValueError, TypeError):
+    return x
