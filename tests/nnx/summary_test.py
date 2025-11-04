@@ -308,7 +308,5 @@ class SummaryTest(absltest.TestCase):
     x = jnp.zeros((4, 8))
     nnx.tabulate(net, x, console_kwargs={"width": 200})
 
-# TODO: should test dynamic shapes with nested calls. This will probably lead to duplicate rows.
-
 if __name__ == '__main__':
   absltest.main()
