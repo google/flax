@@ -21,7 +21,6 @@ import typing as tp
 from types import MappingProxyType
 import functools
 import itertools
-from types import SimpleNamespace
 
 import jax
 import numpy as np
@@ -53,38 +52,6 @@ NoneDumper.add_representer(
   type(None),
   lambda dumper, data: dumper.represent_scalar('tag:yaml.org,2002:str', 'None'),
 )
-
-class MaybeJit:
-  """
-  Wraps a function with nnx.jit, but saves the original to run
-  if the function turns out to be non-concrete. We can't get the flops of non-concrete functions,
-  but we should still be able to trace the input and output shapes.
-  """
-  def __init__(self, f):
-      functools.update_wrapper(self, f)
-      self.f = f
-      self.jitted = nnx.jit(f)
-      self.seen = set()
-
-  # implement descriptor protocol so that we can use this as a method
-  def __get__(self, obj, objtype=None):
-    if obj is None:
-      return self
-    return functools.partial(self, obj)
-
-  def __call__(self, *args, **kwargs):
-    try:
-      return self.jitted(*args, **kwargs)
-    except TypeError as e:
-      return self.f(*args, **kwargs)
-
-  def lower(self, *args, **kwargs):
-    try:
-      return self.jitted.lower(*args, **kwargs)
-    except TypeError as e:
-      result = self.f(*args, **kwargs)
-      # Mock a `Lowered` instance with a SimpleNamespace
-      return SimpleNamespace(cost_analysis="0", lowered=SimpleNamespace(out_info=(None, None, result)))
 
 class SizeBytes(typing.SizeBytes):
   def __repr__(self) -> str:
@@ -232,7 +199,7 @@ def _get_inputs_repr(args, kwargs):
     inputs_repr += _as_yaml_str(input_kwargs)
   return inputs_repr
 
-def _save_call_info(counter, tracer_args, f, node_stats, compute_flops, compute_vjp_flops):
+def _save_call_info(counter, tracer_args, f, node_stats, compute_flops, compute_vjp_flops, seen):
   "Wrap a function to save its arguments"
 
   # Used when computing vjp flops
@@ -241,6 +208,11 @@ def _save_call_info(counter, tracer_args, f, node_stats, compute_flops, compute_
     return f_vjp(primals)
 
   method_name = f.__name__
+
+  @functools.partial(jax.jit)
+  def jit_f(graphdef, state):
+    args, kwargs = nnx.merge(graphdef, state)
+    return f(*args, **kwargs)
 
   @wraps(f)
   def wrapper(obj, *args, **kwargs):
@@ -251,19 +223,20 @@ def _save_call_info(counter, tracer_args, f, node_stats, compute_flops, compute_
     if method_name != '__call__':
       path = (*path, method_name)
     identifier = (inputs_repr, object_id)
-    if identifier not in f.seen:
-      counter_val = next(counter)
-      lowered = f.lower(obj, *args, **kwargs)
+    counter_val = next(counter)
+    graphdef, state = nnx.split(((obj, *args), kwargs))
+    lowered = jit_f.lower(graphdef, state)
+    if identifier not in seen:
+      seen.add(identifier)
       flops = _get_flops(lowered) if compute_flops else None
-      outputs = lowered.lowered.out_info[2]
+      outputs = lowered.out_info
       output_repr = jax.tree.map(_to_dummy_array, outputs)
       vjp_flops = _get_flops(jax.jit(do_vjp).lower(
         obj, *args, **kwargs)) if compute_vjp_flops else None
       tracer_args.append(
         CallInfo(counter_val, object_id, type(obj), path, inputs_repr,
           output_repr, flops, vjp_flops))
-      f.seen.add(identifier)
-    return f(obj, *args, **kwargs)
+    return jit_f(graphdef, state)
   return wrapper
 
 def _overwrite_methods(env):
@@ -424,12 +397,13 @@ def tabulate(
 
   # Modify all the object's methods to save their lowered JIT representations.
   rows : list[CallInfo] = []
-  maybejits = {k: _save_call_info(counter, rows, MaybeJit(v), node_stats, compute_flops, compute_vjp_flops)
+  seen = set()
+  jits = {k: _save_call_info(counter, rows, v, node_stats, compute_flops, compute_vjp_flops, seen)
     for k, v in env.items()}
-  _overwrite_methods(maybejits)
+  _overwrite_methods(jits)
 
   # Trace the top function (which indirectly traces all the others)
-  maybejits[(type(obj), method)](obj, *input_args, **input_kwargs)
+  jits[(type(obj), method)](obj, *input_args, **input_kwargs)
 
   # Sort call info in pre-order traversal order
   rows.sort(key=lambda x: x.call_order)
