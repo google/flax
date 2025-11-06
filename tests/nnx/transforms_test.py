@@ -31,7 +31,7 @@ from flax import errors
 
 
 
-class TestJIT(absltest.TestCase):
+class TestJIT(parameterized.TestCase):
   def test_jit(self):
     m = nnx.Dict(a=nnx.Param(1))
 
@@ -435,6 +435,72 @@ class TestJIT(absltest.TestCase):
     self.assertEqual(m.count[...], 1)
     y = compiled(m, x)
     self.assertEqual(m.count[...], 2)
+
+  @parameterized.parameters(
+    {'static_argnums': (2,), 'static_argnames': None},
+    {'static_argnums': None, 'static_argnames': ('use_relu',)},
+  )
+  def test_jit_static_args_with_shardings(self, static_argnums, static_argnames):
+    """Test static arguments work correctly with in_shardings."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def fn(x, scale, use_relu):
+      y = x * scale
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+
+    f = nnx.jit(fn, in_shardings=(x_sharding, None),
+                static_argnums=static_argnums, static_argnames=static_argnames)
+    y_relu = f(x, 0.5, True)
+    y_no_relu = f(x, 0.5, False)
+    self.assertNotEqual(y_relu, y_no_relu)
+
+  @parameterized.parameters(
+    {
+      'static_args': {'static_argnums': (2, 3)},
+    },
+    {
+      'static_args': {'static_argnames': ('static_arg1', 'static_arg2')},
+    },
+  )
+  def test_with_sharding_and_static_args(self, static_args):
+    n_devices = max(jax.local_device_count() // 2, 1)
+    devices = mesh_utils.create_device_mesh(
+      (n_devices, jax.local_device_count() // n_devices)
+    )
+    mesh = jax.sharding.Mesh(devices, ('a', 'b'))
+
+    def sharding(*args):
+      return jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(*args))
+
+    state_sharding = nnx.StateSharding(
+      {
+        nnx.PathContains('kernel'): sharding('a', 'b'),
+        nnx.PathContains('bias'): sharding('b'),
+      }
+    )
+
+    m = nnx.Linear(16, 32, rngs=nnx.Rngs(0))
+    self.assertNotIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
+
+    @nnx.jit(
+      in_shardings=(state_sharding, None),
+      **static_args,
+    )
+    def constrain_object(m, scale: float, static_arg1: bool, static_arg2: bool):
+      new_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('b', 'a'))
+      m.kernel = jax.lax.with_sharding_constraint(m.kernel, new_sharding)
+      return None
+
+    constrain_object(m, 0.5, True, True)
+    self.assertEqual(m.kernel.sharding.spec, jax.sharding.PartitionSpec("a", "b"))
+
 
 class TestEvalShape(absltest.TestCase):
   def test_eval_shape(self):
