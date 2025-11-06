@@ -142,6 +142,10 @@ class LinearGeneral(Module):
       the dot product. This argument is passed to ``dot_general`` function.
       See ``jax.lax.dot`` for details.
     rngs: rng key.
+    kernel_metadata: Optional metadata dictionary to set when initializing
+      the weight matrix.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
   """
 
   def __init__(
@@ -162,6 +166,8 @@ class LinearGeneral(Module):
     dot_general_cls: tp.Any = None,
     preferred_element_type: Dtype | None = None,
     rngs: rnglib.Rngs,
+    kernel_metadata: dict[str, tp.Any] | None = None,
+    bias_metadata: dict[str, tp.Any] | None = None,
   ):
     self.in_features = _canonicalize_tuple(in_features)
     self.out_features = _canonicalize_tuple(out_features)
@@ -195,6 +201,9 @@ class LinearGeneral(Module):
     n_in_features = len(self.in_features)
     n_out_features = len(self.out_features)
 
+    if kernel_metadata is not None:
+      kernel_init = nnx.with_metadata(kernel_init, **kernel_metadata)
+
     def kernel_init_wrap(rng, shape, dtype):
       flat_shape = (
         np.prod(shape[:n_batch_axis])
@@ -222,6 +231,8 @@ class LinearGeneral(Module):
 
     self.bias: nnx.Param[jax.Array] | None
     if self.use_bias:
+      if bias_metadata is not None:
+        bias_init = nnx.with_metadata(bias_init, **bias_metadata)
 
       def bias_init_wrap(rng, shape, dtype):
         flat_shape = (int(np.prod(shape)),)
@@ -337,6 +348,10 @@ class Linear(Module):
       the dot product. This argument is passed to ``dot_general`` function.
       See ``jax.lax.dot`` for details.
     rngs: rng key.
+    kernel_metadata: Optional metadata dictionary to set when initializing
+      the weight matrix.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
   """
 
   def __init__(
@@ -354,13 +369,19 @@ class Linear(Module):
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     preferred_element_type: Dtype | None = None,
     rngs: rnglib.Rngs,
+    kernel_metadata: dict[str, tp.Any] | None = None,
+    bias_metadata: dict[str, tp.Any] | None = None,
   ):
+    if kernel_metadata is not None:
+      kernel_init = nnx.with_metadata(kernel_init, **kernel_metadata)
     kernel_key = rngs.params()
     self.kernel = nnx.Param(
       kernel_init(kernel_key, (in_features, out_features), param_dtype)
     )
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
+      if bias_metadata is not None:
+        bias_init = nnx.with_metadata(bias_init, **bias_metadata)
       bias_key = rngs.params()
       self.bias = nnx.Param(bias_init(bias_key, (out_features,), param_dtype))
     else:

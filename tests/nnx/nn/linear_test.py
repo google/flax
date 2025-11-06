@@ -69,6 +69,20 @@ class TestLinearGeneral(parameterized.TestCase):
     assert module.bias is not None
     assert module.bias.shape == (3, 4)
 
+  @parameterized.product(linear_cls=[nnx.Linear, nnx.LinearGeneral])
+  def test_params_metadata(self, linear_cls):
+    mesh = jax.make_mesh(((1, 1)), ("din", "dout"))
+    with jax.set_mesh(mesh):
+      module = linear_cls(
+        12,
+        10,
+        rngs=nnx.Rngs(0),
+        kernel_metadata={"sharding_names": ("din", "dout")},
+        bias_metadata={"sharding_names": ("dout",)},
+      )
+    self.assertEqual(module.kernel.sharding_names, ("din", "dout"))
+    self.assertEqual(module.bias.sharding_names, ("dout",))
+
 
 class TestLinenConsistency(parameterized.TestCase):
   @parameterized.product(
