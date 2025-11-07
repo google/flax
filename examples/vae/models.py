@@ -14,44 +14,47 @@
 
 """VAE model definitions."""
 
-from flax import linen as nn
+from flax import nnx
 from jax import random
 import jax.numpy as jnp
 
 
-class Encoder(nn.Module):
+class Encoder(nnx.Module):
   """VAE Encoder."""
 
-  latents: int
+  def __init__(self, input_features: int, latents:int, *, rngs: nnx.Rngs):
+    self.linear_1 = nnx.Linear(input_features, 500, rngs=rngs)
+    self.mean_linear = nnx.Linear(500, latents, rngs=rngs)
+    self.logvar_linear = nnx.Linear(500, latents, rngs=rngs)
 
-  @nn.compact
   def __call__(self, x):
-    x = nn.Dense(500, name='fc1')(x)
-    x = nn.relu(x)
-    mean_x = nn.Dense(self.latents, name='fc2_mean')(x)
-    logvar_x = nn.Dense(self.latents, name='fc2_logvar')(x)
+    x = self.linear_1(x)
+    x = nnx.relu(x)
+    mean_x = self.mean_linear(x)
+    logvar_x = self.logvar_linear(x)
     return mean_x, logvar_x
 
 
-class Decoder(nn.Module):
+class Decoder(nnx.Module):
   """VAE Decoder."""
 
-  @nn.compact
+  def __init__(self, latents: int, output_features:int, *, rngs: nnx.Rngs):
+    self.linear_1 = nnx.Linear(latents, 500, rngs=rngs)
+    self.linear_2 = nnx.Linear(500, output_features, rngs=rngs)
+
   def __call__(self, z):
-    z = nn.Dense(500, name='fc1')(z)
-    z = nn.relu(z)
-    z = nn.Dense(784, name='fc2')(z)
+    z = self.linear_1(z)
+    z = nnx.relu(z)
+    z = self.linear_2(z)
     return z
 
 
-class VAE(nn.Module):
+class VAE(nnx.Module):
   """Full VAE model."""
 
-  latents: int = 20
-
-  def setup(self):
-    self.encoder = Encoder(self.latents)
-    self.decoder = Decoder()
+  def __init__(self, input_features:int, latents: int, rngs: nnx.Rngs):
+    self.encoder = Encoder(input_features=input_features, latents=latents, rngs=rngs)
+    self.decoder = Decoder(latents=latents, output_features=input_features, rngs=rngs)
 
   def __call__(self, x, z_rng):
     mean, logvar = self.encoder(x)
@@ -60,7 +63,7 @@ class VAE(nn.Module):
     return recon_x, mean, logvar
 
   def generate(self, z):
-    return nn.sigmoid(self.decoder(z))
+    return nnx.sigmoid(self.decoder(z))
 
 
 def reparameterize(rng, mean, logvar):
@@ -69,5 +72,5 @@ def reparameterize(rng, mean, logvar):
   return mean + eps * std
 
 
-def model(latents):
-  return VAE(latents=latents)
+def model(input_features: int, latents: int, rngs: nnx.Rngs):
+  return VAE(input_features=input_features, latents=latents, rngs=rngs)

@@ -25,7 +25,7 @@ from clu import platform
 import jax
 from ml_collections import config_flags
 import tensorflow as tf
-
+import time
 import train
 
 
@@ -37,6 +37,8 @@ config_flags.DEFINE_config_file(
     'File path to the training hyperparameter configuration.',
     lock_config=True,
 )
+
+flags.DEFINE_string('workdir', None, 'Directory to store logs and checkpoints.')
 
 
 def main(argv):
@@ -55,9 +57,9 @@ def main(argv):
       f'process_index: {jax.process_index()}, '
       f'process_count: {jax.process_count()}'
   )
-
+  start = time.time()
   train.train_and_evaluate(FLAGS.config)
-
+  logging.info('Total training time: %.2f seconds', time.time() - start)
 
 if __name__ == '__main__':
   app.run(main)
