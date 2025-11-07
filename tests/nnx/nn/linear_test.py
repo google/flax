@@ -256,6 +256,7 @@ class TestLayersSameGraph(parameterized.TestCase):
               ("kernel_init", "out_kernel_init", "bias_init", "out_bias_init"),
           ),
           (nnx.BatchNorm, (3,), ("scale_init", "bias_init")),
+          (nnx.LayerNorm, (3,), ("scale_init", "bias_init")),
           (nnx.RMSNorm, (3,), ("scale_init",)),
           (nnx.GroupNorm, (6, 3), ("scale_init", "bias_init")),
           (nnx.InstanceNorm, (6,), ("scale_init", "bias_init")),
