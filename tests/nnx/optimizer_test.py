@@ -69,7 +69,13 @@ class TestOptimizer(parameterized.TestCase):
     optimizer.update(model, grads)
 
   def test_sharding_propagation(self):
-    with jax.set_mesh(jax.make_mesh(((1, 1)), ('a', 'b'))):
+    with jax.set_mesh(
+        jax.make_mesh(
+            (1, 1),
+            ('a', 'b'),
+            axis_types=(jax.sharding.AxisType.Auto,) * len(('a', 'b')),
+        )
+    ):
       model = nnx.Linear(
           2,
           3,

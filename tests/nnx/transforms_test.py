@@ -1872,7 +1872,7 @@ class TestScan(absltest.TestCase):
         test.assertEqual(self.linear.bias.sharding_names, ('dout',))
         return x, None
 
-    mesh = jax.make_mesh(((1, 1, 1)), ('layers', 'din', 'dout'))
+    mesh = jax.make_mesh((1, 1, 1), ('layers', 'din', 'dout'), axis_types=(jax.sharding.AxisType.Auto,) * len(('layers', 'din', 'dout')))
     with jax.set_mesh(mesh):
       m = MLP(rngs=nnx.Rngs(0))
 
@@ -2646,7 +2646,7 @@ class TestVmap(absltest.TestCase):
       )
 
 
-    mesh = jax.make_mesh(((1, 1, 1)), ('a', 'b', 'c'))
+    mesh = jax.make_mesh((1, 1, 1), ('a', 'b', 'c'), axis_types=(jax.sharding.AxisType.Auto,) * len(('a', 'b', 'c')))
     with jax.set_mesh(mesh):
       m = create_block(nnx.Rngs(0))
     self.assertEqual(m.kernel.shape, (5, 16, 32))

@@ -47,7 +47,11 @@ class TestSPMD(parameterized.TestCase):
     def create_module():
       return nnx.split(Foo())
 
-    mesh = jax.make_mesh((2, 2), ('model', 'data'))
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('model', 'data'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('model', 'data')),
+    )
 
     with jax.set_mesh(mesh):
       m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
@@ -74,7 +78,11 @@ class TestSPMD(parameterized.TestCase):
     def create_module():
       return nnx.split(Foo())
 
-    mesh = jax.make_mesh((1, 1), ('model', 'data'))
+    mesh = jax.make_mesh(
+        (1, 1),
+        ('model', 'data'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('model', 'data')),
+    )
 
     with mesh:
       m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
@@ -95,7 +103,11 @@ class TestSPMD(parameterized.TestCase):
       def __call__(self, x):
         return x @ self.w
 
-    mesh = jax.make_mesh(((2, 2)), ('row', 'col'))
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('row', 'col'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('row', 'col')),
+    )
     with jax.set_mesh(mesh):
       graphdef, params = nnx.split(Foo())
       state = nnx.TrainState.create(
@@ -154,7 +166,12 @@ class TestSPMD(parameterized.TestCase):
         test.assertEqual(bremoves[-1], (0, 'layers'))
         return x, None
 
-    mesh = jax.make_mesh(((1, 2, 2)), ('layers', 'din', 'dout'))
+    mesh = jax.make_mesh(
+        (1, 2, 2),
+        ('layers', 'din', 'dout'),
+        axis_types=(jax.sharding.AxisType.Auto,)
+        * len(('layers', 'din', 'dout')),
+    )
     with jax.set_mesh(mesh):
       m = MLP(rngs=nnx.Rngs(0))
     self.assertEqual(m.linear.kernel.shape, (5, 4, 4))
@@ -169,7 +186,7 @@ class TestSPMD(parameterized.TestCase):
 
     # One remove_axis and one add_axis called when in and out of `nnx.scan`
     with jax.set_mesh(mesh):
-       _ = m(jnp.ones((5, 4)))
+      _ = m(jnp.ones((5, 4)))
     self.assertEqual(kadds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(kremoves, [(0, 'layers')])
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
@@ -197,11 +214,15 @@ class TestSPMD(parameterized.TestCase):
       def __call__(self, x):
         return x @ self.w + self.b
 
-    mesh = jax.make_mesh(((1, 2, 2)), ('layers', 'row', 'col'))
+    mesh = jax.make_mesh(
+        (1, 2, 2),
+        ('layers', 'row', 'col'),
+        axis_types=(jax.sharding.AxisType.Auto,)
+        * len(('layers', 'row', 'col')),
+    )
     with jax.set_mesh(mesh), nnx.logical_axis_rules((('col-alias', 'col'),)):
       model = Foo()
       optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
-
 
     assert model.w.sharding.is_equivalent_to(
       NamedSharding(mesh, P('row', 'col')), ndim=2)
@@ -219,7 +240,11 @@ class TestSPMD(parameterized.TestCase):
             nnx.initializers.lecun_normal(), (None, 'model')))
         self.shared = self.linear.kernel
 
-    mesh = jax.make_mesh(((2, 2)), ('batch', 'model'))
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('batch', 'model'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('batch', 'model')),
+    )
     gdef, abs_state = nnx.get_abstract_model(lambda: Foo(nnx.Rngs(0)), mesh)
     assert len(jax.tree.leaves(abs_state)) == 1
     assert jax.tree.leaves(abs_state)[0].sharding.is_equivalent_to(

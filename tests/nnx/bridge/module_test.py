@@ -256,7 +256,11 @@ class TestBridgeModule(absltest.TestCase):
     foo = Linear(6)
     x = jnp.ones((4, 2))
 
-    mesh = jax.make_mesh((2, 2), ('in', 'out'))
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('in', 'out'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('in', 'out')),
+    )
     with jax.set_mesh(mesh):
       variables = foo.init(0, x)
       y: jax.Array = foo.apply(variables, x)
@@ -514,4 +518,3 @@ class TestBridgeModule(absltest.TestCase):
 
 if __name__ == '__main__':
   absltest.main()
-
