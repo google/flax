@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import typing as tp
+from types import MappingProxyType
 from jax.nn import (
   celu,
   elu,
@@ -104,6 +106,8 @@ class PReLU(nnx.Module):
       (including Variables accessed through ``self``) to the desired dtype. The
       function should accept a tuple of ``(inputs, negative_slope)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
+    negative_slope_metadata: Optional metadata dictionary to set when initializing
+      the negative slope.
   """
   def __init__(
     self,
@@ -112,9 +116,10 @@ class PReLU(nnx.Module):
     dtype: Dtype | None = None,
     param_dtype: Dtype = jnp.float32,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+    negative_slope_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     self.negative_slope = nnx.Param(
-      jnp.asarray(negative_slope_init, dtype=param_dtype)
+      jnp.asarray(negative_slope_init, dtype=param_dtype), **negative_slope_metadata
     )
     self.dtype = dtype
     self.param_dtype = param_dtype

@@ -16,6 +16,8 @@
 import warnings
 from typing import Any, TypeVar
 from collections.abc import Mapping
+from types import MappingProxyType
+from collections.abc import Mapping
 from collections.abc import Callable
 from functools import partial
 from typing_extensions import Protocol
@@ -125,6 +127,9 @@ class LSTMCell(RNNCellBase):
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     keep_rngs: bool = False,
     rngs: rnglib.Rngs,
+    kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    bias_metadata: Mapping[str, Any] = MappingProxyType({}),
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -150,6 +155,7 @@ class LSTMCell(RNNCellBase):
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
       rngs=rngs,
+      kernel_metadata=kernel_metadata,
     )
 
     dense_h = partial(
@@ -163,6 +169,8 @@ class LSTMCell(RNNCellBase):
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
       rngs=rngs,
+      kernel_metadata=recurrent_kernel_metadata,
+      bias_metadata=bias_metadata,
     )
 
     self.ii = dense_i()
@@ -279,6 +287,17 @@ class OptimizedLSTMCell(RNNCellBase):
         bias_init: initializer for the bias parameters (default: initializers.zeros_init()).
         dtype: the dtype of the computation (default: infer from inputs and params).
         param_dtype: the dtype passed to parameter initializers (default: float32).
+        keep_rngs: whether to store the input rngs as attribute (i.e. `self.rngs = rngs`)
+          (default: True). If rngs is stored, we should split the module as
+          `graphdef, params, nondiff = nnx.split(module, nnx.Param, ...)` where `nondiff`
+          contains RNG object associated with stored `self.rngs`.
+        rngs: rng key.
+        kernel_metadata: Optional metadata dictionary to set when initializing
+          the kernels that transform the input.
+        recurrent_kernel_metadata: Optional metadata dictionary to set when initializing
+          the kernels that transform the hidden state.
+        bias_metadata: Optional metadata dictionary to set when initializing
+          the bias of layers that transform the hidden state.
     """
 
   def __init__(
@@ -297,6 +316,9 @@ class OptimizedLSTMCell(RNNCellBase):
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     keep_rngs: bool = False,
     rngs: rnglib.Rngs,
+    kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    bias_metadata: Mapping[str, Any] = MappingProxyType({}),
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -321,6 +343,7 @@ class OptimizedLSTMCell(RNNCellBase):
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
       rngs=rngs,
+      kernel_metadata=kernel_metadata,
     )
 
     self.dense_h = Linear(
@@ -333,6 +356,8 @@ class OptimizedLSTMCell(RNNCellBase):
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
       rngs=rngs,
+      kernel_metadata=recurrent_kernel_metadata,
+      bias_metadata=bias_metadata,
     )
 
     if carry_init:
@@ -455,6 +480,9 @@ class SimpleCell(RNNCellBase):
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     keep_rngs: bool = False,
     rngs: rnglib.Rngs,
+    kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    bias_metadata: Mapping[str, Any] = MappingProxyType({}),
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -480,6 +508,7 @@ class SimpleCell(RNNCellBase):
       kernel_init=recurrent_kernel_init,
       promote_dtype=self.promote_dtype,
       rngs=rngs,
+      kernel_metadata=recurrent_kernel_metadata,
     )
     self.dense_i = Linear(
       in_features=self.in_features,
@@ -491,6 +520,8 @@ class SimpleCell(RNNCellBase):
       bias_init=bias_init,
       promote_dtype=self.promote_dtype,
       rngs=rngs,
+      kernel_metadata=kernel_metadata,
+      bias_metadata=bias_metadata,
     )
 
     if carry_init:
@@ -577,6 +608,17 @@ class GRUCell(RNNCellBase):
         bias_init: initializer for the bias parameters (default: initializers.zeros_init()).
         dtype: the dtype of the computation (default: None).
         param_dtype: the dtype passed to parameter initializers (default: float32).
+        keep_rngs: whether to store the input rngs as attribute (i.e. `self.rngs = rngs`)
+          (default: True). If rngs is stored, we should split the module as
+          `graphdef, params, nondiff = nnx.split(module, nnx.Param, ...)` where `nondiff`
+          contains RNG object associated with stored `self.rngs`.
+        rngs: rng key.
+        kernel_metadata: Optional metadata dictionary to set when initializing
+          the kernels that transform the input.
+        recurrent_kernel_metadata: Optional metadata dictionary to set when initializing
+          the kernels that transform the hidden state.
+        bias_metadata: Optional metadata dictionary to set when initializing
+          the bias of layers that transform the input.
     """
 
   def __init__(
@@ -595,6 +637,9 @@ class GRUCell(RNNCellBase):
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     keep_rngs: bool = False,
     rngs: rnglib.Rngs,
+    kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    bias_metadata: Mapping[str, Any] = MappingProxyType({}),
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -620,6 +665,8 @@ class GRUCell(RNNCellBase):
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
       rngs=rngs,
+      kernel_metadata=kernel_metadata,
+      bias_metadata=bias_metadata,
     )
 
     self.dense_h = Linear(
@@ -631,6 +678,7 @@ class GRUCell(RNNCellBase):
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
       rngs=rngs,
+      kernel_metadata=recurrent_kernel_metadata,
     )
 
     if carry_init:

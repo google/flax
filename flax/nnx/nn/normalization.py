@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import typing as tp
+from types import MappingProxyType
 
 import jax
 import jax.numpy as jnp
@@ -279,6 +280,10 @@ class BatchNorm(Module):
       a ``dtype`` keyword argument, and return a tuple of arrays with the promoted
       dtype.
     rngs: rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -300,6 +305,8 @@ class BatchNorm(Module):
     use_fast_variance: bool = True,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     feature_shape = (num_features,)
     self.mean = nnx.BatchStat(jnp.zeros(feature_shape, jnp.float32))
@@ -308,14 +315,14 @@ class BatchNorm(Module):
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = nnx.data(None)
 
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
-      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
+      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype), **bias_metadata)
     else:
       self.bias = nnx.data(None)
 
@@ -477,6 +484,10 @@ class LayerNorm(Module):
         function should accept a tuple of ``(inputs, scale, bias)`` and a ``dtype``
         keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -497,20 +508,22 @@ class LayerNorm(Module):
     use_fast_variance: bool = True,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     feature_shape = (num_features,)
 
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = nnx.data(None)
 
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
-      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
+      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype), **bias_metadata)
     else:
       self.bias = nnx.data(None)
 
@@ -618,6 +631,8 @@ class RMSNorm(Module):
       function should accept a tuple of ``(inputs, scale)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -636,13 +651,14 @@ class RMSNorm(Module):
     use_fast_variance: bool = True,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     feature_shape = (num_features,)
 
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = nnx.data(None)
 
@@ -770,6 +786,10 @@ class GroupNorm(Module):
       function should accept a tuple of ``(inputs, scale, bias)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -791,6 +811,8 @@ class GroupNorm(Module):
     use_fast_variance: bool = True,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     self.feature_axis = -1
 
@@ -827,14 +849,14 @@ class GroupNorm(Module):
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = nnx.data(None)
 
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
-      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
+      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype), **bias_metadata)
     else:
       self.bias = nnx.data(None)
 
@@ -1118,6 +1140,10 @@ class InstanceNorm(Module):
       function should accept a tuple of ``(inputs, scale, bias)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: The rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -1137,19 +1163,21 @@ class InstanceNorm(Module):
     use_fast_variance: bool = True,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     feature_shape = (num_features,)
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = None
 
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
-      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
+      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype), **bias_metadata)
     else:
       self.bias = None
 
