@@ -27,16 +27,12 @@ import jax.numpy as jnp
 from flax import nnx
 from flax.nnx import filterlib, rnglib
 from flax.nnx.module import Module
-from flax.nnx.nn import initializers
+from flax.nnx.nn import initializers, dtypes
 from flax.nnx.nn.linear import Linear
 from flax.nnx.nn.activations import sigmoid
 from flax.nnx.nn.activations import tanh
 from flax.nnx.transforms import iteration
-from flax.typing import (
-    Dtype,
-    Initializer,
-    Shape
-)
+from flax.typing import Dtype, Initializer, PromoteDtypeFn, Shape
 
 default_kernel_init = initializers.lecun_normal()
 default_bias_init = initializers.zeros_init()
@@ -126,6 +122,7 @@ class LSTMCell(RNNCellBase):
     dtype: Dtype | None = None,
     param_dtype: Dtype = jnp.float32,
     carry_init: Initializer | None = None,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     keep_rngs: bool = False,
     rngs: rnglib.Rngs,
   ):
@@ -135,6 +132,7 @@ class LSTMCell(RNNCellBase):
     self.activation_fn = activation_fn
     self.dtype = dtype
     self.param_dtype = param_dtype
+    self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
       self.rngs = rngs.carry.fork()
@@ -150,6 +148,7 @@ class LSTMCell(RNNCellBase):
       kernel_init=kernel_init,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
+      promote_dtype=self.promote_dtype,
       rngs=rngs,
     )
 
@@ -162,6 +161,7 @@ class LSTMCell(RNNCellBase):
       bias_init=bias_init,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
+      promote_dtype=self.promote_dtype,
       rngs=rngs,
     )
 
@@ -294,6 +294,7 @@ class OptimizedLSTMCell(RNNCellBase):
     dtype: Dtype | None = None,
     param_dtype: Dtype = jnp.float32,
     carry_init: Initializer | None = None,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     keep_rngs: bool = False,
     rngs: rnglib.Rngs,
   ):
@@ -303,6 +304,7 @@ class OptimizedLSTMCell(RNNCellBase):
     self.activation_fn = activation_fn
     self.dtype = dtype
     self.param_dtype = param_dtype
+    self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
       self.rngs = rngs.carry.fork()
@@ -317,6 +319,7 @@ class OptimizedLSTMCell(RNNCellBase):
       kernel_init=kernel_init,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
+      promote_dtype=self.promote_dtype,
       rngs=rngs,
     )
 
@@ -328,6 +331,7 @@ class OptimizedLSTMCell(RNNCellBase):
       bias_init=bias_init,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
+      promote_dtype=self.promote_dtype,
       rngs=rngs,
     )
 
@@ -448,6 +452,7 @@ class SimpleCell(RNNCellBase):
     kernel_init: Initializer = initializers.lecun_normal(),
     recurrent_kernel_init: Initializer = initializers.orthogonal(),
     bias_init: Initializer = initializers.zeros_init(),
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     keep_rngs: bool = False,
     rngs: rnglib.Rngs,
   ):
@@ -457,6 +462,7 @@ class SimpleCell(RNNCellBase):
     self.param_dtype = param_dtype
     self.residual = residual
     self.activation_fn = activation_fn
+    self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
       self.rngs = rngs.carry.fork()
@@ -472,6 +478,7 @@ class SimpleCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       kernel_init=recurrent_kernel_init,
+      promote_dtype=self.promote_dtype,
       rngs=rngs,
     )
     self.dense_i = Linear(
@@ -482,6 +489,7 @@ class SimpleCell(RNNCellBase):
       param_dtype=self.param_dtype,
       kernel_init=kernel_init,
       bias_init=bias_init,
+      promote_dtype=self.promote_dtype,
       rngs=rngs,
     )
 
@@ -584,6 +592,7 @@ class GRUCell(RNNCellBase):
     dtype: Dtype | None = None,
     param_dtype: Dtype = jnp.float32,
     carry_init: Initializer | None = None,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     keep_rngs: bool = False,
     rngs: rnglib.Rngs,
   ):
@@ -593,6 +602,7 @@ class GRUCell(RNNCellBase):
     self.activation_fn = activation_fn
     self.dtype = dtype
     self.param_dtype = param_dtype
+    self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
       self.rngs = rngs.carry.fork()
@@ -608,6 +618,7 @@ class GRUCell(RNNCellBase):
       bias_init=bias_init,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
+      promote_dtype=self.promote_dtype,
       rngs=rngs,
     )
 
@@ -618,6 +629,7 @@ class GRUCell(RNNCellBase):
       kernel_init=recurrent_kernel_init,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
+      promote_dtype=self.promote_dtype,
       rngs=rngs,
     )
 
