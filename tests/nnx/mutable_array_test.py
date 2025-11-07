@@ -15,7 +15,6 @@
 import dataclasses
 from absl.testing import absltest
 import optax
-import pytest
 from flax import nnx
 import flax.errors
 import jax
