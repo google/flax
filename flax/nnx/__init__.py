@@ -202,6 +202,8 @@ from .variablelib import variable_name_from_type as variable_name_from_type
 from .variablelib import register_variable_name as register_variable_name
 from .variablelib import use_refs as use_refs
 from .variablelib import using_refs as using_refs
+from .variablelib import use_eager_sharding as use_eager_sharding
+from .variablelib import using_eager_sharding as using_eager_sharding
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree
