@@ -235,10 +235,10 @@ def _collect_stats(
   node_stats[id(node)] = stats
 
   if isinstance(node, Variable):
-    var_type = type(node)
+    var_type = node.var_type
     if issubclass(var_type, nnx.RngState):
       var_type = nnx.RngState
-    size_bytes = SizeBytes.from_any(node.raw_value)
+    size_bytes = SizeBytes.from_any(node.get_raw_value())
     if size_bytes:
       stats[var_type] = size_bytes
 
@@ -369,6 +369,16 @@ class ArrayRepr(reprlib.Representable):
     yield reprlib.Attr('shape', self.shape)
     yield reprlib.Attr('dtype', self.dtype)
 
+@dataclasses.dataclass(frozen=True, repr=False)
+class VariableRepr(reprlib.Representable):
+  var_type: type[Variable]
+  value: tp.Any
+  metadata: dict[str, tp.Any]
+
+  def __nnx_repr__(self):
+    variable = self.var_type._new(self.value, self.metadata)
+    yield from variable.__nnx_repr__()
+
 
 @dataclasses.dataclass(frozen=True, repr=False)
 class MutableArrayRepr(reprlib.Representable):
@@ -384,6 +394,20 @@ class MutableArrayRepr(reprlib.Representable):
     yield reprlib.Attr('shape', self.shape)
     yield reprlib.Attr('dtype', self.dtype)
 
+def _to_shape_dtype(x):
+  if isinstance(x, Variable):
+    value = x.get_raw_value()
+    metadata = x.get_metadata()
+    value = jax.tree.map(_to_shape_dtype, value)
+    return VariableRepr(x.var_type, value, metadata)
+  elif variablelib.is_array_ref(x) and np.prod(x.shape) > 1:
+    return MutableArrayRepr(x.shape, x.dtype)
+  elif (
+    isinstance(x, (np.ndarray, jax.Array))
+    and np.prod(x.shape) > 1
+  ):
+    return ArrayRepr(x.shape, x.dtype)
+  return x
 
 class AttributeStatus(tp.NamedTuple):
   is_data: bool
@@ -507,12 +531,8 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       vars(self)[name] = value
 
   def _check_value(self, key, value, new_status: AttributeStatus | None):
-    def _has_arrays(leaves):
-      return any(
-          isinstance(leaf, (np.ndarray, jax.Array))
-          or variablelib.is_array_ref(leaf)
-          for leaf in leaves
-      )
+    def _has_data(leaves):
+      return any(is_data(leaf) for leaf in leaves)
 
     def _get_annotations(leaves):
       return {
@@ -547,7 +567,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
           f' _.{key} = nnx.data(...)\n\n'
       )
 
-    if _has_arrays(leaves):
+    if _has_data(leaves):
       # check no data in nnx.static assignments
       if new_status is not None:
         if not new_status.is_data and new_status.explicit:
@@ -660,21 +680,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         if str(name).startswith('_'):
           continue
 
-        def to_shape_dtype(value):
-          if isinstance(value, Variable):
-            return value.replace(
-              raw_value=jax.tree.map(to_shape_dtype, value.raw_value)
-            )
-          elif variablelib.is_array_ref(value) and np.prod(value.shape) > 1:
-            return MutableArrayRepr(value.shape, value.dtype)
-          elif (
-            isinstance(value, (np.ndarray, jax.Array))
-            and np.prod(value.shape) > 1
-          ):
-            return ArrayRepr(value.shape, value.dtype)
-          return value
-
-        value = jax.tree.map(to_shape_dtype, value, is_leaf=graph.is_graph_node)
+        value = jax.tree.map(_to_shape_dtype, value, is_leaf=graph.is_graph_node)
         yield reprlib.Attr(name, value)
     finally:
       if clear_seen:
