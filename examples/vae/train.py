@@ -45,7 +45,7 @@ def compute_metrics(recon_x, x, mean, logvar):
   return {'bce': bce_loss, 'kld': kld_loss, 'loss': bce_loss + kld_loss}
 
 @nnx.jit
-def train_step(optimizer: nnx.Optimizer, model: nnx.Module, batch, z_rng, latents):
+def train_step(model: nnx.Module, optimizer: nnx.Optimizer, batch, z_rng):
   """Single training step for the VAE model."""
   def loss_fn(model):
     recon_x, mean, logvar = model(batch, z_rng)
@@ -55,12 +55,12 @@ def train_step(optimizer: nnx.Optimizer, model: nnx.Module, batch, z_rng, latent
     return loss
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)
+  optimizer.update(model, grads)
   return loss
 
 
 @nnx.jit
-def eval_f(model: nnx.Module, images, z, z_rng, latents):
+def eval_f(model: nnx.Module, images, z, z_rng):
   """Evaluation function for the VAE model."""
   recon_images, mean, logvar = model(images, z_rng)
   comparison = jnp.concatenate([
@@ -89,7 +89,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
   logging.info('Initializing model.')
   rngs = nnx.Rngs(0)
   model = models.model(784, config.latents, rngs=rngs)
-  optimizer = nnx.Optimizer(model, optax.adam(config.learning_rate))
+  optimizer = nnx.Optimizer(model, optax.adam(config.learning_rate), wrt=nnx.Param)
 
   rng, z_key, eval_rng = random.split(rng, 3)
   z = random.normal(z_key, (64, config.latents))
@@ -102,11 +102,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict):
     for _ in range(steps_per_epoch):
       batch = next(train_ds)
       rng, key = random.split(rng)
-      loss_val = train_step(optimizer, model, batch, key, config.latents)
+      loss_val = train_step(model, optimizer, batch, key)
 
     metrics, comparison, sample = eval_f(
-        model, test_ds, z, eval_rng, config.latents
-    )
+        model, test_ds, z, eval_rng)
     vae_utils.save_image(
         comparison, f'results/reconstruction_{epoch}.png', nrow=8
     )

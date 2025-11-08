@@ -59,7 +59,7 @@ def main(argv):
   )
   start = time.perf_counter()
   train.train_and_evaluate(FLAGS.config)
-  logging.info('Total training time: %.2f seconds', time.time() - start)
+  logging.info('Total training time: %.2f seconds', time.perf_counter() - start)
 
 if __name__ == '__main__':
   app.run(main)

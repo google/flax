@@ -1,9 +1,9 @@
 absl-py==1.4.0
-flax~=0.10
+flax~=0.12
 numpy>=1.26.4
 optax==0.1.5
 Pillow==10.2.0
-tensorflow~=2.16.0
+tensorflow-cpu~=2.18.0
 tensorflow-datasets==4.9.2
 clu==0.0.12
 ml-collections>=0.1.1
