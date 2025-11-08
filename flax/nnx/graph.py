@@ -2634,7 +2634,8 @@ def to_arrays(
     >>> frozen_node = nnx.to_arrays(node)
     >>> assert isinstance(frozen_node[0], jax.Array)
 
-  If the structure contains duplicate array refs, a ValueError is raised::
+  If ``allow_duplicates`` is ``False`` and the structure contains duplicate
+  array refs, raises ``ValueError``::
 
     >>> shared_array = jax.new_ref(jnp.array(1.0))
     >>> node = [shared_array, shared_array]
@@ -2660,8 +2661,12 @@ def to_arrays(
   Args:
     node: A structure potentially containing array refs.
     only: A Filter to specify which array refs to freeze.
+    allow_duplicates: If True, allow duplicate array refs.
   Returns:
     A structure with the frozen arrays.
+  Raises:
+    ValueError: If duplicate array refs are found and `allow_duplicates` is
+      False.
   """
   if not allow_duplicates and (
     all_duplicates := find_duplicates(node, only=only)
