@@ -57,7 +57,7 @@ def main(argv):
       f'process_index: {jax.process_index()}, '
       f'process_count: {jax.process_count()}'
   )
-  start = time.time()
+  start = time.perf_counter()
   train.train_and_evaluate(FLAGS.config)
   logging.info('Total training time: %.2f seconds', time.time() - start)
 
