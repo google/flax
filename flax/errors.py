@@ -351,22 +351,6 @@ class ModifyScopeVariableError(FlaxError):
     )
 
 
-class ImmutableVariableError(FlaxError):
-  """You cannot update a variable that is marked as immutable.
-
-  This error occurs when attempting to modify a Variable that has been set to
-  'immutable' mode. Variables in immutable mode are read-only and cannot be
-  changed after creation.
-
-  To fix this error, either:
-  1. Use a different variable mode (e.g., 'qdd' or 'pytree')
-  2. Or ensure you're not trying to modify the variable's value
-  """
-
-  def __init__(self, message):
-    super().__init__(message)
-
-
 class JaxTransformError(FlaxError):
   """JAX transforms and Flax modules cannot be mixed.
 

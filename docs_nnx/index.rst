@@ -197,7 +197,6 @@ Learn more
    key_concepts
    guides_basic
    guides_advanced
-   hijax/index
    migrating/index
    examples/index
    nnx_glossary

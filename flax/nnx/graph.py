@@ -20,7 +20,7 @@ import functools
 import threading
 import typing as tp
 
-import jax.core
+import jax.experimental
 
 from flax import config
 from flax.nnx import filterlib, reprlib, traversals, variablelib
@@ -261,11 +261,7 @@ def is_node(x: tp.Any) -> bool:
 
 
 def is_graph_node(x: tp.Any) -> bool:
-  return (
-    type(x) in GRAPH_REGISTRY
-    or variablelib.is_array_ref(x)
-    or isinstance(x, Variable)
-  )
+  return type(x) in GRAPH_REGISTRY or variablelib.is_array_ref(x) or isinstance(x, variablelib.Variable)
 
 
 def is_node_type(x: type[tp.Any]) -> bool:
@@ -765,7 +761,7 @@ def _graph_flatten(
   if is_variable:
     assert isinstance(node, Variable)
     assert index is not None
-    prev_inner_value = node.get_raw_value()
+    prev_inner_value = node.raw_value
     if variablelib.is_array_ref(prev_inner_value):
       array_refdef, inner_value = make_mutable_arraydef(prev_inner_value)
     else:
@@ -776,13 +772,13 @@ def _graph_flatten(
     else:
       leaf = node  # type: ignore[assignment]
       if inner_value is not prev_inner_value:
-        leaf.set_raw_value(inner_value)
+        leaf.raw_value = inner_value
 
     variabledef = VariableDef(
-      type=node.var_type,  # type: ignore
+      type=type(node),
       index=index,
       outer_index=ref_outer_index.get(node, None) if ref_outer_index else None,
-      metadata=HashableMapping(node.get_metadata()),
+      metadata=HashableMapping(node._var_metadata),
       array_refdef=array_refdef,
     )
     if type(inner_value) is not Repeated:
@@ -948,7 +944,7 @@ def _graph_fingerprint(
         variable_index = new_ref_index[value] = ctx.next_index
         ctx.next_index += 1
         append_fn(variable_index)
-        for key_value in value.get_metadata().items():
+        for key_value in value._var_metadata.items():
           append_fn(key_value)
     elif not isinstance(value, (jax.Array, np.ndarray)):
       append_fn(value)
@@ -1052,7 +1048,7 @@ def _check_graph_fingerprint(
         # append_fn(variable_index)
         if variable_index != next(fp_iterator):
           return False
-        for key_value in value.get_metadata().items():
+        for key_value in value._var_metadata.items():
           # append_fn(key_value)
           if key_value != next(fp_iterator):
             return False
@@ -1201,10 +1197,10 @@ def _graph_unflatten(
         raise RuntimeError(f'Expected a no update for ArrayRef but got {leaf}.')
     elif type(leaf) in (NoUpdate, Repeated):
       raise ValueError(
-        f"Expected a ArrayRefOutput type but got '{leaf}.'"
+        f"Expected a ArrayRefOutput type but got '{leaf.value}.'"
       )
     elif type(leaf) is ArrayRefOutput:
-      array_ref = jax.new_ref(leaf.value)
+      array_ref = variablelib.new_ref(leaf.value)
     elif variablelib.is_array_ref(leaf):
       array_ref = leaf
     else:
@@ -1228,14 +1224,11 @@ def _graph_unflatten(
         value = next(leaves_iter)
         assert type(variabledef.array_refdef) is ArrayRefDef
         if isinstance(value, Variable):
-          copy_ref = not isinstance(
-            value.get_raw_value(), (NoUpdate, Repeated, ArrayRefOutput)
-          )
-          value = value.copy(_copy_ref=copy_ref) if copy_variables else value
-          inner_value = value.get_raw_value()
+          value = value.copy() if copy_variables else value
+          inner_value = value.raw_value
           array_ref = get_mutable_array(variabledef.array_refdef, inner_value)
           if array_ref is not inner_value:
-            value.set_raw_value(array_ref)
+            value.raw_value = array_ref
         else:
           # if value is an array or array ref, we need call get_mutable_array
           # to register it in the index_ref
@@ -1243,10 +1236,7 @@ def _graph_unflatten(
     else:
       value = next(leaves_iter)
       if isinstance(value, Variable) and copy_variables:
-        copy_ref = not isinstance(
-          value.get_raw_value(), (NoUpdate, Repeated, ArrayRefOutput)
-        )
-        value = value.copy(_copy_ref=copy_ref)
+        value = value.copy()
 
     # when idxmap is present, check if the Varable exists there
     # and update existing variables if it does
@@ -1262,7 +1252,7 @@ def _graph_unflatten(
       elif isinstance(value, Variable):
         variable.update_from_state(value)
       else:
-        variable.set_raw_value(value)
+        variable.raw_value = value
     else:  # variabledef.index not in index_ref_cache
       # variable reference does not exist outside, create a new one
       if isinstance(value, Variable):
@@ -1447,12 +1437,12 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
         # can happen when using standalone Variables with `grad`
         pass
       else:
-        if is_array_ref(node.get_raw_value()) and (
+        if is_array_ref(node.raw_value) and (
           isinstance(value, jax.Array) or is_array_ref(value)
         ):
           node[...] = value[...]
         else:
-          node.set_raw_value(value, _unsafe_bypass_check=True)
+          node.raw_value = value
 
   if isinstance(node, Variable):
     _update_variable(node, state)
@@ -1474,10 +1464,7 @@ def _graph_update_dynamic(node: tp.Any, state: tp.Mapping[KeyT, tp.Any]):
           f'type {type(node).__name__}'
         )
       if isinstance(value, Variable):
-        copy_ref = not isinstance(
-          value.get_raw_value(), (NoUpdate, Repeated, ArrayRefOutput)
-        )
-        value = value.copy(_copy_ref=copy_ref)
+        value = value.copy()
       node_impl.set_key(node, key, value)
       continue
 
@@ -1793,7 +1780,7 @@ class SplitContext:
       else:
         paths = None
         leaves = [
-          variable.get_raw_value() for variable in node_static_cache.variables
+          variable.raw_value for variable in node_static_cache.variables
         ]
     else:
       graphdef, flat_state = flatten(
@@ -1929,7 +1916,7 @@ class MergeContext:
             if isinstance(leaf, Variable):
               variable.update_from_state(leaf)
             else:
-              variable.set_raw_value(leaf)
+              variable.raw_value = leaf
           self.index_ref.update(static_cache_node.new_index_ref)
         else:
           # uncached node, create it
@@ -2563,7 +2550,7 @@ def pop(
     >>> assert hasattr(model, 'i')
 
     >>> intermediates = nnx.pop(model, nnx.Intermediate)
-    >>> assert intermediates['i'][0].shape == (1, 3)
+    >>> assert intermediates['i'].value[0].shape == (1, 3)
     >>> assert not hasattr(model, 'i')
 
   Args:
@@ -2622,33 +2609,60 @@ def clone(node: Node, variables: bool = True) -> Node:
   return merge(graphdef, state, copy=variables)
 
 
-def vars_as(
+def _mutable_like(path, x):
+  return (isinstance(x, Variable) and x.has_ref) or variablelib.is_array_ref(x)
+
+
+def to_arrays(
   node: A,
   /,
   *,
-  is_hijax: bool | None = None,
-  has_ref: bool | None = None,
-  is_mutable: bool | None = None,
-  only: filterlib.Filter = ...,
+  only: filterlib.Filter = _mutable_like,
   allow_duplicates: bool = False,
 ) -> A:
-  """ """
-  new_attrs: dict[str, bool] = {}
-  if is_hijax is not None:
-    new_attrs['is_hijax'] = is_hijax
-  if has_ref is not None:
-    new_attrs['has_ref'] = has_ref
-  if is_mutable is not None:
-    new_attrs['is_mutable'] = is_mutable
+  """Converts a structure of array refs to regular arrays.
 
-  def _different_vars(path, x):
-    return isinstance(x, Variable) and any(
-      getattr(x, attr) != value for attr, value in new_attrs.items()
-    )
+  Example::
 
-  only = filterlib.All(_different_vars, only)
-  predicate = filterlib.to_predicate(only)
+    >>> from flax import nnx
+    >>> import jax
+    >>> import jax.numpy as jnp
+    ...
+    >>> node = [jax.new_ref(jnp.array(1.0)), jnp.array(2.0)]
+    >>> assert isinstance(node[0], jax.Ref)
+    ...
+    >>> frozen_node = nnx.to_arrays(node)
+    >>> assert isinstance(frozen_node[0], jax.Array)
 
+  If the structure contains duplicate array refs, a ValueError is raised::
+
+    >>> shared_array = jax.new_ref(jnp.array(1.0))
+    >>> node = [shared_array, shared_array]
+    >>> try:
+    ...   nnx.to_arrays(node)
+    ... except ValueError as e:
+    ...   print(e)
+    Found duplicate at paths:
+      ---
+      0
+      1
+      ---
+
+  ``only`` is a `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
+  that can be used to specify which array refs to freeze::
+
+    >>> node = [jax.new_ref(jnp.array(1.0)), jax.new_ref(jnp.array(2.0))]
+    >>> frozen_node = nnx.to_arrays(node, only=lambda path, x: path[0] == 0)
+    ...
+    >>> assert isinstance(frozen_node[0], jax.Array)
+    >>> assert isinstance(frozen_node[1], jax.Ref)
+
+  Args:
+    node: A structure potentially containing array refs.
+    only: A Filter to specify which array refs to freeze.
+  Returns:
+    A structure with the frozen arrays.
+  """
   if not allow_duplicates and (
     all_duplicates := find_duplicates(node, only=only)
   ):
@@ -2660,23 +2674,18 @@ def vars_as(
       duplicates_strs += '\n  ---'
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
-  def _to_refs(jax_path, x):
-    if predicate(jax_to_nnx_path(jax_path), x):
-      assert isinstance(x, Variable)
-      variable = x.copy(**new_attrs)
-      return variable
-    return x
-
-  node = jax.tree.map_with_path(
-    _to_refs, node, is_leaf=lambda x: isinstance(x, Variable)
-  )
+  graphdef, mutable_state, rest = split(node, only, ...)  # type: ignore[misc]
+  frozen_state = jax.tree.map(lambda x: x[...], mutable_state)
+  node = merge(graphdef, frozen_state, rest)
   return node
 
 
-def as_ref_vars(
-  node: A, /, *, only: filterlib.Filter = ..., allow_duplicates: bool = False
-) -> A:
-  """Converts a Variable or structure of Variables to Variables with `has_ref=True`.
+def _array_like(path, x):
+  return (isinstance(x, Variable) and not x.has_ref) or isinstance(x, jax.Array)
+
+
+def to_refs(node: A, /, only: filterlib.Filter = _array_like) -> A:
+  """Converts a structure of arrays to array refs.
 
   Example::
 
@@ -2684,17 +2693,17 @@ def as_ref_vars(
     >>> import jax
     >>> import jax.numpy as jnp
     ...
-    >>> node = [nnx.Variable(jnp.array(1.0)), nnx.Variable(jnp.array(2.0))]
-    >>> node = nnx.as_ref_vars(node)
-    >>> assert node[0].has_ref
-    >>> assert node[1].has_ref
+    >>> node = [jnp.array(1.0), jax.new_ref(jnp.array(2.0))]
+    >>> mutable_node = nnx.to_refs(node)
+    >>> assert isinstance(mutable_node[0], jax.Ref)
+    >>> assert isinstance(mutable_node[1], jax.Ref)
 
   If the structure contains duplicate arrays a ValueError is raised::
 
-    >>> shared = nnx.Variable(jnp.array(1.0))
-    >>> node = [shared, shared]
+    >>> shared_array = jnp.array(1.0)
+    >>> node = [shared_array, shared_array]
     >>> try:
-    ...   nnx.as_ref_vars(node)
+    ...   nnx.to_refs(node)
     ... except ValueError as e:
     ...   print(e)
     Found duplicate at paths:
@@ -2706,11 +2715,11 @@ def as_ref_vars(
   ``only`` is a `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
   that can be used to specify which arrays to convert to array refs.
 
-    >>> node = [nnx.Variable(jnp.array(1.0)), nnx.Variable(jnp.array(2.0))]
-    >>> mutable_node = nnx.as_ref_vars(node, only=lambda path, x: path[0] == 0)
+    >>> node = [jnp.array(1.0), jnp.array(2.0)]
+    >>> mutable_node = nnx.to_refs(node, only=lambda path, x: path[0] == 0)
     ...
-    >>> assert mutable_node[0].has_ref
-    >>> assert not mutable_node[1].has_ref
+    >>> assert isinstance(mutable_node[0], jax.Ref)
+    >>> assert isinstance(mutable_node[1], jax.Array)
 
   Args:
     node: A structure potentially containing arrays.
@@ -2718,53 +2727,19 @@ def as_ref_vars(
   Returns:
     A structure with the array refs.
   """
-  return vars_as(
-    node, has_ref=True, only=only, allow_duplicates=allow_duplicates
-  )
+  if all_duplicates := find_duplicates(node, only=only):
+    duplicates_strs = '\n  ---'
+    for node_duplicates in all_duplicates:
+      for path in node_duplicates:
+        path_str = '/'.join(map(str, path))
+        duplicates_strs += f'\n  {path_str}'
+      duplicates_strs += '\n  ---'
+    raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
-
-def as_array_vars(
-  node: A, /, *, only: filterlib.Filter = ..., allow_duplicates: bool = False
-) -> A:
-  """ """
-  return vars_as(
-    node, has_ref=False, only=only, allow_duplicates=allow_duplicates
-  )
-
-
-def as_hijax_vars(
-  node: A, /, *, only: filterlib.Filter = ..., allow_duplicates: bool = False
-) -> A:
-  """ """
-  return vars_as(
-    node, is_hijax=True, only=only, allow_duplicates=allow_duplicates
-  )
-
-
-def as_pytree_vars(
-  node: A, /, *, only: filterlib.Filter = ..., allow_duplicates: bool = False
-) -> A:
-  """ """
-  return vars_as(
-    node, is_hijax=False, allow_duplicates=allow_duplicates, only=only
-  )
-
-
-def as_immutable_vars(
-  node: A, /, *, only: filterlib.Filter = ..., allow_duplicates: bool = False
-) -> A:
-  """ """
-  return vars_as(
-    node, is_mutable=False, allow_duplicates=allow_duplicates, only=only
-  )
-
-def as_mutable_vars(
-  node: A, /, *, only: filterlib.Filter = ..., allow_duplicates: bool = False
-) -> A:
-  """ """
-  return vars_as(
-    node, is_mutable=True, allow_duplicates=allow_duplicates, only=only
-  )
+  graphdef, frozen_state, rest = split(node, only, ...)  # type: ignore[misc]
+  mutable_state = jax.tree.map(variablelib.new_ref, frozen_state)
+  node = merge(graphdef, mutable_state, rest)
+  return node
 
 
 def pure(tree: A) -> A:
@@ -2806,9 +2781,7 @@ def pure(tree: A) -> A:
 
   def _pure_fn(x):
     if isinstance(x, Variable):
-      return pure(x.get_raw_value())
-    elif variablelib.is_array_ref(x):
-      return x[...]
+      return x.raw_value
     return x
 
   return jax.tree.map(
@@ -2908,9 +2881,7 @@ def call(
   return CallableProxy(pure_caller)  # type: ignore
 
 
-def set_metadata(
-  node: tp.Any, /, *, only: filterlib.Filter = Variable, **metadata: tp.Any
-) -> None:
+def set_metadata(node: tp.Any, /, *, only: filterlib.Filter = Variable, **metadata: tp.Mapping[str, tp.Any]) -> None:
   """Sets the metadata of all :class:`Variable` objects in the given graph node in-place.
 
   Example::

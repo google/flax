@@ -31,11 +31,7 @@ graph
 
 .. autofunction:: find_duplicates
 .. autofunction:: pure
-.. autofunction:: as_immutable_vars
-.. autofunction:: as_mutable_vars
-.. autofunction:: as_hijax_vars
-.. autofunction:: as_pytree_vars
-.. autofunction:: as_ref_vars
-.. autofunction:: as_array_vars
+.. autofunction:: to_refs
+.. autofunction:: to_arrays
 .. autofunction:: flatten
 .. autofunction:: unflatten

@@ -368,7 +368,7 @@ class BatchNorm(Module):
         mask=mask,
       )
       # stop_gradient only for flax_array_ref
-      if self.mean._can_update or self.var._can_update:
+      if self.mean.has_ref or self.var.has_ref:
         stop_gradient = jax.lax.stop_gradient
       else:
         stop_gradient = lambda x: x

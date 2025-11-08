@@ -71,12 +71,8 @@ from .graph import split_context as split_context
 from .graph import MergeContext as MergeContext
 from .graph import merge_context as merge_context
 from .graph import variables as variables
-from .graph import as_ref_vars as as_ref_vars
-from .graph import as_array_vars as as_array_vars
-from .graph import as_hijax_vars as as_hijax_vars
-from .graph import as_pytree_vars as as_pytree_vars
-from .graph import as_immutable_vars as as_immutable_vars
-from .graph import as_mutable_vars as as_mutable_vars
+from .graph import to_arrays as to_arrays
+from .graph import to_refs as to_refs
 from .graph import pure as pure
 from .graph import cached_partial as cached_partial
 from .graph import flatten as flatten
@@ -204,8 +200,8 @@ from .variablelib import with_metadata as with_metadata
 from .variablelib import variable_type_from_name as variable_type_from_name
 from .variablelib import variable_name_from_type as variable_name_from_type
 from .variablelib import register_variable_name as register_variable_name
-from .variablelib import use_hijax as use_hijax
-from .variablelib import using_hijax as using_hijax
+from .variablelib import use_refs as use_refs
+from .variablelib import using_refs as using_refs
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree

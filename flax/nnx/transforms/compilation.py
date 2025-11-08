@@ -30,7 +30,7 @@ from flax.nnx import (
   statelib,
   variablelib,
 )
-from flax.typing import MISSING, Missing, PathParts
+from flax.typing import MISSING, Missing
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 P = tp.ParamSpec('P')
@@ -71,7 +71,7 @@ class StateSharding(extract.PrefixMapping):
     return self._shardings
 
   def map_prefix(
-    self, path: PathParts, variable: variablelib.Variable
+    self, path: variablelib.PathParts, variable: variablelib.Variable
   ) -> tp.Any:
     for filter, sharding in zip(self.filters, self.shardings):
       predicate = filterlib.to_predicate(filter)

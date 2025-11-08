@@ -25,7 +25,6 @@ from jax._src import checkify as checkify_lib
 from flax.nnx import (
   extract,
   graph,
-  variablelib,
 )
 from flax.nnx.module import Module
 from flax.nnx.proxy_caller import (
@@ -126,60 +125,6 @@ class LiftedModule(tp.Generic[M], Module):  # type: ignore[ignored-abstractmetho
 # -------------------------------
 # simple transforms
 # -------------------------------
-@dataclasses.dataclass(frozen=True)
-class ValueMetadata:
-  var_type: type[variablelib.Variable]
-  value: tp.Any
-  metadata: dict[str, tp.Any]
-
-
-def _flatten_value_metadata(
-  value_metadata: tp.Union[tp.Any, ValueMetadata],
-):
-  metadata = tuple(sorted(value_metadata.metadata.items()))
-  return (value_metadata.value,), (value_metadata.var_type, metadata)
-
-
-def _unflatten_value_metadata(aux_data, children):
-  var_type, metadata_items = aux_data
-  metadata = dict(metadata_items)
-  return ValueMetadata(var_type=var_type, value=children[0], metadata=metadata)
-
-
-jax.tree_util.register_pytree_node(
-  ValueMetadata,
-  _flatten_value_metadata,
-  _unflatten_value_metadata,
-)
-
-
-def _to_value_metadata(node):
-  def to_value_metadata(x):
-    if isinstance(x, variablelib.Variable):
-      value = x.get_raw_value()
-      if variablelib.is_array_ref(value):
-        value = value[...]
-      metadata = x.get_metadata()
-      return ValueMetadata(var_type=x.var_type, value=value, metadata=metadata)
-    return x
-
-  return jax.tree.map(
-    to_value_metadata,
-    node,
-    is_leaf=lambda x: isinstance(x, variablelib.Variable),
-  )
-
-
-def _to_variable(node):
-  def to_variable(x):
-    if isinstance(x, ValueMetadata):
-      var = x.var_type._new(x.value, x.metadata)
-      return var
-    return x
-
-  return jax.tree.map(
-    to_variable, node, is_leaf=lambda x: isinstance(x, ValueMetadata)
-  )
 
 
 def eval_shape(
@@ -201,10 +146,10 @@ def eval_shape(
   def _eval_shape_fn(*args, **kwargs):
     args, kwargs = extract.from_tree((args, kwargs))
     out = f(*args, **kwargs)
-    return _to_value_metadata(extract.to_tree(out))
+    return graph.to_arrays(extract.to_tree(out), allow_duplicates=True)
 
   out = jax.eval_shape(_eval_shape_fn, *args, **kwargs)
-  return extract.from_tree(_to_variable(out))
+  return extract.from_tree(out)
 
 @dataclasses.dataclass(eq=False)
 class CheckifyFn:
