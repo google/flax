@@ -31,7 +31,7 @@ def setup_training_args():
     """Setup training arguments with defaults from config."""
     parser = argparse.ArgumentParser(description='VAE Training Script')
     config = get_default_config()
-    
+
     # Add all config parameters as arguments
     parser.add_argument('--learning_rate', type=float, default=config.learning_rate,
                        help='Learning rate for training')
@@ -43,9 +43,9 @@ def setup_training_args():
                        help='Number of training epochs')
     parser.add_argument('--workdir', type=str, default='/tmp/vae',
                        help='Working directory for checkpoints and logs')
-    
+
     args = parser.parse_args()
-    
+
     # Convert args to TrainingConfig
     return TrainingConfig(
         learning_rate=args.learning_rate,
@@ -57,10 +57,10 @@ def setup_training_args():
 def main():
     # Configure logging
     logging.basicConfig(level=logging.INFO)
-    
+
     # Parse arguments and get config
     config, workdir = setup_training_args()
-    
+
     # Create workdir if it doesn't exist
     os.makedirs(workdir, exist_ok=True)
 
@@ -71,7 +71,7 @@ def main():
     logging.info('JAX local devices: %r', jax.local_devices())
 
     # Simple process logging
-    logging.info('Starting training process %d/%d', 
+    logging.info('Starting training process %d/%d',
                 jax.process_index(), jax.process_count())
 
     start = time.perf_counter()
