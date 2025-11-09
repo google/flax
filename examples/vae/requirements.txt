@@ -5,5 +5,3 @@ optax==0.1.5
 Pillow==10.2.0
 tensorflow-cpu~=2.18.0
 tensorflow-datasets==4.9.2
-clu==0.0.12
-ml-collections>=0.1.1

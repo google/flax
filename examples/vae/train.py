@@ -21,7 +21,7 @@ import utils as vae_utils
 import jax
 from jax import random
 import jax.numpy as jnp
-import ml_collections
+from config import TrainingConfig
 import optax
 import tensorflow_datasets as tfds
 
@@ -74,7 +74,7 @@ def eval_f(model: nnx.Module, images, z, z_rng):
 
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict):
+def train_and_evaluate(config: TrainingConfig):
   """Train and evaulate pipeline."""
   rng = random.key(0)
   rng, key = random.split(rng)
