@@ -26,12 +26,12 @@ A = tp.TypeVar('A')
 class TestVariable(absltest.TestCase):
   def test_pytree(self):
     r1 = nnx.Param(1)
-    self.assertEqual(r1.value, 1)
+    self.assertEqual(r1.get_value(), 1)
 
     r2 = jax.tree.map(lambda x: x + 1, r1)
 
-    self.assertEqual(r1.value, 1)
-    self.assertEqual(r2.value, 2)
+    self.assertEqual(r1.get_value(), 1)
+    self.assertEqual(r2.get_value(), 2)
     self.assertIsNot(r1, r2)
 
   def test_overloads_module(self):

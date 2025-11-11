@@ -137,11 +137,11 @@ class ModuleFromLinenVariablesTest(parameterized.TestCase):
     np.testing.assert_array_equal(output, linen_output)
     for i in range(len(num_features)):
       np.testing.assert_array_equal(
-          mdl.layers[i].layers[0].mean.value,
+          mdl.layers[i].layers[0].mean[...],
           linen_vars['batch_stats'][f'layers_{i}']['layers_0']['mean'],
       )
       np.testing.assert_array_equal(
-          mdl.layers[i].layers[0].var.value,
+          mdl.layers[i].layers[0].var[...],
           linen_vars['batch_stats'][f'layers_{i}']['layers_0']['var'],
       )
 

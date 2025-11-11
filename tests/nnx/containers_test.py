@@ -34,7 +34,7 @@ class TestContainers(absltest.TestCase):
     )
     x[...] = 5
 
-    assert x.raw_value == 12
+    assert x.get_raw_value() == 12
 
   def test_module_unbox(self):
     class Foo(nnx.Module):
@@ -43,8 +43,8 @@ class TestContainers(absltest.TestCase):
 
     module = Foo()
 
-    assert module.x.value == 4
-    assert vars(module)['x'].raw_value == 1
+    assert module.x.get_value() == 4
+    assert vars(module)['x'].get_raw_value() == 1
 
   def test_module_box(self):
     class Foo(nnx.Module):
@@ -58,7 +58,7 @@ class TestContainers(absltest.TestCase):
     module.x[...] = 5
 
     assert module.x[...] == 12
-    assert vars(module)['x'].raw_value == 12
+    assert vars(module)['x'][...] == 12
 
 
 if __name__ == '__main__':

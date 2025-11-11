@@ -28,9 +28,6 @@ from flax.nnx.variablelib import Variable
 M = tp.TypeVar('M', bound=nnx.Module)
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
-# TODO: add tests and docstrings
-
-
 class OptState(Variable):
   """Any optimizer state"""
 
@@ -52,7 +49,7 @@ class OptVariable(OptState):
 def to_opt_state(tree):
   def _to_opt_state(x):
     if isinstance(x, Variable):
-      opt_state = OptVariable(x.value, **x.get_metadata())  # type: ignore
+      opt_state = OptVariable(x.get_value(), **x.get_metadata())  # type: ignore
     else:
       opt_state = OptArray(x)
     return opt_state

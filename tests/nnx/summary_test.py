@@ -278,7 +278,7 @@ class SummaryTest(absltest.TestCase):
             self.custom_param.set_metadata('custom_obj', Custom())
 
         def __call__(self, x):
-            return jnp.dot(x, self.hooked_param.value) + self.custom_param.sum()
+          return jnp.dot(x, self.hooked_param[...]) + self.custom_param.sum()
 
     module = Model()
     # Should not raise yaml.representer.RepresenterError

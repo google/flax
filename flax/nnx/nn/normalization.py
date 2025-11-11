@@ -952,7 +952,7 @@ class WeightNorm(nnx.Module):
     ...   def __call__(self, x: jax.Array) -> jax.Array:
     ...     return self.normed_linear(x)
 
-    >>> rng = jax.random.PRNGKey(42)
+    >>> rng = jax.random.key(42)
     >>> model = Foo(rngs=nnx.Rngs(rng))
 
     >>> x = jax.random.normal(rng, (5, 8))
@@ -960,7 +960,7 @@ class WeightNorm(nnx.Module):
     >>> y.shape
     (5, 4)
 
-    >>> w = model.normed_linear.layer_instance.kernel.value
+    >>> w = model.normed_linear.layer_instance.kernel[...]
     >>> col_norms = np.linalg.norm(np.array(w), axis=0)
     >>> np.testing.assert_allclose(col_norms, np.ones(4))
 
@@ -1014,39 +1014,41 @@ class WeightNorm(nnx.Module):
         if self.variable_filter(path, param)})
 
   def _weightnorm_inplace(self, path, param):
-      if not self.variable_filter(path, param):
-        return
+    if not self.variable_filter(path, param):
+      return
 
-      if self.feature_axes is None:
-        feature_axes = ()
-        reduction_axes = tuple(range(param.ndim))
-      else:
-        feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
-        reduction_axes = tuple(i for i in range(param.ndim) if i not in feature_axes)
+    if self.feature_axes is None:
+      feature_axes = ()
+      reduction_axes = tuple(range(param.ndim))
+    else:
+      feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
+      reduction_axes = tuple(
+        i for i in range(param.ndim) if i not in feature_axes
+      )
 
-      value_bar = _l2_normalize(param, axis=reduction_axes, eps=self.epsilon)
+    value_bar = _l2_normalize(param, axis=reduction_axes, eps=self.epsilon)
 
-      if self.use_scale:
-        if path not in self.scales:
-          raise RuntimeError(
-            f"Could not find the scale corresponding to the param {path} "
-            "in scales dict. Parameters of the layer_instance should not change!"
-          )
-        scale_value = self.scales[path]
+    if self.use_scale:
+      if path not in self.scales:
+        raise RuntimeError(
+          f'Could not find the scale corresponding to the param {path} '
+          'in scales dict. Parameters of the layer_instance should not change!'
+        )
+      scale_value = self.scales[path]
 
-        if len(feature_axes) < param.ndim:
-          broadcast_shape = [1] * param.ndim
-          for ax in feature_axes:
-            broadcast_shape[ax] = param.shape[ax]
-          scale_value = scale_value.reshape(broadcast_shape)
-        value_bar = value_bar * scale_value
+      if len(feature_axes) < param.ndim:
+        broadcast_shape = [1] * param.ndim
+        for ax in feature_axes:
+          broadcast_shape[ax] = param.shape[ax]
+        scale_value = scale_value.reshape(broadcast_shape)
+      value_bar = value_bar * scale_value
 
-      cast_args = [param]
-      if self.use_scale:
-        cast_args.append(scale_value)
+    cast_args = [param]
+    if self.use_scale:
+      cast_args.append(scale_value)
 
-      final_dtype = dtypes.canonicalize_dtype(*cast_args, dtype=self.dtype)
-      param.value = jnp.asarray(value_bar, final_dtype)
+    final_dtype = dtypes.canonicalize_dtype(*cast_args, dtype=self.dtype)
+    param.set_value(jnp.asarray(value_bar, final_dtype))
 
   def __call__(self, x: Array, *args, **kwargs) -> Array:
     """Compute the l2-norm of the weights in ``self.layer_instance``
