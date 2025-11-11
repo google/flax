@@ -42,7 +42,8 @@ import jax.numpy as jnp
 from jax.numpy import tanh
 
 from flax import nnx
-from flax.typing import Array, Dtype
+from flax.nnx.nn import dtypes
+from flax.typing import Array, Dtype, PromoteDtypeFn
 
 
 __all__ = [
@@ -97,21 +98,40 @@ class PReLU(nnx.Module):
 
   Args:
     negative_slope_init: the value to initialize the negative slope (default 0.01).
+    dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
+    promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype. The
+      function should accept a tuple of ``(inputs, negative_slope)`` and a ``dtype``
+      keyword argument, and return a tuple of arrays with the promoted dtype.
   """
   def __init__(
     self,
     negative_slope_init: float = 0.01,
-    param_dtype: Dtype = jnp.float32
+    *,
+    dtype: Dtype | None = None,
+    param_dtype: Dtype = jnp.float32,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
   ):
     self.negative_slope = nnx.Param(
       jnp.asarray(negative_slope_init, dtype=param_dtype)
     )
+    self.dtype = dtype
     self.param_dtype = param_dtype
+    self.promote_dtype = promote_dtype
 
   def __call__(self, inputs: Array) -> Array:
+    negative_slope = self.negative_slope[...]
+    if self.dtype is not None:
+      inputs, negative_slope = self.promote_dtype(
+        (inputs, negative_slope), dtype=self.dtype
+      )
+    else:
+      # Match Linen behavior: cast parameter to input dtype
+      negative_slope = jnp.asarray(negative_slope, inputs.dtype)
+
     return jnp.where(
       inputs >= 0,
       inputs,
-      jnp.asarray(self.negative_slope[...], inputs.dtype) * inputs,
+      negative_slope * inputs,
     )

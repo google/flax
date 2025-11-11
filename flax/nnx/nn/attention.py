@@ -301,6 +301,15 @@ class MultiHeadAttention(Module):
       num_heads, value_channels]``
     decode: whether to prepare and use an autoregressive cache.
     normalize_qk: should QK normalization be applied (arxiv.org/abs/2302.05442).
+    qkv_promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype for the
+      query, key, and value LinearGeneral submodules.
+    out_promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype for the
+      output LinearGeneral submodule.
+    ln_promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype for the
+      LayerNorm submodules (query_ln and key_ln) when normalize_qk=True.
     rngs: rng key.
     keep_rngs: whether to store the input rngs as attribute (i.e. `self.rngs = rngs`)
       (default: True). If rngs is stored, we should split the module as
@@ -330,6 +339,9 @@ class MultiHeadAttention(Module):
     attention_fn: Callable[..., Array] = dot_product_attention,
     decode: bool | None = None,
     normalize_qk: bool = False,
+    qkv_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+    out_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+    ln_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     # Deprecated, will be removed.
     qkv_dot_general: DotGeneralT | None = None,
     out_dot_general: DotGeneralT | None = None,
@@ -359,6 +371,9 @@ class MultiHeadAttention(Module):
     self.attention_fn = attention_fn
     self.decode = decode
     self.normalize_qk = normalize_qk
+    self.qkv_promote_dtype = qkv_promote_dtype
+    self.out_promote_dtype = out_promote_dtype
+    self.ln_promote_dtype = ln_promote_dtype
     self.qkv_dot_general = qkv_dot_general
     self.out_dot_general = out_dot_general
     self.qkv_dot_general_cls = qkv_dot_general_cls
@@ -381,6 +396,7 @@ class MultiHeadAttention(Module):
       bias_init=bias_init,
       use_bias=self.use_bias,
       precision=self.precision,
+      promote_dtype=self.qkv_promote_dtype,
       dot_general=self.qkv_dot_general,
       dot_general_cls=self.qkv_dot_general_cls,
     )
@@ -400,6 +416,7 @@ class MultiHeadAttention(Module):
         use_bias=False,
         dtype=self.dtype,
         param_dtype=self.param_dtype,
+        promote_dtype=self.ln_promote_dtype,
         rngs=rngs,
       )
       self.key_ln = LayerNorm(
@@ -407,6 +424,7 @@ class MultiHeadAttention(Module):
         use_bias=False,
         dtype=self.dtype,
         param_dtype=self.param_dtype,
+        promote_dtype=self.ln_promote_dtype,
         rngs=rngs,
       )
     else:
@@ -423,6 +441,7 @@ class MultiHeadAttention(Module):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       precision=self.precision,
+      promote_dtype=self.out_promote_dtype,
       dot_general=self.out_dot_general,
       dot_general_cls=self.out_dot_general_cls,
       rngs=rngs,
