@@ -29,6 +29,7 @@ import jax
 from jax import numpy as jnp
 from jax.sharding import PartitionSpec as P, NamedSharding, AxisType
 import optax
+import flax
 from flax import nnx
 
 # Ignore this if you are already running on a TPU or GPU
@@ -46,10 +47,9 @@ In this guide we use a standard FSDP layout and shard our devices on two axes - 
 auto_mesh = jax.make_mesh((2, 4), ('data', 'model'))
 ```
 
-> Compatibility Note: This guide covers the [eager sharding feature](https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html) that greatly simplifies creating sharded model. If your project already used Flax GSPMD API on version `flax<0.12`, you might have turned the feature off to keep your code working. User can toggle this feature using the `nnx.use_eager_sharding` function.
+> Compatibility Note: This guide covers the [eager sharding feature](https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html) that greatly simplifies creating sharded model. If your project already used Flax GSPMD API on version `flax<0.12`, you might have turned the feature off to keep your code working. Users can toggle this feature using the `nnx.use_eager_sharding` function.
 
 ```{code-cell} ipython3
-import flax
 nnx.use_eager_sharding(True)
 assert nnx.using_eager_sharding()
 ```
@@ -59,6 +59,12 @@ The `nnx.use_eager_sharding` function can also be used as a context manager to t
 ```{code-cell} ipython3
 with nnx.use_eager_sharding(False):
   assert not nnx.using_eager_sharding()
+```
+
+You can also enable eager sharding on a per-variable basis by passing `eager_sharding=False` during variable initialization. The mesh can also be passed this way.
+
+```{code-cell} ipython3
+nnx.Param(jnp.ones(4,4), sharding_names=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
 ```
 
 ## Shard a single-array model
