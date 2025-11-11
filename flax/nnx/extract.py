@@ -164,7 +164,7 @@ class NodeStates(struct.PyTreeNode):
   @classmethod
   def from_split(
     cls,
-    graphdef: graph.GraphDef[tp.Any],
+    graphdef: graph.GraphDef[tp.Any] | None,
     state: tp.Any,
     /,
     *states: tp.Any,
