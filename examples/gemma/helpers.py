@@ -74,7 +74,7 @@ def module_from_linen_variables(
         mapped_path: tuple[str | int, ...],
         val: Any,
     ) -> dict[tuple[str, ...], Any]:
-      state[mapped_path].value = val
+      state[mapped_path].set_value(val)
       return state
 
   mdl: M = nnx.eval_shape(module_factory)

@@ -248,7 +248,7 @@ class State(MutableMapping[K, V], reprlib.Representable):
       super().__setattr__('_mapping', _mapping)
 
   @property
-  def raw_mapping(self) -> tp.Mapping[K, tp.Mapping[K, tp.Any] | V]:
+  def raw_mapping(self) -> dict[K, tp.Mapping[K, tp.Any] | V]:
     return self._mapping  # type: ignore
 
   def __contains__(self, key) -> bool:
@@ -521,7 +521,7 @@ def to_pure_dict(
   """
   # Works for nnx.Variable
   if extract_fn is None:
-    extract_fn = lambda x: x.value if isinstance(x, variablelib.Variable) else x
+    extract_fn = lambda x: x.get_value() if isinstance(x, variablelib.Variable) else x
   flat_values = {k: extract_fn(x) for k, x in to_flat_state(state)}
   return traversals.unflatten_mapping(flat_values)
 
@@ -535,15 +535,17 @@ def restore_int_paths(pure_dict: dict[str, tp.Any]):
 
     >>> from flax import nnx
     >>> import orbax.checkpoint as ocp
+    >>> import tempfile
     ...
     >>> model = nnx.List([nnx.Linear(10, 10, rngs=nnx.Rngs(0)) for _ in range(2)])
     >>> pure_dict_state = nnx.to_pure_dict(nnx.state(model))
     >>> list(pure_dict_state.keys())
     [0, 1]
     >>> checkpointer = ocp.StandardCheckpointer()
-    >>> checkpointer.save('/tmp/checkpoint/pure_dict', pure_dict_state)
-    >>> restored_pure_dict = checkpointer.restore('/tmp/checkpoint/pure_dict')
-    >>> list(restored_pure_dict.keys())
+    >>> with tempfile.TemporaryDirectory() as tmpdir:
+    ...   checkpointer.save(f'{tmpdir}/ckpt', pure_dict_state)
+    ...   restored_pure_dict = checkpointer.restore(f'{tmpdir}/ckpt')
+    ...   list(restored_pure_dict.keys())
     ['0', '1']
     >>> restored_pure_dict = nnx.restore_int_paths(restored_pure_dict)
     >>> list(restored_pure_dict.keys())
@@ -831,6 +833,6 @@ def create_path_filters(state: State):
   value_paths: dict[tp.Any, set[PathParts]] = {}
   for path, value in flat_state:
     if isinstance(value, variablelib.Variable):
-      value = value.raw_value
+      value = value.get_value()
     value_paths.setdefault(value, set()).add(path)
   return {filterlib.PathIn(*value_paths[value]): value for value in value_paths}
