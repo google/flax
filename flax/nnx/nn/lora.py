@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import typing as tp
+from types import MappingProxyType
 
 from flax.nnx import rnglib, variablelib
 from flax.nnx.module import Module
@@ -79,6 +80,10 @@ class LoRA(Module):
       function should accept a tuple of ``(inputs, lora_a, lora_b)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
+    a_metadata: Optional metadata dictionary to set when initializing
+      the fan-in matrices.
+    b_metadata: Optional metadata dictionary to set when initializing
+      the fan-out matrices.
   """
 
   def __init__(
@@ -95,6 +100,8 @@ class LoRA(Module):
     lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    a_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    b_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     self.in_features = in_features
     self.out_features = out_features
@@ -105,10 +112,12 @@ class LoRA(Module):
     self.promote_dtype = promote_dtype
 
     self.lora_a = lora_param_type(
-      a_initializer(rngs.params(), (in_features, lora_rank), param_dtype)
+      a_initializer(rngs.params(), (in_features, lora_rank), param_dtype),
+      **a_metadata,
     )
     self.lora_b = lora_param_type(
-      b_initializer(rngs.params(), (lora_rank, out_features), param_dtype)
+      b_initializer(rngs.params(), (lora_rank, out_features), param_dtype),
+      **b_metadata,
     )
 
   def __call__(self, x: jax.Array):
@@ -161,6 +170,10 @@ class LoRALinear(Linear):
       `zero initializer`.
     lora_param_type: the type of the LoRA params.
     lora_promote_dtype: function to promote the dtype for the LoRA submodule.
+    a_metadata: Optional metadata dictionary to set when initializing
+      the fan-in matrices.
+    b_metadata: Optional metadata dictionary to set when initializing
+      the fan-out matrices.
   """
 
   def __init__(
@@ -176,6 +189,8 @@ class LoRALinear(Linear):
     lora_param_type: tp.Type[variablelib.Variable] = LoRAParam,
     lora_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    a_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    b_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
     **kwargs,
   ):
     super().__init__(in_features, out_features, rngs=rngs, **kwargs)
@@ -190,6 +205,8 @@ class LoRALinear(Linear):
       lora_param_type=lora_param_type,
       promote_dtype=lora_promote_dtype,
       rngs=rngs,
+      a_metadata=a_metadata,
+      b_metadata=b_metadata,
     )
 
   def __call__(self, x: jax.Array):
