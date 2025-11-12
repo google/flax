@@ -47,7 +47,7 @@ class TestObject(absltest.TestCase):
 
   def test_pytree_data_typehint(self):
     class Foo(nnx.Module):
-      node: nnx.Data[jax.Array]
+      node: jax.Array = nnx.data()
 
       def __init__(self):
         self.node = jnp.array(1)
@@ -74,14 +74,14 @@ class TestObject(absltest.TestCase):
     assert m.meta == 1
 
   def test_pytree_dataclass(self):
-    @dataclasses.dataclass
+    @nnx.dataclass
     class Foo(nnx.Module):
-      node: nnx.Data[jax.Array]
+      node: jax.Array = nnx.data()
       meta: int
       meta2: int = 3
       meta3: int = 4
       meta4: int = 5
-      node2: nnx.Data[int] = 6
+      node2: int = nnx.data(default=6)
 
     m = Foo(node=jnp.array(1), meta=1)
 
@@ -504,9 +504,9 @@ class TestMutableArrayNNXTransforms(absltest.TestCase):
     self.assertIsInstance(m_out2.kernel.raw_value, jax.Ref)
 
   def test_jit_mutable(self):
-    @dataclasses.dataclass
+    @nnx.dataclass
     class Foo(nnx.Pytree):
-      a: nnx.Data[jax.Ref]
+      a: jax.Ref = nnx.data()
 
     m1 = Foo(a=jax.new_ref(1))
 

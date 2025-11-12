@@ -36,6 +36,7 @@ from .pytreelib import Pytree as Pytree
 from .pytreelib import Object as Object
 from .pytreelib import Data as Data
 from .pytreelib import Static as Static
+from .pytreelib import dataclass as dataclass
 from .pytreelib import data as data
 from .pytreelib import static as static
 from .pytreelib import register_data_type as register_data_type
@@ -209,12 +210,12 @@ from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
 from . import traversals as traversals
 
-# alias VariableState
-VariableState = Variable
 
 import typing as _tp
 
-if not _tp.TYPE_CHECKING:
+if _tp.TYPE_CHECKING:
+  VariableState = Variable
+else:
   def __getattr__(name):
     if name == "VariableState":
       import warnings
@@ -224,4 +225,5 @@ if not _tp.TYPE_CHECKING:
           DeprecationWarning,
           stacklevel=2,
       )
+      return Variable
     raise AttributeError(f"Module {__name__} has no attribute '{name}'")

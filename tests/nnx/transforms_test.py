@@ -2829,9 +2829,9 @@ class TestCond(absltest.TestCase):
             step=nnx.Variable(jnp.array(0)), reward=nnx.Variable(jnp.array(0.0))
         )
 
-    @dataclasses.dataclass
+    @nnx.dataclass
     class Foo(nnx.Pytree):
-      timestep: nnx.Data[TimeStep]
+      timestep: TimeStep = nnx.data()
 
       def update(self):
         def reward_2(self: Foo):

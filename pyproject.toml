@@ -191,6 +191,8 @@ filterwarnings = [
     "ignore:.*Sharding info not provided when restoring.*:UserWarning",
     # UserWarning: pkg_resources is deprecated as an API.
     "ignore:.*pkg_resources is deprecated as an API.*:UserWarning",
+    # DeprecationWarning: 'Data' is deprecated, please replace:
+    "ignore:.*[Data|Static]' is deprecated, please replace.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
