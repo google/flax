@@ -64,10 +64,103 @@ else:
 @dataclasses.dataclass
 class VariableContext(threading.local):
   mutable_variable_stack: list[bool] = dataclasses.field(default_factory=list)
+  eager_shard_stack: list[bool] = dataclasses.field(default_factory=list)
+
 
 
 VARIABLE_CONTEXT = VariableContext()
 
+class UseEagerShardContext:
+  def __init__(self, prev_value: bool | None, new_value: bool):
+    self.prev_value: bool | None = prev_value
+    self.new_value: bool = new_value
+
+  def __enter__(self):
+    if self.prev_value is not None:
+      VARIABLE_CONTEXT.eager_shard_stack.insert(-1, self.prev_value)
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    VARIABLE_CONTEXT.eager_shard_stack.pop()
+
+  def __call__(self, f: F) -> F:
+    # undo eager stack change
+    VARIABLE_CONTEXT.eager_shard_stack.pop()
+    if self.prev_value is not None:
+      VARIABLE_CONTEXT.eager_shard_stack.append(self.prev_value)
+
+    @functools.wraps(f)
+    def use_eager_sharding_wrapper(*args, **kwargs):
+      VARIABLE_CONTEXT.eager_shard_stack.append(self.new_value)
+      try:
+        return f(*args, **kwargs)
+      finally:
+        VARIABLE_CONTEXT.eager_shard_stack.pop()
+
+    return use_eager_sharding_wrapper  # type: ignore[return-value]
+
+def using_eager_sharding() -> bool:
+  """Returns whether Variables are using eager sharding by default.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> nnx.use_eager_sharding(True)
+    <...>
+    >>> nnx.using_eager_sharding()
+    True
+    >>> nnx.use_eager_sharding(False)
+    <...>
+    >>> nnx.using_eager_sharding()
+    False
+
+
+  Returns:
+    A boolean indicating if Variables are using eager sharding by default.
+  """
+  do_eager_sharding = config.flax_always_shard_variable
+  if VARIABLE_CONTEXT.eager_shard_stack:
+    do_eager_sharding = VARIABLE_CONTEXT.eager_shard_stack[-1]
+  return do_eager_sharding
+
+def use_eager_sharding(value: bool, /):
+  """Sets whether Variables should use eager sharding by default or not.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> # Use eager sharding by default
+    >>> nnx.use_eager_sharding(True)
+    <...>
+    >>> # Variable will now use eager sharding
+    >>> nnx.using_eager_sharding()
+    True
+
+  It can also be used as a context manager to temporarily
+  change the default behavior for a block of code::
+
+    >>> nnx.use_eager_sharding(False)
+    <...>
+    >>> with nnx.use_eager_sharding(True):
+    ...   nnx.using_eager_sharding()
+    True
+    >>> # it will reset outside
+    >>> v = nnx.Variable(jax.numpy.ones((2, 3)))
+    >>> nnx.using_eager_sharding()
+    False
+
+  Args:
+    value: A boolean indicating if Variables should use eager sharding by default.
+
+  Returns:
+    A context manager that resets the context to the previous value.
+  """
+  if VARIABLE_CONTEXT.eager_shard_stack:
+    prev_value = VARIABLE_CONTEXT.eager_shard_stack[-1]
+    VARIABLE_CONTEXT.eager_shard_stack[-1] = value
+  else:
+    prev_value = None
+    VARIABLE_CONTEXT.eager_shard_stack.append(value)
+  return UseEagerShardContext(prev_value, value)
 
 def using_refs() -> bool:
   """Returns whether Variables are using ArrayRefs by default.
@@ -289,10 +382,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     value = self.create_value(self.raw_value)
 
     # shard the value if applicable
-    do_eager_sharding = config.flax_always_shard_variable
-    if 'eager_sharding' in metadata:
-      do_eager_sharding = metadata['eager_sharding']
-    if do_eager_sharding and 'sharding_names' in metadata:
+    if metadata.get('eager_sharding', using_eager_sharding()) and 'sharding_names' in metadata:
       value = core_spmd.shard_value(
         value, metadata['sharding_names'], metadata.get('sharding_rules', None),
         metadata.get('mesh', None))

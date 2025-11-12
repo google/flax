@@ -192,6 +192,21 @@ class TestSPMD(parameterized.TestCase):
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(bremoves, [(0, 'layers')])
 
+
+  @parameterized.product(use_eager_sharding=[True, False])
+  def test_eager_sharding_context(self, use_eager_sharding):
+    rngs = nnx.Rngs(0)
+    with nnx.use_eager_sharding(use_eager_sharding):
+      mesh = jax.make_mesh(((2, 2)), ("data", "model"))
+      with jax.set_mesh(mesh):
+        w = nnx.Param(
+          rngs.lecun_normal()((4, 8)),
+          sharding_names=(None, 'model'))
+        if use_eager_sharding:
+          assert has_sharding_spec(w)
+        else:
+          assert not has_sharding_spec(w)
+
   @parameterized.product(use_ref=[True, False])
   def test_logical_rules(self, use_ref):
     self.enter_context(nnx.use_refs(use_ref))
@@ -302,6 +317,14 @@ class TestSPMD(parameterized.TestCase):
       P('row', 'col'),
     )
 
+def has_sharding_spec(array):
+    sharding = array.sharding
+    if hasattr(sharding, 'spec'):
+        # For NamedSharding or PositionalSharding
+        return sharding.spec is not None and any(
+            s is not None for s in sharding.spec
+        )
+    return False
 
 if __name__ == '__main__':
   absltest.main()
