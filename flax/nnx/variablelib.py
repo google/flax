@@ -777,6 +777,11 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       other = other.value
     return self.value.__ror__(other)  # type: ignore
 
+  def __eq__(self, other) -> bool:
+    if isinstance(other, Variable):
+      other = other.value
+    return self.value.__eq__(other)  # type: ignore
+
   def __iadd__(self: V, other) -> V:
     raise NotImplementedError(
       'In-place operations are no longer supported for Variable.\n'
