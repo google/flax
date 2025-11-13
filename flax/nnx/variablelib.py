@@ -21,6 +21,7 @@ from functools import partial
 import threading
 import typing as tp
 from typing import Any
+import warnings
 from flax import config
 
 import jax
@@ -375,16 +376,20 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       metadata['on_remove_axis'] = var_t.on_remove_axis
 
     if 'sharding' in metadata:
-      metadata['sharding_names'] = metadata.pop('sharding')
+      metadata['sharding_metadata'] = metadata.pop('sharding')
+
+    if 'sharding_names' in metadata: # for bw compat
+      warnings.warn("'sharding_names' is deprecated. Use 'sharding_metadata' instead.", DeprecationWarning)
+      metadata['sharding_metadata'] = metadata.pop('sharding_names')
 
     object.__setattr__(self, '_var_metadata', metadata)
     # run create_value hooks
     value = self.create_value(self.raw_value)
 
     # shard the value if applicable
-    if metadata.get('eager_sharding', using_eager_sharding()) and 'sharding_names' in metadata:
+    if metadata.get('eager_sharding', using_eager_sharding()) and 'sharding_metadata' in metadata:
       value = core_spmd.shard_value(
-        value, metadata['sharding_names'], metadata.get('sharding_rules', None),
+        value, metadata['sharding_metadata'], metadata.get('sharding_rules', None),
         metadata.get('mesh', None))
 
     # Create the ref out of the array value
@@ -394,6 +399,9 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     object.__setattr__(self, 'raw_value', value)
 
   def __getattr__(self, name: str) -> tp.Any:
+    if name == 'sharding_names': # for backward compatibility
+      warnings.warn("'sharding_names' is deprecated. Use 'sharding_metadata' instead.", DeprecationWarning)
+      return self.sharding_metadata
     if name in object.__getattribute__(self, '_var_metadata'):
       return self._var_metadata[name]
     return getattr(self.raw_value, name)

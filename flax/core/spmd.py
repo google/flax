@@ -45,6 +45,8 @@ def shard_value(value, sharding_names, sharding_rules, mesh):
       f' with annotation {sharding_names=}. '
       'For more guidance, see https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html.')
   pspec = get_pspec(sharding_names, sharding_rules)
+  if isinstance(sharding_names, NamedSharding) and mesh is not None:
+    assert sharding_names.mesh == mesh
   if mesh is not None:
     return _apply_sharding(value, NamedSharding(mesh, pspec))
   return _apply_sharding(value, pspec)
@@ -107,8 +109,10 @@ def composite_rules(rule1, rule2):
 
 
 def from_sharding_rules(
-    sharding: Sharding, sharding_rules: LogicalRules
+    sharding, sharding_rules: LogicalRules
 ) -> Sharding:
+  if isinstance(sharding, NamedSharding):
+    sharding = sharding.spec
   rules = {alias: on_mesh for (alias, on_mesh) in sharding_rules}
   return tuple(
       rules[str(s)] if (s and str(s) in rules) else s for s in sharding

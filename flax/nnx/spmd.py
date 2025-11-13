@@ -45,9 +45,9 @@ def add_axis(tree: A, index: int, transform_metadata: tp.Mapping) -> A:
   def _add_axis(x: tp.Any):
     if isinstance(x, variablelib.Variable):
       metadata = x.get_metadata()
-      if 'sharding_names' in metadata and metadata['sharding_names']:
-        sharding = metadata['sharding_names']
-        x.set_metadata(sharding_names=insert_field(sharding, index, axis_name))
+      if 'sharding_metadata' in metadata and metadata['sharding_metadata']:
+        sharding = metadata['sharding_metadata']
+        x.set_metadata(sharding_metadata=insert_field(sharding, index, axis_name))
 
       for k, v in other_meta.items():
         if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
@@ -74,9 +74,9 @@ def remove_axis(
 
   def _remove_axis(x: tp.Any):
     if isinstance(x, variablelib.Variable):
-      if hasattr(x, 'sharding_names') and x.sharding_names is not None:
+      if hasattr(x, 'sharding_metadata') and x.sharding_metadata is not None:
         x.set_metadata(
-          sharding_names=remove_field(x.sharding_names, index, axis_name)
+          sharding_metadata=remove_field(x.sharding_metadata, index, axis_name)
         )
 
       for k, v in other_meta.items():
@@ -119,7 +119,7 @@ def with_partitioning(
   """A wrapper over any initializer to add sharding annotation data to a `Variable`."""
   return variablelib.with_metadata(
     initializer,
-    sharding_names=sharding,
+    sharding_metadata=sharding,
     mesh=mesh,
     **metadata,
   )
@@ -128,8 +128,8 @@ def with_partitioning(
 def get_var_pspec(v: variablelib.Variable) -> PartitionSpec | None:
   """Given an `nnx.Variable`, return its `PartitionSpec`."""
   metadata = v.get_metadata()
-  if 'sharding_names' in metadata and metadata['sharding_names']:
-    sharding = metadata['sharding_names']
+  if 'sharding_metadata' in metadata and metadata['sharding_metadata']:
+    sharding = metadata['sharding_metadata']
     if core_spmd.get_logical_axis_rules() or 'sharding_rules' in metadata:
       context_rules = core_spmd.get_logical_axis_rules()
       local_rules = metadata.get('sharding_rules', ())
