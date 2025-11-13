@@ -27,11 +27,13 @@ from flax.nnx import (
 )
 from flax.nnx.statelib import State
 import jax
-import jax.core
-import jax.stages
 
 from flax.nnx.transforms import general
-from flax.nnx.transforms.transforms import resolve_kwargs
+from flax.nnx.transforms.transforms import (
+  resolve_kwargs,
+  _resolve_bound_callable,
+  _raise_bound_method_error,
+)
 from flax.typing import MISSING, Missing
 
 
@@ -58,6 +60,7 @@ AxisName = tp.Hashable
 class DiffState:
   argnum: int
   filter: filterlib.Filter
+
 
 
 @dataclasses.dataclass(eq=False)
@@ -312,14 +315,22 @@ def grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
     )
-  return _grad_general(
-    f,
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+
+  if was_bound:
+    _raise_bound_method_error('grad')
+
+  grad_fn = _grad_general(
+    f_unbound,
     argnums,
     has_aux,
     holomorphic,
     allow_int,
     return_value=False,
   )
+
+  return grad_fn
 
 
 @tp.overload
@@ -366,8 +377,14 @@ def value_and_grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
     )
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+
+  if was_bound:
+    _raise_bound_method_error('value_and_grad')
+
   return _grad_general(
-    f,
+    f_unbound,
     argnums,
     has_aux,
     holomorphic,
@@ -829,7 +846,13 @@ def custom_vjp(
   """
   if isinstance(fun, Missing):
     return functools.partial(custom_vjp, nondiff_argnums=nondiff_argnums)
-  return CustomVjp(fun, nondiff_argnums)
+
+  # Detect bound nnx.Module methods and raise error.
+  fun_unbound, _, was_bound = _resolve_bound_callable(fun)
+  if was_bound:
+    _raise_bound_method_error('custom_vjp')
+
+  return CustomVjp(fun_unbound, nondiff_argnums)
 
 
 # -------------------------------
@@ -881,11 +904,18 @@ def remat(
       policy=policy,
     )  # type: ignore[return-value]
 
-  return resolve_kwargs()(
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+
+  if was_bound:
+    _raise_bound_method_error('remat')
+
+  # Unbound function path: preserve the concise composition used in NNX.
+  return resolve_kwargs()(  # type: ignore[return-value]
     graph.update_context('remat')(
       general.split_inputs(
         jax.checkpoint(
-          general.merge_inputs(f, ctxtag='remat'),
+          general.merge_inputs(f_unbound, ctxtag='remat'),
           prevent_cse=prevent_cse,
           static_argnums=static_argnums,
           policy=policy,
