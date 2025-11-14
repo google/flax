@@ -460,6 +460,7 @@ class TestIntegration(absltest.TestCase):
       nnx.update(model, restored_pure_dict)
       assert model(x).shape == (3, 4)  # The model still works!
 
+  @nnx.use_hijax(True)
   def test_example_mutable_arrays(self):
     class Model(nnx.Module):
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
@@ -472,18 +473,17 @@ class TestIntegration(absltest.TestCase):
         x = nnx.relu(self.dropout(self.bn(self.linear(x))))
         return self.linear_out(x)
 
-    with nnx.use_refs(True):
-      model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
-      optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
+    model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
+    optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
     @jax.jit  # automatic state management for JAX transforms
     def train_step(x, y):
       graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
       def loss_fn(params):
         model =  nnx.merge(graphdef, params, nondiff)
-        return ((model(x) - y) ** 2).mean() # call methods directly
+        return ((model(x) - y) ** 2).mean()  # call methods directly
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.to_arrays(params))
+      loss, grads = jax.value_and_grad(loss_fn)(nnx.as_immutable_vars(params))
       optimizer.update(model, grads)  # in-place updates
 
       return loss

@@ -207,9 +207,9 @@ class TestSPMD(parameterized.TestCase):
         else:
           assert not has_sharding_spec(w)
 
-  @parameterized.product(use_ref=[True, False])
-  def test_logical_rules(self, use_ref):
-    self.enter_context(nnx.use_refs(use_ref))
+  @parameterized.product(use_hijax=[True, False])
+  def test_logical_rules(self, use_hijax):
+    self.enter_context(nnx.use_hijax(use_hijax))
     class Foo(nnx.Module):
 
       def __init__(self):
