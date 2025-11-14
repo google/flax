@@ -1261,6 +1261,13 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
           f'Cannot change `is_mutable` metadata, expected {self.is_mutable}, '
           f'got {metadata["is_mutable"]}'
         )
+      if 'eager_sharding' not in metadata:
+        metadata['eager_sharding'] = self.eager_sharding
+      if metadata['eager_sharding'] != self.eager_sharding:
+        raise ValueError(
+          f'Cannot change `eager_sharding` metadata, expected '
+          f'{self.eager_sharding}, got {metadata["eager_sharding"]}'
+        )
       self._var_metadata = metadata
     elif len(args) == 2:
       name, value = args
