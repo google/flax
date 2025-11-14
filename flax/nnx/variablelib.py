@@ -289,7 +289,7 @@ class NewVariable(hijax.HiPrimitive):
     variable = var_type._new(None, {})
     leaves, treedef = jax.tree.flatten(variable)
     qdd = VariableQDD(tuple(leaves), treedef)
-    return hijax.AvalQDD(AbstractVariable(var_type), qdd), {variable_effect}
+    return hijax.AvalQDD(AbstractVariable(var_type), qdd), {variable_effect}  # type: ignore
 
   def to_lojax(self, *, treedef, var_type: type[Variable]):
     return HijaxVariable._new(None, {}, var_type)

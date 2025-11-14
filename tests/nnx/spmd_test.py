@@ -197,7 +197,11 @@ class TestSPMD(parameterized.TestCase):
   def test_eager_sharding_context(self, use_eager_sharding):
     rngs = nnx.Rngs(0)
     with nnx.use_eager_sharding(use_eager_sharding):
-      mesh = jax.make_mesh(((2, 2)), ("data", "model"))
+      mesh = jax.make_mesh(
+        (2, 2),
+        ('data', 'model'),
+        axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto),
+      )
       with jax.set_mesh(mesh):
         w = nnx.Param(
           rngs.lecun_normal()((4, 8)),
