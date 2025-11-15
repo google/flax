@@ -96,7 +96,7 @@ def _collect_stats(
       var_type = type(value)
       if issubclass(var_type, nnx.RngState):
         var_type = nnx.RngState
-      size_bytes = SizeBytes.from_any(value.value)
+      size_bytes = SizeBytes.from_any(value.get_value())
       if var_type in stats:
         stats[var_type] += size_bytes
       else:
@@ -457,7 +457,7 @@ def tabulate(
       attributes = {}
       variable: variablelib.Variable
       for name, variable in node_info.variable_groups[var_type].items():
-        value = variable.value
+        value = variable.get_value()
         value_repr = _render_array(value) if _has_shape_dtype(value) else ''
         metadata = variable.get_metadata()
         for required_key in var_type.required_metadata:

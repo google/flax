@@ -109,19 +109,18 @@ class TestLinenConsistency(parameterized.TestCase):
     # Compare BatchNorm parameters
     np.testing.assert_array_equal(
       variables['params']['norm_layer']['scale'],
-      nnx_model.norm_layer.scale.value
+      nnx_model.norm_layer.scale[...],
     )
     np.testing.assert_array_equal(
-      variables['params']['norm_layer']['bias'],
-      nnx_model.norm_layer.bias.value
+      variables['params']['norm_layer']['bias'], nnx_model.norm_layer.bias[...]
     )
     np.testing.assert_array_equal(
       variables['batch_stats']['norm_layer']['mean'],
-      nnx_model.norm_layer.mean.value
+      nnx_model.norm_layer.mean[...],
     )
     np.testing.assert_array_equal(
       variables['batch_stats']['norm_layer']['var'],
-      nnx_model.norm_layer.var.value
+      nnx_model.norm_layer.var[...],
     )
 
 
@@ -267,8 +266,8 @@ class TestLinenConsistency(parameterized.TestCase):
       use_fast_variance=use_fast_variance,
       rngs=rngs,
     )
-    nnx_model.linear.kernel.value = variables['params']['linear']['kernel']
-    nnx_model.linear.bias.value = variables['params']['linear']['bias']
+    nnx_model.linear.kernel.set_value(variables['params']['linear']['kernel'])
+    nnx_model.linear.bias.set_value(variables['params']['linear']['bias'])
 
     nnx_out = nnx_model(x, mask=mask)
     assert isinstance(linen_out, jax.Array)
@@ -406,8 +405,8 @@ class TestLinenConsistency(parameterized.TestCase):
     variables = linen_model.init(jax.random.key(1), x)
 
     nnx_model = NNXModel(dtype=dtype, param_dtype=param_dtype, rngs=rngs)
-    nnx_model.dense.kernel.value = variables['params']['dense']['kernel']
-    nnx_model.dense.bias.value = variables['params']['dense']['bias']
+    nnx_model.dense.kernel.set_value(variables['params']['dense']['kernel'])
+    nnx_model.dense.bias.set_value(variables['params']['dense']['bias'])
 
     linen_out = linen_model.apply(variables, x)
     nnx_out = nnx_model(x)
@@ -562,20 +561,20 @@ class TestLinenConsistency(parameterized.TestCase):
     )
     # Setup the same weights and batch stats
     var_params_seq_0 = variables['params']['seq']['layers_0']
-    nnx_model.seq.layers[0].kernel.value = var_params_seq_0['kernel']
-    nnx_model.seq.layers[0].bias.value = var_params_seq_0['bias']
+    nnx_model.seq.layers[0].kernel.set_value(var_params_seq_0['kernel'])
+    nnx_model.seq.layers[0].bias.set_value(var_params_seq_0['bias'])
 
     var_params_seq_2 = variables['params']['seq']['layers_2']
-    nnx_model.seq.layers[2].scale.value = var_params_seq_2['scale']
-    nnx_model.seq.layers[2].bias.value = var_params_seq_0['bias']
+    nnx_model.seq.layers[2].scale.set_value(var_params_seq_2['scale'])
+    nnx_model.seq.layers[2].bias.set_value(var_params_seq_0['bias'])
 
     var_norm_layer = variables['batch_stats']['norm_layer']
     nnx_model.norm_layer.batch_stats[
       ('layers', 0, 'kernel', 'u')
-    ].value = var_norm_layer['seq/layers_0/kernel/u']
+    ].set_value(var_norm_layer['seq/layers_0/kernel/u'])
     nnx_model.norm_layer.batch_stats[
       ('layers', 0, 'kernel', 'sigma')
-    ].value = var_norm_layer['seq/layers_0/kernel/sigma']
+    ].set_value(var_norm_layer['seq/layers_0/kernel/sigma'])
 
     linen_out = linen_model.apply(variables, x, mutable=['batch_stats'])
     nnx_out = nnx_model(x)

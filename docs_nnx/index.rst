@@ -107,15 +107,11 @@ Basic usage
    model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
    optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
-   @nnx.jit  # automatic state management for JAX transforms
-   def train_step(model, optimizer, x, y, rngs):
-     def loss_fn(model):
-       y_pred = model(x, rngs)  # call methods directly
-       return ((y_pred - y) ** 2).mean()
-
+   @nnx.jit  # automatic state propagation
+   def train_step(model, optimizer, x, y):
+     loss_fn = lambda model: ((model(x) - y) ** 2).mean()
      loss, grads = nnx.value_and_grad(loss_fn)(model)
      optimizer.update(model, grads)  # in-place updates
-
      return loss
 
 
