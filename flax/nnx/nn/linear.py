@@ -34,6 +34,7 @@ from flax.typing import (
   PrecisionLike,
   DotGeneralT,
   ConvGeneralDilatedT,
+  ConvTransposeT,
   PaddingLike,
   LaxPadding,
   PromoteDtypeFn,
@@ -1021,6 +1022,7 @@ class ConvTranspose(Module):
     kernel_init: Initializer = default_kernel_init,
     bias_init: Initializer = default_bias_init,
     transpose_kernel: bool = False,
+    conv_transpose: ConvTransposeT = lax.conv_transpose,
     promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     preferred_element_type: Dtype | None = None,
     rngs: rnglib.Rngs,
@@ -1044,6 +1046,7 @@ class ConvTranspose(Module):
     self.param_dtype = param_dtype
     self.precision = precision
     self.transpose_kernel = transpose_kernel
+    self.conv_transpose = conv_transpose
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
 
@@ -1133,7 +1136,7 @@ class ConvTranspose(Module):
       (inputs, kernel, bias), dtype=self.dtype
     )
 
-    y = lax.conv_transpose(
+    y = self.conv_transpose(
       inputs,
       kernel,
       strides,
