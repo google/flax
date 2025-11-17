@@ -112,14 +112,20 @@ class RngStream(Pytree):
 
     count = jnp.zeros(key.shape, dtype=jnp.uint32)
     self.tag = tag
-    self.key = RngKey(key, tag=tag)
+    self.base_key = RngKey(key, tag=tag)
     self.count = RngCount(count, tag=tag)
 
   def __call__(self) -> jax.Array:
     self.count._check_can_update()
-    key = random.fold_in(self.key[...], self.count[...])
+    key = random.fold_in(self.base_key[...], self.count[...])
     self.count[...] += 1
     return key
+
+  def key(self) -> jax.Array:
+    return self()
+
+  def split(self, k: int):
+      return self.fork(split=k)
 
   def fork(self, *, split: int | tuple[int, ...] | None = None):
     key = self()
@@ -316,7 +322,7 @@ class Rngs(Pytree):
   ``counter``. Every time a key is requested, the counter is incremented and the key is
   generated from the seed key and the counter by using ``jax.random.fold_in``.
 
-  To create an ``Rngs`` pass in an integer or ``jax.random.key`` to the
+  To create an ``Rngs`` pass in an integer or ``jax.random.base_key`` to the
   constructor as a keyword argument with the name of the stream. The key will be used as the
   starting seed for the stream, and the counter will be initialized to zero. Then call the
   stream to get a key::
@@ -369,7 +375,7 @@ class Rngs(Pytree):
     Args:
       default: the starting seed for the ``default`` stream, defaults to None.
       **rngs: keyword arguments specifying the starting seed for each stream.
-        The key can be an integer or a ``jax.random.key``.
+        The key can be an integer or a ``jax.random.base_key``.
     """
     if default is not None:
       if isinstance(default, tp.Mapping):
@@ -379,7 +385,7 @@ class Rngs(Pytree):
 
     for tag, key in rngs.items():
       if isinstance(key, RngStream):
-        key = key.key.get_value()
+        key = key.base_key.get_value()
       stream = RngStream(
         key=key,
         tag=tag,
@@ -406,6 +412,9 @@ class Rngs(Pytree):
   def __call__(self):
     return self.default()
 
+  def key(self):
+    return self.default()
+
   def __iter__(self) -> tp.Iterator[str]:
     for name, stream in vars(self).items():
       if isinstance(stream, RngStream):
@@ -423,6 +432,9 @@ class Rngs(Pytree):
     for name, stream in vars(self).items():
       if isinstance(stream, RngStream):
         yield name, stream
+
+  def split(self, splits: int):
+    return self.fork(split=splits)
 
   def fork(
     self,
@@ -448,8 +460,8 @@ class Rngs(Pytree):
       >>> rngs = nnx.Rngs(params=1, dropout=2)
       >>> new_rngs = rngs.fork(split=5)
       ...
-      >>> assert new_rngs.params.key.shape == (5,)
-      >>> assert new_rngs.dropout.key.shape == (5,)
+      >>> assert new_rngs.params.base_key.shape == (5,)
+      >>> assert new_rngs.dropout.base_key.shape == (5,)
 
     ``split`` also accepts a mapping of
     `Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__  to
@@ -462,9 +474,9 @@ class Rngs(Pytree):
       ...  ...: (2, 5),      # split anything else into 2x5 keys
       ... })
       ...
-      >>> assert new_rngs.params.key.shape == (5,)
-      >>> assert new_rngs.dropout.key.shape == ()
-      >>> assert new_rngs.noise.key.shape == (2, 5)
+      >>> assert new_rngs.params.base_key.shape == (5,)
+      >>> assert new_rngs.dropout.base_key.shape == ()
+      >>> assert new_rngs.noise.base_key.shape == (2, 5)
     """
     if split is None:
       split = {}
@@ -725,18 +737,18 @@ def split_rngs(
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> _ = nnx.split_rngs(rngs, splits=5)
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> rngs.params.base_key.shape, rngs.dropout.base_key.shape
     ((5,), (5,))
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> _ = nnx.split_rngs(rngs, splits=(2, 5))
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> rngs.params.base_key.shape, rngs.dropout.base_key.shape
     ((2, 5), (2, 5))
 
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> rngs.params.base_key.shape, rngs.dropout.base_key.shape
     ((5,), ())
 
   Once split, random state can be used with transforms like :func:`nnx.vmap`::
@@ -756,7 +768,7 @@ def split_rngs(
     ...   return Model(rngs)
     ...
     >>> model = create_model(rngs)
-    >>> model.dropout.rngs.key.shape
+    >>> model.dropout.rngs.base_key.shape
     ()
 
   ``split_rngs`` returns a SplitBackups object that can be used to restore the
@@ -769,7 +781,7 @@ def split_rngs(
     >>> model = create_model(rngs)
     >>> nnx.restore_rngs(backups)
     ...
-    >>> model.dropout.rngs.key.shape
+    >>> model.dropout.rngs.base_key.shape
     ()
 
   SplitBackups can also be used as a context manager to automatically restore
@@ -780,7 +792,7 @@ def split_rngs(
     >>> with nnx.split_rngs(rngs, splits=5, only='params'):
     ...   model = create_model(rngs)
     ...
-    >>> model.dropout.rngs.key.shape
+    >>> model.dropout.rngs.base_key.shape
     ()
 
     >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
@@ -792,7 +804,7 @@ def split_rngs(
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> model = create_model(rngs)
-    >>> model.dropout.rngs.key.shape
+    >>> model.dropout.rngs.base_key.shape
     ()
 
 
@@ -819,18 +831,18 @@ def split_rngs(
   for path, stream in graph.iter_graph(node):
     if (
       isinstance(stream, RngStream)
-      and predicate((*path, 'key'), stream.key)
+      and predicate((*path, 'key'), stream.base_key)
       and predicate((*path, 'count'), stream.count)
     ):
       key = stream()
-      backups.append((stream, stream.key.raw_value, stream.count.raw_value))
+      backups.append((stream, stream.base_key.raw_value, stream.count.raw_value))
       key = random.split(key, splits)
       if squeeze:
         key = key[0]
-      if variablelib.is_array_ref(stream.key.raw_value):
-        stream.key.raw_value = variablelib.new_ref(key)  # type: ignore[assignment]
+      if variablelib.is_array_ref(stream.base_key.raw_value):
+        stream.base_key.raw_value = variablelib.new_ref(key)  # type: ignore[assignment]
       else:
-        stream.key.value = key
+        stream.base_key.value = key
       if squeeze:
         counts_shape = stream.count.shape
       elif isinstance(splits, int):
@@ -889,18 +901,18 @@ def fork_rngs(
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> _ = nnx.fork_rngs(rngs, split=5)
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> rngs.params.base_key.shape, rngs.dropout.base_key.shape
     ((5,), (5,))
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> _ = nnx.fork_rngs(rngs, split=(2, 5))
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> rngs.params.base_key.shape, rngs.dropout.base_key.shape
     ((2, 5), (2, 5))
 
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> _ = nnx.fork_rngs(rngs, split={'params': 5})
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> rngs.params.base_key.shape, rngs.dropout.base_key.shape
     ((5,), ())
 
   Once forked, random state can be used with transforms like :func:`nnx.vmap`::
@@ -920,7 +932,7 @@ def fork_rngs(
     ...   return Model(rngs)
     ...
     >>> model = create_model(rngs)
-    >>> model.dropout.rngs.key.shape
+    >>> model.dropout.rngs.base_key.shape
     ()
 
   ``fork_rngs`` returns a SplitBackups object that can be used to restore the
@@ -933,7 +945,7 @@ def fork_rngs(
     >>> model = create_model(rngs)
     >>> nnx.restore_rngs(backups)
     ...
-    >>> model.dropout.rngs.key.shape
+    >>> model.dropout.rngs.base_key.shape
     ()
 
   SplitBackups can also be used as a context manager to automatically restore
@@ -944,7 +956,7 @@ def fork_rngs(
     >>> with nnx.fork_rngs(rngs, split={'params': 5}):
     ...   model = create_model(rngs)
     ...
-    >>> model.dropout.rngs.key.shape
+    >>> model.dropout.rngs.base_key.shape
     ()
 
     >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
@@ -956,7 +968,7 @@ def fork_rngs(
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> model = create_model(rngs)
-    >>> model.dropout.rngs.key.shape
+    >>> model.dropout.rngs.base_key.shape
     ()
   """
   if isinstance(node, Missing):
@@ -984,14 +996,14 @@ def fork_rngs(
     for predicate, splits in predicate_splits.items():
       if (
         isinstance(stream, RngStream)
-        and predicate((*path, 'key'), stream.key)
+        and predicate((*path, 'key'), stream.base_key)
         and predicate((*path, 'count'), stream.count)
       ):
         forked_stream = stream.fork(split=splits)
         # backup the original stream state
-        backups.append((stream, stream.key.raw_value, stream.count.raw_value))
+        backups.append((stream, stream.base_key.raw_value, stream.count.raw_value))
         # apply the forked key and count to the original stream
-        stream.key.raw_value = forked_stream.key.raw_value
+        stream.base_key.raw_value = forked_stream.base_key.raw_value
         stream.count.raw_value = forked_stream.count.raw_value
 
   return SplitBackups(backups)
@@ -1001,7 +1013,7 @@ def backup_keys(node: tp.Any, /):
   backups: list[StreamBackup] = []
   for _, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
-      backups.append((stream, stream.key.raw_value))
+      backups.append((stream, stream.base_key.raw_value))
   return backups
 
 def _scalars_only(
@@ -1046,7 +1058,7 @@ def reseed(
       of the form ``(path, scalar_key, target_shape) -> new_key`` can be passed to
       define a custom reseeding policy.
     **stream_keys: a mapping of stream names to new keys. The keys can be
-      either integers or ``jax.random.key``.
+      either integers or ``jax.random.base_key``.
 
   Example::
 
@@ -1084,16 +1096,16 @@ def reseed(
   rngs = Rngs(**stream_keys)
   for path, stream in graph.iter_graph(node):
     if isinstance(stream, RngStream):
-      if stream.key.tag in stream_keys:
-        key = rngs[stream.key.tag]()
-        key = policy(path, key, stream.key.shape)
-        stream.key.value = key
+      if stream.base_key.tag in stream_keys:
+        key = rngs[stream.base_key.tag]()
+        key = policy(path, key, stream.base_key.shape)
+        stream.base_key.value = key
         stream.count.value = jnp.zeros(key.shape, dtype=jnp.uint32)
 
 
 def restore_rngs(backups: tp.Iterable[StreamBackup], /):
   for backup in backups:
     stream = backup[0]
-    stream.key.raw_value = backup[1]
+    stream.base_key.raw_value = backup[1]
     if len(backup) == 3:
       stream.count.raw_value = backup[2]  # count
