@@ -1567,7 +1567,7 @@ class TestScan(absltest.TestCase):
     assert y.shape == (1, 3)
 
   def test_in_axes(self):
-    state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
+    state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState, nnx.Intermediate): 0, ...: None})
 
     class MLP(nnx.Module):
       @nnx.split_rngs(splits=5)
@@ -1584,6 +1584,7 @@ class TestScan(absltest.TestCase):
         x = x + a
         x = self.linear(x)
         x = nnx.gelu(x)
+        self.sow(nnx.Intermediate, "data", x)
         return x, None
 
     module = MLP(rngs=nnx.Rngs(0))
@@ -1598,6 +1599,9 @@ class TestScan(absltest.TestCase):
 
     assert y.shape == (1, 3)
     assert out is None
+
+    intermediates = nnx.pop(module, nnx.Intermediate)
+    assert intermediates["data"].value[0].shape == (5, 1, 3)
 
   def test_in_axes_broadcast(self):
     test = self
@@ -1993,6 +1997,75 @@ class TestScan(absltest.TestCase):
 
     x = jnp.ones((16, 10, 20))
     y = rnn_forward(cell, x)
+
+  def test_carry_pytree_sow(self):
+    class CarryAsPytree(nnx.Pytree):
+      def __init__(self, data: jax.Array):
+        self.data = data
+
+    class Model(nnx.Module):
+      def __init__(self, num_steps):
+        self.fc = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+        self.num_steps = num_steps
+
+      def _step(self, state):
+        new_data = state.data + 1
+        self.sow(nnx.Intermediate, "data", new_data)
+        state.data = new_data
+        return state
+
+      def _step2(self, state: tuple[CarryAsPytree, jax.Array, CarryAsPytree]):
+        out = self.fc(state[1])
+
+        new_data1 = state[0].data + 1
+        new_data2 = state[2].data + 1
+
+        self.sow(nnx.Intermediate, "data1", new_data1)
+        self.sow(nnx.Intermediate, "data2", new_data2)
+
+        state[0].data = new_data1
+        state[2].data = new_data2
+        return (state[0], out, state[2])
+
+      @nnx.jit(static_argnames=("method"))
+      def __call__(self, state, method):
+        state_axes = nnx.StateAxes({nnx.Intermediate: 0, ...: nnx.Carry})
+        state_final = nnx.scan(
+          method,
+          in_axes=(state_axes, nnx.Carry),
+          out_axes=nnx.Carry,
+          length=self.num_steps,
+        )(self, state)
+
+        return state_final
+
+    num_steps = 5
+    model = Model(num_steps=num_steps)
+    carry = CarryAsPytree(data=jnp.array(0.0))
+    carry_final = model(carry, method=Model._step)
+    intermediates = nnx.pop(model, nnx.Intermediate)
+    self.assertEqual(carry_final.data, num_steps)
+    np.testing.assert_array_equal(
+      intermediates["data"].value[0], 1.0 + jnp.arange(num_steps)
+    )
+
+    carry = (
+      CarryAsPytree(data=jnp.array(0.0)),
+      jnp.ones((10,)),
+      CarryAsPytree(data=jnp.array(10.0))
+    )
+
+    carry_final = model(carry, method=Model._step2)
+    intermediates = nnx.pop(model, nnx.Intermediate)
+
+    self.assertEqual(carry_final[0].data, num_steps)
+    self.assertEqual(carry_final[2].data, 10 + num_steps)
+    np.testing.assert_array_equal(
+      intermediates["data1"].value[0], 1.0 + jnp.arange(num_steps)
+    )
+    np.testing.assert_array_equal(
+      intermediates["data2"].value[0], 11.0 + jnp.arange(num_steps)
+    )
 
 
 class TestRemat(absltest.TestCase):
