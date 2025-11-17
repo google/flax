@@ -1601,7 +1601,7 @@ class TestScan(absltest.TestCase):
     assert out is None
 
     intermediates = nnx.pop(module, nnx.Intermediate)
-    assert intermediates["data"].value[0].shape == (5, 1, 3)
+    assert intermediates['data'][0].shape == (5, 1, 3)
 
   def test_in_axes_broadcast(self):
     test = self
@@ -2046,7 +2046,7 @@ class TestScan(absltest.TestCase):
     intermediates = nnx.pop(model, nnx.Intermediate)
     self.assertEqual(carry_final.data, num_steps)
     np.testing.assert_array_equal(
-      intermediates["data"].value[0], 1.0 + jnp.arange(num_steps)
+      intermediates['data'][0], 1.0 + jnp.arange(num_steps)
     )
 
     carry = (
@@ -2061,10 +2061,10 @@ class TestScan(absltest.TestCase):
     self.assertEqual(carry_final[0].data, num_steps)
     self.assertEqual(carry_final[2].data, 10 + num_steps)
     np.testing.assert_array_equal(
-      intermediates["data1"].value[0], 1.0 + jnp.arange(num_steps)
+      intermediates['data1'][0], 1.0 + jnp.arange(num_steps)
     )
     np.testing.assert_array_equal(
-      intermediates["data2"].value[0], 11.0 + jnp.arange(num_steps)
+      intermediates['data2'][0], 11.0 + jnp.arange(num_steps)
     )
 
 

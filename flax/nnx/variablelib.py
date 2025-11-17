@@ -21,6 +21,7 @@ import itertools as it
 import threading
 import typing as tp
 from typing import Any
+import warnings
 
 from flax import config
 from flax import errors
@@ -1362,22 +1363,46 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
   @property
   def raw_value(self) -> A:
+    warnings.warn(
+      "'.raw_value' access is now deprecated. Use:\n\n"
+      '  variable.get_raw_value()\n',
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.get_raw_value()
 
   @raw_value.setter
   def raw_value(self, value: A):
+    warnings.warn(
+      "'.raw_value' setter is now deprecated. Use:\n\n"
+      '  variable.set_raw_value(value)\n',
+      DeprecationWarning,
+      stacklevel=2,
+    )
     self.set_raw_value(value)
 
   @property
   def value(self) -> A:
-    value = self._raw_value
-    if is_array_ref(value):
-      value = value[...]
-
+    warnings.warn(
+      "'.value' access is now deprecated. For Variable[Array] instances use:\n\n"
+      '  variable[...]\n\n'
+      'For other Variable types use:\n\n'
+      '  variable.get_value()\n',
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return self.get_value()
 
   @value.setter
   def value(self, value: A):
+    warnings.warn(
+      "'.value' setter is now deprecated. For Variable[Array] instances use:\n\n"
+      '  variable[...] = value\n\n'
+      'For other Variable types use:\n\n'
+      '  variable.set_value(value)\n',
+      DeprecationWarning,
+      stacklevel=2,
+    )
     self.set_value(value)
 
   def create_value(self, value: A):

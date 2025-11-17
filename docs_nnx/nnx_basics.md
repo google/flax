@@ -40,7 +40,7 @@ class Linear(nnx.Module):
     self.din, self.dout = din, dout
 
   def __call__(self, x: jax.Array):
-    return x @ self.w + self.b
+    return x @ self.w + self.b[None]
 ```
 
 Also note that the inner values of `Variable`s can be accessed using the `value` property, but for convenience they implement all numeric operators and can be used directly in arithmetic expressions (as shown in the code above).
@@ -73,12 +73,12 @@ class Counter(nnx.Module):
     self.count = Count(jnp.array(0))
 
   def __call__(self):
-    self.count.value += 1
+    self.count[...] += 1
 
 counter = Counter()
-print(f'{counter.count.value = }')
+print(f'{counter.count[...] = }')
 counter()
-print(f'{counter.count.value = }')
+print(f'{counter.count[...] = }')
 ```
 
 Mutable references are usually avoided in JAX. But Flax NNX provides sound mechanisms

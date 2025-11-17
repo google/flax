@@ -183,7 +183,7 @@ class Module(Pytree, metaclass=ModuleMeta):
           f"Expected '{name}' to be of type '{variable_type.__name__}', "
           f"got '{type(variable).__name__}'"
         )
-      variable.raw_value = reduce_fn(variable.raw_value, value)
+      variable.set_value(reduce_fn(variable.get_value(), value))
     else:
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))

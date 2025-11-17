@@ -391,7 +391,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       if isinstance(
         variable, variablelib.Variable
       ) and bridge_variables.is_vanilla_variable(variable):
-        leaf = variable.value
+        leaf = variable.get_value()
       else:
         leaf = bridge_variables.to_linen_var(variable)
 

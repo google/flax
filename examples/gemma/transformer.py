@@ -487,10 +487,10 @@ def _assign_linen_params_to_nnx_state(
   if 'gate_proj' in mapped_path:
     if transpose_gating_einsum:
       val = jnp.swapaxes(val, 1, 2)
-    state[mapped_path].value = val[0]
-    state[mapped_path[:-2] + ('up_proj', 'kernel')].value = val[1]
+    state[mapped_path].set_value(val[0])
+    state[mapped_path[:-2] + ('up_proj', 'kernel')].set_value(val[1])
   else:
-    state[mapped_path].value = val
+    state[mapped_path].set_value(val)
   return state
 
 
