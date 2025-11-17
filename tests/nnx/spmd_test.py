@@ -197,7 +197,11 @@ class TestSPMD(parameterized.TestCase):
   def test_eager_sharding_context(self, use_eager_sharding):
     rngs = nnx.Rngs(0)
     with nnx.use_eager_sharding(use_eager_sharding):
-      mesh = jax.make_mesh(((2, 2)), ("data", "model"))
+      mesh = jax.make_mesh(
+        (2, 2),
+        ('data', 'model'),
+        axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto),
+      )
       with jax.set_mesh(mesh):
         w = nnx.Param(
           rngs.lecun_normal()((4, 8)),
@@ -207,9 +211,9 @@ class TestSPMD(parameterized.TestCase):
         else:
           assert not has_sharding_spec(w)
 
-  @parameterized.product(use_ref=[True, False])
-  def test_logical_rules(self, use_ref):
-    self.enter_context(nnx.use_refs(use_ref))
+  @parameterized.product(use_hijax=[True, False])
+  def test_logical_rules(self, use_hijax):
+    self.enter_context(nnx.use_hijax(use_hijax))
     class Foo(nnx.Module):
 
       def __init__(self):

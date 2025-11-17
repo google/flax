@@ -60,7 +60,7 @@ class TestRngs(absltest.TestCase):
     def f():
       with self.assertRaisesRegex(
         errors.TraceContextError,
-        'Cannot mutate RngStream from a different trace level',
+        'Cannot mutate RngCount from a different trace level',
       ):
         rngs.params()
 
@@ -78,7 +78,7 @@ class TestRngs(absltest.TestCase):
     self.assertIsInstance(rngs1, nnx.Rngs)
     with self.assertRaisesRegex(
       errors.TraceContextError,
-      'Cannot mutate RngStream from a different trace level',
+      'Cannot mutate RngCount from a different trace level',
     ):
       rngs1.params()
 

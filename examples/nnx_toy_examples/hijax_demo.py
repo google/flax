@@ -49,9 +49,8 @@ class Linear(nnx.Module):
     self.w = nnx.Param(initializer(rngs.params(), (din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
 
-  # [...] is used to access the array
   def __call__(self, x: jax.Array):
-    return x @ self.w[...] + self.b[None]
+    return x @ self.w + self.b[None]
 
 
 # Block implements linear, batch norm, and dropout. Its behavior
@@ -88,21 +87,21 @@ class Block(nnx.Module):
     self, x: jax.Array, *, rngs: nnx.Rngs | None = None
   ) -> jax.Array:
     # ----------- linear --------------------
-    x = x @ self.w[...] + self.b[None]
+    x = x @ self.w + self.b[None]
     # ----------- batch norm ----------------
     if self.use_stats:
-      mean = self.mean[...]
-      var = self.var[...]
+      mean = self.mean
+      var = self.var
     else:
       mean = jnp.mean(x, axis=0)
       var = jnp.var(x, axis=0)
       # ema updates
-      # stop gradient is used until a ArrayRef supports updates from grad tracers
+      # stop gradient is used until a Hijax supports updates from grad tracers
       sg = jax.lax.stop_gradient
-      self.mean[...] = sg(self.mu * self.mean[...] + (1 - self.mu) * mean)
-      self.var[...] = sg(self.mu * self.var[...] + (1 - self.mu) * var)
+      self.mean[...] = sg(self.mu * self.mean + (1 - self.mu) * mean)
+      self.var[...] = sg(self.mu * self.var + (1 - self.mu) * var)
     x = (x - mean[None]) / jnp.sqrt(var[None] + 1e-5)
-    x = x * self.scale[...] + self.bias[...]
+    x = x * self.scale + self.bias
     # ----------- dropout -------------------
     if not self.deterministic and self.dropout_rate > 0.0:
       assert rngs is not None
@@ -125,7 +124,7 @@ class Model(nnx.Module):
     use_scan: bool = True,
     rngs: nnx.Rngs,
   ):
-    self.count: jax.Ref = jax.new_ref(jnp.array(0))
+    self.count = nnx.Variable(jnp.array(0))
     self.block_in = Block(din, dhidden, rngs=rngs)
     self.linear_out = Linear(dhidden, dout, rngs=rngs)
 
@@ -136,11 +135,15 @@ class Model(nnx.Module):
 
       @jax.vmap
       def create_block(rngs, /):
-        return nnx.to_arrays(Block(dhidden, dhidden, rngs=rngs))
+        # return nnx.stateless(Block(dhidden, dhidden, rngs=rngs))
+        return Block(dhidden, dhidden, rngs=rngs)
 
-      self.blocks = nnx.to_refs(create_block(rngs.fork(split=num_blocks)))
+      # self.blocks = nnx.stateful(create_block(rngs.fork(split=num_blocks)))
+      self.blocks = create_block(rngs.fork(split=num_blocks))
     else:
-      self.blocks = nnx.List([Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)])
+      self.blocks = nnx.List(
+        [Block(dhidden, dhidden, rngs=rngs) for i in range(num_blocks)]
+      )
 
   def __call__(self, x: jax.Array, *, rngs: nnx.Rngs | None = None):
     self.count[...] += 1
@@ -169,7 +172,7 @@ class OptState(nnx.Variable): ...
 
 
 # Optimizer are an interesting case as they are inherently stateful and
-# pose a good use case for ArrayRef. Here we implement SGD with
+# pose a good use case for MutableHijax. Here we implement SGD with
 # momentum. The optimizer receives the params as constructor arguments but doesn't
 # hold a reference to them, it only uses the params to initialize its state
 # by creating new OptState Variables that reuse the param's metadata.
@@ -180,40 +183,36 @@ class SGD(nnx.Pytree):
 
     def make_opt_state(x):
       if isinstance(x, nnx.Variable):
-        return OptState(jnp.zeros_like(x.value), **x.get_metadata())
+        return OptState(jnp.zeros_like(x[...]), **x.get_metadata())
       else:
         return OptState(jnp.zeros_like(x))
 
-    self.momentum = nnx.data(jax.tree.map(
-        make_opt_state,
-        params,
-        is_leaf=lambda x: isinstance(x, nnx.Variable),
-      ))
+    self.momentum = nnx.data(jax.tree.map(make_opt_state, params))
 
   # during the update we simply map over (params, momentum, grads),
   # for each triplet we implement the SGD update rule which updates
   # both the optimizer's state (momentum) and the params in place.
   def update(self, params, grads):
-    params = nnx.pure(params)
-    grads = nnx.pure(grads)
-    momentum = nnx.pure(self.momentum)
-
     def update_fn(
-      param: jax.Ref, momentum: jax.Ref, grad: jax.Array
+      param: nnx.Variable[jax.Array],
+      momentum: nnx.Variable[jax.Array],
+      grad: nnx.Variable[jax.Array],
     ):
-      momentum[...] = self.decay * momentum[...] + (1 - self.decay) * grad[...]
-      param[...] -= self.lr * momentum[...]
+      momentum[...] = self.decay * momentum + (1 - self.decay) * grad
+      param[...] -= self.lr * momentum
 
-    jax.tree.map(update_fn, params, momentum, grads)
+    # is_leaf might not be necesarry as MutableHijaxVariable are not pytreees
+    jax.tree.map(update_fn, params, self.momentum, grads)
+
 
 # ## Training
+nnx.use_hijax(True)
 
-with nnx.use_refs(True):
-  rngs = nnx.Rngs(params=0, dropout=1)
-  model = Model(
-    num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
-  )
-  optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
+rngs = nnx.Rngs(params=0, dropout=1)
+model = Model(
+  num_blocks=3, din=1, dhidden=256, dout=1, use_scan=False, rngs=rngs
+)
+optimizer = SGD(params=nnx.state(model, nnx.Param), lr=3e-3, decay=0.99)
 
 # Create a copy of the model structure and set its attributes to eval model.
 # This works because they share the underlying ArrayRefs so both models
@@ -237,12 +236,13 @@ def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
     loss = jnp.mean((model(x, rngs=rngs) - y) ** 2)
     return loss
 
-  # For the time being we have to use 'freeze' make the Variables immutable
-  # as 'jax.grad' doesn't support ArrayRefs yet.
-  grads = jax.grad(loss_fn)(nnx.to_arrays(params))
+  # For the time being we have to use 'immutable'
+  # as 'jax.grad' doesn't support QDD types yet.
+  grads = jax.grad(loss_fn)(nnx.as_immutable_vars(params))
   # 'update' mutates the optimizer's state and the params in place
   # so we don't need to return anything 🚀
   optimizer.update(params, grads)
+
 
 # simple test step that computes the loss
 @jax.jit
