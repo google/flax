@@ -47,6 +47,7 @@ class TestLinenConsistency(parameterized.TestCase):
           dtype=dtype,
           param_dtype=param_dtype,
           use_fast_variance=use_fast_variance,
+          promote_dtype=lambda x, **kwargs: x, # ensure same behavior as Linen
           rngs=rngs,
         )
         self.linear = nnx.Linear(
@@ -85,7 +86,7 @@ class TestLinenConsistency(parameterized.TestCase):
     linen_model = LinenModel(
       dtype=dtype, param_dtype=param_dtype, use_fast_variance=use_fast_variance
     )
-    variables = linen_model.init(jax.random.key(1), x)
+    variables: dict = linen_model.init(jax.random.key(1), x)
     linen_out, batch_stats = linen_model.apply(
       variables, x, mask=mask, mutable=['batch_stats']
     )
@@ -99,8 +100,31 @@ class TestLinenConsistency(parameterized.TestCase):
     nnx_model.linear.kernel[...] = variables['params']['linear']['kernel']
     nnx_model.linear.bias[...] = variables['params']['linear']['bias']
 
+    linen_out, updates = linen_model.apply(
+      variables, x, mask=mask, mutable=['batch_stats']
+    )
+    variables.update(updates)
     nnx_out = nnx_model(x, mask=mask)
     np.testing.assert_array_equal(linen_out, nnx_out)
+    # Compare BatchNorm parameters
+    np.testing.assert_array_equal(
+      variables['params']['norm_layer']['scale'],
+      nnx_model.norm_layer.scale.value
+    )
+    np.testing.assert_array_equal(
+      variables['params']['norm_layer']['bias'],
+      nnx_model.norm_layer.bias.value
+    )
+    np.testing.assert_array_equal(
+      variables['batch_stats']['norm_layer']['mean'],
+      nnx_model.norm_layer.mean.value
+    )
+    np.testing.assert_array_equal(
+      variables['batch_stats']['norm_layer']['var'],
+      nnx_model.norm_layer.var.value
+    )
+
+
 
   @parameterized.product(
     dtype=[jnp.float32, jnp.float16],
@@ -122,6 +146,7 @@ class TestLinenConsistency(parameterized.TestCase):
           dtype=dtype,
           param_dtype=param_dtype,
           use_fast_variance=use_fast_variance,
+          promote_dtype=lambda x, **kwargs: x, # ensure same behavior as Linen
           rngs=rngs,
         )
         self.linear = nnx.Linear(
@@ -195,6 +220,7 @@ class TestLinenConsistency(parameterized.TestCase):
           dtype=dtype,
           param_dtype=param_dtype,
           use_fast_variance=use_fast_variance,
+          promote_dtype=lambda x, **kwargs: x,  # ensure same behavior as Linen
           rngs=rngs,
         )
         self.linear = nnx.Linear(
@@ -269,6 +295,7 @@ class TestLinenConsistency(parameterized.TestCase):
           dtype=dtype,
           param_dtype=param_dtype,
           use_fast_variance=use_fast_variance,
+          promote_dtype=lambda x, **kwargs: x, # ensure same behavior as Linen
           rngs=rngs,
         )
         self.linear = nnx.Linear(

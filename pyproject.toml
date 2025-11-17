@@ -191,6 +191,8 @@ filterwarnings = [
     "ignore:.*Sharding info not provided when restoring.*:UserWarning",
     # UserWarning: pkg_resources is deprecated as an API.
     "ignore:.*pkg_resources is deprecated as an API.*:UserWarning",
+    # DeprecationWarning: 'Data' is deprecated, please replace:
+    "ignore:.*[Data|Static]' is deprecated, please replace.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
@@ -235,3 +237,6 @@ quote-style = "single"
 [tool.uv]
 # Ignore uv.lock and always upgrade the package to the latest
 upgrade-package = ["jax", "jaxlib", "orbax-checkpoint"]
+
+[tool.uv.sources]
+jax = { path = "../jax" }

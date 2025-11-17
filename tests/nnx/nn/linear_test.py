@@ -246,7 +246,7 @@ class TestLayersSameGraph(parameterized.TestCase):
       module_args_kwargs_initargs=[
           (nnx.LinearGeneral, (2, (3, 4)), ("kernel_init", "bias_init")),
           (nnx.Linear, (2, 4), ("kernel_init", "bias_init")),
-          (nnx.Einsum, ("ik,kj->ij", 4, 3), ("kernel_init", "bias_init")),
+          (nnx.Einsum, ("ik,kj->ij", (5, 4), 5), ("kernel_init", "bias_init")),
           (nnx.Conv, (2, 4, 3), ("kernel_init", "bias_init")),
           (nnx.ConvTranspose, (2, 4, 3), ("kernel_init", "bias_init")),
           (nnx.Embed, (2, 4), ("embedding_init",)),
@@ -256,6 +256,7 @@ class TestLayersSameGraph(parameterized.TestCase):
               ("kernel_init", "out_kernel_init", "bias_init", "out_bias_init"),
           ),
           (nnx.BatchNorm, (3,), ("scale_init", "bias_init")),
+          (nnx.LayerNorm, (3,), ("scale_init", "bias_init")),
           (nnx.RMSNorm, (3,), ("scale_init",)),
           (nnx.GroupNorm, (6, 3), ("scale_init", "bias_init")),
           (nnx.InstanceNorm, (6,), ("scale_init", "bias_init")),
@@ -292,6 +293,125 @@ class TestLayersSameGraph(parameterized.TestCase):
     mod2 = module_cls(*args, **init2_kwargs, **kwargs)
     g1, g2 = nnx.graphdef(mod1), nnx.graphdef(mod2)
     assert g1 == g2
+
+
+class TestLayersParamsMetadata(parameterized.TestCase):
+
+  @parameterized.product(
+      module_args_kwargs_initargs=[
+          (nnx.LinearGeneral, (2, (3, 4)), (("kernel", 2, ()), ("bias", 1, ()))),
+          (nnx.Linear, (2, 4), (("kernel", 2, ()), ("bias", 1, ()))),
+          (nnx.Einsum, ("ik,kj->ij", (5, 4), 5), (("kernel", 2, ()), ("bias", 1, ()))),
+          (nnx.Conv, (2, 4, 3), (("kernel", 2, ()), ("bias", 1, ()))),
+          (nnx.ConvTranspose, (2, 4, 3), (("kernel", 2, ()), ("bias", 1, ()))),
+          (nnx.Embed, (2, 4), (("embedding", 2, ()), )),
+          (
+              partial(nnx.MultiHeadAttention, normalize_qk=True),
+              (8, 5, 16),
+              (
+                ("kernel", 2, (("query", "kernel"), ("key", "kernel"), ("value", "kernel"))),
+                ("out_kernel", 2, (("out", "kernel"), )),
+                ("bias", 1, (("query", "bias"), ("key", "bias"), ("value", "bias"))),
+                ("out_bias", 1, (("out", "bias"), )),
+                ("query_ln_scale", 1, (("query_ln", "scale"), )),
+                ("key_ln_scale", 1, (("key_ln", "scale"), )),
+              ),
+          ),
+          (nnx.BatchNorm, (3,), (("scale", 1, ()), ("bias", 1, ()))),
+          (nnx.LayerNorm, (3,), (("scale", 1, ()), ("bias", 1, ()))),
+          (nnx.RMSNorm, (3,), (("scale", 1, ()), )),
+          (nnx.GroupNorm, (6, 3), (("scale", 1, ()), ("bias", 1, ()))),
+          (nnx.InstanceNorm, (6,), (("scale", 1, ()), ("bias", 1, ()))),
+          (
+            nnx.LoRA,
+            (3, 2, 4),
+            (
+              ("a", 2, ((None, "lora_a"), )),
+              ("b", 2, ((None, "lora_b"), )),
+            )
+          ),
+          (
+            partial(nnx.LoRALinear, lora_rank=4),
+            (3, 2),
+            (
+              ("a", 2, (("lora", "lora_a"), )),
+              ("b", 2, (("lora", "lora_b"), )),
+            )
+          ),
+          (
+              nnx.LSTMCell,
+              (4, 5),
+              (
+                (
+                  "kernel",
+                  2,
+                  ((name, "kernel") for name in ["ii", "if_", "ig", "io"])
+                ),
+                (
+                  "recurrent_kernel",
+                  2,
+                  ((name, "kernel") for name in ["hi", "hf", "hg", "ho"])
+                ),
+                (
+                  "bias",
+                  1,
+                  ((name, "bias") for name in ["hi", "hf", "hg", "ho"])
+                ),
+              ),
+          ),
+          (
+              nnx.OptimizedLSTMCell,
+              (4, 5),
+              (
+                ("kernel", 2, (("dense_i", "kernel"), )),
+                ("recurrent_kernel", 2, (("dense_h", "kernel"), )),
+                ("bias", 1, (("dense_h", "bias"), )),
+              )
+          ),
+          (
+              nnx.SimpleCell,
+              (4, 5),
+              (
+                ("kernel", 2, (("dense_i", "kernel"), )),
+                ("bias", 1, (("dense_i", "bias"), )),
+                ("recurrent_kernel", 2, (("dense_h", "kernel"), )),
+              )
+          ),
+          (
+              nnx.GRUCell,
+              (4, 5),
+              (
+                ("kernel", 2, (("dense_i", "kernel"), )),
+                ("bias", 1, (("dense_i", "bias"), )),
+                ("recurrent_kernel", 2, (("dense_h", "kernel"), )),
+              )
+          ),
+      ],
+  )
+  def test(self, module_args_kwargs_initargs):
+    module_cls, args, metadata_argnames = module_args_kwargs_initargs
+    kwargs = {"rngs": nnx.Rngs(0)}
+    sharding_names = ("din", "dout")
+    metadata_kwargs = {
+      f"{key}_metadata": {"sharding_names": sharding_names[:le]}
+      for key, le, _ in metadata_argnames
+    }
+
+    mesh = jax.make_mesh(
+      (1, 1),
+      sharding_names,
+      axis_types=(jax.sharding.AxisType.Auto,) * len(sharding_names),
+    )
+    with jax.set_mesh(mesh):
+      module = module_cls(*args, **metadata_kwargs, **kwargs)
+
+    for key, le, attrs in metadata_argnames:
+      attrs = attrs if attrs else ((None, key), )
+      for attr_name, param_name in attrs:
+        attr = getattr(module, attr_name) if attr_name is not None else module
+        param = getattr(attr, param_name)
+        self.assertIsNotNone(param.sharding_names)
+        self.assertEqual(param.sharding_names, sharding_names[:le])
 
 
 if __name__ == '__main__':

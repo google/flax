@@ -32,6 +32,9 @@ def get_pspec(sharding_names, sharding_rules = None) -> PartitionSpec:
     return PartitionSpec(*from_sharding_rules(sharding_names, rules))
   return PartitionSpec(*sharding_names)
 
+def _apply_sharding(value, sharding):
+  with jax.disable_jit(False):
+    return jax.jit(lambda x: x, out_shardings=sharding)(value)
 
 def shard_value(value, sharding_names, sharding_rules, mesh):
   if not sharding_names:
@@ -43,8 +46,8 @@ def shard_value(value, sharding_names, sharding_rules, mesh):
       'For more guidance, see https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html.')
   pspec = get_pspec(sharding_names, sharding_rules)
   if mesh is not None:
-    jax.lax.with_sharding_constraint(value, NamedSharding(mesh, pspec))
-  return jax.lax.with_sharding_constraint(value, pspec)
+    return _apply_sharding(value, NamedSharding(mesh, pspec))
+  return _apply_sharding(value, pspec)
 
 
 

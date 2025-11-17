@@ -76,9 +76,11 @@ jobs:
     - name: Install standalone dependencies only
       run: |
         uv sync
+        # temporary: install jax nightly
+        uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
     - name: Test importing Flax
       run: |
-        uv run python -c "import flax"
+        uv run --no-sync python -c "import flax"
 
   tests:
     name: Run Tests
@@ -109,6 +111,7 @@ jobs:
 
     - name: Install dependencies
       run: |
+        rm -fr .venv
         uv sync --extra testing --extra docs
     - name: Install JAX
       run: |
@@ -122,14 +125,22 @@ jobs:
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
           # TODO(cgarciae): Remove this once dm-haiku 0.0.14 is released
           uv pip install -U git+https://github.com/google-deepmind/dm-haiku.git
-          uv run tests/run_all_tests.sh --only-doctest
+          # temporary: install jax nightly
+          uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
+          uv run --no-sync tests/run_all_tests.sh --only-doctest
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
           uv pip install -U tensorflow-datasets
-          uv run tests/run_all_tests.sh --only-pytest
+          # temporary: install jax nightly
+          uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
+          uv run --no-sync tests/run_all_tests.sh --only-pytest
         elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
-          uv run tests/run_all_tests.sh --only-pytype
+          # temporary: install jax nightly
+          uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
+          uv run --no-sync tests/run_all_tests.sh --only-pytype
         elif [[ "${{ matrix.test-type }}" == "mypy" ]]; then
-          uv run tests/run_all_tests.sh --only-mypy
+          # temporary: install jax nightly
+          uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
+          uv run --no-sync tests/run_all_tests.sh --only-mypy
         else
           echo "Unknown test type: ${{ matrix.test-type }}"
           exit 1
