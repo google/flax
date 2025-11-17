@@ -38,7 +38,7 @@ from flax.nnx import (
 )
 from flax import config
 from flax.nnx.variablelib import Variable
-from flax.typing import SizeBytes
+from flax.typing import MISSING, Missing, SizeBytes
 
 BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
 
@@ -52,31 +52,24 @@ Data.__doc__ = """Data marks attributes of a class as pytree data using type ann
 Data annotations must be used at the class level and will apply to all instances.
 The usage of Data is recommended when type annotations are used already present
 or required e.g. for dataclasses.
-
-Example::
-
-  from flax import nnx
-  import jax
-  import dataclasses
-
-  @dataclasses.dataclass
-  class Foo(nnx.Pytree):
-    a: nnx.Data[int]  # Annotates `a` as pytree data
-    b: str            # `b` is not pytree data
-
-  foo = Foo(a=42, b='hello')
-
-  assert jax.tree.leaves(foo) == [42]
 """
 DATA_REGISTRY: set[type] = set()
 
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class DataAttr:
-  value: tp.Any
-
-
-def data(value: A, /) -> A:
+@tp.overload
+def data(value: A, /) -> A: ...
+@tp.overload
+def data(
+  *,
+  default: A = dataclasses.MISSING,  # type: ignore[assignment]
+  default_factory: tp.Callable[[], A] | None = None,  # type: ignore[assignment]
+  init: bool = True,
+  repr: bool = True,
+  hash: bool | None = None,
+  compare: bool = True,
+  metadata: tp.Mapping[str, tp.Any] | None = None,
+  kw_only: bool = False,
+) -> tp.Any: ...
+def data(value: tp.Any = MISSING, /, **kwargs) -> tp.Any:
   """Annotates a an attribute as pytree data.
 
   The return value from `data` must be directly assigned to an Object attribute
@@ -103,7 +96,20 @@ def data(value: A, /) -> A:
     A value which will register the attribute as data on assignment.
 
   """
-  return DataAttr(value)  # type: ignore[return-value]
+  if not isinstance(value, Missing) and kwargs:
+    raise TypeError(
+      'nnx.data() accepts either a single positional argument or keyword'
+      ' arguments, but not both.'
+    )
+  metadata = {'nnx_value': value}
+  if 'metadata' in kwargs and kwargs['metadata'] is not None:
+    if 'static' in kwargs['metadata']:
+      raise ValueError(
+        "Cannot use 'static' key in metadata argument for nnx.data."
+      )
+    metadata.update(kwargs.pop('metadata'))
+  metadata['static'] = False
+  return dataclasses.field(**kwargs, metadata=metadata)  # type: ignore[return-value]
 
 
 def register_data_type(type_: type, /) -> None:
@@ -191,13 +197,21 @@ The usage of Static is recommended when type annotations are used already presen
 or required e.g. for dataclasses.
 """
 
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class StaticAttr:
-  value: tp.Any
-
-
-def static(value: A, /) -> A:
+@tp.overload
+def static(value: A, /) -> A: ...
+@tp.overload
+def static(
+  *,
+  default: A = dataclasses.MISSING,  # type: ignore[assignment]
+  default_factory: tp.Callable[[], A] | None = None,
+  init: bool = True,
+  repr: bool = True,
+  hash: bool | None = None,
+  compare: bool = True,
+  metadata: tp.Mapping[str, tp.Any] | None = None,
+  kw_only: bool = False,
+) -> tp.Any: ...
+def static(value: tp.Any = MISSING, /, **kwargs) -> tp.Any:
   """Annotates a an attribute as static.
 
   The return value from `static` must be directly assigned to an Object
@@ -219,8 +233,61 @@ def static(value: A, /) -> A:
 
   By default ``nnx.Pytree`` will ...
   """
-  return StaticAttr(value)  # type: ignore[return-value]
+  if not isinstance(value, Missing) and kwargs:
+    raise TypeError(
+      'nnx.static() accepts either a single positional argument or keyword'
+      ' arguments, but not both.'
+    )
+  metadata = {'nnx_value': value}
+  if 'metadata' in kwargs and kwargs['metadata'] is not None:
+    if 'static' in kwargs['metadata']:
+      raise ValueError(
+        "Cannot use 'static' key in metadata argument for nnx.static."
+      )
+    metadata.update(kwargs.pop('metadata'))
+  metadata['static'] = True
+  return dataclasses.field(**kwargs, metadata=metadata)  # type: ignore[return-value]
 
+@tp.overload
+def dataclass(cls: type[A], /) -> type[A]: ...
+@tp.overload
+def dataclass(
+  *,
+  init: bool = True,
+  eq: bool = True,
+  order: bool = False,
+  unsafe_hash: bool = False,
+  match_args: bool = True,
+  kw_only: bool = False,
+  slots: bool = False,
+  weakref_slot: bool = False,
+) -> tp.Callable[[type[A]], type[A]]: ...
+
+@tp.dataclass_transform(field_specifiers=(dataclasses.field, data, static))
+def dataclass(
+  cls=None,
+  /,
+  *,
+  init: bool = True,
+  eq: bool = True,
+  order: bool = False,
+  unsafe_hash: bool = False,
+  match_args: bool = True,
+  kw_only: bool = False,
+  slots: bool = False,
+  weakref_slot: bool = False,
+) -> tp.Any:
+  return dataclasses.dataclass(
+    cls,
+    init=init,
+    eq=eq,
+    order=order,
+    unsafe_hash=unsafe_hash,
+    match_args=match_args,
+    kw_only=kw_only,
+    slots=slots,
+    weakref_slot=weakref_slot,
+  )
 
 def _collect_stats(
   node: tp.Any, node_stats: dict[int, dict[type[Variable], SizeBytes]]
@@ -235,10 +302,10 @@ def _collect_stats(
   node_stats[id(node)] = stats
 
   if isinstance(node, Variable):
-    var_type = type(node)
+    var_type = node.var_type
     if issubclass(var_type, nnx.RngState):
       var_type = nnx.RngState
-    size_bytes = SizeBytes.from_any(node.raw_value)
+    size_bytes = SizeBytes.from_any(node.get_raw_value())
     if size_bytes:
       stats[var_type] = size_bytes
 
@@ -369,6 +436,16 @@ class ArrayRepr(reprlib.Representable):
     yield reprlib.Attr('shape', self.shape)
     yield reprlib.Attr('dtype', self.dtype)
 
+@dataclasses.dataclass(frozen=True, repr=False)
+class VariableRepr(reprlib.Representable):
+  var_type: type[Variable]
+  value: tp.Any
+  metadata: dict[str, tp.Any]
+
+  def __nnx_repr__(self):
+    variable = self.var_type._new(self.value, self.metadata)
+    yield from variable.__nnx_repr__()
+
 
 @dataclasses.dataclass(frozen=True, repr=False)
 class MutableArrayRepr(reprlib.Representable):
@@ -384,6 +461,20 @@ class MutableArrayRepr(reprlib.Representable):
     yield reprlib.Attr('shape', self.shape)
     yield reprlib.Attr('dtype', self.dtype)
 
+def _to_shape_dtype(x):
+  if isinstance(x, Variable):
+    value = x.get_raw_value()
+    metadata = x.get_metadata()
+    value = jax.tree.map(_to_shape_dtype, value)
+    return VariableRepr(x.var_type, value, metadata)
+  elif variablelib.is_array_ref(x) and np.prod(x.shape) > 1:
+    return MutableArrayRepr(x.shape, x.dtype)
+  elif (
+    isinstance(x, (np.ndarray, jax.Array))
+    and np.prod(x.shape) > 1
+  ):
+    return ArrayRepr(x.shape, x.dtype)
+  return x
 
 class AttributeStatus(tp.NamedTuple):
   is_data: bool
@@ -429,15 +520,65 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     for name, type_ in type_hints.items():
       if isinstance(type_, str):
         if type_.startswith('nnx.Data'):
+          warnings.warn(
+            f"'Data' is deprecated, please replace:\n\n"
+            '  some_field: nnx.Data[SomeType]\n\n'
+            f'with:\n\n'
+            '  some_field: SomeType = nnx.data()\n\n',
+            DeprecationWarning,
+            stacklevel=2,
+          )
           nodes[name] = True
         elif type_.startswith('nnx.Static'):
+          warnings.warn(
+            f"'Static' is deprecated, please replace:\n\n"
+            '  some_field: nnx.Static[SomeType]\n\n'
+            f'with:\n\n'
+            '  some_field: SomeType = nnx.static()\n\n',
+            DeprecationWarning,
+            stacklevel=2,
+          )
           nodes[name] = False
       else:
         type_metadata = getattr(type_, '__metadata__', ())
         if DataAnnotation in type_metadata:
+          warnings.warn(
+            f"'Data' is deprecated, please replace:\n\n"
+            '  some_field: nnx.Data[SomeType]\n\n'
+            f'with:\n\n'
+            '  some_field: SomeType = nnx.data()\n\n',
+            DeprecationWarning,
+            stacklevel=2,
+          )
           nodes[name] = True
         elif StaticAnnotation in type_metadata:
+          warnings.warn(
+            f"'Static' is deprecated, please replace:\n\n"
+            '  some_field: nnx.Static[SomeType]\n\n'
+            f'with:\n\n'
+            '  some_field: SomeType = nnx.static()\n\n',
+            DeprecationWarning,
+            stacklevel=2,
+          )
           nodes[name] = False
+
+    for name, value in vars(cls).items():
+      if isinstance(value, dataclasses.Field) and 'static' in value.metadata:
+        if not isinstance(value.metadata['static'], bool):
+          raise ValueError(
+            f"Invalid 'static' metadata for attribute"
+            f" '{cls.__name__}.{name}': expected bool, got"
+            f' {type(value.metadata["static"]).__name__}.'
+          )
+        is_node = not value.metadata['static']
+        if name in nodes and nodes[name] != is_node:
+          raise ValueError(
+            f'Conflicting pytree annotation for attribute'
+            f" '{cls.__name__}.{name}': previously registered as"
+            f' {"data" if nodes[name] else "static"}, but found'
+            f' nnx.{"data" if is_node else "static"}(...) annotation.'
+          )
+        nodes[name] = is_node
 
     cls._pytree__nodes = graph.HashableMapping(nodes, copy=False)
 
@@ -483,15 +624,11 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     )
     data: bool = False
     explicit: bool = False
-    if type(value) is DataAttr:
-      value = value.value
+    if isinstance(value, dataclasses.Field) and 'nnx_value' in value.metadata:
+      is_static = value.metadata['static']
+      value = value.metadata['nnx_value']
       if self._pytree__is_pytree:
-        data = True
-        explicit = True
-    elif type(value) is StaticAttr:
-      value = value.value
-      if self._pytree__is_pytree:
-        data = False
+        data = not is_static
         explicit = True
     elif self._pytree__is_pytree:
       data = is_data(value)
@@ -507,18 +644,14 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       vars(self)[name] = value
 
   def _check_value(self, key, value, new_status: AttributeStatus | None):
-    def _has_arrays(leaves):
-      return any(
-          isinstance(leaf, (np.ndarray, jax.Array))
-          or variablelib.is_array_ref(leaf)
-          for leaf in leaves
-      )
+    def _has_data(leaves):
+      return any(is_data(leaf) for leaf in leaves)
 
     def _get_annotations(leaves):
       return {
-          'data' if type(leaf) is DataAttr else 'static'
-          for leaf in leaves
-          if type(leaf) is DataAttr or type(leaf) is StaticAttr
+        'static' if leaf.metadata['static'] else 'data'
+        for leaf in leaves
+        if isinstance(leaf, dataclasses.Field) and 'nnx_value' in leaf.metadata
       }
 
     def _has_visited(x):
@@ -547,7 +680,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
           f' _.{key} = nnx.data(...)\n\n'
       )
 
-    if _has_arrays(leaves):
+    if _has_data(leaves):
       # check no data in nnx.static assignments
       if new_status is not None:
         if not new_status.is_data and new_status.explicit:
@@ -563,20 +696,20 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
               base_pytree_type = t
               break
           raise ValueError(
-              f"Found Arrays on value of type '{type(value)}' assigned to"
-              f" static attribute '{key}' of Pytree type '{type(self)}'. Static"
-              ' attributes should not contain Array values. Consider one of'
-              ' the following options:\n\n1. If the attribute is meant to be'
-              ' static, either remove the Array value or wrap it in a static'
-              ' container (e.g., using `nnx.static(...)`).\n2. If the'
-              ' attribute is meant to be data, wrap the value with nnx.data on'
-              f' assignment:\n\n  _.{key} = nnx.data(...)\n\n3. Alternatively,'
-              ' annotate the class attribute with nnx.Data:\n\n  class'
-              f' {type(self).__name__}({base_pytree_type.__name__}):\n   '
-              f' {key}: nnx.Data[{type(value).__name__}]\n\n4. Disable pytree'
-              ' for this class:\n\n  class'
-              f' {type(self).__name__}({base_pytree_type.__name__},'
-              ' pytree=False):\n\n'
+            f"Found Arrays on value of type '{type(value)}' assigned to"
+            f" static attribute '{key}' of Pytree type '{type(self)}'. Static"
+            ' attributes should not contain Array values. Consider one of'
+            ' the following options:\n\n1. If the attribute is meant to be'
+            ' static, either remove the Array value or wrap it in a static'
+            ' container (e.g., using `nnx.static(...)`).\n2. If the'
+            ' attribute is meant to be data, wrap the value with nnx.data on'
+            f' assignment:\n\n  _.{key} = nnx.data(...)\n\n3. Alternatively,'
+            ' annotate the class attribute with nnx.data:\n\n  class'
+            f' {type(self).__name__}({base_pytree_type.__name__}):\n   '
+            f' {key}: {type(value).__name__} = nnx.data()\n\n4. Disable pytree'
+            ' for this class:\n\n  class'
+            f' {type(self).__name__}({base_pytree_type.__name__},'
+            ' pytree=False):\n\n'
           )
       # check no data in static attributes after __init__
       elif not current_is_data:
@@ -586,20 +719,20 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
             base_pytree_type = t
             break
         raise ValueError(
-            f'Found unexpected Arrays on value of type {type(value)} in static'
-            f" attribute '{key}' of Pytree type '{type(self)}'. This is an"
-            ' error starting from Flax version 0.12.0.\nConsider one of the'
-            ' following options:\n\n1. If the attribute is meant to be static,'
-            ' either remove the Array value or wrap it in a static'
-            ' container.\n2. Wrap the value with nnx.data on'
-            f' assignment:\n\n  _.{key} = nnx.data(...)\n\n3. Annotate the'
-            ' class attribute with nnx.Data:\n\n  class'
-            f' {type(self).__name__}({base_pytree_type.__name__}):\n    {key}:'
-            f' nnx.Data[{type(value).__name__}]\n\n4. If the container is a'
-            ' list or dict, try using nnx.List(...) or nnx.Dict(...)'
-            ' instead.\n5. Disable pytree for this class:\n\n  class'
-            f' {type(self).__name__}({base_pytree_type.__name__},'
-            f' pytree=False):\n\n'
+          f'Found unexpected Arrays on value of type {type(value)} in static'
+          f" attribute '{key}' of Pytree type '{type(self)}'. This is an"
+          ' error starting from Flax version 0.12.0.\nConsider one of the'
+          ' following options:\n\n1. If the attribute is meant to be static,'
+          ' either remove the Array value or wrap it in a static'
+          ' container.\n2. Wrap the value with nnx.data on'
+          f' assignment:\n\n  _.{key} = nnx.data(...)\n\n3. Annotate the'
+          ' class attribute with nnx.data:\n\n  class'
+          f' {type(self).__name__}({base_pytree_type.__name__}):\n    {key}:'
+          f' {type(value).__name__} = nnx.data()\n\n4. If the container is a'
+          ' list or dict, try using nnx.List(...) or nnx.Dict(...)'
+          ' instead.\n5. Disable pytree for this class:\n\n  class'
+          f' {type(self).__name__}({base_pytree_type.__name__},'
+          f' pytree=False):\n\n'
         )
     if tags := _get_annotations(leaves):
       raise ValueError(
@@ -660,21 +793,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         if str(name).startswith('_'):
           continue
 
-        def to_shape_dtype(value):
-          if isinstance(value, Variable):
-            return value.replace(
-              raw_value=jax.tree.map(to_shape_dtype, value.raw_value)
-            )
-          elif variablelib.is_array_ref(value) and np.prod(value.shape) > 1:
-            return MutableArrayRepr(value.shape, value.dtype)
-          elif (
-            isinstance(value, (np.ndarray, jax.Array))
-            and np.prod(value.shape) > 1
-          ):
-            return ArrayRepr(value.shape, value.dtype)
-          return value
-
-        value = jax.tree.map(to_shape_dtype, value, is_leaf=graph.is_graph_node)
+        value = jax.tree.map(_to_shape_dtype, value, is_leaf=graph.is_graph_node)
         yield reprlib.Attr(name, value)
     finally:
       if clear_seen:

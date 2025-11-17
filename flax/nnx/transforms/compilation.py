@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import inspect
+import operator
 import typing as tp
 
 import jax
@@ -32,7 +34,7 @@ from flax.nnx.transforms.transforms import (
   _resolve_bound_callable,
   _raise_bound_method_error,
 )
-from flax.typing import MISSING, Missing
+from flax.typing import MISSING, Missing, PathParts
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 P = tp.ParamSpec('P')
@@ -73,7 +75,7 @@ class StateSharding(extract.PrefixMapping):
     return self._shardings
 
   def map_prefix(
-    self, path: variablelib.PathParts, variable: variablelib.Variable
+    self, path: PathParts, variable: variablelib.Variable
   ) -> tp.Any:
     for filter, sharding in zip(self.filters, self.shardings):
       predicate = filterlib.to_predicate(filter)
@@ -403,14 +405,25 @@ class JitWrapped(tp.Generic[P, R]):
       out_shardings,
     )
 
+    if isinstance(in_shardings, (tuple, list)) and (static_argnums or static_argnames):
+      # We should reintroduce None values into in_shardings corresponding to static arguments
+      static_argnums = _resolve_argnums(fun, static_argnums, static_argnames)
+      in_shardings = list(in_shardings)
+      for static_arg_index in sorted(static_argnums):
+        in_shardings.insert(static_arg_index, None)
+      in_shardings = tuple(in_shardings)
+
+    jax_out_in_shardings = jax.tree.map(
+      lambda x: extract.NodeStates.from_prefixes(x.shardings, metadata=x)
+      if isinstance(x, StateSharding)
+      else x,
+      in_shardings,
+    )
+
     self.jitted_fn = jax.jit(
       JitFn(fun, in_shardings, out_shardings, kwarg_shardings, self),
       in_shardings=self.jax_in_shardings,
-      out_shardings=(
-        self.jax_in_shardings,
-        kwarg_shardings,
-        self.jax_out_shardings,
-      ),
+      out_shardings=(jax_out_in_shardings, kwarg_shardings, self.jax_out_shardings),
       static_argnums=static_argnums,
       static_argnames=static_argnames,
       donate_argnums=donate_argnums,
@@ -1050,3 +1063,105 @@ def shard_map(
   shard_map_wrapper.inner = shard_map_fn  # type: ignore
 
   return shard_map_wrapper  # type: ignore
+
+
+# We can't use private methods from jax._src.api_util
+# We copy the function: api_util.fun_signature
+def _fun_signature(fun: tp.Callable) -> inspect.Signature | None:
+  try:
+    return inspect.signature(fun)
+  except (ValueError, TypeError):
+    return None
+
+# Adapted copy of private jax function from api_util: fun_signature
+def _resolve_argnums(
+    fun: tp.Callable,
+    static_argnums: int | tp.Sequence[int] | None,
+    static_argnames: str | tp.Iterable[str] | None,
+) -> tuple[int, ...]:
+  def _ensure_index_tuple(x: tp.Any) -> tuple[int, ...]:
+    """Convert x to a tuple of indices."""
+    try:
+      return (operator.index(x),)
+    except TypeError:
+      return tuple(map(operator.index, x))
+
+  def _ensure_str(x: str) -> str:
+    if not isinstance(x, str):
+      raise TypeError(f"argument is not a string: {x}")
+    return x
+
+  def _ensure_str_tuple(x: str | tp.Iterable[str]) -> tuple[str, ...]:
+    """Convert x to a tuple of strings."""
+    if isinstance(x, str):
+      return (x,)
+    else:
+      return tuple(map(_ensure_str, x))
+
+  signature = _fun_signature(fun)
+  if signature is None:
+    # Some built-in functions don't support signature.
+    # See: https://github.com/python/cpython/issues/73485
+    # In this case no validation is done
+    static_argnums = () if static_argnums is None else _ensure_index_tuple(
+        static_argnums)
+  else:
+    # Infer argnums and argnames according to docstring
+    # If nums is None and names is not None, then nums are inferred from the
+    # names and vice-versa.
+    _POSITIONAL_OR_KEYWORD = inspect.Parameter.POSITIONAL_OR_KEYWORD
+    _POSITIONAL_ARGUMENTS = (
+      inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD
+    )
+
+    def infer_argnums_and_argnames(
+        sig: inspect.Signature,
+        argnums: int | tp.Iterable[int] | None,
+        argnames: str | tp.Iterable[str] | None,
+      ) -> tuple[tuple[int, ...], tuple[str, ...]]:
+      """Infer missing argnums and argnames for a function with inspect."""
+      if argnums is None and argnames is None:
+        return (), ()
+
+      if argnums is not None and argnames is not None:
+        argnums = _ensure_index_tuple(argnums)
+        argnames = _ensure_str_tuple(argnames)
+        return argnums, argnames
+
+      parameters = sig.parameters
+      if argnums is None:
+        assert argnames is not None
+        argnames = _ensure_str_tuple(argnames)
+        argnums = tuple(
+            i for i, (k, param) in enumerate(parameters.items())
+            if param.kind == _POSITIONAL_OR_KEYWORD and k in argnames
+        )
+      else:
+        argnums = _ensure_index_tuple(argnums)
+        argnames = tuple(
+            k for i, (k, param) in enumerate(parameters.items())
+            if param.kind == _POSITIONAL_OR_KEYWORD and i in argnums
+        )
+      return argnums, argnames
+
+    def _validate_argnums(sig: inspect.Signature, argnums: tuple[int, ...], argnums_name: str) -> None:
+      n_pos_args = 0
+      for param in sig.parameters.values():
+        if param.kind in _POSITIONAL_ARGUMENTS:
+          n_pos_args += 1
+
+        elif param.kind is inspect.Parameter.VAR_POSITIONAL:
+          # We can have any number of positional arguments
+          return
+
+      if argnums and (-min(argnums) > n_pos_args or max(argnums) >= n_pos_args):
+        raise ValueError(f"Jitted function has {argnums_name}={argnums}, "
+                        f"but only accepts {n_pos_args} positional arguments.")
+
+    static_argnums, static_argnames = infer_argnums_and_argnames(
+        signature, static_argnums, static_argnames)
+
+    # Validation
+    _validate_argnums(signature, static_argnums, "static_argnums")
+
+  return static_argnums

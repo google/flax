@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import functools
 from typing import Any
+from collections.abc import Mapping
+from types import MappingProxyType
 from collections.abc import Callable
 import math
 
@@ -301,11 +303,32 @@ class MultiHeadAttention(Module):
       num_heads, value_channels]``
     decode: whether to prepare and use an autoregressive cache.
     normalize_qk: should QK normalization be applied (arxiv.org/abs/2302.05442).
+    qkv_promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype for the
+      query, key, and value LinearGeneral submodules.
+    out_promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype for the
+      output LinearGeneral submodule.
+    ln_promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype for the
+      LayerNorm submodules (query_ln and key_ln) when normalize_qk=True.
     rngs: rng key.
     keep_rngs: whether to store the input rngs as attribute (i.e. `self.rngs = rngs`)
       (default: True). If rngs is stored, we should split the module as
       `graphdef, params, nondiff = nnx.split(module, nnx.Param, ...)` where `nondiff`
       contains RNG object associated with stored `self.rngs`.
+    kernel_metadata: Optional metadata dictionary to set when initializing
+      the Dense layers.
+    out_kernel_metadata: Optional metadata dictionary to set when initializing
+      the output Dense layers. If None, the kernel_metadata is used.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias of the Dense layers.
+    out_bias_metadata: Optional metadata dictionary to set when initializing
+      the bias of the output Dense layers. If None, the bias_metadata is used.
+    query_ln_scale_metadata: Optional metadata dictionary to set when initializing
+      the scale of the query layer norm layer.
+    key_ln_scale_metadata: Optional metadata dictionary to set when initializing
+      the scale of the key layer norm layer.
   """
 
   def __init__(
@@ -330,6 +353,9 @@ class MultiHeadAttention(Module):
     attention_fn: Callable[..., Array] = dot_product_attention,
     decode: bool | None = None,
     normalize_qk: bool = False,
+    qkv_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+    out_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+    ln_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     # Deprecated, will be removed.
     qkv_dot_general: DotGeneralT | None = None,
     out_dot_general: DotGeneralT | None = None,
@@ -337,6 +363,12 @@ class MultiHeadAttention(Module):
     out_dot_general_cls: Any = None,
     rngs: rnglib.Rngs,
     keep_rngs: bool = True,
+    kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    out_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
+    bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    out_bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    query_ln_scale_metadata: Mapping[str, Any] = MappingProxyType({}),
+    key_ln_scale_metadata: Mapping[str, Any] = MappingProxyType({}),
   ):
     self.num_heads = num_heads
     self.in_features = in_features
@@ -359,6 +391,9 @@ class MultiHeadAttention(Module):
     self.attention_fn = attention_fn
     self.decode = decode
     self.normalize_qk = normalize_qk
+    self.qkv_promote_dtype = qkv_promote_dtype
+    self.out_promote_dtype = out_promote_dtype
+    self.ln_promote_dtype = ln_promote_dtype
     self.qkv_dot_general = qkv_dot_general
     self.out_dot_general = out_dot_general
     self.qkv_dot_general_cls = qkv_dot_general_cls
@@ -381,8 +416,11 @@ class MultiHeadAttention(Module):
       bias_init=bias_init,
       use_bias=self.use_bias,
       precision=self.precision,
+      promote_dtype=self.qkv_promote_dtype,
       dot_general=self.qkv_dot_general,
       dot_general_cls=self.qkv_dot_general_cls,
+      kernel_metadata=kernel_metadata,
+      bias_metadata=bias_metadata,
     )
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
@@ -400,14 +438,18 @@ class MultiHeadAttention(Module):
         use_bias=False,
         dtype=self.dtype,
         param_dtype=self.param_dtype,
+        promote_dtype=self.ln_promote_dtype,
         rngs=rngs,
+        scale_metadata=query_ln_scale_metadata,
       )
       self.key_ln = LayerNorm(
         self.head_dim,
         use_bias=False,
         dtype=self.dtype,
         param_dtype=self.param_dtype,
+        promote_dtype=self.ln_promote_dtype,
         rngs=rngs,
+        scale_metadata=key_ln_scale_metadata,
       )
     else:
       self.query_ln = nnx.data(None)
@@ -423,9 +465,12 @@ class MultiHeadAttention(Module):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       precision=self.precision,
+      promote_dtype=self.out_promote_dtype,
       dot_general=self.out_dot_general,
       dot_general_cls=self.out_dot_general_cls,
       rngs=rngs,
+      kernel_metadata=out_kernel_metadata or kernel_metadata,
+      bias_metadata=out_bias_metadata or bias_metadata,
     )
     self.rngs = rngs.dropout.fork() if keep_rngs and dropout_rate > 0 else None
 
@@ -637,6 +682,51 @@ class MultiHeadAttention(Module):
     self.cached_key = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cached_value = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
+
+  def set_mode(
+      self,
+      deterministic: bool | None = None,
+      decode: bool | None = None,
+      batch_size: int | Shape | None = None,
+      max_length: int | None = None,
+      **kwargs,
+  ) -> dict:
+    """Class method used by ``nnx.set_mode``.
+
+    Args:
+      train: if True, the module is set to training mode.
+      deterministic: if True, the module is set to deterministic mode.
+      decode: if True, the module is set to decode mode.
+      batch_size: the batch size to use for the cache.
+      max_length: the max length to use for the cache.
+    """
+    if deterministic is not None:
+      self.deterministic = deterministic
+
+    if decode is not None:
+      self.decode = decode
+      if (
+          not hasattr(self, 'cached_key')
+          or not hasattr(self, 'cached_value')
+          or not hasattr(self, 'cache_index')
+      ):
+        if batch_size is None:
+          raise TypeError(
+              "'batch_size' must be provided when initializing cache."
+          )
+        if max_length is None:
+          raise TypeError(
+              "'max_length' must be provided when initializing cache."
+          )
+        if isinstance(batch_size, int):
+          batch_size = (batch_size,)
+
+        # initialize cache
+        cache_shape = (*batch_size, max_length, self.num_heads, self.head_dim)
+        self.cached_key = nnx.Cache(jnp.zeros(cache_shape, self.dtype))
+        self.cached_value = nnx.Cache(jnp.zeros(cache_shape, self.dtype))
+        self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
+    return kwargs
 
 
 # mask-making utility functions

@@ -31,7 +31,7 @@ from flax import errors
 
 
 
-class TestJIT(absltest.TestCase):
+class TestJIT(parameterized.TestCase):
   def test_jit(self):
     m = nnx.Dict(a=nnx.Param(1))
 
@@ -436,17 +436,83 @@ class TestJIT(absltest.TestCase):
     y = compiled(m, x)
     self.assertEqual(m.count[...], 2)
 
+  @parameterized.parameters(
+    {'static_argnums': (2,), 'static_argnames': None},
+    {'static_argnums': None, 'static_argnames': ('use_relu',)},
+  )
+  def test_jit_static_args_with_shardings(self, static_argnums, static_argnames):
+    """Test static arguments work correctly with in_shardings."""
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    def fn(x, scale, use_relu):
+      y = x * scale
+      if use_relu:
+        y = jnp.maximum(y, 0)
+      return y.sum()
+
+    x = jnp.linspace(-1.0, 1.0, 16, dtype=jnp.float32).reshape(4, 4)
+    x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
+
+    f = nnx.jit(fn, in_shardings=(x_sharding, None),
+                static_argnums=static_argnums, static_argnames=static_argnames)
+    y_relu = f(x, 0.5, True)
+    y_no_relu = f(x, 0.5, False)
+    self.assertNotEqual(y_relu, y_no_relu)
+
+  @parameterized.parameters(
+    {
+      'static_args': {'static_argnums': (2, 3)},
+    },
+    {
+      'static_args': {'static_argnames': ('static_arg1', 'static_arg2')},
+    },
+  )
+  def test_with_sharding_and_static_args(self, static_args):
+    n_devices = max(jax.local_device_count() // 2, 1)
+    devices = mesh_utils.create_device_mesh(
+      (n_devices, jax.local_device_count() // n_devices)
+    )
+    mesh = jax.sharding.Mesh(devices, ('a', 'b'))
+
+    def sharding(*args):
+      return jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(*args))
+
+    state_sharding = nnx.StateSharding(
+      {
+        nnx.PathContains('kernel'): sharding('a', 'b'),
+        nnx.PathContains('bias'): sharding('b'),
+      }
+    )
+
+    m = nnx.Linear(16, 32, rngs=nnx.Rngs(0))
+    self.assertNotIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
+
+    @nnx.jit(
+      in_shardings=(state_sharding, None),
+      **static_args,
+    )
+    def constrain_object(m, scale: float, static_arg1: bool, static_arg2: bool):
+      new_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('b', 'a'))
+      m.kernel = jax.lax.with_sharding_constraint(m.kernel, new_sharding)
+      return None
+
+    constrain_object(m, 0.5, True, True)
+    self.assertEqual(m.kernel.sharding.spec, jax.sharding.PartitionSpec("a", "b"))
+
+
 class TestEvalShape(absltest.TestCase):
   def test_eval_shape(self):
     abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
     self.assertIsInstance(abs_model, nnx.Linear)
-    self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
+    self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
 
   def test_eval_shape_mutable_array(self):
-    with nnx.use_refs(True):
+    with nnx.use_hijax(True):
       abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
     self.assertIsInstance(abs_model, nnx.Linear)
-    self.assertIsInstance(abs_model.kernel.value, jax.ShapeDtypeStruct)
+    self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
     self.assertEqual(abs_model.kernel.shape, (1, 2))
 
 class TestShardMap(absltest.TestCase):
@@ -800,7 +866,7 @@ class TestGrad(parameterized.TestCase):
       loss = jnp.mean(l1[0].kernel * l2[0].kernel) + jnp.mean(
         l1[0].bias * l2[0].bias
       )
-      l1[0].kernel.value = jnp.array(-1.0)
+      l1[0].kernel.set_value(jnp.array(-1.0))
       m3 = nnx.Linear(2, 3, rngs=nnx.Rngs(2))
       return loss, m3
 
@@ -1601,6 +1667,38 @@ class TestScan(absltest.TestCase):
 
     assert y.shape == (1, 3)
 
+  def test_complex_set_mode(self):
+    state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
+
+    class MLP(nnx.Module):
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes))
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.node = nnx.Variable(jnp.ones((2,)))
+
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = self.bn(x)
+        x = self.dropout(x)
+        x = nnx.gelu(x)
+        return x, None
+
+    module = MLP(rngs=nnx.Rngs(0))
+    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+
+    assert new_module.linear.kernel.shape == (5, 3, 3)
+    assert new_module.linear.bias.shape == (5, 3)
+    assert new_module.node.shape == (2,)
+
+    x = jnp.ones((1, 3))
+    y, _ = new_module(x)
+
+    assert y.shape == (1, 3)
+
   def test_complex_broadcast_dropout(self):
     state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
 
@@ -1631,6 +1729,39 @@ class TestScan(absltest.TestCase):
 
     x = jnp.ones((1, 3))
     y, _ = module(x)
+
+    assert y.shape == (1, 3)
+
+  def test_complex_broadcast_dropout_set_mode(self):
+    state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
+
+    class MLP(nnx.Module):
+      @nnx.split_rngs(splits=5, only='params')
+      @nnx.vmap(in_axes=(state_axes, state_axes))
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.node = nnx.Variable(jnp.ones((2,)))
+
+      @nnx.split_rngs(splits=5, only='params')
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = self.bn(x)
+        x = self.dropout(x)
+        x = nnx.gelu(x)
+        return x, None
+
+    module = MLP(rngs=nnx.Rngs(params=0, dropout=1))
+    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+
+    assert new_module.linear.kernel.shape == (5, 3, 3)
+    assert new_module.linear.bias.shape == (5, 3)
+    assert new_module.node.shape == (2,)
+
+    x = jnp.ones((1, 3))
+    y, _ = new_module(x)
 
     assert y.shape == (1, 3)
 
@@ -1669,6 +1800,42 @@ class TestScan(absltest.TestCase):
     assert y.shape == (1, 3)
     assert out is None
 
+  def test_complex_decorator_set_mode(self):
+    state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
+
+    class Block(nnx.Module):
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes), axis_size=5)
+      def __init__(self, rngs: nnx.Rngs):
+        self.d = 3
+        self.linear = nnx.Linear(3, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.node = nnx.Variable(jnp.ones((2,)))
+
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = self.bn(x)
+        x = self.dropout(x)
+        x = nnx.gelu(x)
+        return x, None
+
+    module = Block(rngs=nnx.Rngs(0))
+    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+
+    assert new_module.d == 3
+    assert new_module.linear.kernel.shape == (5, 3, 3)
+    assert new_module.linear.bias.shape == (5, 3)
+    assert new_module.node.shape == (2,)
+
+    x = jnp.ones((1, 3))
+    y, out = new_module(x)
+
+    assert y.shape == (1, 3)
+    assert out is None
+
+
   def test_scan_with_sharding(self):
     test = self
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
@@ -1705,7 +1872,7 @@ class TestScan(absltest.TestCase):
         test.assertEqual(self.linear.bias.sharding_names, ('dout',))
         return x, None
 
-    mesh = jax.make_mesh(((1, 1, 1)), ('layers', 'din', 'dout'))
+    mesh = jax.make_mesh((1, 1, 1), ('layers', 'din', 'dout'), axis_types=(jax.sharding.AxisType.Auto,) * len(('layers', 'din', 'dout')))
     with jax.set_mesh(mesh):
       m = MLP(rngs=nnx.Rngs(0))
 
@@ -2479,7 +2646,7 @@ class TestVmap(absltest.TestCase):
       )
 
 
-    mesh = jax.make_mesh(((1, 1, 1)), ('a', 'b', 'c'))
+    mesh = jax.make_mesh((1, 1, 1), ('a', 'b', 'c'), axis_types=(jax.sharding.AxisType.Auto,) * len(('a', 'b', 'c')))
     with jax.set_mesh(mesh):
       m = create_block(nnx.Rngs(0))
     self.assertEqual(m.kernel.shape, (5, 16, 32))
@@ -2662,9 +2829,9 @@ class TestCond(absltest.TestCase):
             step=nnx.Variable(jnp.array(0)), reward=nnx.Variable(jnp.array(0.0))
         )
 
-    @dataclasses.dataclass
+    @nnx.dataclass
     class Foo(nnx.Pytree):
-      timestep: nnx.Data[TimeStep]
+      timestep: TimeStep = nnx.data()
 
       def update(self):
         def reward_2(self: Foo):

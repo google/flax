@@ -47,7 +47,11 @@ class TestSPMD(parameterized.TestCase):
     def create_module():
       return nnx.split(Foo())
 
-    mesh = jax.make_mesh((2, 2), ('model', 'data'))
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('model', 'data'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('model', 'data')),
+    )
 
     with jax.set_mesh(mesh):
       m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
@@ -74,9 +78,13 @@ class TestSPMD(parameterized.TestCase):
     def create_module():
       return nnx.split(Foo())
 
-    mesh = jax.make_mesh((1, 1), ('model', 'data'))
+    mesh = jax.make_mesh(
+        (1, 1),
+        ('model', 'data'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('model', 'data')),
+    )
 
-    with mesh:
+    with jax.set_mesh(mesh):
       m: Foo = nnx.merge(*create_module())  # type: ignore[invalid-annotation]
 
     assert m.w.shape == (8, 2)
@@ -95,7 +103,11 @@ class TestSPMD(parameterized.TestCase):
       def __call__(self, x):
         return x @ self.w
 
-    mesh = jax.make_mesh(((2, 2)), ('row', 'col'))
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('row', 'col'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('row', 'col')),
+    )
     with jax.set_mesh(mesh):
       graphdef, params = nnx.split(Foo())
       state = nnx.TrainState.create(
@@ -154,7 +166,12 @@ class TestSPMD(parameterized.TestCase):
         test.assertEqual(bremoves[-1], (0, 'layers'))
         return x, None
 
-    mesh = jax.make_mesh(((1, 2, 2)), ('layers', 'din', 'dout'))
+    mesh = jax.make_mesh(
+        (1, 2, 2),
+        ('layers', 'din', 'dout'),
+        axis_types=(jax.sharding.AxisType.Auto,)
+        * len(('layers', 'din', 'dout')),
+    )
     with jax.set_mesh(mesh):
       m = MLP(rngs=nnx.Rngs(0))
     self.assertEqual(m.linear.kernel.shape, (5, 4, 4))
@@ -169,15 +186,34 @@ class TestSPMD(parameterized.TestCase):
 
     # One remove_axis and one add_axis called when in and out of `nnx.scan`
     with jax.set_mesh(mesh):
-       _ = m(jnp.ones((5, 4)))
+      _ = m(jnp.ones((5, 4)))
     self.assertEqual(kadds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(kremoves, [(0, 'layers')])
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(bremoves, [(0, 'layers')])
 
-  @parameterized.product(use_ref=[True, False])
-  def test_logical_rules(self, use_ref):
-    self.enter_context(nnx.use_refs(use_ref))
+
+  @parameterized.product(use_eager_sharding=[True, False])
+  def test_eager_sharding_context(self, use_eager_sharding):
+    rngs = nnx.Rngs(0)
+    with nnx.use_eager_sharding(use_eager_sharding):
+      mesh = jax.make_mesh(
+        (2, 2),
+        ('data', 'model'),
+        axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto),
+      )
+      with jax.set_mesh(mesh):
+        w = nnx.Param(
+          rngs.lecun_normal()((4, 8)),
+          sharding_names=(None, 'model'))
+        if use_eager_sharding:
+          assert has_sharding_spec(w)
+        else:
+          assert not has_sharding_spec(w)
+
+  @parameterized.product(use_hijax=[True, False])
+  def test_logical_rules(self, use_hijax):
+    self.enter_context(nnx.use_hijax(use_hijax))
     class Foo(nnx.Module):
 
       def __init__(self):
@@ -197,11 +233,15 @@ class TestSPMD(parameterized.TestCase):
       def __call__(self, x):
         return x @ self.w + self.b
 
-    mesh = jax.make_mesh(((1, 2, 2)), ('layers', 'row', 'col'))
+    mesh = jax.make_mesh(
+        (1, 2, 2),
+        ('layers', 'row', 'col'),
+        axis_types=(jax.sharding.AxisType.Auto,)
+        * len(('layers', 'row', 'col')),
+    )
     with jax.set_mesh(mesh), nnx.logical_axis_rules((('col-alias', 'col'),)):
       model = Foo()
       optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
-
 
     assert model.w.sharding.is_equivalent_to(
       NamedSharding(mesh, P('row', 'col')), ndim=2)
@@ -219,12 +259,76 @@ class TestSPMD(parameterized.TestCase):
             nnx.initializers.lecun_normal(), (None, 'model')))
         self.shared = self.linear.kernel
 
-    mesh = jax.make_mesh(((2, 2)), ('batch', 'model'))
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('batch', 'model'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('batch', 'model')),
+    )
     gdef, abs_state = nnx.get_abstract_model(lambda: Foo(nnx.Rngs(0)), mesh)
     assert len(jax.tree.leaves(abs_state)) == 1
     assert jax.tree.leaves(abs_state)[0].sharding.is_equivalent_to(
       NamedSharding(mesh, P(None, 'model')), ndim=2)
 
+  def test_explicit_sharding(self):
+    mesh = jax.make_mesh(
+      (2, 2),
+      ('row', 'col'),
+      axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Explicit),
+    )
+    v = nnx.Variable(
+      jnp.ones((4, 4)),
+      sharding_names=('row', 'col'),
+      mesh=mesh,
+    )
+    self.assertEqual(v.sharding.mesh, mesh)
+    self.assertEqual(
+      v.sharding.spec,
+      P('row', 'col'),
+    )
+
+  def test_explicit_sharding_disable_jit(self):
+    mesh = jax.make_mesh(
+      (2, 2),
+      ('row', 'col'),
+      axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Explicit),
+    )
+    with jax.disable_jit(True):
+      v = nnx.Variable(
+        jnp.ones((4, 4)),
+        sharding_names=('row', 'col'),
+        mesh=mesh,
+      )
+    self.assertEqual(v.sharding.mesh, mesh)
+    self.assertEqual(
+      v.sharding.spec,
+      P('row', 'col'),
+    )
+
+  def test_explicit_sharding_mesh_context(self):
+    mesh = jax.make_mesh(
+      (2, 2),
+      ('row', 'col'),
+      axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Explicit),
+    )
+    with jax.set_mesh(mesh):
+      v = nnx.Variable(
+        jnp.ones((4, 4)),
+        sharding_names=('row', 'col'),
+      )
+    self.assertEqual(v.sharding.mesh, mesh)
+    self.assertEqual(
+      v.sharding.spec,
+      P('row', 'col'),
+    )
+
+def has_sharding_spec(array):
+    sharding = array.sharding
+    if hasattr(sharding, 'spec'):
+        # For NamedSharding or PositionalSharding
+        return sharding.spec is not None and any(
+            s is not None for s in sharding.spec
+        )
+    return False
 
 if __name__ == '__main__':
   absltest.main()

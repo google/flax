@@ -1,4 +1,5 @@
 # Copyright 2024 The Flax Authors.
+
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -79,16 +80,16 @@ class PytreeTest(absltest.TestCase):
       foo.b = nnx.static(jnp.array(4))
 
   def test_consistent_attrs_frozen_dataclass(self):
-    @dataclasses.dataclass(frozen=True)
+    @nnx.dataclass
     class Foo(nnx.Pytree):
-      a: nnx.Data[int]
-      b: nnx.Static[int]
+      a: int = nnx.data()
+      b: int = nnx.static()
       c: jax.Array
 
     foo = Foo(a=1, b=2, c=jnp.array(3))
     self.assertLen(jax.tree.leaves(foo), 2)
 
-  def test_consistent_attrs_dataclass(self):
+  def test_consistent_attrs_dataclass_annotations(self):
     @dataclasses.dataclass
     class Foo(nnx.Pytree):
       a: nnx.Data[int]
@@ -649,6 +650,48 @@ class TestModule(absltest.TestCase):
       raise_if_not_found=False,
     )
 
+  def test_set_mode(self):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    assert block.dropout.deterministic == False
+    assert block.batch_norm.use_running_average == False
+
+    new_block = nnx.set_mode(block, deterministic=True, use_running_average=True)
+    assert new_block.dropout.deterministic == True
+    assert new_block.batch_norm.use_running_average == True
+    assert new_block.linear.kernel is block.linear.kernel
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    new_block = nnx.set_mode(block, only=nnx.Dropout, deterministic=True)
+    # Only the dropout will be modified
+    assert new_block.dropout.deterministic == True
+    assert new_block.batch_norm.use_running_average == False
+
+  def test_set_mode_error(self):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+
+    with self.assertRaisesRegex(
+        ValueError,
+        (
+            "Unused keys found in set_mode: \\['unknown'\\]"
+        ),
+    ):
+      nnx.set_mode(block, deterministic=True, use_running_average=True, unknown=True)
+
   def test_cloud_pickle(self):
     class Model(nnx.Module):
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
@@ -718,7 +761,7 @@ class TestModule(absltest.TestCase):
     self.assertIn(str(expected_total_rng_states), foo_repr[0])
 
 
-class TestModuleDataclass:
+class TestModuleDataclass(absltest.TestCase):
   def test_basic(self):
 
     @dataclasses.dataclass
@@ -750,6 +793,51 @@ class TestModuleDataclass:
     assert isinstance(state['d'], nnx.Variable)
     assert state['e'].value == 5
     assert isinstance(state['e'], nnx.BatchStat)
+
+  def test_field_specifiers(self):
+    @nnx.dataclass
+    class Foo(nnx.Pytree):
+      a: int = nnx.static()
+      b: jax.Array = nnx.data()
+
+    m = Foo(a=1, b=jnp.array(2))
+
+    leaves = jax.tree.leaves(m)
+    assert len(leaves) == 1
+    assert leaves[0] == jnp.array(2)
+
+  def test_field_specifiers_forced(self):
+    @nnx.dataclass
+    class Bar(nnx.Pytree):
+      a: int = nnx.data()
+
+    m = Bar(a=1)
+
+    leaves = jax.tree.leaves(m)
+    assert len(leaves) == 1
+    assert leaves[0] == 1
+
+  def test_field_specifiers_with_defaults(self):
+    @nnx.dataclass
+    class Bar(nnx.Pytree):
+      a: int = nnx.data(default=3)
+
+    m = Bar()
+
+    leaves = jax.tree.leaves(m)
+    assert len(leaves) == 1
+    assert leaves[0] == 3
+
+  def test_field_specifiers_array_in_static(self):
+    @nnx.dataclass
+    class Bar(nnx.Pytree):
+      a: jax.Array = nnx.static()
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found unexpected Arrays on value of type',
+    ):
+      m = Bar(a=jnp.array(3))
 
   def test_post_init(self):
 
