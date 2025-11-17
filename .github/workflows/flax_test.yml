@@ -191,6 +191,8 @@ jobs:
       run: |
         rm -fr .venv
         uv sync --extra testing --extra docs
+        # temporary: install jax nightly
+        uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
     - name: Test with pytest
       run: |
         export XLA_FLAGS='--xla_force_host_platform_device_count=4'

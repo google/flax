@@ -2315,6 +2315,27 @@ class ModuleTest(absltest.TestCase):
       Foo(1, None)
     Foo(a=1, parent=None)  # type: ignore[call-arg]
 
+  def test_failure_with_sequencelayer(self):
+    # This is a minimal reproducer of the failure seen with
+    # SequenceLayer project and Flax Linen when enabled support for 3.14
+    # See PR: https://github.com/google/flax/pull/5087
+    # Code below is based on
+    # https://github.com/google/flax/pull/5087#issuecomment-3535067361
+    import abc
+    from collections.abc import Iterator
+    from typing import Protocol
+
+    class CheckpointableIterator(Iterator, Protocol):
+      pass
+
+    class Steppable(metaclass=abc.ABCMeta):
+      pass
+
+    isinstance(Steppable, Iterator)
+
+    class SequenceLayer(nn.Module, Steppable):
+      pass
+
   def test_module_path_empty(self):
     rngkey = jax.random.key(0)
     scope = Scope({}, {'params': rngkey}, mutable=['params'])

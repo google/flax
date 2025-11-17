@@ -19,6 +19,7 @@ import dataclasses
 import enum
 import functools
 import inspect
+import sys
 import threading
 import typing
 import weakref
@@ -1097,6 +1098,12 @@ class Module(ModuleBase):
     ) in extra_fields:
       setattr(cls, name, default)
       cls.__annotations__[name] = annotation
+
+    # TODO: a workaround for the issue:
+    # https://github.com/google/flax/pull/5087#issuecomment-3536610568
+    if (sys.version_info.major, sys.version_info.minor) in [(3, 12), (3, 13)]:
+      setattr(cls, '__annotations__', cls.__annotations__)
+
     dataclasses.dataclass(  # type: ignore[call-overload]
       unsafe_hash='__hash__' not in cls.__dict__,
       repr=False,
