@@ -16,7 +16,7 @@ if [ -d "../.tfds/metadata" ]; then
   echo 'TFDS metadata already exists.';
 else
   echo 'TFDS metadata does not exist. Downloading...';
-  git clone --branch v4.8.2 --depth 3 --filter=blob:none --sparse https://github.com/tensorflow/datasets/
+  git clone --branch v4.9.9 --depth 3 --filter=blob:none --sparse https://github.com/tensorflow/datasets/
   cd datasets
   git sparse-checkout set tensorflow_datasets/testing/metadata
   mkdir ../../.tfds

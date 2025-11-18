@@ -129,7 +129,6 @@ jobs:
           uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
           uv run --no-sync tests/run_all_tests.sh --only-doctest
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
-          uv pip install -U tensorflow-datasets
           # temporary: install jax nightly
           uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
           uv run --no-sync tests/run_all_tests.sh --only-pytest
