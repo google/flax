@@ -128,8 +128,7 @@ if $RUN_PYTEST; then
     if [[ $egd == *"_"* ]]; then
       continue
     fi
-    # skiping examples until tfds issue is resolved
-    # pytest $egd
+    pytest -vvv $egd
   done
 fi
 

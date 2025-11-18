@@ -118,9 +118,6 @@ jobs:
         else
           uv pip install "jax==${{ matrix.jax-version }}" "jaxlib==${{ matrix.jax-version }}"
         fi
-        if [[ "${{ matrix.test-type }}" == "pytest" ]]; then
-          uv pip install -U tensorflow-datasets
-        fi
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
