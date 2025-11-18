@@ -47,10 +47,10 @@ testing = [
     "ml-collections",
     "mypy",
     "opencv-python",
-    # Set protobuf version for python 3.13+ to prevent error in
+    # Set protobuf version to prevent error in
     # examples/mnist/train_test.py::TrainTest::test_train_and_evaluate
     # Failed to construct dataset "mnist", builder_kwargs "{}": Value out of range: 11594722
-    "protobuf<6; python_version>='3.13'",
+    "protobuf<6",
     "pytest",
     "pytest-cov",
     "pytest-custom_exit_code",
