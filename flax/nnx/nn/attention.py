@@ -62,6 +62,7 @@ def dot_product_attention_weights(
   precision: PrecisionLike = None,
   module: Module | None = None,
   promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+  is_causal: bool = False,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -94,6 +95,11 @@ def dot_product_attention_weights(
     promote_dtype: function to promote the dtype of the arrays to the desired
       dtype. The function should accept a tuple of ``(query, key)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
+    is_causal: If true, causal attention will be applied. Note, some
+      implementations like xla will generate a mask tensor and apply it to
+      the logits to mask out the non-causal parts of the attention matrix,
+      but other implementations like cudnn will avoid computing the
+      non-causal regions, providing speedups.
 
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
@@ -118,9 +124,17 @@ def dot_product_attention_weights(
   if bias is not None:
     attn_weights = attn_weights + bias
   # apply attention mask
-  if mask is not None:
+  if mask is not None or is_causal:
     big_neg = jnp.finfo(dtype).min
-    attn_weights = jnp.where(mask, attn_weights, big_neg)
+    masks = [m for m in [mask] if m is not None]
+    if is_causal:
+      T, S = attn_weights.shape[-2:]
+      causal_mask = jnp.tril(jnp.ones((T, S), dtype=dtype))
+      target_shape = mask.shape if mask is not None else attn_weights.shape
+      masks.append(jnp.broadcast_to(causal_mask, target_shape))
+    combined_mask = combine_masks(*masks, dtype=dtype)
+    assert combined_mask is not None
+    attn_weights = jnp.where(combined_mask, attn_weights, big_neg)
 
   # normalize the attention weights
   attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
@@ -157,6 +171,7 @@ def dot_product_attention(
   precision: PrecisionLike = None,
   module: Module | None = None,
   promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+  is_causal: bool = False,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -198,6 +213,11 @@ def dot_product_attention(
       dtype. The function should accept a tuple of ``(query, key, value)`` and a
       ``dtype`` keyword argument, and return a tuple of arrays with the promoted
       dtype.
+    is_causal: If true, causal attention will be applied. Note, some
+      implementations like xla will generate a mask tensor and apply it to
+      the logits to mask out the non-causal parts of the attention matrix,
+      but other implementations like cudnn will avoid computing the
+      non-causal regions, providing speedups.
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
@@ -224,7 +244,7 @@ def dot_product_attention(
         reshape_4d, (query, key, value, bias, mask))
     if mask is not None:
       mask = mask.astype(jnp.bool)
-    out = jax.nn.dot_product_attention(query, key, value, bias, mask)
+    out = jax.nn.dot_product_attention(query, key, value, bias, mask, is_causal=is_causal)
     if len(query_shape) > 4:
       out = jnp.reshape(out, query_shape)
     return out
@@ -242,6 +262,8 @@ def dot_product_attention(
     dtype,
     precision,
     module,
+    promote_dtype,
+    is_causal,
   )
 
   # return weighted sum over values for each query position
