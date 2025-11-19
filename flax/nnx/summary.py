@@ -225,11 +225,15 @@ def _save_call_info(counter, tracer_args, f, node_stats, compute_flops, compute_
     identifier = (inputs_repr, object_id)
     counter_val = next(counter)
     graphdef, state = nnx.split(((obj, *args), kwargs))
-    lowered = jit_f.lower(graphdef, state)
+    if compute_flops:
+      lowered = jit_f.lower(graphdef, state)
+      flops = _get_flops(lowered)
+      outputs = lowered.out_info
+    else:
+      flops = None
+      outputs = jit_f(graphdef, state)
     if identifier not in seen:
       seen.add(identifier)
-      flops = _get_flops(lowered) if compute_flops else None
-      outputs = lowered.out_info
       output_repr = jax.tree.map(_to_dummy_array, outputs)
       vjp_flops = _get_flops(jax.jit(do_vjp).lower(
         obj, *args, **kwargs)) if compute_vjp_flops else None
