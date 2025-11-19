@@ -225,6 +225,32 @@ class SummaryTest(absltest.TestCase):
     # We should see 3 calls per block, plus one overall call
     self.assertEqual(sum([s.startswith("├─") for s in table.splitlines()]), 7)
 
+  def test_time_complexity(self):
+    counter = []
+
+    class Block(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 2, rngs=rngs)
+
+      def __call__(self, x):
+        counter.append(1)
+        return self.linear(x)
+
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        for d in range(10):
+          setattr(self, f"linear{d}", Block(rngs))
+
+      def __call__(self, x):
+        for d in range(10):
+          x = getattr(self, f"linear{d}")(x)
+        return x
+
+    m = Model(nnx.Rngs(0))
+    x = jnp.ones((4, 2))
+    nnx.tabulate(m, x, compute_flops=True, compute_vjp_flops=False)
+    self.assertEqual(len(counter), 10)
+
   def test_shared(self):
     class Block(nnx.Module):
       def __init__(self, linear: nnx.Linear, *, rngs):
