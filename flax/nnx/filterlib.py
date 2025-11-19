@@ -89,7 +89,7 @@ class WithTag:
 
 @dataclasses.dataclass(frozen=True)
 class PathContains:
-  key: Key
+  key: Key | str
   exact: bool = True
 
   def __call__(self, path: PathParts, x: tp.Any):
