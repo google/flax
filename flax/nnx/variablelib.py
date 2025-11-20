@@ -1108,10 +1108,10 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     # run create_value hook
     value = self.create_value(value)  # type: ignore
     # shard the _value if applicable
-    if eager_sharding and 'sharding_names' in metadata:
+    if eager_sharding and 'sharding_metadata' in metadata:
       value = core_spmd.shard_value(
         value,
-        metadata['sharding_names'],
+        metadata['sharding_metadata'],
         metadata.get('sharding_rules', None),
         metadata.get('mesh', None),
       )
