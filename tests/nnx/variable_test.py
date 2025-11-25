@@ -109,29 +109,29 @@ class TestVariable(parameterized.TestCase):
       self.assertEqual(p1 == p2, v1 == v2)
 
   def test_mutable_array_context(self):
-    initial_mode = nnx.using_hijax()
-    with nnx.use_hijax(False):
+    initial_mode = nnx.var_defaults().hijax
+    with nnx.var_defaults(hijax=False):
       v = nnx.Variable(jnp.array(1.0))
-      self.assertEqual(nnx.using_hijax(), False)
+      self.assertEqual(nnx.var_defaults().hijax, False)
       self.assertNotIsInstance(v[...], jax.Ref)
 
-      with nnx.use_hijax(True):
+      with nnx.var_defaults(hijax=True):
         v = nnx.Variable(jnp.array(1.0))
-        self.assertEqual(nnx.using_hijax(), True)
+        self.assertEqual(nnx.var_defaults().hijax, True)
         self.assertIsInstance(v[...], jax.Array)
 
       v = nnx.Variable(jnp.array(2.0))
       self.assertIsInstance(v[...], jax.Array)
-      self.assertEqual(nnx.using_hijax(), False)
+      self.assertEqual(nnx.var_defaults().hijax, False)
 
-      nnx.use_hijax(True)
+      nnx.var_defaults(hijax=True)
 
       v = nnx.Variable(jnp.array(0.0))
-      self.assertEqual(nnx.using_hijax(), True)
+      self.assertEqual(nnx.var_defaults().hijax, True)
       self.assertIsInstance(v[...], jax.Array)
 
     v = nnx.Variable(jnp.array(1.0))
-    self.assertEqual(nnx.using_hijax(), initial_mode)
+    self.assertEqual(nnx.var_defaults().hijax, initial_mode)
     self.assertIsInstance(v[...], jax.Array)
 
   def test_get_set_metadata(self):
@@ -139,9 +139,9 @@ class TestVariable(parameterized.TestCase):
     self.assertEqual(
         v.get_metadata(),
         {
-            'is_hijax': False,
-            'has_ref': False,
-            'is_mutable': True,
+            'hijax': False,
+            'ref': False,
+            'mutable': True,
             'eager_sharding': True,
         },
     )
@@ -151,9 +151,9 @@ class TestVariable(parameterized.TestCase):
     v.set_metadata({
         'b': 3,
         'c': 4,
-        'is_hijax': False,
-        'has_ref': False,
-        'is_mutable': True,
+        'hijax': False,
+        'ref': False,
+        'mutable': True,
         'eager_sharding': True,
     })
     self.assertEqual(
@@ -161,9 +161,9 @@ class TestVariable(parameterized.TestCase):
         {
             'b': 3,
             'c': 4,
-            'is_hijax': False,
-            'has_ref': False,
-            'is_mutable': True,
+            'hijax': False,
+            'ref': False,
+            'mutable': True,
             'eager_sharding': True,
         },
     )
@@ -190,9 +190,9 @@ class TestVariable(parameterized.TestCase):
     self.assertEqual(v_metadata['foo'], 'bar')
     self.assertEqual(p_metadata['foo'], 'bar')
     # Check that default metadata is preserved
-    self.assertIn('is_hijax', v_metadata)
-    self.assertIn('has_ref', v_metadata)
-    self.assertIn('is_mutable', v_metadata)
+    self.assertIn('hijax', v_metadata)
+    self.assertIn('ref', v_metadata)
+    self.assertIn('mutable', v_metadata)
 
     self.assertNotIn('differentiable', m.v.get_metadata())
     self.assertNotIn('differentiable', m.p.get_metadata())

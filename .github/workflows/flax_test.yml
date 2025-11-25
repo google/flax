@@ -76,6 +76,8 @@ jobs:
     - name: Install standalone dependencies only
       run: |
         uv sync
+        # temp install jax nightly
+        uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/ --reinstall
     - name: Test importing Flax
       run: |
         uv run --no-sync python -c "import flax"
@@ -118,14 +120,16 @@ jobs:
         else
           uv pip install "jax==${{ matrix.jax-version }}" "jaxlib==${{ matrix.jax-version }}"
         fi
+        if [[ "${{ matrix.test-type }}" == "pytest" ]]; then
+          uv pip install -U tensorflow-datasets
+        fi
+        # temp install jax nightly
+        uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/ --reinstall
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
-          # TODO(cgarciae): Remove this once dm-haiku 0.0.14 is released
-          uv pip install -U git+https://github.com/google-deepmind/dm-haiku.git
           uv run --no-sync tests/run_all_tests.sh --only-doctest
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
-          uv pip install -U tensorflow-datasets
           uv run --no-sync tests/run_all_tests.sh --only-pytest
         elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
           uv run --no-sync tests/run_all_tests.sh --only-pytype

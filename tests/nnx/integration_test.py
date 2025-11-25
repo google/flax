@@ -460,7 +460,7 @@ class TestIntegration(absltest.TestCase):
       nnx.update(model, restored_pure_dict)
       assert model(x).shape == (3, 4)  # The model still works!
 
-  @nnx.use_hijax(True)
+  @nnx.var_defaults(hijax=True)
   def test_example_mutable_arrays(self):
     class Model(nnx.Module):
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
@@ -483,7 +483,9 @@ class TestIntegration(absltest.TestCase):
         model =  nnx.merge(graphdef, params, nondiff)
         return ((model(x) - y) ** 2).mean()  # call methods directly
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.as_immutable_vars(params))
+      loss, grads = jax.value_and_grad(loss_fn)(
+        nnx.vars_as(params, mutable=False)
+      )
       optimizer.update(model, grads)  # in-place updates
 
       return loss
