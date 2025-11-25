@@ -245,7 +245,7 @@ class TestSPMD(parameterized.TestCase):
 
   @parameterized.product(use_hijax=[True, False])
   def test_logical_rules(self, use_hijax):
-    self.enter_context(nnx.use_hijax(use_hijax))
+    self.enter_context(nnx.var_defaults(hijax=use_hijax))
     class Foo(nnx.Module):
 
       def __init__(self):

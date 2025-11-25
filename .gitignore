@@ -29,3 +29,6 @@ uv.lock
 
 # custom
 /tmp-files
+.agent/rules/flax.md
+.github/copilot-instructions.md
+.env

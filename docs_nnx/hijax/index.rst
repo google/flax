@@ -1,10 +1,6 @@
 Hijax (experimental)
 ====================
 
-
-
-----
-
 Basic usage
 ^^^^^^^^^^^^
 
@@ -13,14 +9,14 @@ Basic usage
   import jax
   import jax.numpy as jnp
 
-  current_mode = nnx.using_hijax()
+  current_mode = nnx.var_defaults().hijax
 
 .. testcode::
 
   from flax import nnx
   import optax
 
-  nnx.use_hijax(True)
+  nnx.var_defaults(hijax=True)
 
   class Model(nnx.Module):
     def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
@@ -42,11 +38,11 @@ Basic usage
     def loss_fn(params):
       model = nnx.merge(graphdef, params, nondiff)
       return ((model(x, rngs) - y) ** 2).mean()
-    loss, grads = jax.value_and_grad(loss_fn)(nnx.as_immutable_vars(params))
+    loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(params, mutable=False))
     optimizer.update(model, grads)  # in-place updates
     return loss
 
-  nnx.use_hijax(current_mode)  # clean up for CI tests
+  nnx.var_defaults(hijax=current_mode)  # clean up for CI tests
 
 
 ----
