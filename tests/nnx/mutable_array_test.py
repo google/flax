@@ -151,7 +151,13 @@ class TestVariableRefMode(absltest.TestCase):
     m5 = nnx.as_hijax_vars(m2)
     self.assertFalse(m5.a.has_ref)
     self.assertTrue(m5.a.is_hijax)
-    self.assertNotIn('had_ref', m5.a.get_metadata())
+    self.assertIn('had_ref', m5.a.get_metadata())
+
+    m6 = nnx.as_mutable_vars(m5)
+    self.assertIsInstance(m6.a.get_raw_value(), jax.Ref)
+    self.assertTrue(m6.a.has_ref)
+    self.assertTrue(m6.a.is_hijax)
+    self.assertNotIn('had_ref', m6.a.get_metadata())
 
   def test_to_arrays_example(self):
     node = [nnx.Variable(1.0), nnx.Variable(2.0, mode='ref')]
@@ -706,7 +712,7 @@ class TestOptimizer(absltest.TestCase):
         model = nnx.merge(graphdef, params, nondiff)
         return jnp.mean((model(x) - y) ** 2)
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.as_immutable_vars(params))
+      loss, grads = jax.value_and_grad(loss_fn)(nnx.as_pytree_vars(params))
       optimizer.update(params, grads)
       return loss
 
@@ -783,7 +789,8 @@ class TestHijaxVariables(absltest.TestCase):
 
     v_low = nnx.as_immutable_vars(v_hi)
 
-    assert not v_low.is_hijax and not v_low.is_mutable
+    assert v_low.is_hijax
+    assert not v_low.is_mutable
     assert v_low[...] == 10
 
   def test_immutable_variable(self):
@@ -909,6 +916,55 @@ class TestHijaxVariables(absltest.TestCase):
     y = jax.eval_shape(f, v)
 
     self.assertEqual(y.shape, ())
+
+  @nnx.use_hijax(True)
+  def test_qdd_grad(self):
+    v = nnx.Param(jnp.array(3.0))
+
+    self.assertTrue(v.is_mutable)
+    self.assertTrue(v.is_hijax)
+
+    def f(v):
+      self.assertFalse(v.is_mutable)
+      self.assertTrue(v.is_hijax)
+      return v[...] ** 2
+
+    grad = jax.grad(f)(v)
+
+    self.assertIsInstance(grad, nnx.Param)
+    self.assertEqual(grad[...], 6.0)
+
+  @nnx.use_hijax(True)
+  def test_no_qdd_grad(self):
+    v = nnx.Param(jnp.array(3.0), is_mutable=False)
+
+    self.assertFalse(v.is_mutable)
+    self.assertTrue(v.is_hijax)
+
+    def f(v):
+      self.assertTrue(v.is_hijax)
+      return v[...] ** 2
+
+    grad = jax.grad(f)(v)
+
+    self.assertIsInstance(grad, nnx.Param)
+    self.assertEqual(grad[...], 6.0)
+
+  @nnx.use_hijax(True)
+  def test_no_qdd_grad_new(self):
+    x = jnp.array(3.0)
+
+    def f(x):
+      v = nnx.Param(x, is_mutable=False)
+      self.assertFalse(v.is_mutable)
+      self.assertTrue(v.is_hijax)
+      self.assertTrue(v.is_hijax)
+      return v[...] ** 2
+
+    grad = jax.grad(f)(x)
+
+    self.assertIsInstance(grad, jax.Array)
+    self.assertEqual(grad, 6.0)
 
 
 if __name__ == '__main__':
