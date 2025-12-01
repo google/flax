@@ -20,8 +20,8 @@
 # pytype: disable=wrong-keyword-args
 # pytype: disable=attribute-error
 
-from typing import Any, Optional
 from collections.abc import Callable
+from typing import Any
 
 from flax import linen as nn
 from flax import struct
@@ -549,7 +549,8 @@ class Transformer(nn.Module):
 
     # Make padding attention masks.
     if config.decode:
-      # for fast autoregressive decoding only a special encoder-decoder mask is used
+      # for fast autoregressive decoding only a special encoder-decoder mask is
+      # used
       decoder_mask = None
       encoder_decoder_mask = nn.make_attention_mask(
           jnp.ones_like(targets) > 0, inputs > 0, dtype=config.dtype
