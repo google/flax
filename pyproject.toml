@@ -66,6 +66,7 @@ testing = [
     "treescope>=0.1.1; python_version>='3.10'",
     "cloudpickle>=3.0.0",
     "ale-py>=0.10.2",
+    "grain>=0.2",
 ]
 docs = [
     "sphinx==6.2.1",
