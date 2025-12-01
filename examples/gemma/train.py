@@ -22,26 +22,25 @@ This script trains a Transformer on a LM1B dataset.
 
 import dataclasses
 import os
+from typing import Any
 
+from absl import logging
+from clu import metric_writers
+from clu import periodic_actions
+from flax import nnx
 import input_pipeline
-import jax
-import jax.numpy as jnp
+import sampler as sampler_lib
 import tokenizer
 import transformer as transformer_lib
+import utils
+from flax.training import checkpoints
+from flax.training import common_utils
+import jax
+from jax import random
+import jax.numpy as jnp
 import numpy as np
 import optax
-import sampler as sampler_lib
 import tensorflow as tf
-import utils
-from absl import logging
-from clu import metric_writers, periodic_actions
-from jax import random
-from jax.sharding import Mesh, NamedSharding
-from jax.sharding import PartitionSpec as P
-from utils import TrainState
-
-from flax import nnx
-from flax.training import checkpoints, common_utils
 
 
 @dataclasses.dataclass(unsafe_hash=True)
@@ -53,13 +52,14 @@ class MeshRules:
 
   def __call__(self, *keys: str) -> tuple[str, ...]:
     return tuple(
-      getattr(self, key) if key is not None else None
-      for key in keys
+        getattr(self, key) if key is not None else None for key in keys
     )
 
 
 @dataclasses.dataclass(unsafe_hash=True)
 class TrainConfig:
+  """Configuration for training a gemma model."""
+
   # Path to load or store sentencepiece vocab file.
   vocab_path: str | None
   # Vocabulary size if `vocab_path` is not given.
@@ -107,10 +107,11 @@ class TrainConfig:
 
   # Gemma transformer name.
   # Possible values defined in transformer.TransformerConfig:
-  # (gemma_2b, gemma_7b, gemma2_2b, gemma2_9b, gemma2_27b, gemma3_1b, gemma3_4b, ...)
+  # (gemma_2b, gemma_7b, gemma2_2b, gemma2_9b, gemma2_27b, gemma3_1b, gemma3_4b,
+  # ...)
   transformer_name: str | None
   # or alternatively define the model using the dict of parameters
-  transformer_params: dict | None
+  transformer_params: dict[Any, Any] | None
 
   # Whether to save model checkpoints.
   save_checkpoints: bool
@@ -157,8 +158,8 @@ class TrainConfig:
 
 
 def rsqrt_schedule(
-  init_value: float,
-  shift: int = 0,
+    init_value: float,
+    shift: int = 0,
 ):
   """Applies a reverse square-root schedule.
 
@@ -182,20 +183,20 @@ def rsqrt_schedule(
 def create_learning_rate_schedule(learning_rate: float, warmup_steps: int):
   """Creates a rsqrt schedule with linear warmup."""
   return optax.join_schedules(
-    [
-      optax.linear_schedule(
-        init_value=0,
-        end_value=learning_rate,
-        transition_steps=warmup_steps,
-      ),
-      rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
-    ],
-    boundaries=[warmup_steps],
+      [
+          optax.linear_schedule(
+              init_value=0,
+              end_value=learning_rate,
+              transition_steps=warmup_steps,
+          ),
+          rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
+      ],
+      boundaries=[warmup_steps],
   )
 
 
 def compute_weighted_cross_entropy(
-  logits, targets, weights=None, label_smoothing=0.0
+    logits, targets, weights=None, label_smoothing=0.0
 ):
   """Compute weighted cross entropy and entropy for log probs and targets.
 
@@ -211,18 +212,18 @@ def compute_weighted_cross_entropy(
   """
   if logits.ndim != targets.ndim + 1:
     raise ValueError(
-      'Incorrect shapes. Got shape %s logits and %s targets'
-      % (str(logits.shape), str(targets.shape))
+        'Incorrect shapes. Got shape %s logits and %s targets'
+        % (str(logits.shape), str(targets.shape))
     )
   vocab_size = logits.shape[-1]
   confidence = 1.0 - label_smoothing
   low_confidence = (1.0 - confidence) / (vocab_size - 1)
   normalizing_constant = -(
-    confidence * jnp.log(confidence)
-    + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+      confidence * jnp.log(confidence)
+      + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
   )
   soft_targets = common_utils.onehot(
-    targets, vocab_size, on_value=confidence, off_value=low_confidence
+      targets, vocab_size, on_value=confidence, off_value=low_confidence
   )
 
   loss = -jnp.sum(soft_targets * nnx.log_softmax(logits), axis=-1)
@@ -249,8 +250,8 @@ def compute_weighted_accuracy(logits, targets, weights=None):
   """
   if logits.ndim != targets.ndim + 1:
     raise ValueError(
-      'Incorrect shapes. Got shape %s logits and %s targets'
-      % (str(logits.shape), str(targets.shape))
+        'Incorrect shapes. Got shape %s logits and %s targets'
+        % (str(logits.shape), str(targets.shape))
     )
   loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
   normalizing_factor = np.prod(logits.shape[:-1])
@@ -264,13 +265,13 @@ def compute_weighted_accuracy(logits, targets, weights=None):
 def compute_metrics(logits, labels, weights, label_smoothing=0.0):
   """Compute summary metrics."""
   loss, weight_sum = compute_weighted_cross_entropy(
-    logits, labels, weights, label_smoothing
+      logits, labels, weights, label_smoothing
   )
   acc, _ = compute_weighted_accuracy(logits, labels, weights)
   metrics = {
-    'loss': loss,
-    'accuracy': acc,
-    'denominator': weight_sum,
+      'loss': loss,
+      'accuracy': acc,
+      'denominator': weight_sum,
   }
   return metrics
 
@@ -280,10 +281,10 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
 
 
 def train_step(
-  state: TrainState,
-  batch,
-  learning_rate_fn,
-  label_smoothing=0.0,
+    state: utils.TrainState,
+    batch,
+    learning_rate_fn,
+    label_smoothing=0.0,
 ):
   """Perform a single training step."""
   # X_position and X_segmentation are needed only when using "packed examples"
@@ -293,16 +294,20 @@ def train_step(
   # like a normal, unpacked sequence example.
   train_keys = ['inputs', 'inputs_position', 'inputs_segmentation', 'targets']
   (inputs, inputs_positions, inputs_segmentation, targets) = (
-    batch.get(k, None) for k in train_keys
+      batch.get(k, None) for k in train_keys
   )
 
   # TODO: this should be defined globally
   pad_id = 0
   weights = jnp.where(inputs > pad_id, 1, 0).astype(jnp.float32)
   input_mask = inputs > pad_id
-  attention_mask = transformer_lib.make_causal_attn_mask(input_mask)  # (B, L, L)
+  attention_mask = transformer_lib.make_causal_attn_mask(
+      input_mask
+  )  # (B, L, L)
   # inputs_segmentation: (B, L)
-  mask = inputs_segmentation[:, :, None] == inputs_segmentation[:, None, :]  # (B, L, L)
+  mask = (
+      inputs_segmentation[:, :, None] == inputs_segmentation[:, None, :]
+  )  # (B, L, L)
   attention_mask = jnp.logical_and(mask, attention_mask)
 
   def loss_fn(params):
@@ -310,14 +315,14 @@ def train_step(
     module = nnx.merge(state.graphdef, params)
 
     logits, _ = module(
-      inputs,
-      positions=inputs_positions,
-      attention_mask=attention_mask,
-      cache=None,
+        inputs,
+        positions=inputs_positions,
+        attention_mask=attention_mask,
+        cache=None,
     )
 
     loss, weight_sum = compute_weighted_cross_entropy(
-      logits, targets, weights, label_smoothing
+        logits, targets, weights, label_smoothing
     )
     mean_loss = loss / weight_sum
     return mean_loss, logits
@@ -334,10 +339,10 @@ def train_step(
 
 
 def eval_step(
-  params: nnx.State,
-  batch,
-  graphdef: nnx.GraphDef[transformer_lib.Transformer],
-  label_smoothing=0.0,
+    params: nnx.State,
+    batch,
+    graphdef: nnx.GraphDef[transformer_lib.Transformer],
+    label_smoothing=0.0,
 ):
   """Calculate evaluation metrics on a batch."""
   inputs, targets = batch['inputs'], batch['targets']
@@ -351,21 +356,21 @@ def eval_step(
 
   module = nnx.merge(graphdef, params)
   logits, _ = module(
-    inputs,
-    positions=inputs_positions,
-    attention_mask=attention_mask,
-    cache=None,
+      inputs,
+      positions=inputs_positions,
+      attention_mask=attention_mask,
+      cache=None,
   )
 
   return compute_metrics(logits, targets, weights, label_smoothing)
 
 
 def evaluate(
-  *,
-  jit_eval_step,
-  state: TrainState,
-  eval_ds: tf.data.Dataset,
-  num_eval_steps: int,
+    *,
+    jit_eval_step,
+    state: utils.TrainState,
+    eval_ds: tf.data.Dataset,
+    num_eval_steps: int,
 ):
   """Evaluate the target an return a dictionary with the metrics."""
   logging.info('Gathering evaluation metrics.')
@@ -379,8 +384,8 @@ def evaluate(
   eval_metrics_sums = jax.tree.map(jnp.sum, eval_metrics)
   eval_denominator = eval_metrics_sums.pop('denominator')
   eval_summary = jax.tree.map(
-    lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
-    eval_metrics_sums,
+      lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
+      eval_metrics_sums,
   )
   return eval_summary
 
@@ -406,7 +411,7 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
   # ---------------------------------------------------------------------------
   logging.info('Initializing dataset.')
   train_ds, eval_ds, encoder = input_pipeline.get_datasets(
-    n_devices=jax.local_device_count(), config=config, vocab_path=vocab_path
+      n_devices=jax.local_device_count(), config=config, vocab_path=vocab_path
   )
 
   train_iter = iter(train_ds)
@@ -417,48 +422,48 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
   # ---------------------------------------------------------------------------
   if config.transformer_name is not None:
     model_config = transformer_lib.TransformerConfig.from_version_name(
-      config.transformer_name,
-      num_embed=vocab_size,
-      dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
-      axis_rules=config.axis_rules,
+        config.transformer_name,
+        num_embed=vocab_size,
+        dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
+        axis_rules=config.axis_rules,
     )
   else:
     assert config.transformer_params is not None
     model_config = transformer_lib.TransformerConfig.from_dict(
-      **config.transformer_params,
-      num_embed=vocab_size,
-      dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
-      axis_rules=config.axis_rules,
+        **config.transformer_params,
+        num_embed=vocab_size,
+        dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
+        axis_rules=config.axis_rules,
     )
 
   # Mesh definition
   devices_array = utils.create_device_mesh(config)
-  mesh = Mesh(devices_array, config.mesh_axes)
+  mesh = jax.sharding.Mesh(devices_array, config.mesh_axes)
 
   start_step = 0
   rng = jax.random.PRNGKey(config.seed)
   rng, init_rng = jax.random.split(rng)
-  rng, inference_rng = random.split(rng)
+  _, inference_rng = random.split(rng)
 
   def constructor(config: transformer_lib.TransformerConfig, key: jax.Array):
     return transformer_lib.Transformer(config, rngs=nnx.Rngs(params=key))
 
   learning_rate_fn = create_learning_rate_schedule(
-    learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
+      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
   )
 
   optimizer = optax.adamw(
-    learning_rate_fn,
-    b1=0.9,
-    b2=0.98,
-    eps=1e-9,
-    weight_decay=config.weight_decay,
+      learning_rate_fn,
+      b1=0.9,
+      b2=0.98,
+      eps=1e-9,
+      weight_decay=config.weight_decay,
   )
 
   state, state_sharding = utils.setup_initial_state(
-    constructor, optimizer, model_config, init_rng, mesh
+      constructor, optimizer, model_config, init_rng, mesh
   )
-  data_sharding = NamedSharding(mesh, P(config.data_sharding))
+  data_sharding = jax.NamedSharding(mesh, jax.P(config.data_sharding))
 
   if config.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
@@ -467,38 +472,38 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
     start_step = int(state.step)
 
   writer = metric_writers.create_default_writer(
-    workdir, just_logging=jax.process_index() > 0
+      workdir, just_logging=jax.process_index() > 0
   )
   if start_step == 0:
     writer.write_hparams(dataclasses.asdict(config))
 
   # compile multidevice versions of train/eval/predict step fn.
   jit_train_step = jax.jit(
-    train_step,
-    in_shardings=(
-      state_sharding,
-      data_sharding,
-    ),  # type: ignore
-    out_shardings=(state_sharding, None),  # type: ignore
-    static_argnames=("learning_rate_fn", "label_smoothing"),
-    donate_argnums=0,
+      train_step,
+      in_shardings=(
+          state_sharding,
+          data_sharding,
+      ),  # type: ignore
+      out_shardings=(state_sharding, None),  # type: ignore
+      static_argnames=('learning_rate_fn', 'label_smoothing'),
+      donate_argnums=0,
   )
 
   jit_eval_step = jax.jit(
-    eval_step,
-    in_shardings=(
-      state_sharding.params,
-      data_sharding,
-    ),  # type: ignore
-    out_shardings=None,  # type: ignore
-    static_argnames=("graphdef", "label_smoothing"),
+      eval_step,
+      in_shardings=(
+          state_sharding.params,
+          data_sharding,
+      ),  # type: ignore
+      out_shardings=None,  # type: ignore
+      static_argnames=('graphdef', 'label_smoothing'),
   )
 
   vocab = tokenizer.load_sentencepiece_processor(vocab_path)
-  sampler =  sampler_lib.Sampler(
-    transformer=nnx.merge(state.graphdef, state.params),
-    vocab=vocab,
-    cache_size=1024,
+  sampler = sampler_lib.Sampler(
+      transformer=nnx.merge(state.graphdef, state.params),
+      vocab=vocab,
+      cache_size=1024,
   )
 
   # Main Train Loop
@@ -509,12 +514,12 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
   logging.info('Starting training loop.')
   hooks = []
   report_progress = periodic_actions.ReportProgress(
-    num_train_steps=config.num_train_steps, writer=writer
+      num_train_steps=config.num_train_steps, writer=writer
   )
   if jax.process_index() == 0:
     hooks += [
-      report_progress,
-      periodic_actions.Profile(logdir=workdir, num_profile_steps=5),
+        report_progress,
+        periodic_actions.Profile(logdir=workdir, num_profile_steps=5),
     ]
   train_metrics = []
   with metric_writers.ensure_flushes(writer):
@@ -525,12 +530,12 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
       with jax.profiler.StepTraceAnnotation('train', step_num=step):
         with report_progress.timed('data'):
           batch = next(train_iter)
-          batch = jax.tree.map(lambda x: jnp.asarray(x, device=data_sharding), batch)
+          batch = jax.tree.map(
+              lambda x: jnp.asarray(x, device=data_sharding), batch
+          )
 
         with report_progress.timed('train_step'):
-          state, metrics = jit_train_step(
-            state, batch, learning_rate_fn, 0.0
-          )
+          state, metrics = jit_train_step(state, batch, learning_rate_fn, 0.0)
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
@@ -541,14 +546,17 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
       # Write batch loss and lr every step to TB
       # without overwhelming the stdout:
       if jax.process_index() == 0:
-        tb_writer = writer._writers[-1]
+        tb_writer = writer._writers[-1]  # pylint: disable=protected-access
         lr = train_metrics[-1]['learning_rate']
         train_batch_loss = train_metrics[-1]['loss']
         denominator = train_metrics[-1]['denominator']
-        tb_writer.write_scalars(step, {
-          "train_learning_rate": lr,
-          "train_loss": train_batch_loss / denominator,
-        })
+        tb_writer.write_scalars(
+            step,
+            {
+                'train_learning_rate': lr,
+                'train_loss': train_batch_loss / denominator,
+            },
+        )
 
       # Periodic metric handling.
       if (step > 0 and step % config.eval_every_steps == 0) or is_last_step:
@@ -569,33 +577,33 @@ def train_and_evaluate(config: TrainConfig, workdir: str):
           # update sampler's transformer state:
           sampler.transformer_state = state.params
           exemplars = sampler(
-            config.prompts,
-            total_generation_steps=config.num_predict_steps,
-            temperature=config.sampling_temperature,
-            top_p=config.sampling_top_p,
-            seed=inference_rng,
-            echo=True,
+              config.prompts,
+              total_generation_steps=config.num_predict_steps,
+              temperature=config.sampling_temperature,
+              top_p=config.sampling_top_p,
+              seed=inference_rng,
+              echo=True,
           )
-          writer.write_texts(step, {'samples': exemplars.text})
+          writer.write_texts(step, {'samples': exemplars.text[0]})
 
         with report_progress.timed('eval'):
           eval_results = evaluate(
-            jit_eval_step=jit_eval_step,
-            state=state,
-            eval_ds=eval_ds,
-            num_eval_steps=config.num_eval_steps,
+              jit_eval_step=jit_eval_step,
+              state=state,
+              eval_ds=eval_ds,
+              num_eval_steps=config.num_eval_steps,
           )
           # (clipped) perplexity after averaging log-perplexity
           eval_results['perplexity'] = jnp.clip(
-            jnp.exp(eval_results['loss']), max=1.0e4
+              jnp.exp(eval_results['loss']), max=1.0e4
           )
           writer.write_scalars(
-            step, {'eval_' + k: v for k, v in eval_results.items()}
+              step, {'eval_' + k: v for k, v in eval_results.items()}
           )
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
       save_checkpoint = (
-        step % config.checkpoint_every_steps == 0 or is_last_step
+          step % config.checkpoint_every_steps == 0 or is_last_step
       )
       if config.save_checkpoints and save_checkpoint:
         logging.info('Saving checkpoint step %d.', step)
