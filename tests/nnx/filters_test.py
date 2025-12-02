@@ -21,15 +21,20 @@ class TestFilters(absltest.TestCase):
   def test_path_contains(self):
     class Model(nnx.Module):
       def __init__(self, rngs):
-        self.backbone = nnx.Linear(2, 3, rngs=rngs)
+        self.backbone1 = nnx.Linear(2, 3, rngs=rngs)
+        self.backbone2 = nnx.Linear(3, 3, rngs=rngs)
         self.head = nnx.Linear(3, 10, rngs=rngs)
 
     model = Model(nnx.Rngs(0))
 
     head_state = nnx.state(model, nnx.PathContains('head'))
+    backbones_state = nnx.state(model, nnx.PathContains('backbone', exact=False))
 
     self.assertIn('head', head_state)
     self.assertNotIn('backbone', head_state)
+    self.assertIn('backbone1', backbones_state)
+    self.assertIn('backbone2', backbones_state)
+    self.assertNotIn('head', backbones_state)
 
 if __name__ == '__main__':
   absltest.main()

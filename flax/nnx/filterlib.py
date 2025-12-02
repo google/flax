@@ -89,13 +89,16 @@ class WithTag:
 
 @dataclasses.dataclass(frozen=True)
 class PathContains:
-  key: Key
+  key: Key | str
+  exact: bool = True
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return self.key in path
+    if self.exact:
+      return self.key in path
+    return any(str(self.key) in str(part) for part in path)
 
   def __repr__(self):
-    return f'PathContains({self.key!r})'
+    return f'PathContains({self.key!r}, exact={self.exact})'
 
 
 class PathIn:
