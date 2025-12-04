@@ -1458,9 +1458,18 @@ def checkpoint(
     # add 2 to each static_argnums because we add two initial arguments to rematted
     static_argnums_ = jax.tree_util.tree_map(lambda x: x + 2, static_argnums)
 
+    # After JAX v0.3.16, concrete=False is a no-op and concrete=True raises
+    # NotImplementedError. Starting in JAX v0.8.2, the concrete argument is
+    # deprecated and will be removed in the future.
+    if concrete:
+      raise NotImplementedError(
+          "The concrete argument is deprecated. Use static_argnums instead."
+          " for more information, see"
+          " https://docs.jax.dev/en/latest/jep/11830-new-remat-checkpoint.html"
+      )
+
     @functools.partial(
       jax.remat,
-      concrete=concrete,
       static_argnums=static_argnums_,
       prevent_cse=prevent_cse,
       policy=policy,
