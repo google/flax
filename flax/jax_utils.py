@@ -25,6 +25,7 @@ import numpy as np
 from jax import core, lax
 from jax.extend import linear_util as lu
 from jax.interpreters import partial_eval as pe
+from jax.sharding import NamedSharding, PartitionSpec as P, AxisType
 
 
 def _pmap_device_order():
@@ -42,7 +43,24 @@ def replicate(tree, devices=None):
     A new pytree containing the replicated arrays.
   """
   devices = devices or _pmap_device_order()
-  return jax.device_put_replicated(tree, devices)
+  mesh = jax.make_mesh(
+    (len(devices),),
+    ("_flax_jax_utils_replicate_data_axis",),
+    (AxisType.Auto,),
+    devices=devices,
+  )
+  data_sharding = NamedSharding(mesh, P("_flax_jax_utils_replicate_data_axis"))
+
+  def _device_put_replicated(x):
+    if isinstance(x, (jax.Array, np.ndarray)):
+      buf = x[None]
+    else:
+      buf = jnp.asarray(x)[None]
+    buf = jnp.concat([buf] * len(devices))
+    return jax.device_put(buf, data_sharding)
+
+  with jax.set_mesh(mesh):
+    return jax.tree.map(_device_put_replicated, tree)
 
 
 def unreplicate(tree):
@@ -137,17 +155,26 @@ def prefetch_to_device(iterator, size, devices=None):
   queue = collections.deque()
   devices = _pmap_device_order() if devices is None else devices
 
+  mesh = jax.make_mesh(
+    (len(devices),),
+    ("_flax_jax_utils_prefetch_to_device_data_axis",),
+    (AxisType.Auto,),
+    devices=devices,
+  )
+  data_sharding = NamedSharding(mesh, P("_flax_jax_utils_prefetch_to_device_data_axis"))
+
   def _prefetch(xs):
-    return jax.device_put_sharded(list(xs), devices)
+    return jax.device_put(xs, data_sharding)
 
   def enqueue(n):  # Enqueues *up to* `n` elements from the iterator.
     for data in itertools.islice(iterator, n):
       queue.append(jax.tree_util.tree_map(_prefetch, data))
 
-  enqueue(size)  # Fill up the buffer.
-  while queue:
-    yield queue.popleft()
-    enqueue(1)
+  with jax.set_mesh(mesh):
+    enqueue(size)  # Fill up the buffer.
+    while queue:
+      yield queue.popleft()
+      enqueue(1)
 
 
 def _scan_nd(body_fn, init, xs, n=1, unroll=(1,)):
