@@ -8,7 +8,7 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
-# Hijax Variable
+# Hijax
 
 ```{code-cell} ipython3
 from flax import nnx
@@ -16,8 +16,31 @@ import jax
 import jax.numpy as jnp
 import optax
 
-current_mode = nnx.using_hijax()
+current_mode = nnx.using_hijax() # ignore: only needed for testing
 ```
+
+```{code-cell} ipython3
+nnx.use_hijax(True)
+
+rngs = nnx.Rngs(0)
+model = nnx.Linear(2, 3, rngs=rngs)
+optimizer = nnx.Optimizer(model, optax.adamw(1e-2), wrt=nnx.Param)
+
+@jax.jit
+def train_step(x, y):
+  loss_fn = lambda m: jnp.mean((m(x) - y) ** 2)
+  loss, grads = jax.value_and_grad(loss_fn)(model)  # tmp fix for jax.grad
+  optimizer.update(model, grads)
+  return loss
+
+x, y = rngs.uniform((4, 2)), rngs.uniform((4, 3))
+for _ in range(3):
+  print(train_step(x, y))
+```
+
+## Hijax Variable
+
++++
 
 State propagation:
 

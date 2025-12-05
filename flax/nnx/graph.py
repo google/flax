@@ -32,7 +32,7 @@ from flax.nnx.proxy_caller import (
 )
 from flax.nnx.statelib import FlatState, State, map_state
 from flax.nnx.variablelib import Variable, is_array_ref, V
-from flax.typing import Key, PathParts, is_key_like
+from flax.typing import HashableMapping, Key, PathParts, is_key_like
 import jax
 import numpy as np
 import treescope  # type: ignore[import-not-found,import-untyped]
@@ -300,50 +300,6 @@ def get_node_impl_for_type(
   else:
     return None
 
-
-class HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
-  _mapping: dict[HA, HB] | tp.Mapping[HA, HB]
-
-  def __init__(self, mapping: tp.Mapping[HA, HB], copy: bool = True):
-    self._mapping = dict(mapping) if copy else mapping
-
-  def __contains__(self, key: object) -> bool:
-    return key in self._mapping
-
-  def __getitem__(self, key: HA) -> HB:
-    return self._mapping[key]
-
-  def __iter__(self) -> tp.Iterator[HA]:
-    return iter(self._mapping)
-
-  def __len__(self) -> int:
-    return len(self._mapping)
-
-  def __hash__(self) -> int:
-    # use type-aware sorting to support int keys
-    def _pytree__key_sort_fn(item: tuple[tp.Any, tp.Any]) -> tuple[int, tp.Any]:
-      key, _ = item
-      if isinstance(key, int):
-        return (0, key)
-      elif isinstance(key, str):
-        return (1, key)
-      else:
-        raise ValueError(f'Unsupported key type: {type(key)!r}')
-    return hash(tuple(sorted(self._mapping.items(), key=_pytree__key_sort_fn)))
-
-  def __eq__(self, other: tp.Any) -> bool:
-    return (
-      isinstance(other, HashableMapping) and self._mapping == other._mapping
-    )
-
-  def __repr__(self) -> str:
-    return repr(self._mapping)
-
-  def update(self, other: tp.Mapping[HA, HB]) -> HashableMapping[HA, HB]:
-    """Updates the mapping with another mapping."""
-    mapping = dict(self._mapping)
-    mapping.update(other)
-    return HashableMapping(mapping, copy=False)
 
 
 @jax.tree_util.register_static
