@@ -209,7 +209,7 @@ class LoRALinear(Linear):
       b_metadata=b_metadata,
     )
 
-  def __call__(self, x: jax.Array):
-    y = super().__call__(x)
+  def __call__(self, x: jax.Array, out_sharding = None):
+    y = super().__call__(x, out_sharding=out_sharding)
     y += self.lora(x)
     return y
