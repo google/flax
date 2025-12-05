@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - name: Set up Python ${{ matrix.python-version }}
@@ -160,3 +160,31 @@ jobs:
            "description": "'$status'",
            "context": "github-actions/Build"
            }'
+
+  # This is a temporary workflow to test flax on Python 3.14 and
+  # skipping deps like tensorstore, tensorflow etc
+  tests-python314:
+    name: Run Tests on Python 3.14
+    needs: [pre-commit, commit-count]
+    runs-on: ubuntu-24.04-16core
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - name: Setup uv
+      uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
+      with:
+        version: "0.9.2"
+        python-version: "3.14"
+        activate-environment: true
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        rm -fr .venv
+        uv sync --extra testing --extra docs
+        # temporary: install jax nightly
+        uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
+    - name: Test with pytest
+      run: |
+        export XLA_FLAGS='--xla_force_host_platform_device_count=4'
+        find tests/ -name "*.py" | grep -vE 'io_test|tensorboard' | xargs pytest -n auto
+

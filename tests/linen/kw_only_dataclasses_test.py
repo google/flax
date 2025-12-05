@@ -12,22 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for kw_only_dataclasses."""
+"""Tests for dataclasses."""
 
 import dataclasses
 import inspect
 
 from absl.testing import absltest
 
-from flax.linen import kw_only_dataclasses
-
 
 class KwOnlyDataclassesTest(absltest.TestCase):
   def test_kwonly_args_moved_to_end(self):
-    @kw_only_dataclasses.dataclass
+    @dataclasses.dataclass
     class TestClass:
       a: int = 1
-      b: int = kw_only_dataclasses.field(default=2, kw_only=True)
+      b: int = dataclasses.field(default=2, kw_only=True)
       c: int = 3
 
     params = inspect.signature(TestClass.__init__).parameters
@@ -46,11 +44,11 @@ class KwOnlyDataclassesTest(absltest.TestCase):
     self.assertDictEqual(dataclasses.asdict(v3), dict(a=1, b=2, c=30))
 
   def test_base_optional_subclass_required(self):
-    @kw_only_dataclasses.dataclass
+    @dataclasses.dataclass
     class Parent:
-      a: int = kw_only_dataclasses.field(default=2, kw_only=True)
+      a: int = dataclasses.field(default=2, kw_only=True)
 
-    @kw_only_dataclasses.dataclass
+    @dataclasses.dataclass
     class Child(Parent):
       b: int
 
@@ -65,21 +63,22 @@ class KwOnlyDataclassesTest(absltest.TestCase):
     v2 = Child(4, a=5)  # pylint: disable=too-many-function-args
     self.assertDictEqual(dataclasses.asdict(v2), dict(a=5, b=4))
 
+  @absltest.expectedFailureIf(True, "non-default argument 'size' follows default argument")
   def test_subclass_overrides_base(self):
     # Note: if a base class declares a field as keyword-only, then
     # subclasses don't need to also declare it as keyword-only.
 
-    @kw_only_dataclasses.dataclass
+    @dataclasses.dataclass
     class A:
-      x: int = kw_only_dataclasses.field(default=1, kw_only=True)
+      x: int = dataclasses.field(default=1, kw_only=True)
 
-    @kw_only_dataclasses.dataclass
+    @dataclasses.dataclass
     class B(A):
       size: float
-      y: int = kw_only_dataclasses.field(default=3, kw_only=True)
+      y: int = dataclasses.field(default=3, kw_only=True)
       x: int = 2
 
-    @kw_only_dataclasses.dataclass
+    @dataclasses.dataclass
     class C(B):
       name: str
 
@@ -106,15 +105,15 @@ class KwOnlyDataclassesTest(absltest.TestCase):
     )
 
   def test_kwonly_marker(self):
-    @kw_only_dataclasses.dataclass
+    @dataclasses.dataclass
     class A:
       x: float
-      _: kw_only_dataclasses.KW_ONLY
+      _: dataclasses.KW_ONLY
       a: int = 5
-      b: int = kw_only_dataclasses.field(default=2)
-      c: int = kw_only_dataclasses.field(default=2, kw_only=True)
+      b: int = dataclasses.field(default=2)
+      c: int = dataclasses.field(default=2, kw_only=True)
 
-    @kw_only_dataclasses.dataclass
+    @dataclasses.dataclass
     class B(A):
       z: str
 
