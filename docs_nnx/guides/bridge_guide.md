@@ -36,7 +36,7 @@ from flax import linen as nn
 from flax.nnx import bridge
 import jax
 from jax import numpy as jnp
-from jax.experimental import mesh_utils
+from jax.sharding import PartitionSpec as P, NamedSharding, AxisType
 from typing import *
 ```
 
@@ -336,7 +336,7 @@ Flax uses a metadata wrapper box over the raw JAX array to annotate how a variab
 
 In Linen, this is an optional feature that triggered by using `nn.with_partitioning` on initializers (see more on [Linen partition metadata guide](https://flax.readthedocs.io/en/latest/guides/parallel_training/flax_on_pjit.html)). In NNX, since all NNX variables are wrapped by `nnx.Variable` class anyway, that class will hold the sharding annotations too.
 
-The `bridge.ToNNX` and `bridge.ToLinen` API will automatically convert the sharding annotations, if you use the built-in annotation methods (aka. `nn.with_partitioning` for Linen and `nnx.with_partitioning` for NNX).
+The `bridge.ToNNX` and `bridge.ToLinen` API will automatically convert the sharding annotations, if you use the built-in annotation methods (aka. `nn.with_partitioning` for Linen).
 
 ### Linen to NNX
 
@@ -367,21 +367,20 @@ def create_sharded_nnx_module(x):
 
 
 print(f'We have {len(jax.devices())} fake JAX devices now to partition this model...')
-mesh = jax.sharding.Mesh(devices=mesh_utils.create_device_mesh((2, 4)),
-                         axis_names=('in', 'out'))
+mesh = jax.make_mesh((2, 4), ('in', 'out'), axis_types=(AxisType.Auto, AxisType.Auto))
 x = jax.random.normal(jax.random.key(42), (4, 32))
-with mesh:
+with jax.set_mesh(mesh):
   model = create_sharded_nnx_module(x)
 
-print(type(model.w))           # `nnx.Param`
-print(model.w.sharding)        # The partition annotation attached with `w`
-print(model.w.value.sharding)  # The underlying JAX array is sharded across the 2x4 mesh
+print(type(model.w))                 # `nnx.Param`
+print(model.w.sharding)              # The partition annotation attached with `w`
+print(model.w.get_value().sharding)  # The underlying JAX array is sharded across the 2x4 mesh
 ```
 
     We have 8 fake JAX devices now to partition this model...
-    <class 'flax.nnx.variables.Param'>
-    ('in', 'out')
-    GSPMDSharding({devices=[2,4]<=[8]})
+    <class 'flax.nnx.variablelib.Param'>
+    NamedSharding(mesh=Mesh('in': 2, 'out': 4, axis_types=(Auto, Auto)), spec=PartitionSpec('in', 'out'), memory_kind=device)
+    NamedSharding(mesh=Mesh('in': 2, 'out': 4, axis_types=(Auto, Auto)), spec=PartitionSpec('in', 'out'), memory_kind=device)
 
 +++
 
@@ -396,8 +395,9 @@ Like with any Linen metadata wrappers, you can use `linen.unbox()` to get the ra
 ```{code-cell} ipython3
 class NNXDotWithParititioning(nnx.Module):
   def __init__(self, in_dim: int, out_dim: int, rngs: nnx.Rngs):
-    init_fn = nnx.with_partitioning(nnx.initializers.lecun_normal(), ('in', 'out'))
-    self.w = nnx.Param(init_fn(rngs.params(), (in_dim, out_dim)))
+    init_fn = nnx.initializers.lecun_normal()
+    self.w = nnx.Param(init_fn(rngs.params(), (in_dim, out_dim)),
+                       sharding_names=('in', 'out'))
   def __call__(self, x: jax.Array):
     return x @ self.w
 
@@ -410,7 +410,7 @@ def create_sharded_variables(key, x):
   # A `NNXMeta` wrapper of the underlying `nnx.Param`
   assert type(variables['params']['w']) == bridge.NNXMeta
   # The annotation coming from the `nnx.Param` => (in, out)
-  assert variables['params']['w'].metadata['sharding'] == ('in', 'out')
+  assert variables['params']['w'].metadata['sharding_names'] == ('in', 'out')
 
   unboxed_variables = nn.unbox(variables)
   variable_pspecs = nn.get_partition_spec(variables)
@@ -422,14 +422,14 @@ def create_sharded_variables(key, x):
                               nn.get_partition_spec(variables))
   return sharded_vars
 
-with mesh:
+with jax.set_mesh(mesh):
   variables = create_sharded_variables(jax.random.key(0), x)
 
 # The underlying JAX array is sharded across the 2x4 mesh
 print(variables['params']['w'].sharding)
 ```
 
-    GSPMDSharding({devices=[2,4]<=[8]})
+    NamedSharding(mesh=Mesh('in': 2, 'out': 4, axis_types=(Auto, Auto)), spec=PartitionSpec('in', 'out'), memory_kind=device)
 
 +++
 
