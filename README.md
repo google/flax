@@ -62,7 +62,7 @@ comes with everything you need to start your research, including:
 
 * **Utilities and patterns**: replicated training, serialization and checkpointing, metrics, prefetching on device.
 
-* **Educational examples**: [MNIST](https://flax.readthedocs.io/en/latest/mnist_tutorial.html), [Inference/sampling with the Gemma language model (transformer)](https://github.com/google/flax/tree/main/examples/gemma), [Transformer LM1B](https://github.com/google/flax/tree/main/examples/lm1b_nnx).
+* **Educational examples**: [MNIST](https://flax.readthedocs.io/en/latest/mnist_tutorial.html), [Inference/sampling with the Gemma language model (transformer)](https://github.com/google/flax/tree/main/examples/gemma).
 
 ## Quick install
 
