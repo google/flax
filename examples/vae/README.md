@@ -14,11 +14,7 @@ The VAE example uses simple command line arguments for configuration. You can ov
 
 ```shell
 python main.py \
---workdir=/tmp/mnist \
---learning_rate=0.01 \
---num_epochs=10 \
---batch_size=128 \
---latents=20
+--workdir=/tmp/mnist
 ```
 
 

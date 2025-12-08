@@ -18,65 +18,38 @@ This file is intentionally kept short. The majority for logic is in libraries
 that can be easily tested and imported in Colab.
 """
 
-import argparse
-import logging
+from absl import app
+from absl import flags
+from absl import logging
 import jax
 import tensorflow as tf
 import time
 import train
-from config import TrainingConfig, get_default_config
-import os
+from configs.default import get_default_config
 
-def setup_training_args():
-    """Setup training arguments with defaults from config."""
-    parser = argparse.ArgumentParser(description='VAE Training Script')
-    config = get_default_config()
+FLAGS = flags.FLAGS
 
-    # Add all config parameters as arguments
-    parser.add_argument('--learning_rate', type=float, default=config.learning_rate,
-                       help='Learning rate for training')
-    parser.add_argument('--latents', type=int, default=config.latents,
-                       help='Number of latent dimensions')
-    parser.add_argument('--batch_size', type=int, default=config.batch_size,
-                       help='Batch size for training')
-    parser.add_argument('--num_epochs', type=int, default=config.num_epochs,
-                       help='Number of training epochs')
-    parser.add_argument('--workdir', type=str, default='/tmp/vae',
-                       help='Working directory for checkpoints and logs')
+flags.DEFINE_string('workdir', None, 'Directory to store logs and checkpoints.')
 
-    args = parser.parse_args()
+def main(argv):
+  if len(argv) > 1:
+    raise app.UsageError('Too many command-line arguments.')
 
-    # Convert args to TrainingConfig
-    return TrainingConfig(
-        learning_rate=args.learning_rate,
-        latents=args.latents,
-        batch_size=args.batch_size,
-        num_epochs=args.num_epochs
-    ), args.workdir
+  # Parse arguments and get config
+  config = get_default_config()
 
-def main():
-    # Configure logging
-    logging.basicConfig(level=logging.INFO)
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
-    # Parse arguments and get config
-    config, workdir = setup_training_args()
+  logging.info('JAX process: %d / %d', jax.process_index(), jax.process_count())
+  logging.info('JAX local devices: %r', jax.local_devices())
 
-    # Create workdir if it doesn't exist
-    os.makedirs(workdir, exist_ok=True)
+  # Simple process logging
+  logging.info('Starting training process %d/%d', jax.process_index(), jax.process_count())
 
-    # Make sure tf does not allocate gpu memory.
-    tf.config.experimental.set_visible_devices([], 'GPU')
-
-    logging.info('JAX process: %d / %d', jax.process_index(), jax.process_count())
-    logging.info('JAX local devices: %r', jax.local_devices())
-
-    # Simple process logging
-    logging.info('Starting training process %d/%d',
-                jax.process_index(), jax.process_count())
-
-    start = time.perf_counter()
-    train.train_and_evaluate(config)
-    logging.info('Total training time: %.2f seconds', time.perf_counter() - start)
+  start = time.perf_counter()
+  train.train_and_evaluate(config)
+  logging.info('Total training time: %.2f seconds', time.perf_counter() - start)
 
 if __name__ == '__main__':
-    main()
+  app.run(main)

@@ -21,7 +21,7 @@ import utils as vae_utils
 import jax
 from jax import random
 import jax.numpy as jnp
-from config import TrainingConfig
+from configs.default import TrainingConfig
 import optax
 import tensorflow_datasets as tfds
 
