@@ -62,7 +62,7 @@ comes with everything you need to start your research, including:
 
 * **Utilities and patterns**: replicated training, serialization and checkpointing, metrics, prefetching on device.
 
-* **Educational examples**: [MNIST](https://flax.readthedocs.io/en/latest/mnist_tutorial.html), [Inference/sampling with the Gemma language model (transformer)](https://github.com/google/flax/tree/main/examples/gemma), [Transformer LM1B](https://github.com/google/flax/tree/main/examples/lm1b_nnx).
+* **Educational examples**: [MNIST](https://flax.readthedocs.io/en/latest/mnist_tutorial.html), [Inference/sampling with the Gemma language model (transformer)](https://github.com/google/flax/tree/main/examples/gemma).
 
 ## Quick install
 
@@ -158,7 +158,7 @@ To cite this repository:
   author = {Jonathan Heek and Anselm Levskaya and Avital Oliver and Marvin Ritter and Bertrand Rondepierre and Andreas Steiner and Marc van {Z}ee},
   title = {{F}lax: A neural network library and ecosystem for {JAX}},
   url = {http://github.com/google/flax},
-  version = {0.12.0},
+  version = {0.12.1},
   year = {2024},
 }
 ```

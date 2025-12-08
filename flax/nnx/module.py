@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import inspect
 import typing as tp
 
 import jax
@@ -182,7 +183,7 @@ class Module(Pytree, metaclass=ModuleMeta):
           f"Expected '{name}' to be of type '{variable_type.__name__}', "
           f"got '{type(variable).__name__}'"
         )
-      variable.raw_value = reduce_fn(variable.raw_value, value)
+      variable.set_value(reduce_fn(variable.get_value(), value))
     else:
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
@@ -559,6 +560,115 @@ def eval_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
   )
 
 
+def _parse_docstring_args(doc_str: str) -> dict[str, str]:
+  """Parses parameters from `Args:` section of a function docstring.
+  Assumes Google style docstrings. Returns a dictionary with
+  keys representing argument names and values representing descriptions.
+  Each description has lines starting with 4 spaces.
+  """
+  lines = doc_str.split("\n")
+
+  # Get lines with the parameter names
+  inds = [i for i, l in enumerate(lines) if l.startswith("  ") and not l.startswith("    ")]
+  inds.append(len(lines))
+  out = dict()
+
+  # Parse each argument
+  for i in range(len(inds)-1):
+    start, end = inds[i], inds[i+1]
+
+    # Process first line for the description
+    first_colon = lines[start].find(":")
+    name = lines[start][:first_colon].strip()
+    desc = [" "*4 + lines[start][first_colon+1:].strip()]
+
+    # Append remaining description lines
+    for j in range(start+1, end):
+      desc.append(lines[j])
+
+    out[name] = "\n".join(desc)
+  return out
+
+
+
+def set_mode_info(node: Module, /, *, only: filterlib.Filter = ...) -> str:
+  """Provides information about the ``set_mode`` arguments for a module and all
+  submodules. If no docstring is provided for a module's `set_mode`, this function
+  puts the `set_mode` signature below the function.
+
+  Example::
+    >>> from flax import nnx
+    ...
+    >>> class CustomModel(nnx.Module):
+    ...   def __init__(self, *, rngs):
+    ...       self.mha = nnx.MultiHeadAttention(4, 8, 32, rngs=rngs)
+    ...       self.drop = nnx.Dropout(0.5, rngs=rngs)
+    ...       self.bn = nnx.BatchNorm(32, rngs=rngs)
+    ...
+    >>> model = CustomModel(rngs=nnx.Rngs(0))
+    >>> print(nnx.set_mode_info(model))
+    BatchNorm:
+      use_running_average: bool | None = None
+        if True, the stored batch statistics will be
+        used instead of computing the batch statistics on the input.
+    Dropout:
+      deterministic: bool | None = None
+        if True, disables dropout masking.
+    MultiHeadAttention:
+      deterministic: bool | None = None
+        if True, the module is set to deterministic mode.
+      decode: bool | None = None
+        if True, the module is set to decode mode.
+      batch_size: int | Shape | None = None
+        the batch size to use for the cache.
+      max_length: int | None = None
+        the max length to use for the cache.
+
+  Args:
+    node: the object to display ``set_mode`` information for.
+    only: Filters to select the Modules to display information for.
+  """
+  predicate = filterlib.to_predicate(only)
+  classes: set[Module] = set()
+
+  def _set_mode_info_fn(path, node):
+    if hasattr(node, 'set_mode') and predicate(path, node):
+      classes.add(node.__class__)
+    return node
+
+  graph.recursive_map(_set_mode_info_fn, node)
+
+  class_list = sorted(list(classes), key=lambda x: x.__qualname__)
+  out_str = []
+  for c in class_list:
+    out_str.append(f"{c.__qualname__}:")
+    sig = inspect.signature(c.set_mode)
+    doc = inspect.getdoc(c.set_mode)
+
+    # Parse docstring
+    if isinstance(doc, str):
+      start, end = doc.find("Args:\n"), doc.find("Returns:\n")
+      if end == -1:
+        end = len(doc)
+      doc = doc[start+6:end]
+      parsed_docstring = _parse_docstring_args(doc)
+
+      # Generate output from signature and docstring
+      skip_names = {"self", "args", "kwargs"}
+      for name, param in sig.parameters.items():
+        if name in skip_names:
+          continue
+
+        if param.default is inspect.Parameter.empty:
+          out_str.append(f"  {name}: {param.annotation}")
+        else:
+          out_str.append(f"  {name}: {param.annotation} = {param.default}")
+        out_str.append(parsed_docstring[name])
+    else:
+      out_str.append(f"  set_mode{sig}")
+
+
+  return "\n".join(out_str)
 
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:
   """Return the first non-None argument.

@@ -1,4 +1,4 @@
-# Copyright 2024 The Flax Authors.
+# Copyright 2025 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,5 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Current Flax version at head on Github."""
-__version__ = '0.12.1'
+"""Default Hyperparameter configuration."""
+
+import ml_collections
+
+
+def get_config():
+  """Get the default hyperparameter configuration."""
+  config = ml_collections.ConfigDict()
+
+  config.workdir = '/tmp/seq2seq'
+  config.learning_rate = 0.003
+  config.batch_size = 128
+  config.hidden_size = 512
+  config.num_train_steps = 10000
+  config.decode_frequency = 200
+  config.max_len_query_digit = 3
+
+  return config

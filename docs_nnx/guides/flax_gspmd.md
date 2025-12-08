@@ -29,6 +29,7 @@ import jax
 from jax import numpy as jnp
 from jax.sharding import PartitionSpec as P, NamedSharding, AxisType
 import optax
+import flax
 from flax import nnx
 
 # Ignore this if you are already running on a TPU or GPU
@@ -37,7 +38,7 @@ if not jax._src.xla_bridge.backends_are_initialized():
 print(f'You have 8 “fake” JAX devices now: {jax.devices()}')
 ```
 
-Set up a `2x4` device mesh as the [JAX data sharding tutorial](https://docs.jax.dev/en/latest/sharded-computation.html#key-concept-data-sharding) instructs. 
+Set up a `2x4` device mesh as the [JAX data sharding tutorial](https://docs.jax.dev/en/latest/sharded-computation.html#key-concept-data-sharding) instructs.
 
 In this guide we use a standard FSDP layout and shard our devices on two axes - `data` and `model`, for doing batch data parallelism and tensor parallelism.
 
@@ -46,11 +47,24 @@ In this guide we use a standard FSDP layout and shard our devices on two axes - 
 auto_mesh = jax.make_mesh((2, 4), ('data', 'model'))
 ```
 
-> Compatibility Note: This guide covers the [eager sharding feature](https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html) that greatly simplifies creating sharded model. If your project already used Flax GSPMD API on version `flax<0.12`, you might have turned the feature off to keep your code working. Check the flag and read on to learn how to use the feature.
+> Compatibility Note: This guide covers the [eager sharding feature](https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html) that greatly simplifies creating sharded model. If your project already used Flax GSPMD API on version `flax<0.12`, you might have turned the feature off to keep your code working. Users can toggle this feature using the `nnx.use_eager_sharding` function.
 
 ```{code-cell} ipython3
-import flax
-assert flax.config.flax_always_shard_variable is True
+nnx.use_eager_sharding(True)
+assert nnx.using_eager_sharding()
+```
+
+The `nnx.use_eager_sharding` function can also be used as a context manager to toggle the eager sharding feature within a specific scope.
+
+```{code-cell} ipython3
+with nnx.use_eager_sharding(False):
+  assert not nnx.using_eager_sharding()
+```
+
+You can also enable eager sharding on a per-variable basis by passing `eager_sharding=False` during variable initialization. The mesh can also be passed this way.
+
+```{code-cell} ipython3
+nnx.Param(jnp.ones(4,4), sharding_names=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
 ```
 
 ## Shard a single-array model
@@ -107,7 +121,7 @@ You should still make sure to `jax.jit` for maximum performance, and also to exp
 with jax.set_mesh(auto_mesh):
   # Create your input data, sharded along `data` dimension, as in data parallelism
   x = jax.device_put(jnp.ones((16, 4)), P('data', None))
-  
+
   # Run the model forward function, jitted
   y = jax.jit(lambda m, x: m(x))(linear, x)
   print(y.sharding.spec)                       # sharded: ('data', 'model')
@@ -153,7 +167,7 @@ class MultiDotReluDot(nnx.Module):
     def create_sublayers(r):
       return DotReluDot(depth, r)
     self.layers = create_sublayers(rngs.fork(split=num_layers))
-  
+
   def __call__(self, x):
     def scan_over_layers(x, layer):
       return layer(x), None
@@ -182,7 +196,7 @@ with jax.set_mesh(auto_mesh):
   # Model and optimizer
   model = MultiDotReluDot(1024, 2, rngs=nnx.Rngs(0))
   optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
-  
+
   # The loop
   for i in range(5):
     model, loss = train_step(model, optimizer, input, label)
@@ -266,7 +280,7 @@ class LogicalMultiDotReluDot(nnx.Module):
     def create_sublayers(r):
       return LogicalDotReluDot(depth, r)
     self.layers = create_sublayers(rngs.fork(split=num_layers))
-  
+
   def __call__(self, x):
     def scan_over_layers(x, layer):
       return layer(x), None
@@ -354,7 +368,7 @@ class ExplicitMultiDotReluDot(nnx.Module):
     def create_sublayers(r):
       return ExplicitDotReluDot(depth, r)
     self.layers = create_sublayers(rngs.fork(split=num_layers))
-  
+
   def __call__(self, x):
     def scan_over_layers(x, layer):
       return layer(x), None

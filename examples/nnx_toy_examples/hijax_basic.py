@@ -33,11 +33,11 @@ def dataset(batch_size):
 
 class Linear(nnx.Module):
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
-    self.w = nnx.Param(jax.random.uniform(rngs.params(), (din, dout)))
+    self.w = nnx.Param(rngs.params.uniform((din, dout)))
     self.b = nnx.Param(jnp.zeros((dout,)))
 
   def __call__(self, x):
-    return x @ self.w[...] + self.b[None]
+    return x @ self.w + self.b[None]
 
 
 class Count(nnx.Variable[nnx.A]):
@@ -54,22 +54,22 @@ class MLP(nnx.Module):
     self.count[...] += 1
     return self.linear2(jax.nn.relu(self.linear1(x)) * 0.5)
 
-with nnx.use_refs(True):
-  model = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0))
-  optimizer = nnx.Optimizer(model, optax.sgd(learning_rate=0.1), wrt=nnx.Param)
+nnx.use_hijax(True)
+
+model = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0))
+optimizer = nnx.Optimizer(model, optax.sgd(learning_rate=0.1), wrt=nnx.Param)
 
 
 @jax.jit
 def train_step(model, optimizer, x, y):
-  graphdef, params, counts = nnx.split(model, nnx.Param, Count)
+  graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
 
   def loss_fn(params):
-    model = nnx.merge(graphdef, params, counts)
+    model = nnx.merge(graphdef, params, nondiff)
     return jnp.mean((y - model(x)) ** 2)
 
-  grads = jax.grad(loss_fn)(nnx.to_arrays(params))
+  grads = jax.grad(loss_fn)(nnx.as_immutable_vars(params))
   optimizer.update(model, grads)
-
 
 @jax.jit
 def test_step(model: MLP, x, y):
@@ -87,7 +87,7 @@ for step, (x, y) in enumerate(dataset(32)):
   if step >= total_steps - 1:
     break
 
-print('times called:', model.count.value)
+print('times called:', model.count[...])
 
 y_pred = model(X)
 

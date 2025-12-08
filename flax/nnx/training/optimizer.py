@@ -28,9 +28,6 @@ from flax.nnx.variablelib import Variable
 M = tp.TypeVar('M', bound=nnx.Module)
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
-# TODO: add tests and docstrings
-
-
 class OptState(Variable):
   """Any optimizer state"""
 
@@ -52,7 +49,7 @@ class OptVariable(OptState):
 def to_opt_state(tree):
   def _to_opt_state(x):
     if isinstance(x, Variable):
-      opt_state = OptVariable(x.value, **x.get_metadata())  # type: ignore
+      opt_state = OptVariable(x.get_value(), **x.get_metadata())  # type: ignore
     else:
       opt_state = OptArray(x)
     return opt_state
@@ -209,10 +206,10 @@ class Optimizer(Pytree, tp.Generic[M]):
       **kwargs: additional keyword arguments passed to the tx.update, to support
       ``GradientTransformationExtraArgs``, such as ``optax.scale_by_backtracking_linesearch``.
     """
-    param_arrays = nnx.to_arrays(nnx.pure(nnx.state(model, self.wrt)))
-    grad_arrays = nnx.to_arrays(nnx.pure(nnx.state(grads, self.wrt)))
-    opt_state_arrays = nnx.to_arrays(nnx.pure(self.opt_state))
-    kwargs_arrays = nnx.to_arrays(nnx.pure(kwargs))
+    param_arrays = nnx.pure(nnx.state(model, self.wrt))
+    grad_arrays = nnx.pure(nnx.state(grads, self.wrt))
+    opt_state_arrays = nnx.pure(self.opt_state)
+    kwargs_arrays = nnx.pure(kwargs)
 
     updates, new_opt_state = self.tx.update(
       grad_arrays, opt_state_arrays, param_arrays, **kwargs_arrays

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import typing as tp
+from types import MappingProxyType
 
 import jax
 import jax.numpy as jnp
@@ -27,6 +28,7 @@ from flax.typing import (
   Dtype,
   Initializer,
   Axes,
+  PromoteDtypeFn,
 )
 
 
@@ -272,7 +274,16 @@ class BatchNorm(Module):
       for more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype. The
+      function should accept a tuple of ``(inputs, mean, var, scale, bias)`` and
+      a ``dtype`` keyword argument, and return a tuple of arrays with the promoted
+      dtype.
     rngs: rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -292,7 +303,10 @@ class BatchNorm(Module):
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
     use_fast_variance: bool = True,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     feature_shape = (num_features,)
     self.mean = nnx.BatchStat(jnp.zeros(feature_shape, jnp.float32))
@@ -301,14 +315,14 @@ class BatchNorm(Module):
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = nnx.data(None)
 
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
-      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
+      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype), **bias_metadata)
     else:
       self.bias = nnx.data(None)
 
@@ -324,6 +338,7 @@ class BatchNorm(Module):
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
     self.use_fast_variance = use_fast_variance
+    self.promote_dtype = promote_dtype
 
   def __call__(
     self,
@@ -355,9 +370,13 @@ class BatchNorm(Module):
     feature_axes = _canonicalize_axes(x.ndim, self.axis)
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
 
-    if use_running_average:
-      mean, var = self.mean[...], self.var[...]
-    else:
+    # Promote dtypes for input and all Variables
+    scale = self.scale[...] if self.scale else None
+    bias = self.bias[...] if self.bias else None
+    x, mean, var, scale, bias = self.promote_dtype(
+      (x, self.mean[...], self.var[...], scale, bias), dtype=self.dtype
+    )
+    if not use_running_average:
       mean, var = _compute_stats(
         x,
         reduction_axes,
@@ -368,7 +387,7 @@ class BatchNorm(Module):
         mask=mask,
       )
       # stop_gradient only for flax_array_ref
-      if self.mean.has_ref or self.var.has_ref:
+      if self.mean._can_update or self.var._can_update:
         stop_gradient = jax.lax.stop_gradient
       else:
         stop_gradient = lambda x: x
@@ -384,8 +403,8 @@ class BatchNorm(Module):
       x,
       mean,
       var,
-      self.scale[...] if self.scale else None,
-      self.bias[...] if self.bias else None,
+      scale,
+      bias,
       reduction_axes,
       feature_axes,
       self.dtype,
@@ -460,7 +479,15 @@ class LayerNorm(Module):
         for more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
         calculation for the variance.
+    promote_dtype: function to promote the dtype of all input array arguments
+        (including Variables accessed through ``self``) to the desired dtype. The
+        function should accept a tuple of ``(inputs, scale, bias)`` and a ``dtype``
+        keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -479,21 +506,24 @@ class LayerNorm(Module):
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
     use_fast_variance: bool = True,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     feature_shape = (num_features,)
 
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = nnx.data(None)
 
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
-      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
+      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype), **bias_metadata)
     else:
       self.bias = nnx.data(None)
 
@@ -508,6 +538,7 @@ class LayerNorm(Module):
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
     self.use_fast_variance = use_fast_variance
+    self.promote_dtype = promote_dtype
 
   def __call__(self, x, *, mask: tp.Optional[jax.Array] = None):
     """Applies layer normalization on the input.
@@ -518,6 +549,12 @@ class LayerNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
+    # Promote dtypes for input and all Variables
+    scale = self.scale[...] if self.scale else None
+    bias = self.bias[...] if self.bias else None
+    x, scale, bias = self.promote_dtype(
+      (x, scale, bias), dtype=self.dtype
+    )
     mean, var = _compute_stats(
       x,
       self.reduction_axes,
@@ -532,8 +569,8 @@ class LayerNorm(Module):
       x,
       mean,
       var,
-      self.scale[...] if self.scale else None,
-      self.bias[...] if self.bias else None,
+      scale,
+      bias,
       self.reduction_axes,
       self.feature_axes,
       self.dtype,
@@ -589,7 +626,13 @@ class RMSNorm(Module):
         for more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
         calculation for the variance.
+    promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype. The
+      function should accept a tuple of ``(inputs, scale)`` and a ``dtype``
+      keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -606,14 +649,16 @@ class RMSNorm(Module):
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
     use_fast_variance: bool = True,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     feature_shape = (num_features,)
 
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = nnx.data(None)
 
@@ -627,6 +672,7 @@ class RMSNorm(Module):
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
     self.use_fast_variance = use_fast_variance
+    self.promote_dtype = promote_dtype
 
   def __call__(self, x, mask: tp.Optional[jax.Array] = None):
     """Applies layer normalization on the input.
@@ -637,6 +683,11 @@ class RMSNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
+    # Promote dtypes for input and all Variables
+    scale = self.scale[...] if self.scale else None
+    x, scale = self.promote_dtype(
+      (x, scale), dtype=self.dtype
+    )
     mean, var = _compute_stats(
       x,
       self.reduction_axes,
@@ -652,7 +703,7 @@ class RMSNorm(Module):
       x,
       mean,
       var,
-      self.scale[...] if self.scale else None,
+      scale,
       None,
       self.reduction_axes,
       self.feature_axes,
@@ -730,7 +781,15 @@ class GroupNorm(Module):
       more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype. The
+      function should accept a tuple of ``(inputs, scale, bias)`` and a ``dtype``
+      keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -750,7 +809,10 @@ class GroupNorm(Module):
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
     use_fast_variance: bool = True,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     self.feature_axis = -1
 
@@ -787,14 +849,14 @@ class GroupNorm(Module):
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = nnx.data(None)
 
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
-      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
+      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype), **bias_metadata)
     else:
       self.bias = nnx.data(None)
 
@@ -807,6 +869,7 @@ class GroupNorm(Module):
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
     self.use_fast_variance = use_fast_variance
+    self.promote_dtype = promote_dtype
 
   def __call__(self, x, *, mask: tp.Optional[jax.Array] = None):
     """Applies group normalization to the input (arxiv.org/abs/1803.08494).
@@ -834,6 +897,12 @@ class GroupNorm(Module):
     if mask is not None:
       mask = mask.reshape(mask.shape[:-1] + (self.num_groups, self.group_size))
 
+    # Promote dtypes for input and all Variables
+    scale = self.scale[...] if self.scale else None
+    bias = self.bias[...] if self.bias else None
+    x, scale, bias = self.promote_dtype(
+      (x, scale, bias), dtype=self.dtype
+    )
     mean, var = _compute_stats(
       x.reshape(group_shape),
       list(reduction_axes[:-1]) + [-1],
@@ -845,12 +914,13 @@ class GroupNorm(Module):
     )
     mean = jnp.repeat(mean, self.group_size, axis=1)
     var = jnp.repeat(var, self.group_size, axis=1)
+
     return _normalize(
       x,
       mean,
       var,
-      self.scale[...] if self.scale else None,
-      self.bias[...] if self.bias else None,
+      scale,
+      bias,
       reduction_axes[:-1],
       (self.feature_axis,),
       self.dtype,
@@ -882,7 +952,7 @@ class WeightNorm(nnx.Module):
     ...   def __call__(self, x: jax.Array) -> jax.Array:
     ...     return self.normed_linear(x)
 
-    >>> rng = jax.random.PRNGKey(42)
+    >>> rng = jax.random.key(42)
     >>> model = Foo(rngs=nnx.Rngs(rng))
 
     >>> x = jax.random.normal(rng, (5, 8))
@@ -890,7 +960,7 @@ class WeightNorm(nnx.Module):
     >>> y.shape
     (5, 4)
 
-    >>> w = model.normed_linear.layer_instance.kernel.value
+    >>> w = model.normed_linear.layer_instance.kernel[...]
     >>> col_norms = np.linalg.norm(np.array(w), axis=0)
     >>> np.testing.assert_allclose(col_norms, np.ones(4))
 
@@ -903,6 +973,9 @@ class WeightNorm(nnx.Module):
     dtype: The dtype of the result, by default infer from input and params.
     param_dtype: The dtype of the parameters, by default float32.
     variable_filter: The variable filter, by default ``nnx.PathContains('kernel')``.
+    promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype. This
+      is used internally by WeightNorm when normalizing weights.
     rngs: The rng key.
   """
   def __init__(
@@ -916,6 +989,7 @@ class WeightNorm(nnx.Module):
     dtype: tp.Optional[Dtype] = None,
     param_dtype: Dtype = jnp.float32,
     variable_filter: nnx.filterlib.Filter = nnx.PathContains('kernel'),
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
   ):
     self.layer_instance = layer_instance
@@ -926,6 +1000,7 @@ class WeightNorm(nnx.Module):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.variable_filter = nnx.filterlib.to_predicate(variable_filter)
+    self.promote_dtype = promote_dtype
     self.scales : tp.Optional[dict] = None
 
     if use_scale:
@@ -939,39 +1014,41 @@ class WeightNorm(nnx.Module):
         if self.variable_filter(path, param)})
 
   def _weightnorm_inplace(self, path, param):
-      if not self.variable_filter(path, param):
-        return
+    if not self.variable_filter(path, param):
+      return
 
-      if self.feature_axes is None:
-        feature_axes = ()
-        reduction_axes = tuple(range(param.ndim))
-      else:
-        feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
-        reduction_axes = tuple(i for i in range(param.ndim) if i not in feature_axes)
+    if self.feature_axes is None:
+      feature_axes = ()
+      reduction_axes = tuple(range(param.ndim))
+    else:
+      feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
+      reduction_axes = tuple(
+        i for i in range(param.ndim) if i not in feature_axes
+      )
 
-      value_bar = _l2_normalize(param, axis=reduction_axes, eps=self.epsilon)
+    value_bar = _l2_normalize(param, axis=reduction_axes, eps=self.epsilon)
 
-      if self.use_scale:
-        if path not in self.scales:
-          raise RuntimeError(
-            f"Could not find the scale corresponding to the param {path} "
-            "in scales dict. Parameters of the layer_instance should not change!"
-          )
-        scale_value = self.scales[path]
+    if self.use_scale:
+      if path not in self.scales:
+        raise RuntimeError(
+          f'Could not find the scale corresponding to the param {path} '
+          'in scales dict. Parameters of the layer_instance should not change!'
+        )
+      scale_value = self.scales[path]
 
-        if len(feature_axes) < param.ndim:
-          broadcast_shape = [1] * param.ndim
-          for ax in feature_axes:
-            broadcast_shape[ax] = param.shape[ax]
-          scale_value = scale_value.reshape(broadcast_shape)
-        value_bar = value_bar * scale_value
+      if len(feature_axes) < param.ndim:
+        broadcast_shape = [1] * param.ndim
+        for ax in feature_axes:
+          broadcast_shape[ax] = param.shape[ax]
+        scale_value = scale_value.reshape(broadcast_shape)
+      value_bar = value_bar * scale_value
 
-      cast_args = [param]
-      if self.use_scale:
-        cast_args.append(scale_value)
+    cast_args = [param]
+    if self.use_scale:
+      cast_args.append(scale_value)
 
-      final_dtype = dtypes.canonicalize_dtype(*cast_args, dtype=self.dtype)
-      param.value = jnp.asarray(value_bar, final_dtype)
+    final_dtype = dtypes.canonicalize_dtype(*cast_args, dtype=self.dtype)
+    param.set_value(jnp.asarray(value_bar, final_dtype))
 
   def __call__(self, x: Array, *args, **kwargs) -> Array:
     """Compute the l2-norm of the weights in ``self.layer_instance``
@@ -1060,7 +1137,15 @@ class InstanceNorm(Module):
       more details. This argument is currently not supported for SPMD jit.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype. The
+      function should accept a tuple of ``(inputs, scale, bias)`` and a ``dtype``
+      keyword argument, and return a tuple of arrays with the promoted dtype.
     rngs: The rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
   """
 
   def __init__(
@@ -1078,20 +1163,23 @@ class InstanceNorm(Module):
     axis_name: tp.Optional[str] = None,
     axis_index_groups: tp.Any = None,
     use_fast_variance: bool = True,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   ):
     feature_shape = (num_features,)
     self.scale: nnx.Param[jax.Array] | None
     if use_scale:
       key = rngs.params()
-      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype))
+      self.scale = nnx.Param(scale_init(key, feature_shape, param_dtype), **scale_metadata)
     else:
       self.scale = None
 
     self.bias: nnx.Param[jax.Array] | None
     if use_bias:
       key = rngs.params()
-      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype))
+      self.bias = nnx.Param(bias_init(key, feature_shape, param_dtype), **bias_metadata)
     else:
       self.bias = None
 
@@ -1105,6 +1193,7 @@ class InstanceNorm(Module):
     self.axis_name = axis_name
     self.axis_index_groups = axis_index_groups
     self.use_fast_variance = use_fast_variance
+    self.promote_dtype = promote_dtype
 
   def __call__(self, x, *, mask: tp.Optional[jax.Array] = None):
     """Applies instance normalization on the input.
@@ -1123,6 +1212,12 @@ class InstanceNorm(Module):
                        'as this is assumed to be the batch axis.')
     reduction_axes = [i for i in range(1, x.ndim) if i not in feature_axes]
 
+    # Promote dtypes for input and all Variables
+    scale = self.scale[...] if self.scale else None
+    bias = self.bias[...] if self.bias else None
+    x, scale, bias = self.promote_dtype(
+      (x, scale, bias), dtype=self.dtype
+    )
     mean, var = _compute_stats(
       x,
       reduction_axes,
@@ -1137,8 +1232,8 @@ class InstanceNorm(Module):
       x,
       mean,
       var,
-      self.scale[...] if self.scale else None,
-      self.bias[...] if self.bias else None,
+      scale,
+      bias,
       reduction_axes,
       feature_axes,
       self.dtype,

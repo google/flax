@@ -49,7 +49,7 @@ class InputPipelineTest(absltest.TestCase):
     vocab_path = os.path.join(tempfile.mkdtemp(), 'sentencepiece_model')
 
     # Go two directories up to the root of the flax directory.
-    # "/path/to/flax/examples/lm1b_nnx/models_test.py" -> "/path/to/flax"
+    # "/path/to/flax/examples/gemma/input_pipeline_test.py" -> "/path/to/flax"
     flax_root_dir = pathlib.Path(__file__).absolute().parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'  # pylint: disable=unused-variable
 

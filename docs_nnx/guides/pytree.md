@@ -195,29 +195,41 @@ pytree = Bar(1.0, True)
 pytree_structure(pytree)
 ```
 
-### Class Annotations
-Annotations can also be added at the type level via `nnx.Static` and `nnx.Data`. This is useful for creating `dataclasses` but the mechanism also works for regular classes.
+### Dataclasses
+`nnx.Pytree` dataclasses can be created by using the `nnx.dataclass` decorator. To control the status of each field, `nnx.static` and `nnx.data` can be used as `field` specifiers.
 
 ```{code-cell} ipython3
 import dataclasses
 
-@dataclasses.dataclass
+@nnx.dataclass
 class Foo(nnx.Pytree):
-  i: nnx.Data[int]
-  s: nnx.Static[str]
+  i: int = nnx.data()
   x: jax.Array
   a: int
+  s: str = nnx.static(default='hi', kw_only=True)
 
-@dataclasses.dataclass
+@nnx.dataclass
 class Bar(nnx.Pytree):
-  ls: nnx.Data[list[Foo]]
+  ls: list[Foo] = nnx.data()
   shapes: list[int]
 
 pytree = Bar(
-  ls=[Foo(i, "Hi" + "!" * i, jnp.array(42 * i), hash(i)) for i in range(2)],
+  ls=[Foo(i, jnp.array(42 * i), hash(i)) for i in range(2)],
   shapes=[8, 16, 32]
 )
 pytree_structure(pytree)
+```
+
+`dataclasses.dataclass` can also be used directly, however type checkers will not handle `nnx.static` and `nnx.data` correctly. To solve this `dataclasses.field` can be used by setting `metadata` with the appropriate entry for `static`.
+
+```{code-cell} ipython3
+@dataclasses.dataclass
+class Bar(nnx.Pytree):
+  a: int = dataclasses.field(metadata={'static': False}) # data
+  b: str = dataclasses.field(metadata={'static': True})  # static
+
+pytree = Bar(a=10, b="hello")
+pytree_structure(pytree, title='dataclass pytree structure')
 ```
 
 ### Attribute Updates
@@ -281,7 +293,7 @@ except ValueError as e:
   print("ValueError:", e)
 ```
 
-Checking for `nnx.data` or `nnx.static` annotations stored in inside nested structures that are not `nnx.Pytree` instances:
+Checking for `nnx.data` or `nnx.static` annotations stored inside nested structures that are not `nnx.Pytree` instances:
 
 ```{code-cell} ipython3
 class Foo(nnx.Pytree):

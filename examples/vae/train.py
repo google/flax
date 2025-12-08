@@ -58,7 +58,6 @@ def train_step(model: nnx.Module, optimizer: nnx.Optimizer, batch, z_rng):
   optimizer.update(model, grads)
   return loss
 
-
 @nnx.jit
 def eval_f(model: nnx.Module, images, z, z_rng):
   """Evaluation function for the VAE model."""
@@ -109,7 +108,9 @@ def train_and_evaluate(config: TrainingConfig):
     vae_utils.save_image(
         comparison, f'results/reconstruction_{epoch}.png', nrow=8
     )
-    vae_utils.save_image(sample, f'results/sample_{epoch}.png', nrow=8)
+    vae_utils.save_image(
+        sample, f'results/sample_{epoch}.png', nrow=8
+    )
 
     print(
         'eval epoch: {}, loss: {:.4f}, BCE: {:.4f}, KLD: {:.4f}'.format(

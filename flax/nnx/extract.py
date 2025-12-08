@@ -63,7 +63,7 @@ def check_consistent_aliasing(
           lambda: f'Trying to extract graph node from different trace level, got {value!r}'
         )
       if isinstance(value, graph.Variable):
-        if not value._trace_state.is_valid():
+        if not value._can_update:
           raise ValueError(
             f'Cannot extract graph node from different trace level, got {value!r}'
           )
@@ -164,7 +164,7 @@ class NodeStates(struct.PyTreeNode):
   @classmethod
   def from_split(
     cls,
-    graphdef: graph.GraphDef[tp.Any],
+    graphdef: graph.GraphDef[tp.Any] | None,
     state: tp.Any,
     /,
     *states: tp.Any,

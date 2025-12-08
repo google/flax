@@ -2,7 +2,7 @@
 ## Language modeling
 Trains Gemma model on the One Billion Word Benchmark (lm1b; Chelba *et al.*, 2013).
 
-This example is based on `lm1b_nnx` example script and similarly uses linear learning rate warmup and inverse square root learning rate schedule.
+This example is based on lm1b and similarly uses linear learning rate warmup and inverse square root learning rate schedule.
 
 
 ### Requirements

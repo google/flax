@@ -36,6 +36,7 @@ from .pytreelib import Pytree as Pytree
 from .pytreelib import Object as Object
 from .pytreelib import Data as Data
 from .pytreelib import Static as Static
+from .pytreelib import dataclass as dataclass
 from .pytreelib import data as data
 from .pytreelib import static as static
 from .pytreelib import register_data_type as register_data_type
@@ -48,6 +49,7 @@ from .helpers import TrainState as TrainState
 from .module import M as M
 from .module import Module as Module
 from .module import set_mode as set_mode
+from .module import set_mode_info as set_mode_info
 from .module import train_mode as train_mode
 from .module import eval_mode as eval_mode
 from .module import iter_children as iter_children, iter_modules as iter_modules
@@ -71,8 +73,12 @@ from .graph import split_context as split_context
 from .graph import MergeContext as MergeContext
 from .graph import merge_context as merge_context
 from .graph import variables as variables
-from .graph import to_arrays as to_arrays
-from .graph import to_refs as to_refs
+from .graph import as_ref_vars as as_ref_vars
+from .graph import as_array_vars as as_array_vars
+from .graph import as_hijax_vars as as_hijax_vars
+from .graph import as_pytree_vars as as_pytree_vars
+from .graph import as_immutable_vars as as_immutable_vars
+from .graph import as_mutable_vars as as_mutable_vars
 from .graph import pure as pure
 from .graph import cached_partial as cached_partial
 from .graph import flatten as flatten
@@ -200,8 +206,10 @@ from .variablelib import with_metadata as with_metadata
 from .variablelib import variable_type_from_name as variable_type_from_name
 from .variablelib import variable_name_from_type as variable_name_from_type
 from .variablelib import register_variable_name as register_variable_name
-from .variablelib import use_refs as use_refs
-from .variablelib import using_refs as using_refs
+from .variablelib import use_eager_sharding as use_eager_sharding
+from .variablelib import using_eager_sharding as using_eager_sharding
+from .variablelib import use_hijax as use_hijax
+from .variablelib import using_hijax as using_hijax
 from .visualization import display as display
 from .extract import to_tree as to_tree
 from .extract import from_tree as from_tree
@@ -209,12 +217,12 @@ from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
 from . import traversals as traversals
 
-# alias VariableState
-VariableState = Variable
 
 import typing as _tp
 
-if not _tp.TYPE_CHECKING:
+if _tp.TYPE_CHECKING:
+  VariableState = Variable
+else:
   def __getattr__(name):
     if name == "VariableState":
       import warnings
@@ -224,4 +232,5 @@ if not _tp.TYPE_CHECKING:
           DeprecationWarning,
           stacklevel=2,
       )
+      return Variable
     raise AttributeError(f"Module {__name__} has no attribute '{name}'")
