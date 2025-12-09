@@ -6,6 +6,10 @@ jupyter:
       format_name: markdown
       format_version: '1.3'
       jupytext_version: 1.13.8
+  kernelspec:
+    display_name: Python 3 (ipykernel)
+    language: python
+    name: python3
 ---
 
 # A Flax Optimization Cookbook
@@ -37,9 +41,6 @@ def nnx_model(rngs, **kwargs):
     return nnx.Sequential(
         nnx.Linear(2,8, rngs=rngs, kernel_init=ft.partial(param_init, **kwargs)),
         nnx.Linear(8,8, rngs=rngs, kernel_init=ft.partial(param_init, **kwargs)))
-
-def nnx_loss_fn(params, x, y):
-    return jnp.sum((y - model(params, x))**2)
 
 def nnx_loss_fn(model, x, y):
     return jnp.sum((model(x) - y) ** 2)
