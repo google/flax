@@ -25,13 +25,15 @@ from flax.nnx import (
   graph,
   variablelib,
 )
-from flax.nnx.statelib import EmptyState, State
+from flax.nnx.statelib import State
 import jax
-import jax.core
-import jax.stages
 
 from flax.nnx.transforms import general
-from flax.nnx.transforms.transforms import resolve_kwargs
+from flax.nnx.transforms.transforms import (
+  resolve_kwargs,
+  _resolve_bound_callable,
+  _raise_bound_method_error,
+)
 from flax.typing import MISSING, Missing
 
 
@@ -60,11 +62,12 @@ class DiffState:
   filter: filterlib.Filter
 
 
+
 @dataclasses.dataclass(eq=False)
 class GradFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
-  nondiff_states: deque[State | variablelib.VariableState | None]
+  nondiff_states: deque[State | None]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
@@ -134,12 +137,12 @@ def _grad_general(
   def grad_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
     del kwargs
-    nondiff_states: deque[State | variablelib.VariableState | None] = deque()
+    nondiff_states: deque[State | variablelib.Variable | None] = deque()
 
     def _grad_split_fn(
       ctx: graph.SplitContext, path, prefix: DiffState | None, value
     ):
-      if prefix is None:
+      if prefix is None or (prefix.argnum == -1 and isinstance(value, variablelib.Variable)):
         nondiff_states.append(None)
         return extract.NodeStates.from_split(*ctx.split(value))
       else:
@@ -249,12 +252,10 @@ def grad(
     >>> grads = grad_fn(m, x, y)
     >>> jax.tree.map(jnp.shape, grads)
     State({
-      'bias': VariableState(
-        type=Param,
+      'bias': Param(
         value=(3,)
       ),
-      'kernel': VariableState(
-        type=Param,
+      'kernel': Param(
         value=(2, 3)
       )
     })
@@ -275,8 +276,7 @@ def grad(
     >>> grads = grad_fn(m, x, y)
     >>> jax.tree.map(jnp.shape, grads)
     State({
-      'kernel': VariableState(
-        type=Param,
+      'kernel': Param(
         value=(2, 3)
       )
     })
@@ -315,14 +315,22 @@ def grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
     )
-  return _grad_general(
-    f,
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+
+  if was_bound:
+    _raise_bound_method_error('grad')
+
+  grad_fn = _grad_general(
+    f_unbound,
     argnums,
     has_aux,
     holomorphic,
     allow_int,
     return_value=False,
   )
+
+  return grad_fn
 
 
 @tp.overload
@@ -369,8 +377,14 @@ def value_and_grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
     )
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+
+  if was_bound:
+    _raise_bound_method_error('value_and_grad')
+
   return _grad_general(
-    f,
+    f_unbound,
     argnums,
     has_aux,
     holomorphic,
@@ -427,7 +441,7 @@ def _custom_vjp_split_fn(
     # but we return a TreeNode.from_states which doesn't have a graphdef
     # in order to keep the gradients clean from any metadata
     graphdef, passed = ctx.split(value)
-    broadcast = EmptyState()
+    broadcast = State({})
     nondiff_states.append(extract.GraphDefState(graphdef, broadcast))
     return extract.NodeStates.from_states(passed)
   else:
@@ -568,8 +582,8 @@ class BwdFn:
       if is_differentiable:
         if isinstance(x, jax.Array):
           return x
-        elif not isinstance(x, State | variablelib.VariableState):
-          raise ValueError(f'Expected State or VariableState, got {type(x)}')
+        elif not isinstance(x, State | variablelib.Variable):
+          raise ValueError(f'Expected State or Variable, got {type(x)}')
         return extract.NodeStates.from_states(x)
       return x
 
@@ -577,7 +591,7 @@ class BwdFn:
       state_to_node_states,
       self.tree_node_args,
       tangent,
-      is_leaf=lambda x: isinstance(x, State | variablelib.VariableState),
+      is_leaf=lambda x: isinstance(x, State | variablelib.Variable),
     )
     return pure_tangent
 
@@ -754,8 +768,8 @@ def custom_vjp(
     ...   (m_updates_g,) = input_updates_g
     ...   m_g = jax.tree.map(lambda x: x, m_updates_g) # create copy
     ...
-    ...   m_g['x'].value = cos_x * out_g * m.y
-    ...   m_g['y'].value = sin_x * out_g
+    ...   m_g['x'][...] = cos_x * out_g * m.y
+    ...   m_g['y'][...] = sin_x * out_g
     ...   return (m_g,)
     ...
     >>> f.defvjp(f_fwd, f_bwd)
@@ -765,12 +779,10 @@ def custom_vjp(
     ...
     >>> jax.tree.map(jnp.shape, grads)
     State({
-      'x': VariableState(
-        type=Param,
+      'x': Param(
         value=()
       ),
-      'y': VariableState(
-        type=Param,
+      'y': Param(
         value=()
       )
     })
@@ -802,7 +814,7 @@ def custom_vjp(
     ...   (m_updates_g,) = input_updates_g
     ...   m_g = jax.tree.map(lambda x: x, m_updates_g) # create copy
     ...
-    ...   m_g.x.value = cos_x * out_g * m.y
+    ...   m_g.x[...] = cos_x * out_g * m.y
     ...   del m_g['y'] # y is not differentiable
     ...   return (m_g,)
 
@@ -813,8 +825,7 @@ def custom_vjp(
     ...
     >>> jax.tree.map(jnp.shape, grad)
     State({
-      'x': VariableState(
-        type=Param,
+      'x': Param(
         value=()
       )
     })
@@ -835,7 +846,13 @@ def custom_vjp(
   """
   if isinstance(fun, Missing):
     return functools.partial(custom_vjp, nondiff_argnums=nondiff_argnums)
-  return CustomVjp(fun, nondiff_argnums)
+
+  # Detect bound nnx.Module methods and raise error.
+  fun_unbound, _, was_bound = _resolve_bound_callable(fun)
+  if was_bound:
+    _raise_bound_method_error('custom_vjp')
+
+  return CustomVjp(fun_unbound, nondiff_argnums)
 
 
 # -------------------------------
@@ -865,27 +882,6 @@ def remat(
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
 ) -> F | tp.Callable[[F], F]:
-  if isinstance(f, Missing):
-    return functools.partial(
-      remat,
-      prevent_cse=prevent_cse,
-      static_argnums=static_argnums,
-      policy=policy,
-    )  # type: ignore[return-value]
-
-  return resolve_kwargs()(
-    graph.update_context('remat')(
-      general.split_inputs(
-        jax.checkpoint(
-          general.merge_inputs(f, ctxtag='remat'),
-          prevent_cse=prevent_cse,
-          static_argnums=static_argnums,
-          policy=policy,
-        ),
-        ctxtag='remat',
-      ),
-    )
-  )
   """A 'lifted' version of the
   `jax.checkpoint <https://jax.readthedocs.io/en/latest/_autosummary/jax.checkpoint.html>`__
   (a.k.a. ``jax.remat``).
@@ -900,4 +896,31 @@ def remat(
     `fundamentals of jax.checkpoint <https://jax.readthedocs.io/en/latest/notebooks/autodiff_remat.html#fundamentals-of-jax-checkpoint>`_
     and `practical notes <https://jax.readthedocs.io/en/latest/notebooks/autodiff_remat.html#practical-notes>`_.
   """
+  if isinstance(f, Missing):
+    return functools.partial(
+      remat,
+      prevent_cse=prevent_cse,
+      static_argnums=static_argnums,
+      policy=policy,
+    )  # type: ignore[return-value]
 
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+
+  if was_bound:
+    _raise_bound_method_error('remat')
+
+  # Unbound function path: preserve the concise composition used in NNX.
+  return resolve_kwargs()(  # type: ignore[return-value]
+    graph.update_context('remat')(
+      general.split_inputs(
+        jax.checkpoint(
+          general.merge_inputs(f_unbound, ctxtag='remat'),
+          prevent_cse=prevent_cse,
+          static_argnums=static_argnums,
+          policy=policy,
+        ),
+        ctxtag='remat',
+      ),
+    )
+  )

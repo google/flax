@@ -63,7 +63,7 @@ Features
          .. div:: sd-font-normal
 
             Flax NNX allows fine-grained control of the model's state via
-            its `Filter <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__
+            its `Filter <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
             system.
 
    .. grid-item::
@@ -97,25 +97,21 @@ Basic usage
      def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
        self.linear = nnx.Linear(din, dmid, rngs=rngs)
        self.bn = nnx.BatchNorm(dmid, rngs=rngs)
-       self.dropout = nnx.Dropout(0.2, rngs=rngs)
+       self.dropout = nnx.Dropout(0.2)
        self.linear_out = nnx.Linear(dmid, dout, rngs=rngs)
 
-     def __call__(self, x):
-       x = nnx.relu(self.dropout(self.bn(self.linear(x))))
+     def __call__(self, x, rngs):
+       x = nnx.relu(self.dropout(self.bn(self.linear(x)), rngs=rngs))
        return self.linear_out(x)
 
    model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
-   optimizer = nnx.Optimizer(model, optax.adam(1e-3))  # reference sharing
+   optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
-   @nnx.jit  # automatic state management for JAX transforms
+   @nnx.jit  # automatic state propagation
    def train_step(model, optimizer, x, y):
-     def loss_fn(model):
-       y_pred = model(x)  # call methods directly
-       return ((y_pred - y) ** 2).mean()
-
+     loss_fn = lambda model: ((model(x) - y) ** 2).mean()
      loss, grads = nnx.value_and_grad(loss_fn)(model)
-     optimizer.update(grads)  # in-place updates
-
+     optimizer.update(model, grads)  # in-place updates
      return loss
 
 
@@ -189,14 +185,18 @@ Learn more
 
 .. toctree::
    :hidden:
-   :maxdepth: 2
+   :maxdepth: 3
 
    nnx_basics
    mnist_tutorial
    why
-   guides/index
+   key_concepts
+   guides_basic
+   guides_advanced
+   hijax/index
+   migrating/index
    examples/index
    nnx_glossary
-   The Flax philosophy <https://flax.readthedocs.io/en/latest/philosophy.html>
-   How to contribute <https://flax.readthedocs.io/en/latest/contributing.html>
+   philosophy
+   contributing
    api_reference/index

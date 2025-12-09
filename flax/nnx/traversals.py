@@ -17,8 +17,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from collections.abc import Iterable, Sequence
 from typing import Any, overload
-from collections.abc import Iterable
 
 from flax import struct
 
@@ -167,28 +167,25 @@ def flatten_to_sequence(
 
 
 @overload
-def unflatten_mapping(xs: Mapping[tuple[Any, ...], Any],
-                      /,
-                      *,
-                      sep: None = None
-                      ) -> dict[Any, Any]:
+def unflatten_mapping(
+    xs: Sequence[tuple[tuple[Any, ...], Any]], /, *, sep: None = None
+) -> dict[Any, Any]:
   ...
 
 
 @overload
-def unflatten_mapping(xs: Mapping[str, Any],
-                      /,
-                      *,
-                      sep: str
-                      ) -> dict[Any, Any]:
+def unflatten_mapping(
+    xs: Mapping[tuple[Any, ...], Any], /, *, sep: None = None
+) -> dict[Any, Any]:
   ...
 
 
-def unflatten_mapping(xs: Any,
-                      /,
-                      *,
-                      sep: str | None = None
-                      ) -> dict[Any, Any]:
+@overload
+def unflatten_mapping(xs: Mapping[str, Any], /, *, sep: str) -> dict[Any, Any]:
+  ...
+
+
+def unflatten_mapping(xs: Any, /, *, sep: str | None = None) -> dict[Any, Any]:
   """Unflatten a mapping.
 
   See ``flatten_mapping``
@@ -220,7 +217,7 @@ def unflatten_mapping(xs: Any,
   result: dict[Any, Any] = {}
   for path, value in xs:
     if sep is not None:
-      path = path.split(sep)
+      path = path.split(sep)  # type: ignore
     if value is empty_node:
       value = {}
     cursor = result

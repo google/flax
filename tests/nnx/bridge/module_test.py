@@ -124,7 +124,7 @@ class TestBridgeModule(absltest.TestCase):
         count = self.variable(
           'counts', 'count', lambda: jnp.zeros((), jnp.int32)
         )
-        count.value += 1
+        count[...] += 1
 
     model_nnx = FooNNX()
 
@@ -149,8 +149,8 @@ class TestBridgeModule(absltest.TestCase):
     scope = bar.apply({}, rngs=1)
     self.assertIsNone(bar.scope)
 
-    self.assertEqual(scope.rngs.default.key.value, jax.random.key(1))
-    self.assertEqual(scope.rngs.default.count.value, 0)
+    self.assertEqual(scope.rngs.default.key[...], jax.random.key(1))
+    self.assertEqual(scope.rngs.default.count[...], 0)
 
     class Baz(bridge.Module):
       @bridge.compact
@@ -160,40 +160,6 @@ class TestBridgeModule(absltest.TestCase):
     baz = Baz()
     scope = baz.apply({}, rngs=1)
     self.assertIsNone(scope)
-
-  def test_name(self):
-    class Foo(bridge.Module):
-      dout: int
-
-      def __call__(self, x):
-        w = self.param(
-          'w', nnx.initializers.uniform(), (x.shape[-1], self.dout)
-        )
-        return x @ w
-
-    class Bar(bridge.Module):
-      @bridge.compact
-      def __call__(self, x):
-        return Foo(5, name='xyz')(x)
-
-    bar = Bar()
-    x = jnp.ones((1, 2))
-    y, variables = bar.init_with_output(0, x)
-
-    self.assertIn('xyz', variables['params'])
-    self.assertEqual(variables['params']['xyz']['w'].shape, (2, 5))
-    self.assertEqual(y.shape, (1, 5))
-
-    y = bar.apply(variables, x)
-    self.assertEqual(y.shape, (1, 5))
-
-    with self.assertRaises(ValueError):
-      class SetupBar(bridge.Module):
-        def setup(self):
-          self.xyz = Foo(5, name='xyz')
-        def __call__(self, x):
-          return self.xyz(x)
-      SetupBar().init(0, x)
 
   def test_dense_port(self):
     class Dense(bridge.Module):
@@ -287,21 +253,28 @@ class TestBridgeModule(absltest.TestCase):
         b = self.param('b', nnx.initializers.zeros_init(), (self.dout,))
         return x @ w + b[None]
 
-    foo = Linear(5)
-    x = jnp.ones((3, 2))
+    foo = Linear(6)
+    x = jnp.ones((4, 2))
 
-    variables = foo.init(0, x)
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('in', 'out'),
+        axis_types=(jax.sharding.AxisType.Auto,) * len(('in', 'out')),
+    )
+    with jax.set_mesh(mesh):
+      variables = foo.init(0, x)
+      y: jax.Array = foo.apply(variables, x)
+
     params = variables['params']
     self.assertIsInstance(params['w'], nn.Partitioned)
-    self.assertEqual(params['w'].value.shape, (2, 5))
+    self.assertEqual(params['w'].value.shape, (2, 6))
     self.assertEqual(params['w'].names, ('in', 'out'))
     self.assertEqual(nn.get_partition_spec(variables)['params']['w'],
                      jax.sharding.PartitionSpec('in', 'out'))
     self.assertIsInstance(params['b'], jax.Array)
-    self.assertEqual(params['b'].shape, (5,))
+    self.assertEqual(params['b'].shape, (6,))
 
-    y: jax.Array = foo.apply(variables, x)
-    self.assertEqual(y.shape, (3, 5))
+    self.assertEqual(y.shape, (4, 6))
 
   def test_pure_nnx_submodule(self):
     class NNXLayer(nnx.Module):
@@ -312,7 +285,7 @@ class TestBridgeModule(absltest.TestCase):
       def __call__(self, x):
         # Required check to avoid state update in `init()`. Can this be avoided?
         if not bridge.current_module().is_initializing():
-          self.count.value = self.count.value + 1
+          self.count[...] += 1
         x = self.linear(x)
         x = self.dropout(x)
         return x
@@ -545,4 +518,3 @@ class TestBridgeModule(absltest.TestCase):
 
 if __name__ == '__main__':
   absltest.main()
-

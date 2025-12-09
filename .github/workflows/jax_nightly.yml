@@ -34,13 +34,13 @@ jobs:
     - name: Setup uv
       uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a  # v5.1.0
       with:
-        version: "0.3.0"
+        version: "0.8.13"
     - name: Install dependencies
       run: |
-        uv sync --extra all --extra testing --extra docs
+        uv sync --extra testing --extra docs
     - name: Install JAX
       run: |
-        uv pip install -U --pre jax jaxlib -f https://storage.googleapis.com/jax-releases/jax_nightly_releases.html
+        uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
     - name: Run test suite
       if: success()
       run: |

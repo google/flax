@@ -68,7 +68,7 @@ def train_step(model: MLP, optimizer: nnx.Optimizer, batch):
 
   diff_state = nnx.DiffState(0, is_param)
   grads: nnx.State = nnx.grad(loss_fn, argnums=diff_state)(model)
-  optimizer.update(grads)
+  optimizer.update(model, grads)
 
 
 @nnx.jit

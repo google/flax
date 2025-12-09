@@ -56,15 +56,15 @@ class MLP(nnx.Module):
   def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
     self.w1 = nnx.Param(
       nnx.initializers.lecun_normal()(rngs.params(), (din, dmid)),
-      sharding=mesh_rules('embed', 'mlp'),
+      sharding_names=mesh_rules('embed', 'mlp'),
     )
     self.b1 = nnx.Param(
       jnp.zeros((dmid,)),
-      sharding=mesh_rules('mlp'),
+      sharding_names=mesh_rules('mlp'),
     )
     self.w2 = nnx.Param(
       nnx.initializers.lecun_normal()(rngs.params(), (dmid, dout)),
-      sharding=mesh_rules('embed', 'mlp'),
+      sharding_names=mesh_rules('embed', 'mlp'),
     )
 
   def __call__(self, x: jax.Array):
@@ -75,7 +75,7 @@ class SGDState(nnx.Variable):
   pass
 
 
-class SGD(nnx.Object):
+class SGD(nnx.Pytree):
   def __init__(self, params: nnx.State, lr, decay=0.9):
     def init_optimizer_state(variable: nnx.Variable):
       return SGDState(
@@ -83,49 +83,44 @@ class SGD(nnx.Object):
       )
 
     self.lr = lr
-    self.params = params
-    self.momentum: nnx.State = jax.tree.map(init_optimizer_state, self.params)
+    self.params = nnx.data(params)
+    self.momentum: nnx.State = nnx.data(jax.tree.map(
+      init_optimizer_state,
+      self.params,
+      is_leaf=lambda x: isinstance(x, nnx.Variable),
+    ))
     self.decay = decay
 
   def update(self, grads: nnx.State):
     def update_fn(
-      params: nnx.Variable, momentum: SGDState, grad: nnx.VariableState
+      params: nnx.Variable, momentum: SGDState, grad: nnx.Variable
     ):
       # v_t = β * v_{t-1} + (1 - β) * ∇J(θ_t)
-      momentum.value = self.decay * momentum + (1 - self.decay) * grad.value
+      momentum[...] = self.decay * momentum[...] + (1 - self.decay) * grad[...]
       # θ_{t+1} = θ_t - α * v_t
-      params.value -= self.lr * momentum
+      params[...] -= self.lr * momentum[...]
 
-    jax.tree.map(update_fn, self.params, self.momentum, grads)
+    jax.tree.map(
+      update_fn,
+      self.params,
+      self.momentum,
+      grads,
+      is_leaf=lambda x: isinstance(x, nnx.Variable),
+    )
 
 
 @nnx.jit
 def create_model():
   model = MLP(1, 32, 1, rngs=nnx.Rngs(0))
   optimizer = SGD(nnx.variables(model, nnx.Param), 0.01, decay=0.9)
-  state = nnx.state(optimizer)
-  sharded_state = jax.lax.with_sharding_constraint(
-    state, nnx.get_named_sharding(state, mesh)
-  )
-
-  def get_named_shardings(path: tuple, value: nnx.VariableState):
-    if path[0] == 'params':
-      return value.replace(NamedSharding(mesh, P(*value.sharding)))
-    elif path[0] == 'momentum':
-      # currently the same as above but in general it could be different
-      return value.replace(NamedSharding(mesh, P(*value.sharding)))
-    else:
-      raise ValueError(f'Unknown path: {path}')
-
-  named_shardings = nnx.map_state(get_named_shardings, state)
-  sharded_state = jax.lax.with_sharding_constraint(state, named_shardings)
-  nnx.update(optimizer, sharded_state)
   return model, optimizer
 
+with jax.set_mesh(mesh):
+  model, optimizer = create_model()
 
-model, optimizer = create_model()
-
+print('Model parameters sharding:')
 jax.debug.visualize_array_sharding(model.w1.value)
+print('Optimizer momentum sharding:')
 jax.debug.visualize_array_sharding(optimizer.momentum['w1'].value)
 
 

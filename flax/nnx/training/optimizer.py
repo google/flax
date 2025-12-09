@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import functools
 import typing as tp
 
 import jax
@@ -21,91 +22,73 @@ import optax
 
 from flax import nnx
 from flax.nnx import filterlib
-from flax.nnx import variablelib
-from flax.nnx.object import Object
-from flax.nnx.variablelib import Variable, VariableState
+from flax.nnx.pytreelib import Pytree
+from flax.nnx.variablelib import Variable
 
 M = tp.TypeVar('M', bound=nnx.Module)
-
-# TODO: add tests and docstrings
-
+F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
 class OptState(Variable):
-  """Holds any optimizer state."""
+  """Any optimizer state"""
 
   pass
 
 
 class OptArray(OptState):
-  """Holds an array of optimizer state."""
+  """Optimizer state for an array."""
 
   pass
 
 
 class OptVariable(OptState):
-  """Holds Variable state."""
+  """Optimizer state for a Variable."""
 
-  source_type: type[Variable]
   pass
 
 
-def _wrap_optimizer_state(opt_state):
-  def wrap_optimizer_state_fn(x):
-    if isinstance(x, variablelib.VariableState):
-      new_state = x.copy()
-      new_state.source_type = x.type
-      new_state.type = OptVariable
-      return new_state.to_variable()
+def to_opt_state(tree):
+  def _to_opt_state(x):
+    if isinstance(x, Variable):
+      opt_state = OptVariable(x.get_value(), **x.get_metadata())  # type: ignore
     else:
-      return OptArray(x)
+      opt_state = OptArray(x)
+    return opt_state
 
-  return jax.tree.map(
-    wrap_optimizer_state_fn,
-    opt_state,
-    is_leaf=lambda x: isinstance(x, variablelib.VariableState),
+  tree = jax.tree.map(
+    _to_opt_state,
+    tree,
+    is_leaf=lambda x: isinstance(x, Variable),
   )
+  return tree
 
+class _Missing:
+  pass
 
-def _opt_state_variables_to_state(opt_state):
-  def optimizer_variable_to_state_fn(x):
-    if isinstance(x, OptVariable):
-      state = x.to_state()
-      state.type = x.source_type
-      del state.source_type
-      return state
-    elif isinstance(x, OptArray):
-      return x.value
-    else:
+MISSING = _Missing()
+
+def _check_grads_arg_passed(f: F) -> F:
+  @functools.wraps(f)
+  def _check_grads_wrapper(self, model, grads=MISSING, **kwargs):
+    if isinstance(grads, _Missing):
       raise TypeError(
-        f'Unexpected type when converting optimizer state: {type(x)}'
+        'Missing required argument `grads`. As of Flax 0.11.0 update requires both (model, grads) arguments '
+        'to be passed. If you want to keep the previous use nnx.ModelAndOptimizer instead of nnx.Optimizer.'
       )
+    return f(self, model, grads, **kwargs)
+  return _check_grads_wrapper # type: ignore
 
-  return jax.tree.map(optimizer_variable_to_state_fn, opt_state)
-
-
-def _update_opt_state(opt_state, updates):
-  def optimizer_update_variables(x, update):
-    if isinstance(x, OptVariable):
-      if not isinstance(update, VariableState):
-        raise TypeError(
-          f'Expected update to be VariableState, got {type(update)}'
-        )
-      x.raw_value = update.value
-    elif isinstance(x, OptArray):
-      if isinstance(update, VariableState):
-        raise TypeError(
-          f'Expected update to not to be a VariableState, got {update}'
-        )
-      x.raw_value = update
-    else:
+def _check_wrt_arg_passed(f: F) -> F:
+  @functools.wraps(f)
+  def _check_wrt_wrapper(*args, wrt=MISSING, **kwargs):
+    if isinstance(wrt, _Missing):
       raise TypeError(
-        f'Unexpected type when updating optimizer state: {type(x)}'
+        'Missing required argument `wrt`. As of Flax 0.11.0 the `wrt` argument is required, '
+        'if you want to keep the previous use nnx.ModelAndOptimizer instead of nnx.Optimizer.'
       )
+    return f(*args, wrt=wrt, **kwargs)
+  return _check_wrt_wrapper  # type: ignore
 
-  return jax.tree.map(optimizer_update_variables, opt_state, updates)
-
-
-class Optimizer(Object, tp.Generic[M]):
+class Optimizer(Pytree, tp.Generic[M]):
   """Simple train state for the common case with a single Optax optimizer.
 
   Example usage::
@@ -126,55 +109,29 @@ class Optimizer(Object, tp.Generic[M]):
     ...
     >>> model = Model(nnx.Rngs(0))
     >>> tx = optax.adam(1e-3)
-    >>> state = nnx.Optimizer(model, tx)
+    >>> optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
     ...
     >>> loss_fn = lambda model: ((model(x) - y) ** 2).mean()
     >>> loss_fn(model)
     Array(2.3359997, dtype=float32)
-    >>> grads = nnx.grad(loss_fn)(state.model)
-    >>> state.update(grads)
+    >>> grads = nnx.grad(loss_fn)(model)
+    >>> optimizer.update(model, grads)
     >>> loss_fn(model)
     Array(2.310461, dtype=float32)
 
-  Note that you can easily extend this class by subclassing it for storing
-  additional data (e.g. adding metrics).
-
-  Example usage::
-
-    >>> class TrainState(nnx.Optimizer):
-    ...   def __init__(self, model, tx, metrics):
-    ...     self.metrics = metrics
-    ...     super().__init__(model, tx)
-    ...   def update(self, *, grads, **updates):
-    ...     self.metrics.update(**updates)
-    ...     super().update(grads)
-    ...
-    >>> metrics = nnx.metrics.Average()
-    >>> state = TrainState(model, tx, metrics)
-    ...
-    >>> grads = nnx.grad(loss_fn)(state.model)
-    >>> state.update(grads=grads, values=loss_fn(state.model))
-    >>> state.metrics.compute()
-    Array(2.310461, dtype=float32)
-    >>> state.update(grads=grads, values=loss_fn(state.model))
-    >>> state.metrics.compute()
-    Array(2.2978127, dtype=float32)
-
-  For more exotic usecases (e.g. multiple optimizers) it's probably best to
-  fork the class and modify it.
-
-  Args:
+  Attributes:
     step: An ``OptState`` :class:`Variable` that tracks the step count.
-    model: The wrapped :class:`Module`.
     tx: An Optax gradient transformation.
     opt_state: The Optax optimizer state.
   """
 
+  @_check_wrt_arg_passed
   def __init__(
     self,
     model: M,
     tx: optax.GradientTransformation,
-    wrt: filterlib.Filter = nnx.Param,
+    *,
+    wrt: filterlib.Filter,  # type: ignore
   ):
     """
     Instantiate the class and wrap the :class:`Module` and Optax gradient
@@ -184,69 +141,62 @@ class Optimizer(Object, tp.Generic[M]):
     Args:
       model: An NNX Module.
       tx: An Optax gradient transformation.
-      wrt: optional argument to filter for which :class:`Variable`'s to keep
+      wrt: filter to specify for which :class:`Variable`'s to keep
         track of in the optimizer state. These should be the :class:`Variable`'s
         that you plan on updating; i.e. this argument value should match the
         ``wrt``  argument passed to the ``nnx.grad`` call that will generate the
         gradients that will be passed into the ``grads`` argument of the
-        :func:`update` method.
+        :func:`update` method. The filter should match the filter used in nnx.grad.
     """
+    if isinstance(wrt, _Missing):
+      raise TypeError(
+        'Missing required argument `wrt`. As of Flax 0.11.0 the `wrt` argument is required, '
+        'if you want to keep the previous use nnx.ModelAndOptimizer instead of nnx.Optimizer.'
+      )
+      wrt = nnx.Param
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
-    self.model = model
     self.tx = tx
-    self.opt_state = _wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
+    self.opt_state = nnx.data(
+      to_opt_state(tx.init(nnx.state(model, wrt)))
+    )
     self.wrt = wrt
 
-  def update(self, grads, **kwargs):
-    """Updates ``step``, ``params``, ``opt_state`` and ``**kwargs`` in return value.
-    The ``grads`` must be derived from ``nnx.grad(..., wrt=self.wrt)``, where the
-    gradients are with respect to the same :class:`Variable` types as defined in
-    ``self.wrt`` during instantiation of this ``Optimizer``. For example::
+  if not tp.TYPE_CHECKING:
+    def __getattribute__(self, name: str) -> tp.Any:
+      if name == 'model' and name not in vars(self):
+        raise AttributeError(
+          f"{type(self).__name__} does not have attribute 'model' since Flax 0.11.0. "
+          "To keep the previous behavior, use nnx.ModelAndOptimizer instead of nnx.Optimizer."
+        )
+      return super().__getattribute__(name)
+
+  @_check_grads_arg_passed
+  def update(self, model: M, grads, /, **kwargs):
+    """Updates the optimizer state and model parameters given the gradients.
+
+    Example::
 
       >>> from flax import nnx
       >>> import jax, jax.numpy as jnp
       >>> import optax
-
-      >>> class CustomVariable(nnx.Variable):
-      ...   pass
-
+      ...
       >>> class Model(nnx.Module):
       ...   def __init__(self, rngs):
       ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
-      ...     self.custom_variable = CustomVariable(jnp.ones((1, 3)))
+      ...     self.count = nnx.Variable(jnp.array(0))
+      ...
       ...   def __call__(self, x):
-      ...     return self.linear(x) + self.custom_variable
+      ...     self.count[...] += 1
+      ...     return self.linear(x)
+      ...
       >>> model = Model(rngs=nnx.Rngs(0))
-      >>> jax.tree.map(jnp.shape, nnx.state(model))
-      State({
-        'custom_variable': VariableState(
-          type=CustomVariable,
-          value=(1, 3)
-        ),
-        'linear': {
-          'bias': VariableState(
-            type=Param,
-            value=(3,)
-          ),
-          'kernel': VariableState(
-            type=Param,
-            value=(2, 3)
-          )
-        }
-      })
-
-      >>> # update:
-      >>> # - only Linear layer parameters
-      >>> # - only CustomVariable parameters
-      >>> # - both Linear layer and CustomVariable parameters
+      ...
       >>> loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
-      >>> for variable in (nnx.Param, CustomVariable, (nnx.Param, CustomVariable)):
-      ...   # make sure `wrt` arguments match for `nnx.Optimizer` and `nnx.grad`
-      ...   state = nnx.Optimizer(model, optax.adam(1e-3), wrt=variable)
-      ...   grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, variable))(
-      ...     state.model, jnp.ones((1, 2)), jnp.ones((1, 3))
-      ...   )
-      ...   state.update(grads=grads)
+      >>> optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
+      >>> grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, nnx.Param))(
+      ...   model, jnp.ones((1, 2)), jnp.ones((1, 3))
+      ... )
+      >>> optimizer.update(model, grads)
 
     Note that internally this function calls ``.tx.update()`` followed by a call
     to ``optax.apply_updates()`` to update ``params`` and ``opt_state``.
@@ -256,13 +206,30 @@ class Optimizer(Object, tp.Generic[M]):
       **kwargs: additional keyword arguments passed to the tx.update, to support
       ``GradientTransformationExtraArgs``, such as ``optax.scale_by_backtracking_linesearch``.
     """
-    params = nnx.state(self.model, self.wrt)
-    opt_state = _opt_state_variables_to_state(self.opt_state)
+    param_arrays = nnx.pure(nnx.state(model, self.wrt))
+    grad_arrays = nnx.pure(nnx.state(grads, self.wrt))
+    opt_state_arrays = nnx.pure(self.opt_state)
+    kwargs_arrays = nnx.pure(kwargs)
 
-    updates, new_opt_state = self.tx.update(grads, opt_state, params, **kwargs)
-    new_params = optax.apply_updates(params, updates)
-    assert isinstance(new_params, nnx.State)
+    updates, new_opt_state = self.tx.update(
+      grad_arrays, opt_state_arrays, param_arrays, **kwargs_arrays
+    )
+    new_params = optax.apply_updates(param_arrays, updates)
 
-    self.step.value += 1
-    nnx.update(self.model, new_params)
-    _update_opt_state(self.opt_state, new_opt_state)
+    nnx.update(model, new_params)
+    nnx.update(self.opt_state, nnx.state(new_opt_state))
+    self.step[...] += 1
+
+class ModelAndOptimizer(Optimizer[M]):
+  """A convenience class that combines a model and an optimizer.
+
+  This class is deprecated and will be removed in a future release.
+  Use :class:`Optimizer` instead.
+  """
+
+  def __init__(self, model: M, tx: optax.GradientTransformation, *, wrt: filterlib.Filter = nnx.Param):
+    super().__init__(model, tx, wrt=wrt)
+    self.model = model
+
+  def update(self, grads, /, **kwargs): # type: ignore
+    return super().update(self.model, grads, **kwargs)

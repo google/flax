@@ -249,6 +249,36 @@ class ModuleTest(absltest.TestCase):
       param_shape, {'a_(1, 2)': {'kernel': (3, 2), 'bias': (2,)}}
     )
 
+  def test_setup_frozen_dict_nonstring_keys(self):
+    a = {1: 2}
+
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = FrozenDict(a)  # int as key.
+
+      @nn.compact
+      def __call__(self, x):
+        return self.a[x]
+
+    foo = Foo()
+    x = 1
+    params = foo.init(random.key(0), x)
+    assert foo.apply(params, x) == a[x]
+
+  def test_setup_dict_nonstring_keys_in_state(self):
+    class Foo(nn.Module):
+      a: dict[int, int]  # int as key.
+
+      @nn.compact
+      def __call__(self, x):
+        return self.a[x]
+
+    a = {1: 2}
+    foo = Foo(a)
+    x = 1
+    params = foo.init(random.key(0), x)
+    assert foo.apply(params, x) == a[x]
+
   def test_setup_cloning(self):
     class MLP(nn.Module):
       def setup(self):

@@ -35,13 +35,6 @@ Import some necessary dependencies.
 **Note:** This guide uses the `--xla_force_host_platform_device_count=8` flag to emulate multiple devices in a CPU environment in a Google Colab/Jupyter Notebook. You don't need this if you are already using a multi-device TPU environment.
 
 ```{code-cell} ipython3
-:tags: [skip-execution]
-
-# Once Flax v0.6.10 is released, there is no need to do this.
-# ! pip3 install -qq "git+https://github.com/google/flax.git@main#egg=flax"
-```
-
-```{code-cell} ipython3
 import os
 os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=8'
 ```
@@ -480,7 +473,7 @@ Choosing when to use a device or logical axis depends on how much you want to co
 
 ## Save the data
 
-To save the cross-device array, you can use [`flax.training.checkpoints`](https://flax.readthedocs.io/en/latest/_modules/flax/training/checkpoints.html), as shown in the [Save and load checkpoints guide - Multi-host/multi-process checkpointing](https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#multi-host-multi-process-checkpointing). This is especially required if you are running on a multi-host environment (for example, a TPU pod).
+To save the cross-device array, you can use Orbax as shown in the [Save and load checkpoints guide - Multi-host/multi-process checkpointing](https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#multi-host-multi-process-checkpointing). This is especially required if you are running on a multi-host environment (for example, a TPU pod).
 
 In practice, you might want to save the raw `jax.Array` pytree as checkpoint, instead of the wrapped `Partitioned` values, to reduce complexity. You can restore it as-is and put it back into an annotated pytree with `flax.linen.meta.replace_boxed()`.
 

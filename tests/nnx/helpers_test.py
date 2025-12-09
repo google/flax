@@ -27,7 +27,7 @@ class TrainState(nnx.TrainState):
   batch_stats: nnx.State
 
 
-class TestHelpers:
+class TestHelpers(absltest.TestCase):
   def test_train_state(self):
     m = nnx.Dict(a=nnx.Param(1), b=nnx.BatchStat(2))
 
@@ -88,7 +88,7 @@ class TestHelpers:
       for param in ('kernel', 'bias'):
         variables['params'][f'layers_{layer_index}'][param] = getattr(
           model_nnx.layers[layer_index], param
-        ).value
+        )[...]
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
     np.testing.assert_array_equal(out, out_nnx)
@@ -96,12 +96,68 @@ class TestHelpers:
     variables = model.init(key2, x)
     for layer_index in range(2):
       for param in ('kernel', 'bias'):
-        getattr(model_nnx.layers[layer_index], param).value = variables[
+        getattr(model_nnx.layers[layer_index], param)[...] = variables[
           'params'
         ][f'layers_{layer_index}'][param]
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
     np.testing.assert_array_equal(out, out_nnx)
+
+  def test_nnx_empty_sequential_is_identity(self):
+    iden = nnx.Sequential()
+    assert iden(12) == 12
+    assert iden(12, 23) == (12, 23)
+    assert iden() is None
+    assert iden(k=2) == {'k': 2}
+
+  def test_dict_mutable_mapping(self):
+    d = nnx.Dict({'a': 1, 'b': 2})
+    self.assertEqual(d['a'], 1)
+    self.assertEqual(d['b'], 2)
+    self.assertEqual(len(d), 2)
+
+    d['c'] = 3
+    self.assertEqual(d['c'], 3)
+    self.assertEqual(len(d), 3)
+
+    del d['a']
+    self.assertEqual(len(d), 2)
+    with self.assertRaises(AttributeError):
+      _ = d['a']
+
+    self.assertSetEqual(set(d), {'b', 'c'})
+
+  def test_list_mutable_sequence(self):
+    l = nnx.List([1, 2, 3])
+    self.assertEqual(len(l), 3)
+    self.assertEqual(l[0], 1)
+    self.assertEqual(l[1], 2)
+    self.assertEqual(l[2], 3)
+
+    l.append(4)
+    self.assertEqual(len(l), 4)
+    self.assertEqual(l[3], 4)
+
+    l.insert(1, 5)
+    self.assertEqual(len(l), 5)
+    self.assertEqual(l[0], 1)
+    self.assertEqual(l[1], 5)
+    self.assertEqual(l[2], 2)
+    self.assertEqual(l[3], 3)
+    self.assertEqual(l[4], 4)
+
+    del l[2]
+    self.assertEqual(len(l), 4)
+    self.assertEqual(l[0], 1)
+    self.assertEqual(l[1], 5)
+    self.assertEqual(l[2], 3)
+    self.assertEqual(l[3], 4)
+
+    l[1:3] = [6, 7]
+    self.assertEqual(l[1], 6)
+    self.assertEqual(l[2], 7)
+
+    self.assertEqual(l[1:3], [6, 7])
 
 
 if __name__ == '__main__':

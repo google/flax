@@ -179,10 +179,19 @@ def replace_boxed(tree: Any, updates: Any) -> Any:
 PARTITION_NAME = 'partition_name'
 
 
-def _global_mesh_defined() -> bool:
+def get_global_mesh() -> jax.sharding.AbstractMesh | jax.sharding.Mesh | None:
+  mesh = jax.sharding.get_abstract_mesh()
+  if mesh.empty:
+    mesh = pxla.thread_resources.env.physical_mesh
+    if mesh.empty:
+      return None
+  return mesh
+
+
+def global_mesh_defined() -> bool:
   """Checks if global mesh resource environment is defined."""
-  env = pxla.thread_resources.env
-  return env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
+  mesh = get_global_mesh()
+  return mesh is not None
 
 
 class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
@@ -249,7 +258,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
 
   def unbox(self, apply_constraint=True) -> A:
     """Returns the wrapped value with the partitioning applied as a sharding constraint."""
-    if apply_constraint and (_global_mesh_defined() or self.mesh is not None):
+    if apply_constraint and (global_mesh_defined() or self.mesh is not None):
       axis_resource = self.get_partition_spec()
       if self.mesh is not None:
         sharding = jax.sharding.NamedSharding(self.mesh, axis_resource)
@@ -290,14 +299,14 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
 
   def to_nnx_metadata(self) -> dict[str, Any]:
     """Return a dict of metadata that can translate into an `nnx.Variable`."""
-    metadata = vars(self)
-    metadata['sharding'] = metadata.pop('names')
+    metadata = dict(vars(self))
+    metadata['sharding_names'] = metadata.pop('names')
     return metadata
 
   @classmethod
   def from_nnx_metadata(cls, metadata: dict[str, Any]):
     """Given a dict of `nnx.Variable` format metadata, create a `nn.Partitioned`."""
-    metadata['names'] = metadata.pop('sharding')
+    metadata['names'] = metadata.pop('sharding_names')
     fields = {x.name for x in dataclasses.fields(cls)}
     return cls(**{k: v for k, v in metadata.items() if k in fields})
 

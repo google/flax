@@ -19,12 +19,17 @@ import functools
 import typing as tp
 
 from flax import struct
+from flax import typing
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx import extract, filterlib, graph, spmd, variablelib
 from flax.nnx import statelib
 from flax.nnx.module import Module
 from flax.nnx.statelib import State
-from flax.nnx.transforms.transforms import resolve_kwargs
+from flax.nnx.transforms.transforms import (
+  resolve_kwargs,
+  _resolve_bound_callable,
+  _raise_bound_method_error,
+)
 from flax.typing import Leaf, Missing, PytreeDeque
 import jax
 import jax.core
@@ -43,11 +48,13 @@ N = tp.TypeVar('N', bound=Module)
 T = tp.TypeVar('T')
 StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
-Leaves = tp.List[Leaf]
+Leaves = list[Leaf]
 Index = int
 
 
 class Carry:
+  """Helper class for :func:`flax.nnx.scan` function to mark input and output axis as carry.
+  """
   pass
 
 
@@ -56,7 +63,7 @@ class Carry:
 # -------------------------------
 
 
-class StateAxes(extract.PrefixMapping):
+class StateAxes(extract.PrefixMapping, tp.Mapping):
 
   def __init__(
     self,
@@ -87,7 +94,7 @@ class StateAxes(extract.PrefixMapping):
     return self._axes
 
   def map_prefix(
-    self, path: variablelib.PathParts, variable: variablelib.Variable
+    self, path: typing.PathParts, variable: variablelib.Variable
   ) -> tp.Any:
     for filter, axis in zip(self.filters, self.axes):
       predicate = filterlib.to_predicate(filter)
@@ -101,6 +108,15 @@ class StateAxes(extract.PrefixMapping):
   def items(self):
     return zip(self.filters, self.axes)
 
+  def __getitem__(self, key):
+    return self.axes[self.filters.index(key)]
+
+  def __iter__(self):
+    return iter(self.filters)
+
+  def __len__(self):
+    return len(self.filters)
+
   def __eq__(self, other):
     return (
         isinstance(other, StateAxes)
@@ -113,8 +129,8 @@ class StateAxes(extract.PrefixMapping):
 
 
 AxisFn = tp.Callable[
-  [graph.GraphState | variablelib.VariableState, int, tp.Mapping],
-  graph.GraphState | variablelib.VariableState,
+  [graph.GraphState | variablelib.Variable, int, tp.Mapping],
+  graph.GraphState | variablelib.Variable,
 ]
 
 
@@ -127,13 +143,13 @@ def _update_variable_sharding_metadata(
     ):
       if isinstance(node_states.metadata, int):
         state = node_states.state
-        assert isinstance(state, State | variablelib.VariableState)
+        assert isinstance(state, State | variablelib.Variable)
         state = axis_fn(state, node_states.metadata, transform_metadata)
         return node_states.replace(states=(state,))
       else:
-        states_out: list[graph.GraphState | variablelib.VariableState] = []
+        states_out: list[graph.GraphState | variablelib.Variable] = []
         for state, axis in zip(node_states.states, node_states.metadata.axes):
-          assert isinstance(state, graph.State | variablelib.VariableState)
+          assert isinstance(state, graph.State | variablelib.Variable)
           if isinstance(axis, int):
             state = axis_fn(state, axis, transform_metadata)
           states_out.append(state)
@@ -236,7 +252,7 @@ def vmap(
       addition to integers and None, :class:`StateAxes`  can be used to control
       how graph nodes like Modules are vectorized by specifying the axes to be
       applied to substates of the graph node given a `Filter
-      <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+      <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
     out_axes: An integer, None, or pytree indicating where the mapped axis
       should appear in the output (see `jax.vmap
       <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
@@ -276,7 +292,7 @@ def vmap(
   ...
   >>> @nnx.vmap(in_axes=(0, None), out_axes=0)
   ... def forward(model, x):
-  ...   return jnp.dot(x, model.w.value)
+  ...   return x @ model.w
   ...
   >>> y = forward(model, x)
   >>> y.shape
@@ -317,6 +333,11 @@ def vmap(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    _raise_bound_method_error('vmap')
+
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
     if isinstance(x, StateAxes)
@@ -330,7 +351,7 @@ def vmap(
     out_axes,
   )
   vmapped_fn = jax.vmap(
-      VmapFn(f, transform_metadata, in_axes, out_axes),
+      VmapFn(f_unbound, transform_metadata, in_axes, out_axes),
       in_axes=jax_in_axes,
       out_axes=(jax_in_axes, jax_out_axes),
       axis_name=axis_name,
@@ -454,7 +475,7 @@ def pmap(
       addition to integers and None, :class:`StateAxes`  can be used to control
       how graph nodes like Modules are vectorized by specifying the axes to be
       applied to substates of the graph node given a `Filter
-      <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+      <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
     out_axes: An integer, None, or pytree indicating where the mapped axis
       should appear in the output (see `jax.vmap
       <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
@@ -494,7 +515,7 @@ def pmap(
   ...
   >>> @nnx.vmap(in_axes=(0, None), out_axes=0)
   ... def forward(model, x):
-  ...   return jnp.dot(x, model.w.value)
+  ...   return x @ model.w
   ...
   >>> y = forward(model, x)
   >>> y.shape
@@ -539,6 +560,11 @@ def pmap(
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
 
+  # Detect bound nnx.Module methods and raise error.
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    _raise_bound_method_error('pmap')
+
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
     if isinstance(x, StateAxes)
@@ -552,7 +578,7 @@ def pmap(
     out_axes,
   )
   pmapped_fn = jax.pmap(
-      PmapFn(f, transform_metadata, in_axes, out_axes),
+      PmapFn(f_unbound, transform_metadata, in_axes, out_axes),
       axis_name=axis_name,
       in_axes=jax_in_axes,
       out_axes=(jax_in_axes, jax_out_axes),
@@ -652,53 +678,18 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
       )
 
   jax.tree_util.tree_map_with_path(
-    check_carry_same_references, carry_arg, carry_arg_out
+      check_carry_same_references,
+      carry_arg,
+      carry_arg_out,
+      is_leaf=lambda x: graph.is_graph_node(x)
+      and not isinstance(x, variablelib.Variable),
   )
-
-def _extract_graphdefs(
-  pure_carry_arg_out, carry_graphdefs: list[graph.GraphDef], /
-):
-  def extract_index_mappings(x):
-    if isinstance(x, extract.NodeStates) and isinstance(
-      x._graphdef, graph.GraphDef
-    ):
-      graphdef = x._graphdef
-      carry_graphdefs.append(graphdef)
-      x = x.replace(_graphdef=graphdef.with_no_outer_index())
-    return x
-
-  pure_carry_arg_out = jax.tree.map(
-    extract_index_mappings,
-    pure_carry_arg_out,
-    is_leaf=lambda x: isinstance(x, extract.NodeStates),
-  )
-
-  return pure_carry_arg_out
-
-def _insert_graphdefs(
-  pure_carry_arg_out,
-  carry_graphdefs: deque[graph.GraphDef],
-  /,
-):
-  def insert_index_mappings(x):
-    if isinstance(x, extract.NodeStates) and isinstance(
-      x._graphdef, graph.GraphDef
-    ):
-      graphdef = carry_graphdefs.popleft()
-      x = x.replace(_graphdef=graphdef)
-    return x
-
-  pure_carry_arg_out = jax.tree.map(
-    insert_index_mappings,
-    pure_carry_arg_out,
-    is_leaf=lambda x: isinstance(x, extract.NodeStates),
-  )
-  return pure_carry_arg_out
 
 
 def _scan_split_in(
-  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
-  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  carry_deque: PytreeDeque[list[State | variablelib.Variable]],
+  graphdefs_deque: PytreeDeque[graph.GraphDef],
+  broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   broadcast_arrays: PytreeDeque[Broadcasted],
   /,
   ctx: graph.SplitContext,
@@ -707,9 +698,9 @@ def _scan_split_in(
   x,
 ):
   if graph.is_graph_node(x) or isinstance(x, variablelib.Variable):
-    vectorized_states: list[State | variablelib.VariableState] = []
-    carry_states: list[State | variablelib.VariableState] = []
-    broadcast_states: list[State | variablelib.VariableState] = []
+    vectorized_states: list[State | variablelib.Variable] = []
+    carry_states: list[State | variablelib.Variable] = []
+    broadcast_states: list[State | variablelib.Variable] = []
     if isinstance(prefix, StateAxes):
       graphdef, *states = ctx.split(x, *prefix.filters)
 
@@ -717,21 +708,23 @@ def _scan_split_in(
         if axis is None:
           broadcast_states.append(state)
         elif isinstance(axis, int):
-          state = jax.tree.map(lambda x: jnp.moveaxis(x, axis, 0), state)
+          if axis != 0:
+            state = jax.tree.map(lambda x: jnp.moveaxis(x, axis, 0), state)
           vectorized_states.append(state)
         else:  # axis is Carry
           carry_states.append(state)
-
       if not vectorized_states:
         vectorized_states.append(State({}))
       carry_deque.append(carry_states)
+      graphdefs_deque.append(graphdef)
       broadcast_deque.append(broadcast_states)
       return extract.NodeStates.from_split(
-        graphdef, *vectorized_states, metadata=prefix
+        None, *vectorized_states, metadata=prefix
       )
     elif isinstance(prefix, int):
       graphdef, state = ctx.split(x)
-      state = jax.tree.map(lambda x: jnp.moveaxis(x, prefix, 0), state)
+      if prefix != 0:
+        state = jax.tree.map(lambda x: jnp.moveaxis(x, prefix, 0), state)
       vectorized_states.append(state)
     elif prefix is None:
       graphdef, state = ctx.split(x)
@@ -749,9 +742,10 @@ def _scan_split_in(
     if not vectorized_states:
       vectorized_states.append(State({}))
     carry_deque.append(carry_states)
+    graphdefs_deque.append(graphdef)
     broadcast_deque.append(broadcast_states)
     return extract.NodeStates.from_split(
-      graphdef, *vectorized_states, metadata=prefix
+      None, *vectorized_states, metadata=prefix
     )
   else:
     if isinstance(prefix, StateAxes):
@@ -770,7 +764,9 @@ def _scan_split_in(
           f'Expected an array, got {type(x).__name__} args'
           f'{jax.tree_util.keystr(path)}'
         )
-      return jnp.moveaxis(x, prefix, 0)
+      if prefix != 0:
+        x = jnp.moveaxis(x, prefix, 0)
+      return x
     else:
       raise ValueError(
         f'Invalid axes {prefix} args{jax.tree_util.keystr(path)}'
@@ -778,8 +774,9 @@ def _scan_split_in(
 
 
 def _scan_split_out(
-  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
-  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  carry_deque: PytreeDeque[list[State | variablelib.Variable]],
+  graphdefs_deque: PytreeDeque[graph.GraphDef],
+  broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   /,
   ctx: graph.SplitContext,
   path: extract.KeyPath,
@@ -790,9 +787,9 @@ def _scan_split_out(
   is_input_arg = path[0].idx == 0
 
   if graph.is_graph_node(x) or isinstance(x, variablelib.Variable):
-    vectorized_states: list[State | variablelib.VariableState] = []
-    carry_states: list[State | variablelib.VariableState] = []
-    broadcast_states: list[State | variablelib.VariableState] = []
+    vectorized_states: list[State | variablelib.Variable] = []
+    carry_states: list[State | variablelib.Variable] = []
+    broadcast_states: list[State | variablelib.Variable] = []
     if isinstance(prefix, StateAxes):
       graphdef, *states = ctx.split(x, *prefix.filters)
 
@@ -817,8 +814,9 @@ def _scan_split_out(
       if is_input_arg:
         carry_deque.append(carry_states)
         broadcast_deque.append(broadcast_states)
+      graphdefs_deque.append(graphdef)
       return extract.NodeStates.from_split(
-        graphdef, *vectorized_states, metadata=prefix
+        None, *vectorized_states, metadata=prefix
       )
     elif isinstance(prefix, int):
       graphdef, state = ctx.split(x)
@@ -843,8 +841,9 @@ def _scan_split_out(
     if is_input_arg:
       carry_deque.append(carry_states)
       broadcast_deque.append(broadcast_states)
+    graphdefs_deque.append(graphdef)
     return extract.NodeStates.from_split(
-      graphdef, *vectorized_states, metadata=prefix
+      None, *vectorized_states, metadata=prefix
     )
   else:
     if isinstance(prefix, StateAxes):
@@ -868,8 +867,9 @@ def _scan_split_out(
 
 
 def _scan_merge_in(
-  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
-  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  carry_deque: PytreeDeque[list[State]],
+  graphdefs_deque: PytreeDeque[graph.GraphDef],
+  broadcast_deque: PytreeDeque[list[State]],
   broadcast_arrays: PytreeDeque[Broadcasted],
   /,
   ctx: graph.MergeContext,
@@ -880,7 +880,8 @@ def _scan_merge_in(
   if isinstance(x, extract.NodeStates):
     carry_states = carry_deque.popleft()
     broadcast_states = broadcast_deque.popleft()
-    return ctx.merge(x.graphdef, *x.states, *carry_states, *broadcast_states)
+    graphdef = graphdefs_deque.popleft()
+    return ctx.merge(graphdef, *x.states, *carry_states, *broadcast_states)
   elif isinstance(x, Broadcasted):
     assert x.data is None
     return broadcast_arrays.popleft().data
@@ -889,8 +890,9 @@ def _scan_merge_in(
 
 
 def _scan_merge_out(
-  carry_deque: PytreeDeque[list[State | variablelib.VariableState]],
-  broadcast_deque: PytreeDeque[list[State | variablelib.VariableState]],
+  carry_deque: PytreeDeque[list[State]],
+  graphdefs_deque: PytreeDeque[graph.GraphDef],
+  broadcast_deque: PytreeDeque[list[State]],
   /,
   ctx: graph.MergeContext,
   path,
@@ -901,19 +903,23 @@ def _scan_merge_out(
   is_input_arg = path[0].idx == 0
 
   if isinstance(x, extract.NodeStates):
-    states: list[State | variablelib.VariableState] = []
+    states: list[State] = []
+    graphdef = graphdefs_deque.popleft()
     if is_input_arg:
       carry_states = deque(carry_deque.popleft())
       broadcast_states = deque(broadcast_deque.popleft())
     else:
-      carry_states = deque[State | variablelib.VariableState]()
-      broadcast_states = deque[State | variablelib.VariableState]()
+      carry_states = deque[State]()
+      broadcast_states = deque[State]()
     if isinstance(prefix, StateAxes):
       vectorized_states = deque(x.states)
       for axis in prefix.axes:
         if isinstance(axis, int):
           state = vectorized_states.popleft()
-          state = jax.tree.map(lambda x: jnp.moveaxis(x, 0, axis), state)
+          state = jax.tree.map(
+            lambda x: jnp.moveaxis(x, 0, axis) if axis != 0 else x,
+            state,
+          )
           states.append(state)
         elif axis is None:
           states.append(broadcast_states.popleft())
@@ -924,7 +930,9 @@ def _scan_merge_out(
         len(vectorized_states) == 1 and not vectorized_states[0]
       )
     elif isinstance(prefix, int):
-      state = jax.tree.map(lambda x: jnp.moveaxis(x, 0, prefix), x.state)
+      state = jax.tree.map(
+        lambda x: jnp.moveaxis(x, 0, prefix) if prefix != 0 else x, x.state
+      )
       states.extend((state, *carry_states, *broadcast_states))
     elif prefix is None:
       assert is_input_arg
@@ -937,8 +945,7 @@ def _scan_merge_out(
       raise ValueError(
         f'Invalid axes {prefix} at {obj_repr}{jax.tree_util.keystr(path)}'
       )
-
-    return ctx.merge(x.graphdef, *states)
+    return ctx.merge(graphdef, *states)
   else:
     if isinstance(prefix, StateAxes):
       obj_repr = 'args' if is_input_arg else 'out'
@@ -957,7 +964,9 @@ def _scan_merge_out(
           f'Expected an array, got {type(x).__name__} at '
           f'{obj_repr}{jax.tree_util.keystr(path)}'
         )
-      return jnp.moveaxis(x, 0, prefix)
+      if prefix != 0:
+        x = jnp.moveaxis(x, 0, prefix)
+      return x
     else:
       obj_repr = 'args' if is_input_arg else 'out'
       raise ValueError(
@@ -981,15 +990,16 @@ class ScanFn:
     self,
     carry: tuple[
       tp.Any,  # carry_arg
-      PytreeDeque[list[State | variablelib.VariableState]],  # carry_deque
-      PytreeDeque[list[State | variablelib.VariableState]],  # broadcast_deque
+      PytreeDeque[list[State]],  # carry_deque
+      PytreeDeque[list[State]],  # broadcast_deque
       PytreeDeque[Broadcasted],  # broadcast_arrays
     ],
-    pure_args: tuple[tp.Any, ...],
+    scan_in: tuple[tp.Any, ...],
   ):
     pure_carry_arg, carry_deque, broadcast_deque, broadcast_arrays = carry
     broadcast_deque_out = PytreeDeque(broadcast_deque)
     broadcast_arrays_out = PytreeDeque(broadcast_arrays)
+    graphdefs_deque, pure_args = scan_in
 
     if self.input_carry_argnum == 'all':
       assert pure_args == ()
@@ -1012,7 +1022,7 @@ class ScanFn:
       pure_args,
       prefix=self.in_axes,
       merge_fn=functools.partial(
-        _scan_merge_in, carry_deque, broadcast_deque, broadcast_arrays
+        _scan_merge_in, carry_deque, graphdefs_deque, broadcast_deque, broadcast_arrays
       ),
       is_leaf=lambda x: isinstance(x, (extract.NodeStates, Broadcasted)),
       map_non_graph_nodes=True,
@@ -1063,16 +1073,17 @@ class ScanFn:
       assert self.input_carry_argnum is None
       assert carry_arg_out is None
 
-    carry_deque_out = PytreeDeque[list[State | variablelib.VariableState]]()
+    carry_deque_out = PytreeDeque[list[State | variablelib.Variable]]()
+    graphdefs_out = PytreeDeque[graph.GraphDef]()
     _broadcast_deque_out_tmp = PytreeDeque[
-      list[State | variablelib.VariableState]
+      list[State | variablelib.Variable]
     ]()  # discarded
     pure_args_out: tuple
     pure_args_out, pure_out = extract.to_tree(
       (args_out, out),
       prefix=(self.in_axes, self.out_axes),
       split_fn=functools.partial(
-        _scan_split_out, carry_deque_out, _broadcast_deque_out_tmp
+        _scan_split_out, carry_deque_out, graphdefs_out, _broadcast_deque_out_tmp
       ),
       map_non_graph_nodes=True,
       ctxtag='scan',
@@ -1097,11 +1108,6 @@ class ScanFn:
       assert self.input_carry_argnum is None
       pure_carry_arg_out = None
 
-    # next we have to remove all the index_mappings from the GraphDefs
-    # in the carry outputs because they are not present in the inputs
-    carry_graphdefs: list[graph.GraphDef] = []
-    pure_carry_arg_out = _extract_graphdefs(pure_carry_arg_out, carry_graphdefs)
-
     carry_arg_out = (
       pure_carry_arg_out,
       carry_deque_out,
@@ -1109,7 +1115,7 @@ class ScanFn:
       broadcast_arrays_out,
     )
     scan_out = (
-      carry_graphdefs,
+      graphdefs_out,
       pure_args_out,
       pure_out,
     )
@@ -1162,6 +1168,98 @@ def scan(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
 ) -> F | tp.Callable[[F], F]:
+  """A Flax NNX transformation of `jax.lax.scan`_.
+
+  Example::
+
+    import jax
+    from flax import nnx
+
+    class Block(nnx.Module):
+      def __init__(self, input_dim, features, *, rngs):
+        self.linear = nnx.Linear(input_dim, features, rngs=rngs)
+        self.dropout = nnx.Dropout(0.1, rngs=rngs)
+
+      def __call__(self, x: jax.Array):
+        x = self.linear(x)
+        x = self.dropout(x)
+        x = jax.nn.relu(x)
+        return x
+
+    class Model(nnx.Module):
+      def __init__(self, num_layers, features, *, rngs):
+        # In this model implementation we create
+        # multiple blocks using vmap
+
+        # As Block contains dropout op, we prefer
+        # to split RNG into num_layers of RNGs
+        # using @nnx.split_rngs decorator.
+        # Next, nnx.vmap creates a vectorized version of Block.
+        # in_axes and out_axes define vectorization axis
+        # of the input splitted rngs and the output Block instance.
+        # Both axes should be 0.
+        @nnx.split_rngs(splits=num_layers)
+        @nnx.vmap(in_axes=(0,), out_axes=0)
+        def create_block(rngs: nnx.Rngs):
+          return Block(features, features, rngs=rngs)
+
+        self.blocks = create_block(rngs)
+        self.num_layers = num_layers
+
+      def __call__(self, x):
+        # Forward pass method implementation
+
+        # We use nnx.scan to apply sequentially the blocks
+        # on the input, for example with num_layers=3
+        # output = block[0](x)
+        # output = block[1](output)
+        # output = block[2](output)
+        #
+        # In `forward` function defined below:
+        # - x represents the loop carry value
+        # - model is the data to scan along the leading axis
+        # nnx.scan args:
+        # - in_axes marks the inputs: x is marked as carry
+        # and the model is to scan along the axis 0
+        # - out_axes marks the output as carry
+        @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=nnx.Carry)
+        def forward(x, model):
+          x = model(x)
+          return x
+
+        return forward(x, self.blocks)
+
+      # Alternatively, we can also decorate `self.__call__` method
+      # @nnx.scan(in_axes=(0, nnx.Carry), out_axes=nnx.Carry)
+      # def __call__(self, x):
+      #   return self.blocks(x)
+
+    model = Model(2, 4, rngs=nnx.Rngs(0))
+    _, params, _ = nnx.split(model, nnx.Param, ...)
+    print(params)  # kernel of shape: (2, 4, 4)
+
+    x = jnp.arange(5 * 4, dtype="float32").reshape((5, 4))
+    y = model(x)
+    print(y.shape)  # shape: (5, 4)
+
+  Args:
+    f: a Python function to be scanned
+    length: optional integer specifying the number of loop iterations
+    reverse: optional boolean specifying whether to run the scan iteration
+      forward (the default) or in reverse
+    unroll: optional positive int or bool specifying, in the underlying
+      operation of the scan primitive, how many scan iterations to unroll
+      within a single iteration of a loop.
+    in_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
+      the kind of input args. Integer value would specify the axis of corresponding
+      input data to scan along. :class:`flax.nnx.Carry` marks the input data as
+      loop carry value. None marks the input data as auxiliary input.
+    out_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
+      the kind of output args. See ``in_axes`` for details. Note that If ``in_axes``
+      contains :class:`flax.nnx.Carry` then ``out_axes`` must also contain :class:`flax.nnx.Carry`.
+
+  .. _jax.lax.scan: https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>
+  """
   if f is Missing:
     return functools.partial(
         scan,
@@ -1173,6 +1271,10 @@ def scan(
         out_axes=out_axes,
         transform_metadata=transform_metadata,
     )  # type: ignore[return-value]
+
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    _raise_bound_method_error('scan')
 
   _check_out_axes(out_axes)
 
@@ -1188,7 +1290,7 @@ def scan(
     )
 
   scan_fn = ScanFn(
-    f,
+    f_unbound,
     input_carry_argnum,
     output_carry_argnum,
     in_axes,
@@ -1207,6 +1309,7 @@ def scan(
         f'got {len(args)} arguments.'
       )
 
+    graphdefs_deque = PytreeDeque()
     carry_deque = PytreeDeque()
     broadcast_deque = PytreeDeque()
     broadcast_arrays = PytreeDeque()
@@ -1214,7 +1317,7 @@ def scan(
       args,
       prefix=in_axes,
       split_fn=functools.partial(
-        _scan_split_in, carry_deque, broadcast_deque, broadcast_arrays
+        _scan_split_in, carry_deque, graphdefs_deque, broadcast_deque, broadcast_arrays
       ),
       map_non_graph_nodes=True,
       ctxtag='scan',
@@ -1232,11 +1335,12 @@ def scan(
       pure_carry_arg = None
 
     carry = (pure_carry_arg, carry_deque, broadcast_deque, broadcast_arrays)
+    scan_in = (graphdefs_deque, pure_args)
 
     carry_out, scan_out = jax.lax.scan(
       scan_fn,
       carry,
-      pure_args,
+      scan_in,
       length=length,
       reverse=reverse,
       unroll=unroll,
@@ -1249,16 +1353,10 @@ def scan(
         broadcast_arrays_out,
     ) = carry_out
     (
-      carry_graphdefs,
+      graphdefs_out,
       pure_args_out,
       pure_out,
     ) = scan_out
-
-    # next we have to insert all the index_mappings back into the GraphDefs
-    # in the carry outputs
-    pure_carry_arg_out = _insert_graphdefs(
-      pure_carry_arg_out, deque(carry_graphdefs)
-    )
 
     # insert pure carry into pure_args_out
     if input_carry_argnum == 'all':
@@ -1275,7 +1373,7 @@ def scan(
       (pure_args_out, pure_out),
       prefix=(in_axes, out_axes),
       merge_fn=functools.partial(
-        _scan_merge_out, carry_deque_out, broadcast_deque_out
+        _scan_merge_out, carry_deque_out, graphdefs_out, broadcast_deque_out
       ),
       is_leaf=lambda x: isinstance(x, (extract.NodeStates, Broadcasted)),
       map_non_graph_nodes=True,
@@ -1306,9 +1404,6 @@ def scan(
     return out
 
   return scan_wrapper  # type: ignore
-
-
-
 
 
 # -------------------------------
@@ -1495,7 +1590,7 @@ def fori_loop(lower: int, upper: int,
 
     >>> def fwd_fn(i, input):
     ...   m, x = input
-    ...   m.kernel.value = jnp.identity(10) * i
+    ...   m.kernel[...] = jnp.identity(10) * i
     ...   return m, m(x)
 
     >>> module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))

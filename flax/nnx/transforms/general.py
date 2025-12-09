@@ -79,7 +79,7 @@ def split_inputs(
     ... @merge_inputs
     ... def forward_and_zero(model: nnx.Linear, x: jax.Array):
     ...   y = model(x)
-    ...   model.kernel *= 0  # zero out the kernel
+    ...   model.kernel[...] *= 0  # zero out the kernel
     ...   return y
     ...
     >>> model = nnx.Linear(2, 2, rngs=nnx.Rngs(0))

@@ -15,25 +15,26 @@
 
 from flax import nnx
 from absl.testing import absltest
+import jax.numpy as jnp
 
 
 class TestContainers(absltest.TestCase):
   def test_unbox(self):
     x = nnx.Param(
-      1,
+      jnp.array(1),
       on_get_value=lambda c, x: x + 3,  # type: ignore
     )
 
-    assert x.value == 4
+    assert x[...] == 4
 
   def test_on_set_value(self):
-    x: nnx.Param[int] = nnx.Param(
-      1,  # type: ignore
+    x = nnx.Param(
+      jnp.array(1),  # type: ignore
       on_set_value=lambda c, x: x + 7,  # type: ignore
     )
-    x.value = 5
+    x[...] = 5
 
-    assert x.raw_value == 12
+    assert x.get_raw_value() == 12
 
   def test_module_unbox(self):
     class Foo(nnx.Module):
@@ -42,22 +43,22 @@ class TestContainers(absltest.TestCase):
 
     module = Foo()
 
-    assert module.x.value == 4
-    assert vars(module)['x'].raw_value == 1
+    assert module.x.get_value() == 4
+    assert vars(module)['x'].get_raw_value() == 1
 
   def test_module_box(self):
     class Foo(nnx.Module):
       def __init__(self) -> None:
         self.x = nnx.Param(
-          1,
+          jnp.array(1),
           on_set_value=lambda c, x: x + 7,  # type: ignore
         )
 
     module = Foo()
-    module.x.value = 5
+    module.x[...] = 5
 
-    assert module.x.value == 12
-    assert vars(module)['x'].raw_value == 12
+    assert module.x[...] == 12
+    assert vars(module)['x'][...] == 12
 
 
 if __name__ == '__main__':

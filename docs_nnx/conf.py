@@ -31,6 +31,7 @@
 
 import os
 import sys
+import doctest
 
 sys.path.insert(0, os.path.abspath('..'))
 # Include local extension.
@@ -127,7 +128,7 @@ html_theme_options = {
   'use_repository_button': True,  # add a 'link to repository' button
   'use_issues_button': False,  # add an 'Open an Issue' button
   'path_to_docs': (
-    'docs'
+    'docs_nnx'
   ),  # used to compute the path to launch notebooks in colab
   'launch_buttons': {
     'colab_url': 'https://colab.research.google.com/',
@@ -139,7 +140,7 @@ html_theme_options = {
 
 # -- Options for myst ----------------------------------------------
 # uncomment line below to avoid running notebooks during development
-nb_execution_mode = 'off'
+nb_execution_mode = os.environ.get("NB_EXECUTION_MODE", 'off')
 # Notebook cell execution timeout; defaults to 30.
 nb_execution_timeout = 100
 # List of patterns, relative to source directory, that match notebook
@@ -150,7 +151,8 @@ nb_execution_excludepatterns = [
   'transfer_learning.ipynb',  # <-- transformers requires flax<=0.7.0
   'flax/nnx',  # exclude nnx
   'guides/demo.ipynb',  # TODO(cgarciae): broken, remove or update
-  'guides/gemma.ipynb',
+  'examples/gemma.ipynb',
+  'guides/bridge_guide.ipynb',  # TODO(cgarciae): broken, bridge doesn't support Linen sow yet
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False
@@ -163,6 +165,8 @@ nb_execution_raise_on_error = True
 always_document_param_types = True
 
 # -- doctest configuration -------------------------------------------------
+
+doctest_default_flags = doctest.NORMALIZE_WHITESPACE
 doctest_global_setup = """
 import jax
 import jax.numpy as jnp

@@ -8,8 +8,6 @@ variables
    :members:
 .. autoclass:: Cache
    :members:
-.. autoclass:: Empty
-   :members:
 .. autoclass:: Intermediate
    :members:
 .. autoclass:: Param
@@ -18,11 +16,9 @@ variables
    :members:
 .. autoclass:: VariableMetadata
    :members:
-.. autoclass:: VariableState
-   :members:
 
 .. autofunction:: with_metadata
 
 .. autofunction:: variable_name_from_type
 .. autofunction:: variable_type_from_name
-.. autofunction:: set_variable_name
+.. autofunction:: register_variable_name

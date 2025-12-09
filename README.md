@@ -4,7 +4,8 @@
 
 # Flax: A neural network library and ecosystem for JAX designed for flexibility
 
-![Build](https://github.com/google/flax/workflows/Build/badge.svg?branch=main) [![coverage](https://badgen.net/codecov/c/gh/google/flax)](https://codecov.io/gh/google/flax)
+[![Flax - Test](https://github.com/google/flax/actions/workflows/flax_test.yml/badge.svg)](https://github.com/google/flax/actions/workflows/flax_test.yml)
+[![PyPI version](https://img.shields.io/pypi/v/flax)](https://pypi.org/project/flax/)
 
 [**Overview**](#overview)
 | [**Quick install**](#quick-install)
@@ -61,7 +62,7 @@ comes with everything you need to start your research, including:
 
 * **Utilities and patterns**: replicated training, serialization and checkpointing, metrics, prefetching on device.
 
-* **Educational examples**: [MNIST](https://flax.readthedocs.io/en/latest/mnist_tutorial.html), [Inference/sampling with the Gemma language model (transformer)](https://github.com/google/flax/tree/main/examples/gemma), [Transformer LM1B](https://github.com/google/flax/tree/main/examples/lm1b_nnx).
+* **Educational examples**: [MNIST](https://flax.readthedocs.io/en/latest/mnist_tutorial.html), [Inference/sampling with the Gemma language model (transformer)](https://github.com/google/flax/tree/main/examples/gemma).
 
 ## Quick install
 
@@ -99,10 +100,10 @@ Example of an MLP:
 ```py
 class MLP(nnx.Module):
   def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
-    self.linear1 = Linear(din, dmid, rngs=rngs)
+    self.linear1 = nnx.Linear(din, dmid, rngs=rngs)
     self.dropout = nnx.Dropout(rate=0.1, rngs=rngs)
     self.bn = nnx.BatchNorm(dmid, rngs=rngs)
-    self.linear2 = Linear(dmid, dout, rngs=rngs)
+    self.linear2 = nnx.Linear(dmid, dout, rngs=rngs)
 
   def __call__(self, x: jax.Array):
     x = nnx.gelu(self.dropout(self.bn(self.linear1(x))))
@@ -157,7 +158,7 @@ To cite this repository:
   author = {Jonathan Heek and Anselm Levskaya and Avital Oliver and Marvin Ritter and Bertrand Rondepierre and Andreas Steiner and Marc van {Z}ee},
   title = {{F}lax: A neural network library and ecosystem for {JAX}},
   url = {http://github.com/google/flax},
-  version = {0.10.5},
+  version = {0.12.1},
   year = {2024},
 }
 ```

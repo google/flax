@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import defaultdict
 from typing import Any, TypeVar
 import typing as tp
 
 import jax
 from flax import struct
 from flax.core import meta
-from flax.nnx import graph
 from flax.nnx import spmd
 from flax.nnx import traversals
 from flax.nnx import variablelib
@@ -43,7 +41,7 @@ def sort_variable_types(types: tp.Iterable[type]):
 
 
 class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
-  """Default Flax metadata class for `nnx.VariableState`."""
+  """Default Flax metadata class for `nnx.Variable`."""
 
   var_type: type[variablelib.Variable[tp.Any]] = struct.field(pytree_node=False)
   value: Any = struct.field(pytree_node=True)
@@ -65,37 +63,39 @@ class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
 
   def get_partition_spec(self) -> jax.sharding.PartitionSpec:
     """Returns the ``Partitionspec`` for this partitioned value."""
-    nnx_var = self.to_nnx_variable().to_state()
-    return spmd.get_partition_spec(nnx_var).value
+    nnx_var = self.to_nnx_variable()
+    spec = spmd.get_partition_spec(nnx_var).get_raw_value()
+    assert isinstance(spec, jax.sharding.PartitionSpec)
+    return spec
 
   def to_nnx_variable(self) -> variablelib.Variable:
     return self.var_type(self.value, **self.metadata)
 
 
-def is_vanilla_variable(vs: variablelib.VariableState) -> bool:
-  """A variables state is vanilla if its metadata is essentially blank.
+def is_vanilla_variable(vs: variablelib.Variable) -> bool:
+  """A variable is vanilla if its metadata is essentially blank.
 
   Returns False only if it has non-empty hooks or any non-built-in attribute.
   """
   for key, value in vs.get_metadata().items():
-    if key.endswith('_hooks'):
-      if value != ():
-        return False
-    else:
-      return False
+    if key in variablelib.Variable.required_metadata:
+      continue
+    if key.endswith('_hooks') and value == ():
+      continue
+    return False
   return True
 
 
-def to_linen_var(vs: variablelib.VariableState) -> meta.AxisMetadata:
+def to_linen_var(vs: variablelib.Variable) -> meta.AxisMetadata:
   metadata = vs.get_metadata()
   if 'linen_meta_type' in metadata:
     linen_type = metadata['linen_meta_type']
     if hasattr(linen_type, 'from_nnx_metadata'):
-      return linen_type.from_nnx_metadata({'value': vs.value, **metadata})
-    return linen_type(vs.value, **metadata)
+      return linen_type.from_nnx_metadata({'value': vs.get_value(), **metadata})
+    return linen_type(vs.get_value(), **metadata)
   if is_vanilla_variable(vs):
-    return vs.value
-  return NNXMeta(vs.type, vs.value, metadata)
+    return vs.get_value()
+  return NNXMeta(type(vs), vs.get_value(), metadata)
 
 
 def get_col_name(keypath: tp.Sequence[Any]) -> str:
@@ -130,32 +130,32 @@ def _recursive_merge(dict1, dict2):
 def linen_vars_to_nnx_attrs(variables: tp.Mapping[str, Any]) -> dict[str, Any]:
   """Convert a dict of Linen-style variables to NNX variables."""
   nnx_vars = jax.tree_util.tree_map_with_path(
-    lambda kp, x: to_nnx_var(get_col_name(kp), x),
-    variables, is_leaf=lambda x: isinstance(x, meta.AxisMetadata))
-  nnx_attrs: dict[str, Any] = defaultdict(dict)
-  for _, col_tree in nnx_vars.items():
-    assert isinstance(col_tree, dict)
-    for attr_name, value in col_tree.items():
-      assert isinstance(attr_name, str)
-      if isinstance(value, tp.Mapping):  # it's a sublayer
-        nnx_attrs[attr_name] = _recursive_merge(nnx_attrs[attr_name], value)
-      else:
-        nnx_attrs[attr_name] = value     # it's a variable on this layer
-  return dict(nnx_attrs)
+      lambda kp, x: to_nnx_var(get_col_name(kp), x),
+      variables,
+      is_leaf=lambda x: not isinstance(x, dict),
+  )
+  flat_paths: dict[tuple, tp.Any] = {}
+  for col_name, col_variables in nnx_vars.items():  # pylint: disable=unused-variable
+    for path, variable in traversals.flatten_mapping(col_variables).items():
+      if path in flat_paths:
+        raise ValueError(
+            f"Found duplicate variable path {path} with variables "
+            f"{flat_paths[path]} and {variable}. "
+            "This is not allowed in NNX."
+        )
+      flat_paths[path] = variable
+
+  nnx_vars = traversals.unflatten_mapping(flat_paths)
+  return nnx_vars
 
 
 def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
-  """Convert a dict of NNX variables (or variable states) to Linen-style variables."""
+  """Convert a dict of NNX variables to Linen-style variables."""
   linen_structured = {}
   for kp, v in traversals.flatten_mapping(nnx_attrs).items():
     if isinstance(v, variablelib.Variable):
       col_name = variablelib.variable_name_from_type(type(v))
       v = to_linen_var(v.to_state())
-    elif isinstance(v, variablelib.VariableState):
-      col_name = variablelib.variable_name_from_type(v.type)
-      v = to_linen_var(v)
-    elif isinstance(v, graph.GraphDef):
-      col_name = 'nnx'  # an nnx.GraphDef for some ToLinen submodule
     else:
       raise ValueError(f'Cannot infer collection name from value: {v}')
     linen_structured[(col_name, *kp)] = v

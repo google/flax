@@ -14,23 +14,21 @@
 
 from __future__ import annotations
 
+import inspect
 import typing as tp
-from functools import partial
 
 import jax
 import jax.numpy as jnp
-import jax.tree_util as jtu
 
 from flax.nnx import (
   filterlib,
   graph,
 )
 from flax.nnx import variablelib as variableslib
-from flax.nnx.graph import GraphDef
-from flax.nnx.object import Object, ObjectMeta
-from flax.nnx.graph import GraphState, StateLeaf
-from flax.nnx.statelib import State
+from flax.nnx.pytreelib import Pytree, PytreeMeta
+from flax.nnx.graph import GraphState
 from flax.typing import Key, Path, PathParts
+import warnings
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -44,13 +42,13 @@ tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
 
-class ModuleMeta(ObjectMeta):
+class ModuleMeta(PytreeMeta):
   # we keep a trivial derived class just in case we need to
   # add more functionality in the future
   pass
 
 
-class Module(Object, metaclass=ModuleMeta):
+class Module(Pytree, metaclass=ModuleMeta):
   """Base class for all neural network modules.
 
   Layers and models should subclass this class.
@@ -121,12 +119,12 @@ class Module(Object, metaclass=ModuleMeta):
 
       >>> y = model(x)
       >>> assert hasattr(model, 'i')
-      >>> assert len(model.i.value) == 1 # tuple of length 1
-      >>> assert model.i.value[0].shape == (1, 3)
+      >>> assert len(model.i) == 1 # tuple of length 1
+      >>> assert model.i[0].shape == (1, 3)
 
       >>> y = model(x, add=1)
-      >>> assert len(model.i.value) == 2 # tuple of length 2
-      >>> assert (model.i.value[0] + 1 == model.i.value[1]).all()
+      >>> assert len(model.i) == 2 # tuple of length 2
+      >>> assert (model.i[0] + 1 == model.i[1]).all()
 
     Alternatively, a custom init/reduce function can be passed::
 
@@ -149,12 +147,12 @@ class Module(Object, metaclass=ModuleMeta):
       >>> model = Model(rngs=nnx.Rngs(0))
 
       >>> y = model(x)
-      >>> assert (model.sum.value == model.product.value).all()
-      >>> intermediate = model.sum.value
+      >>> assert (model.sum[...] == model.product[...]).all()
+      >>> intermediate = model.sum[...]
 
       >>> y = model(x)
-      >>> assert (model.sum.value == intermediate*2).all()
-      >>> assert (model.product.value == intermediate**2).all()
+      >>> assert (model.sum[...] == intermediate*2).all()
+      >>> assert (model.product[...] == intermediate**2).all()
 
     Args:
       variable_type: The :class:`Variable` type for the stored value.
@@ -185,7 +183,7 @@ class Module(Object, metaclass=ModuleMeta):
           f"Expected '{name}' to be of type '{variable_type.__name__}', "
           f"got '{type(variable).__name__}'"
         )
-      variable.raw_value = reduce_fn(variable.raw_value, value)
+      variable.set_value(reduce_fn(variable.get_value(), value))
     else:
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
@@ -236,17 +234,18 @@ class Module(Object, metaclass=ModuleMeta):
       >>> model = Model(rngs=nnx.Rngs(0))
       >>> assert not hasattr(model, 'xgrad')  # perturbation requires a sample input run
       >>> _ = model(x)
-      >>> assert model.xgrad.value.shape == (1, 3)   # same as the intermediate value
+      >>> assert model.xgrad.shape == (1, 3)   # same as the intermediate value
+      >>> graphdef, params, perturbations = nnx.split(model, nnx.Param, nnx.Perturbation)
 
       >>> # Take gradients on the Param and Perturbation variables
-      >>> @nnx.grad(argnums=nnx.DiffState(argnum=0, filter=nnx.Any(nnx.Param, nnx.Perturbation)))
-      ... def grad_loss(model, inputs, targets):
-      ...   preds = model(inputs)
-      ...   return jnp.square(preds - targets).mean()
+      >>> @nnx.grad(argnums=(0, 1))
+      ... def grad_loss(params, perturbations, inputs, targets):
+      ...   model = nnx.merge(graphdef, params, perturbations)
+      ...   return jnp.mean((model(inputs) - targets) ** 2)
 
-      >>> intm_grads = grad_loss(model, x, y)
-      >>> # `intm_grads.xgrad.value` is the intermediate gradient
-      >>> assert not jnp.array_equal(intm_grads.xgrad.value, jnp.zeros((1, 3)))
+      >>> (grads, perturbations) = grad_loss(params, perturbations, x, y)
+      >>> # `perturbations.xgrad[...]` is the intermediate gradient
+      >>> assert not jnp.array_equal(perturbations.xgrad[...], jnp.zeros((1, 3)))
 
     Args:
       name: A string denoting the ``Module`` attribute name for the
@@ -268,88 +267,36 @@ class Module(Object, metaclass=ModuleMeta):
         f"Expected '{name}' to be of type '{variable_type.__name__}', "
         f"got '{type(old_value).__name__}'"
       )
-    return old_value.value + value
+    return old_value[...] + value
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
-    """Recursively iterates over all nested :class:`Module`'s of the current Module, including
-    the current Module.
-
-    ``iter_modules`` creates a generator that yields the path and the Module instance, where
-    the path is a tuple of strings or integers representing the path to the Module from the
-    root Module.
-
-    Example::
-
-      >>> from flax import nnx
-      ...
-      >>> class SubModule(nnx.Module):
-      ...   def __init__(self, din, dout, rngs):
-      ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
-      ...
-      >>> class Block(nnx.Module):
-      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
-      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.submodule = SubModule(din, dout, rngs=rngs)
-      ...     self.dropout = nnx.Dropout(0.5)
-      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
-      ...
-      >>> model = Block(2, 5, rngs=nnx.Rngs(0))
-      >>> for path, module in model.iter_modules():
-      ...   print(path, type(module).__name__)
-      ...
-      ('batch_norm',) BatchNorm
-      ('dropout',) Dropout
-      ('linear',) Linear
-      ('submodule', 'linear1') Linear
-      ('submodule', 'linear2') Linear
-      ('submodule',) SubModule
-      () Block
     """
-    for path, value in graph.iter_graph(self):
-      if isinstance(value, Module):
-        yield path, value
+    Warning: this method is method is deprecated; use :func:`iter_modules` instead.
+
+    Recursively iterates over all nested :class:`Module`'s of the current Module, including
+    the current Module. Alias of :func:`iter_modules`.
+    """
+    warnings.warn(
+      "The 'm.iter_modules()' method is deprecated; use the 'nnx.iter_modules(m)' function instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    yield from iter_modules(self)
 
   def iter_children(self) -> tp.Iterator[tuple[Key, Module]]:
-    """Iterates over all children :class:`Module`'s of the current Module. This
-    method is similar to :func:`iter_modules`, except it only iterates over the
-    immediate children, and does not recurse further down.
-
-    ``iter_children`` creates a generator that yields the key and the Module instance,
-    where the key is a string representing the attribute name of the Module to access
-    the corresponding child Module.
-
-    Example::
-
-      >>> from flax import nnx
-      ...
-      >>> class SubModule(nnx.Module):
-      ...   def __init__(self, din, dout, rngs):
-      ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
-      ...
-      >>> class Block(nnx.Module):
-      ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
-      ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
-      ...     self.submodule = SubModule(din, dout, rngs=rngs)
-      ...     self.dropout = nnx.Dropout(0.5)
-      ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
-      ...
-      >>> model = Block(2, 5, rngs=nnx.Rngs(0))
-      >>> for path, module in model.iter_children():
-      ...  print(path, type(module).__name__)
-      ...
-      batch_norm BatchNorm
-      dropout Dropout
-      linear Linear
-      submodule SubModule
     """
-    node_impl = graph.get_node_impl(self)
-    assert node_impl is not None
-    node_dict = node_impl.node_dict(self)
-    for key, value in node_dict.items():
-      if isinstance(value, Module):
-        yield key, value
+    Warning: this method is method is deprecated; use :func:`iter_children` instead.
+
+    Iterates over all children :class:`Module`'s of the current Module. This
+    method is similar to :func:`iter_modules`, except it only iterates over the
+    immediate children, and does not recurse further down. Alias of :func:`iter_children`.
+    """
+    warnings.warn(
+      "The 'm.iter_children()' method is deprecated; use the 'nnx.iter_children(m)' function instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    yield from iter_children(self)
 
   def set_attributes(
     self,
@@ -395,7 +342,7 @@ class Module(Object, metaclass=ModuleMeta):
     if not filters:
       filters = (True,)
     predicates = tuple(map(filterlib.to_predicate, filters))
-    for path, module in self.iter_modules():
+    for path, module in iter_modules(self):
       for predicate in predicates:
         if predicate(path, module):
           for name, value in attributes.items():
@@ -481,43 +428,247 @@ class Module(Object, metaclass=ModuleMeta):
       raise_if_not_found=False,
     )
 
-  def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
-    super().__init_subclass__()
+def set_mode(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool = True,  **kwargs) -> A:
+  """Creates a new node with static attributes updated according to ``**kwargs``.
 
-    if experimental_pytree:
-      jtu.register_pytree_with_keys(
-        cls,
-        partial(_module_flatten, with_keys=True),
-        _module_unflatten,  # type: ignore[arg-type]
-        flatten_func=partial(_module_flatten, with_keys=False),
-      )
+  The new node contains references to jax arrays in the original node. If a
+  kwarg is not found in any module, this method raises a ValueError. ``set_mode``
+  class methods should return any unused kwargs.
 
-# -------------------------
-# Pytree Definition
-# -------------------------
-def _module_flatten(module: Module, *, with_keys: bool):
-  graphdef, state = graph.split(module)
-  key_values = sorted(
-    state.raw_mapping.items()  # type: ignore
+  Example::
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5, deterministic=False)
+    ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=False, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (False, False)
+    >>> new_block = nnx.set_mode(block, deterministic=True, use_running_average=True)
+    >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
+    (True, True)
+
+  ``Filter``'s can be used to set the attributes of specific Modules::
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> new_block = nnx.set_mode(block, only=nnx.Dropout, deterministic=True)
+    >>> # Only the dropout will be modified
+    >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
+    (True, False)
+
+  Args:
+    node: the object to create a copy of.
+    only: Filters to select the Modules to set the attributes of.
+    **kwargs: The attributes to set.
+  """
+  predicate = filterlib.to_predicate(only)
+
+  counts = {k: 0 for k in kwargs}
+  counts["_set_mode_calls"] = 0
+
+  def _set_mode_fn(path, node):
+    if hasattr(node, 'set_mode') and predicate(path, node):
+      counts["_set_mode_calls"] += 1
+      unused = node.set_mode(**kwargs)
+      for k in unused:
+        counts[k] += 1
+    return node
+
+  out = graph.recursive_map(_set_mode_fn, node)
+
+  if raise_if_not_found:
+    set_mode_calls = counts.pop("_set_mode_calls")
+    unused_keys = [k for k, v in counts.items() if v == set_mode_calls]
+    if unused_keys:
+      raise ValueError(f"Unused keys found in set_mode: {unused_keys}")
+
+  return out
+
+def train_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  """Creates a new node set to training mode.
+
+  ``train_mode`` uses ``set_mode`` to recursively set attributes ``deterministic=False``
+  and ``use_running_average=False`` of all nested Modules that have these attributes.
+  Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+  Modules.
+
+  Example::
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     # initialize Dropout and BatchNorm in eval mode
+    ...     self.dropout = nnx.Dropout(0.5, deterministic=True)
+    ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=True, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (True, True)
+    >>> train_block = nnx.train_mode(block)
+    >>> train_block.dropout.deterministic, train_block.batch_norm.use_running_average
+    (False, False)
+
+  Args:
+    **kwargs: additional attributes passed to ``set_attributes``.
+  """
+  return set_mode(
+      node,
+      only=only,
+      raise_if_not_found=False,
+      deterministic=False,
+      use_running_average=False,
+      **kwargs,
   )
-  keys = tuple(key for key, _ in key_values)
 
-  children: tuple[tp.Any, ...]
-  if with_keys:
-    children = tuple((jtu.DictKey(key), value) for key, value in key_values)
-  else:
-    children = tuple(value for _, value in key_values)
+def eval_mode(node: A, /, *, only: filterlib.Filter = ..., **kwargs) -> A:
+  """Creates a new node set to evaluation mode.
 
-  return children, (keys, graphdef)
+  ``eval_mode`` uses ``set_mode`` to recursively set attributes ``deterministic=True``
+  and ``use_running_average=True`` of all nested Modules that have these attributes.
+  Its primarily used to control the runtime behavior of the ``Dropout`` and ``BatchNorm``
+  Modules.
+
+  Example::
+    >>> from flax import nnx
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> block = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> block.dropout.deterministic, block.batch_norm.use_running_average
+    (False, False)
+    >>> eval_block = nnx.eval_mode(block)
+    >>> eval_block.dropout.deterministic, eval_block.batch_norm.use_running_average
+    (True, True)
+
+  Args:
+    **kwargs: additional attributes passed to ``set_mode``.
+  """
+  return set_mode(
+      node,
+      only=only,
+      raise_if_not_found=False,
+      deterministic=True,
+      use_running_average=True,
+      **kwargs,
+  )
 
 
-def _module_unflatten(
-  paths_moduledef: tuple[tuple[Path, ...], GraphDef[M]],
-  variables: tuple[StateLeaf, ...],
-) -> M:
-  paths, graphdef = paths_moduledef
-  return graph.merge(graphdef, State(zip(paths, variables)))
+def _parse_docstring_args(doc_str: str) -> dict[str, str]:
+  """Parses parameters from `Args:` section of a function docstring.
+  Assumes Google style docstrings. Returns a dictionary with
+  keys representing argument names and values representing descriptions.
+  Each description has lines starting with 4 spaces.
+  """
+  lines = doc_str.split("\n")
 
+  # Get lines with the parameter names
+  inds = [i for i, l in enumerate(lines) if l.startswith("  ") and not l.startswith("    ")]
+  inds.append(len(lines))
+  out = dict()
+
+  # Parse each argument
+  for i in range(len(inds)-1):
+    start, end = inds[i], inds[i+1]
+
+    # Process first line for the description
+    first_colon = lines[start].find(":")
+    name = lines[start][:first_colon].strip()
+    desc = [" "*4 + lines[start][first_colon+1:].strip()]
+
+    # Append remaining description lines
+    for j in range(start+1, end):
+      desc.append(lines[j])
+
+    out[name] = "\n".join(desc)
+  return out
+
+
+
+def set_mode_info(node: Module, /, *, only: filterlib.Filter = ...) -> str:
+  """Provides information about the ``set_mode`` arguments for a module and all
+  submodules. If no docstring is provided for a module's `set_mode`, this function
+  puts the `set_mode` signature below the function.
+
+  Example::
+    >>> from flax import nnx
+    ...
+    >>> class CustomModel(nnx.Module):
+    ...   def __init__(self, *, rngs):
+    ...       self.mha = nnx.MultiHeadAttention(4, 8, 32, rngs=rngs)
+    ...       self.drop = nnx.Dropout(0.5, rngs=rngs)
+    ...       self.bn = nnx.BatchNorm(32, rngs=rngs)
+    ...
+    >>> model = CustomModel(rngs=nnx.Rngs(0))
+    >>> print(nnx.set_mode_info(model))
+    BatchNorm:
+      use_running_average: bool | None = None
+        if True, the stored batch statistics will be
+        used instead of computing the batch statistics on the input.
+    Dropout:
+      deterministic: bool | None = None
+        if True, disables dropout masking.
+    MultiHeadAttention:
+      deterministic: bool | None = None
+        if True, the module is set to deterministic mode.
+      decode: bool | None = None
+        if True, the module is set to decode mode.
+      batch_size: int | Shape | None = None
+        the batch size to use for the cache.
+      max_length: int | None = None
+        the max length to use for the cache.
+
+  Args:
+    node: the object to display ``set_mode`` information for.
+    only: Filters to select the Modules to display information for.
+  """
+  predicate = filterlib.to_predicate(only)
+  classes: set[Module] = set()
+
+  def _set_mode_info_fn(path, node):
+    if hasattr(node, 'set_mode') and predicate(path, node):
+      classes.add(node.__class__)
+    return node
+
+  graph.recursive_map(_set_mode_info_fn, node)
+
+  class_list = sorted(list(classes), key=lambda x: x.__qualname__)
+  out_str = []
+  for c in class_list:
+    out_str.append(f"{c.__qualname__}:")
+    sig = inspect.signature(c.set_mode)
+    doc = inspect.getdoc(c.set_mode)
+
+    # Parse docstring
+    if isinstance(doc, str):
+      start, end = doc.find("Args:\n"), doc.find("Returns:\n")
+      if end == -1:
+        end = len(doc)
+      doc = doc[start+6:end]
+      parsed_docstring = _parse_docstring_args(doc)
+
+      # Generate output from signature and docstring
+      skip_names = {"self", "args", "kwargs"}
+      for name, param in sig.parameters.items():
+        if name in skip_names:
+          continue
+
+        if param.default is inspect.Parameter.empty:
+          out_str.append(f"  {name}: {param.annotation}")
+        else:
+          out_str.append(f"  {name}: {param.annotation} = {param.default}")
+        out_str.append(parsed_docstring[name])
+    else:
+      out_str.append(f"  set_mode{sig}")
+
+
+  return "\n".join(out_str)
 
 def first_from(*args: tp.Optional[A], error_msg: str) -> A:
   """Return the first non-None argument.
@@ -534,3 +685,84 @@ def first_from(*args: tp.Optional[A], error_msg: str) -> A:
     if arg is not None:
       return arg
   raise ValueError(error_msg)
+
+def iter_modules(module: Module) -> tp.Iterator[tuple[PathParts, Module]]:
+  """Recursively iterates over all nested :class:`Module`'s of the given Module, including
+  the argument.
+
+  Specifically, this function creates a generator that yields the path and the Module instance, where
+  the path is a tuple of strings or integers representing the path to the Module from the
+  root Module.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class SubModule(nnx.Module):
+    ...   def __init__(self, din, dout, rngs):
+    ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.submodule = SubModule(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> model = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> for path, module in nnx.iter_modules(model):
+    ...   print(path, type(module).__name__)
+    ...
+    ('batch_norm',) BatchNorm
+    ('dropout',) Dropout
+    ('linear',) Linear
+    ('submodule', 'linear1') Linear
+    ('submodule', 'linear2') Linear
+    ('submodule',) SubModule
+    () Block
+  """
+  for path, value in graph.iter_graph(module):
+    if isinstance(value, Module):
+      yield path, value
+
+def iter_children(module: Module) -> tp.Iterator[tuple[Key, Module]]:
+  """Iterates over all children :class:`Module`'s of a given Module. This
+  method is similar to :func:`iter_modules`, except it only iterates over the
+  immediate children, and does not recurse further down.
+
+  Specifically, this function creates a generator that yields the key and the Module instance,
+  where the key is a string representing the attribute name of the Module to access
+  the corresponding child Module.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> class SubModule(nnx.Module):
+    ...   def __init__(self, din, dout, rngs):
+    ...     self.linear1 = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.linear2 = nnx.Linear(din, dout, rngs=rngs)
+    ...
+    >>> class Block(nnx.Module):
+    ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
+    ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
+    ...     self.submodule = SubModule(din, dout, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
+    ...
+    >>> model = Block(2, 5, rngs=nnx.Rngs(0))
+    >>> for path, module in nnx.iter_children(model):
+    ...  print(path, type(module).__name__)
+    ...
+    batch_norm BatchNorm
+    dropout Dropout
+    linear Linear
+    submodule SubModule
+  """
+  node_impl = graph.get_node_impl(module)
+  assert node_impl is not None
+  node_dict = node_impl.node_dict(module)
+  for key, value in node_dict.items():
+    if isinstance(value, Module):
+      yield key, value

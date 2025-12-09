@@ -25,7 +25,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
-          python-version: '3.10'
+          python-version: '3.11'
       - run: python -m pip install pre-commit
       - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.11']
+        python-version: ['3.11', '3.12', '3.13']
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - name: Set up Python ${{ matrix.python-version }}
@@ -72,46 +72,45 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
       with:
-        uv-version: "0.3.0"
+        version: "0.8.13"
     - name: Install standalone dependencies only
       run: |
-        uv sync --extra all
+        uv sync
     - name: Test importing Flax
       run: |
-        uv run python -c "import flax"
+        uv run --no-sync python -c "import flax"
+
   tests:
     name: Run Tests
-    needs: [pre-commit, commit-count, test-import]
+    needs: [pre-commit, commit-count]
     runs-on: ubuntu-24.04-16core
     strategy:
+      # Make sure to change `github_check_runs` in `copy.bara.sky` if you change the tests here.
       matrix:
-        python-version: ['3.10', '3.11']
-        test-type: [doctest, pytest, pytype, mypy]
+        python-version: ['3.11', '3.12', '3.13']
+        test-type: [doctest, pytest]
         jax-version: [newest]
-        exclude:
-          - test-type: pytype
-            python-version: '3.10'
-          - test-type: mypy
-            python-version: '3.11'
         include:
-          - python-version: '3.10'
-            test-type: pytest
-            jax-version: '0.4.27'  # keep in sync with jax pin in pyproject.toml
+          # keep in sync with internal type checking
+          - python-version: '3.12'
+            test-type: pytype
+            jax-version: 'newest'
+          - python-version: '3.12'
+            test-type: mypy
+            jax-version: 'newest'
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - name: Set up Python ${{ matrix.python-version }}
-      id: setup_python
-      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
-      with:
-        python-version: ${{ matrix.python-version }}
     - name: Setup uv
       uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
       with:
-        version: "0.3.0"
+        version: "0.8.13"
+        python-version: ${{ matrix.python-version }}
+        enable-cache: true
 
     - name: Install dependencies
       run: |
-        uv sync --extra all --extra testing --extra docs
+        rm -fr .venv
+        uv sync --extra testing --extra docs
     - name: Install JAX
       run: |
         if [[ "${{ matrix.jax-version }}" == "newest" ]]; then
@@ -124,14 +123,14 @@ jobs:
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
           # TODO(cgarciae): Remove this once dm-haiku 0.0.14 is released
           uv pip install -U git+https://github.com/google-deepmind/dm-haiku.git
-          uv run tests/run_all_tests.sh --only-doctest
+          uv run --no-sync tests/run_all_tests.sh --only-doctest
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
           uv pip install -U tensorflow-datasets
-          uv run tests/run_all_tests.sh --only-pytest
+          uv run --no-sync tests/run_all_tests.sh --only-pytest
         elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
-          uv run tests/run_all_tests.sh --only-pytype
+          uv run --no-sync tests/run_all_tests.sh --only-pytype
         elif [[ "${{ matrix.test-type }}" == "mypy" ]]; then
-          uv run tests/run_all_tests.sh --only-mypy
+          uv run --no-sync tests/run_all_tests.sh --only-mypy
         else
           echo "Unknown test type: ${{ matrix.test-type }}"
           exit 1

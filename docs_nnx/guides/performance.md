@@ -35,7 +35,7 @@ class Model(nnx.Module):
     return self.linear_out(x)
   
 model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
-optimizer = nnx.Optimizer(model, optax.adam(1e-3))  # reference sharing
+optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 metrics = nnx.MultiMetric(
   loss=nnx.metrics.Average('loss'),
 )
@@ -47,7 +47,7 @@ def train_step(model, optimizer, metrics, x, y):
     return ((y_pred - y) ** 2).mean()
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)  # in-place updates
+  optimizer.update(model, grads)  # in-place updates
   metrics.update(loss=loss)
 
   return loss
@@ -63,7 +63,7 @@ Important thing here is that we created a `train_step()` function that uses `nnx
 
 ## Asynchronous dispatch
 
-Asynchronous dispatch is a feature of JAX where it runs operations in the background whenever possible so Python can continue executing other code. This can be use to absorve the cost of data loading and in this case the overhead of `nnx.jit` and similar transforms. In general, as the amount of computation JAX has to perform per iteration increases the more it is able to absorve the python overhead since eventually the JAX computation will be the main blocker and programs with different overhead will have the same performance. This could be achieved in a couple of ways:
+Asynchronous dispatch is a feature of JAX where it runs operations in the background whenever possible so Python can continue executing other code. This can be use to absorb the cost of data loading and in this case the overhead of `nnx.jit` and similar transforms. In general, as the amount of computation JAX has to perform per iteration increases the more it is able to absorb the python overhead since eventually the JAX computation will be the main blocker and programs with different overhead will have the same performance. This could be achieved in a couple of ways:
 
 * Increasing the batch size.
 * Increasing the model size.
@@ -111,7 +111,7 @@ def jax_train_step(graphdef, state, x, y):
     return ((y_pred - y) ** 2).mean()
 
   loss, grads = nnx.value_and_grad(loss_fn)(model)
-  optimizer.update(grads)
+  optimizer.update(model, grads)
   metrics.update(loss=loss)
 
   state = nnx.state((model, optimizer, metrics))
@@ -119,7 +119,7 @@ def jax_train_step(graphdef, state, x, y):
 
 for _ in range(10):
   x, y = jnp.ones((32, 2)), jnp.zeros((32, 3))
-  state, loss = jax_train_step(graphdef, state, x, y)
+  loss, state = jax_train_step(graphdef, state, x, y)
 
 # update objects after training
 nnx.update((model, optimizer, metrics), state)

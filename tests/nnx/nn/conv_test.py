@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Sequence
+from functools import partial
 import typing as tp
 
 import jax
@@ -39,6 +40,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
     dtype=[jnp.float32],
     param_dtype=[jnp.float16],
     precision=[Precision.HIGHEST],
+    preferred_element_type=[None, jnp.float32],
   )
   def test_nnx_linen_conv_equivalence(
     self,
@@ -52,6 +54,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     precision: PrecisionLike,
+    preferred_element_type: tp.Optional[Dtype],
   ):
     key = jax.random.key(42)
     rngs = nnx.Rngs(42)
@@ -85,8 +88,16 @@ class TestConvLinenConsistency(parameterized.TestCase):
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,
+      preferred_element_type=preferred_element_type,
       rngs=rngs,
     )
+    if preferred_element_type is not None:
+      conv_general_dilated = partial(
+        jax.lax.conv_general_dilated,
+        preferred_element_type=preferred_element_type,
+      )
+    else:
+      conv_general_dilated = None
     model = linen.Conv(
       OUT_FEATURES,
       kernel_size=kernel_size,
@@ -100,11 +111,12 @@ class TestConvLinenConsistency(parameterized.TestCase):
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,
+      conv_general_dilated=conv_general_dilated,
     )
     variables = model.init(key, x)
-    model_nnx.kernel.value = variables['params']['kernel']
+    model_nnx.kernel[...] = variables['params']['kernel']
     if use_bias:
-      model_nnx.bias.value = variables['params']['bias']
+      model_nnx.bias[...] = variables['params']['bias']
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)
@@ -120,6 +132,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
     dtype=[jnp.float32],
     param_dtype=[jnp.float16],
     precision=[Precision.HIGHEST],
+    preferred_element_type=[None, jnp.float32],
   )
   def test_nnx_linen_convtranspose_equivalence(
     self,
@@ -131,6 +144,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
     dtype: tp.Optional[Dtype],
     param_dtype: Dtype,
     precision: PrecisionLike,
+    preferred_element_type: tp.Optional[Dtype],
   ):
     key = jax.random.key(42)
     rngs = nnx.Rngs(42)
@@ -156,6 +170,7 @@ class TestConvLinenConsistency(parameterized.TestCase):
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,
+      preferred_element_type=preferred_element_type,
       rngs=rngs,
     )
     model = linen.ConvTranspose(
@@ -169,12 +184,13 @@ class TestConvLinenConsistency(parameterized.TestCase):
       dtype=dtype,
       param_dtype=param_dtype,
       precision=precision,
+      preferred_element_type=preferred_element_type,
     )
     variables = model.init(key, x)
-    model_nnx.kernel.value = variables['params']['kernel']
+    model_nnx.kernel[...] = variables['params']['kernel']
     if use_bias:
       assert model_nnx.bias is not None
-      model_nnx.bias.value = variables['params']['bias']
+      model_nnx.bias[...] = variables['params']['bias']
 
     out_nnx = model_nnx(x)
     out = model.apply(variables, x)

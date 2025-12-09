@@ -31,7 +31,7 @@ Filter = tp.Union[FilterLiteral, tuple['Filter', ...], list['Filter']]
 
 def to_predicate(filter: Filter) -> Predicate:
   """Converts a Filter to a predicate function.
-  See `Using Filters <https://flax.readthedocs.io/en/latest/nnx/filters_guide.html>`__.
+  See `Using Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
   """
 
   if isinstance(filter, str):
@@ -89,13 +89,16 @@ class WithTag:
 
 @dataclasses.dataclass(frozen=True)
 class PathContains:
-  key: Key
+  key: Key | str
+  exact: bool = True
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return self.key in path
+    if self.exact:
+      return self.key in path
+    return any(str(self.key) in str(part) for part in path)
 
   def __repr__(self):
-    return f'PathContains({self.key!r})'
+    return f'PathContains({self.key!r}, exact={self.exact})'
 
 
 class PathIn:
@@ -121,9 +124,7 @@ class OfType:
   type: type
 
   def __call__(self, path: PathParts, x: tp.Any):
-    return isinstance(x, self.type) or (
-      hasattr(x, 'type') and issubclass(x.type, self.type)
-    )
+    return isinstance(x, self.type)
 
   def __repr__(self):
     return f'OfType({self.type!r})'

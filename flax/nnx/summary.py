@@ -15,7 +15,6 @@
 
 from collections import defaultdict
 import dataclasses
-import functools
 import inspect
 import io
 import typing as tp
@@ -33,12 +32,23 @@ from flax import nnx
 from flax import typing
 from flax.nnx import graph, statelib, variablelib
 
+from functools import wraps
+
 try:
   from IPython import get_ipython
 
   in_ipython = get_ipython() is not None
 except ImportError:
   in_ipython = False
+
+# Custom YAML dumper to represent None as 'None' string (not YAML 'null') for clarity
+class NoneDumper(yaml.SafeDumper):
+  pass
+
+NoneDumper.add_representer(
+  type(None),
+  lambda dumper, data: dumper.represent_scalar('tag:yaml.org,2002:str', 'None'),
+)
 
 class SizeBytes(typing.SizeBytes):
   def __repr__(self) -> str:
@@ -72,7 +82,7 @@ def _collect_stats(
   ] = defaultdict(lambda: defaultdict())
   node_stats[id(node)] = ObjectInfo(path, stats, variable_groups)
 
-  if isinstance(node, nnx.Object):
+  if isinstance(node, nnx.Pytree):
     node._nnx_tabulate_id = id(node)  # type: ignore
     object_types.add(type(node))
 
@@ -86,7 +96,7 @@ def _collect_stats(
       var_type = type(value)
       if issubclass(var_type, nnx.RngState):
         var_type = nnx.RngState
-      size_bytes = SizeBytes.from_any(value.value)
+      size_bytes = SizeBytes.from_any(value.get_value())
       if var_type in stats:
         stats[var_type] += size_bytes
       else:
@@ -126,6 +136,8 @@ class CallInfo:
   input_args: tuple[tp.Any, ...]
   input_kwargs: dict[str, tp.Any]
   outputs: tp.Any
+  flops: int | None = None
+  vjp_flops: int | None = None
 
 class SimpleObjectRepr:
   def __init__(self, obj: tp.Any):
@@ -138,79 +150,79 @@ class SimpleObjectRepr:
     return f'{self.type.__name__}(...)'
 
 
-def get_method_wrapper(
-  rows: list[CallInfo],
-  node_stats: NodeStats,
-  method: tp.Callable,
-) -> tp.Callable:
-  method_name = method.__name__
-  @functools.wraps(method)
-  def method_wrapper(obj, *args, **kwargs):
-    def _to_dummy_array(x):
-      if isinstance(x, jax.Array | np.ndarray):
-        return ArrayRepr.from_array(x)
-      elif graph.is_graph_node(x):
-        return SimpleObjectRepr(x)
-      else:
-        return x
+def _to_dummy_array(x):
+  if isinstance(x,jax.ShapeDtypeStruct):
+    return ArrayRepr(x.shape, x.dtype)
+  elif isinstance(x, jax.Array | np.ndarray):
+    return ArrayRepr.from_array(x)
+  elif graph.is_graph_node(x):
+    return SimpleObjectRepr(x)
+  else:
+    return x
 
-    object_id: int = getattr(obj, '_nnx_tabulate_id')
-    input_args_info, input_kwargs_info = jax.tree.map(
-      _to_dummy_array, (args, kwargs)
-    )
-    node_info = node_stats[object_id]
-    assert node_info is not None
-    path = node_info.path
-    if method_name != '__call__':
-      path = (*path, method_name)
-    call_info = CallInfo(
-      object_id=object_id,
-      type=type(obj),
-      path=path,
-      input_args=input_args_info,
-      input_kwargs=input_kwargs_info,
-      outputs=None,
-    )
-    rows.append(call_info)
-    out = method(obj, *args, **kwargs)
-    call_info.outputs = jax.tree.map(_to_dummy_array, out)
-    return out
+def _pure_nnx_vjp(f, model, *args, **kwargs):
+  "Wrap nnx functional api around jax.vjp. Only handles pure method calls."
+  graphdef, state = nnx.split(model)
+  def inner(state, *args, **kwargs):
+    model = nnx.merge(graphdef, state)
+    return f(model, *args, **kwargs)
+  return jax.vjp(inner, state, *args, **kwargs)
 
-  return method_wrapper
+def _get_call_info(jitted, method_name, node_stats, obj, compute_flops: bool, *args, **kwargs):
+  e = jitted.lower(obj, *args, **kwargs)
+  flops = _get_flops(e) if compute_flops else None
+  outputs = e.lowered.out_info[2]
+  output_repr = jax.tree.map(_to_dummy_array, outputs)
+  input_args_info, input_kwargs_info = jax.tree.map(
+    _to_dummy_array, (args, kwargs)
+  )
+  object_id: int = getattr(obj, '_nnx_tabulate_id')
+  node_info = node_stats[object_id]
+  assert node_info is not None
+  path = node_info.path
+  if method_name != '__call__':
+    path = (*path, method_name)
 
-
-def _call_obj(
-  obj,
-  input_args: tuple[tp.Any, ...],
-  input_kwargs: dict[str, tp.Any],
-  *,
-  call_method: str,
-  rows: list[CallInfo],
-  node_stats: NodeStats,
-  object_types: set[type],
-):
-  original_methods: dict[type, dict[str, tp.Callable]] = {}
-  try:
-    for obj_type in object_types:
-      methods: dict[str, tp.Callable] = {}
-      for name, top_method in inspect.getmembers(obj_type, inspect.isfunction):
-        if not name.startswith('_') or name == '__call__':
-          methods[name] = top_method
-          method_wrapper = get_method_wrapper(rows, node_stats, top_method)
-          setattr(obj_type, name, method_wrapper)
-
-      original_methods[obj_type] = methods
-
-    top_method = getattr(type(obj), call_method)
-    top_method(obj, *input_args, **input_kwargs)
-  finally:
-    for obj_type, methods in original_methods.items():
-      for name, top_method in methods.items():  # type: ignore[assignment]
-        setattr(obj_type, name, top_method)
+  return CallInfo(
+    object_id=object_id,
+    type=type(obj),
+    path=path,
+    input_args=input_args_info,
+    input_kwargs=input_kwargs_info,
+    outputs=output_repr,
+    flops=flops,
+  )
 
 
 def filter_rng_streams(row: CallInfo):
   return not issubclass(row.type, nnx.RngStream)
+
+def _create_obj_env(object_types):
+  "Turn a set of object types into a dictionary mapping (type, method name) pairs to methods"
+  result = {}
+  for obj_type in object_types:
+    for name, top_method in inspect.getmembers(obj_type, inspect.isfunction):
+      if not name.startswith('_') or name == '__call__':
+        result[(obj_type, name)] = top_method
+  return result
+
+def _argsave(tracer_args, f):
+  "Wrap a function to save its arguments"
+  n = f.__name__
+  @wraps(f)
+  def wrapper(obj, *args, **kwargs):
+      tracer_args.append((obj, n, args, kwargs))
+      return f(obj, *args, **kwargs)
+  return wrapper
+
+def _overwrite_methods(env):
+  "Overwrite methods with functions from an environment"
+  for (obj_type, name), f in env.items():
+    setattr(obj_type, name, f)
+
+def _get_flops(e) -> int:
+  cost = e.cost_analysis() or e.compile().cost_analysis()
+  return 0 if cost is None or 'flops' not in cost else int(cost['flops'])
 
 def tabulate(
   obj,
@@ -221,6 +233,8 @@ def tabulate(
   table_kwargs: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   column_kwargs: tp.Mapping[str, tp.Any] = MappingProxyType({}),
   console_kwargs: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+  compute_flops: bool = False,
+  compute_vjp_flops: bool = False,
   **input_kwargs,
 ) -> str:
   """Creates a summary of the graph object represented as a table.
@@ -321,6 +335,15 @@ def tabulate(
       Default arguments are  ``'force_terminal': True``, and ``'force_jupyter'``
       is set to ``True`` if the code is running in a Jupyter notebook, otherwise
       it is set to ``False``.
+    compute_flops: whether to include a `flops` column in the table listing the
+      estimated FLOPs cost of each module forward pass. Does incur actual
+      on-device computation / compilation / memory allocation, but still
+      introduces overhead for large modules (e.g. extra 20 seconds for a
+      Stable Diffusion's UNet, whereas otherwise tabulation would finish in 5
+      seconds).
+    compute_vjp_flops: whether to include a `vjp_flops` column in the table
+      listing the estimated FLOPs cost of each module backward pass. Introduces
+      a compute overhead of about 2-3X of `compute_flops`.
 
   Returns:
     A string summarizing the object.
@@ -334,21 +357,52 @@ def tabulate(
   _collect_stats((), obj, node_stats, object_types)
   _variable_types: set[type] = {
     nnx.RngState  # type: ignore[misc]
-    if issubclass(variable_state.type, nnx.RngState)
-    else variable_state.type
-    for _, variable_state in nnx.to_flat_state(nnx.state(obj))
+    if isinstance(leaf, nnx.RngState)
+    else type(leaf)
+    for _, leaf in nnx.to_flat_state(nnx.state(obj))
   }
   variable_types: list[type] = sorted(_variable_types, key=lambda t: t.__name__)
 
-  rows: list[CallInfo] = []
-  eval_fn = functools.partial(
-    _call_obj,
-    call_method=method,
-    rows=rows,
-    node_stats=node_stats,
-    object_types=object_types,
-  )
-  nnx.eval_shape(eval_fn, obj, input_args, input_kwargs)
+  # Create a dictionary-version of the object's class. This makes
+  # iteration over methods easier.
+  env = _create_obj_env(object_types)
+
+  # Modify all the object's methods to save their Tracer arguments.
+  # tracer_args contains (object, name, args, kwargs) tuples.
+  tracer_args: list[tuple[tp.Any, str, tuple, dict[str, tp.Any]]] = []
+  saver_env = {k: _argsave(tracer_args, v) for k,v in env.items()}
+  _overwrite_methods(saver_env)
+
+  # Add JIT calculation to each method. We can extract flops and output info from
+  # the lowered JITs. We'll only call these jitted values, which guarantees
+  # that each method will only be traced (and added to the table) once.
+  jits = {} # Maps (class, method_name) to jit
+  for key, value in saver_env.items():
+    jits[key] = nnx.jit(value)
+  _overwrite_methods(jits)
+
+  # Trace the top function (which indirectly traces all the others)
+  jits[(type(obj), method)].trace(obj, *input_args, **input_kwargs)
+
+  # Get call_info
+  rows : list[CallInfo] = [_get_call_info(
+    jits[(type(object), name)], name, node_stats, object,
+    compute_flops, *args, **kwargs)
+    for (object, name, args, kwargs) in tracer_args]
+
+  # Add VJP flops if required. This needs to be done separately because calls to `_pure_nnx_vjp`
+  # can result in tracing the jitted functions a second time if there's shared structure.
+  # This would add items to `tracer_args`, resulting in duplicate rows in the table.
+  if compute_vjp_flops:
+    for i, row in enumerate(rows):
+      object, method_name, args, kwargs = tracer_args[i]
+      def do_vjp(*args, **kwargs):
+        primals, f_vjp = _pure_nnx_vjp(jits[(type(object), method_name)], *args, **kwargs)
+        return f_vjp(primals)
+      row.vjp_flops = _get_flops(jax.jit(do_vjp).lower(object, *args, **kwargs))
+
+  # Restore the object's original methods
+  _overwrite_methods(env)
 
   if depth is not None:
     rows = [row for row in rows if len(row.path) <= depth and row_filter(row)]
@@ -367,6 +421,10 @@ def tabulate(
   rich_table.add_column('type', **column_kwargs)
   rich_table.add_column('inputs', **column_kwargs)
   rich_table.add_column('outputs', **column_kwargs)
+  if compute_flops:
+    rich_table.add_column('flops', **column_kwargs)
+  if compute_vjp_flops:
+    rich_table.add_column('vjp_flops', **column_kwargs)
 
   for var_type in variable_types:
     rich_table.add_column(var_type.__name__, **column_kwargs)
@@ -390,14 +448,20 @@ def tabulate(
       inputs_repr += _as_yaml_str(row.input_kwargs)
     col_reprs.append(inputs_repr)
     col_reprs.append(_as_yaml_str(row.outputs))
+    if compute_flops:
+      col_reprs.append(str(row.flops))
+    if compute_vjp_flops:
+      col_reprs.append(str(row.vjp_flops))
 
     for var_type in variable_types:
       attributes = {}
+      variable: variablelib.Variable
       for name, variable in node_info.variable_groups[var_type].items():
-        value = variable.value
+        value = variable.get_value()
         value_repr = _render_array(value) if _has_shape_dtype(value) else ''
         metadata = variable.get_metadata()
-
+        for required_key in var_type.required_metadata:
+          metadata.pop(required_key, None)
         if metadata:
           attributes[name] = {
             'value': value_repr,
@@ -418,14 +482,15 @@ def tabulate(
 
     rich_table.add_row(*col_reprs)
 
-  rich_table.columns[3].footer = rich.text.Text.from_markup(
+  total_offset = 3 + int(compute_flops) + int(compute_vjp_flops)
+  rich_table.columns[total_offset].footer = rich.text.Text.from_markup(
     'Total', justify='right'
   )
   node_info = node_stats[id(obj)]
   assert node_info is not None
   for i, var_type in enumerate(variable_types):
     size_bytes = node_info.stats[var_type]
-    rich_table.columns[i + 4].footer = str(size_bytes)
+    rich_table.columns[i + total_offset + 1].footer = str(size_bytes)
 
   rich_table.caption_style = 'bold'
   total_size = sum(node_info.stats.values(), SizeBytes(0, 0))
@@ -481,7 +546,7 @@ def _normalize_values(x):
   elif isinstance(x, ArrayRepr | SimpleObjectRepr):
     return str(x)
   else:
-    return x
+    return repr(x)
 
 def _maybe_pytree_to_dict(pytree: tp.Any):
   path_leaves = jax.tree_util.tree_flatten_with_path(pytree)[0]
@@ -494,10 +559,34 @@ def _maybe_pytree_to_dict(pytree: tp.Any):
   elif len(path_leaves) == 1 and path_leaves[0][0] == ():
     return pytree
   else:
-    return _unflatten_to_simple_structure(path_leaves)
+    return _unflatten_to_simple_structure(path_leaves, original=pytree)
 
 
-def _unflatten_to_simple_structure(xs: list[tuple[tuple[tp.Any, ...], tp.Any]]):
+def _unflatten_to_simple_structure(
+  xs: list[tuple[tuple[tp.Any, ...], tp.Any]], *, original: tp.Any
+):
+  """Rebuild a simple Python structure from path/value leaves.
+
+  This variant is aware of the original object so it can:
+  - Preserve empty containers that were elided by JAX flattening.
+  - Pad trailing missing list/tuple items using the original length.
+  - Distinguish placeholders for empty dict/list vs None.
+  """
+
+  def _get_by_path(x, path: tuple[tp.Any, ...]):
+    cur = x
+    for k in path:
+      cur = cur[k]
+    return cur
+
+  def _to_simple(x):
+    # Convert to display-friendly simple structures
+    if isinstance(x, (list, tuple)):
+      return [_to_simple(e) for e in x]
+    if isinstance(x, dict):
+      return {k: _to_simple(v) for k, v in x.items()}
+    return x
+
   result: list | dict = (
     [] if len(xs) > 0 and isinstance(xs[0][0][0], int) else {}
   )
@@ -505,12 +594,20 @@ def _unflatten_to_simple_structure(xs: list[tuple[tuple[tp.Any, ...], tp.Any]]):
     cursor = result
     for i, key in enumerate(path[:-1]):
       if isinstance(cursor, list):
-        if key == len(cursor):
-          next_key = path[i + 1]
-          if isinstance(next_key, int):
+        # Ensure list has slot for current key; infer placeholder from original
+        while len(cursor) <= key:
+          # path to the slot we are about to create
+          slot_path = path[:i] + (len(cursor),)
+          try:
+            orig_slot = _get_by_path(original, slot_path)
+          except Exception:
+            orig_slot = None
+          if isinstance(orig_slot, (list, tuple)):
             cursor.append([])
-          else:
+          elif isinstance(orig_slot, dict):
             cursor.append({})
+          else:
+            cursor.append(None)
       else:
         if key not in cursor:
           next_key = path[i + 1]
@@ -520,11 +617,28 @@ def _unflatten_to_simple_structure(xs: list[tuple[tuple[tp.Any, ...], tp.Any]]):
             cursor[key] = {}
       cursor = cursor[key]
     if isinstance(cursor, list):
-      assert path[-1] == len(cursor)
-      cursor.append(value)
+      # Handle gaps in indices caused by JAX flattening eliding empty containers
+      while len(cursor) <= path[-1]:
+        slot_path = path[:-1] + (len(cursor),)
+        try:
+          orig_slot = _get_by_path(original, slot_path)
+        except Exception:
+          orig_slot = None
+        if isinstance(orig_slot, (list, tuple)):
+          cursor.append([])
+        elif isinstance(orig_slot, dict):
+          cursor.append({})
+        else:
+          cursor.append(None)
+      cursor[path[-1]] = value
     else:
       assert isinstance(cursor, dict)
       cursor[path[-1]] = value
+  # If original is a sequence and result is a list, pad trailing items
+  if isinstance(original, (list, tuple)) and isinstance(result, list):
+    for i in range(len(result), len(original)):
+      slot = original[i]
+      result.append(_to_simple(slot))
   return result
 
 def _as_yaml_str(value) -> str:
@@ -535,9 +649,10 @@ def _as_yaml_str(value) -> str:
   value = _maybe_pytree_to_dict(value)
 
   file = io.StringIO()
-  yaml.safe_dump(
+  yaml.dump(
     value,
     file,
+    Dumper=NoneDumper,
     default_flow_style=False,
     indent=2,
     sort_keys=False,

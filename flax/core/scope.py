@@ -357,7 +357,7 @@ class Variable(Generic[T]):
         value, is_leaf=meta.is_axis_metadata
       )
       has_meta = any(map(meta.is_axis_metadata, cur_struct.flatten_up_to(cur)))
-      if cur_struct == value_struct and has_meta:
+      if cur_struct == value_struct and has_meta: # type: ignore[operator]
         value = meta.replace_boxed(cur, value)
 
     self.scope.put_variable(self.collection, self.name, value)
@@ -882,12 +882,23 @@ class Scope:
 
   @overload
   def param(
-    self,
-    name: str,
-    init_fn: Callable[..., T],
-    *init_args,
-    unbox: Literal[True],
-    **init_kwargs,
+      self,
+      name: str,
+      init_fn: Callable[..., meta.AxisMetadata[T]] | Callable[..., T],
+      *init_args,
+      unbox: Literal[True],
+      **init_kwargs,
+  ) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[False],
+      **init_kwargs,
   ) -> T:
     ...
 
@@ -895,18 +906,7 @@ class Scope:
   def param(
     self,
     name: str,
-    init_fn: Callable[..., T],
-    *init_args,
-    unbox: Literal[False],
-    **init_kwargs,
-  ) -> meta.AxisMetadata[T]:
-    ...
-
-  @overload
-  def param(
-    self,
-    name: str,
-    init_fn: Callable[..., T],
+    init_fn: Callable[..., T | meta.AxisMetadata[T]],
     *init_args,
     unbox: bool,
     **init_kwargs,
@@ -948,17 +948,17 @@ class Scope:
       # catch it with an error message.
       # NOTE: We could consider moving this to `self.`
       abs_value = jax.eval_shape(
-        lambda: init_fn(random.key(0), *init_args, **init_kwargs)
+          lambda: init_fn(random.key(0), *init_args, **init_kwargs)
       )
       abs_value_flat = jax.tree_util.tree_leaves(abs_value)
       value_flat = jax.tree_util.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
-        # NOTE: We could check dtype consistency here as well but it's
-        # usefuleness is less obvious. We might intentionally change the dtype
-        # for inference to a half float type for example.
+        # NOTE: We could check dtype consistency here as well but its usefulness
+        # is less obvious. We might intentionally change the dtype for inference
+        # to a half float type for example.
         if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
-            name, self.path_text, np.shape(abs_val), np.shape(val)
+              name, self.path_text, np.shape(val), np.shape(abs_val)
           )
     else:
       if not self.is_mutable_collection('params'):
@@ -1184,6 +1184,10 @@ def _is_valid_variables(variables: VariableDict) -> bool:
 
 def _is_valid_rng(rng: Array):
   """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
+  # Allow for user-provided LazyRng - useful for compatibility when refactoring.
+  if isinstance(rng, LazyRng):
+    return True
+
   # This check is valid for either new-style or old-style PRNG keys
   if not isinstance(rng, (np.ndarray, jnp.ndarray)):
     return False

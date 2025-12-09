@@ -12,44 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING
 from absl.testing import absltest
 from flax import nnx
 import jax
-
-
-class List(nnx.Module):
-  def __init__(self, items):
-    vars(self).update({str(i): item for i, item in enumerate(items)})
-
-  def __getitem__(self, idx):
-    return getattr(self, str(idx))
-
-  def __setitem__(self, idx, value):
-    setattr(self, str(idx), value)
-
-
-class Dict(nnx.Module):
-  def __init__(self, *args, **kwargs):
-    vars(self).update(dict(*args, **kwargs))
-
-  def __getitem__(self, key):
-    return vars(self)[key]
-
-  def __setitem__(self, key, value):
-    vars(self)[key] = value
-
-  if TYPE_CHECKING:
-
-    def __getattr__(self, key): ...
+import jax.numpy as jnp
 
 
 class TestPartitioning(absltest.TestCase):
 
   def test_partition(self):
-    m = Dict(
-      a=List([nnx.Param(1), nnx.BatchStat(2)]),
-      b=nnx.Param(2),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(jnp.array(1)), nnx.BatchStat(jnp.array(2))]),
+      b=nnx.Param(jnp.array(2)),
       c=100,
     )
 
@@ -59,41 +33,41 @@ class TestPartitioning(absltest.TestCase):
     self.assertLen(rest, 1)
 
     # check params
-    self.assertEqual(params['a']['0'].value, m.a['0'].value)
-    self.assertEqual(params['b'].value, m.b.value)
+    self.assertEqual(params['a'][0][...], m.a[0][...])
+    self.assertEqual(params['b'][...], m.b[...])
 
     # check rest
-    self.assertEqual(rest['a']['1'].value, m.a['1'].value)
+    self.assertEqual(rest['a'][1][...], m.a[1][...])
 
     m2 = nnx.merge(graphdef, params, rest)
 
-    self.assertEqual(m2.a['0'].value, m.a['0'].value)
-    self.assertEqual(m2.a['1'].value, m.a['1'].value)
-    self.assertEqual(m2.b.value, m.b.value)
+    self.assertEqual(m2.a[0][...], m.a[0][...])
+    self.assertEqual(m2.a[1][...], m.a[1][...])
+    self.assertEqual(m2.b[...], m.b[...])
     self.assertEqual(m2.c, 100)
 
   def test_complete_partitioning(self):
-    m = Dict(
-      a=List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
-      b=Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
+      b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
     # no error
     nnx.split(m, nnx.Param, nnx.BatchStat, nnx.Variable)
 
   def test_complete_partitioning_plus_ellipsis(self):
-    m = Dict(
-      a=List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
-      b=Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
+      b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
     # no error if additional ... is passed at the end
     nnx.split(m, nnx.Param, nnx.BatchStat, nnx.Variable, ...)
 
   def test_inclomplete_partition_error(self):
-    m = Dict(
-      a=List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
-      b=Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
+      b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
     with self.assertRaisesRegex(
@@ -102,9 +76,9 @@ class TestPartitioning(absltest.TestCase):
       nnx.split(m, nnx.Param)
 
   def test_ellipsis_not_last_error(self):
-    m = Dict(
-      a=List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
-      b=Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(1), nnx.Param(2), nnx.Variable(3)]),
+      b=nnx.Dict(c=nnx.Param(1), d=nnx.BatchStat(2)),
     )
 
     with self.assertRaisesRegex(
@@ -113,9 +87,9 @@ class TestPartitioning(absltest.TestCase):
       nnx.split(m, ..., nnx.Param)
 
   def test_update_from(self):
-    m = Dict(
-      a=List([nnx.Param(1), nnx.BatchStat(3)]),
-      b=nnx.Param(2),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(jnp.array(1)), nnx.BatchStat(jnp.array(3))]),
+      b=nnx.Param(jnp.array(2)),
       c=100,
     )
 
@@ -126,34 +100,32 @@ class TestPartitioning(absltest.TestCase):
 
     nnx.update(m, state)
 
-    self.assertEqual(m.a[0].value, 2)
-    self.assertEqual(m.a[1].value, 6)
-    self.assertEqual(m.b.value, 4)
+    self.assertEqual(m.a[0][...], 2)
+    self.assertEqual(m.a[1][...], 6)
+    self.assertEqual(m.b[...], 4)
     self.assertEqual(m.c, 100)
 
   def test_update_from_with_array_leaf(self):
-    m = Dict(
-      a=List([nnx.Param(1), nnx.BatchStat(3)]),
-      b=nnx.Param(2),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(jnp.array(1)), nnx.BatchStat(jnp.array(3))]),
+      b=nnx.Param(jnp.array(2)),
       c=nnx.Variable(jax.numpy.array(100)),
     )
 
-    graphdef, state = nnx.split(
-      m,
-    )
+    graphdef, state = nnx.split(m)
     state = jax.tree.map(lambda x: x * 2, state)
 
     nnx.update(m, state)
 
-    self.assertEqual(m.a[0].value, 2)
-    self.assertEqual(m.a[1].value, 6)
-    self.assertEqual(m.b.value, 4)
-    self.assertEqual(m.c.value, 200)
+    self.assertEqual(m.a[0][...], 2)
+    self.assertEqual(m.a[1][...], 6)
+    self.assertEqual(m.b[...], 4)
+    self.assertEqual(m.c[...], 200)
 
   def test_grad_example(self):
-    m = Dict(
-      a=List([nnx.Param(1.0), nnx.BatchStat(-10)]),
-      b=nnx.Param(2.0),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(jnp.array(1.0)), nnx.BatchStat(jnp.array(-10))]),
+      b=nnx.Param(jnp.array(2.0)),
       c=100,
     )
 
@@ -165,27 +137,27 @@ class TestPartitioning(absltest.TestCase):
     grads = jax.grad(loss)(params)
     nnx.update(m, grads)
 
-    self.assertEqual(m.a[0].value, 2.0)
-    self.assertEqual(m.a[1].value, -10)
-    self.assertEqual(m.b.value, 2.0)
+    self.assertEqual(m.a[0][...], 2.0)
+    self.assertEqual(m.a[1][...], -10)
+    self.assertEqual(m.b[...], 2.0)
     self.assertEqual(m.c, 100)
 
   def test_get_paritition(self):
-    m = Dict(
-      a=List([nnx.Param(10.0), nnx.Param(20.0)]),
-      b=nnx.Param(10.0),
+    m = nnx.Dict(
+      a=nnx.List([nnx.Param(jnp.array(10.0)), nnx.Param(jnp.array(20.0))]),
+      b=nnx.Param(jnp.array(10.0)),
       c=7,
       d=5.0,
     )
 
     # test Variables not shared
-    self.assertIsNot(vars(m.a)['0'], vars(m)['b'])
+    self.assertIsNot(vars(m.a)[0], vars(m)['b'])
 
     state = nnx.state(m, nnx.Variable)
-    self.assertEqual(state['a']['0'].value, m.a['0'].value)
-    self.assertEqual(state['a']['1'].value, m.a['1'].value)
-    self.assertEqual(state['b'].value, m.b.value)
-    self.assertIsNot(state['b'], state['a']['0'])
+    self.assertEqual(state['a'][0][...], m.a[0][...])
+    self.assertEqual(state['a'][1][...], m.a[1][...])
+    self.assertEqual(state['b'][...], m.b[...])
+    self.assertIsNot(state['b'], state['a'][0])
     self.assertLen(nnx.to_flat_state(state), 3)
 
 

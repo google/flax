@@ -53,7 +53,7 @@ def create_fake_params(config: transformer_lib.TransformerConfig):
           (config.num_heads, config.embed_dim, config.head_dim)
       )
       params[f'layer_{layer_idx}']['attn']['kv_einsum']['w'] = jnp.ones(
-          (config.num_kv_heads, config.embed_dim, config.head_dim)
+          (2, config.num_kv_heads, config.embed_dim, config.head_dim)
       )
 
     # 4. feedforward block params
@@ -97,9 +97,9 @@ class TransformerTest(parameterized.TestCase):
           head_dim=8,
           cache_size=29,
           batch_size=7,
-          sequence_length=17,
-          expected_outputs_shape=(7, 17, 17),
-          expected_cache_shape=(7, 29, 2, 8),
+          sequence_length=18,
+          expected_outputs_shape=(7, 18, 17),  # batch_size, seq_size, num_embed
+          expected_cache_shape=(7, 29, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
       dict(
           num_layers=3,
@@ -112,8 +112,22 @@ class TransformerTest(parameterized.TestCase):
           cache_size=2,
           batch_size=1,
           sequence_length=1,
-          expected_outputs_shape=(1, 1, 4),
-          expected_cache_shape=(1, 2, 1, 4),
+          expected_outputs_shape=(1, 1, 4),  # batch_size, seq_size, num_embed
+          expected_cache_shape=(1, 2, 1, 4),  # batch_size, cache_size, num_kv_heads, head_dim
+      ),
+      dict(
+          num_layers=3,
+          num_embed=7,
+          embed_dim=5,
+          num_heads=4,
+          num_kv_heads=2,
+          hidden_dim=6,
+          head_dim=8,
+          cache_size=9,
+          batch_size=1,
+          sequence_length=1,
+          expected_outputs_shape=(1, 1, 7),  # batch_size, seq_size, num_embed
+          expected_cache_shape=(1, 9, 2, 8),  # batch_size, cache_size, num_kv_heads, head_dim
       ),
   )
   def test_transformer(
@@ -381,6 +395,21 @@ class TransformerTest(parameterized.TestCase):
               use_post_ffw_norm=True,
           ),
       ),
+      dict(
+          config=transformer_lib.TransformerConfig(
+              num_layers=2,
+              num_embed=4,
+              embed_dim=5,
+              hidden_dim=12,
+              num_heads=6,
+              head_dim=4,
+              num_kv_heads=3,
+              final_logit_softcap=None,
+              attention_types=[modules.AttentionType.GLOBAL] * 2,
+              use_post_attn_norm=True,
+              use_post_ffw_norm=True,
+          ),
+      ),
   )
   def test_load_from_params(self, config):
     params = create_fake_params(config)
@@ -432,7 +461,7 @@ class TransformerTest(parameterized.TestCase):
 
     if sow_config.embeddings:
       self.assertTrue(hasattr(transformer, 'embeddings'))
-      embeddings = transformer.embeddings.value[0]
+      embeddings = transformer.embeddings[0]
       self.assertEqual(
           embeddings.shape,
           (batch_size, sequence_length, config.embed_dim),
@@ -443,7 +472,7 @@ class TransformerTest(parameterized.TestCase):
     for layer in transformer.layers:
       if sow_config.rs_after_attention:
         self.assertTrue(hasattr(layer, 'rs_after_attention'))
-        rs_after_attention = layer.rs_after_attention.value[0]
+        rs_after_attention = layer.rs_after_attention[0]
         self.assertIsNotNone(rs_after_attention)
         self.assertEqual(
             rs_after_attention.shape,
@@ -453,7 +482,7 @@ class TransformerTest(parameterized.TestCase):
         self.assertFalse(hasattr(layer, 'rs_after_attention'))
       if sow_config.rs_after_ffw:
         self.assertTrue(hasattr(layer, 'rs_after_ffw'))
-        rs_after_ffw = layer.rs_after_ffw.value[0]
+        rs_after_ffw = layer.rs_after_ffw[0]
         self.assertIsNotNone(rs_after_ffw)
         self.assertEqual(
             rs_after_ffw.shape,
@@ -463,7 +492,7 @@ class TransformerTest(parameterized.TestCase):
         self.assertFalse(hasattr(layer, 'rs_after_ffw'))
       if sow_config.attn_logits_topk:
         self.assertTrue(hasattr(layer.attn, 'logits_topk_values'))
-        attn_logits_topk_values = layer.attn.logits_topk_values.value[0]
+        attn_logits_topk_values = layer.attn.logits_topk_values[0]
         self.assertIsNotNone(attn_logits_topk_values)
         self.assertEqual(
             attn_logits_topk_values.shape,
@@ -475,7 +504,7 @@ class TransformerTest(parameterized.TestCase):
             ),
         )
         self.assertTrue(hasattr(layer.attn, 'logits_topk_indices'))
-        attn_logits_topk_indices = layer.attn.logits_topk_indices.value[0]
+        attn_logits_topk_indices = layer.attn.logits_topk_indices[0]
         self.assertIsNotNone(attn_logits_topk_indices)
         self.assertEqual(
             attn_logits_topk_indices.shape,
@@ -491,7 +520,7 @@ class TransformerTest(parameterized.TestCase):
         self.assertFalse(hasattr(layer.attn, 'logits_topk_indices'))
       if sow_config.mlp_hidden_topk:
         self.assertTrue(hasattr(layer.mlp, 'hidden_topk_values'))
-        ffw_hidden_topk_values = layer.mlp.hidden_topk_values.value[0]
+        ffw_hidden_topk_values = layer.mlp.hidden_topk_values[0]
         self.assertIsNotNone(ffw_hidden_topk_values)
         self.assertEqual(
             ffw_hidden_topk_values.shape,
@@ -502,7 +531,7 @@ class TransformerTest(parameterized.TestCase):
             ),
         )
         self.assertTrue(hasattr(layer.mlp, 'hidden_topk_indices'))
-        ffw_hidden_topk_indices = layer.mlp.hidden_topk_indices.value[0]
+        ffw_hidden_topk_indices = layer.mlp.hidden_topk_indices[0]
         self.assertIsNotNone(ffw_hidden_topk_indices)
         self.assertEqual(
             ffw_hidden_topk_indices.shape,

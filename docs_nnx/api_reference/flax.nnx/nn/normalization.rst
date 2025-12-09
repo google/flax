@@ -19,3 +19,15 @@ Normalization
 .. flax_module::
   :module: flax.nnx
   :class: GroupNorm
+
+.. flax_module::
+  :module: flax.nnx
+  :class: InstanceNorm
+
+.. flax_module::
+  :module: flax.nnx
+  :class: SpectralNorm
+
+.. flax_module::
+  :module: flax.nnx
+  :class: WeightNorm

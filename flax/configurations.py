@@ -23,7 +23,11 @@ _T = TypeVar('_T')
 
 class Config:
   flax_use_flaxlib: bool
+  flax_array_ref: bool
+  flax_pytree_module: bool
   flax_max_repr_depth: int | None
+  flax_always_shard_variable: bool
+  flax_hijax_variable: bool
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
 
@@ -67,6 +71,21 @@ class Config:
   def __repr__(self):
     values_repr = ', '.join(f'\n  {k}={v!r}' for k, v in self._values.items())
     return f'Config({values_repr}\n)'
+
+  @contextmanager
+  def temp_flip_flag(self, var_name: str, var_value: bool):
+    """Context manager to temporarily flip feature flags for test functions.
+
+    Args:
+      var_name: the config variable name (without the 'flax_' prefix)
+      var_value: the boolean value to set var_name to temporarily
+    """
+    old_value = getattr(self, f'flax_{var_name}')
+    try:
+      self.update(f'flax_{var_name}', var_value)
+      yield
+    finally:
+      self.update(f'flax_{var_name}', old_value)
 
 
 config = Config()
@@ -203,22 +222,6 @@ def static_int_env(varname: str, default: int | None) -> int | None:
     ) from None
 
 
-@contextmanager
-def temp_flip_flag(var_name: str, var_value: bool):
-  """Context manager to temporarily flip feature flags for test functions.
-
-  Args:
-    var_name: the config variable name (without the 'flax_' prefix)
-    var_value: the boolean value to set var_name to temporarily
-  """
-  old_value = getattr(config, f'flax_{var_name}')
-  try:
-    config.update(f'flax_{var_name}', var_value)
-    yield
-  finally:
-    config.update(f'flax_{var_name}', old_value)
-
-
 # Flax Global Configuration Variables:
 
 flax_filter_frames = bool_flag(
@@ -266,9 +269,30 @@ flax_use_flaxlib = bool_flag(
   default=False,
   help='Whether to use flaxlib for C++ acceleration.',
 )
+flax_array_ref = bool_flag(
+  name='flax_array_ref',
+  default=False,
+  help='Whether to use array refs.',
+)
+flax_pytree_module = bool_flag(
+  name='flax_pytree_module',
+  default=True,
+  help='Whether Modules are pytrees by default or not.',
+)
 
 flax_max_repr_depth = int_flag(
   name='flax_max_repr_depth',
   default=None,
   help='Maximum depth of reprs for nested flax objects. Default is None (no limit).',
+)
+
+flax_always_shard_variable = bool_flag(
+  name='flax_always_shard_variable',
+  default=True,
+  help='Whether a `nnx.Variable` should always automatically be sharded if it contains sharding annotations.',
+)
+flax_hijax_variable = bool_flag(
+  name='flax_hijax_variable',
+  default=False,
+  help='Whether to enable HiJAX support for `nnx.Variable`.',
 )

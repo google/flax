@@ -70,8 +70,8 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('Total', table_repr[34])
     self.assertIn('276 (1.1 KB)', table_repr[34])
     self.assertIn('5,790 (23.2 KB)', table_repr[34])
-    self.assertIn('2 (12 B)', table_repr[34])
-    self.assertIn('Total Parameters: 6,068 (24.3 KB)', table_repr[37])
+    self.assertIn('4 (24 B)', table_repr[34])
+    self.assertIn('Total Parameters: 6,070 (24.3 KB)', table_repr[37])
 
   def test_multiple_inputs_and_outputs(self):
     class CustomMLP(nnx.Module):
@@ -97,6 +97,203 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('float32[1,8]', table_repr[5])
     self.assertIn('float32[1,8]', table_repr[6])
 
+  def test_tabulate_empty_dict_first_arg(self):
+    class Model(nnx.Module):
+      def subroutine(self, foo, x):
+        return x
+
+      def __call__(self, x):
+        return self.subroutine({}, x)
+
+    model = Model()
+    out = nnx.tabulate(
+      model, jnp.zeros((1, 8)), depth=1, console_kwargs=CONSOLE_TEST_KWARGS
+    )
+    # Ensure empty dict argument is preserved and array input is shown
+    self.assertIn('{}', out)
+    self.assertIn('float32[1,8]', out)
+
+  def test_tabulate_empty_dict_last_arg(self):
+    class Model(nnx.Module):
+      def subroutine(self, foo, x):
+        return x
+
+      def __call__(self, x):
+        return self.subroutine(x, {})
+
+    model = Model()
+    out = nnx.tabulate(
+      model, jnp.zeros((1, 8)), depth=1, console_kwargs=CONSOLE_TEST_KWARGS
+    )
+    # Ensure trailing empty dict is not dropped
+    self.assertIn('{}', out)
+
+  def test_tabulate_empty_dict_and_none_kwarg(self):
+    class Model(nnx.Module):
+      def subroutine(self, x, *, foo=None):
+        return x
+
+      def __call__(self, x):
+        # One call with empty dict, one with None
+        _ = self.subroutine(x, foo={})
+        return self.subroutine(x, foo=None)
+
+    model = Model()
+    out = nnx.tabulate(
+      model, jnp.zeros((1, 8)), depth=2, console_kwargs=CONSOLE_TEST_KWARGS
+    )
+    # Distinguish {} and None in output
+    self.assertIn('{}', out)
+    self.assertIn('None', out)
+
+  def test_tabulate_empty_dict_property(self):
+    class Model(nnx.Module):
+      def __init__(self):
+        self.foo = {}
+
+      def subroutine(self, foo, x):
+        return x
+
+      def __call__(self, x):
+        return self.subroutine(self.foo, x)
+
+    model = Model()
+    out = nnx.tabulate(
+      model, jnp.zeros((1, 1024)), depth=1, console_kwargs=CONSOLE_TEST_KWARGS
+    )
+    # Should not crash and should show the empty dict argument
+    self.assertIn('{}', out)
+
+
+  def test_no_dup_flops(self):
+    class Model(nnx.Module):
+      def g(self, x):
+        return x**2
+      def __call__(self, x):
+        return self.g(x)
+    m = Model()
+    x = jnp.ones(4)
+    table_rep = nnx.tabulate(m, x, compute_flops=True)
+    table_lines = table_rep.splitlines()
+    self.assertEqual(sum(" g " in l for l in table_lines), 1)
+
+
+  def test_flops(self):
+    class Model(nnx.Module):
+      def __init__(self):
+        self.weight = nnx.Param(jnp.ones(4))
+
+      def __call__(self, x1):
+        return jnp.sum((x1 * self.weight)**2)
+    m = Model()
+    x = jnp.ones(4)
+    table_repr1 = nnx.tabulate(
+      m, x, compute_flops=True
+    ).splitlines()
+    self.assertIn('flops', table_repr1[2])
+    self.assertNotIn('vjp_flops', table_repr1[2])
+    table_repr2 = nnx.tabulate(
+      m, x, compute_flops=True, compute_vjp_flops=True
+    ).splitlines()
+    self.assertIn('vjp_flops', table_repr2[2])
+
+  def test_nested(self):
+    class Block(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 2, rngs=rngs)
+        self.bn = nnx.BatchNorm(2, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.bn(x)
+        return nnx.relu(x)
+
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        self.block1 = Block(rngs)
+        self.block2 = Block(rngs)
+
+      def __call__(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
+
+    m = Model(nnx.Rngs(0))
+    x = jnp.ones((4, 2))
+    table = nnx.tabulate(m, x, compute_flops=True, compute_vjp_flops=True)
+    # We should see 3 calls per block, plus one overall call
+    self.assertEqual(sum([s.startswith("├─") for s in table.splitlines()]), 7)
+
+  def test_shared(self):
+    class Block(nnx.Module):
+      def __init__(self, linear: nnx.Linear, *, rngs):
+        self.linear = linear
+        self.bn = nnx.BatchNorm(2, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.bn(x)
+        return nnx.relu(x)
+
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        shared = nnx.Linear(2, 2, rngs=rngs)
+        self.block1 = Block(shared, rngs=rngs)
+        self.block2 = Block(shared, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
+
+    m = Model(nnx.Rngs(0))
+    x = jnp.ones((4, 2))
+    table = nnx.tabulate(m, x, compute_vjp_flops=True)
+    # We should see 3 calls per block, plus one overall call, minus the shared call
+    self.assertEqual(sum([s.startswith("├─") for s in table.splitlines()]), 6)
+
+  def test_tabulate_with_variable_hooks(self):
+    """Test that tabulate works with Variables implementing hooks and custom metadata."""
+
+    class Custom:
+      def __repr__(self):
+        return "<CustomMetadata>"
+
+    class VarWithHooks(nnx.Variable):
+        def on_get_value(self, value):
+            return value
+
+        def on_set_value(self, value):
+            return value + 1.0
+
+    class Model(nnx.Module):
+        def __init__(self):
+            # Variable with hooks
+            self.hooked_param = VarWithHooks(value=jnp.ones((2, 3)))
+            self.hooked_param.set_metadata('description', 'Custom parameter')
+            self.hooked_param.set_metadata('trainable', True)
+
+            # Variable with custom non-serializable metadata
+            self.custom_param = nnx.Param(jnp.ones((2, 2)))
+            self.custom_param.set_metadata('custom_obj', Custom())
+
+        def __call__(self, x):
+          return jnp.dot(x, self.hooked_param[...]) + self.custom_param.sum()
+
+    module = Model()
+    # Should not raise yaml.representer.RepresenterError
+    table_repr = nnx.tabulate(module, jnp.ones((1, 2)), console_kwargs=CONSOLE_TEST_KWARGS)
+    self.assertIsNotNone(table_repr)
+
+    # Verify table contains expected content
+    self.assertIn('Model Summary', table_repr)
+    self.assertIn('hooked_param', table_repr)
+    self.assertIn('on_set_value', table_repr)
+    self.assertIn('<CustomMetadata>', table_repr)
+
+    # Verify metadata is preserved in the module
+    self.assertEqual(module.hooked_param.get_metadata('description'), 'Custom parameter')
+    self.assertEqual(module.hooked_param.get_metadata('trainable'), True)
 
 if __name__ == '__main__':
   absltest.main()

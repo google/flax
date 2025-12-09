@@ -295,3 +295,5 @@ your current agreements on file or to sign a new one.
 You generally only need to submit a CLA once, so if you've already submitted one
 (even if it was for a different project), you probably don't need to do it
 again.
+
+All submissions to Google Open Source projects need to follow Google’s Contributor License Agreement (CLA), in which contributors agree that their contribution is an original work of authorship. This doesn’t prohibit the use of coding assistance tools, but what’s submitted does need to be a contributor’s original creation.

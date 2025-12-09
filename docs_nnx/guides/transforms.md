@@ -200,10 +200,8 @@ Certain JAX transforms allow the use of pytree prefixes to specify how different
 | Lift type        | JAX transforms                          |
 |------------------|-----------------------------------------|
 | `StateAxes`      | `vmap`, `pmap`, `scan`                  |
-| `StateSharding`  | `jit`, `shard_map`*                     |
+| `StateSharding`  | `jit`, `shard_map`                      |
 | `DiffState`      | `grad`, `value_and_grad`, `custom_vjp`  |
-
-> **Note:** * Flax NNX `shard_map` has not been implemented yet at the time of writing this version of the document.
 
 To specify how to vectorize different sub-states of an object in `nnx.vmap`, the Flax team created a `nnx.StateAxes`. `StateAxes` maps a set of sub-states via Flax NNX [Filters](https://flax.readthedocs.io/en/latest/guides/filters_guide.html) to their corresponding axes, and you can pass the `nnx.StateAxes` to `in_axes` and `out_axes` as if it/they were a pytree prefix.
 
@@ -242,7 +240,7 @@ Here, `count` is now a scalar since it's not being vectorized. Also, note that `
 
 ### Random state
 
-In Flax NNX, a random state is just a regular state. This means that it is stored inside `nnx.Module`s that need it, and it is treated as any other type of state. This is a simplification over Flax Linen, where a random state was handled by a separate mechanism. In practice `nnx.Module`s simply need to keep a reference to a `Rngs` object that is passed to them during initialization, and use it to generate a unique key for each random operation. For the purposes of this guide, this means that random state can be transformed like any other type of state but we also need be aware of how the state is laid out so we can transform it correctly.
+In Flax NNX, a random state is just a regular state. This means that it is stored inside `nnx.Module`s that need it, and it is treated as any other type of state. This is a simplification over Flax Linen, where a random state was handled by a separate mechanism. In practice `nnx.Module`s simply need to keep a reference to a `Rngs` object that is passed to them during initialization, and use it to generate a unique key for each random operation. For the purposes of this guide, this means that random state can be transformed like any other type of state but we also need to be aware of how the state is laid out so we can transform it correctly.
 
 Suppose you want to change things up a bit and apply the same weights to all elements in the batch. But you also want to add different random noise to each element.
 
@@ -316,7 +314,7 @@ In this section we will cover some rules and limitations apply when using Module
 
 While Python allows for passing objects as closures to functions, this is generally not supported by Flax NNX transforms. The reason is that because Modules are mutable it is very easy to capture tracer into a Module created outside of the transform, this is silent error in JAX. To avoid this, Flax NNX checks that the Modules and Variables being mutated are passed as arguments to the transformed function.
 
-For example, if we a have stateful Module such as `Counter` that increments a counter every time it is called, and we try to pass it as a closure to a function decorated with `nnx.jit`, we would be leaking the tracer. However Flax NNX will raise an error instead to prevent this:
+For example, if we have a stateful Module such as `Counter` that increments a counter every time it is called, and we try to pass it as a closure to a function decorated with `nnx.jit`, we would be leaking the tracer. However Flax NNX will raise an error instead to prevent this:
 
 ```{code-cell} ipython3
 class Counter(nnx.Module):
@@ -390,20 +388,23 @@ To achieve this, Flax NNX transforms provide a non-standard `transform_metadata`
 Let's see an example of this in action:
 
 ```{code-cell} ipython3
-class Weights(nnx.Module):
-  def __init__(self, array: jax.Array, sharding: tuple[str | None, ...]):
-    self.param = nnx.Param(array, sharding=sharding)
+mesh = jax.make_mesh((1, 1), ('a', 'b'))
 
-m = Weights(jnp.ones((3, 4, 5)), sharding=('a', 'b', None))
+class Weights(nnx.Module):
+  def __init__(self, array: jax.Array, sharding_names: tuple[str | None, ...]):
+    self.param = nnx.Param(array, sharding_names=sharding_names)
 
 @nnx.vmap(in_axes=1, transform_metadata={nnx.PARTITION_NAME: 'b'})
 def f(m: Weights):
   print(f'Inner {m.param.shape = }')
-  print(f'Inner {m.param.sharding = }')
+  print(f'Inner {m.param.sharding_names = }')
 
-f(m)
+with jax.set_mesh(mesh):
+  m = Weights(jnp.ones((3, 4, 5)), sharding_names=('a', 'b', None))
+  f(m)
+
 print(f'Outter {m.param.shape = }')
-print(f'Outter {m.param.sharding = }')
+print(f'Outter {m.param.sharding_names = }')
 ```
 
 Here, you added a `sharding` metadata to the `nnx.Param` variables, and used `transform_metadata` to update the `sharding` metadata to reflect the axis changes. Specifically, you can see that the first axis `b` was removed from the `sharding` metadata when inside of `nnx.vmap`, and then added back when outside of `nnx.vmap`.
@@ -413,9 +414,10 @@ You can verify that this also works when `nnx.Module`s are created inside the tr
 ```{code-cell} ipython3
 @nnx.vmap(out_axes=1, axis_size=4, transform_metadata={nnx.PARTITION_NAME: 'b'})
 def init_vmap():
-  return Weights(jnp.ones((3, 5)), sharding=('a', None))
+  return Weights(jnp.ones((3, 5)), sharding_names=('a', None))
 
-m = init_vmap()
+with jax.set_mesh(mesh):
+  m = init_vmap()
 print(f'Outter {m.param.shape = }')
-print(f'Outter {m.param.sharding = }')
+print(f'Outter {m.param.sharding_names = }')
 ```

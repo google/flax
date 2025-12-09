@@ -205,6 +205,7 @@ class DenseGeneral(Module):
     # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if self.use_bias:
       # expand bias shape to broadcast bias over batch dims.
+      assert bias is not None
       bias = jnp.reshape(bias, expanded_batch_shape + features)
       out += bias
     return out
@@ -246,7 +247,6 @@ class Dense(Module):
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   promote_dtype: PromoteDtypeFn = promote_dtype
-  # Deprecated. Will be removed.
   dot_general: DotGeneralT | None = None
   dot_general_cls: Any = None
 
@@ -337,6 +337,7 @@ class Einsum(Module):
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   promote_dtype: PromoteDtypeFn = promote_dtype
+  preferred_element_type: Dtype | None = None
 
   @compact
   def __call__(self, inputs: Array, einsum_str: str | None = None) -> Array:
@@ -386,7 +387,13 @@ class Einsum(Module):
       inputs, kernel, bias, dtype=self.dtype
     )
 
-    y = jnp.einsum(einsum_str, inputs, kernel, precision=self.precision)
+    y = jnp.einsum(
+      einsum_str,
+      inputs,
+      kernel,
+      precision=self.precision,
+      preferred_element_type=self.preferred_element_type,
+    )
 
     if bias is not None:
       y += jnp.reshape(bias, broadcasted_bias_shape)
@@ -571,8 +578,7 @@ class _Conv(Module):
     num_batch_dimensions = inputs.ndim - (len(kernel_size) + 1)
     if num_batch_dimensions != 1:
       input_batch_shape = inputs.shape[:num_batch_dimensions]
-      total_batch_size = int(np.prod(input_batch_shape))
-      flat_input_shape = (total_batch_size,) + inputs.shape[
+      flat_input_shape = (-1,) + inputs.shape[
         num_batch_dimensions:
       ]
       inputs = jnp.reshape(inputs, flat_input_shape)
@@ -943,6 +949,7 @@ class ConvTranspose(Module):
   bias_init: Initializer = initializers.zeros_init()
   transpose_kernel: bool = False
   promote_dtype: PromoteDtypeFn = promote_dtype
+  preferred_element_type: Dtype | None = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -986,8 +993,7 @@ class ConvTranspose(Module):
     num_batch_dimensions = inputs.ndim - (len(kernel_size) + 1)
     if num_batch_dimensions != 1:
       input_batch_shape = inputs.shape[:num_batch_dimensions]
-      total_batch_size = int(np.prod(input_batch_shape))
-      flat_input_shape = (total_batch_size,) + inputs.shape[
+      flat_input_shape = (-1,) + inputs.shape[
         num_batch_dimensions:
       ]
       inputs = jnp.reshape(inputs, flat_input_shape)
@@ -1039,6 +1045,7 @@ class ConvTranspose(Module):
       rhs_dilation=kernel_dilation,
       transpose_kernel=self.transpose_kernel,
       precision=self.precision,
+      preferred_element_type=self.preferred_element_type,
     )
 
     if self.padding == 'CIRCULAR':

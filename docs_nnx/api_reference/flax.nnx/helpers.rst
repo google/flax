@@ -4,11 +4,12 @@ helpers
 .. automodule:: flax.nnx
 .. currentmodule:: flax.nnx
 
-.. autoclass:: Dict
+
+.. autoclass:: Sequential
    :members:
 .. autoclass:: List
    :members:
-.. autoclass:: Sequential
+.. autoclass:: Dict
    :members:
 .. autoclass:: TrainState
    :members:

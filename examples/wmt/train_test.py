@@ -14,6 +14,7 @@
 
 import pathlib
 import tempfile
+import sys
 
 from absl import logging
 from absl.testing import absltest
@@ -32,6 +33,8 @@ class TrainTest(absltest.TestCase):
   """Test cases for WMT library."""
 
   def setUp(self):
+    if sys.version_info >= (3, 13):
+      self.skipTest('Test (and tensorflow-text) does not suport Python 3.13+')
     super().setUp()
     tf.config.experimental.set_visible_devices([], 'GPU')
 

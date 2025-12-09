@@ -283,9 +283,9 @@ class ScopeParamShapeError(FlaxError):
 
   def __init__(self, param_name, scope_path, value_shape, init_shape):
     super().__init__(
-      f'Initializer expected to generate shape {init_shape} '
-      f'but got shape {value_shape} instead for parameter '
-      f'"{param_name}" in "{scope_path}".'
+        f'For parameter "{param_name}" in "{scope_path}", the given '
+        f'initializer is expected to generate shape {init_shape}, but the '
+        f'existing parameter it received has shape {value_shape}.'
     )
 
 
@@ -349,6 +349,22 @@ class ModifyScopeVariableError(FlaxError):
       f'Cannot update variable "{variable_name}" in '
       f'"{scope_path}" because collection "{col}" is immutable.'
     )
+
+
+class ImmutableVariableError(FlaxError):
+  """You cannot update a variable that is marked as immutable.
+
+  This error occurs when attempting to modify a Variable that has been set to
+  'immutable' mode. Variables in immutable mode are read-only and cannot be
+  changed after creation.
+
+  To fix this error, either:
+  1. Use a different variable mode (e.g., 'qdd' or 'pytree')
+  2. Or ensure you're not trying to modify the variable's value
+  """
+
+  def __init__(self, message):
+    super().__init__(message)
 
 
 class JaxTransformError(FlaxError):

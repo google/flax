@@ -35,6 +35,27 @@ class _Broadcast:
 broadcast = _Broadcast()
 
 
+def build_shaped_array(x, batch_dim: bool = False) -> core.ShapedArray:
+  """Builds ShapedArray preserving as much information from x as possible."""
+  shape = jnp.shape(x)
+  sharding = x.aval.sharding if hasattr(x, "aval") else None
+  if batch_dim:
+    shape = shape[1:]
+    if sharding is not None:
+      if sharding.spec[0] is not None:
+        raise ValueError(
+            "Batch dimension in scan `xs` cannot be sharded."
+        )
+      sharding = sharding.update(
+          spec=jax.sharding.PartitionSpec(*sharding.spec[1:]))
+  return core.ShapedArray(
+      shape=shape,
+      dtype=jnp.result_type(x),
+      sharding=sharding,
+      **{k: getattr(x, k) for k in ["weak_type", "vma"] if hasattr(x, k)},
+  )
+
+
 def scan(
     fn: Callable[..., Any],
     in_axes: Any,
@@ -147,15 +168,14 @@ def scan(
 
     broadcast_body = functools.partial(body_fn, init_mode=True)
 
-    carry_avals = jax.tree_util.tree_map(
-        lambda x: core.ShapedArray(jnp.shape(x), jnp.result_type(x)), init
-    )
-    scan_avals = jax.tree_util.tree_map(
-        lambda x: core.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x)), xs
-    )
-    input_avals = (carry_avals, scan_avals)
+    init_flat, carry_tree = jax.tree.flatten(init)
+    xs_flat, scan_tree = jax.tree.flatten(xs)
+    carry_avals = [build_shaped_array(x) for x in init_flat]
+    scan_avals = [build_shaped_array(x, batch_dim=True) for x in  xs_flat]
+    in_avals = [*carry_avals, *scan_avals]
+    in_tree = jax.tree_util.treedef_tuple((carry_tree, scan_tree))
+    assert all(isinstance(a, core.AbstractValue) for a in in_avals), in_avals
 
-    in_avals, in_tree = jax.tree_util.tree_flatten(input_avals)
     debug_info = jax.api_util.debug_info("flax scan", broadcast_body,
                                          (in_tree,), {})
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(

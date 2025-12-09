@@ -31,7 +31,7 @@ from flax.core.frozen_dict import FrozenDict
 from flax.nnx import graph, rnglib, statelib, traversals
 from flax.nnx import variablelib
 import flax.nnx.module as nnx_module
-from flax.nnx.object import Object
+from flax.nnx.pytreelib import Pytree
 from flax.nnx import variablelib
 from flax.nnx.bridge import variables as bridge_variables
 import numpy as np
@@ -64,7 +64,7 @@ class ModuleState(statelib.State):
   pass
 
 
-class Scope(Object):
+class Scope(Pytree):
   def __init__(self, rngs: rnglib.Rngs, mutable: CollectionFilter):
     self.rngs = rngs
     self.mutable = mutable
@@ -85,7 +85,7 @@ def _maybe_call_setup(module: Module):
   if (
     has_setup(module)
     and isinstance(module, Module)
-    and not module._object__state.is_setup
+    and not module._pytree__state.is_setup
   ):
     # void parent context
     MODULE_CONTEXT.module_stack.append(
@@ -93,7 +93,7 @@ def _maybe_call_setup(module: Module):
     )
     try:
       module.setup()  # type: ignore[attribute-error]
-      module._object__state._is_setup = True
+      module._pytree__state._is_setup = True
     finally:
       MODULE_CONTEXT.module_stack.pop()
 
@@ -130,9 +130,9 @@ def _auto_submodule_name(parent_ctx, cls):
 
 class ModuleMeta(nnx_module.ModuleMeta):
 
-  def _object_meta_construct(cls, self, *args, **kwargs):
+  def _pytree_meta_construct(cls, self, *args, **kwargs):
     vars(self)['scope'] = None
-    super()._object_meta_construct(self, *args, **kwargs)
+    super()._pytree_meta_construct(self, *args, **kwargs)
 
 
 def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
@@ -222,8 +222,8 @@ class ModuleBase:
 
 @tpe.dataclass_transform(field_specifiers=(dataclasses.field,))  # type: ignore[not-supported-yet]
 class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
-  def __init_subclass__(cls, experimental_pytree: bool = False) -> None:
-    super().__init_subclass__(experimental_pytree)
+  def __init_subclass__(cls) -> None:
+    super().__init_subclass__(pytree=False)
 
     cls = dataclasses.dataclass(repr=False)(cls)
     cls.__hash__ = object.__hash__  # type: ignore[method-assign]
@@ -243,9 +243,9 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         state := vars(self)[name], ModuleState
       ):
         graph.update(value, state)
-      for leaf in jax.tree.leaves(value):
+      for leaf in jax.tree.leaves(value, is_leaf=graph.is_graph_node):
         if isinstance(leaf, Module):
-          leaf._object__state._initializing = self.is_initializing()
+          leaf._pytree__state._initializing = self.is_initializing()
           _bind_module(self, leaf)
     super()._setattr(name, value)
 
@@ -296,8 +296,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       abs_value = jax.eval_shape(
         lambda: init_fn(jax.random.key(0), *init_args, **init_kwargs)
       )
-      abs_value_flat = jax.tree_util.tree_leaves(abs_value)
-      value_flat = jax.tree_util.tree_leaves(value)
+      abs_value_flat = jax.tree.leaves(abs_value)
+      value_flat = jax.tree.leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
         if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
@@ -347,8 +347,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
         raise ValueError(f"Expected 'init_fn' to be a callable, got None")
 
       abs_value = jax.eval_shape(lambda: init_fn(*init_args, **init_kwargs))
-      abs_value_flat = jax.tree_util.tree_leaves(abs_value)
-      value_flat = jax.tree_util.tree_leaves(value)
+      abs_value_flat = jax.tree.leaves(abs_value)
+      value_flat = jax.tree.leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
         if np.shape(val) != np.shape(abs_val):
           raise errors.ScopeParamShapeError(
@@ -374,28 +374,26 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     state = graph.state(self)
     _variables: dict = {}
 
-    variable_state: variablelib.VariableState
-    for path, variable_state in statelib.to_flat_state(state):
-
-      if issubclass(variable_state.type, rnglib.RngState):
+    variable: variablelib.Variable
+    for path, variable in statelib.to_flat_state(state):
+      if isinstance(variable, rnglib.RngState):
         # Don't return RNG states, since Linen doesn't have them.
         continue
 
       try:
-        collection = variablelib.variable_name_from_type(variable_state.type)
+        collection = variablelib.variable_name_from_type(type(variable))
       except ValueError:
-        collection = variable_state.type.__name__
+        collection = type(variable).__name__
 
       if collection not in _variables:
         _variables[collection] = {}
 
-      if (
-        isinstance(variable_state, variablelib.VariableState)
-        and not variable_state._var_metadata
-      ):
-        leaf = variable_state.value
+      if isinstance(
+        variable, variablelib.Variable
+      ) and bridge_variables.is_vanilla_variable(variable):
+        leaf = variable.get_value()
       else:
-        leaf = bridge_variables.to_linen_var(variable_state)
+        leaf = bridge_variables.to_linen_var(variable)
 
       _variables[collection][path] = leaf
 
@@ -471,8 +469,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
 
     # set temporary state
     for _, value in graph.iter_graph(module):
-      if isinstance(value, Object):
-        value._object__state._initializing = _initialize
+      if isinstance(value, Pytree):
+        value._pytree__state._initializing = _initialize
       if isinstance(value, Module):
         value.scope = Scope(rngs, mutable)
         _maybe_call_setup(value)
@@ -486,8 +484,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       MODULE_CONTEXT.module_stack.pop()
       # reset temporary state
       for _, value in graph.iter_graph(module):
-        if isinstance(value, Object):
-          value._object__state._initializing = False
+        if isinstance(value, Pytree):
+          value._pytree__state._initializing = False
         if isinstance(value, Module):
           value.scope = None
 
@@ -536,7 +534,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     )
 
   def is_initializing(self) -> bool:
-    return self._object__state._initializing
+    return self._pytree__state._initializing
 
 
 def compact(f: F) -> F:

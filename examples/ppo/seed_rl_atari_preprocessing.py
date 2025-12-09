@@ -31,8 +31,8 @@ Adapted from SEED RL, originally adapted from Dopamine.
 """
 
 import cv2
-from gymnasium.spaces.box import Box
 import gymnasium as gym
+from gymnasium.spaces.box import Box
 import numpy as np
 
 
@@ -117,7 +117,7 @@ class AtariPreprocessing:
 
   @property
   def reward_range(self):
-    return self.environment.reward_range
+    return self.environment.reward_range  # type: ignore
 
   @property
   def metadata(self):
@@ -189,7 +189,7 @@ class AtariPreprocessing:
       # We bypass the Gym observation altogether and directly fetch the
       # grayscale image from the ALE. This is a little faster.
       _, reward, game_over, _, info = self.environment.step(action)
-      accumulated_reward += reward
+      accumulated_reward += float(reward)
 
       if self.terminal_on_life_loss:
         new_lives = self.environment.unwrapped.ale.lives()  # pytype:disable=attribute-error

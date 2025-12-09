@@ -56,6 +56,14 @@ class PartitioningTest(parameterized.TestCase):
       partitioning.logical_to_mesh_axes(axes_0, rules=AXIS_RULES_1),
       ('data', 'model'),
     )
+
+    # Repeated None and Unconstrained
+    unconstrained = jax.sharding.PartitionSpec.UNCONSTRAINED
+    axes_repeated = ('foo', unconstrained, unconstrained, None, None)
+    self.assertEqual(
+        partitioning.logical_to_mesh_axes(axes_repeated, rules=AXIS_RULES_1),
+        ('data', unconstrained, unconstrained, None, None),
+    )
     # axis rules context
     with partitioning.axis_rules(AXIS_RULES_1):
       self.assertEqual(

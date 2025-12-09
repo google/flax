@@ -15,11 +15,51 @@
 import typing as tp
 
 RefMap = tp.MutableMapping[tp.Any, int]
+IndexMap = dict[int, tp.Any]
 
-def _graph_fingerprint(
-  node,
-  node_impl,
-  ref_index: RefMap,
-  new_ref_index: RefMap,
-  next_index: int,
-) -> tuple[tuple[tp.Any, ...], int]: ...
+class NodeDef:
+  type: type
+  index: int | None
+  outer_index: int | None
+  num_attributes: int
+  metadata: tp.Any
+
+  def with_no_outer_index(self) -> NodeDef: ...
+  def with_same_outer_index(self) -> NodeDef: ...
+  def __eq__(self, other: tp.Any) -> bool: ...
+  def __hash__(self) -> int: ...
+  def __getstate__(
+    self,
+  ) -> tuple[tp.Any, tp.Any, tp.Any, tp.Any, tp.Any]: ...
+  @staticmethod
+  def __setstate__(
+    nodedef: NodeDef, state: tuple[tp.Any, tp.Any, tp.Any, tp.Any, tp.Any]
+  ) -> None: ...
+
+class VariableDef:
+  type: type
+  index: int
+  outer_index: int | None
+  metadata: tp.Any
+
+  def with_no_outer_index(self) -> VariableDef: ...
+  def with_same_outer_index(self) -> VariableDef: ...
+  def __eq__(self, other: tp.Any) -> bool: ...
+  def __hash__(self) -> int: ...
+  def __getstate__(
+    self,
+  ) -> tuple[tp.Any, int, tp.Any, tp.Any]: ...
+  @staticmethod
+  def __setstate__(
+    variabledef: 'VariableDef', state: tuple[tp.Any, int, tp.Any, tp.Any]
+  ) -> None: ...
+
+class NodeRef:
+  index: int
+
+  def __eq__(self, other: tp.Any) -> bool: ...
+  def __hash__(self) -> int: ...
+  def __getstate__(self) -> tuple[int]: ...
+  @staticmethod
+  def __setstate__(noderef: NodeRef, state: tuple[int]) -> None: ...
+

@@ -1788,12 +1788,23 @@ class Module(ModuleBase):
 
   @overload
   def param(
-    self,
-    name: str,
-    init_fn: Callable[..., T],
-    *init_args,
-    unbox: Literal[True],
-    **init_kwargs,
+      self,
+      name: str,
+      init_fn: Callable[..., meta.AxisMetadata[T]] | Callable[..., T],
+      *init_args,
+      unbox: Literal[True],
+      **init_kwargs,
+  ) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[False],
+      **init_kwargs,
   ) -> T:
     ...
 
@@ -1801,28 +1812,16 @@ class Module(ModuleBase):
   def param(
     self,
     name: str,
-    init_fn: Callable[..., T],
-    *init_args,
-    unbox: Literal[False],
-    **init_kwargs,
-  ) -> meta.AxisMetadata[T]:
-    ...
-
-  @overload
-  def param(
-    self,
-    name: str,
-    init_fn: Callable[..., T],
+    init_fn: Callable[..., T | meta.AxisMetadata[T]],
     *init_args,
     unbox: bool,
     **init_kwargs,
   ) -> T | meta.AxisMetadata[T]:
     ...
-
   def param(
     self,
     name: str,
-    init_fn: Callable[..., T],
+    init_fn: Callable[..., T | meta.AxisMetadata[T]],
     *init_args,
     unbox: bool = True,
     **init_kwargs,
@@ -1874,7 +1873,9 @@ class Module(ModuleBase):
     if self._name_taken(name, collection='params'):
       raise errors.NameInUseError('param', name, self.__class__.__name__)
     assert self.scope is not None
-    v = self.scope.param(name, init_fn, *init_args, unbox=unbox, **init_kwargs)
+    v: T | meta.AxisMetadata[T] = self.scope.param(
+        name, init_fn, *init_args, unbox=unbox, **init_kwargs
+    )
     self._state.children[name] = 'params'
     return v
 
