@@ -865,207 +865,6 @@ def _graph_flatten(
   return
 
 
-@dataclasses.dataclass(slots=True)
-class FingerprintContext:
-  next_index: int
-
-
-# TODO(cgarciae): the actual fingerprint object is not being used,
-# only the traversal process is still relevant
-def fingerprint(
-  node,
-  /,
-  *,
-  ref_index: RefMap | None = None,
-  new_ref_index: RefMap | None = None,
-) -> list[tp.Hashable]:
-  """ """
-  if ref_index is None:
-    ref_index = RefMap()
-
-  if new_ref_index is None:
-    new_ref_index = RefMap()
-  node_impl = get_node_impl(node)
-  if node_impl is None:
-    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
-  ctx = FingerprintContext(len(ref_index) + len(new_ref_index))
-  fp: list[tp.Hashable] = []
-  _graph_fingerprint(ctx, fp.append, node, node_impl, ref_index, new_ref_index)
-  return fp
-
-
-def _graph_fingerprint(
-  ctx: FingerprintContext,
-  append_fn: tp.Callable[[tp.Any], None],
-  node,
-  node_impl: NodeImpl[Node, Leaf, AuxData],
-  ref_index: RefMap,
-  new_ref_index: RefMap,
-):
-  is_pytree_node_ = type(node_impl) is PytreeNodeImpl
-  is_graph_node_ = type(node_impl) is GraphNodeImpl
-
-  append_fn(type(node))
-
-  if is_graph_node_:
-    append_fn(id(node))
-    if node in ref_index:
-      append_fn(ref_index[node])
-      return
-    elif node in new_ref_index:
-      append_fn(new_ref_index[node])
-      return
-    index = new_ref_index[node] = ctx.next_index
-    ctx.next_index += 1
-  else:
-    index = -1
-
-  values, metadata = node_impl.flatten(node)
-
-  append_fn(index)
-  append_fn(metadata)
-
-  for key, value in values:
-    value_node_impl = get_node_impl(value)
-    append_fn(key)
-    if value_node_impl is not None:
-      _graph_fingerprint(
-        ctx,
-        append_fn,
-        value,
-        value_node_impl,
-        ref_index,
-        new_ref_index,
-      )
-    elif isinstance(value, Variable):
-      append_fn(id(value))
-      append_fn(type(value))
-      if value in ref_index:
-        append_fn(ref_index[value])
-      elif value in new_ref_index:
-        append_fn(new_ref_index[value])
-      else:
-        variable_index = new_ref_index[value] = ctx.next_index
-        ctx.next_index += 1
-        append_fn(variable_index)
-        for key_value in value.get_metadata().items():
-          append_fn(key_value)
-    elif not isinstance(value, (jax.Array, np.ndarray)):
-      append_fn(value)
-
-
-def check_fingerprint(
-  node,
-  fp: list[tp.Hashable],
-  /,
-  *,
-  ref_index: RefMap | None = None,
-  new_ref_index: RefMap | None = None,
-) -> bool:
-  """ """
-  if ref_index is None:
-    ref_index = RefMap()
-
-  if new_ref_index is None:
-    new_ref_index = RefMap()
-  node_impl = get_node_impl(node)
-  if node_impl is None:
-    raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
-  ctx = FingerprintContext(len(ref_index) + len(new_ref_index))
-  fp_matches = _check_graph_fingerprint(
-    ctx, iter(fp), node, node_impl, ref_index, new_ref_index
-  )
-  return fp_matches
-
-
-def _check_graph_fingerprint(
-  ctx: FingerprintContext,
-  fp_iterator: tp.Iterator[tp.Hashable],
-  node,
-  node_impl: NodeImpl[Node, Leaf, AuxData],
-  ref_index: RefMap,
-  new_ref_index: RefMap,
-) -> bool:
-  is_pytree_node_ = type(node_impl) is PytreeNodeImpl
-  is_graph_node_ = type(node_impl) is GraphNodeImpl
-
-  if type(node) != next(fp_iterator):
-    return False
-
-  if is_graph_node_:
-    # append_fn(id(node))
-    if id(node) != next(fp_iterator):
-      return False
-    if node in ref_index:
-      # append_fn(ref_index[node])
-      return ref_index[node] == next(fp_iterator)
-    elif node in new_ref_index:
-      # append_fn(new_ref_index[node])
-      return new_ref_index[node] == next(fp_iterator)
-    index = new_ref_index[node] = ctx.next_index
-    ctx.next_index += 1
-  else:
-    index = -1
-
-  values, metadata = node_impl.flatten(node)
-
-  # append_fn(index)
-  if index != next(fp_iterator):
-    return False
-  # append_fn(metadata)
-  if metadata != next(fp_iterator):
-    return False
-
-  for key, value in values:
-    value_node_impl = get_node_impl(value)
-    # append_fn(key)
-    if key != next(fp_iterator):
-      return False
-    if value_node_impl is not None:
-      if not _check_graph_fingerprint(
-        ctx,
-        fp_iterator,
-        value,
-        value_node_impl,
-        ref_index,
-        new_ref_index,
-      ):
-        return False
-    elif isinstance(value, Variable):
-      # append_fn(id(value))
-      if id(value) != next(fp_iterator):
-        return False
-      # append_fn(type(value))
-      if type(value) != next(fp_iterator):
-        return False
-      if value in ref_index:
-        # append_fn(ref_index[value])
-        if ref_index[value] != next(fp_iterator):
-          return False
-      elif value in new_ref_index:
-        # append_fn(new_ref_index[value])
-        if new_ref_index[value] != next(fp_iterator):
-          return False
-      else:
-        variable_index = new_ref_index[value] = ctx.next_index
-        ctx.next_index += 1
-        # append_fn(variable_index)
-        if variable_index != next(fp_iterator):
-          return False
-        for key_value in value.get_metadata().items():
-          # append_fn(key_value)
-          if key_value != next(fp_iterator):
-            return False
-    else:
-      if isinstance(value, (jax.Array, np.ndarray)):
-        raise ValueError(f'Arrays leaves are not supported: {value}')
-      # append_fn(value)
-      if value != next(fp_iterator):
-        return False
-
-  return True
-
-
 def _get_sorted_leaves(
   xs: tp.Mapping[tp.Any, tp.Any],
 ) -> list[tp.Any]:
@@ -1629,13 +1428,17 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
       node_cache = unflatten(
         graphdef, flat_state, index_ref=index_ref, copy_variables=False
       )
-      cached_new_ref_index = RefMap()
-      _fp = fingerprint(
+      start_index = len(cached_ref_index)
+      flatten(
         node_cache,
         ref_index=cached_ref_index,
-        new_ref_index=cached_new_ref_index,
+        with_paths=False,
       )
-      cached_ref_index.update(cached_new_ref_index)
+      cached_new_ref_index = RefMap(
+        (key, value)
+        for key, value in cached_ref_index.items()
+        if value >= start_index
+      )
       cache[node_cache] = StaticCache.create(
         graphdef, paths, variables, cached_new_ref_index
       )

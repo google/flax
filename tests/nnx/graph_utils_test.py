@@ -845,44 +845,6 @@ class TestGraphUtils(absltest.TestCase):
     self.assertIs(m1, args_out[2]['b'])
     self.assertIs(m2, args_out[1])
 
-  def test_fingerprint_basic(self):
-    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    fp1 = nnx.graph.fingerprint(m)
-    fp2 = nnx.graph.fingerprint(m)
-
-    self.assertEqual(fp1, fp2)
-    self.assertTrue(nnx.graph.check_fingerprint(m, fp1))
-    self.assertTrue(nnx.graph.check_fingerprint(m, fp2))
-
-  def test_fingerprint_variable_id_sensitive(self):
-    m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    fp1 = nnx.graph.fingerprint(m1)
-
-    m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    fp2 = nnx.graph.fingerprint(m2)
-
-    self.assertNotEqual(fp1, fp2)
-    self.assertTrue(nnx.graph.check_fingerprint(m1, fp1))
-    self.assertTrue(nnx.graph.check_fingerprint(m2, fp2))
-    self.assertFalse(nnx.graph.check_fingerprint(m1, fp2))
-    self.assertFalse(nnx.graph.check_fingerprint(m2, fp1))
-
-  def test_fingerprint_module_id_insensitive(self):
-    m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    m2 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-
-    m1.kernel = m2.kernel
-    m1.bias = m2.bias
-
-    fp1 = nnx.graph.fingerprint(m1)
-    fp2 = nnx.graph.fingerprint(m2)
-
-    self.assertNotEqual(fp1, fp2)
-    self.assertTrue(nnx.graph.check_fingerprint(m1, fp1))
-    self.assertTrue(nnx.graph.check_fingerprint(m2, fp2))
-    self.assertFalse(nnx.graph.check_fingerprint(m1, fp2))
-    self.assertFalse(nnx.graph.check_fingerprint(m2, fp1))
-
   def test_split_variable(self):
     v = nnx.Param(1)
     graphdef, state = nnx.split(v)
@@ -1137,6 +1099,27 @@ class TestGraphUtils(absltest.TestCase):
     actual = [node for node in nodes if any(node is e for e in unique)]
     self.assertEqual(list(map(index, actual)), list(map(index, expected)))
 
+  def test_cached_partial_docstring_example(self):
+    import optax
+
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=nnx.Param)
+
+    @nnx.jit
+    def train_step(model, optimizer, x, y):
+      def loss_fn(model):
+        return jnp.mean((model(x) - y) ** 2)
+
+      loss, grads = nnx.value_and_grad(loss_fn)(model)
+      optimizer.update(model, grads)
+      return loss
+
+    cached_train_step = nnx.cached_partial(train_step, model, optimizer)
+
+    for step in range(2):
+      x, y = jnp.ones((10, 2)), jnp.ones((10, 3))
+      loss = cached_train_step(x, y)
+      self.assertIsInstance(loss, jax.Array)
 
   def test_find_duplicates(self):
     class SharedModules(nnx.Module):
