@@ -158,7 +158,6 @@ def jit(
   device: tp.Optional[jax.Device] = None,
   backend: tp.Optional[str] = None,
   inline: bool = False,
-  abstracted_axes: tp.Optional[tp.Any] = None,
 ) -> tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]: ...
 @tp.overload
 def jit(
@@ -174,7 +173,6 @@ def jit(
   device: tp.Optional[jax.Device] = None,
   backend: tp.Optional[str] = None,
   inline: bool = False,
-  abstracted_axes: tp.Optional[tp.Any] = None,
 ) -> JitWrapped[P, R]: ...
 def jit(
   fun: tp.Callable[P, R] | Missing = MISSING,
@@ -189,7 +187,6 @@ def jit(
   device: tp.Optional[jax.Device] = None,
   backend: tp.Optional[str] = None,
   inline: bool = False,
-  abstracted_axes: tp.Optional[tp.Any] = None,
 ) -> JitWrapped[P, R] | tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]:
   """
   Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
@@ -342,7 +339,6 @@ def jit(
       device=device,
       backend=backend,
       inline=inline,
-      abstracted_axes=abstracted_axes,
     )  # type: ignore[return-value]
   # Detect bound nnx.Module methods and raise error.
   fun_unbound, _, was_bound = _resolve_bound_callable(fun)
@@ -361,7 +357,6 @@ def jit(
     device=device,
     backend=backend,
     inline=inline,
-    abstracted_axes=abstracted_axes,
   )
 
 
@@ -387,7 +382,6 @@ class JitWrapped(tp.Generic[P, R]):
     device: tp.Optional[jax.Device] = None,
     backend: tp.Optional[str] = None,
     inline: bool = False,
-    abstracted_axes: tp.Optional[tp.Any] = None,
   ):
     functools.update_wrapper(self, fun)
     self.fun: tp.Callable[P, R] = fun
@@ -432,7 +426,6 @@ class JitWrapped(tp.Generic[P, R]):
       device=device,
       backend=backend,
       inline=inline,
-      abstracted_axes=abstracted_axes,
     )
     self.in_shardings = in_shardings
     self.out_shardings = out_shardings
