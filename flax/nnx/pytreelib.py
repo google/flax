@@ -936,7 +936,17 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   def _graph_node_pop_key(self, key: str):
     if not isinstance(key, str):
       raise KeyError(f'Invalid key: {key!r}')
-    return vars(self).pop(key)
+    delattr(self, key)
+    return self
+
+  def __delattr__(self, name: str) -> None:
+    if name in self._pytree__nodes:
+      if isinstance(self._pytree__nodes._mapping, tp.MutableMapping):
+        del self._pytree__nodes._mapping[name]
+      else:
+        self._pytree__nodes._mapping = {k: v for k, v in self._pytree__nodes.items() if k != name}
+
+    super().__delattr__(name)
 
   @staticmethod
   def _graph_node_create_empty(node_type: tp.Type[P]) -> P:
