@@ -130,6 +130,7 @@ from .nn.linear import LinearGeneral as LinearGeneral
 from .nn.linear import Einsum as Einsum
 from .nn.lora import LoRA as LoRA
 from .nn.lora import LoRALinear as LoRALinear
+from .nn.lora import LoRALinearGeneral as LoRALinearGeneral
 from .nn.lora import LoRAParam as LoRAParam
 from .nn.normalization import BatchNorm as BatchNorm
 from .nn.normalization import LayerNorm as LayerNorm

@@ -154,7 +154,7 @@ class LinearGeneral(Module):
     in_features: Size | tp.Sequence[Size],
     out_features: Size | tp.Sequence[Size],
     *,
-    axis: Axis | tp.Sequence[Axis] = -1,
+    axis: Axis | tp.Sequence[Axis] = None,
     batch_axis: tp.Mapping[Axis, Size] = FrozenDict({}),
     use_bias: bool = True,
     dtype: Dtype | None = None,
@@ -172,6 +172,8 @@ class LinearGeneral(Module):
   ):
     self.in_features = _canonicalize_tuple(in_features)
     self.out_features = _canonicalize_tuple(out_features)
+    if axis is None:
+      axis = tuple(range(-len(self.in_features), 0))
     self.axis = _canonicalize_tuple(axis)
     self.batch_axis = FrozenDict[Axis, Size](batch_axis)
     self.use_bias = use_bias
