@@ -17,6 +17,7 @@ from jax.lax import Precision
 
 from flax import linen
 from flax import nnx
+from flax.nnx.nn.attention import combine_masks
 from flax.typing import Dtype, PrecisionLike
 
 import numpy as np
@@ -132,6 +133,78 @@ class TestMultiHeadAttention(parameterized.TestCase):
     else:
       nnx.split(module, nnx.Param)
 
+  @parameterized.product(use_padding=[True, False], is_cross_attention=[True, False])
+  def test_causal_mask_equivalence(
+    self,
+    use_padding: bool,
+    is_cross_attention: bool
+  ):
+    batch_size = 1
+    num_heads = 2
+    q_len = 2
+    kv_len = 4 if is_cross_attention else q_len
+    head_dim = 4
+
+    q = jax.random.normal(
+      key=jax.random.key(0),
+      shape=(batch_size, 1, q_len, num_heads, head_dim)
+    )
+    k = jax.random.normal(
+      key=jax.random.key(1),
+      shape=(batch_size, 1, kv_len, num_heads, head_dim)
+    )
+    v = jax.random.normal(
+      key=jax.random.key(2),
+      shape=(batch_size, 1, kv_len, num_heads, head_dim)
+    )
+
+    causal_mask = jnp.tril(jnp.ones(
+        shape=(q_len, kv_len),
+        dtype=jnp.bool_
+      )
+    )
+    causal_mask = jnp.broadcast_to(
+      array=causal_mask,
+      shape=(batch_size, 1, num_heads, q_len, kv_len)
+    )
+
+    padding_mask = None
+
+    if use_padding:
+      padding_mask = jnp.ones(
+        shape=(batch_size, 1, 1, q_len, kv_len),
+        dtype=jnp.bool_,
+      )
+      padding_mask = padding_mask.at[..., -2:].set(False)
+
+    manual_mask = combine_masks(padding_mask, causal_mask, dtype=q.dtype)
+
+    # Jax.nn path with precombined mask and is_causal = False
+    attn_jax = nnx.dot_product_attention(
+      query=q,
+      key=k,
+      value=v,
+      mask=manual_mask,
+      is_causal=False,
+      deterministic=True,
+      module=None,
+    )
+
+    class DummyModule(nnx.Module):
+      pass
+
+    # nnx path with padding mask and is_causal = True (internally combines them)
+    attn_manual = nnx.dot_product_attention(
+      query=q,
+      key=k,
+      value=v,
+      mask=padding_mask,
+      is_causal=True,
+      deterministic=True,
+      module=DummyModule(),
+    )
+
+    np.testing.assert_allclose(attn_jax, attn_manual, atol=1e-6)
 
 # TODO: add all possible constructor argument values to parameterized.product
 class TestLinenConsistency(parameterized.TestCase):
