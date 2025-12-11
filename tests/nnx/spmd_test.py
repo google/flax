@@ -217,9 +217,9 @@ class TestSPMD(parameterized.TestCase):
     with jax.set_mesh(mesh):
       replicated_array = jnp.arange(4).reshape(2, 2)
       sharded_array = reshard(replicated_array, P("X", None))
-      l = nnx.Linear(2,4, rngs=nnx.Rngs(0))
-      assert 'float32[2@X,4]' in str(jax.typeof(l(sharded_array)))
-      assert 'float32[2@X,4@Y]' in str(jax.typeof(l(sharded_array, out_sharding=P("X", "Y"))))
+      model = nnx.Linear(2,4, rngs=nnx.Rngs(0))
+      assert 'float32[2@X,4]' in str(jax.typeof(model(sharded_array)))
+      assert 'float32[2@X,4@Y]' in str(jax.typeof(model(sharded_array, out_sharding=P("X", "Y"))))
 
   @parameterized.product(use_hijax=[True, False])
   def test_logical_rules(self, use_hijax):

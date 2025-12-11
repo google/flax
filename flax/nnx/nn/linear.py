@@ -412,8 +412,7 @@ class Linear(Module):
     # user custom self.dot_general method which may not have
     # preferred_element_type argument to avoid breaking
     # existing code
-    dot_general_kwargs = {}
-    dot_general_kwargs['out_sharding'] = out_sharding
+    dot_general_kwargs = {'out_sharding': out_sharding}
     if self.preferred_element_type is not None:
       dot_general_kwargs["preferred_element_type"] = self.preferred_element_type
     y = self.dot_general(
