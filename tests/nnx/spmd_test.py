@@ -20,7 +20,7 @@ from absl.testing import parameterized
 from flax import nnx
 import jax
 import jax.numpy as jnp
-from jax.sharding import PartitionSpec as P, NamedSharding
+from jax.sharding import PartitionSpec as P, NamedSharding, AxisType, reshard
 import optax
 
 
@@ -210,6 +210,16 @@ class TestSPMD(parameterized.TestCase):
           assert has_sharding_spec(w)
         else:
           assert not has_sharding_spec(w)
+
+  def test_out_sharding(self):
+    mesh = jax.make_mesh((2, 2), ("X", "Y"),
+                         axis_types=(AxisType.Explicit, AxisType.Explicit))
+    with jax.set_mesh(mesh):
+      replicated_array = jnp.arange(4).reshape(2, 2)
+      sharded_array = reshard(replicated_array, P("X", None))
+      model = nnx.Linear(2,4, rngs=nnx.Rngs(0))
+      assert 'float32[2@X,4]' in str(jax.typeof(model(sharded_array)))
+      assert 'float32[2@X,4@Y]' in str(jax.typeof(model(sharded_array, out_sharding=P("X", "Y"))))
 
   @parameterized.product(use_hijax=[True, False])
   def test_logical_rules(self, use_hijax):

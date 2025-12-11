@@ -246,7 +246,7 @@ class LinearGeneral(Module):
     else:
       self.bias = nnx.data(None)
 
-  def __call__(self, inputs: Array) -> Array:
+  def __call__(self, inputs: Array, out_sharding = None) -> Array:
     """Applies a linear transformation to the inputs along multiple dimensions.
 
     Args:
@@ -288,7 +288,7 @@ class LinearGeneral(Module):
     # user custom dot_general/dot_general_cls which may not have
     # preferred_element_type argument to avoid breaking
     # existing code
-    dot_general_kwargs = {}
+    dot_general_kwargs = {'out_sharding': out_sharding}
     if self.preferred_element_type is not None:
       dot_general_kwargs["preferred_element_type"] = self.preferred_element_type
     out = dot_general(
@@ -393,7 +393,7 @@ class Linear(Module):
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
 
-  def __call__(self, inputs: Array) -> Array:
+  def __call__(self, inputs: Array, out_sharding = None) -> Array:
     """Applies a linear transformation to the inputs along the last dimension.
 
     Args:
@@ -412,7 +412,7 @@ class Linear(Module):
     # user custom self.dot_general method which may not have
     # preferred_element_type argument to avoid breaking
     # existing code
-    dot_general_kwargs = {}
+    dot_general_kwargs = {'out_sharding': out_sharding}
     if self.preferred_element_type is not None:
       dot_general_kwargs["preferred_element_type"] = self.preferred_element_type
     y = self.dot_general(
@@ -521,7 +521,7 @@ class Einsum(Module):
     self.preferred_element_type = preferred_element_type
 
   def __call__(
-    self, inputs: Array, einsum_str: tp.Optional[str] = None
+    self, inputs: Array, einsum_str: tp.Optional[str] = None, out_sharding = None
   ) -> Array:
     """Applies a linear transformation to the inputs along the last dimension.
 
@@ -557,7 +557,7 @@ class Einsum(Module):
     # user custom self.einsum_op method which may not have
     # preferred_element_type argument to avoid breaking
     # existing code
-    einsum_op_kwargs = {}
+    einsum_op_kwargs = {'out_sharding': out_sharding}
     if self.preferred_element_type is not None:
       einsum_op_kwargs["preferred_element_type"] = self.preferred_element_type
 
@@ -1141,7 +1141,7 @@ class ConvTranspose(Module):
       rhs_dilation=kernel_dilation,
       transpose_kernel=self.transpose_kernel,
       precision=self.precision,
-      preferred_element_type=self.preferred_element_type,
+      preferred_element_type=self.preferred_element_type
     )
 
     if self.padding == 'CIRCULAR':
