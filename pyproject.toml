@@ -40,7 +40,7 @@ testing = [
     "clu",
     "clu<=0.0.9; python_version<'3.10'",
     "einops",
-    "gymnasium[atari]",
+    "gymnasium[atari]; python_version<'3.14'",
     "jaxlib",
     "jaxtyping",
     "jraph>=0.0.6dev0",
@@ -61,11 +61,11 @@ testing = [
     "tensorflow_text>=2.11.0; platform_system!='Darwin' and python_version < '3.13'",
     "tensorflow_datasets",
     "tensorflow>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
-    "tensorflow>=2.20.0; python_version>='3.13'",
+    "tensorflow>=2.20.0; python_version>='3.13' and python_version<'3.14'",
     "torch",
     "treescope>=0.1.1; python_version>='3.10'",
     "cloudpickle>=3.0.0",
-    "ale-py>=0.10.2",
+    "ale-py>=0.10.2; python_version<'3.14'",
 ]
 docs = [
     "sphinx==6.2.1",

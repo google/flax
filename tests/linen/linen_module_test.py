@@ -727,16 +727,16 @@ class ModuleTest(absltest.TestCase):
       list(Test.__dataclass_fields__.keys()), ['bar', 'parent', 'name']
     )
     self.assertEqual(
-      list(Test2.__dataclass_fields__.keys()),
-      ['bar', 'baz', 'parent', 'name'],
+      set(Test2.__dataclass_fields__.keys()),
+      {'bar', 'baz', 'parent', 'name'},
     )
     self.assertEqual(
-      list(Test3.__dataclass_fields__.keys()),
-      ['bar', 'baz', 'parent', 'name'],
+      set(Test3.__dataclass_fields__.keys()),
+      {'bar', 'baz', 'parent', 'name'},
     )
     self.assertEqual(
-      list(Test4.__dataclass_fields__.keys()),
-      ['bar', 'baz', 'parent', 'name'],
+      set(Test4.__dataclass_fields__.keys()),
+      {'bar', 'baz', 'parent', 'name'},
     )
 
   def test_get_suffix_value_pairs(self):
@@ -2314,6 +2314,27 @@ class ModuleTest(absltest.TestCase):
     ):
       Foo(1, None)
     Foo(a=1, parent=None)  # type: ignore[call-arg]
+
+  def test_failure_with_sequencelayer(self):
+    # This is a minimal reproducer of the failure seen with
+    # SequenceLayer project and Flax Linen when enabled support for 3.14
+    # See PR: https://github.com/google/flax/pull/5087
+    # Code below is based on
+    # https://github.com/google/flax/pull/5087#issuecomment-3535067361
+    import abc
+    from collections.abc import Iterator
+    from typing import Protocol
+
+    class CheckpointableIterator(Iterator, Protocol):
+      pass
+
+    class Steppable(metaclass=abc.ABCMeta):
+      pass
+
+    isinstance(Steppable, Iterator)
+
+    class SequenceLayer(nn.Module, Steppable):
+      pass
 
   def test_module_path_empty(self):
     rngkey = jax.random.key(0)

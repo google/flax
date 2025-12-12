@@ -166,3 +166,5 @@ from .transforms import (
     while_loop as while_loop,
 )
 # pylint: enable=g-multiple-import
+# For BC
+from flax.linen import kw_only_dataclasses as kw_only_dataclasses
