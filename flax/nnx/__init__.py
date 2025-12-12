@@ -73,12 +73,7 @@ from .graph import split_context as split_context
 from .graph import MergeContext as MergeContext
 from .graph import merge_context as merge_context
 from .graph import variables as variables
-from .graph import as_ref_vars as as_ref_vars
-from .graph import as_array_vars as as_array_vars
-from .graph import as_hijax_vars as as_hijax_vars
-from .graph import as_pytree_vars as as_pytree_vars
-from .graph import as_immutable_vars as as_immutable_vars
-from .graph import as_mutable_vars as as_mutable_vars
+from .graph import vars_as as vars_as
 from .graph import pure as pure
 from .graph import cached_partial as cached_partial
 from .graph import flatten as flatten

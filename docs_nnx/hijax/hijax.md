@@ -8,7 +8,7 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
-# Hijax Variable
+# Hijax
 
 ```{code-cell} ipython3
 from flax import nnx
@@ -16,8 +16,31 @@ import jax
 import jax.numpy as jnp
 import optax
 
-current_mode = nnx.using_hijax()
+current_mode = nnx.using_hijax() # ignore: only needed for testing
 ```
+
+```{code-cell} ipython3
+nnx.use_hijax(True)
+
+rngs = nnx.Rngs(0)
+model = nnx.Linear(2, 3, rngs=rngs)
+optimizer = nnx.Optimizer(model, optax.adamw(1e-2), wrt=nnx.Param)
+
+@jax.jit
+def train_step(x, y):
+  loss_fn = lambda m: jnp.mean((m(x) - y) ** 2)
+  loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(model, is_mutable=False))  # tmp fix for jax.grad
+  optimizer.update(model, grads)
+  return loss
+
+x, y = rngs.uniform((4, 2)), rngs.uniform((4, 3))
+for _ in range(3):
+  print(train_step(x, y))
+```
+
+## Hijax Variable
+
++++
 
 State propagation:
 
@@ -89,13 +112,13 @@ class Linear(nnx.Module):
 
 model = Linear(1, 3, rngs=nnx.Rngs(0))
 
-print(f"{nnx.as_immutable_vars(model) = !s}")
-print(f"{nnx.as_mutable_vars(model) = !s}")
+print(f"{nnx.vars_as(model, is_mutable=False) = !s}")
+print(f"{nnx.vars_as(model, is_mutable=True) = !s}")
 ```
 
 ```{code-cell} ipython3
 v = nnx.Variable(jnp.array(0))
-v_immut = nnx.as_immutable_vars(v)
+v_immut = nnx.vars_as(v, is_mutable=False)
 assert not v_immut.is_mutable
 
 try:
@@ -108,18 +131,18 @@ except Exception as e:
 
 ```{code-cell} ipython3
 v = nnx.Variable(jnp.array(0))
-v_ref = nnx.as_ref_vars(v)
+v_ref = nnx.vars_as(v, has_ref=True)
 assert v_ref.has_ref
 print(v_ref)
 print(v_ref.get_raw_value())
 ```
 
 ```{code-cell} ipython3
-v_immut = nnx.as_immutable_vars(v_ref)
+v_immut = nnx.vars_as(v_ref, is_mutable=False)
 assert not v_immut.has_ref
 print("immutable =", v_immut)
 
-v_ref = nnx.as_mutable_vars(v_immut)
+v_ref = nnx.vars_as(v_immut, is_mutable=True)
 assert v_ref.has_ref
 print("mutable =", v_ref)
 ```
@@ -153,7 +176,7 @@ def train_step(model, optimizer, x, y):
     model =  nnx.merge(graphdef, params, nondiff)
     return ((model(x) - y) ** 2).mean()
 
-  loss, grads = jax.value_and_grad(loss_fn)(nnx.as_immutable_vars(params))  # lojax Variables for jax.grad
+  loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(params, is_mutable=False))  # immutable for jax.grad
   optimizer.update(model, grads)
 
   return loss
@@ -203,9 +226,9 @@ except Exception as e:
 ```{code-cell} ipython3
 @jax.jit
 def create_model(rngs):
-  return nnx.as_immutable_vars(Block(2, 64, 3, rngs=rngs))
+  return nnx.vars_as((Block(2, 64, 3, rngs=rngs)), is_hijax=False)
 
-model = nnx.as_mutable_vars(create_model(nnx.Rngs(0)))
+model = nnx.vars_as(create_model(nnx.Rngs(0)), is_hijax=True)
 
 print("model.linear =", model.linear)
 ```
@@ -231,25 +254,24 @@ print(get_error(f, x, x))
 
 ```{code-cell} ipython3
 # NOTE: doesn't currently fail on the jax side
-class Shared(nnx.Pytree):
+class HasShared(nnx.Pytree):
   def __init__(self):
     self.a = nnx.Variable(jnp.array(0))
     self.b = self.a
-    self.c = Linear(1, 1, rngs=nnx.Rngs(0))
-    self.d = self.c
 
 @jax.jit
-def g(pytree):
-  ...
+def g(has_shared):
+  has_shared.a[...] = 5
 
-shared = Shared()
+has_shared = HasShared()
 
-print(get_error(g, shared))
+print(get_error(g, has_shared))
+print(has_shared)  # updates don't propagate
 ```
 
 ```{code-cell} ipython3
 print("Duplicates found:")
-if (all_duplicates := nnx.find_duplicates(shared)):
+if (all_duplicates := nnx.find_duplicates(has_shared)):
   for duplicates in all_duplicates:
     print("-", duplicates)
 ```
@@ -257,15 +279,12 @@ if (all_duplicates := nnx.find_duplicates(shared)):
 ```{code-cell} ipython3
 @jax.jit
 def h(graphdef, state):
-  obj = nnx.merge(graphdef, state)
-  obj.a[...] += 10
+  has_shared = nnx.merge(graphdef, state)
+  has_shared.a[...] = 5
 
-graphdef, state = nnx.split(shared)
-print("before:", state.a) # split deduplicates the state
-
+graphdef, state = nnx.split(has_shared)
 h(graphdef, state)
-
-print("after:", shared.a)
+print(has_shared)
 ```
 
 ```{code-cell} ipython3

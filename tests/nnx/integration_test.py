@@ -483,7 +483,9 @@ class TestIntegration(absltest.TestCase):
         model =  nnx.merge(graphdef, params, nondiff)
         return ((model(x) - y) ** 2).mean()  # call methods directly
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.as_immutable_vars(params))
+      loss, grads = jax.value_and_grad(loss_fn)(
+        nnx.vars_as(params, is_mutable=False)
+      )
       optimizer.update(model, grads)  # in-place updates
 
       return loss

@@ -238,7 +238,7 @@ def train_step(model: Model, optimizer: SGD, rngs: nnx.Rngs, x, y):
 
   # For the time being we have to use 'immutable'
   # as 'jax.grad' doesn't support QDD types yet.
-  grads = jax.grad(loss_fn)(nnx.as_immutable_vars(params))
+  grads = jax.grad(loss_fn)(nnx.vars_as(params, is_mutable=False))
   # 'update' mutates the optimizer's state and the params in place
   # so we don't need to return anything 🚀
   optimizer.update(params, grads)

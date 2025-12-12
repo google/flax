@@ -28,7 +28,7 @@ class TestPytree(absltest.TestCase):
         self.node = jnp.array(1)
         self.meta = 1
 
-    m = nnx.as_ref_vars(Foo())
+    m = nnx.vars_as(Foo(), has_ref=True)
 
     m = jax.tree.map(lambda x: x + 1, m)
 
@@ -128,44 +128,52 @@ class TestVariableRefMode(absltest.TestCase):
       def __init__(self):
         self.a = nnx.Param(1)
 
-    m = nnx.as_ref_vars(Foo())
+    m = nnx.vars_as(Foo(), has_ref=True)
     self.assertTrue(m.a.has_ref)
     self.assertFalse(m.a.is_hijax)
 
-    m2 = nnx.as_immutable_vars(m)
+    m2 = nnx.vars_as(m, is_mutable=False)
     self.assertTrue(m2.a.had_ref)
     self.assertFalse(m2.a.has_ref)
     self.assertFalse(m2.a.is_hijax)
     self.assertIsNot(m, m2)
 
-    m3 = nnx.as_ref_vars(m2)
+    m3 = nnx.vars_as(m2, has_ref=True)
     self.assertTrue(m3.a.has_ref)
     self.assertIsNot(m2, m3)
     self.assertIsNot(m2.a, m3.a)
 
-    m4 = nnx.as_mutable_vars(m2)
+    m4 = nnx.vars_as(m2, is_mutable=True)
     self.assertTrue(m4.a.has_ref)
     self.assertFalse(m4.a.is_hijax)
     self.assertNotIn('had_ref', m4.a.get_metadata())
 
-    m5 = nnx.as_hijax_vars(m2)
+    m5 = nnx.vars_as(m2, is_hijax=True)
     self.assertFalse(m5.a.has_ref)
     self.assertTrue(m5.a.is_hijax)
-    self.assertNotIn('had_ref', m5.a.get_metadata())
+    self.assertIn('had_ref', m5.a.get_metadata())
+
+    m6 = nnx.vars_as(m5, is_mutable=True)
+    self.assertIsInstance(m6.a.get_raw_value(), jax.Ref)
+    self.assertTrue(m6.a.has_ref)
+    self.assertTrue(m6.a.is_hijax)
+    self.assertNotIn('had_ref', m6.a.get_metadata())
 
   def test_to_arrays_example(self):
     node = [nnx.Variable(1.0), nnx.Variable(2.0, mode='ref')]
-    mutable_node = nnx.as_ref_vars(node)
+    mutable_node = nnx.vars_as(node, has_ref=True)
     assert isinstance(mutable_node[0].get_raw_value(), jax.Ref)
     assert isinstance(mutable_node[1].get_raw_value(), jax.Ref)
 
     shared_array = nnx.Variable(1.0, mode='pytree')
     node = [shared_array, shared_array]
     with self.assertRaisesRegex(ValueError, 'Found duplicate at path'):
-      nnx.as_ref_vars(node)
+      nnx.vars_as(node, has_ref=True)
 
     node = [nnx.Variable(1.0), nnx.Variable(2.0)]
-    mutable_node = nnx.as_ref_vars(node, only=lambda path, x: path[0] == 0)
+    mutable_node = nnx.vars_as(
+      node, has_ref=True, only=lambda path, x: path[0] == 0
+    )
     assert isinstance(mutable_node[0].get_raw_value(), jax.Ref)
     assert isinstance(mutable_node[1].get_raw_value(), float)
 
@@ -175,16 +183,16 @@ class TestVariableRefMode(absltest.TestCase):
         self.a = nnx.Param(1)
         self.b = nnx.BatchStat(2)
 
-    m = nnx.as_ref_vars(Foo())
+    m = nnx.vars_as(Foo(), has_ref=True)
     self.assertEqual(m.a.has_ref, True)
     self.assertEqual(m.b.has_ref, True)
 
-    m2 = nnx.as_immutable_vars(m, only=nnx.BatchStat)
+    m2 = nnx.vars_as(m, is_mutable=False, only=nnx.BatchStat)
     self.assertEqual(m2.a.has_ref, True)
     self.assertEqual(m2.b.has_ref, False)
     self.assertIsNot(m, m2)
 
-    m3 = nnx.as_ref_vars(m2, only=nnx.BatchStat)
+    m3 = nnx.vars_as(m2, has_ref=True, only=nnx.BatchStat)
     self.assertEqual(m3.a.has_ref, True)
     self.assertEqual(m3.b.has_ref, True)
     self.assertIsNot(m2, m3)
@@ -199,7 +207,7 @@ class TestVariableRefMode(absltest.TestCase):
     m = Foo()
 
     with self.assertRaisesRegex(ValueError, 'Found duplicate at path'):
-      nnx.as_immutable_vars(m)
+      nnx.vars_as(m, is_mutable=False)
 
   def test_mutable_array_split(self):
     class Foo(nnx.Module):
@@ -257,7 +265,7 @@ class TestVariableRefMode(absltest.TestCase):
     tree = [nnx.Variable(1.0), nnx.Variable(2.0, has_ref=True)]
     assert tree[0].has_ref == False
     assert tree[1].has_ref == True
-    mutable_tree = nnx.as_ref_vars(tree)
+    mutable_tree = nnx.vars_as(tree, has_ref=True)
     assert isinstance(mutable_tree[0].get_raw_value(), jax.Ref)
     assert isinstance(mutable_tree[1].get_raw_value(), jax.Ref)
 
@@ -271,15 +279,15 @@ class TestVariableRefMode(absltest.TestCase):
 
     ref_map = nnx.graph.RefMap()
     graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
-    state = nnx.as_immutable_vars(state)
+    state = nnx.vars_as(state, is_mutable=False)
     self.assertLen(state, 1)
 
-    m1 = nnx.merge(graphdef, nnx.as_hijax_vars(state))
+    m1 = nnx.merge(graphdef, nnx.vars_as(state, is_hijax=True))
     self.assertIs(m1.a, m1.b)
     self.assertIsInstance(m1.a, jax.Ref)
 
   def test_update_context(self):
-    m1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+    m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
     with nnx.update_context('example'):
       with nnx.split_context('example') as ctx:
         graphdef, state = ctx.split(m1)
@@ -287,7 +295,7 @@ class TestVariableRefMode(absltest.TestCase):
       with nnx.merge_context('example', True) as ctx:
         m2 = ctx.merge(graphdef, state)
 
-      m_out1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+      m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
 
       with nnx.split_context('example') as ctx:
         graphdef_out, state_out = ctx.split((m2, m_out1, m2))
@@ -314,7 +322,7 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_update_context_flatten(self):
-    m1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+    m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
     with nnx.update_context('example'):
       with nnx.split_context('example') as ctx:
         graphdef, state = ctx.flatten(m1)
@@ -322,7 +330,7 @@ class TestVariableRefMode(absltest.TestCase):
       with nnx.merge_context('example', True) as ctx:
         m2 = ctx.merge(graphdef, state)
 
-      m_out1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+      m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
 
       with nnx.split_context('example') as ctx:
         graphdef_out, state_out = ctx.flatten((m2, m_out1, m2))
@@ -351,13 +359,13 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_update_context_to_tree1(self):
-    m1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+    m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
     with nnx.update_context('example'):
       m1_tree = nnx.to_tree((m1,), ctxtag='example')
 
       (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True)
 
-      m_out1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+      m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
 
       # with nnx.split_context('example') as ctx:
       #   graphdef_out, state_out = ctx.split((m2, m_out1))
@@ -390,13 +398,13 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_update_context_to_tree2(self):
-    m1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+    m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
     with nnx.update_context('example') as ctx:
       m1_tree = nnx.to_tree((m1,), ctxtag='example')
 
       (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True)
 
-      m_out1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+      m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
 
       # with nnx.split_context('example') as ctx:
       #   graphdef_out, state_out = ctx.split((m2, m_out1))
@@ -429,13 +437,13 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_update_context_to_tree_trivial_prefix(self):
-    m1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+    m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
     with nnx.update_context('example'):
       m1_tree = nnx.to_tree((m1,), ctxtag='example', prefix=0)
 
       (m2,) = nnx.from_tree(m1_tree, ctxtag='example', is_inner=True, prefix=0)
 
-      m_out1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+      m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
 
       # with nnx.split_context('example') as ctx:
       #   graphdef_out, state_out = ctx.split((m2, m_out1))
@@ -468,13 +476,13 @@ class TestVariableRefMode(absltest.TestCase):
       self.assertIsNot(m_out2, m_out1)
 
   def test_simple_jit(self):
-    m1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+    m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
     m_out1 = None
 
     @nnx.jit
     def f(m2):
       nonlocal m_out1
-      m_out1 = nnx.as_ref_vars(nnx.Linear(1, 1, rngs=nnx.Rngs(0)))
+      m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), has_ref=True)
       return m_out1
 
     m_out2 = f(m1)
@@ -540,7 +548,7 @@ class TestVariableRefMode(absltest.TestCase):
         self.count = nnx.Variable(jnp.array(0))
 
     params = Params(3, 4)
-    params = nnx.as_ref_vars(params)
+    params = nnx.vars_as(params, has_ref=True)
 
     paths_leaves, treedef = jax.tree.flatten_with_path(params)
     paths, leaves = zip(*paths_leaves)
@@ -706,7 +714,7 @@ class TestOptimizer(absltest.TestCase):
         model = nnx.merge(graphdef, params, nondiff)
         return jnp.mean((model(x) - y) ** 2)
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.as_immutable_vars(params))
+      loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(params, is_mutable=False))
       optimizer.update(params, grads)
       return loss
 
@@ -717,7 +725,7 @@ class TestOptimizer(absltest.TestCase):
 class TestHijaxVariables(absltest.TestCase):
   def test_variable_to_hijax(self):
     v_low = nnx.Param(jnp.array(1), a='hi')
-    v_hi = nnx.as_hijax_vars(v_low)
+    v_hi = nnx.vars_as(v_low, is_hijax=True)
 
     self.assertTrue(v_hi.is_hijax)
     self.assertEqual(v_hi[...], 1)
@@ -739,7 +747,7 @@ class TestHijaxVariables(absltest.TestCase):
     self.assertEqual(v_hi[...], 15)
     self.assertEqual(y, 17)
 
-    v_low = nnx.as_immutable_vars(v_hi)
+    v_low = nnx.vars_as(v_hi, is_mutable=False)
     self.assertFalse(v_low.is_mutable)
     self.assertIsInstance(v_low, nnx.Param)
 
@@ -765,7 +773,7 @@ class TestHijaxVariables(absltest.TestCase):
     print()
     print(v_low)
     assert not v_low.is_hijax
-    v_hi = nnx.as_hijax_vars(v_low)
+    v_hi = nnx.vars_as(v_low, is_hijax=True)
     v_hi[...] = jnp.array([2])
     assert v_hi.is_hijax
     print(v_hi)
@@ -781,9 +789,10 @@ class TestHijaxVariables(absltest.TestCase):
 
     assert v_hi[...] == 10
 
-    v_low = nnx.as_immutable_vars(v_hi)
+    v_low = nnx.vars_as(v_hi, is_mutable=False)
 
-    assert not v_low.is_hijax and not v_low.is_mutable
+    assert v_low.is_hijax
+    assert not v_low.is_mutable
     assert v_low[...] == 10
 
   def test_immutable_variable(self):
@@ -833,7 +842,7 @@ class TestHijaxVariables(absltest.TestCase):
     assert not foo.w.is_hijax
     assert not foo.b.is_hijax
 
-    foo = nnx.as_hijax_vars(foo)
+    foo = nnx.vars_as(foo, is_hijax=True)
 
     assert foo.w.is_hijax
     assert foo.b.is_hijax
@@ -909,6 +918,38 @@ class TestHijaxVariables(absltest.TestCase):
     y = jax.eval_shape(f, v)
 
     self.assertEqual(y.shape, ())
+
+  @nnx.use_hijax(True)
+  def test_no_qdd_grad(self):
+    v = nnx.Param(jnp.array(3.0), is_mutable=False)
+
+    self.assertFalse(v.is_mutable)
+    self.assertTrue(v.is_hijax)
+
+    def f(v):
+      self.assertTrue(v.is_hijax)
+      return v[...] ** 2
+
+    grad = jax.grad(f)(v)
+
+    self.assertIsInstance(grad, nnx.Param)
+    self.assertEqual(grad[...], 6.0)
+
+  @nnx.use_hijax(True)
+  def test_no_qdd_grad_new(self):
+    x = jnp.array(3.0)
+
+    def f(x):
+      v = nnx.Param(x, is_mutable=False)
+      self.assertFalse(v.is_mutable)
+      self.assertTrue(v.is_hijax)
+      self.assertTrue(v.is_hijax)
+      return v[...] ** 2
+
+    grad = jax.grad(f)(x)
+
+    self.assertIsInstance(grad, jax.Array)
+    self.assertEqual(grad, 6.0)
 
 
 if __name__ == '__main__':

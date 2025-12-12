@@ -42,7 +42,7 @@ Basic usage
     def loss_fn(params):
       model = nnx.merge(graphdef, params, nondiff)
       return ((model(x, rngs) - y) ** 2).mean()
-    loss, grads = jax.value_and_grad(loss_fn)(nnx.as_immutable_vars(params))
+    loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(params, is_mutable=False))
     optimizer.update(model, grads)  # in-place updates
     return loss
 
