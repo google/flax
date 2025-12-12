@@ -49,6 +49,21 @@ class PartitioningTest(parameterized.TestCase):
       self.assertEqual(partitioning.get_axis_rules(), AXIS_RULES_2)
     self.assertEqual(partitioning.get_axis_rules(), AXIS_RULES_1)
 
+  def test_logical_to_mesh_axes_resolves_to_none_or_unconstrained(self):
+    unconstrained = jax.sharding.PartitionSpec.UNCONSTRAINED
+    rules = (
+        ('foo', None),
+        ('bad', None),
+        ('bar', unconstrained),
+        ('baz', unconstrained),
+    )
+    self.assertEqual(
+        partitioning.logical_to_mesh_axes(
+            ('foo', 'bad', 'bar', 'baz'), rules=rules
+        ),
+        (None, None, unconstrained, unconstrained),
+    )
+
   def test_logical_to_mesh_axes(self):
     axes_0 = ('foo', 'bar')
     # direct rule assignment
