@@ -20,147 +20,187 @@ The data is loaded using tensorflow_datasets.
 
 # See issue #620.
 # pytype: disable=wrong-keyword-args
+from functools import partial
+from typing import Any
+from pathlib import Path
 
 from absl import logging
-from flax import linen as nn
+from flax import nnx
 from flax.metrics import tensorboard
-from flax.training import train_state
 import jax
-import jax.numpy as jnp
 import ml_collections
-import numpy as np
 import optax
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
+tf.random.set_seed(0)  # Set the random seed for reproducibility.
 
-class CNN(nn.Module):
+
+class CNN(nnx.Module):
   """A simple CNN model."""
 
-  @nn.compact
-  def __call__(self, x):
-    x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-    x = nn.relu(x)
-    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = nn.Conv(features=64, kernel_size=(3, 3))(x)
-    x = nn.relu(x)
-    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = x.reshape((x.shape[0], -1))  # flatten
-    x = nn.Dense(features=256)(x)
-    x = nn.relu(x)
-    x = nn.Dense(features=10)(x)
+  def __init__(self, rngs: nnx.Rngs):
+    self.conv1 = nnx.Conv(1, 32, kernel_size=(3, 3), rngs=rngs)
+    self.batch_norm1 = nnx.BatchNorm(32, rngs=rngs)
+    self.dropout1 = nnx.Dropout(rate=0.025)
+    self.conv2 = nnx.Conv(32, 64, kernel_size=(3, 3), rngs=rngs)
+    self.batch_norm2 = nnx.BatchNorm(64, rngs=rngs)
+    self.avg_pool = partial(nnx.avg_pool, window_shape=(2, 2), strides=(2, 2))
+    self.linear1 = nnx.Linear(3136, 256, rngs=rngs)
+    self.dropout2 = nnx.Dropout(rate=0.025)
+    self.linear2 = nnx.Linear(256, 10, rngs=rngs)
+
+  def __call__(self, x, rngs: nnx.Rngs):
+    x = self.avg_pool(nnx.relu(self.batch_norm1(self.dropout1(self.conv1(x), rngs=rngs))))
+    x = self.avg_pool(nnx.relu(self.batch_norm2(self.conv2(x))))
+    x = x.reshape(x.shape[0], -1)  # flatten
+    x = nnx.relu(self.dropout2(self.linear1(x), rngs=rngs))
+    x = self.linear2(x)
     return x
 
 
-@jax.jit
-def apply_model(state, images, labels):
-  """Computes gradients, loss and accuracy for a single batch."""
 
-  def loss_fn(params):
-    logits = state.apply_fn({'params': params}, images)
-    one_hot = jax.nn.one_hot(labels, 10)
-    loss = jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=one_hot))
-    return loss, logits
-
-  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (loss, logits), grads = grad_fn(state.params)
-  accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
-  return grads, loss, accuracy
+def loss_fn(model: CNN, batch, rngs):
+  logits = model(batch['image'], rngs)
+  loss = optax.softmax_cross_entropy_with_integer_labels(
+    logits=logits, labels=batch['label']
+  ).mean()
+  return loss, logits
 
 
-@jax.jit
-def update_model(state, grads):
-  return state.apply_gradients(grads=grads)
+@nnx.jit
+def train_step(model: CNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, batch, rngs):
+  """Train for a single step."""
+  grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
+  (loss, logits), grads = grad_fn(model, batch, rngs)
+  metrics.update(loss=loss, logits=logits, labels=batch['label'])  # In-place updates.
+  optimizer.update(model, grads)  # In-place updates.
 
 
-def train_epoch(state, train_ds, batch_size, rng):
-  """Train for a single epoch."""
-  train_ds_size = len(train_ds['image'])
-  steps_per_epoch = train_ds_size // batch_size
-
-  perms = jax.random.permutation(rng, len(train_ds['image']))
-  perms = perms[: steps_per_epoch * batch_size]  # skip incomplete batch
-  perms = perms.reshape((steps_per_epoch, batch_size))
-
-  epoch_loss = []
-  epoch_accuracy = []
-
-  for perm in perms:
-    batch_images = train_ds['image'][perm, ...]
-    batch_labels = train_ds['label'][perm, ...]
-    grads, loss, accuracy = apply_model(state, batch_images, batch_labels)
-    state = update_model(state, grads)
-    epoch_loss.append(loss)
-    epoch_accuracy.append(accuracy)
-  train_loss = np.mean(epoch_loss)
-  train_accuracy = np.mean(epoch_accuracy)
-  return state, train_loss, train_accuracy
 
 
-def get_datasets():
+@nnx.jit
+def eval_step(model: CNN, metrics: nnx.MultiMetric, batch):
+  loss, logits = loss_fn(model, batch, None)
+  metrics.update(loss=loss, logits=logits, labels=batch['label'])  # In-place updates.
+
+
+def get_datasets(
+    config: ml_collections.ConfigDict,
+) -> tuple[tf.data.Dataset, tf.data.Dataset]:
   """Load MNIST train and test datasets into memory."""
-  ds_builder = tfds.builder('mnist')
-  ds_builder.download_and_prepare()
-  train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
-  test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
-  train_ds['image'] = jnp.float32(train_ds['image']) / 255.0
-  test_ds['image'] = jnp.float32(test_ds['image']) / 255.0
+  batch_size = config.batch_size
+  train_ds: tf.data.Dataset = tfds.load('mnist', split='train')
+  test_ds: tf.data.Dataset = tfds.load('mnist', split='test')
+
+  train_ds = train_ds.map(
+      lambda sample: {
+          'image': tf.cast(sample['image'], tf.float32) / 255,
+          'label': sample['label'],
+      }
+  )  # normalize train set
+  test_ds = test_ds.map(
+      lambda sample: {
+          'image': tf.cast(sample['image'], tf.float32) / 255,
+          'label': sample['label'],
+      }
+  )  # normalize the test set.
+
+  # Create a shuffled dataset by allocating a buffer size of 1024 to randomly
+  # draw elements from.
+  train_ds = train_ds.shuffle(1024)
+  # Group into batches of `batch_size` and skip incomplete batches, prefetch the
+  # next sample to improve latency.
+  train_ds = train_ds.batch(batch_size, drop_remainder=True).prefetch(1)
+  # Group into batches of `batch_size` and skip incomplete batches, prefetch the
+  # next sample to improve latency.
+  test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1)
+
   return train_ds, test_ds
 
 
-def create_train_state(rng, config):
-  """Creates initial `TrainState`."""
-  cnn = CNN()
-  params = cnn.init(rng, jnp.ones([1, 28, 28, 1]))['params']
-  tx = optax.sgd(config.learning_rate, config.momentum)
-  return train_state.TrainState.create(apply_fn=cnn.apply, params=params, tx=tx)
-
-
-def train_and_evaluate(
-    config: ml_collections.ConfigDict, workdir: str
-) -> train_state.TrainState:
+def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str) -> None:
   """Execute model training and evaluation loop.
 
   Args:
     config: Hyperparameter configuration for training and evaluation.
-    workdir: Directory where the tensorboard summaries are written to.
-
-  Returns:
-    The train state (which includes the `.params`).
+    workdir: Directory path to store metrics.
   """
-  train_ds, test_ds = get_datasets()
-  rng = jax.random.key(0)
+  train_ds, test_ds = get_datasets(config)
+
+  # Instantiate the model.
+  model = CNN(rngs=nnx.Rngs(0))
+
+  learning_rate = config.learning_rate
+  momentum = config.momentum
 
   summary_writer = tensorboard.SummaryWriter(workdir)
   summary_writer.hparams(dict(config))
 
-  rng, init_rng = jax.random.split(rng)
-  state = create_train_state(init_rng, config)
+  optimizer = nnx.Optimizer(
+      model, optax.sgd(learning_rate, momentum), wrt=nnx.Param
+  )
+  metrics = nnx.MultiMetric(
+      accuracy=nnx.metrics.Accuracy(),
+      loss=nnx.metrics.Average('loss'),
+  )
+  rngs = nnx.Rngs(0)
 
   for epoch in range(1, config.num_epochs + 1):
-    rng, input_rng = jax.random.split(rng)
-    state, train_loss, train_accuracy = train_epoch(
-        state, train_ds, config.batch_size, input_rng
-    )
-    _, test_loss, test_accuracy = apply_model(
-        state, test_ds['image'], test_ds['label']
-    )
+    # Run the optimization for one step and make a stateful update to the
+    # following:
+    # - The train state's model parameters
+    # - The optimizer state
+    # - The training loss and accuracy batch metrics
+    model.train()  # Switch to train mode
 
-    logging.info(
+    for batch in train_ds.as_numpy_iterator():
+      train_step(model, optimizer, metrics, batch, rngs)
+    #  Compute the training metrics.
+    train_metrics = metrics.compute()
+    metrics.reset()  # Reset the metrics for the test set.
+
+    # Compute the metrics on the test set after each training epoch.
+    model.eval()  # Switch to eval mode
+    for batch in test_ds.as_numpy_iterator():
+      eval_step(model, metrics, batch)
+
+    # Compute the eval metrics.
+    eval_metrics = metrics.compute()
+    metrics.reset()  # Reset the metrics for the next training epoch.
+
+    logging.info(  # pylint: disable=logging-not-lazy
         'epoch:% 3d, train_loss: %.4f, train_accuracy: %.2f, test_loss: %.4f,'
         ' test_accuracy: %.2f'
         % (
             epoch,
-            train_loss,
-            train_accuracy * 100,
-            test_loss,
-            test_accuracy * 100,
+            train_metrics['loss'],
+            train_metrics['accuracy'] * 100,
+            eval_metrics['loss'],
+            eval_metrics['accuracy'] * 100,
         )
     )
 
-    summary_writer.scalar('train_loss', train_loss, epoch)
-    summary_writer.scalar('train_accuracy', train_accuracy, epoch)
-    summary_writer.scalar('test_loss', test_loss, epoch)
-    summary_writer.scalar('test_accuracy', test_accuracy, epoch)
+    # Write the metrics to TensorBoard.
+    summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
+    summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
+    summary_writer.scalar('test_loss', eval_metrics['loss'], epoch)
+    summary_writer.scalar('test_accuracy', eval_metrics['accuracy'], epoch)
 
   summary_writer.flush()
-  return state
+
+  # Export the model to a SavedModel directory.
+  from orbax.export import JaxModule, ExportManager, ServingConfig
+
+  def exported_predict(model, y):
+      return model(y, None)
+
+  model.eval()
+  jax_module = JaxModule(model, exported_predict)
+  sig = [tf.TensorSpec(shape=(1, 28, 28, 1), dtype=tf.float32)]
+  export_mgr = ExportManager(jax_module, [
+      ServingConfig('mnist_server', input_signature=sig)
+  ])
+
+  output_dir= Path(workdir) / 'mnist_export'
+  export_mgr.save(str(output_dir))
