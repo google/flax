@@ -41,9 +41,10 @@ class SummaryTest(absltest.TestCase):
 
     foo = Foo(nnx.Rngs(0))
     x = jnp.ones((1, 32))
-    table_repr = nnx.tabulate(
+    table_repr_ = nnx.tabulate(
       foo, x, console_kwargs=CONSOLE_TEST_KWARGS
-    ).splitlines()
+    )
+    table_repr = table_repr_.splitlines()
 
     self.assertIn('Foo Summary', table_repr[0])
     self.assertIn('path', table_repr[2])
@@ -224,6 +225,32 @@ class SummaryTest(absltest.TestCase):
     # We should see 3 calls per block, plus one overall call
     self.assertEqual(sum([s.startswith("├─") for s in table.splitlines()]), 7)
 
+  def test_time_complexity(self):
+    counter = []
+
+    class Block(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 2, rngs=rngs)
+
+      def __call__(self, x):
+        counter.append(1)
+        return self.linear(x)
+
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        for d in range(10):
+          setattr(self, f"linear{d}", Block(rngs))
+
+      def __call__(self, x):
+        for d in range(10):
+          x = getattr(self, f"linear{d}")(x)
+        return x
+
+    m = Model(nnx.Rngs(0))
+    x = jnp.ones((4, 2))
+    nnx.tabulate(m, x, compute_flops=True, compute_vjp_flops=False)
+    self.assertEqual(len(counter), 10)
+
   def test_shared(self):
     class Block(nnx.Module):
       def __init__(self, linear: nnx.Linear, *, rngs):
@@ -294,6 +321,18 @@ class SummaryTest(absltest.TestCase):
     # Verify metadata is preserved in the module
     self.assertEqual(module.hooked_param.get_metadata('description'), 'Custom parameter')
     self.assertEqual(module.hooked_param.get_metadata('trainable'), True)
+
+  def test_tabulate_concrete_shape(self):
+    class Net(nnx.Module):
+        def __init__(self):
+            self.rngs = nnx.Rngs(0)
+
+        def __call__(self, x):
+            return self.rngs.uniform((x.shape[0], 10))
+
+    net = Net()
+    x = jnp.zeros((4, 8))
+    nnx.tabulate(net, x, console_kwargs={"width": 200})
 
 if __name__ == '__main__':
   absltest.main()
