@@ -21,29 +21,22 @@ that can be easily tested and imported in Colab.
 from absl import app
 from absl import flags
 from absl import logging
-from clu import platform
 import jax
-from ml_collections import config_flags
 import tensorflow as tf
-
+import time
 import train
-
+from configs.default import get_default_config
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('workdir', None, 'Directory to store model data.')
-config_flags.DEFINE_config_file(
-    'config',
-    None,
-    'File path to the training hyperparameter configuration.',
-    lock_config=True,
-)
-flags.mark_flags_as_required(['config', 'workdir'])
-
+flags.DEFINE_string('workdir', None, 'Directory to store logs and checkpoints.')
 
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
+
+  # Parse arguments and get config
+  config = get_default_config()
 
   # Make sure tf does not allocate gpu memory.
   tf.config.experimental.set_visible_devices([], 'GPU')
@@ -51,15 +44,12 @@ def main(argv):
   logging.info('JAX process: %d / %d', jax.process_index(), jax.process_count())
   logging.info('JAX local devices: %r', jax.local_devices())
 
-  # Add a note so that we can tell which task is which JAX host.
-  # (Depending on the platform task 0 is not guaranteed to be host 0)
-  platform.work_unit().set_task_status(
-      f'process_index: {jax.process_index()}, '
-      f'process_count: {jax.process_count()}'
-  )
+  # Simple process logging
+  logging.info('Starting training process %d/%d', jax.process_index(), jax.process_count())
 
-  train.train_and_evaluate(FLAGS.config, FLAGS.workdir)
-
+  start = time.perf_counter()
+  train.train_and_evaluate(config)
+  logging.info('Total training time: %.2f seconds', time.perf_counter() - start)
 
 if __name__ == '__main__':
   app.run(main)
