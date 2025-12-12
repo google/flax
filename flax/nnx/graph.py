@@ -300,6 +300,15 @@ def get_node_impl_for_type(
   else:
     return None
 
+# use type-aware sorting to support int keys
+def _type_aware_sort(item: tuple[tp.Any, tp.Any]) -> tuple[int, tp.Any]:
+  key, _ = item
+  if isinstance(key, int):
+    return (0, key)
+  elif isinstance(key, str):
+    return (1, key)
+  else:
+    raise ValueError(f'Unsupported key type: {type(key)!r}')
 
 class HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
   _mapping: dict[HA, HB] | tp.Mapping[HA, HB]
@@ -320,16 +329,7 @@ class HashableMapping(tp.Mapping[HA, HB], tp.Hashable):
     return len(self._mapping)
 
   def __hash__(self) -> int:
-    # use type-aware sorting to support int keys
-    def _pytree__key_sort_fn(item: tuple[tp.Any, tp.Any]) -> tuple[int, tp.Any]:
-      key, _ = item
-      if isinstance(key, int):
-        return (0, key)
-      elif isinstance(key, str):
-        return (1, key)
-      else:
-        raise ValueError(f'Unsupported key type: {type(key)!r}')
-    return hash(tuple(sorted(self._mapping.items(), key=_pytree__key_sort_fn)))
+    return hash(tuple(sorted(self._mapping.items(), key=_type_aware_sort)))
 
   def __eq__(self, other: tp.Any) -> bool:
     return (
