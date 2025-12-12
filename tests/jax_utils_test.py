@@ -106,5 +106,64 @@ class PadShardUnpadTest(chex.TestCase):
     np.testing.assert_allclose(np.float64(y), np.float64(5 * x + 10))
 
 
+class DataShardingTest(parameterized.TestCase):
+  def setUp(self):
+    if jax.device_count() < 4:
+      self.skipTest('At least 4 devices required')
+
+  @parameterized.product(num_devices= ["all", 2])
+  def test_prefetch_to_device(self, num_devices):
+    devices = jax.local_devices()
+    if isinstance(num_devices, int):
+      devices = devices[:num_devices]
+    shape = (len(devices), 4, 16, 16, 3)
+    iterator = (jnp.ones(shape) for _ in range(4))
+
+    data_iter = jax_utils.prefetch_to_device(iterator, size=3, devices=devices)
+    for _ in range(4):
+      data = next(data_iter)
+      self.assertEqual(data.shape, shape)
+      self.assertIsNotNone(data.sharding)
+      sharding_slices_per_device = data.sharding.devices_indices_map(tuple(data.shape))
+      self.assertEqual(len(sharding_slices_per_device), len(devices))
+      # Here we check that sharding_slices_per_device is like
+      # Device(id=2): (slice(2, 3, None), slice(None, None, None), ..., slice(None, None, None))
+      for i, dev in enumerate(devices):
+        sharding_slice = sharding_slices_per_device[dev]
+        self.assertEqual(sharding_slice[0], slice(i + 0, i + 1, None))
+        for sharding_slice_j in sharding_slice[1:]:
+          self.assertEqual(sharding_slice_j, slice(None, None, None))
+
+  @parameterized.product(num_devices= ["all", 2])
+  def test_replicate(self, num_devices):
+    devices = jax.local_devices()
+    if isinstance(num_devices, int):
+      devices = devices[:num_devices]
+    num_batches = 5
+    shape = (2, 3)
+    data_tree = [
+      i * jnp.ones((2, 3)) for i in range(num_batches - 2)
+    ] + [4, 5 * np.ones(shape)]
+    out_tree = jax_utils.replicate(data_tree, devices=devices)
+
+    def check_sharding(p):
+      if p.ndim == 1:
+        self.assertEqual(p.shape, (len(devices),))
+      else:
+        self.assertEqual(p.shape, (len(devices), *shape))
+      self.assertIsNotNone(p.sharding)
+      sharding_slices_per_device = p.sharding.devices_indices_map(tuple(p.shape))
+      self.assertEqual(len(sharding_slices_per_device), len(devices))
+      # Here we check that sharding_slices_per_device is like
+      # Device(id=2): (slice(2, 3, None), slice(None, None, None), slice(None, None, None))
+      for i, dev in enumerate(devices):
+        sharding_slice = sharding_slices_per_device[dev]
+        self.assertEqual(sharding_slice[0], slice(i + 0, i + 1, None))
+        for sharding_slice_j in sharding_slice[1:]:
+          self.assertEqual(sharding_slice_j, slice(None, None, None))
+
+    jax.tree.map(check_sharding, out_tree)
+
+
 if __name__ == '__main__':
   absltest.main()
