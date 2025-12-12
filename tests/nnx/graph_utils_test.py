@@ -39,6 +39,18 @@ class StatefulLinear(nnx.Module):
 
 
 class TestGraphUtils(absltest.TestCase):
+  def test_data_is_not_static(self):
+    class Module(nnx.Module):
+        def __init__(self):
+            self.data = nnx.data({"a": jnp.ones((8, 8))})
+
+    module = Module()
+    # assert False
+    f1 = nnx.flatten(module)
+    abstract_module = nnx.eval_shape(Module)
+    f2 = nnx.flatten(abstract_module)
+    assert f1[0].attributes == f2[0].attributes
+
   def test_flatten(self):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
