@@ -25,7 +25,8 @@ Let’s get started!
 If `flax` is not installed in your Python environment, use `pip` to install the package from PyPI (below, just uncomment the code in the cell if you are working from Google Colab/Jupyter Notebook):
 
 ```{code-cell} ipython3
-# !pip install flax
+# !pip install -U "jax[cuda12]"
+# !pip install -U flax
 ```
 
 ## 2. Load the MNIST dataset
