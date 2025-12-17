@@ -401,6 +401,17 @@ class VariableDef(reprlib.Representable, tp.Generic[Node]):
       else self.array_refdef,
     )
 
+  def with_matching_outer_index(self, other) -> VariableDef:
+    return VariableDef(
+      type=self.type,
+      index=self.index,
+      outer_index=other.outer_index,
+      metadata=self.metadata,
+      array_refdef=self.array_refdef.with_matching_outer_index(other.array_refdef)
+      if isinstance(self.array_refdef, ArrayRefDef)
+      else self.array_refdef
+    )
+
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self))
     yield reprlib.Attr('type', self.type.__name__)
@@ -444,6 +455,12 @@ class ArrayRefDef(reprlib.Representable):
     return ArrayRefDef(
       index=self.index,
       outer_index=self.index,
+    )
+
+  def with_matching_outer_index(self, other):
+    return ArrayRefDef(
+      index=self.index,
+      outer_index=other.outer_index,
     )
 
   def __nnx_repr__(self):
@@ -490,6 +507,15 @@ class NodeDef(tp.Generic[Node], reprlib.Representable):
       type=self.type,
       index=self.index,
       outer_index=self.index,
+      num_attributes=self.num_attributes,
+      metadata=self.metadata,
+    )
+
+  def with_matching_outer_index(self, other) -> NodeDef[Node]:
+    return NodeDef(
+      type=self.type,
+      index=self.index,
+      outer_index=other.outer_index,
       num_attributes=self.num_attributes,
       metadata=self.metadata,
     )
@@ -579,6 +605,16 @@ class GraphDef(tp.Generic[Node]):
       nodes=[
         node.with_no_outer_index() if not isinstance(node, NodeRef) else node
         for node in self.nodes
+      ],
+      attributes=self.attributes,
+      num_leaves=self.num_leaves,
+    )
+
+  def with_matching_outer_index(self, other) -> GraphDef[Node]:
+    return GraphDef(
+      nodes=[
+        node.with_matching_outer_index(other_node) if not isinstance(node, NodeRef) else node
+        for node, other_node in zip(self.nodes, other.nodes)
       ],
       attributes=self.attributes,
       num_leaves=self.num_leaves,

@@ -18,6 +18,7 @@ import dataclasses
 import functools
 import typing as tp
 
+
 from flax import struct
 from flax import typing
 from flax.core.frozen_dict import FrozenDict
@@ -1424,6 +1425,19 @@ class WhileLoopCondFn:
     return out
 
 
+def _reconsile_index_mapping(tree_to_fix, example_tree):
+  def f(a, b):
+    if not isinstance(a, extract.NodeStates) or not isinstance(
+      a._graphdef, graph.GraphDef
+    ):
+      return a
+    return dataclasses.replace(
+      a, _graphdef=a._graphdef.with_matching_outer_index(b._graphdef)
+    )
+
+  return jax.tree.map(f, tree_to_fix, example_tree,
+                      is_leaf=lambda x: isinstance(x, extract.NodeStates))
+
 def _add_fake_index_mapping(tree: tp.Any):
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
@@ -1548,27 +1562,10 @@ class ForiLoopBodyFn:
     functools.update_wrapper(self, self.f)
 
   @graph.update_context('fori_loop_body')
-  def __call__(self, i, pure_val):
-    # Removing the dummy index mapping being added outside of body function.
-    pure_val_in = _remove_index_mapping(pure_val)
-
+  def __call__(self, i, pure_val_in):
     val = extract.from_tree(pure_val_in, ctxtag='fori_loop_body', is_inner=True)
     out = self.f(i, val)
     pure_out = extract.to_tree(out, ctxtag='fori_loop_body')
-
-    try:
-      jax.tree.map(lambda a, b: None, pure_val, pure_out)
-    except ValueError as e:
-      msg = (
-        "nnx.fori_loop requires body function's input and output to "
-        'have the same reference and pytree structure, but they differ. '
-        'If the mismatch comes from `outer_index` field, you might '
-        'have modified reference structure within the body function, '
-        'which is not allowed. '
-        f'Detail of the mismatch: \n {str(e)}'
-      )
-      raise ValueError(msg)
-
     return pure_out
 
 
@@ -1619,13 +1616,11 @@ def fori_loop(lower: int, upper: int,
   """
 
   pure_init_val = extract.to_tree(init_val, ctxtag='fori_loop')
-
-  # Adding the expected reference mapping to `pure_init_val` to match
-  # `body_fun`'s output pytree structure, to make JAX happy.
-  pure_init_val = _add_fake_index_mapping(pure_init_val)
-
+  body = ForiLoopBodyFn(body_fun)
+  pure_out = body(lower, pure_init_val)
+  pure_init_val = _reconsile_index_mapping(pure_init_val, pure_out)
   pure_out = jax.lax.fori_loop(lower, upper,
-                               ForiLoopBodyFn(body_fun), pure_init_val,
+                               body, pure_init_val,
                                unroll=unroll)
   out = extract.from_tree(pure_out, ctxtag='fori_loop', is_inner=False)
   return out
