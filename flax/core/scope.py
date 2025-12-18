@@ -1126,7 +1126,7 @@ def lazy_init(
 ) -> Callable[..., Any]:
   """Functionalizes a `Scope` function for lazy initialization.
 
-  Similair to ``init`` except that the init function now accepts
+  Similar to ``init`` except that the init function now accepts
   ``jax.ShapeDtypeStruct`` instances for arguments that do not
   affect the variable initialization (typically this is all the input data).
 
