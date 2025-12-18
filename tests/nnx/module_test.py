@@ -693,6 +693,9 @@ class TestModule(absltest.TestCase):
       nnx.set_mode(block, deterministic=True, use_running_average=True, unknown=True)
 
   def test_cloud_pickle(self):
+    import platform
+    if platform.python_version().startswith('3.11'):
+      self.skipTest("Cloudpickle cannot pickle PRNGKeyArray on python 3.11")
     class Model(nnx.Module):
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dmid, rngs=rngs)

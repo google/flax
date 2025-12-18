@@ -30,7 +30,6 @@ from collections.abc import Callable
 from flax import errors, struct
 from flax.typing import LogicalNames
 import jax
-from jax.interpreters import pxla
 
 A = TypeVar('A')
 B = TypeVar('B')
@@ -182,9 +181,7 @@ PARTITION_NAME = 'partition_name'
 def get_global_mesh() -> jax.sharding.AbstractMesh | jax.sharding.Mesh | None:
   mesh = jax.sharding.get_abstract_mesh()
   if mesh.empty:
-    mesh = pxla.thread_resources.env.physical_mesh
-    if mesh.empty:
-      return None
+    return None
   return mesh
 
 

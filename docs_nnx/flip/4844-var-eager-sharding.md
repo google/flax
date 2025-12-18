@@ -33,7 +33,7 @@ def create_sharded_model():
   return model
 
 mesh = jax.make_mesh(((2, 4)), ("data", "model"))
-with mesh:
+with jax.set_mesh(mesh):
   sharded_model = create_sharded_model()
 ```
 

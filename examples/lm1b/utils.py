@@ -168,7 +168,7 @@ def setup_initial_state(model, tx, config, rng, mesh):
   state_logical_annotations = nn.get_partition_spec(abstract_state)
 
   # Initialization
-  with mesh, nn_partitioning.axis_rules(config.logical_axis_rules):
+  with jax.set_mesh(mesh), nn_partitioning.axis_rules(config.logical_axis_rules):
     state_mesh_annotations = nn.logical_to_mesh_sharding(
         state_logical_annotations, mesh, config.logical_axis_rules
     )

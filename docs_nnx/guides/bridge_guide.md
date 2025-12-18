@@ -370,7 +370,7 @@ print(f'We have {len(jax.devices())} fake JAX devices now to partition this mode
 mesh = jax.sharding.Mesh(devices=mesh_utils.create_device_mesh((2, 4)),
                          axis_names=('in', 'out'))
 x = jax.random.normal(jax.random.key(42), (4, 32))
-with mesh:
+with jax.set_mesh(mesh):
   model = create_sharded_nnx_module(x)
 
 print(type(model.w))           # `nnx.Param`
@@ -422,7 +422,7 @@ def create_sharded_variables(key, x):
                               nn.get_partition_spec(variables))
   return sharded_vars
 
-with mesh:
+with jax.set_mesh(mesh):
   variables = create_sharded_variables(jax.random.key(0), x)
 
 # The underlying JAX array is sharded across the 2x4 mesh
