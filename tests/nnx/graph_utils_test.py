@@ -39,6 +39,20 @@ class StatefulLinear(nnx.Module):
 
 
 class TestGraphUtils(absltest.TestCase):
+  def test_pop_no_pytree_nodes(self):
+    class MLP(nnx.Module):
+      def __call__(self):
+        self.sow(nnx.Intermediate, "blah", jnp.ones(2))
+
+    def sow_fn(model):
+      model()
+      nnx.pop(model, nnx.Intermediate)
+      return model
+
+    model = MLP()
+    sow_fn(model)
+    assert 'blah' not in model._pytree__nodes
+
   def test_flatten(self):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]

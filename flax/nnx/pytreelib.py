@@ -936,6 +936,10 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   def _graph_node_pop_key(self, key: str):
     if not isinstance(key, str):
       raise KeyError(f'Invalid key: {key!r}')
+    if hasattr(self, '_pytree__nodes'):
+        mapping = dict(self._pytree__nodes._mapping)
+        del mapping[key]
+        self._pytree__nodes = nnx.graph.HashableMapping(mapping, copy=False)
     return vars(self).pop(key)
 
   @staticmethod
