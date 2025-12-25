@@ -1094,7 +1094,11 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       metadata['on_remove_axis'] = var_t.on_remove_axis
 
     if 'sharding' in metadata:
-      metadata['sharding_names'] = metadata.pop('sharding')
+      metadata['sharding_metadata'] = metadata.pop('sharding')
+
+    if 'sharding_names' in metadata: # for bw compat
+      warnings.warn("'sharding_names' is deprecated. Use 'sharding_metadata' instead.", DeprecationWarning)
+      metadata['sharding_metadata'] = metadata.pop('sharding_names')
 
     # run create_value hooks
     if 'on_create_value' in metadata:
@@ -1104,10 +1108,10 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     # run create_value hook
     value = self.create_value(value)  # type: ignore
     # shard the _value if applicable
-    if eager_sharding and 'sharding_names' in metadata:
+    if eager_sharding and 'sharding_metadata' in metadata:
       value = core_spmd.shard_value(
         value,
-        metadata['sharding_names'],
+        metadata['sharding_metadata'],
         metadata.get('sharding_rules', None),
         metadata.get('mesh', None),
       )
@@ -1134,6 +1138,9 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       )
 
   def __getattr__(self, name: str) -> tp.Any:
+    if name == 'sharding_names': # for backward compatibility
+      warnings.warn("'sharding_names' is deprecated. Use 'sharding_metadata' instead.", DeprecationWarning)
+      return self.sharding_metadata
     if name in object.__getattribute__(self, '_var_metadata'):
       return self._var_metadata[name]
     return getattr(object.__getattribute__(self, '_raw_value'), name)
