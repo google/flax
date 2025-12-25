@@ -914,7 +914,7 @@ class RNN(Module):
 
   By default RNN expect the time dimension after the batch dimension (``(*batch,
   time, *features)``),
-  if you set ``time_major=True`` RNN will instead expect the time dimesion to be
+  if you set ``time_major=True`` RNN will instead expect the time dimension to be
   at the beginning
   (``(time, *batch, *features)``)::
 
@@ -955,7 +955,7 @@ class RNN(Module):
   RNN also accepts some of the arguments of :func:`flax.linen.scan`, by default
   they are set to
   work with cells like :class:`LSTMCell` and :class:`GRUCell` but they can be
-  overriden as needed.
+  overridden as needed.
   Overriding default values to scan looks like this::
 
     >>> lstm = nn.RNN(
