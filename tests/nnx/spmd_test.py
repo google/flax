@@ -211,15 +211,37 @@ class TestSPMD(parameterized.TestCase):
         else:
           assert not has_sharding_spec(w)
 
-  def test_out_sharding(self):
-    mesh = jax.make_mesh((2, 2), ("X", "Y"),
-                         axis_types=(AxisType.Explicit, AxisType.Explicit))
+  def test_out_sharding_linear_layers(self):
+    mesh = jax.make_mesh((2, 2), ("X", "Y"), axis_types=(AxisType.Explicit, AxisType.Explicit))
     with jax.set_mesh(mesh):
       replicated_array = jnp.arange(4).reshape(2, 2)
       sharded_array = reshard(replicated_array, P("X", None))
-      model = nnx.Linear(2,4, rngs=nnx.Rngs(0))
-      assert 'float32[2@X,4]' in str(jax.typeof(model(sharded_array)))
-      assert 'float32[2@X,4@Y]' in str(jax.typeof(model(sharded_array, out_sharding=P("X", "Y"))))
+      layers = [
+        nnx.Linear(2, 4, rngs=nnx.Rngs(0)),
+        nnx.LinearGeneral(2, 4, rngs=nnx.Rngs(0)),
+        nnx.Einsum('ab,bc->ac', (2, 4), (4,), rngs=nnx.Rngs(0)),
+      ]
+      for layer in layers:
+        assert 'float32[2@X,4]' in str(jax.typeof(layer(sharded_array)))
+        assert 'float32[2@X,4@Y]' in str(jax.typeof(layer(sharded_array, out_sharding=P("X", "Y"))))
+
+  def test_out_sharding_conv(self):
+    mesh = jax.make_mesh((2, 2), ("X", "Y"), axis_types=(AxisType.Explicit, AxisType.Explicit))
+    with jax.set_mesh(mesh):
+      replicated_array = jnp.arange(32).reshape(2, 4, 4).astype(jnp.float32)
+      sharded_array = reshard(replicated_array, P("X", None, None))
+      layer = nnx.Conv(4, 8, kernel_size=(3,), rngs=nnx.Rngs(0))
+      assert 'float32[2@X,2,8]' in str(jax.typeof(layer(sharded_array)))
+      assert 'float32[2@X,2@Y,8]' in str(jax.typeof(layer(sharded_array, out_sharding=P("X", "Y", None))))
+
+  def test_out_sharding_embed_attend(self):
+    mesh = jax.make_mesh((2, 2), ("X", "Y"), axis_types=(AxisType.Explicit, AxisType.Explicit))
+    with jax.set_mesh(mesh):
+      replicated_array = jnp.arange(8).reshape(2, 4).astype(jnp.float32)
+      sharded_array = reshard(replicated_array, P("X", None))
+      layer = nnx.Embed(num_embeddings=10, features=4, rngs=nnx.Rngs(0))
+      assert 'float32[2@X,10]' in str(jax.typeof(layer.attend(sharded_array)))
+      assert 'float32[2@X,10@Y]' in str(jax.typeof(layer.attend(sharded_array, out_sharding=P("X", "Y"))))
 
   @parameterized.product(use_hijax=[True, False])
   def test_logical_rules(self, use_hijax):

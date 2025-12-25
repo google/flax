@@ -773,7 +773,7 @@ class Conv(Module):
     self.promote_dtype = promote_dtype
     self.preferred_element_type = preferred_element_type
 
-  def __call__(self, inputs: Array) -> Array:
+  def __call__(self, inputs: Array, out_sharding=None) -> Array:
     """Applies a (potentially unshared) convolution to the inputs.
 
     Args:
@@ -787,6 +787,11 @@ class Conv(Module):
         better performance than this default flattening approach.  If the input
         lacks a batch dimension it will be added for the convolution and removed
         n return, an allowance made to enable writing single-example code.
+      out_sharding: Optional sharding specification (e.g.,
+        ``jax.sharding.PartitionSpec``) for the output array. When using JAX's
+        explicit sharding mode with a mesh context with ``AxisType.Explicit``.
+        If ``None`` (default), the compiler automatically determines output
+        sharding.
 
     Returns:
       The convolved data.
@@ -871,7 +876,7 @@ class Conv(Module):
     # user custom self.conv_general_dilated method which may not have
     # preferred_element_type argument to avoid breaking
     # existing code
-    conv_kwargs = {}
+    conv_kwargs = {'out_sharding': out_sharding}
     if self.preferred_element_type is not None:
       conv_kwargs["preferred_element_type"] = self.preferred_element_type
 
@@ -1302,12 +1307,17 @@ class Embed(Module):
       return jnp.broadcast_to(embedding, inputs.shape + (self.features,))
     return jnp.take(embedding, inputs, axis=0)
 
-  def attend(self, query: Array) -> Array:
+  def attend(self, query: Array, out_sharding=None) -> Array:
     """Attend over the embedding using a query array.
 
     Args:
       query: array with last dimension equal the feature depth ``features`` of the
         embedding.
+      out_sharding: Optional sharding specification (e.g.,
+        ``jax.sharding.PartitionSpec``) for the output array. When using JAX's
+        explicit sharding mode with a mesh context with ``AxisType.Explicit``.
+        If ``None`` (default), the compiler automatically determines output
+        sharding.
 
     Returns:
       An array with final dim ``num_embeddings`` corresponding to the batched
@@ -1318,4 +1328,4 @@ class Embed(Module):
     query, embedding = self.promote_dtype(
       (query, self.embedding[...]), dtype=self.dtype
     )
-    return jnp.dot(query, embedding.T)
+    return jnp.dot(query, embedding.T, out_sharding=out_sharding)
