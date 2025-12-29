@@ -590,7 +590,6 @@ For more information on Flax NNX transforms, check out the `Transforms guide <ht
       self.num_layers = num_layers
 
     def __call__(self, x):
-      @nnx.split_rngs(splits=self.num_layers)
       @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=nnx.Carry)
       def forward(x, model):
         x = model(x)
@@ -763,5 +762,3 @@ the ``train_step``.
 
   sample_x = jnp.ones((1, 784))
   train_step(state, sample_x, jnp.ones((1,), dtype=jnp.int32))
-
-
