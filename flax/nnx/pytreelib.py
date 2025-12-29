@@ -920,9 +920,14 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   def _graph_node_flatten(self):
     pytree_nodes = self._pytree__nodes
     nodes = (
-      (name, nnx.graph.DataElem(value)
-      if name in pytree_nodes and pytree_nodes[name]
-      else nnx.graph.StaticElem(value))
+      (
+        name,
+        value
+        if not self._pytree__is_pytree
+        else nnx.graph.DataElem(value)
+        if name in pytree_nodes and pytree_nodes[name]
+        else nnx.graph.StaticElem(value)
+      )
       for name, value in vars(self).items()
     )
     nodes = sorted(nodes, key=self._pytree__key_sort_fn)

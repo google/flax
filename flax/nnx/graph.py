@@ -180,10 +180,10 @@ class NodeImplBase(tp.Generic[Node, Leaf, AuxData]):
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[Key, Leaf]], AuxData]]
 
   def node_dict(self, node: Node) -> dict[Key, tp.Any]:
-    nodes, _ = self.flatten(node)
+    node_seq, _ = self.flatten(node)
     nodes = {
       key: node.value if isinstance(node, DataElem | StaticElem) else node
-      for key, node in nodes
+      for key, node in node_seq
     }
     return nodes
 
