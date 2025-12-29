@@ -231,8 +231,8 @@ class TestSPMD(parameterized.TestCase):
       replicated_array = jnp.arange(32).reshape(2, 4, 4).astype(jnp.float32)
       sharded_array = reshard(replicated_array, P("X", None, None))
       layer = nnx.Conv(4, 8, kernel_size=(3,), rngs=nnx.Rngs(0))
-      assert 'float32[2@X,2,8]' in str(jax.typeof(layer(sharded_array)))
-      assert 'float32[2@X,2@Y,8]' in str(jax.typeof(layer(sharded_array, out_sharding=P("X", "Y", None))))
+      assert 'float32[2@X,4,8]' in str(jax.typeof(layer(sharded_array)))
+      assert 'float32[2@X,4@Y,8]' in str(jax.typeof(layer(sharded_array, out_sharding=P("X", "Y", None))))
 
   def test_out_sharding_embed_attend(self):
     mesh = jax.make_mesh((2, 2), ("X", "Y"), axis_types=(AxisType.Explicit, AxisType.Explicit))
