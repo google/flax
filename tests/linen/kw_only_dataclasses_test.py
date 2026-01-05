@@ -123,6 +123,27 @@ class KwOnlyDataclassesTest(absltest.TestCase):
     self.assertEqual(list(a_params), ['self', 'x', 'a', 'b', 'c'])
     self.assertEqual(list(b_params), ['self', 'x', 'z', 'a', 'b', 'c'])
 
+  def test_whatever(self):
+    import abc
+    from collections.abc import Iterator, Iterable
+    import io
+    from typing import Protocol, TypeVar
+
+    T = TypeVar("T")
+
+    class CheckpointableIterator(Iterator[T], Protocol[T]):
+      pass
+
+    isinstance(io.TextIOBase, Iterable)
+
+    from flax import linen as nn
+
+    class Steppable(metaclass=abc.ABCMeta):
+      path: str
+
+    class SequenceLayer(nn.Module, Steppable):
+      pass
+
 
 if __name__ == '__main__':
   absltest.main()
