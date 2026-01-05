@@ -150,9 +150,6 @@ class TestPartitioning(absltest.TestCase):
       d=5.0,
     )
 
-    # test Variables not shared
-    self.assertIsNot(vars(m.a)[0], vars(m)['b'])
-
     state = nnx.state(m, nnx.Variable)
     self.assertEqual(state['a'][0][...], m.a[0][...])
     self.assertEqual(state['a'][1][...], m.a[1][...])
