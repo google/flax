@@ -11,8 +11,12 @@ authors = [
     {name = "Flax team", email = "flax-dev@google.com"},
 ]
 dependencies = [
-    "numpy>=1.23.2; python_version>='3.11'",
-    "numpy>=1.26.0; python_version>='3.12'",
+    # temporary numpy version fix due to
+    # https://github.com/google/flax/issues/5162
+    # and
+    # https://github.com/google-deepmind/chex/issues/424
+    "numpy>=1.23.2,<2.4.0; python_version>='3.11'",
+    "numpy>=1.26.0,<2.4.0; python_version>='3.12'",
     # keep in sync with jax-version in .github/workflows/build.yml
     "jax>=0.8.1",
     "msgpack",

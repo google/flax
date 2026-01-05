@@ -123,6 +123,8 @@ jobs:
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
           # TODO(cgarciae): Remove this once dm-haiku 0.0.14 is released
           uv pip install -U git+https://github.com/google-deepmind/dm-haiku.git
+          # https://github.com/google/flax/issues/5162
+          uv pip install "numpy<2.4.0"
           uv run --no-sync tests/run_all_tests.sh --only-doctest
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
           uv pip install -U tensorflow-datasets
