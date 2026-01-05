@@ -91,7 +91,7 @@ class TestOptimizer(parameterized.TestCase):
     state = nnx.state(optimizer)
     partition_spec = nnx.get_partition_spec(state)
 
-    self.assertEqual(state['opt_state'][0]['mu']['kernel'].sharding_names, ('a', 'b'))
+    self.assertEqual(state['opt_state'][0]['mu']['kernel'].sharding_metadata, ('a', 'b'))
     self.assertEqual(
       partition_spec['opt_state'][0]['mu']['kernel'].get_value(),
       jax.sharding.PartitionSpec('a', 'b'),

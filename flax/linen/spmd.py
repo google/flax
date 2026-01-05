@@ -290,7 +290,7 @@ class LogicallyPartitioned(meta.Partitioned):
     """Return a dict of metadata that can translate into an `nnx.Variable`."""
     metadata = vars(self)
     if 'names' in metadata:
-      metadata['sharding_names'] = metadata.pop('names')
+      metadata['sharding_metadata'] = metadata.pop('names')
     if 'rules' in metadata:
       metadata['sharding_rules'] = metadata.pop('rules')
     return metadata
@@ -298,7 +298,7 @@ class LogicallyPartitioned(meta.Partitioned):
   @classmethod
   def from_nnx_metadata(cls, metadata: dict[str, Any]):
     """Given a dict of `nnx.Variable` format metadata, create a `nn.LogicallyPartitioned`."""
-    metadata['names'] = metadata.pop('sharding_names')
+    metadata['names'] = metadata.pop('sharding_metadata')
     metadata['rules'] = metadata.pop('sharding_rules')
     fields = {x.name for x in dataclasses.fields(cls)}
     return cls(**{k: v for k, v in metadata.items() if k in fields})

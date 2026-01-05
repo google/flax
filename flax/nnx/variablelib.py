@@ -1094,7 +1094,11 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       metadata['on_remove_axis'] = var_t.on_remove_axis
 
     if 'sharding' in metadata:
-      metadata['sharding_names'] = metadata.pop('sharding')
+      metadata['sharding_metadata'] = metadata.pop('sharding')
+
+    if 'sharding_names' in metadata: # for bw compat
+      warnings.warn("'sharding_names' is deprecated. Use 'sharding_metadata' instead.", DeprecationWarning)
+      metadata['sharding_metadata'] = metadata.pop('sharding_names')
 
     # run create_value hooks
     if 'on_create_value' in metadata:
@@ -1104,10 +1108,10 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     # run create_value hook
     value = self.create_value(value)  # type: ignore
     # shard the _value if applicable
-    if eager_sharding and 'sharding_names' in metadata:
+    if eager_sharding and 'sharding_metadata' in metadata:
       value = core_spmd.shard_value(
         value,
-        metadata['sharding_names'],
+        metadata['sharding_metadata'],
         metadata.get('sharding_rules', None),
         metadata.get('mesh', None),
       )
@@ -1134,8 +1138,8 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       )
 
   def __getattr__(self, name: str) -> tp.Any:
-    if name in object.__getattribute__(self, '_var_metadata'):
-      return self._var_metadata[name]
+    if self.has_metadata(name):
+      return self.get_metadata(name)
     return getattr(object.__getattribute__(self, '_raw_value'), name)
 
   def __setattr__(self, name: str, value: tp.Any):
@@ -1195,6 +1199,9 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       raise TypeError(
         "Cannot specify both 'name' and 'exclude_required' arguments."
       )
+    if name == 'sharding_names': # for backward compatibility
+        warnings.warn("'sharding_names' is deprecated. Use 'sharding_metadata' instead.", DeprecationWarning)
+        name = 'sharding_metadata'
     metadata = self._var_metadata.copy()
     if name is None:
       if not isinstance(default, Missing):
@@ -1316,6 +1323,8 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     Returns:
       True if the metadata entry exists, False otherwise.
     """
+    if name == 'sharding_names': # for backward compatibility
+        name = 'sharding_metadata'
     return name in self._var_metadata
 
   def del_metadata(self, name: str) -> None:

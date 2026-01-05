@@ -393,7 +393,7 @@ class TestLayersParamsMetadata(parameterized.TestCase):
     kwargs = {"rngs": nnx.Rngs(0)}
     sharding_names = ("din", "dout")
     metadata_kwargs = {
-      f"{key}_metadata": {"sharding_names": sharding_names[:le]}
+      f"{key}_metadata": {"sharding_metadata": sharding_names[:le]}
       for key, le, _ in metadata_argnames
     }
 
@@ -410,8 +410,8 @@ class TestLayersParamsMetadata(parameterized.TestCase):
       for attr_name, param_name in attrs:
         attr = getattr(module, attr_name) if attr_name is not None else module
         param = getattr(attr, param_name)
-        self.assertIsNotNone(param.sharding_names)
-        self.assertEqual(param.sharding_names, sharding_names[:le])
+        self.assertIsNotNone(param.sharding_metadata)
+        self.assertEqual(param.sharding_metadata, sharding_names[:le])
 
 
 if __name__ == '__main__':
