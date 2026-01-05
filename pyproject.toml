@@ -199,6 +199,8 @@ filterwarnings = [
     "ignore:.*pkg_resources is deprecated as an API.*:UserWarning",
     # DeprecationWarning: 'Data' is deprecated, please replace:
     "ignore:.*[Data|Static]' is deprecated, please replace.*:DeprecationWarning",
+    # DeprecationWarning: Implicit conversion of an array to a dtype is deprecated; rather than dtype=arr use dtype=arr.dtype.
+    "ignore:.*Implicit conversion of an array to a dtype is deprecated; rather than dtype=arr use dtype=arr.dtype.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
