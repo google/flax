@@ -279,7 +279,7 @@ class BatchNorm(Module):
       function should accept a tuple of ``(inputs, mean, var, scale, bias)`` and
       a ``dtype`` keyword argument, and return a tuple of arrays with the promoted
       dtype.
-    rngs: rng key.
+    rngs: rngs object.
     bias_metadata: Optional metadata dictionary to set when initializing
       the bias.
     scale_metadata: Optional metadata dictionary to set when initializing
@@ -483,7 +483,7 @@ class LayerNorm(Module):
         (including Variables accessed through ``self``) to the desired dtype. The
         function should accept a tuple of ``(inputs, scale, bias)`` and a ``dtype``
         keyword argument, and return a tuple of arrays with the promoted dtype.
-    rngs: rng key.
+    rngs: rngs object.
     bias_metadata: Optional metadata dictionary to set when initializing
       the bias.
     scale_metadata: Optional metadata dictionary to set when initializing
@@ -630,7 +630,7 @@ class RMSNorm(Module):
       (including Variables accessed through ``self``) to the desired dtype. The
       function should accept a tuple of ``(inputs, scale)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
-    rngs: rng key.
+    rngs: rngs object.
     scale_metadata: Optional metadata dictionary to set when initializing
       the scale.
   """
@@ -785,7 +785,7 @@ class GroupNorm(Module):
       (including Variables accessed through ``self``) to the desired dtype. The
       function should accept a tuple of ``(inputs, scale, bias)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
-    rngs: rng key.
+    rngs: rngs object.
     bias_metadata: Optional metadata dictionary to set when initializing
       the bias.
     scale_metadata: Optional metadata dictionary to set when initializing
@@ -1300,7 +1300,7 @@ class SpectralNorm(Module):
       than 2 is used by the layer.
     update_stats: if True, the stored batch statistics will be
       used instead of computing the batch statistics on the input.
-    rngs: rng key.
+    rngs: rngs object.
   """
 
   def __init__(

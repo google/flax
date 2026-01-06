@@ -142,7 +142,7 @@ class LinearGeneral(Module):
     preferred_element_type: Optional parameter controls the data type output by
       the dot product. This argument is passed to ``dot_general`` function.
       See ``jax.lax.dot`` for details.
-    rngs: rng key.
+    rngs: rngs object.
     kernel_metadata: Optional metadata dictionary to set when initializing
       the weight matrix.
     bias_metadata: Optional metadata dictionary to set when initializing
@@ -343,7 +343,7 @@ class Linear(Module):
     preferred_element_type: Optional parameter controls the data type output by
       the dot product. This argument is passed to ``dot_general`` function.
       See ``jax.lax.dot`` for details.
-    rngs: rng key.
+    rngs: rngs object.
     kernel_metadata: Optional metadata dictionary to set when initializing
       the weight matrix.
     bias_metadata: Optional metadata dictionary to set when initializing
@@ -468,7 +468,7 @@ class Einsum(Module):
     preferred_element_type: Optional parameter controls the data type output by
       the dot product. This argument is passed to ``dot_general`` function.
       See ``jax.lax.dot`` for details.
-    rngs: rng key.
+    rngs: rngs object.
     kernel_metadata: Optional metadata dictionary to set when initializing
       the weight matrix.
     bias_metadata: Optional metadata dictionary to set when initializing
@@ -699,7 +699,7 @@ class Conv(Module):
     preferred_element_type: Optional parameter controls the data type output by
       the convolution. This argument is passed to ``conv_general_dilated``
       function. See ``jax.lax.conv_general_dilated`` for details.
-    rngs: rng key.
+    rngs: rngs object.
     kernel_metadata: Optional metadata dictionary to set when initializing
       the weight matrix.
     bias_metadata: Optional metadata dictionary to set when initializing
@@ -1002,7 +1002,7 @@ class ConvTranspose(Module):
       the transposed convolution. This argument is passed to
       ``jax.lax.conv_transpose`` function. See ``jax.lax.conv_transpose``
       for details.
-    rngs: rng key.
+    rngs: rngs object.
     kernel_metadata: Optional metadata dictionary to set when initializing
       the weight matrix.
     bias_metadata: Optional metadata dictionary to set when initializing
@@ -1257,7 +1257,7 @@ class Embed(Module):
       dtype. The function should accept a tuple of ``(embedding,)`` during ``__call__``
       or ``(query, embedding)`` during ``attend``, and a ``dtype`` keyword argument,
       and return a tuple of arrays with the promoted dtype.
-    rngs: rng key.
+    rngs: rngs object.
     embedding_metadata: Optional metadata dictionary to set when initializing
       the embedding matrix.
   """

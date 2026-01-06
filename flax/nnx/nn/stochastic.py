@@ -65,7 +65,7 @@ class Dropout(Module):
       masked, whereas if true, no mask is applied and the inputs are returned
       as is.
     rng_collection: the rng collection name to use when requesting an rng key.
-    rngs: rng key.
+    rngs: rngs object.
   """
 
   def __init__(

@@ -291,7 +291,7 @@ class OptimizedLSTMCell(RNNCellBase):
           (default: True). If rngs is stored, we should split the module as
           `graphdef, params, nondiff = nnx.split(module, nnx.Param, ...)` where `nondiff`
           contains RNG object associated with stored `self.rngs`.
-        rngs: rng key.
+        rngs: rngs object.
         kernel_metadata: Optional metadata dictionary to set when initializing
           the kernels that transform the input.
         recurrent_kernel_metadata: Optional metadata dictionary to set when initializing
@@ -612,7 +612,7 @@ class GRUCell(RNNCellBase):
           (default: True). If rngs is stored, we should split the module as
           `graphdef, params, nondiff = nnx.split(module, nnx.Param, ...)` where `nondiff`
           contains RNG object associated with stored `self.rngs`.
-        rngs: rng key.
+        rngs: rngs object.
         kernel_metadata: Optional metadata dictionary to set when initializing
           the kernels that transform the input.
         recurrent_kernel_metadata: Optional metadata dictionary to set when initializing
