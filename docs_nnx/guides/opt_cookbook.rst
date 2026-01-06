@@ -1,27 +1,38 @@
 A Flax Optimization Cookbook
 ################################
 
-
 This notebook goes through some common problems in nontrivial training loops for flax models. For clarity, all sections below will be training the following toy model. Both raw Jax and Flax code are shown for comparison.
 
-.. testsetup:: NNX, Jax
+.. codediff::
+    :title: NNX, Jax
+    :sync:
+
     import jax
     from flax import nnx
-    jax.config.update('jax_num_cpu_devices', 8)
+    import jax.numpy as jnp
+    from jax import tree
+    import optax
+    import functools as ft
+    import matplotlib.pyplot as plt
+    from jax.sharding import PartitionSpec as P, AxisType, get_abstract_mesh, reshard
+
+    ---
+
+    import jax
+
     import jax.numpy as jnp
     from jax import tree
     import optax
     import itertools as it
     import functools as ft
-    from collections import namedtuple
     import matplotlib.pyplot as plt
     from jax.sharding import PartitionSpec as P, AxisType, get_abstract_mesh, reshard
 
 The following sections will all be training the same toy model. We will allow extra keyword arguments so that the sharding and dtype can be determined on an instance by instance basis.
 
 .. codediff::
-  :title: NNX, Jax
-  :sync:
+    :title: NNX, Jax
+    :sync:
 
     param_init = jax.nn.initializers.lecun_normal()
 
@@ -37,6 +48,8 @@ The following sections will all be training the same toy model. We will allow ex
 
     ---
 
+    param_init = jax.nn.initializers.lecun_normal()
+
     keys = map(ft.partial(jax.random.fold_in, jax.random.key(0)), it.count())
 
     def make_linear(size, keys, **kwargs):
@@ -46,7 +59,7 @@ The following sections will all be training the same toy model. We will allow ex
         }
 
     def jax_params(keys, **kwargs):
-        return [make_linear((2, 8), keys), make_linear((8, 8), keys, **kwargs)]
+        return [make_linear((2, 8), keys, **kwargs), make_linear((8, 8), keys, **kwargs)]
 
     def jax_model(params, x):
         for p in params:
@@ -64,7 +77,7 @@ We'll operate on the following fake data:
   :sync:
 
   x = nnx_keys.normal((32, 2))
-  y = nnx_keys.normal((32, 2))
+  y = nnx_keys.normal((32, 8))
 
   ---
 
@@ -111,10 +124,11 @@ Neural network see increased robustness when, rather than using only the weights
       loss = train_step(model, nnx_optimizer, ema, x, y)
       losses.append(loss)
 
-    plt.plot(losses)
-    print("EMA LOSS", nnx_loss_fn(ema.ema, x, y))
+    # plt.plot(losses)
+    # print("EMA LOSS", nnx_loss_fn(ema.ema, x, y))
 
     ---
+
     def ema_update(ema, new_val, decay=0.9):
         return decay * ema + (1 - decay) * new_val
 
@@ -133,10 +147,10 @@ Neural network see increased robustness when, rather than using only the weights
 
     losses = []
     for _ in range(50):
-    opt_state, params, ema_params, loss = train_step(opt_state, params, ema_params, x, y)
-    losses.append(loss)
-    plt.plot(losses)
-    print("EMA LOSS ", jax_loss_fn(ema_params, x, y))
+        opt_state, params, ema_params, loss = train_step(opt_state, params, ema_params, x, y)
+        losses.append(loss)
+    # plt.plot(losses)
+    # print("EMA LOSS ", jax_loss_fn(ema_params, x, y))
 
 Low Rank Adaptation
 ====================
@@ -163,7 +177,7 @@ The pattern for adding low rank adaptation to an optimization loop is very simil
 
     nnx_optimizer = nnx.Optimizer(
       model,
-      tx=optimizer,
+      tx=optax.adam(1e-3),
       wrt=nnx.Param,
     )
 
@@ -329,7 +343,7 @@ In Flax, we can just wrap wrap the ``MultiSteps`` optimizer with the ``nnx.Optim
     :sync:
 
     model = nnx_model(nnx_keys)
-    nnx_optimizer = nnx.Optimizer(model, tx=mult_opt, wrt=nnx.Param)
+    nnx_optimizer = nnx.Optimizer(model, tx=optax.MultiSteps(optax.adam(1e-3), every_k_schedule=3), wrt=nnx.Param)
 
     @nnx.jit
     def nnx_train_step(model, nnx_optimizer, x, y):
@@ -343,10 +357,10 @@ In Flax, we can just wrap wrap the ``MultiSteps`` optimizer with the ``nnx.Optim
       losses.append(loss)
     plt.plot(losses)
 
-    ----
+    ---
 
     params = jax_params(keys)
-    mult_opt = optax.MultiSteps(optimizer, every_k_schedule=3)
+    mult_opt = optax.MultiSteps(optax.adam(1e-3), every_k_schedule=3)
     opt_state = mult_opt.init(params)
 
     @jax.jit
@@ -378,6 +392,10 @@ To do this, we can pass the params initializer given the the optimizer a `shardi
     :title: NNX, Jax
     :sync:
 
+    mesh = jax.make_mesh((2, 4), ("x", "y"),
+                         axis_types=(AxisType.Explicit, AxisType.Explicit))
+    jax.set_mesh(mesh)
+
     ghost_model = jax.eval_shape(lambda: nnx_model(nnx.Rngs(0), out_sharding=P('x', 'y')))
     nnx_optimizer = nnx.Optimizer(ghost_model, optax.adam(1e-3), wrt=nnx.Param)
     model = nnx_model(nnx.Rngs(0))
@@ -395,12 +413,10 @@ To do this, we can pass the params initializer given the the optimizer a `shardi
       losses.append(loss)
 
     # The optimizer state is sharded:
-
-    print("OPT STATE", jax.typeof(nnx_optimizer.opt_state[0][1].layers[0]['kernel'][...]))
+    # print("OPT STATE", jax.typeof(nnx_optimizer.opt_state[0][1].layers[0]['kernel'][...]))
 
     # But the model is not:
-
-    print("MODEL", jax.typeof(model.layers[0].kernel[...]))
+    # print("MODEL", jax.typeof(model.layers[0].kernel[...]))
 
     ---
 
@@ -425,7 +441,7 @@ To do this, we can pass the params initializer given the the optimizer a `shardi
 
 
     # The optimizer state gets sharded:
-    print("OPT STATE", jax.typeof(opt_state[0][1][0]['w']))
+    # print("OPT STATE", jax.typeof(opt_state[0][1][0]['w']))
 
     # But the model's state doesn't.
-    print("MODEL", jax.typeof(params[0]['w']))
+    # print("MODEL", jax.typeof(params[0]['w']))
