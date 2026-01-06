@@ -477,7 +477,7 @@ class HijaxVariableMeta(type):
       return isinstance(ty, AbstractVariable)
     return False
 
-jax.Ref
+
 class HijaxVariable(
   tp.Generic[A], reprlib.Representable, metaclass=HijaxVariableMeta
 ):  # type: ignore
