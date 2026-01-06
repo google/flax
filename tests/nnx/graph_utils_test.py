@@ -1180,6 +1180,17 @@ class TestGraphUtils(absltest.TestCase):
     self.assertEqual(bar2[1].d, -20)
     self.assertEqual(n, 2)
 
+  def test_recursive_map_with_list(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.Sequential(nnx.Linear(2, 3, rngs=rngs), nnx.relu, nnx.Linear(3, 4, rngs=rngs))
+
+    def add_rank2_lora(_, node):
+      if isinstance(node, nnx.Linear):
+        return nnx.LoRA(node.in_features, 2, node.out_features, base_module=node, rngs=rngs)
+      return node
+
+    self.assertEqual(len(nnx.recursive_map(add_rank2_lora, model).layers), 3)
+
   def test_graphdef_hash_with_sequential(self):
     rngs = nnx.Rngs(0)
     net = nnx.Sequential(
