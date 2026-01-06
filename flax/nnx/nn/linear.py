@@ -133,6 +133,10 @@ class LinearGeneral(Module):
     param_dtype: the dtype passed to parameter initializers (default: float32).
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
+    dot_general: dot product function (default: None). If neither this nor
+        ``dot_general_cls`` are provided, ``jax.lax.dot_general`` is used.
+    dot_general_cls: dot product function class to instantiate a dot product function
+    as ``dot_general = dot_general_cls()`` (default: None).
     precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     promote_dtype: function to promote the dtype of the arrays to the desired
@@ -688,6 +692,8 @@ class Conv(Module):
           be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
+    conv_general_dilated: the convolution function to use (default:
+      ``jax.lax.conv_general_dilated``).
     precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer for the convolutional kernel.
