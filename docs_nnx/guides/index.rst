@@ -6,3 +6,4 @@ Guides
 
    index_basic
    index_advanced
+   OptCookbook
