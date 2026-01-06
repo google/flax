@@ -509,7 +509,7 @@ class TestEvalShape(absltest.TestCase):
     self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
 
   def test_eval_shape_mutable_array(self):
-    with nnx.use_hijax(True):
+    with nnx.var_defaults(hijax=True):
       abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
     self.assertIsInstance(abs_model, nnx.Linear)
     self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)

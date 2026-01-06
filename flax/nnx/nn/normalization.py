@@ -371,8 +371,8 @@ class BatchNorm(Module):
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
 
     # Promote dtypes for input and all Variables
-    scale = self.scale[...] if self.scale else None
-    bias = self.bias[...] if self.bias else None
+    scale = self.scale[...] if self.scale is not None else None
+    bias = self.bias[...] if self.bias is not None else None
     x, mean, var, scale, bias = self.promote_dtype(
       (x, self.mean[...], self.var[...], scale, bias), dtype=self.dtype
     )

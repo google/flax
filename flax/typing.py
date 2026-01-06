@@ -24,6 +24,7 @@ from typing import (
   TypeVar,
   Union,
 )
+from collections.abc import Iterator
 from collections.abc import Callable, Hashable, Mapping, Sequence
 
 import jax
@@ -135,6 +136,8 @@ PartitionSpecPytree = Any  # pylint: disable=invalid-name
 Sharding = tuple[AxisName, ...]
 
 A = TypeVar('A')
+HA = TypeVar('HA', bound=Hashable)
+HB = TypeVar('HB')
 
 
 class PytreeDeque(deque[A]):
@@ -234,3 +237,49 @@ class PromoteDtypeFn(Protocol):
   def __call__(
     self, args: TupleArg, /, *, dtype: Any = None, inexact: bool = True
   ) -> TupleArg: ...
+
+
+class HashableMapping(Mapping[HA, HB], Hashable):
+  _mapping: dict[HA, HB] | Mapping[HA, HB]
+
+  def __init__(self, mapping: Mapping[HA, HB], copy: bool = True):
+    self._mapping = dict(mapping) if copy else mapping
+
+  def __contains__(self, key: object) -> bool:
+    return key in self._mapping
+
+  def __getitem__(self, key: HA) -> HB:
+    return self._mapping[key]
+
+  def __iter__(self) -> Iterator[HA]:
+    return iter(self._mapping)
+
+  def __len__(self) -> int:
+    return len(self._mapping)
+
+  def __hash__(self) -> int:
+    # use type-aware sorting to support int keys
+    def _pytree__key_sort_fn(item: tuple[Any, Any]) -> tuple[int, Any]:
+      key, _ = item
+      if isinstance(key, int):
+        return (0, key)
+      elif isinstance(key, str):
+        return (1, key)
+      else:
+        raise ValueError(f'Unsupported key type: {type(key)!r}')
+
+    return hash(tuple(sorted(self._mapping.items(), key=_pytree__key_sort_fn)))
+
+  def __eq__(self, other: Any) -> bool:
+    return (
+      isinstance(other, HashableMapping) and self._mapping == other._mapping
+    )
+
+  def __repr__(self) -> str:
+    return repr(self._mapping)
+
+  def update(self, other: Mapping[HA, HB]) -> HashableMapping[HA, HB]:
+    """Updates the mapping with another mapping."""
+    mapping = dict(self._mapping)
+    mapping.update(other)
+    return HashableMapping(mapping, copy=False)
