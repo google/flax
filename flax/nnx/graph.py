@@ -179,13 +179,9 @@ class NodeImplBase(tp.Generic[Node, Leaf, AuxData]):
   type: type[Node]
   flatten: tp.Callable[[Node], tuple[tp.Sequence[tuple[Key, Leaf]], AuxData]]
 
-  def node_dict(self, node: Node) -> dict[Key, tp.Any]:
-    node_seq, _ = self.flatten(node)
-    nodes = {
-      key: node.value if isinstance(node, DataElem | StaticElem) else node
-      for key, node in node_seq
-    }
-    return nodes
+  def node_dict(self, node: Node) -> dict[Key, Leaf]:
+    nodes, _ = self.flatten(node)
+    return dict(nodes)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -537,21 +533,32 @@ NodeDefType = tp.Union[
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ArrayAttr:
+  pass
+
+
+ARRAY_ATTR = ArrayAttr()
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class MutableArrayAttr:
+  pass
+
+
+MUTABLE_ARRAY_ATTR = MutableArrayAttr()
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class NodeAttr:
   pass
 
 
 NODE_ATTR = NodeAttr()
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class LeafAttr:
-  pass
-
-LEAF_ATTR = LeafAttr()
-
 AttrType = tp.Union[
   NodeAttr,
-  LeafAttr,
+  ArrayAttr,
+  MutableArrayAttr,
   'Static[tp.Any]',
 ]
 
@@ -703,14 +710,6 @@ def flatten(  # type: ignore[invalid-annotation]
   else:
     return graphdef, leaves
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class DataElem:
-  value: tp.Any
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class StaticElem:
-  value: tp.Any
 
 def _graph_flatten(
   node: Node,
@@ -828,18 +827,6 @@ def _graph_flatten(
   nodes.append(nodedef)
 
   for key, value in values:
-    is_data = None
-    if isinstance(value, DataElem):
-      value = value.value
-      is_data = True
-    elif isinstance(value, StaticElem):
-      value = value.value
-      is_data = False
-
-    if is_data is False:
-      attributes.append((key, Static(value)))
-      continue
-
     value_node_impl = get_node_impl(value)
     if path is not None:
       path.append(key)
@@ -857,15 +844,15 @@ def _graph_flatten(
         paths,
       )
     elif variablelib.is_array_ref(value):
-      attributes.append((key, NODE_ATTR))
+      attributes.append((key, MUTABLE_ARRAY_ATTR))
       array_refdef, leaf = make_mutable_arraydef(value)
       if not isinstance(leaf, Repeated):
         leaves.append(leaf)
         if paths is not None:
           paths.append(tuple(path))  # type: ignore
       nodes.append(array_refdef)
-    elif isinstance(value, (jax.Array, np.ndarray)) or is_data:
-      attributes.append((key, LEAF_ATTR))
+    elif isinstance(value, (jax.Array, np.ndarray)):
+      attributes.append((key, ARRAY_ATTR))
       if paths is not None:
         paths.append(tuple(path))  # type: ignore
       leaves.append(value)
@@ -1105,33 +1092,41 @@ def _graph_unflatten(
       key, value = next(attribute_iter)
       if type(value) is Static:
         children.append((key, value.value))  # type: ignore[attribute-error]
-      elif type(value) is LeafAttr:
-        leaf = next(leaves_iter)
-        children.append((key, leaf))
-      elif type(value) is NodeAttr:
-        node_def = next(node_iter)
-        if isinstance(node_def, NodeRef):
-          node = index_ref[node_def.index]
-        elif isinstance(node_def, ArrayRefDef):
-          leaf = next(leaves_iter)
-          node = get_mutable_array(node_def, leaf)
-        elif isinstance(node_def, NodeDef | VariableDef):
-          value_node_impl = get_node_impl_for_type(node_def.type)
-          node = _graph_unflatten(
-            node_def,
-            value_node_impl,
-            node_iter,
-            attribute_iter,
-            leaves_iter,
-            index_ref,
-            outer_index_outer_ref,
-            copy_variables,
-          )
+      elif type(value) is MutableArrayAttr:
+        array_refdef = next(node_iter)
+        assert (
+          type(array_refdef) is ArrayRefDef or type(array_refdef) is NodeRef
+        )
+        if type(array_refdef) is NodeRef:
+          array_ref = index_ref[array_refdef.index]
         else:
-          raise RuntimeError(f'Unknown node definition: {node_def!r}')
-        children.append((key, node))
+          assert type(array_refdef) is ArrayRefDef
+          leaf = next(leaves_iter)
+          array_ref = get_mutable_array(array_refdef, leaf)
+        children.append((key, array_ref))
+      elif type(value) is ArrayAttr:
+        array = next(leaves_iter)
+        children.append((key, array))
       elif type(value) is NodeRef:
         children.append((key, index_ref[value.index]))  # type: ignore[attribute-error]
+      elif type(value) is NodeAttr:
+        # if the key is a subgraph we create an empty node
+        subgraphdef = next(node_iter)
+        if type(subgraphdef) is NodeDef:
+          value_node_impl = get_node_impl_for_type(subgraphdef.type)  # type: ignore[attribute-error]
+        else:
+          value_node_impl = None
+        subnode = _graph_unflatten(
+          subgraphdef,
+          value_node_impl,
+          node_iter,
+          attribute_iter,
+          leaves_iter,
+          index_ref,
+          outer_index_outer_ref,
+          copy_variables,
+        )
+        children.append((key, subnode))
       else:
         raise RuntimeError(f'Unknown static field: {key!r}')
 
