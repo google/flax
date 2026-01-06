@@ -66,6 +66,8 @@ def _mesh_assignment_free(new_assignment, existing_assignments):
   """Determines if a given mesh axis has already been assigned."""
   new = set(jax.tree_util.tree_leaves(new_assignment))
   existing = set(jax.tree_util.tree_leaves(existing_assignments))
+  new.discard(jax.sharding.PartitionSpec.UNCONSTRAINED)
+  new.discard(None)
   if existing.intersection(new):
     return False
   return True
@@ -273,6 +275,17 @@ def with_logical_constraint(
 
 class LogicallyPartitioned(meta.Partitioned):
   rules: LogicalRules | None = struct.field(default=None, pytree_node=False)
+
+  # Directly comparing members of the type `jax.Array` can throw an error:
+  # "The truth value of an array with more than one element is ambiguous."
+  # So we bring back an explicit implementation of __eq__ like it was prior to
+  # Python 3.13 in order work around this possibility.
+  def __eq__(self, other):
+    if self is other:
+      return True
+    if other.__class__ is self.__class__:
+      return (self.value,) == (other.value,)
+    return NotImplemented
 
   def unbox(self, apply_constraint=True) -> Any:
     """Returns the wrapped value with the partitioning constraint applied."""

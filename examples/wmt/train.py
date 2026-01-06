@@ -361,6 +361,11 @@ def per_host_sum_pmap(in_tree):
     )
 
   def post_pmap(xs):
+    # Avoid degraded performance under the new jax.pmap. See
+    # https://docs.jax.dev/en/latest/migrate_pmap.html#int-indexing-into-sharded-arrays.
+    if jax.config.jax_pmap_shmap_merge:
+      return jax.tree_util.tree_map(
+          lambda x: x.addressable_shards[0].data.squeeze(0), xs)
     return jax.tree_util.tree_map(lambda x: x[0], xs)
 
   return post_pmap(host_psum(pre_pmap(in_tree)))

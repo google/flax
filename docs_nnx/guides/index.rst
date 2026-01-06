@@ -4,6 +4,6 @@ Guides
 .. toctree::
    :maxdepth: 2
 
-   index_basic
-   index_advanced
    OptCookbook
+   ../guides_basic
+   ../guides_advanced
