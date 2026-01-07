@@ -30,6 +30,7 @@ from .filterlib import Everything as Everything
 from .filterlib import Nothing as Nothing
 from .graph import GraphDef as GraphDef
 from .graph import GraphState as GraphState
+from .graph import GraphFlatState as GraphFlatState
 from .graph import PureState as PureState
 from . import pytreelib as object
 from .pytreelib import Pytree as Pytree
