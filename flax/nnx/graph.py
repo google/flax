@@ -1401,7 +1401,7 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args):
     >>> loss = cached_step(jnp.ones((10, 2)), jnp.ones((10, 3)))
 
   Note:
-    Cached graph nodes are cloned but share the same Variable objects, ensuring
+    Cached graph nodes are cloned but share the same ``Variable`` objects, ensuring
     state propagates correctly. The graph structure must remain unchanged after
     each call (temporary mutations like ``sow`` are allowed if cleaned up via
     ``pop``).
@@ -2001,7 +2001,7 @@ def update_context(tag: tp.Hashable):
     tag: A hashable identifier for this context (used to match split/merge calls).
 
   Returns:
-    A context manager (and decorator) for tracking graph state updates.
+    An ``UpdateContext`` object which can be used as a context manager (and decorator) for tracking graph state updates.
   """
 
   return UpdateContextManager(tag=tag)
@@ -2621,7 +2621,7 @@ def call(
 def set_metadata(
   node: tp.Any, /, *, only: filterlib.Filter = Variable, **metadata: tp.Any
 ) -> None:
-  """Set metadata on Variables in a graph node in-place.
+  """Set metadata on :class:`Variable` objects in a graph node in-place.
 
   Example usage::
 
@@ -2632,9 +2632,9 @@ def set_metadata(
     >>> assert model.kernel.get_metadata('differentiable') is False
 
   Args:
-    node: A graph node containing Variables.
-    only: Filter to specify which Variables to update. Defaults to all Variables.
-    **metadata: Key-value pairs to set as metadata on matching Variables.
+    node: A graph node.
+    only: Filter to specify which Variables to update. Defaults to all ``Variable`` objects.
+    **metadata: Key-value pairs to set as metadata on matching ``Variable`` objects.
   """
 
   def _set_metadata(path: PathParts, variable: V) -> None:
