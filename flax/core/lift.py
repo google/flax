@@ -1171,7 +1171,7 @@ def cond(
   Note that this constraint is violated when
   creating variables or submodules in only one branch.
   Because initializing variables in just one branch
-  causes the paramater structure to be different.
+  causes the parameter structure to be different.
 
   Example::
 
