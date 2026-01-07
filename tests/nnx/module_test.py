@@ -150,6 +150,15 @@ class PytreeTest(absltest.TestCase):
     ):
       foo = Foo()
 
+class SowMod(nnx.Module):
+    def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(4, 4, rngs=rngs)
+
+    def __call__(self, x):
+        y = self.linear(x)
+        self.sow(nnx.Intermediate, "my_summary", y.mean())
+        return y * 2
+
 class TestModule(absltest.TestCase):
   def test_has_module_state(self):
     class Foo(nnx.Module): ...
@@ -393,6 +402,27 @@ class TestModule(absltest.TestCase):
 
     with self.assertRaisesRegex(ValueError, 'to be of type'):
       m(2)
+
+  def test_sow_pop(self):
+    x = jnp.ones((2, 4))
+    model = SowMod(nnx.Rngs(42))
+    out = model(x)
+    intermediates = nnx.pop(model, nnx.Intermediate)
+    attr_names = set(model._pytree__nodes)
+    assert 'my_summary' not in attr_names
+
+  def test_cached_partial(self):
+    model = SowMod(nnx.Rngs(42))
+    x = jnp.ones((2, 4))
+
+    @nnx.jit
+    def train_step(model, x):
+      out = model(x)
+      intermediates = nnx.pop(model, nnx.Intermediate)
+      return out, intermediates
+
+    train_step_fn = nnx.cached_partial(train_step, model)
+    train_step_fn(x)
 
   def test_perturb_basic(self):
     class Foo(nnx.Module):

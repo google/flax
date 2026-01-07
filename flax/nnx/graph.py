@@ -1658,7 +1658,7 @@ class MergeContext:
       )
 
     elif static_cache is not None:
-      assert isinstance(graphdef.nodes[0], NodeDef)
+      assert isinstance(graphdef.nodes[0], NodeDef) or isinstance(graphdef.nodes[0], VariableDef)
       assert ctx is not None
       if (outer_index := graphdef.nodes[0].outer_index) is not None:
         outer_index_outer_ref = ctx.outer_index_outer_ref
