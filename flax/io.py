@@ -21,11 +21,41 @@ import glob as glob_module
 import importlib
 import os
 import shutil
+from typing import Callable, ParamSpec, TypeVar
 from enum import Enum
 
 from absl import logging
 
 from . import errors
+
+
+_T = TypeVar('_T')
+_P = ParamSpec('_P')
+
+
+def _check_gs_path(func: Callable[_P, _T]) -> Callable[_P, _T]:
+  """Decorator to check for gcs paths and warn if tf is not available."""
+
+  _gs_warning = (
+    'Tensorflow library not found, tensorflow.io.gfile '
+    'operations will use native shim calls. '
+    "GCS paths (i.e. 'gs://...') cannot be accessed."
+  )
+
+  def wrapper(*args: _P.args, **kwargs: _P.kwargs):
+    assert io_mode is not None
+    if io_mode == BackendMode.DEFAULT:
+      values = list(args) + list(kwargs.values())
+      str_values = [a for a in values if isinstance(a, str)]
+
+      # we still check against "mode" param of GFile function, but it's fine.
+      if any(v.startswith('gs://') for v in str_values):
+        logging.warning(_gs_warning)
+
+    return func(*args, **kwargs)
+
+  return wrapper
+
 
 # Global Modes and selective import of tensorflow.io gfile.
 
@@ -43,11 +73,6 @@ if importlib.util.find_spec('tensorflow'):
 
   io_mode = BackendMode.TF
 else:
-  logging.warning(
-    'Tensorflow library not found, tensorflow.io.gfile '
-    'operations will use native shim calls. '
-    "GCS paths (i.e. 'gs://...') cannot be accessed."
-  )
   io_mode = BackendMode.DEFAULT
 
 
@@ -94,6 +119,7 @@ def set_mode(override: BackendMode):
 # tensorflow.io.gfile API shim functions.
 
 
+@_check_gs_path
 def GFile(name, mode):  # pylint: disable=invalid-name
   if io_mode == BackendMode.DEFAULT:
     if 'b' in mode:
@@ -106,6 +132,7 @@ def GFile(name, mode):  # pylint: disable=invalid-name
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def listdir(path):
   if io_mode == BackendMode.DEFAULT:
     return os.listdir(path=path)
@@ -115,6 +142,7 @@ def listdir(path):
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def isdir(path):
   if io_mode == BackendMode.DEFAULT:
     return os.path.isdir(path)
@@ -124,6 +152,7 @@ def isdir(path):
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def copy(src, dst, overwrite=False):
   if io_mode == BackendMode.DEFAULT:
     if os.path.exists(dst) and not overwrite:
@@ -136,6 +165,7 @@ def copy(src, dst, overwrite=False):
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def rename(src, dst, overwrite=False):
   if io_mode == BackendMode.DEFAULT:
     if os.path.exists(dst) and not overwrite:
@@ -147,6 +177,7 @@ def rename(src, dst, overwrite=False):
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def exists(path):
   if io_mode == BackendMode.DEFAULT:
     return os.path.exists(path)
@@ -156,6 +187,7 @@ def exists(path):
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def makedirs(path):
   if io_mode == BackendMode.DEFAULT:
     return os.makedirs(path, exist_ok=True)
@@ -165,6 +197,7 @@ def makedirs(path):
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def glob(pattern):
   if io_mode == BackendMode.DEFAULT:
     return [
@@ -176,6 +209,7 @@ def glob(pattern):
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def remove(path):
   """Remove the file at path. Might fail if used on a directory path."""
   if io_mode == BackendMode.DEFAULT:
@@ -186,6 +220,7 @@ def remove(path):
     raise ValueError('Unknown IO Backend Mode.')
 
 
+@_check_gs_path
 def rmtree(path):
   """Remove a directory and recursively all contents inside. Might fail if used on a file path."""
   if io_mode == BackendMode.DEFAULT:
