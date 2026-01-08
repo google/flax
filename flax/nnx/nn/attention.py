@@ -107,8 +107,10 @@ def dot_product_attention_weights(
   query, key = promote_dtype((query, key), dtype=dtype)  # type: ignore[bad-unpacking]
   dtype = query.dtype
 
+  assert query.ndim == key.ndim, 'q, k must have same rank.'
+
   # check if we need to broadcast Key heads to match Query heads
-  if query.ndim == key.ndim and query.shape[-2] != key.shape[-2]:
+  if query.shape[-2] != key.shape[-2]:
     q_heads = query.shape[-2]
     k_heads = key.shape[-2]
 
@@ -121,11 +123,9 @@ def dot_product_attention_weights(
     n_rep = q_heads // k_heads
     key = jnp.repeat(key, n_rep, axis=-2)
 
-  assert query.ndim == key.ndim, 'q, k must have same rank.'
   assert query.shape[:-3] == key.shape[:-3], 'q, k batch dims must match.'
   assert query.shape[-2] == key.shape[-2], 'q, k num_heads must match.'
   assert query.shape[-1] == key.shape[-1], 'q, k depths must match.'
-
   # calculate attention matrix
   depth = query.shape[-1]
   query = query / jnp.sqrt(depth).astype(dtype)
@@ -239,9 +239,11 @@ def dot_product_attention(
   query, key, value = promote_dtype((query, key, value), dtype=dtype)  # type: ignore[bad-unpacking]
   dtype = query.dtype
 
+  assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
+
   # broadcast value heads to match query heads if needed.
   # handle key broadcasting
-  if query.ndim == key.ndim and query.shape[-2] != key.shape[-2]:
+  if query.shape[-2] != key.shape[-2]:
     q_heads = query.shape[-2]
     k_heads = key.shape[-2]
     if q_heads % k_heads != 0:
@@ -250,7 +252,7 @@ def dot_product_attention(
     key = jnp.repeat(key, n_rep, axis=-2)
 
   # handle value broadcasting
-  if query.ndim == value.ndim and query.shape[-2] != value.shape[-2]:
+  if query.shape[-2] != value.shape[-2]:
     q_heads = query.shape[-2]
     v_heads = value.shape[-2]
     if q_heads % v_heads != 0:
@@ -258,7 +260,6 @@ def dot_product_attention(
     n_rep = q_heads // v_heads
     value = jnp.repeat(value, n_rep, axis=-2)
 
-  assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert (
     query.shape[:-3] == key.shape[:-3] == value.shape[:-3]
   ), 'q, k, v batch dims must match.'
