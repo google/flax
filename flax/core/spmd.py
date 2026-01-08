@@ -18,38 +18,39 @@ import threading
 
 import jax
 from jax.sharding import PartitionSpec, NamedSharding
-from flax.core import meta
+from jax._src.layout import Format
 from flax.typing import (
     LogicalRules,
     Sharding,
 )
 
-def get_pspec(sharding_names, sharding_rules = None) -> PartitionSpec:
-  """Given an `nnx.Variable`, return its `PartitionSpec`."""
+def map_sharding(f, sharding):
+  if isinstance(sharding, PartitionSpec) or isinstance(sharding, tuple):
+    return PartitionSpec(*map(f, sharding))
+  elif isinstance(sharding, NamedSharding):
+    return NamedSharding(sharding.mesh, map_sharding(f, sharding.sharding)) # type: ignore
+  elif isinstance(sharding, Format):
+    return Format(sharding.layout, map_sharding(f, sharding.format))
+
+def apply_rules(sharding, sharding_rules):
   if get_logical_axis_rules() or sharding_rules:
     context_rules = get_logical_axis_rules()
-    rules = composite_rules(context_rules, sharding_rules)
-    return PartitionSpec(*from_sharding_rules(sharding_names, rules))
-  return PartitionSpec(*sharding_names)
+    rules = {alias: on_mesh for (alias, on_mesh) in composite_rules(context_rules, sharding_rules)}
+  else:
+    rules = {}
+  return map_sharding(lambda a: rules.get(a, a), sharding)
 
 def _apply_sharding(value, sharding):
   with jax.disable_jit(False):
     return jax.jit(lambda x: x, out_shardings=sharding)(value)
 
-def shard_value(value, sharding_names, sharding_rules, mesh):
-  if not sharding_names:
-    return value
-  if not mesh and not meta.global_mesh_defined():
-    raise ValueError(
-      'An auto mesh context or metadata is required if creating a variable'
-      f' with annotation {sharding_names=}. '
-      'For more guidance, see https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html.')
-  pspec = get_pspec(sharding_names, sharding_rules)
-  if mesh is not None:
-    return _apply_sharding(value, NamedSharding(mesh, pspec))
-  return _apply_sharding(value, pspec)
-
-
+def shard_value(value, sharding, sharding_rules, mesh):
+  sharding = apply_rules(sharding, sharding_rules)
+  if isinstance(sharding, PartitionSpec) and mesh is not None:
+    sharding = NamedSharding(mesh, sharding)
+  if hasattr(sharding, 'mesh'):
+    assert mesh == sharding.mesh
+  return _apply_sharding(value, sharding)
 
 
 # Dynamic Axis Mapping Context
@@ -107,8 +108,10 @@ def composite_rules(rule1, rule2):
 
 
 def from_sharding_rules(
-    sharding: Sharding, sharding_rules: LogicalRules
+    sharding, sharding_rules: LogicalRules
 ) -> Sharding:
+  if isinstance(sharding, NamedSharding):
+    sharding = sharding.spec
   rules = {alias: on_mesh for (alias, on_mesh) in sharding_rules}
   return tuple(
       rules[str(s)] if (s and str(s) in rules) else s for s in sharding

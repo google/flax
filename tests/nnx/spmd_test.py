@@ -139,7 +139,7 @@ class TestSPMD(parameterized.TestCase):
           4,
           kernel_init=nnx.with_metadata(
             nnx.initializers.lecun_normal(),
-            sharding_names=('din', 'dout'),
+            sharding_metadata=('din', 'dout'),
             nickname=('in', 'out'),
             on_add_axis=lambda _, idx, name: kadds.append((idx, name)),
             on_remove_axis=lambda _, idx, name: kremoves.append((idx, name)),
@@ -160,7 +160,7 @@ class TestSPMD(parameterized.TestCase):
         x = self.linear(x)
         # test sharding layer axes is not present inside scan
         test.assertEqual(self.linear.kernel.shape, (4, 4))
-        test.assertEqual(self.linear.kernel.sharding_names, ('din', 'dout'))
+        test.assertEqual(self.linear.kernel.sharding_metadata, ('din', 'dout'))
         # at least a remove_axis was already called to remove the layer axis
         test.assertEqual(kremoves[-1], (0, 'layers'))
         test.assertEqual(bremoves[-1], (0, 'layers'))
@@ -175,7 +175,7 @@ class TestSPMD(parameterized.TestCase):
     with jax.set_mesh(mesh):
       m = MLP(rngs=nnx.Rngs(0))
     self.assertEqual(m.linear.kernel.shape, (5, 4, 4))
-    self.assertEqual(m.linear.kernel.sharding_names, ('layers', 'din', 'dout'))
+    self.assertEqual(m.linear.kernel.sharding_metadata, ('layers', 'din', 'dout'))
     self.assertEqual(m.linear.kernel.nickname, ('nick', 'in', 'out'))
     self.assertEqual(m.linear.bias.shape, (5, 4))
     # One add_axis called to add the `nnx.vmap` dimension
@@ -205,7 +205,7 @@ class TestSPMD(parameterized.TestCase):
       with jax.set_mesh(mesh):
         w = nnx.Param(
           rngs.lecun_normal()((4, 8)),
-          sharding_names=(None, 'model'))
+          sharding_metadata=(None, 'model'))
         if use_eager_sharding:
           assert has_sharding_spec(w)
         else:
@@ -309,7 +309,7 @@ class TestSPMD(parameterized.TestCase):
     )
     v = nnx.Variable(
       jnp.ones((4, 4)),
-      sharding_names=('row', 'col'),
+      sharding_metadata=('row', 'col'),
       mesh=mesh,
     )
     self.assertEqual(v.sharding.mesh, mesh)
@@ -327,7 +327,7 @@ class TestSPMD(parameterized.TestCase):
     with jax.disable_jit(True):
       v = nnx.Variable(
         jnp.ones((4, 4)),
-        sharding_names=('row', 'col'),
+        sharding_metadata=('row', 'col'),
         mesh=mesh,
       )
     self.assertEqual(v.sharding.mesh, mesh)
@@ -345,7 +345,7 @@ class TestSPMD(parameterized.TestCase):
     with jax.set_mesh(mesh):
       v = nnx.Variable(
         jnp.ones((4, 4)),
-        sharding_names=('row', 'col'),
+        sharding_metadata=('row', 'col'),
       )
     self.assertEqual(v.sharding.mesh, mesh)
     self.assertEqual(
