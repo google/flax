@@ -24,7 +24,6 @@ from copy import deepcopy
 import warnings
 
 from flax.nnx import variablelib
-from flax import nnx
 import jax
 import numpy as np
 import treescope  # type: ignore[import-untyped]
@@ -918,19 +917,8 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   # Graph Definition
   # -------------------------
   def _graph_node_flatten(self):
-    pytree_nodes = self._pytree__nodes
-    nodes = (
-      (
-        name,
-        value
-        if not self._pytree__is_pytree
-        else nnx.graph.DataElem(value)
-        if name in pytree_nodes and pytree_nodes[name]
-        else nnx.graph.StaticElem(value)
-      )
-      for name, value in vars(self).items()
-    )
-    nodes = sorted(nodes, key=self._pytree__key_sort_fn)
+    nodes = vars(self)
+    nodes = sorted(nodes.items(), key=self._pytree__key_sort_fn)
     return nodes, type(self)
 
   def _graph_node_set_key(self, key: str, value: tp.Any):

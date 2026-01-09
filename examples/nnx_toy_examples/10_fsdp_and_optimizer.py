@@ -14,8 +14,6 @@
 
 import dataclasses
 import os
-
-from jax._src import sharding
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=8'
 
 from matplotlib import pyplot as plt
@@ -58,15 +56,15 @@ class MLP(nnx.Module):
   def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
     self.w1 = nnx.Param(
       nnx.initializers.lecun_normal()(rngs.params(), (din, dmid)),
-      sharding_metadata=mesh_rules('embed', 'mlp'),
+      sharding_names=mesh_rules('embed', 'mlp'),
     )
     self.b1 = nnx.Param(
       jnp.zeros((dmid,)),
-      sharding_metadata=mesh_rules('mlp'),
+      sharding_names=mesh_rules('mlp'),
     )
     self.w2 = nnx.Param(
       nnx.initializers.lecun_normal()(rngs.params(), (dmid, dout)),
-      sharding_metadata=mesh_rules('embed', 'mlp'),
+      sharding_names=mesh_rules('embed', 'mlp'),
     )
 
   def __call__(self, x: jax.Array):

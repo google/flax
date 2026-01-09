@@ -174,7 +174,7 @@ class TestCompatibility(absltest.TestCase):
     self.assertIsInstance(linen_vars['params']['kernel'], nn.Partitioned)
     self.assertIsInstance(linen_vars['params']['bias'], nn.LogicallyPartitioned)
     self.assertIsInstance(nnx_model.kernel, nnx.Variable)
-    assert nnx_model.kernel.sharding_metadata == ('in', 'out')
+    assert nnx_model.kernel.sharding_names == ('in', 'out')
     assert nnx_model.kernel[...].sharding.is_equivalent_to(
       jax.sharding.NamedSharding(
         self.mesh, jax.sharding.PartitionSpec('in', 'out')
@@ -182,7 +182,7 @@ class TestCompatibility(absltest.TestCase):
       ndim=2,
     ), f'{nnx_model.kernel[...].sharding = }'
 
-    assert nnx_model.bias.sharding_metadata == ('out-alias',)
+    assert nnx_model.bias.sharding_names == ('out-alias',)
     assert nnx_model.bias.sharding_rules == (('out-alias', 'out'),)
     assert nnx_model.bias[...].sharding.is_equivalent_to(
       jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('out')),
@@ -410,7 +410,7 @@ class TestCompatibility(absltest.TestCase):
       pspec_tree = nn.get_partition_spec(variables)
     assert y.shape == (1, 64)
     self.assertIsInstance(variables['params']['kernel'], nnx.bridge.NNXMeta)
-    assert variables['params']['kernel'].metadata['sharding_metadata'] == ('in', 'out')
+    assert variables['params']['kernel'].metadata['sharding_names'] == ('in', 'out')
     self.assertEqual(pspec_tree['params']['kernel'],
                      jax.sharding.PartitionSpec('in', 'out'))
     np.testing.assert_allclose(y, x @ variables['params']['kernel'].value)
@@ -519,8 +519,8 @@ class TestCompatibility(absltest.TestCase):
       w, b = model.inner.dot['w'], model.inner.b
       np.testing.assert_allclose(model(x), x @ w + b)
     self.assertIsInstance(w, nnx.Param)
-    assert hasattr(w, 'sharding_metadata') and w.sharding_metadata == ('in', 'out')
-    assert hasattr(b, 'sharding_metadata') and b.sharding_metadata == ('out-alias', )
+    assert hasattr(w, 'sharding_names') and w.sharding_names == ('in', 'out')
+    assert hasattr(b, 'sharding_names') and b.sharding_names == ('out-alias', )
 
   def test_linen_nnx_linen(self):
     # TODO: add when we can safely `lazy_init` the NNX module inside `ToLinen` without

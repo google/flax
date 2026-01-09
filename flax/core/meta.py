@@ -297,13 +297,13 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
   def to_nnx_metadata(self) -> dict[str, Any]:
     """Return a dict of metadata that can translate into an `nnx.Variable`."""
     metadata = dict(vars(self))
-    metadata['sharding_metadata'] = metadata.pop('names')
+    metadata['sharding_names'] = metadata.pop('names')
     return metadata
 
   @classmethod
   def from_nnx_metadata(cls, metadata: dict[str, Any]):
     """Given a dict of `nnx.Variable` format metadata, create a `nn.Partitioned`."""
-    metadata['names'] = metadata.pop('sharding_metadata')
+    metadata['names'] = metadata.pop('sharding_names')
     fields = {x.name for x in dataclasses.fields(cls)}
     return cls(**{k: v for k, v in metadata.items() if k in fields})
 

@@ -1856,10 +1856,10 @@ class TestScan(absltest.TestCase):
           3,
           3,
           kernel_init=nnx.with_metadata(
-            nnx.initializers.lecun_normal(), sharding_metadata=('din', 'dout')
+            nnx.initializers.lecun_normal(), sharding_names=('din', 'dout')
           ),
           bias_init=nnx.with_metadata(
-            nnx.initializers.zeros_init(), sharding_metadata=('dout',)
+            nnx.initializers.zeros_init(), sharding_names=('dout',)
           ),
           rngs=rngs,
         )
@@ -1871,9 +1871,9 @@ class TestScan(absltest.TestCase):
         x = self.linear(x)
         # test sharding layer axes is not present inside scan
         test.assertEqual(self.linear.kernel.shape, (3, 3))
-        test.assertEqual(self.linear.kernel.sharding_metadata, ('din', 'dout'))
+        test.assertEqual(self.linear.kernel.sharding_names, ('din', 'dout'))
         test.assertEqual(self.linear.bias.shape, (3,))
-        test.assertEqual(self.linear.bias.sharding_metadata, ('dout',))
+        test.assertEqual(self.linear.bias.sharding_names, ('dout',))
         return x, None
 
     mesh = jax.make_mesh((1, 1, 1), ('layers', 'din', 'dout'), axis_types=(jax.sharding.AxisType.Auto,) * len(('layers', 'din', 'dout')))
@@ -1882,9 +1882,9 @@ class TestScan(absltest.TestCase):
 
     # test sharding layers axes is set
     self.assertEqual(m.linear.kernel.shape, (5, 3, 3))
-    self.assertEqual(m.linear.kernel.sharding_metadata, ('layers', 'din', 'dout'))
+    self.assertEqual(m.linear.kernel.sharding_names, ('layers', 'din', 'dout'))
     self.assertEqual(m.linear.bias.shape, (5, 3))
-    self.assertEqual(m.linear.bias.sharding_metadata, ('layers', 'dout'))
+    self.assertEqual(m.linear.bias.sharding_names, ('layers', 'dout'))
 
     x = jnp.ones((1, 3))
     with jax.set_mesh(mesh):
@@ -1892,9 +1892,9 @@ class TestScan(absltest.TestCase):
 
     # test sharding axes is preserved
     self.assertEqual(m.linear.kernel.shape, (5, 3, 3))
-    self.assertEqual(m.linear.kernel.sharding_metadata, ('layers', 'din', 'dout'))
+    self.assertEqual(m.linear.kernel.sharding_names, ('layers', 'din', 'dout'))
     self.assertEqual(m.linear.bias.shape, (5, 3))
-    self.assertEqual(m.linear.bias.sharding_metadata, ('layers', 'dout'))
+    self.assertEqual(m.linear.bias.sharding_names, ('layers', 'dout'))
 
   def test_cache_tracing_simple(self):
     n = 0
@@ -2723,7 +2723,7 @@ class TestVmap(absltest.TestCase):
     with jax.set_mesh(mesh):
       m = create_block(nnx.Rngs(0))
     self.assertEqual(m.kernel.shape, (5, 16, 32))
-    self.assertEqual(m.kernel.sharding_metadata, ('c', 'a', 'b'))
+    self.assertEqual(m.kernel.sharding_names, ('c', 'a', 'b'))
 
   def test_state_axes_from_state(self):
     class Model(nnx.Module):
