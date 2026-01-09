@@ -30,7 +30,7 @@ class TestGQA:
             assert False, "Should have raised ValueError"
         except ValueError as e:
             # Fixed expectation to match your code's error message
-            assert "must be multiple" in str(e)
+            assert "must be a multiple" in str(e)
 
     def test_gqa_parity_with_jax(self):
         class DummyModule(nnx.Module):
