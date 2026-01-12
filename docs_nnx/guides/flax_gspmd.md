@@ -68,14 +68,14 @@ with nnx.use_eager_sharding(False):
 You can also enable eager sharding on a per-variable basis by passing `eager_sharding=False` during variable initialization. The mesh can also be passed this way.
 
 ```{code-cell} ipython3
-nnx.Param(jnp.ones(4,4), sharding_names=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
+nnx.Param(jnp.ones(4,4), sharding_metadata=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
 ```
 
 ## Shard a single-array model
 
 Let's begin by sharding the simplest component possible - a Flax variable.
 
-When you define a Flax variable, you can pass in a metadata field called `sharding_names`, to specify how the underlying JAX array should be sharded. This field should be a tuple of names, each of which refer to how an axis of the array should be sharded.
+When you define a Flax variable, you can pass in a metadata field called `sharding_metadata`, to specify how the underlying JAX array should be sharded. This field should be a tuple of names, each of which refer to how an axis of the array should be sharded.
 
 **You must have an existing device mesh** and create a sharding-annotated `nnx.Variable` within its scope. This allows the result variable to be sharded accordingly on those devices. The device mesh can be your actual accelerator mesh, or a dummy fake CPU mesh like in this notebook.
 
@@ -85,7 +85,7 @@ rngs = nnx.Rngs(0)
 with jax.set_mesh(auto_mesh):
   w = nnx.Param(
     rngs.lecun_normal()((4, 8)),
-    sharding_names=(None, 'model')
+    sharding_metadata=(None, 'model')
   )
   print(w.sharding.spec)
   jax.debug.visualize_array_sharding(w)  # already sharded!
@@ -102,7 +102,7 @@ Also, you should use `jax.jit` for the whole initialization for maximum performa
 def init_sharded_linear(key):
   # Shard your parameter along `model` dimension, as in model/tensor parallelism
   return nnx.Linear(4, 8, use_bias=False, rngs=nnx.Rngs(key),
-                    kernel_metadata={'sharding_names': (None, 'model')})
+                    kernel_metadata={'sharding_metadata': (None, 'model')})
 
 with jax.set_mesh(auto_mesh):
   key= rngs()
@@ -147,12 +147,12 @@ class DotReluDot(nnx.Module):
     init_fn = nnx.initializers.lecun_normal()
     self.dot1 = nnx.Linear(
       depth, depth,
-      kernel_metadata={'sharding_names': (None, 'model')},
+      kernel_metadata={'sharding_metadata': (None, 'model')},
       use_bias=False,  # or use `bias_metadata` to give it annotation too
       rngs=rngs)
     self.w2 = nnx.Param(
       init_fn(rngs.params(), (depth, depth)),  # RNG key and shape for W2 creation
-      sharding=('model', None),  # same as sharding_names=('model', None)
+      sharding=('model', None),  # same as sharding_metadata=('model', None)
     )
 
   def __call__(self, x: jax.Array):
@@ -261,7 +261,7 @@ class LogicalDotReluDot(nnx.Module):
     init_fn = nnx.initializers.lecun_normal()
     self.dot1 = nnx.Linear(
       depth, depth,
-      kernel_metadata={'sharding_names': ('embed', 'hidden')},
+      kernel_metadata={'sharding_metadata': ('embed', 'hidden')},
       use_bias=False,  # or use `bias_metadata` to give it annotation too
       rngs=rngs)
     self.w2 = nnx.Param(

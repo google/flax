@@ -397,7 +397,7 @@ class NNXDotWithParititioning(nnx.Module):
   def __init__(self, in_dim: int, out_dim: int, rngs: nnx.Rngs):
     init_fn = nnx.initializers.lecun_normal()
     self.w = nnx.Param(init_fn(rngs.params(), (in_dim, out_dim)),
-                       sharding_names=('in', 'out'))
+                       sharding_metadata=('in', 'out'))
   def __call__(self, x: jax.Array):
     return x @ self.w
 
@@ -410,7 +410,7 @@ def create_sharded_variables(key, x):
   # A `NNXMeta` wrapper of the underlying `nnx.Param`
   assert type(variables['params']['w']) == bridge.NNXMeta
   # The annotation coming from the `nnx.Param` => (in, out)
-  assert variables['params']['w'].metadata['sharding_names'] == ('in', 'out')
+  assert variables['params']['w'].metadata['sharding_metadata'] == ('in', 'out')
 
   unboxed_variables = nn.unbox(variables)
   variable_pspecs = nn.get_partition_spec(variables)
