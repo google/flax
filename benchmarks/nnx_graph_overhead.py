@@ -58,9 +58,9 @@ class MLP(nnx.Module):
   def __init__(self, din, dhidden, dout, depth, *, rngs: nnx.Rngs):
     self.count = Count(jnp.array(0))
     self.linear_in = Block(din, dhidden, rngs=rngs)
-    self.intermediates = nnx.List([
+    self.intermediates = [
       Block(dhidden, dhidden, rngs=rngs) for _ in range(depth - 2)
-    ])
+    ]
     self.linear_out = Block(dhidden, dout, rngs=rngs)
 
   def __call__(self, x):
