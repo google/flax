@@ -2066,7 +2066,7 @@ def custom_vjp(
   Args:
     fn: The function to define a custom_vjp for.
     forward_fn: A function with the same arguments as ``fn`` returning an tuple
-      with the original output and the residuals that will be passsed to
+      with the original output and the residuals that will be passed to
       ``backward_fn``.
     backward_fn: arguments are passed as
       ``(*nondiff_args, residuals, tangents)`` The function should return a

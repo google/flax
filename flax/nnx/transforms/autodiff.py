@@ -738,10 +738,10 @@ def custom_vjp(
 
   ``nnx.custom_vjp`` accepts Modules and other Flax NNX objects as arguments. The main difference
   with the JAX version is that, because Modules follow reference semantics, they propagate the State
-  updates for the inputs as auxiliary outputs. This means that the incomming gradients in the ``bwd`` function
+  updates for the inputs as auxiliary outputs. This means that the incoming gradients in the ``bwd`` function
   will have the form ``(input_updates_g, out_g)`` where ``input_updates_g`` is the gradient updated state of
   the inputs w.r.t. to the inputs. All Module terms on the inputs will an associated ``State`` term in
-  ``input_updates_g``, while all non-Module terms will appear as None. The shape of the tanget will be
+  ``input_updates_g``, while all non-Module terms will appear as None. The shape of the tangent will be
   expected to have the same shape as the input, with ``State`` terms in place of the corresponding Module terms.
 
   Example::

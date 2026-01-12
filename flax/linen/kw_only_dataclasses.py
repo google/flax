@@ -23,7 +23,7 @@ aliases for `dataclasses.dataclass` and `dataclasses.field`.
 
 For earlier Python versions, when constructing a dataclass, any fields that have
 been marked as keyword-only (including inherited fields) will be moved to the
-end of the constuctor's argument list. This makes it possible to have a base
+end of the constructor's argument list. This makes it possible to have a base
 class that defines a field with a default, and a subclass that defines a field
 without a default. E.g.:
 
@@ -78,7 +78,7 @@ KW_ONLY = _KwOnlyType()
 
 
 def field(*, metadata=None, kw_only=dataclasses.MISSING, **kwargs):
-  """Wrapper for dataclassess.field that adds support for kw_only fields.
+  """Wrapper for dataclasses.field that adds support for kw_only fields.
 
   Args:
     metadata: A mapping or None, containing metadata for the field.
