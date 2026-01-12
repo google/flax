@@ -172,7 +172,7 @@ def dot_product_attention_weights(
   # apply attention dropout
   if not deterministic and dropout_rate > 0.0:
     keep_prob = 1.0 - dropout_rate
-    # Note: We use original key.ndim because we might have expanded key dim
+    # use original key.ndim because we might have expanded key dim
     ndim_base = key.ndim - 1 if is_gqa else key.ndim
 
     if broadcast_dropout:
@@ -261,7 +261,6 @@ def dot_product_attention(
   ), 'q, k, v batch dims must match.'
   assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
 
-  # We skip this optimization for GQA (mismatched heads) to use manual broadcasting
   # Criteria that invoke the more optimized dot product attention
   if dropout_rate == 0.0 and module is None:
     # make sure qkv batch are compressed to one dim
@@ -296,7 +295,7 @@ def dot_product_attention(
   )
 
   # return weighted sum over values for each query position
-  # Check if we need to broadcast Value heads to match Query heads (GQA)
+  # check if need to broadcast Value heads to match Query heads (GQA)
   if attn_weights.shape[-3] != value.shape[-2]:
       q_heads = attn_weights.shape[-3]
       v_heads = value.shape[-2]

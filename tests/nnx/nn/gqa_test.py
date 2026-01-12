@@ -29,7 +29,7 @@ class TestGQA:
             nnx.dot_product_attention(query, key, value)
             assert False, "Should have raised ValueError"
         except ValueError as e:
-            # Fixed expectation to match your code's error message
+
             assert "must be a multiple" in str(e)
 
     def test_gqa_parity_with_jax(self):
@@ -49,12 +49,7 @@ class TestGQA:
         key   = jax.random.normal(k2, (B, S, num_heads_kv, D))
         value = jax.random.normal(k3, (B, S, num_heads_kv, D))
 
-        # Manually repeat heads for JAX reference
-        n_rep = num_heads_q // num_heads_kv
-        key_jax = jnp.repeat(key, n_rep, axis=-2)
-        value_jax = jnp.repeat(value, n_rep, axis=-2)
-
-        jax_out = jax.nn.dot_product_attention(query, key_jax, value_jax)
+        jax_out = jax.nn.dot_product_attention(query, key, value)
 
         # NNX should handle broadcasting internally
         nnx_out = nnx.dot_product_attention(
@@ -62,5 +57,4 @@ class TestGQA:
             module=dummy_module
         )
 
-        # Relaxed tolerance to 1e-3
         np.testing.assert_allclose(nnx_out, jax_out, atol=1e-3, rtol=1e-3)
