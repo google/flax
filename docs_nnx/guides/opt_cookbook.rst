@@ -36,7 +36,7 @@ The following sections will all be training the same toy model. We will allow ex
 
     param_init = jax.nn.initializers.lecun_normal()
 
-    nnx_keys = nnx.Rngs(0)
+    rngs = nnx.Rngs(0)
 
     def nnx_model(rngs, **kwargs):
         return nnx.Sequential(
@@ -76,8 +76,8 @@ We'll operate on the following fake data:
   :title: NNX, Jax
   :sync:
 
-  x = nnx_keys.normal((32, 2))
-  y = nnx_keys.normal((32, 8))
+  x = rngs.normal((32, 2))
+  y = rngs.normal((32, 8))
 
   ---
 
@@ -94,7 +94,7 @@ Neural network see increased robustness when, rather than using only the weights
     :title: NNX, Jax
     :sync:
 
-    model = nnx_model(nnx_keys)
+    model = nnx_model(rngs)
 
     nnx_optimizer = nnx.Optimizer(
       model,
@@ -163,10 +163,10 @@ The pattern for adding low rank adaptation to an optimization loop is very simil
 
     def add_rank2_lora(path, node):
       if isinstance(node, nnx.Linear):
-        return nnx.LoRA(node.in_features, 2, node.out_features, base_module=node, rngs=nnx_keys)
+        return nnx.LoRA(node.in_features, 2, node.out_features, base_module=node, rngs=rngs)
       return node
 
-    base_model = nnx_model(nnx_keys)
+    base_model = nnx_model(rngs)
     model = nnx.recursive_map(add_rank2_lora, base_model)
 
     @nnx.jit
@@ -244,7 +244,7 @@ So far, we've been using optax optimizers with the interface ``optimizer.update(
           value_fn=loss_fn_state)
         return loss
 
-    model = nnx_model(nnx_keys)
+    model = nnx_model(rngs)
 
     nnx_optimizer = nnx.Optimizer(
       model,
@@ -294,7 +294,7 @@ In Flax, we will also initialize a partitioned optax optimizer. But unlike the J
     :title: NNX, Jax
     :sync:
 
-    model = nnx_model(nnx_keys)
+    model = nnx_model(rngs)
     state = nnx.state(model, nnx.Param)
     rates = {'kernel': optax.adam(1e-3), 'bias': optax.adam(1e-2)}
     param_tys = nnx.map_state(lambda p, v: list(p)[-1], state)
@@ -342,7 +342,7 @@ In Flax, we can just wrap wrap the ``MultiSteps`` optimizer with the ``nnx.Optim
     :title: NNX, Jax
     :sync:
 
-    model = nnx_model(nnx_keys)
+    model = nnx_model(rngs)
     nnx_optimizer = nnx.Optimizer(model, tx=optax.MultiSteps(optax.adam(1e-3), every_k_schedule=3), wrt=nnx.Param)
 
     @nnx.jit
@@ -383,7 +383,7 @@ Sharding Optimization State Differently from Parameters
 Say we're doing data parallelism. We want to replicate our parameters across all GPUs so we can do the forward and backward passes without communication latency.
 
 
-But we don't need to replicate the optimizer state, as it's not invovled in SPMD computations. One copy is enough, and we can shard this copy across our mesh to reduce memory usage. This means that we need the optimier state to be sharded differently from the parameters themselves.
+But we don't need to replicate the optimizer state, as it's not invovled in SPMD computations. One copy is enough, and we can shard this copy across our mesh to reduce memory usage. This means that we need the optimizer state to be sharded differently from the parameters themselves.
 
 
 To do this, we can pass the params initializer given the the optimizer a `sharding` argument. This will shard the optimization state the same way. But when we initialize the model parameters themselves, we won't provide a sharding, allowing for data parallelism.
