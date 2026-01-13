@@ -1617,7 +1617,7 @@ def fori_loop(lower: int, upper: int,
 
   pure_init_val = extract.to_tree(init_val, ctxtag='fori_loop')
   body = ForiLoopBodyFn(body_fun)
-  pure_out = body(lower, pure_init_val)
+  pure_out = jax.eval_shape(body, lower, pure_init_val)
   pure_init_val = _reconsile_index_mapping(pure_init_val, pure_out)
   pure_out = jax.lax.fori_loop(lower, upper,
                                body, pure_init_val,
