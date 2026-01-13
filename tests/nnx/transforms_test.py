@@ -3156,6 +3156,17 @@ class TestWhileLoop(absltest.TestCase):
       (0, m, m),
     )
 
+  def test_immut_fori_loop(self):
+    def immut_fn(i, carry):
+        g_accum = carry
+        grads = jax.tree.map(jnp.ones_like, g_accum)
+        g_accum = jax.tree.map(lambda gm, g: gm + g, g_accum, grads)
+        return g_accum
+
+    model = nnx.Linear(10, 10, rngs=nnx.Rngs(0), use_bias=False)
+    g_accum = jax.tree.map(jnp.zeros_like, nnx.state(model))
+    nnx.fori_loop(0, 2, immut_fn, g_accum)
+
   def test_fori_loop_basic(self):
     def fwd_fn(i, input):
       m, x = input
