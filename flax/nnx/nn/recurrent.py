@@ -67,9 +67,7 @@ class RNNCellBase(Module):
     def __call__(
         self,
         carry: Carry,
-        inputs: Array,
-        *,
-        out_sharding = None,
+        inputs: Array
     ) -> tuple[Carry, Array]:
         """Run the RNN cell.
 
@@ -902,7 +900,6 @@ class RNN(Module):
     reverse: bool | None = None,
     keep_order: bool | None = None,
     rngs: rnglib.Rngs | rnglib.RngStream | None = None,
-    out_sharding = None,
   ):
     if return_carry is None:
       return_carry = self.return_carry
@@ -968,7 +965,7 @@ class RNN(Module):
     def scan_fn(
       cell: RNNCellBase, carry: Carry, x: Array
     ) -> tuple[Carry, Array] | tuple[Carry, tuple[Carry, Array]]:
-      carry, y = cell(carry, x, out_sharding=out_sharding)
+      carry, y = cell(carry, x)
       if slice_carry:
         return carry, (carry, y)
       return carry, y
@@ -1170,7 +1167,6 @@ class Bidirectional(Module):
     time_major: bool | None = None,
     reverse: bool | None = None,  # unused
     keep_order: bool | None = None,  # unused
-    out_sharding = None,
   ) -> Output | tuple[tuple[Carry, Carry], Output]:
     if time_major is None:
       time_major = self.time_major
@@ -1203,7 +1199,6 @@ class Bidirectional(Module):
       return_carry=True,
       time_major=time_major,
       reverse=False,
-      out_sharding=out_sharding,
     )
 
     # Encode in the backward direction.
@@ -1216,7 +1211,6 @@ class Bidirectional(Module):
       time_major=time_major,
       reverse=True,
       keep_order=True,
-      out_sharding=out_sharding,
     )
 
     carry = (carry_forward, carry_backward) if return_carry else None

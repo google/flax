@@ -501,10 +501,10 @@ class TestRNN(absltest.TestCase):
           rngs=rngs,
         )
 
-      def __call__(self, carry, inputs, *, out_sharding=None):
+      def __call__(self, carry, inputs):
         h = carry
         x = jnp.concatenate([inputs, h], axis=-1)
-        new_h = jax.nn.tanh(self.dense(x, out_sharding=out_sharding))
+        new_h = jax.nn.tanh(self.dense(x))
         return new_h, new_h
 
       def initialize_carry(self, input_shape, rngs):
@@ -607,9 +607,9 @@ class TestRNN(absltest.TestCase):
           rate=dropout_rate, rng_collection='recurrent_dropout', rngs=rngs
         )
 
-      def __call__(self, carry, x, *, out_sharding=None):
+      def __call__(self, carry, x):
         h, c = carry
-        new_h, new_c = super().__call__((h, c), x, out_sharding=out_sharding)
+        new_h, new_c = super().__call__((h, c), x)
         new_h = jax.tree.map(self.recurrent_dropout, new_h)
         return new_h, new_c
 
