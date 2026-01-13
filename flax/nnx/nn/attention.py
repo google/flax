@@ -541,7 +541,6 @@ class MultiHeadAttention(Module):
     rngs: rnglib.Rngs | rnglib.RngStream | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
-    out_sharding = None,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -572,8 +571,6 @@ class MultiHeadAttention(Module):
       decode: whether to prepare and use an autoregressive cache. The ``decode``
         flag passed into the call method will take precedence over the ``decode``
         flag passed into the constructor.
-      out_sharding: the sharding of the output. If None, the output is not
-        sharded.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
@@ -702,7 +699,7 @@ class MultiHeadAttention(Module):
       module=self if sow_weights else None,
     )
     # back to the original inputs dimensions
-    out = self.out(x, out_sharding=out_sharding)
+    out = self.out(x)
     return out
 
   def init_cache(self, input_shape: Shape, dtype: Dtype = jnp.float32):

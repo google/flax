@@ -203,6 +203,21 @@ class TestLSTMCell(absltest.TestCase):
     for c_nnx, c_linen in zip(new_carry_nnx, new_carry_linen):
       np.testing.assert_allclose(c_nnx, c_linen, atol=1e-5)
 
+  def test_preferred_element_type(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.LSTMCell(
+      in_features=4,
+      hidden_features=4,
+      preferred_element_type=jnp.float16,
+      rngs=rngs,
+    )
+    carry = model.initialize_carry((1, 4), rngs=rngs)
+    x = jnp.ones((1, 4), dtype=jnp.float32)
+    (new_c, new_h), out = model(carry, x)
+    self.assertEqual(out.shape, (1, 4))
+    self.assertEqual(model.preferred_element_type, jnp.float16)
+    self.assertEqual(model.ii.preferred_element_type, jnp.float16)
+
 
 class TestRNN(absltest.TestCase):
   def test_rnn_with_lstm_cell(self):
@@ -486,10 +501,10 @@ class TestRNN(absltest.TestCase):
           rngs=rngs,
         )
 
-      def __call__(self, carry, inputs):
+      def __call__(self, carry, inputs, *, out_sharding=None):
         h = carry
         x = jnp.concatenate([inputs, h], axis=-1)
-        new_h = jax.nn.tanh(self.dense(x))
+        new_h = jax.nn.tanh(self.dense(x, out_sharding=out_sharding))
         return new_h, new_h
 
       def initialize_carry(self, input_shape, rngs):
@@ -592,9 +607,9 @@ class TestRNN(absltest.TestCase):
           rate=dropout_rate, rng_collection='recurrent_dropout', rngs=rngs
         )
 
-      def __call__(self, carry, x):
+      def __call__(self, carry, x, *, out_sharding=None):
         h, c = carry
-        new_h, new_c = super().__call__((h, c), x)
+        new_h, new_c = super().__call__((h, c), x, out_sharding=out_sharding)
         new_h = jax.tree.map(self.recurrent_dropout, new_h)
         return new_h, new_c
 
@@ -640,6 +655,38 @@ class TestRNN(absltest.TestCase):
 
     self.assertEqual(y.shape, (8, 1))
     self.assertEqual(model.lstm.cell.recurrent_dropout.rngs.count[...], 1)
+
+
+class TestGRUCell(absltest.TestCase):
+  def test_preferred_element_type(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.GRUCell(
+      in_features=4,
+      hidden_features=4,
+      preferred_element_type=jnp.float16,
+      rngs=rngs,
+    )
+    carry = model.initialize_carry((1, 4), rngs=rngs)
+    x = jnp.ones((1, 4), dtype=jnp.float32)
+    new_h, out = model(carry, x)
+    self.assertEqual(out.shape, (1, 4))
+    self.assertEqual(model.preferred_element_type, jnp.float16)
+    self.assertEqual(model.dense_i.preferred_element_type, jnp.float16)
+
+
+class TestSimpleCell(absltest.TestCase):
+  def test_out_sharding_signature(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.SimpleCell(
+      in_features=4,
+      hidden_features=4,
+      rngs=rngs,
+    )
+    carry = model.initialize_carry((1, 4), rngs=rngs)
+    x = jnp.ones((1, 4))
+    # Just verify it accepts out_sharding=None without error
+    new_h, out = model(carry, x, out_sharding=None)
+    self.assertEqual(out.shape, (1, 4))
 
 
 if __name__ == '__main__':
