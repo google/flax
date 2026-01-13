@@ -169,3 +169,4 @@ is intended to be that from [flax/version.py](https://github.com/google/flax/blo
 ## Note
 
 Flax is an open source project maintained by a dedicated team at Google DeepMind, but is not an official Google product.
+

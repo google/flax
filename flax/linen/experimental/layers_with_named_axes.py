@@ -248,7 +248,7 @@ def _normalize(
 ):
   """ "Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
-  A seperate bias and scale is learned for each feature as specified by
+  A separate bias and scale is learned for each feature as specified by
   feature_axes.
   """
   reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)

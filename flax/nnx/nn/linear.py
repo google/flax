@@ -133,6 +133,10 @@ class LinearGeneral(Module):
     param_dtype: the dtype passed to parameter initializers (default: float32).
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
+    dot_general: dot product function (default: None). If neither this nor
+        ``dot_general_cls`` are provided, ``jax.lax.dot_general`` is used.
+    dot_general_cls: dot product function class to instantiate a dot product function
+    as ``dot_general = dot_general_cls()`` (default: None).
     precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     promote_dtype: function to promote the dtype of the arrays to the desired
@@ -669,8 +673,8 @@ class Conv(Module):
       ``'CIRCULAR'`` (periodic boundary conditions), the string `'REFLECT'`
       (reflection across the padding boundary), or a sequence of ``n``
       ``(low, high)`` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpeted as applying the same padding
-      in all dims and passign a single int in a sequence causes the same padding
+      spatial dimension. A single int is interpreted as applying the same padding
+      in all dims and passing a single int in a sequence causes the same padding
       to be used on both sides. ``'CAUSAL'`` padding for a 1D convolution will
       left-pad the convolution axis, resulting in same-sized output.
     input_dilation: an integer or a sequence of ``n`` integers, giving the
@@ -688,6 +692,8 @@ class Conv(Module):
           be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
+    conv_general_dilated: the convolution function to use (default:
+      ``jax.lax.conv_general_dilated``).
     precision: numerical precision of the computation see ``jax.lax.Precision``
       for details.
     kernel_init: initializer for the convolutional kernel.
@@ -956,7 +962,7 @@ class ConvTranspose(Module):
       inter-window strides (default: 1).
     padding: either a string indicating a specialized padding mode,
       or a sequence of ``n`` ``(low, high)`` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpeted as applying the same padding
+      spatial dimension. A single int is interpreted as applying the same padding
       in all dims and a single int in a sequence causes the same padding
       to be used on both sides.
 

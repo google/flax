@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Common utilty functions used in data-parallel Flax examples.
+"""Common utility functions used in data-parallel Flax examples.
 
 This module is a historical grab-bag of utility functions primarily concerned
 with helping write pmap-based data-parallel training loops.

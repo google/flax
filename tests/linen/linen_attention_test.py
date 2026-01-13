@@ -206,7 +206,7 @@ class AttentionTest(parameterized.TestCase):
     np.testing.assert_allclose(y7, y8)
 
   def test_causal_mask_1d(self):
-    """Tests autoregresive masking for 1d attention."""
+    """Tests autoregressive masking for 1d attention."""
     x = jnp.ones((3, 16))  # (bs1, length)
     mask_1d = nn.attention.make_causal_mask(x)
     ts = np.arange(16)
@@ -257,8 +257,8 @@ class AttentionTest(parameterized.TestCase):
 
     np.testing.assert_allclose(y_ref, y, atol=1e-5)
 
-  def test_autoregresive_receptive_field_1d(self):
-    """Tests the autoregresive self-attention receptive field."""
+  def test_autoregressive_receptive_field_1d(self):
+    """Tests the autoregressive self-attention receptive field."""
     rng = random.key(0)
     rng1, rng2 = random.split(rng, num=2)
 
