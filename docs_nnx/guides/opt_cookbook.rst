@@ -88,7 +88,7 @@ We'll operate on the following fake data:
 Exponential Moving Average
 ===========================
 
-Neural network see increased robustness when, rather than using only the weights available at the end of training, we use an exponential moving average of the weights produced throughout training. It is easy to modify the standard Jax training loop to accomodate calculating exponential moving averages.
+Neural networks see increased robustness when, rather than using only the weights available at the end of training, we use an exponential moving average of the weights produced throughout training. It is easy to modify the standard Jax training loop to accomodate calculating exponential moving averages.
 
 .. codediff::
     :title: NNX, Jax
