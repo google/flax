@@ -20,14 +20,13 @@ Flax NNX is a Python neural network library built upon [JAX](https://github.com/
 
 Let’s get started!
 
-+++
-
 ## 1. Install Flax
 
 If `flax` is not installed in your Python environment, use `pip` to install the package from PyPI (below, just uncomment the code in the cell if you are working from Google Colab/Jupyter Notebook):
 
 ```{code-cell} ipython3
-# !pip install flax
+# !pip install -U "jax[cuda12]"
+# !pip install -U flax
 ```
 
 ## 2. Load the MNIST dataset
@@ -141,7 +140,7 @@ nnx.display(optimizer)
 
 In this section, you will define a loss function using the cross entropy loss ([`optax.softmax_cross_entropy_with_integer_labels()`](https://optax.readthedocs.io/en/latest/api/losses.html#optax.softmax_cross_entropy_with_integer_labels)) that the CNN model will optimize over.
 
-In addition to the `loss`, during training and testing you will also get the `logits`, which will be used to calculate the accuracy metric. 
+In addition to the `loss`, during training and testing you will also get the `logits`, which will be used to calculate the accuracy metric.
 
 During training - the `train_step` - you will use `nnx.value_and_grad` to compute the gradients and update the model's parameters using the `optimizer` you have already defined. And during both training and testing (the `eval_step`), the `loss` and `logits` will be used to calculate the metrics.
 
@@ -237,7 +236,7 @@ model.eval() # Switch to evaluation mode.
 
 @nnx.jit
 def pred_step(model: CNN, batch):
-  logits = model(batch['image'])
+  logits = model(batch['image'], None)
   return logits.argmax(axis=1)
 ```
 
@@ -252,6 +251,38 @@ for i, ax in enumerate(axs.flatten()):
   ax.imshow(test_batch['image'][i, ..., 0], cmap='gray')
   ax.set_title(f'label={pred[i]}')
   ax.axis('off')
+```
+
+# 8. Export the model
+
+Flax models are great for research, but aren't meant to be deployed directly. Instead, high performance inference runtimes like LiteRT or TensorFlow Serving operate on a special [SavedModel](https://www.tensorflow.org/guide/saved_model) format. The [Orbax](https://orbax.readthedocs.io/en/latest/guides/export/orbax_export_101.html) library makes it easy to export Flax models to this format. First, we must create a `JaxModule` object wrapping a model and its prediction method.
+
+```{code-cell} ipython3
+from orbax.export import JaxModule, ExportManager, ServingConfig
+```
+
+```{code-cell} ipython3
+def exported_predict(model, y):
+    return model(y, None)
+
+jax_module = JaxModule(model, exported_predict)
+```
+
+We also need to tell Tensorflow Serving what input type `exported_predict` expects in its second argument. The export machinery expects type signature arguments to be PyTrees of `tf.TensorSpec`.
+
+```{code-cell} ipython3
+sig = [tf.TensorSpec(shape=(1, 28, 28, 1), dtype=tf.float32)]
+```
+
+Finally, we can bundle up the input signature and the `JaxModule` together using the `ExportManager` class.
+
+```{code-cell} ipython3
+export_mgr = ExportManager(jax_module, [
+    ServingConfig('mnist_server', input_signature=sig)
+])
+
+output_dir='/tmp/mnist_export'
+export_mgr.save(output_dir)
 ```
 
 Congratulations! You have learned how to use Flax NNX to build and train a simple classification model end-to-end on the MNIST dataset.
