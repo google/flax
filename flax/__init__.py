@@ -24,6 +24,7 @@ del configurations
 from flax import core
 from flax import jax_utils
 from flax import linen
+from flax import nnx
 from flax import serialization
 from flax import traverse_util
 
