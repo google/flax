@@ -13,12 +13,13 @@
 # limitations under the License.
 
 import dataclasses
-from absl.testing import absltest
+from absl.testing import absltest, parameterized
 import optax
 from flax import nnx
 import flax.errors
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 
 class TestPytree(absltest.TestCase):
@@ -722,7 +723,7 @@ class TestOptimizer(absltest.TestCase):
 
     self.assertNotEqual(loss, 0.0)
 
-class TestHijaxVariables(absltest.TestCase):
+class TestHijaxVariables(parameterized.TestCase):
   def test_variable_to_hijax(self):
     v_low = nnx.Param(jnp.array(1), a='hi')
     v_hi = nnx.vars_as(v_low, hijax=True)
@@ -951,6 +952,99 @@ class TestHijaxVariables(absltest.TestCase):
     self.assertIsInstance(grad, jax.Array)
     self.assertEqual(grad, 6.0)
 
+  @parameterized.product(
+    mutable=[True, False],
+    hijax=[True, False],
+    ref=[True, False],
+  )
+  def test_variable_properties(self, mutable, hijax, ref):
+    def create_variable():
+      return nnx.Variable(jnp.array(1), mutable=mutable, hijax=hijax, ref=ref)
+
+    # ref=True requires mutable=True (Refs are inherently mutable)
+    if ref and not mutable:
+      with self.assertRaisesRegex(
+        ValueError, 'Cannot set ref=True and mutable=False simultaneously.'
+      ):
+        create_variable()
+    else:
+      v = create_variable()
+      self.assertEqual(v.mutable, mutable)
+      self.assertEqual(v.hijax, hijax)
+      self.assertEqual(v.ref, ref)
+      # Validate object type based on hijax
+      if hijax:
+        self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
+      else:
+        self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
+      # Validate raw value type based on ref
+      if ref:
+        self.assertIsInstance(v.get_raw_value(), jax.Ref)
+      else:
+        self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
+
+  @parameterized.product(
+    mutable=[True, False],
+    hijax=[True, False],
+    ref=[True, False],
+  )
+  def test_variable_copy_properties(self, mutable, hijax, ref):
+    # Start with a vanilla Variable
+    v_original = nnx.Variable(jnp.array(1))
+
+    # ref=True requires mutable=True (Refs are inherently mutable)
+    if ref and not mutable:
+      with self.assertRaisesRegex(
+        ValueError, 'Cannot set ref=True and mutable=False simultaneously.'
+      ):
+        v_original.copy(mutable=mutable, hijax=hijax, ref=ref)
+    else:
+      v = v_original.copy(mutable=mutable, hijax=hijax, ref=ref)
+      self.assertEqual(v.mutable, mutable)
+      self.assertEqual(v.hijax, hijax)
+      self.assertEqual(v.ref, ref)
+      # Validate object type based on hijax
+      if hijax:
+        self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
+      else:
+        self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
+      # Validate raw value type based on ref
+      if ref:
+        self.assertIsInstance(v.get_raw_value(), jax.Ref)
+      else:
+        self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
+
+  @parameterized.product(
+    mutable=[True, False],
+    hijax=[True, False],
+    ref=[True, False],
+  )
+  def test_variable_vars_as_properties(self, mutable, hijax, ref):
+    # Start with a vanilla Variable
+    v_original = nnx.Variable(jnp.array(1))
+
+    # ref=True requires mutable=True (Refs are inherently mutable)
+    if ref and not mutable:
+      with self.assertRaisesRegex(
+        ValueError, 'Cannot set ref=True and mutable=False simultaneously.'
+      ):
+        nnx.vars_as(v_original, mutable=mutable, hijax=hijax, ref=ref)
+    else:
+      v = nnx.vars_as(v_original, mutable=mutable, hijax=hijax, ref=ref)
+      self.assertEqual(v.mutable, mutable)
+      self.assertEqual(v.hijax, hijax)
+      self.assertEqual(v.ref, ref)
+      # Validate object type based on hijax
+      if hijax:
+        self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
+      else:
+        self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
+      # Validate raw value type based on ref
+      if ref:
+        self.assertIsInstance(v.get_raw_value(), jax.Ref)
+      else:
+        self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
+
 
 class TestVarDefaults(absltest.TestCase):
   def test_defaults(self):
@@ -1024,5 +1118,168 @@ class TestVarDefaults(absltest.TestCase):
       v = nnx.Variable(1, ref=False)
       self.assertFalse(v.ref)
 
+class HijaxTransformCoverageTest(absltest.TestCase):
+  # ------------
+  # grad
+  # ------------
+  # with differentiable hijax arguments (immutable variable)
+  def test_hitypes_as_grad_args(self):
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True, mutable=False)
+
+    def loss_fn(v):
+      x = v[0]
+      return x ** 2
+
+    grads = jax.grad(loss_fn)(v)
+    np.testing.assert_allclose(grads[0], 4.0)
+
+  # with non-differentiable hijax arguments (immutable variable)
+  def test_hitypes_as_nondiff_grad_args(self):
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True, mutable=False)
+    x = jnp.array(3.0)
+
+    def loss_fn(x, v):
+      y = v[1]
+      return x ** 2 + y
+
+    grad = jax.grad(loss_fn)(x, v)
+    np.testing.assert_allclose(grad, 6.0)
+
+  # with hijax captured arguments (immutable variable)
+  def test_hitypes_as_captured_args(self):
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True, mutable=False)
+
+    def loss_fn(x):
+      y = v[1]
+      return x ** 2 + y
+
+    grad = jax.grad(loss_fn)(jnp.array(4.0))
+    np.testing.assert_allclose(grad, 8.0)
+
+  # with differentiable mutable hijax arguments
+  @absltest.skip("Not yet implemented")
+  def test_mutable_hitypes_as_grad_args(self):
+    v = nnx.Variable(jnp.array(2.0), hijax=True)
+
+    def loss_fn(v):
+      return v[...] ** 2
+
+    grads = jax.grad(loss_fn)(v)
+    # NOTE: unclear what the tangent type will be here
+
+  # with non-differentiable mutable hijax arguments
+  def test_mutable_hitypes_as_nondiff_grad_args(self):
+    v = nnx.Variable(jnp.array(2.0), hijax=True)
+    x = jnp.array(3.0)
+
+    def loss_fn(x, v):
+      v[...] = jax.lax.stop_gradient(x * 2)
+      return x ** 2 + v[...]
+
+    grad = jax.grad(loss_fn)(x, v)
+    np.testing.assert_allclose(v[...], 6.0)
+    np.testing.assert_allclose(grad, 6.0)
+
+  # with mutable hijax captured arguments
+  def test_mutable_hitypes_as_captured_args(self):
+    v = nnx.Variable(jnp.array(2.0), hijax=True)
+
+    def loss_fn(x):
+      v[...] = jax.lax.stop_gradient(x * 3)
+      return x ** 2 + v[...]
+
+    grad = jax.grad(loss_fn)(jnp.array(4.0))
+    np.testing.assert_allclose(v[...], 12.0)
+    np.testing.assert_allclose(grad, 8.0)
+
+  #------------
+  # scan
+  #------------
+  # with hijax carry arguments (immutable variable)
+  @absltest.skip("scan not yet supported for hijax Variables")
+  def test_hitypes_as_scan_carry(self):
+    v = nnx.Variable((jnp.array(1.0), jnp.array(2.0)), hijax=True, mutable=False)
+
+    def body(v, _):
+      x, y = v
+      return nnx.Variable((x + 1.0, y + 2.0), hijax=True, mutable=False), None
+
+    v_out, _ = jax.lax.scan(body, v, None, length=5)
+    x, y = v_out[...]
+    np.testing.assert_allclose(x, 6.0)
+    np.testing.assert_allclose(y, 12.0)
+
+  # with hijax extensive arguments (immutable variable)
+  @absltest.skip("scan not yet supported for hijax Variables")
+  def test_hitypes_as_scan_extensive(self):
+    v = nnx.Variable((jnp.arange(5), -jnp.arange(5)), hijax=True, mutable=False)
+
+    def body(_, v_i):
+      x, y = v_i
+      v_i = nnx.Variable((x * 2, y * 2), hijax=True, mutable=False)
+      return None, v_i
+
+    _, v_out = jax.lax.scan(body, None, v)
+    x, y = v_out
+    np.testing.assert_allclose(x, jnp.arange(5) * 2)
+    np.testing.assert_allclose(y, -jnp.arange(5) * 2)
+
+  # with hijax captured arguments (immutable variable)
+  @absltest.skip("scan not yet supported for hijax Variables")
+  def test_hitypes_as_scan_captured(self):
+    v = nnx.Variable((jnp.array(3.0), jnp.array(4.0)), hijax=True, mutable=False)
+    carry0 = jnp.array(1.0)
+    xs = jnp.arange(5, dtype=jnp.float32)
+
+    def body(carry, x):
+      a, b = v
+      carry = a * carry + b
+      y = a * x + b
+      return carry, nnx.Variable(y, hijax=True, mutable=False)
+
+    carry, ys_v = jax.lax.scan(body, carry0, xs)
+    ys = ys_v[...]
+    np.testing.assert_allclose(carry, 727.0)
+    np.testing.assert_allclose(ys, 3.0 * xs + 4.0)
+
+  # with mutable hijax carry arguments
+  @absltest.skip("has_qdd not yet supported for mutable Variable in scan carry")
+  def test_mutable_hitypes_as_scan_carry(self):
+    v = nnx.Variable(jnp.array(1.0), hijax=True)
+
+    def body(v, _):
+      v[...] = v[...] * 2
+      return v, None
+
+    v_out, _ = jax.lax.scan(body, v, None, length=5)
+    np.testing.assert_allclose(v_out[...], 32.0)
+
+  # with mutable hijax extensive arguments
+  @absltest.skip("Variable doesn't have shape attribute needed for scan extensive")
+  def test_mutable_hitypes_as_scan_extensive(self):
+    vs = [nnx.Variable(jnp.float32(i), hijax=True) for i in range(5)]
+
+    def body(_, v_i):
+      val = v_i[...]
+      v_i[...] = val * 2
+      return None, v_i
+
+    _, vs_out = jax.lax.scan(body, None, vs)
+    for i, v in enumerate(vs_out):
+      np.testing.assert_allclose(v[...], i * 2)
+
+  # with mutable hijax captured arguments
+  def test_mutable_hitypes_as_scan_captured(self):
+    v = nnx.Variable(jnp.array(3.0), hijax=True)
+
+    def body(_, __):
+      v[...] = v[...] + 1.0
+      return None, None
+
+    jax.lax.scan(body, None, None, length=5)
+    np.testing.assert_allclose(v[...], 8.0)
+
+
 if __name__ == '__main__':
   absltest.main()
+
