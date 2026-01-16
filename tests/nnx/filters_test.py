@@ -36,5 +36,18 @@ class TestFilters(absltest.TestCase):
     self.assertIn('backbone2', backbones_state)
     self.assertNotIn('head', backbones_state)
 
+  def test_path_contains_empty_string(self):
+    class Model(nnx.Module):
+      def __init__(self):
+        self.a = nnx.Param(1)
+        self.b = nnx.Param(2)
+
+    model = Model()
+    state = nnx.state(model, nnx.PathContains(''))
+
+    self.assertLen(state, 2)
+    self.assertIn('a', state)
+    self.assertIn('b', state)
+
 if __name__ == '__main__':
   absltest.main()
