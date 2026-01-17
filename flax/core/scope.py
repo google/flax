@@ -383,6 +383,20 @@ class _DefaultSentinel:
 no_flag = _DefaultSentinel()
 
 
+# Make sure reference sharing of child variable dictionaries isn't broken.
+# See https://github.com/google/flax/issues/2022 for more details.
+def _put_variable(target, key, val):
+  if (
+      key in target
+      and isinstance(target[key], dict)
+      and isinstance(val, Mapping)
+  ):
+    for k, v in val.items():
+      _put_variable(target[key], k, v)
+  else:
+    target[key] = val
+
+
 class Scope:
   """A Scope allows easy access to variables and manages RNGS of a neural network layer.
 
@@ -774,20 +788,7 @@ class Scope:
       raise errors.ModifyScopeVariableError(col, name, self.path_text)
     variables = self._mutable_collection(col)
 
-    # Make sure reference sharing of child variable dictionaries isn't broken.
-    # See https://github.com/google/flax/issues/2022 for more details.
-    def put(target, key, val):
-      if (
-        key in target
-        and isinstance(target[key], dict)
-        and isinstance(val, Mapping)
-      ):
-        for k, v in val.items():
-          put(target[key], k, v)
-      else:
-        target[key] = val
-
-    put(variables, name, value)
+    _put_variable(variables, name, value)
 
   @overload
   def variable(
