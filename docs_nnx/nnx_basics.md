@@ -224,7 +224,7 @@ How do Flax NNX transforms achieve this? To understand how Flax NNX objects inte
 
 The Flax NNX Functional API establishes a clear boundary between reference/object semantics and value/pytree semantics. It also allows the same amount of fine-grained control over the state that Flax Linen and Haiku users are used to. The Flax NNX Functional API consists of three basic methods:  `nnx.split`, `nnx.merge`, and `nnx.update`.
 
-Below is an example of of `StatefulLinear` `Module` that uses the Functional API. It contains:
+Below is an example of `StatefulLinear` `Module` that uses the Functional API. It contains:
 
 - Some `Param` Variables; and
 - A custom `Count` Variable type, which is used to track the integer scalar state that increases on every forward pass.
