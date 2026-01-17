@@ -93,6 +93,8 @@ class PathContains:
   exact: bool = True
 
   def __call__(self, path: PathParts, x: tp.Any):
+    if self.key == '':
+      return True
     if self.exact:
       return self.key in path
     return any(str(self.key) in str(part) for part in path)
