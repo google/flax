@@ -102,7 +102,7 @@ class LazyRng(struct.PyTreeNode):
     else:
       return LazyRng(rng, suffix)
 
-  def clear_suffix(self):
+  def clear_suffix(self) -> None:
     key = self.rng
     return LazyRng(key, ())
 
@@ -326,7 +326,7 @@ class Variable(Generic[T]):
   content and can be assigned to for mutation.
   """
 
-  def __init__(self, scope: 'Scope', collection: str, name: str, unbox: bool):
+  def __init__(self, scope: 'Scope', collection: str, name: str, unbox: bool) -> None:
     """Initializes a variable.
 
     Args:
@@ -471,7 +471,7 @@ class Scope:
     """Returns true if this scope is invalidated as a result of `Scope.temporary`."""
     return self._invalid
 
-  def _check_valid(self):
+  def _check_valid(self) -> None:
     if self._invalid:
       raise errors.InvalidScopeError(self.name)
 
