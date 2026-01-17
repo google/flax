@@ -79,7 +79,7 @@ class LoRA(Module):
       (including Variables accessed through ``self``) to the desired dtype. The
       function should accept a tuple of ``(inputs, lora_a, lora_b)`` and a ``dtype``
       keyword argument, and return a tuple of arrays with the promoted dtype.
-    rngs: rng key.
+    rngs: rngs object.
     a_metadata: Optional metadata dictionary to set when initializing
       the fan-in matrices.
     b_metadata: Optional metadata dictionary to set when initializing
