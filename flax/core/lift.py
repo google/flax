@@ -815,12 +815,23 @@ def vmap(
       raise ValueError('axis_size should be specified manually.')
     else:
       d_axis_size = axis_size
-    # random.clone is only available on Jax versions 0.4.26 or newer
-    # see: https://jax.readthedocs.io/en/latest/jax.experimental.key_reuse.html
-    if hasattr(random, 'clone'):
-      split_fn = lambda rng: random.split(random.clone(rng), d_axis_size)
-    else:
-      split_fn = lambda rng: random.split(rng, d_axis_size)
+
+    def split_fn(rng):
+      # random.clone is only available on Jax versions 0.4.26 or newer. See:
+      # https://jax.readthedocs.io/en/latest/jax.experimental.key_reuse.htmls
+      if hasattr(random, 'clone'):
+        rng = random.clone(rng)
+      rngs = random.split(rng, d_axis_size)
+      if spmd_axis_name is not None:
+        args_flat, _ = jax.tree.flatten(args)
+        axes_flat = _broadcast_prefix_tree(in_axes, args)
+        any_vmapped_axis_sharded = any(
+            jax.typeof(x).sharding.spec[i] == spmd_axis_name
+            for x, i in zip(args_flat, axes_flat)
+        )
+        if any_vmapped_axis_sharded:
+          rngs = jax.sharding.reshard(rngs, jax.P(spmd_axis_name))
+      return rngs
 
     rng_groups = tuple(
         tree_map_rngs(split_fn, rng_group) if split else rng_group
@@ -1781,6 +1792,17 @@ def remat_scan(
 def _unzip2(xs):
   ys = tuple(zip(*xs))
   return ys if ys else ((), ())
+
+
+def _broadcast_prefix_tree(prefix_tree: Any, full_tree: Any) -> list[Any]:
+  bcast_flat = []
+  num_leaves_fn = lambda t: jax.tree.flatten(t)[1].num_leaves
+  jax.tree.map(
+      lambda x, subtree: bcast_flat.extend([x] * num_leaves_fn(subtree)),
+      prefix_tree,
+      full_tree,
+  )
+  return bcast_flat
 
 
 def fold_rngs(
