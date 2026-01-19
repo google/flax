@@ -78,6 +78,29 @@ class _EmptyNode:
 empty_node = _EmptyNode()
 
 
+def _flatten(xs, prefix, keep_empty_nodes, is_leaf, sep):
+  def _key(path):
+    if sep is None:
+      return path
+    return sep.join(path)
+
+  if not isinstance(xs, (flax.core.FrozenDict, dict)) or (
+      is_leaf and is_leaf(prefix, xs)
+  ):
+    return {_key(prefix): xs}
+  result = {}
+  is_empty = True
+  for key, value in xs.items():
+    is_empty = False
+    path = prefix + (key,)
+    result.update(_flatten(value, path, keep_empty_nodes, is_leaf, sep))
+  if keep_empty_nodes and is_empty:
+    if prefix == ():  # when the whole input is empty
+      return {}
+    return {_key(prefix): empty_node}
+  return result
+
+
 def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
   """Flatten a nested dictionary.
 
@@ -115,29 +138,7 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
     xs, (flax.core.FrozenDict, dict)
   ), f'expected (frozen)dict; got {type(xs)}'
 
-  def _key(path):
-    if sep is None:
-      return path
-    return sep.join(path)
-
-  def _flatten(xs, prefix):
-    if not isinstance(xs, (flax.core.FrozenDict, dict)) or (
-      is_leaf and is_leaf(prefix, xs)
-    ):
-      return {_key(prefix): xs}
-    result = {}
-    is_empty = True
-    for key, value in xs.items():
-      is_empty = False
-      path = prefix + (key,)
-      result.update(_flatten(value, path))
-    if keep_empty_nodes and is_empty:
-      if prefix == ():  # when the whole input is empty
-        return {}
-      return {_key(prefix): empty_node}
-    return result
-
-  return _flatten(xs, ())
+  return _flatten(xs, (), keep_empty_nodes, is_leaf, sep)
 
 
 def unflatten_dict(xs, sep=None):
