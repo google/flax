@@ -19,7 +19,7 @@ complexity and obscured the core ideas of `transformations (transforms) <https:/
 
     import jax
     from jax import random, numpy as jnp
-    from flax import nnx
+    import nnx
     import flax.linen as nn
 
 Introducing Flax NNX
@@ -37,7 +37,7 @@ Here is an example of a simple Flax NNX program that illustrates many of the poi
 
 .. testcode:: NNX
 
-  from flax import nnx
+  import nnx
   import optax
 
 

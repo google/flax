@@ -18,7 +18,7 @@ Currently, Flax [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_reference/
 A full resolution _might_ involve developing a C extension (e.g. `flaxlib`) to speed up some of the traversal logic in [`graph.py`](https://github.com/google/flax/blob/main/flax/nnx/graph.py). Before we continue lets an example of a model and a simple training loop:
 
 ```{code-cell}
-from flax import nnx
+import nnx
 import jax
 import jax.numpy as jnp
 import optax

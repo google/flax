@@ -72,7 +72,7 @@ test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1)
 Create a CNN for classification with Flax NNX by subclassing `nnx.Module`:
 
 ```{code-cell} ipython3
-from flax import nnx  # The Flax NNX API.
+import nnx  # The Flax NNX API.
 from functools import partial
 from typing import Optional
 

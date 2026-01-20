@@ -21,7 +21,7 @@ To begin, install Flax with `pip` and import necessary dependencies:
 ```
 
 ```{code-cell} ipython3
-from flax import nnx
+import nnx
 import jax
 import jax.numpy as jnp
 ```

@@ -6,7 +6,7 @@ Convert PyTorch models to Flax
   import numpy as np
   import jax
   from jax import random, numpy as jnp
-  from flax import nnx
+  import nnx
 
   import torch
 

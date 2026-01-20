@@ -170,7 +170,7 @@ doctest_default_flags = doctest.NORMALIZE_WHITESPACE
 doctest_global_setup = """
 import jax
 import jax.numpy as jnp
-from flax import nnx
+import nnx
 
 import logging as slog
 from absl import logging as alog

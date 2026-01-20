@@ -13,7 +13,7 @@ jupytext:
 Flax NNX uses the stateful `nnx.Rngs` class to simplify Jax's handling of random states. For example, the code below uses a `nnx.Rngs` object to define a simple linear model with dropout:
 
 ```{code-cell} ipython3
-from flax import nnx
+import nnx
 
 class Model(nnx.Module):
   def __init__(self, *, rngs: nnx.Rngs):
