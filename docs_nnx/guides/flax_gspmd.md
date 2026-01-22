@@ -64,14 +64,14 @@ with nnx.use_eager_sharding(False):
 You can also enable eager sharding on a per-variable basis by passing `eager_sharding=False` during variable initialization. The mesh can also be passed this way.
 
 ```{code-cell} ipython3
-nnx.Param(jnp.ones(4,4), sharding_names=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
+nnx.Param(jnp.ones(4,4), out_sharding=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
 ```
 
 ## Shard a single-array model
 
 Let's begin by sharding the simplest component possible - a Flax variable.
 
-When you define a Flax variable, you can pass in a metadata field called `sharding_names`, to specify how the underlying JAX array should be sharded. This field should be a tuple of names, each of which refer to how an axis of the array should be sharded.
+When you define a Flax variable, you can pass in a metadata field called `out_sharding`, to specify how the underlying JAX array should be sharded. This field should be a tuple of names, each of which refer to how an axis of the array should be sharded.
 
 **You must have an existing device mesh** and create a sharding-annotated `nnx.Variable` within its scope. This allows the result variable to be sharded accordingly on those devices. The device mesh can be your actual accelerator mesh, or a dummy fake CPU mesh like in this notebook.
 
@@ -81,7 +81,7 @@ rngs = nnx.Rngs(0)
 with jax.set_mesh(auto_mesh):
   w = nnx.Param(
     rngs.lecun_normal()((4, 8)),
-    sharding_names=(None, 'model')
+    out_sharding=(None, 'model')
   )
   print(w.sharding.spec)
   jax.debug.visualize_array_sharding(w)  # already sharded!

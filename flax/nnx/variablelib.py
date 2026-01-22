@@ -1298,6 +1298,15 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
   def shape(self: Variable[jax.Array]) -> tuple[int, ...]:
     return self.get_value().shape
 
+  @property
+  def sharding_names(self):
+    warnings.warn(
+      "'sharding_names' is deprecated, use 'out_sharding' instead.",
+      DeprecationWarning,
+      stacklevel=2,
+    )
+    return self.get_metadata('out_sharding', None)
+
   def __init__(
     self,
     value: A | VariableMetadata[A],
@@ -1387,7 +1396,9 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       metadata['on_remove_axis'] = var_t.on_remove_axis
 
     if 'sharding' in metadata:
-      metadata['sharding_names'] = metadata.pop('sharding')
+      metadata['out_sharding'] = metadata.pop('sharding')
+    if 'sharding_names' in metadata:
+      metadata['out_sharding'] = metadata.pop('sharding_names')
 
     # run create_value hooks
     if 'on_create_value' in metadata:
@@ -1397,10 +1408,10 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     # run create_value hook
     value = self.create_value(value)  # type: ignore
     # shard the _value if applicable
-    if eager_sharding and 'sharding_names' in metadata:
+    if eager_sharding and 'out_sharding' in metadata:
       value = core_spmd.shard_value(
         value,
-        metadata['sharding_names'],
+        metadata['out_sharding'],
         metadata.get('sharding_rules', None),
         metadata.get('mesh', None),
       )
