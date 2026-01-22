@@ -32,22 +32,34 @@ def get_pspec(sharding_names, sharding_rules = None) -> PartitionSpec:
     return PartitionSpec(*from_sharding_rules(sharding_names, rules))
   return PartitionSpec(*sharding_names)
 
-def _apply_sharding(value, sharding):
-  with jax.disable_jit(False):
-    return jax.jit(lambda x: x, out_shardings=sharding)(value)
+def _apply_sharding(value, sharding, mesh):
+  if mesh.are_all_axes_explicit:
+    return jax.sharding.reshard(value, sharding)
+  elif mesh.are_all_axes_auto:
+    return jax.lax.with_sharding_constraint(value, sharding)
+  else:
+    raise ValueError(
+        'Mesh must have all axes as Explicit or all axes as Auto. '
+        f'Got mixed axis types: {mesh.axis_types}')
 
-def shard_value(value, sharding_names, sharding_rules, mesh):
+
+def shard_value(
+  value, sharding_names, sharding_rules,
+  mesh: jax.sharding.AbstractMesh | jax.sharding.Mesh | None
+):
   if not sharding_names:
     return value
-  if not mesh and not meta.global_mesh_defined():
+
+  if mesh is None:
+    mesh = meta.get_global_mesh()
+
+  if mesh is None:
     raise ValueError(
       'An auto mesh context or metadata is required if creating a variable'
       f' with annotation {sharding_names=}. '
       'For more guidance, see https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html.')
   pspec = get_pspec(sharding_names, sharding_rules)
-  if mesh is not None:
-    return _apply_sharding(value, NamedSharding(mesh, pspec))
-  return _apply_sharding(value, pspec)
+  return _apply_sharding(value, NamedSharding(mesh, pspec), mesh)
 
 
 

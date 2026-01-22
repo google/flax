@@ -301,57 +301,35 @@ class TestSPMD(parameterized.TestCase):
     assert jax.tree.leaves(abs_state)[0].sharding.is_equivalent_to(
       NamedSharding(mesh, P(None, 'model')), ndim=2)
 
-  def test_explicit_sharding(self):
-    mesh = jax.make_mesh(
-      (2, 2),
-      ('row', 'col'),
-      axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Explicit),
-    )
-    v = nnx.Variable(
-      jnp.ones((4, 4)),
-      sharding_names=('row', 'col'),
-      mesh=mesh,
-    )
-    self.assertEqual(v.sharding.mesh, mesh)
-    self.assertEqual(
-      v.sharding.spec,
-      P('row', 'col'),
-    )
+  @parameterized.parameters('auto', 'explicit', 'mixed')
+  def test_sharding_axis_types(self, mode):
+    if mode == 'auto':
+      axis_types = (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto)
+    elif mode == 'explicit':
+      axis_types = (jax.sharding.AxisType.Explicit, jax.sharding.AxisType.Explicit)
+    else:
+      axis_types = (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Explicit)
 
-  def test_explicit_sharding_disable_jit(self):
     mesh = jax.make_mesh(
       (2, 2),
       ('row', 'col'),
-      axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Explicit),
+      axis_types=axis_types,
     )
-    with jax.disable_jit(True):
+    if mode == 'mixed':
+      with self.assertRaises(ValueError):
+        nnx.Variable(
+          jnp.ones((4, 4)),
+          sharding_names=('row', 'col'),
+          mesh=mesh,
+        )
+    else:
       v = nnx.Variable(
         jnp.ones((4, 4)),
         sharding_names=('row', 'col'),
         mesh=mesh,
       )
-    self.assertEqual(v.sharding.mesh, mesh)
-    self.assertEqual(
-      v.sharding.spec,
-      P('row', 'col'),
-    )
-
-  def test_explicit_sharding_mesh_context(self):
-    mesh = jax.make_mesh(
-      (2, 2),
-      ('row', 'col'),
-      axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Explicit),
-    )
-    with jax.set_mesh(mesh):
-      v = nnx.Variable(
-        jnp.ones((4, 4)),
-        sharding_names=('row', 'col'),
-      )
-    self.assertEqual(v.sharding.mesh, mesh)
-    self.assertEqual(
-      v.sharding.spec,
-      P('row', 'col'),
-    )
+      self.assertEqual(v.sharding.mesh, mesh)
+      self.assertEqual(v.sharding.spec, P('row', 'col'))
 
 def has_sharding_spec(array):
     sharding = array.sharding
