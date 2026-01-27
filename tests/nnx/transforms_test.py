@@ -1671,7 +1671,7 @@ class TestScan(absltest.TestCase):
 
     assert y.shape == (1, 3)
 
-  def test_complex_set_mode(self):
+  def test_complex_view(self):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class MLP(nnx.Module):
@@ -1692,7 +1692,7 @@ class TestScan(absltest.TestCase):
         return x, None
 
     module = MLP(rngs=nnx.Rngs(0))
-    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+    new_module = nnx.view(module, deterministic=False, use_running_average=False)
 
     assert new_module.linear.kernel.shape == (5, 3, 3)
     assert new_module.linear.bias.shape == (5, 3)
@@ -1736,7 +1736,7 @@ class TestScan(absltest.TestCase):
 
     assert y.shape == (1, 3)
 
-  def test_complex_broadcast_dropout_set_mode(self):
+  def test_complex_broadcast_dropout_view(self):
     state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
 
     class MLP(nnx.Module):
@@ -1758,7 +1758,7 @@ class TestScan(absltest.TestCase):
         return x, None
 
     module = MLP(rngs=nnx.Rngs(params=0, dropout=1))
-    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+    new_module = nnx.view(module, deterministic=False, use_running_average=False)
 
     assert new_module.linear.kernel.shape == (5, 3, 3)
     assert new_module.linear.bias.shape == (5, 3)
@@ -1804,7 +1804,7 @@ class TestScan(absltest.TestCase):
     assert y.shape == (1, 3)
     assert out is None
 
-  def test_complex_decorator_set_mode(self):
+  def test_complex_decorator_view(self):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class Block(nnx.Module):
@@ -1826,7 +1826,7 @@ class TestScan(absltest.TestCase):
         return x, None
 
     module = Block(rngs=nnx.Rngs(0))
-    new_module = nnx.set_mode(module, deterministic=False, use_running_average=False)
+    new_module = nnx.view(module, deterministic=False, use_running_average=False)
 
     assert new_module.d == 3
     assert new_module.linear.kernel.shape == (5, 3, 3)

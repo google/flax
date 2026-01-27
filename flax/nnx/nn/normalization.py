@@ -411,12 +411,12 @@ class BatchNorm(Module):
       self.epsilon,
     )
 
-  def set_mode(
+  def set_view(
       self,
       use_running_average: bool | None = None,
       **kwargs,
   ) -> dict:
-    """Class method used by ``nnx.set_mode``.
+    """Class method used by ``nnx.view``.
 
     Args:
       use_running_average: if True, the stored batch statistics will be
