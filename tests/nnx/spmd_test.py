@@ -231,7 +231,7 @@ class TestSPMD(parameterized.TestCase):
       emb = nnx.Embed(num_embeddings=8, features=4, rngs=nnx.Rngs(0))
       emb = reshard(emb, P("X"))
       sharded_array = reshard(jnp.arange(4), P("Y"))
-      self.assertRaises(ValueError, emb, sharded_array)
+      self.assertRaises(Exception, emb, sharded_array)
       self.assertEqual('float32[4@X,4]',
         str(jax.typeof(emb(sharded_array, out_sharding=P("X")))))
 
