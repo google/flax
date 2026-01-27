@@ -17,7 +17,6 @@ import warnings
 from typing import Any, TypeVar
 from collections.abc import Mapping
 from types import MappingProxyType
-from collections.abc import Mapping
 from collections.abc import Callable
 from functools import partial
 from typing_extensions import Protocol
@@ -109,6 +108,25 @@ class LSTMCell(RNNCellBase):
 
   where x is the input, h is the output of the previous time step, and c is
   the memory.
+
+  Args:
+    in_features: number of input features.
+    hidden_features: number of hidden features.
+    gate_fn: activation function for the gates (default: sigmoid).
+    activation_fn: activation function for the output (default: tanh).
+    kernel_init: initializer function for the weight matrix.
+    recurrent_kernel_init: initializer function for the recurrent weight matrix.
+    bias_init: initializer function for the bias.
+    dtype: the dtype of the computation (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    carry_init: optional carry initializer.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype.
+    keep_rngs: whether to store the input rngs as attribute.
+    rngs: rng key.
+    preferred_element_type: Optional parameter controls the data type output by
+      the dot product. This argument is passed to ``dot_general`` function.
+      See ``jax.lax.dot`` for details.
   """
 
   def __init__(
@@ -130,6 +148,7 @@ class LSTMCell(RNNCellBase):
     kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    preferred_element_type: Dtype | None = None,
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -138,6 +157,7 @@ class LSTMCell(RNNCellBase):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.promote_dtype = promote_dtype
+    self.preferred_element_type = preferred_element_type
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
       self.rngs = rngs.carry.fork()
@@ -154,6 +174,7 @@ class LSTMCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=kernel_metadata,
     )
@@ -168,6 +189,7 @@ class LSTMCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=recurrent_kernel_metadata,
       bias_metadata=bias_metadata,
@@ -193,7 +215,7 @@ class LSTMCell(RNNCellBase):
     self.carry_init = carry_init
 
   def __call__(
-    self, carry: tuple[Array, Array], inputs: Array
+    self, carry: tuple[Array, Array], inputs: Array, *, out_sharding = None
   ) -> tuple[tuple[Array, Array], Array]:  # type: ignore[override]
     r"""A long short-term memory (LSTM) cell.
 
@@ -202,15 +224,17 @@ class LSTMCell(RNNCellBase):
         initialized using ``LSTMCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
+      out_sharding: the sharding of the output. If None, the output is not
+        sharded.
 
     Returns:
       A tuple with the new carry and the output.
     """
     c, h = carry
-    i = self.gate_fn(self.ii(inputs) + self.hi(h))
-    f = self.gate_fn(self.if_(inputs) + self.hf(h))
-    g = self.activation_fn(self.ig(inputs) + self.hg(h))
-    o = self.gate_fn(self.io(inputs) + self.ho(h))
+    i = self.gate_fn(self.ii(inputs, out_sharding=out_sharding) + self.hi(h, out_sharding=out_sharding))
+    f = self.gate_fn(self.if_(inputs, out_sharding=out_sharding) + self.hf(h, out_sharding=out_sharding))
+    g = self.activation_fn(self.ig(inputs, out_sharding=out_sharding) + self.hg(h, out_sharding=out_sharding))
+    o = self.gate_fn(self.io(inputs, out_sharding=out_sharding) + self.ho(h, out_sharding=out_sharding))
     new_c = f * c + i * g
     new_h = o * self.activation_fn(new_c)
     return (new_c, new_h), new_h
@@ -298,6 +322,9 @@ class OptimizedLSTMCell(RNNCellBase):
           the kernels that transform the hidden state.
         bias_metadata: Optional metadata dictionary to set when initializing
           the bias of layers that transform the hidden state.
+        preferred_element_type: Optional parameter controls the data type output by
+          the dot product. This argument is passed to ``dot_general`` function.
+          See ``jax.lax.dot`` for details.
     """
 
   def __init__(
@@ -319,6 +346,7 @@ class OptimizedLSTMCell(RNNCellBase):
     kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    preferred_element_type: Dtype | None = None,
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -327,6 +355,7 @@ class OptimizedLSTMCell(RNNCellBase):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.promote_dtype = promote_dtype
+    self.preferred_element_type = preferred_element_type
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
       self.rngs = rngs.carry.fork()
@@ -342,6 +371,7 @@ class OptimizedLSTMCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=kernel_metadata,
     )
@@ -355,6 +385,7 @@ class OptimizedLSTMCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=recurrent_kernel_metadata,
       bias_metadata=bias_metadata,
@@ -371,7 +402,7 @@ class OptimizedLSTMCell(RNNCellBase):
     self.carry_init = carry_init
 
   def __call__(
-    self, carry: tuple[Array, Array], inputs: Array
+    self, carry: tuple[Array, Array], inputs: Array, *, out_sharding = None
   ) -> tuple[tuple[Array, Array], Array]:  # type: ignore[override]
     r"""An optimized long short-term memory (LSTM) cell.
 
@@ -380,6 +411,8 @@ class OptimizedLSTMCell(RNNCellBase):
         ``LSTMCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
+      out_sharding: the sharding of the output. If None, the output is not
+        sharded.
 
     Returns:
       A tuple with the new carry and the output.
@@ -387,7 +420,7 @@ class OptimizedLSTMCell(RNNCellBase):
     c, h = carry
 
     # Compute combined transformations for inputs and hidden state
-    y = self.dense_i(inputs) + self.dense_h(h)
+    y = self.dense_i(inputs, out_sharding=out_sharding) + self.dense_h(h, out_sharding=out_sharding)
 
     # Split the combined transformations into individual gates
     i, f, g, o = jnp.split(y, indices_or_sections=4, axis=-1)
@@ -462,6 +495,31 @@ class SimpleCell(RNNCellBase):
       \begin{array}{ll}
       h' = \tanh(W_i x + b_i + W_h h + h)
       \end{array}
+
+  Args:
+    in_features: number of input features.
+    hidden_features: number of hidden features.
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    carry_init: optional carry initializer.
+    residual: whether to add the input to the output (default: False).
+    activation_fn: activation function for the output (default: tanh).
+    kernel_init: initializer function for the weight matrix.
+    recurrent_kernel_init: initializer function for the recurrent weight matrix.
+    bias_init: initializer function for the bias.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype.
+    keep_rngs: whether to store the input rngs as attribute.
+    rngs: rng key.
+    kernel_metadata: Optional metadata dictionary to set when initializing
+      the weight matrix.
+    recurrent_kernel_metadata: Optional metadata dictionary to set when initializing
+      the recurrent weight matrix.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    preferred_element_type: Optional parameter controls the data type output by
+      the dot product. This argument is passed to ``dot_general`` function.
+      See ``jax.lax.dot`` for details.
   """
 
   def __init__(
@@ -483,6 +541,7 @@ class SimpleCell(RNNCellBase):
     kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    preferred_element_type: Dtype | None = None,
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -491,6 +550,7 @@ class SimpleCell(RNNCellBase):
     self.residual = residual
     self.activation_fn = activation_fn
     self.promote_dtype = promote_dtype
+    self.preferred_element_type = preferred_element_type
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
       self.rngs = rngs.carry.fork()
@@ -507,6 +567,7 @@ class SimpleCell(RNNCellBase):
       param_dtype=self.param_dtype,
       kernel_init=recurrent_kernel_init,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=recurrent_kernel_metadata,
     )
@@ -519,6 +580,7 @@ class SimpleCell(RNNCellBase):
       kernel_init=kernel_init,
       bias_init=bias_init,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=kernel_metadata,
       bias_metadata=bias_metadata,
@@ -534,8 +596,21 @@ class SimpleCell(RNNCellBase):
 
     self.carry_init = carry_init
 
-  def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]:  # type: ignore[override]
-    new_carry = self.dense_i(inputs) + self.dense_h(carry)
+  def __call__(self, carry: Array, inputs: Array, *, out_sharding = None) -> tuple[Array, Array]:  # type: ignore[override]
+    """Simple RNN cell.
+
+    Args:
+      carry: the hidden state of the RNN cell,
+        initialized using ``SimpleCell.initialize_carry``.
+      inputs: an ndarray with the input for the current time step.
+        All dimensions except the final are considered batch dimensions.
+      out_sharding: the sharding of the output. If None, the output is not
+        sharded.
+
+    Returns:
+      A tuple with the new carry and the output.
+    """
+    new_carry = self.dense_i(inputs, out_sharding=out_sharding) + self.dense_h(carry, out_sharding=out_sharding)
     if self.residual:
       new_carry += carry
     new_carry = self.activation_fn(new_carry)
@@ -619,6 +694,9 @@ class GRUCell(RNNCellBase):
           the kernels that transform the hidden state.
         bias_metadata: Optional metadata dictionary to set when initializing
           the bias of layers that transform the input.
+        preferred_element_type: Optional parameter controls the data type output by
+          the dot product. This argument is passed to ``dot_general`` function.
+          See ``jax.lax.dot`` for details.
     """
 
   def __init__(
@@ -640,6 +718,7 @@ class GRUCell(RNNCellBase):
     kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    preferred_element_type: Dtype | None = None,
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -648,6 +727,7 @@ class GRUCell(RNNCellBase):
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.promote_dtype = promote_dtype
+    self.preferred_element_type = preferred_element_type
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
       self.rngs = rngs.carry.fork()
@@ -664,6 +744,7 @@ class GRUCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=kernel_metadata,
       bias_metadata=bias_metadata,
@@ -677,6 +758,7 @@ class GRUCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=recurrent_kernel_metadata,
     )
@@ -691,7 +773,7 @@ class GRUCell(RNNCellBase):
 
     self.carry_init = carry_init
 
-  def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]:  # type: ignore[override]
+  def __call__(self, carry: Array, inputs: Array, *, out_sharding = None) -> tuple[Array, Array]:  # type: ignore[override]
     """Gated recurrent unit (GRU) cell.
 
     Args:
@@ -699,6 +781,8 @@ class GRUCell(RNNCellBase):
           initialized using ``GRUCell.initialize_carry``.
         inputs: an ndarray with the input for the current time step.
           All dimensions except the final are considered batch dimensions.
+        out_sharding: the sharding of the output. If None, the output is not
+          sharded.
 
     Returns:
         A tuple with the new carry and the output.
@@ -706,8 +790,8 @@ class GRUCell(RNNCellBase):
     h = carry
 
     # Compute combined transformations for inputs and hidden state
-    x_transformed = self.dense_i(inputs)
-    h_transformed = self.dense_h(h)
+    x_transformed = self.dense_i(inputs, out_sharding=out_sharding)
+    h_transformed = self.dense_h(h, out_sharding=out_sharding)
 
     # Split the combined transformations into individual components
     xi_r, xi_z, xi_n = jnp.split(x_transformed, 3, axis=-1)
