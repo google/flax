@@ -1311,12 +1311,12 @@ class Embed(Module):
     )
     if self.num_embeddings == 1:
       return jnp.broadcast_to(embedding, inputs.shape + (self.features,))
-    if out_sharding is None:
-      return jnp.take(embedding, inputs, axis=0)
-    else:
-      return jax.sharding.auto_axes(out_sharding=out_sharding)(
-        lambda embedding, inputs: jnp.take(embedding, inputs, axis=0))(
-          embedding, inputs)
+    if out_sharding is not None:
+      # Use auto_axes to handle out_sharding as jnp.take does not support it.
+      take_fn = lambda embedding, inputs: jnp.take(embedding, inputs, axis=0)
+      sharded_take = jax.sharding.auto_axes(out_sharding=out_sharding)(take_fn)
+      return sharded_take(embedding, inputs)
+    return jnp.take(embedding, inputs, axis=0)
 
   def attend(self, query: Array, out_sharding=None) -> Array:
     """Attend over the embedding using a query array.
