@@ -416,7 +416,7 @@ class BatchNorm(Module):
       use_running_average: bool | None = None,
       **kwargs,
   ) -> dict:
-    """Class method used by ``nnx.set_mode``.
+    """Class method used by ``nnx.view``.
 
     Args:
       use_running_average: if True, the stored batch statistics will be

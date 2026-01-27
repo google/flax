@@ -159,7 +159,7 @@ class Dropout(Module):
       deterministic: bool | None = None,
       **kwargs,
   ) -> dict:
-    """Class method used by ``nnx.set_mode``.
+    """Class method used by ``nnx.view``.
 
     Args:
       deterministic: if True, disables dropout masking.

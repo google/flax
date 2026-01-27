@@ -29,7 +29,7 @@ A = tp.TypeVar('A')
 
 class TestIntegration(absltest.TestCase):
 
-  def test_basic_set_mode_example(self):
+  def test_basic_view_example(self):
     class Model(nnx.Module):
 
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
@@ -43,10 +43,10 @@ class TestIntegration(absltest.TestCase):
         return self.linear_out(x)
 
     model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
-    train_model = nnx.set_mode(
+    train_model = nnx.view(
         model, deterministic=False, use_running_average=False
     )
-    eval_model = nnx.set_mode(
+    eval_model = nnx.view(
         model, deterministic=True, use_running_average=True
     )
     optimizer = nnx.Optimizer(train_model, optax.adam(1e-3), wrt=nnx.Param)
@@ -131,7 +131,7 @@ class TestIntegration(absltest.TestCase):
     assert model.block1.linear.bias is not None
     assert model.block1.bn is not model.block2.bn
 
-  def test_shared_modules_set_mode(self):
+  def test_shared_modules_view(self):
     class Block(nnx.Module):
       def __init__(self, linear: nnx.Linear, *, rngs):
         self.linear = linear
@@ -172,7 +172,7 @@ class TestIntegration(absltest.TestCase):
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
-    new_model = nnx.set_mode(model, use_running_average=False)
+    new_model = nnx.view(model, use_running_average=False)
 
     for _i in range(3):
       train_step(model, x, y)
@@ -240,7 +240,7 @@ class TestIntegration(absltest.TestCase):
     assert model.block1.linear.bias is model.block2.linear.bias
     assert model.block1.bn is not model.block2.bn
 
-  def test_shared_modules_pure_set_mode(self):
+  def test_shared_modules_pure_view(self):
     class Block(nnx.Module):
       def __init__(self, linear: nnx.Linear, *, rngs: nnx.Rngs):
         self.linear = linear
@@ -265,7 +265,7 @@ class TestIntegration(absltest.TestCase):
     @jax.jit
     def train_step(state: nnx.State, graphdef: nnx.GraphDef[Model], x, y):
       model = nnx.merge(graphdef, state)
-      new_model = nnx.set_mode(model, use_running_average=False)
+      new_model = nnx.view(model, use_running_average=False)
 
       @nnx.grad
       def loss_fn(model: Model):
