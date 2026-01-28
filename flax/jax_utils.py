@@ -51,12 +51,16 @@ def unreplicate(tree):
     def _unreplicate_one(x):
       # Avoid degraded performance under the new jax.pmap. See
       # https://docs.jax.dev/en/latest/migrate_pmap.html#int-indexing-into-sharded-arrays.
-      if hasattr(x, "addressable_shards"):
-        shard_data = x.addressable_shards[0].data
-        if shard_data.shape and shard_data.shape[0] == 1:
-          return shard_data.squeeze(0)
-        return shard_data[0]
-      return x[0]
+      # Handle 0-dimensional (scalar) arrays - cannot index into them
+      if hasattr(x, 'ndim') and x.ndim == 0:
+        return x
+      if (not hasattr(x, 'sharding') or
+          isinstance(x.sharding, jax.sharding.SingleDeviceSharding) or
+          len(jax.local_devices()) == 1):
+        return x[0]
+      if x.sharding.is_fully_replicated:
+        return x.addressable_shards[0].data
+      return x.addressable_shards[0].data.squeeze(0)
     return jax.tree_util.tree_map(_unreplicate_one, tree)
   return jax.tree_util.tree_map(lambda x: x[0], tree)
 
