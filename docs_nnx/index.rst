@@ -200,3 +200,10 @@ Learn more
    philosophy
    contributing
    api_reference/index
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Optax API
+
+   _collections/optax_api/index
