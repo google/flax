@@ -117,20 +117,17 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
       for value in it:
         self.append(value)
 
-  def _get_elem(self, key: int) -> A:
-    return getattr(self, str(key))
+  def _getattr(self, key) -> A:
+    return vars(self)[key]  # type: ignore[unsupported-operands]
 
-  def _set_elem(self, key: int, value: A) -> None:
-    setattr(self, str(key), value)
-
-  def _del_elem(self, key: int) -> None:
-    delattr(self, str(key))
+  def _delattr(self, key) -> None:
+    vars(self).pop(key)
 
   def __len__(self) -> int:
     return self._length
 
   def append(self, value: A) -> None:
-    self._set_elem(self._length, value)
+    self._setattr(self._length, value)
     self._length += 1
 
   def insert(self, index: int, value: A) -> None:
@@ -143,15 +140,15 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
 
     # Shift elements to the right
     for i in range(self._length, index, -1):
-      self._set_elem(i, self._get_elem(i - 1))
+      self._setattr(i, self._getattr(i - 1))
 
     # Insert the new value
-    self._set_elem(index, value)
+    self._setattr(index, value)
     self._length += 1
 
   def __iter__(self) -> tp.Iterator[A]:
     for i in range(self._length):
-      yield self._get_elem(i)
+      yield self._getattr(i)
 
   @tp.overload
   def __getitem__(self, index: int) -> A: ...
@@ -163,10 +160,10 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
         index += self._length
       if index < 0 or index >= self._length:
         raise IndexError('Index out of bounds')
-      return self._get_elem(index)
+      return self._getattr(index)
     elif isinstance(index, slice):
       idxs = list(range(self._length))[index]
-      return [self._get_elem(i) for i in idxs]
+      return [self._getattr(i) for i in idxs]
     else:
       raise TypeError('Invalid index type')
 
@@ -176,7 +173,7 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
         index += self._length
       if index < 0 or index >= self._length:
         raise IndexError('Index out of bounds')
-      self._set_elem(index, value)  # type: ignore[arg-type]
+      self._setattr(index, value)
     elif isinstance(index, slice):
       if not isinstance(value, tp.Iterable):
         raise TypeError('Expected an iterable')
@@ -185,7 +182,7 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
       if len(idxs) != len(values):
         raise ValueError('Length mismatch')
       for i, v in zip(idxs, values):
-        self._set_elem(i, v)
+        self._setattr(i, v)
     else:
       raise TypeError('Invalid index type')
 
@@ -206,9 +203,9 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
         index += self._length
       if index < 0 or index >= self._length:
         raise IndexError('Index out of bounds')
-      self._del_elem(index)
+      self._delattr(index)
       for i in range(index + 1, self._length):
-        self._set_elem(i - 1, self._get_elem(i))
+        self._setattr(i - 1, self._getattr(i))
       self._length -= 1
     elif isinstance(index, slice):
       idxs = list(range(self._length))[index]
@@ -218,8 +215,15 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
     else:
       raise TypeError('Invalid index type')
 
-  _pytree__has_int_keys = True
-
+  @staticmethod
+  def _pytree__key_sort_fn(item: tuple[tp.Any, tp.Any]) -> tuple[int, tp.Any]:
+    key, _ = item
+    if isinstance(key, int):
+      return (0, key)
+    elif isinstance(key, str):
+      return (1, key)
+    else:
+      raise ValueError(f'Unsupported key type: {type(key)!r}')
 
 class Sequential(Module):
   """A Module that applies a sequence of callables.
