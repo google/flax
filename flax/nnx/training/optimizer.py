@@ -171,7 +171,7 @@ class Optimizer(Pytree, tp.Generic[M]):
       return super().__getattribute__(name)
 
   @_check_grads_arg_passed
-  def update(self, model: M, grads, /, **kwargs):
+  def update(self, model: M, grads, /, **kwargs) -> optax.Updates:
     """Updates the optimizer state and model parameters given the gradients.
 
     Example::
@@ -205,6 +205,10 @@ class Optimizer(Pytree, tp.Generic[M]):
       grads: the gradients derived from ``nnx.grad``.
       **kwargs: additional keyword arguments passed to the tx.update, to support
       ``GradientTransformationExtraArgs``, such as ``optax.scale_by_backtracking_linesearch``.
+
+    Returns:
+      The updates PyTree containing the parameter updates applied to the model.
+      This matches the structure of the model parameters filtered by ``wrt``.
     """
     param_arrays = nnx.pure(nnx.state(model, self.wrt))
     grad_arrays = nnx.pure(nnx.state(grads, self.wrt))
@@ -219,6 +223,7 @@ class Optimizer(Pytree, tp.Generic[M]):
     nnx.update(model, new_params)
     nnx.update(self.opt_state, nnx.state(new_opt_state))
     self.step[...] += 1
+    return updates
 
 class ModelAndOptimizer(Optimizer[M]):
   """A convenience class that combines a model and an optimizer.
