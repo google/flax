@@ -300,17 +300,6 @@ def get_node_impl_for_type(
   else:
     return None
 
-# use type-aware sorting to support int keys
-def _type_aware_sort(item: tuple[tp.Any, tp.Any]) -> tuple[int, tp.Any]:
-  key, _ = item
-  if isinstance(key, int):
-    return (0, key)
-  elif isinstance(key, str):
-    return (1, key)
-  else:
-    raise ValueError(f'Unsupported key type: {type(key)!r}')
-
-
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, repr=False)
 class NodeRef(tp.Generic[Node], reprlib.Representable):
