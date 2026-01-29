@@ -89,7 +89,7 @@ Basic usage
 
 .. testcode::
 
-   from flax import nnx
+   import nnx
    import optax
 
 

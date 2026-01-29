@@ -57,7 +57,7 @@ There are two fundamental differences between Flax Linen and Flax NNX ``Module``
 
   ---
 
-  from flax import nnx
+  import nnx
 
   class Block(nnx.Module):
     def __init__(self, in_features: int , out_features: int, rngs: nnx.Rngs):
