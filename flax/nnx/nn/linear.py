@@ -1291,7 +1291,7 @@ class Embed(Module):
     self.param_dtype = param_dtype
     self.promote_dtype = promote_dtype
 
-  def __call__(self, inputs: Array) -> Array:
+  def __call__(self, inputs: Array, out_sharding=None) -> Array:
     """Embeds the inputs along the last dimension.
 
     Args:
@@ -1311,6 +1311,11 @@ class Embed(Module):
     )
     if self.num_embeddings == 1:
       return jnp.broadcast_to(embedding, inputs.shape + (self.features,))
+    if out_sharding is not None:
+      # Use auto_axes to handle out_sharding as jnp.take does not support it.
+      take_fn = lambda embedding, inputs: jnp.take(embedding, inputs, axis=0)
+      sharded_take = jax.sharding.auto_axes(out_sharding=out_sharding)(take_fn)
+      return sharded_take(embedding, inputs)
     return jnp.take(embedding, inputs, axis=0)
 
   def attend(self, query: Array, out_sharding=None) -> Array:
