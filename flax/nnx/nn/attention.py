@@ -713,7 +713,7 @@ class MultiHeadAttention(Module):
       max_length: int | None = None,
       **kwargs,
   ) -> dict:
-    """Class method used by ``nnx.set_mode``.
+    """Class method used by ``nnx.view``.
 
     Args:
       train: if True, the module is set to training mode.

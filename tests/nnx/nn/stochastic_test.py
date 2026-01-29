@@ -88,14 +88,14 @@ class TestStochastic:
     ):
       m(x)
 
-  def test_dropout_arg_override_set_mode(self):
+  def test_dropout_arg_override_view(self):
     m = nnx.Dropout(rate=0.5)
     x = jnp.ones((1, 10))
 
     # deterministic call arg provided
     m(x, deterministic=True)
     # deterministic constructor arg provided
-    new_m = nnx.set_mode(m, deterministic=True)
+    new_m = nnx.view(m, deterministic=True)
     y = new_m(x)
     # both deterministic call and constructor arg provided
     with pytest.raises(AssertionError):
@@ -103,7 +103,7 @@ class TestStochastic:
         y, new_m(x, deterministic=False, rngs=nnx.Rngs(dropout=0))
       )
     # no rng arg provided
-    new_m = nnx.set_mode(m, deterministic=False)
+    new_m = nnx.view(m, deterministic=False)
     with pytest.raises(
       ValueError,
       match='`deterministic` is False, but no `rngs` argument was provided to Dropout',
