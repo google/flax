@@ -113,6 +113,9 @@ version = {attr = "flax.version.__version__"}
 [tool.setuptools.packages.find]
 include = ["flax*"]
 
+[tool.setuptools]
+py-modules = ["nnx"]
+
 [tool.setuptools.package-data]
 flax = ["*py.typed"]
 
