@@ -680,7 +680,7 @@ class TestModule(absltest.TestCase):
       raise_if_not_found=False,
     )
 
-  def test_set_mode(self):
+  def test_view(self):
     class Block(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
@@ -693,18 +693,18 @@ class TestModule(absltest.TestCase):
     assert block.dropout.deterministic == False
     assert block.batch_norm.use_running_average == False
 
-    new_block = nnx.set_mode(block, deterministic=True, use_running_average=True)
+    new_block = nnx.view(block, deterministic=True, use_running_average=True)
     assert new_block.dropout.deterministic == True
     assert new_block.batch_norm.use_running_average == True
     assert new_block.linear.kernel is block.linear.kernel
 
     block = Block(2, 5, rngs=nnx.Rngs(0))
-    new_block = nnx.set_mode(block, only=nnx.Dropout, deterministic=True)
+    new_block = nnx.view(block, only=nnx.Dropout, deterministic=True)
     # Only the dropout will be modified
     assert new_block.dropout.deterministic == True
     assert new_block.batch_norm.use_running_average == False
 
-  def test_set_mode_error(self):
+  def test_view_error(self):
     class Block(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
@@ -717,10 +717,10 @@ class TestModule(absltest.TestCase):
     with self.assertRaisesRegex(
         ValueError,
         (
-            "Unused keys found in set_mode: \\['unknown'\\]"
+            "Unused keys found in nnx.view: \\['unknown'\\]"
         ),
     ):
-      nnx.set_mode(block, deterministic=True, use_running_average=True, unknown=True)
+      nnx.view(block, deterministic=True, use_running_average=True, unknown=True)
 
   def test_cloud_pickle(self):
     import platform
@@ -793,7 +793,7 @@ class TestModule(absltest.TestCase):
     self.assertIn(str(expected_total_batch_stats), foo_repr[0])
     self.assertIn(str(expected_total_rng_states), foo_repr[0])
 
-  def test_set_mode_info(self):
+  def test_view_info(self):
     class Block(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
@@ -812,11 +812,11 @@ class TestModule(absltest.TestCase):
         return self.block2(self.block1(x))
 
     obj = Foo(rngs=nnx.Rngs(0))
-    info_str = nnx.set_mode_info(obj)
+    info_str = nnx.view_info(obj)
     self.assertEqual(info_str.count("BatchNorm:"), 1)
     self.assertEqual(info_str.count("Dropout:"), 1)
 
-  def test_set_mode_info_with_filter(self):
+  def test_view_info_with_filter(self):
     class Block(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
@@ -827,14 +827,14 @@ class TestModule(absltest.TestCase):
         return nnx.relu(self.dropout(self.bn(self.linear(x))))
 
     obj = Block(4, 8, rngs=nnx.Rngs(0))
-    info_str = nnx.set_mode_info(obj, only=nnx.Dropout)
+    info_str = nnx.view_info(obj, only=nnx.Dropout)
     self.assertIn("Dropout:", info_str)
     self.assertNotIn("BatchNorm:", info_str)
 
-    info_str = nnx.set_mode_info(obj, only=nnx.MultiHeadAttention)
+    info_str = nnx.view_info(obj, only=nnx.MultiHeadAttention)
     self.assertEmpty(info_str)
 
-  def test_set_mode_info_with_custom_set_mode(self):
+  def test_view_info_with_custom_set_mode(self):
     class Block(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         pass
@@ -842,8 +842,8 @@ class TestModule(absltest.TestCase):
       def __call__(self, x):
         return x
 
-      def set_mode(self, arg1: bool | None = None, arg2: int | None = None, **kwargs) -> dict:
-        """Example set_mode docstring. This follows Google style docstrings.
+      def set_view(self, arg1: bool | None = None, arg2: int | None = None, **kwargs) -> dict:
+        """Example set_view docstring. This follows Google style docstrings.
 
         Args:
           arg1: The first argument.
@@ -853,7 +853,7 @@ class TestModule(absltest.TestCase):
         return kwargs
 
     obj = Block(rngs=nnx.Rngs(0))
-    info_str = nnx.set_mode_info(obj)
+    info_str = nnx.view_info(obj)
     self.assertEqual(f"{obj.__class__.__qualname__}:\n  arg1: bool | None = None\n    The first argument.\n  arg2: int | None = None\n    The second argument.\n    This has two lines.", info_str)
 
 

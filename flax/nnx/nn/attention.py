@@ -705,7 +705,7 @@ class MultiHeadAttention(Module):
     self.cached_value = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
 
-  def set_mode(
+  def set_view(
       self,
       deterministic: bool | None = None,
       decode: bool | None = None,
@@ -713,7 +713,7 @@ class MultiHeadAttention(Module):
       max_length: int | None = None,
       **kwargs,
   ) -> dict:
-    """Class method used by ``nnx.set_mode``.
+    """Class method used by ``nnx.view``.
 
     Args:
       train: if True, the module is set to training mode.
