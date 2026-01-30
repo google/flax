@@ -328,6 +328,105 @@ class TestOptimizer(parameterized.TestCase):
           assert_equal, prev_other_variables, other_variables
       )
 
+  def test_update_returns_updates(self):
+    """Test that Optimizer.update returns the updates PyTree."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    optimizer = nnx.Optimizer(model, optax.sgd(0.1), wrt=nnx.Param)
+
+    def loss_fn(model):
+      params = nnx.state(model)
+      loss = sum(jnp.sum(x**2) for x in jax.tree.leaves(params))
+      return loss
+
+    grads = nnx.grad(loss_fn)(model)
+
+    # Call update and capture return value
+    updates = optimizer.update(model, grads)
+
+    # Verify updates is not None
+    self.assertIsNotNone(updates)
+
+    # Verify updates structure matches params structure
+    params = nnx.pure(nnx.state(model, nnx.Param))
+
+    def check_structure(path, update_val, param_val):
+      self.assertEqual(update_val.shape, param_val.shape)
+      self.assertEqual(update_val.dtype, param_val.dtype)
+
+    jax.tree.map_with_path(check_structure, updates, params)
+
+  def test_updates_match_param_changes(self):
+    """Test that returned updates equal the actual parameter changes."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    # Use SGD with lr=1.0 for simplicity (updates = -grads)
+    optimizer = nnx.Optimizer(model, optax.sgd(1.0), wrt=nnx.Param)
+
+    # Get initial params as pure arrays
+    initial_params = nnx.pure(nnx.state(model, nnx.Param))
+
+    def loss_fn(model):
+      params = nnx.state(model)
+      loss = sum(jnp.sum(x**2) for x in jax.tree.leaves(params))
+      return loss
+
+    grads = nnx.grad(loss_fn)(model)
+
+    # Get updates
+    updates = optimizer.update(model, grads)
+
+    # Get new params as pure arrays
+    new_params = nnx.pure(nnx.state(model, nnx.Param))
+
+    # Verify: new_params = initial_params + updates (within optax.apply_updates)
+    def check_update(old, update, new):
+      expected_new = old + update
+      np.testing.assert_allclose(new, expected_new, rtol=1e-5)
+
+    jax.tree.map(check_update, initial_params, updates, new_params)
+
+  def test_model_and_optimizer_returns_updates(self):
+    """Test that ModelAndOptimizer.update also returns updates."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.ModelAndOptimizer(model, optax.sgd(0.1))
+
+    def loss_fn(model):
+      params = nnx.state(model)
+      loss = sum(jnp.sum(x**2) for x in jax.tree.leaves(params))
+      return loss
+
+    grads = nnx.grad(loss_fn)(model)
+
+    # Call update and capture return value
+    updates = state.update(grads)
+
+    # Verify updates is not None
+    self.assertIsNotNone(updates)
+
+    # Verify updates has the expected structure
+    params = nnx.pure(nnx.state(model, nnx.Param))
+    def check_structure(path, update_val, param_val):
+      self.assertEqual(update_val.shape, param_val.shape)
+
+    jax.tree.map_with_path(check_structure, updates, params)
+
+  def test_update_backward_compatible(self):
+    """Test that existing code ignoring return value still works."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    optimizer = nnx.Optimizer(model, optax.adam(0.1), wrt=nnx.Param)
+
+    def loss_fn(model):
+      params = nnx.state(model)
+      loss = sum(jnp.sum(x**2) for x in jax.tree.leaves(params))
+      return loss
+
+    grads = nnx.grad(loss_fn)(model)
+
+    # Existing code pattern - ignore return value
+    optimizer.update(model, grads)  # Should not error
+
+    # Verify update still worked
+    self.assertEqual(optimizer.step[...], 1)
+
 
 if __name__ == '__main__':
   absltest.main()
