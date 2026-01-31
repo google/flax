@@ -133,6 +133,21 @@ class TestMultiHeadAttention(parameterized.TestCase):
     else:
       nnx.split(module, nnx.Param)
 
+  def test_preferred_element_type(self):
+    rngs = nnx.Rngs(0)
+    # Testing that it doesn't crash and respects preferred_element_type
+    model = nnx.MultiHeadAttention(
+      num_heads=2,
+      in_features=4,
+      preferred_element_type=jnp.float16,
+      decode=False,
+      rngs=rngs,
+    )
+    x = jnp.ones((1, 3, 4), dtype=jnp.float32)
+    y = model(x)
+    assert y.shape == (1, 3, 4)
+    assert model.preferred_element_type == jnp.float16
+
   @parameterized.product(use_padding=[True, False], is_cross_attention=[True, False])
   def test_causal_mask_equivalence(
     self,
