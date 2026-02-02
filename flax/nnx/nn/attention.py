@@ -228,8 +228,7 @@ def dot_product_attention(
       but other implementations like cudnn will avoid computing the
       non-causal regions, providing speedups.
     preferred_element_type: Optional parameter controls the data type output by
-      the dot product. This argument is passed to ``dot_general`` function.
-      See ``jax.lax.dot`` for details.
+      the dot product. 
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
