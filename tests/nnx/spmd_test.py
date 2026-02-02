@@ -243,6 +243,24 @@ class TestSPMD(parameterized.TestCase):
       assert 'float32[2@X,10]' in str(jax.typeof(layer.attend(sharded_array)))
       assert 'float32[2@X,10@Y]' in str(jax.typeof(layer.attend(sharded_array, out_sharding=P("X", "Y"))))
 
+  def test_out_sharding_dropout(self):
+    mesh = jax.make_mesh((2, 2), ("X", "Y"), axis_types=(AxisType.Explicit, AxisType.Explicit))
+    with jax.set_mesh(mesh):
+      replicated_array = jnp.arange(8).reshape(2, 4).astype(jnp.float32)
+      sharded_array = reshard(replicated_array, P("X", None))
+      layers = [
+        nnx.Dropout(rate=0.5, rngs=nnx.Rngs(0)),
+        nnx.Dropout(rate=0.5, broadcast_dims=(1,), rngs=nnx.Rngs(0)),
+      ]
+      for layer in layers:
+        assert 'float32[2@X,4]' in str(jax.typeof(layer(sharded_array)))
+
+        @jax.jit
+        def func(x, rngs):
+          return layer(x, rngs=rngs)
+
+        assert 'float32[2@X,4]' in str(jax.typeof(func(sharded_array, nnx.Rngs(0))))
+
   @parameterized.product(use_hijax=[True, False])
   def test_logical_rules(self, use_hijax):
     self.enter_context(nnx.var_defaults(hijax=use_hijax))
