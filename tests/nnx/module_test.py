@@ -39,6 +39,10 @@ class PytreeTest(absltest.TestCase):
 
     self.assertEqual(jax.tree.leaves(foo), [1])
 
+  def test_sequential_map(self):
+    model = nnx.Sequential(nnx.Linear(2,8, rngs=nnx.Rngs(0)))
+    jax.tree.map(lambda x: x + 1, model) # shouldn't error
+
   def test_sequential_has_leaves(self):
     model = nnx.Sequential(nnx.Linear(2,8, rngs=nnx.Rngs(0)))
     self.assertLen(jax.tree.leaves(model), 2)
