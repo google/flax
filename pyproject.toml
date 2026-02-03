@@ -79,6 +79,7 @@ docs = [
     "sphinx-book-theme",
     "Pygments>=2.6.1",
     "ipykernel",
+    "tqdm==4.67.1",
     "myst_nb",
     "nbstripout",
     "recommonmark",
