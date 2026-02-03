@@ -135,7 +135,6 @@ from .nn.normalization import SpectralNorm as SpectralNorm
 from .nn.normalization import WeightNorm as WeightNorm
 from .nn.stochastic import Dropout as Dropout
 from .nn.pooling import AvgPool as AvgPool
-from .nn.pooling import GlobalAveragePool as GlobalAveragePool
 from .nn.pooling import MaxPool as MaxPool
 from .nn.pooling import MinPool as MinPool
 from .rnglib import Rngs as Rngs

@@ -108,25 +108,3 @@ class AvgPool(Module):
       padding=self.padding,
       count_include_pad=self.count_include_pad,
     )
-
-
-class GlobalAveragePool(Module):
-  """Global Average Pooling layer.
-
-  Pools the input by taking the average over the spatial dimensions.
-  Assumes channel-last layout (e.g., NHWC or NDC).
-
-  Args:
-    keepdims: If True, keeps the reduced dimensions as singleton dimensions.
-      Defaults to False.
-  """
-
-  def __init__(self, keepdims: bool = False):
-    self.keepdims = keepdims
-
-  def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
-    # Assume inputs are (Batch, Spatial..., Features)
-    # We want to reduce over the Spatial dimensions (1 to ndim-2 inclusive)
-    assert inputs.ndim >= 2, f"Input must have at least 2 dimensions (batch, features), got {inputs.ndim}"
-    spatial_axes = tuple(range(1, inputs.ndim - 1))
-    return jnp.mean(inputs, axis=spatial_axes, keepdims=self.keepdims)

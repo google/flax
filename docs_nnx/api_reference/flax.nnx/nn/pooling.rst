@@ -12,10 +12,6 @@ NNX pooling layers.
 
 .. flax_module::
   :module: flax.nnx
-  :class: GlobalAveragePool
-
-.. flax_module::
-  :module: flax.nnx
   :class: MaxPool
 
 .. flax_module::
