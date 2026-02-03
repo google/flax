@@ -924,6 +924,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       node_names = tuple(
         str(name) if isinstance(name, int) else name for name in node_names
       )
+      static_attrs = tuple(
+        (str(name) if isinstance(name, int) else name, val) for name, val in static_attrs
+      )
     for name, value in zip(node_names, node_attrs, strict=True):
       object.__setattr__(obj, name, value)
     for name, value in static_attrs:
