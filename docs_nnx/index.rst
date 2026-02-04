@@ -196,6 +196,7 @@ Learn more
    hijax/index
    migrating/index
    examples/index
+   Models (Bonsai) <https://github.com/jax-ml/bonsai>
    nnx_glossary
    philosophy
    contributing
