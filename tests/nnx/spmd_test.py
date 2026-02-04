@@ -225,6 +225,16 @@ class TestSPMD(parameterized.TestCase):
         assert 'float32[2@X,4]' in str(jax.typeof(layer(sharded_array)))
         assert 'float32[2@X,4@Y]' in str(jax.typeof(layer(sharded_array, out_sharding=P("X", "Y"))))
 
+  def test_out_sharding_embed(self):
+    mesh = jax.make_mesh((2, 2), ("X", "Y"), axis_types=(AxisType.Explicit, AxisType.Explicit))
+    with jax.set_mesh(mesh):
+      emb = nnx.Embed(num_embeddings=8, features=4, rngs=nnx.Rngs(0))
+      emb = reshard(emb, P("X"))
+      sharded_array = reshard(jnp.arange(4), P("Y"))
+      self.assertRaises(Exception, emb, sharded_array)
+      self.assertEqual('float32[4@X,4]',
+        str(jax.typeof(emb(sharded_array, out_sharding=P("X")))))
+
   def test_out_sharding_conv(self):
     mesh = jax.make_mesh((2, 2), ("X", "Y"), axis_types=(AxisType.Explicit, AxisType.Explicit))
     with jax.set_mesh(mesh):
