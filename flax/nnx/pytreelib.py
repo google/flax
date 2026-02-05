@@ -899,11 +899,12 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     else:
       key_fn = None
     node_attributes = self._pytree__nodes
-    node_names: list[str] = []
+    node_names: list[tp.Union[int,str]] = []
     node_attrs: list[tp.Any] = []
-    static_attrs: list[tuple[str, tp.Any]] = []
+    static_attrs: list[tuple[tp.Union[int,str], tp.Any]] = []
     for name, value in sorted(obj_items, key=key_fn):
-      if name in node_attributes and node_attributes[name]:
+      str_name = str(name)
+      if str_name in node_attributes and node_attributes[str_name]:
         node_names.append(name)
         node_attrs.append(value)
       else:
@@ -923,6 +924,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     if cls._pytree__has_int_keys:
       node_names = tuple(
         str(name) if isinstance(name, int) else name for name in node_names
+      )
+      static_attrs = tuple(
+        (str(name) if isinstance(name, int) else name, val) for name, val in static_attrs
       )
     for name, value in zip(node_names, node_attrs, strict=True):
       object.__setattr__(obj, name, value)
