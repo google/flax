@@ -406,7 +406,6 @@ ObjectMeta = PytreeMeta
 
 def _graph_node_meta_call(cls: tp.Type[P], *args, **kwargs) -> P:
   node = cls.__new__(cls, *args, **kwargs)
-  vars_obj = vars(node)
   object.__setattr__(node, '_pytree__state', PytreeState())
   object.__setattr__(node, '_pytree__nodes', cls._pytree__nodes)
   cls._pytree_meta_construct(node, *args, **kwargs)
@@ -498,6 +497,11 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       **kwargs,
   ) -> None:
     super().__init_subclass__(**kwargs)
+    if slots := getattr(cls, '__slots__', ()):
+      raise TypeError(
+        'Pytree currently does not support __slots__, '
+        f"found __slots__={slots} in '{cls.__name__}'."
+      )
     cls._pytree__is_pytree = pytree
 
     graph.register_graph_node_type(
@@ -874,22 +878,30 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     else:
       key_fn = None
     node_attributes = self._pytree__nodes
-    node_names: list[str] = []
+    node_keys: list[str | int] = []
     node_attrs: list[tuple[tp.Any, tp.Any]] = []
-    static_attrs: list[tuple[str, tp.Any]] = []
-    for name, value in sorted(obj_items, key=key_fn):
-      if name in node_attributes and node_attributes[name]:
-        node_names.append(name)
+    static_keys: list[str | int] = []
+    static_attrs: list[tp.Any] = []
+    for key, value in sorted(obj_items, key=key_fn):
+      # get string representation of the key because
+      # node_attributes keys are strings
+      key_str = _get_str(key)
+      if key_str in node_attributes and node_attributes[key_str]:
+        node_keys.append(key)
         node_attrs.append((
-            jax.tree_util.GetAttrKey(name)
-            if isinstance(name, str)
-            else jax.tree_util.SequenceKey(name),
+            jax.tree_util.GetAttrKey(key)
+            if isinstance(key, str)
+            else jax.tree_util.SequenceKey(key),
             value,
         ))
       else:
-        static_attrs.append((name, value))
+        static_keys.append(key)
+        static_attrs.append(value)
 
-    return node_attrs, (tuple(node_names), tuple(static_attrs))
+    return (
+        node_attrs,
+        (tuple(node_keys), tuple(static_keys), tuple(static_attrs)),
+    )
 
   def _pytree__flatten(self):
     obj_items = vars(self).items()
@@ -899,35 +911,38 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     else:
       key_fn = None
     node_attributes = self._pytree__nodes
-    node_names: list[str] = []
+    node_keys: list[str | int] = []
     node_attrs: list[tp.Any] = []
-    static_attrs: list[tuple[str, tp.Any]] = []
-    for name, value in sorted(obj_items, key=key_fn):
-      if name in node_attributes and node_attributes[name]:
-        node_names.append(name)
+    static_keys: list[str | int] = []
+    static_attrs: list[tp.Any] = []
+    for key, value in sorted(obj_items, key=key_fn):
+      # get string representation of the key because
+      # node_attributes keys are strings
+      key_str = _get_str(key)
+      if key_str in node_attributes and node_attributes[key_str]:
+        node_keys.append(key)
         node_attrs.append(value)
       else:
-        static_attrs.append((name, value))
+        static_keys.append(key)
+        static_attrs.append(value)
 
-    return node_attrs, (tuple(node_names), tuple(static_attrs))
+    return (
+        node_attrs,
+        (tuple(node_keys), tuple(static_keys), tuple(static_attrs)),
+    )
 
   @classmethod
   def _pytree__unflatten(
     cls,
-    static: tuple[tuple[str, ...], tuple[tuple[str, tp.Any], ...]],
+    static: tuple[tp.Iterable[str | int], tp.Iterable[str | int], tp.Iterable[tp.Any]],
     node_attrs: tp.Iterable[tp.Any],
   ):
-    node_names, static_attrs = static
+    node_keys, static_keys, static_attrs = static
     obj = object.__new__(cls)
-    vars_obj = vars(obj)
-    if cls._pytree__has_int_keys:
-      node_names = tuple(
-        str(name) if isinstance(name, int) else name for name in node_names
-      )
-    for name, value in zip(node_names, node_attrs, strict=True):
-      object.__setattr__(obj, name, value)
-    for name, value in static_attrs:
-      object.__setattr__(obj, name, value)
+    for name, value in zip(node_keys, node_attrs, strict=True):
+      object.__setattr__(obj, _get_str(name), value)
+    for name, value in zip(static_keys, static_attrs, strict=True):
+      object.__setattr__(obj, _get_str(name), value)
     return obj
 
   # -------------------------
@@ -946,7 +961,16 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   def _graph_node_set_key(self, key, value: tp.Any):
     if self._pytree__has_int_keys and isinstance(key, int):
       key = str(key)
-    setattr(self, key, value)
+    if not isinstance(key, str):
+      raise KeyError(f'Invalid key: {key!r}')
+    elif (
+      hasattr(self, key)
+      and isinstance(variable := getattr(self, key), Variable)
+      and isinstance(value, Variable)
+    ):
+      variable.update_from_state(value)
+    else:
+      setattr(self, key, value)
 
   def _graph_node_pop_key(self, key):
     if self._pytree__has_int_keys and isinstance(key, int):
@@ -972,13 +996,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   def _graph_node_clear(self):
     vars(self).clear()
 
-  def _graph_node_init(self, attributes: tp.Iterable[tuple[str, tp.Any]]):
-    if self._pytree__has_int_keys:
-      attributes = (
-        (str(name) if isinstance(name, int) else name, value)
-        for name, value in attributes
-      )
-    vars(self).update(attributes)
+  def _graph_node_init(self, attributes: tp.Iterable[tuple[str | int, tp.Any]]):
+    for name, value in attributes:
+      object.__setattr__(self, _get_str(name), value)
 
   if tp.TYPE_CHECKING:
     def __call__(self, *args: tp.Any, **kwargs: tp.Any) -> tp.Any: ...
@@ -1001,3 +1021,6 @@ def _maybe_int(x):
     return int(x)
   except (ValueError, TypeError):
     return x
+
+def _get_str(x):
+  return x if isinstance(x, str) else str(x)
