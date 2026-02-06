@@ -20,7 +20,7 @@ dependencies = [
     # keep in sync with jax-version in .github/workflows/build.yml
     "jax>=0.8.1",
     "msgpack",
-    "optax",
+    "optax==0.2.6",
     "orbax-checkpoint",
     "tensorstore",
     "rich>=11.1",
@@ -43,6 +43,7 @@ dynamic = ["version", "readme"]
 [project.optional-dependencies]
 testing = [
     "clu",
+    "chex",
     "clu<=0.0.9; python_version<'3.10'",
     "einops",
     "gymnasium[atari]; python_version<'3.14'",
