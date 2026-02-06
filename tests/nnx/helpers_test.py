@@ -159,6 +159,77 @@ class TestHelpers(absltest.TestCase):
 
     self.assertEqual(l[1:3], [6, 7])
 
+  def test_list_fori_loop(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.layers = nnx.List([
+            nnx.Linear(1, 1, rngs=nnx.Rngs(0)),
+            nnx.Linear(1, 1, rngs=nnx.Rngs(0)),
+        ])
+
+    def batch_loop_body(i, carry):
+      return carry
+
+    net = Foo()
+    jax.lax.fori_loop(0, 2, batch_loop_body, net)
+
+  def test_list_pytree_default_behavior(self):
+    ls = nnx.List([jnp.array(1), jnp.array(2), jnp.array(3)])
+    leaves = jax.tree_util.tree_leaves(ls)
+    self.assertLen(leaves, 3)
+    np.testing.assert_array_equal(leaves[0], jnp.array(1))
+    np.testing.assert_array_equal(leaves[1], jnp.array(2))
+    np.testing.assert_array_equal(leaves[2], jnp.array(3))
+
+  def test_list_pytree_static_elements(self):
+    ls = nnx.List([nnx.static(10), nnx.static(20), nnx.static(30)])
+    leaves = jax.tree_util.tree_leaves(ls)
+    self.assertEmpty(leaves)
+
+  def test_list_pytree_data_elements(self):
+    ls = nnx.List([nnx.data(1), nnx.data(2), nnx.data(3)])
+    leaves = jax.tree_util.tree_leaves(ls)
+    self.assertLen(leaves, 3)
+    self.assertEqual(leaves[0], 1)
+    self.assertEqual(leaves[1], 2)
+    self.assertEqual(leaves[2], 3)
+
+  def test_list_pytree_mixed_static_data(self):
+    ls = nnx.List([
+        nnx.data(jnp.array(1)),
+        nnx.static(100),
+        nnx.data(jnp.array(2)),
+        nnx.static(200),
+    ])
+    leaves = jax.tree_util.tree_leaves(ls)
+    self.assertLen(leaves, 2)
+    np.testing.assert_array_equal(leaves[0], jnp.array(1))
+    np.testing.assert_array_equal(leaves[1], jnp.array(2))
+
+  def test_list_pytree_flatten_unflatten(self):
+    ls = nnx.List([nnx.data(10), nnx.static('hello'), nnx.data(20)])
+    leaves, treedef = jax.tree_util.tree_flatten(ls)
+    self.assertLen(leaves, 2)
+    self.assertEqual(leaves[0], 10)
+    self.assertEqual(leaves[1], 20)
+
+    new_leaves = [x * 2 for x in leaves]
+    new_ls = jax.tree_util.tree_unflatten(treedef, new_leaves)
+    self.assertEqual(new_ls[0], 20)
+    self.assertEqual(new_ls[1], 'hello')
+    self.assertEqual(new_ls[2], 40)
+
+  def test_list_pytree_jit(self):
+    ls = nnx.List([nnx.data(jnp.array(1.0)), nnx.static(999)])
+
+    @jax.jit
+    def double(ls):
+      return jax.tree.map(lambda x: x * 2, ls)
+
+    result = double(ls)
+    np.testing.assert_array_equal(result[0], jnp.array(2.0))
+    self.assertEqual(result[1], 999)
+
 
 if __name__ == '__main__':
   absltest.main()
