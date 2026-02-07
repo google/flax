@@ -629,7 +629,7 @@ class TestGraphUtils(absltest.TestCase):
       self.assertFalse(hasattr(ctx, 'ctxtag'))
       self.assertIsInstance(graphdef1.nodes[0], nnx.graph.NodeDef)
       self.assertIsInstance(graphdef2.nodes[0], nnx.graph.NodeRef)
-      self.assertLen(nnx.to_flat_state(state1), 1)
+      self.assertLen(nnx.to_flat_state(state1), 2)
       self.assertLen(nnx.to_flat_state(state2), 0)
 
       @jax.jit
@@ -717,7 +717,7 @@ class TestGraphUtils(absltest.TestCase):
       assert isinstance(t2, nnx.NodeStates)
       self.assertIsInstance(t1.graphdef.nodes[0], nnx.graph.NodeDef)
       self.assertIsInstance(t2.graphdef.nodes[0], nnx.graph.NodeRef)
-      self.assertLen(nnx.to_flat_state(t1.states[0]), 1)
+      self.assertLen(nnx.to_flat_state(t1.states[0]), 2)
       self.assertLen(nnx.to_flat_state(t2.states[0]), 0)
 
       @jax.jit
@@ -744,7 +744,7 @@ class TestGraphUtils(absltest.TestCase):
         assert isinstance(t2, nnx.NodeStates)
         self.assertIsInstance(t1.graphdef.nodes[0], nnx.graph.NodeDef)
         self.assertIsInstance(t2.graphdef.nodes[0], nnx.graph.NodeRef)
-        self.assertLen(nnx.to_flat_state(t1.states[0]), 1)
+        self.assertLen(nnx.to_flat_state(t1.states[0]), 2)
         self.assertLen(nnx.to_flat_state(t2.states[0]), 0)
 
         return pure_tree2
@@ -761,6 +761,20 @@ class TestGraphUtils(absltest.TestCase):
       self.assertEqual(m.a, 2)
       self.assertEqual(m.b[...], 1)  # type: ignore
       self.assertEqual(impure_tree2[1], 1)
+
+  def test_graph_flatten_with_data_wrapper(self):
+    class Foo(nnx.Pytree):
+      def __init__(self, data, static):
+        self.data = nnx.data(data)
+        self.static = nnx.static(static)
+
+    tree = Foo(1, 2)
+    state = nnx.state(tree)
+
+    self.assertIn('data', state)
+    self.assertIsInstance(state['data'], int)
+    self.assertEqual(state['data'], 1)
+    self.assertNotIn('static', state)
 
   def test_to_tree_consistent_prefix(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
