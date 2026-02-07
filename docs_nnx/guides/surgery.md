@@ -31,7 +31,7 @@ from jax import lax, numpy as jnp, tree_util as jtu
 from jax.sharding import PartitionSpec, Mesh, NamedSharding
 from jax.experimental import mesh_utils
 import flax
-from flax import nnx
+import nnx
 import flax.traverse_util
 import numpy as np
 import orbax.checkpoint as orbax
