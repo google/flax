@@ -334,7 +334,7 @@ class MultiHeadAttention(Module):
     ln_promote_dtype: function to promote the dtype of all input array arguments
       (including Variables accessed through ``self``) to the desired dtype for the
       LayerNorm submodules (query_ln and key_ln) when normalize_qk=True.
-    rngs: rng key.
+    rngs: rngs object.
     keep_rngs: whether to store the input rngs as attribute (i.e. `self.rngs = rngs`)
       (default: True). If rngs is stored, we should split the module as
       `graphdef, params, nondiff = nnx.split(module, nnx.Param, ...)` where `nondiff`
@@ -534,8 +534,8 @@ class MultiHeadAttention(Module):
         dropout, whereas if true, the attention weights are deterministic. The
         ``deterministic`` flag passed into the call method will take precedence
         over the ``deterministic`` flag passed into the constructor.
-      rngs: rng key. The rng key passed into the call method will take
-        precedence over the rng key passed into the constructor.
+      rngs: rngs object. The rngs object passed into the call method will take
+        precedence over the rngs object passed into the constructor.
       sow_weights: if ``True``, the attention weights are sowed into the
         'intermediates' collection.
       decode: whether to prepare and use an autoregressive cache. The ``decode``
