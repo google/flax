@@ -828,40 +828,41 @@ def _graph_flatten(
   nodes.append(nodedef)
 
   for key, value in values:
-    value_node_impl = get_node_impl(value)
     if path is not None:
       path.append(key)
-    if value_node_impl is not None or isinstance(value, Variable):
-      attributes.append((key, NODE_ATTR))
-      _graph_flatten(
-        value,
-        value_node_impl,
-        path,
-        ref_index,
-        ref_outer_index,
-        nodes,
-        attributes,
-        leaves,
-        paths,
-      )
-    elif variablelib.is_array_ref(value):
-      attributes.append((key, MUTABLE_ARRAY_ATTR))
-      array_refdef, leaf = make_mutable_arraydef(value)
-      if not isinstance(leaf, Repeated):
-        leaves.append(leaf)
+    if not hasattr(node, '_pytree__nodes') or (
+      key in node._pytree__nodes and node._pytree__nodes[key]):
+      value_node_impl = get_node_impl(value)
+      if value_node_impl is not None or isinstance(value, Variable):
+        attributes.append((key, NODE_ATTR))
+        _graph_flatten(
+          value,
+          value_node_impl,
+          path,
+          ref_index,
+          ref_outer_index,
+          nodes,
+          attributes,
+          leaves,
+          paths,
+        )
+      elif variablelib.is_array_ref(value):
+        attributes.append((key, MUTABLE_ARRAY_ATTR))
+        array_refdef, leaf = make_mutable_arraydef(value)
+        if not isinstance(leaf, Repeated):
+          leaves.append(leaf)
+          if paths is not None:
+            paths.append(tuple(path))  # type: ignore
+        nodes.append(array_refdef)
+      else:
+        attributes.append((key, ARRAY_ATTR))
         if paths is not None:
           paths.append(tuple(path))  # type: ignore
-      nodes.append(array_refdef)
-    elif isinstance(value, (jax.Array, np.ndarray)):
-      attributes.append((key, ARRAY_ATTR))
-      if paths is not None:
-        paths.append(tuple(path))  # type: ignore
-      leaves.append(value)
+        leaves.append(value)
     else:
       attributes.append((key, Static(value)))
-
     if path is not None:
-      path.pop()
+        path.pop()
 
   return
 
