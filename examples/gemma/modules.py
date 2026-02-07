@@ -50,20 +50,29 @@ class Embedder(nnx.Module):
       embed_dim: int,
       *,
       embedding_init: nnx.Initializer = nnx.initializers.normal(),
-      dtype: Any = jnp.float32,
+      embedding_metadata: dict[str, Any] | None = None,
+      dtype: jnp.dtype = jnp.float32,
+      weight_dtype: jnp.dtype = jnp.float32,
       rngs: nnx.Rngs,
   ):
+    self.dtype = dtype
+    self.weight_dtype = weight_dtype
+    embedding_metadata = embedding_metadata if embedding_metadata else {}
     self.input_embedding = nnx.Param(
-        embedding_init(rngs.params(), (vocab_size, embed_dim), dtype)
+        embedding_init(rngs.params(), (vocab_size, embed_dim), self.weight_dtype),
+        **embedding_metadata
     )
 
   def encode(self, x: ArrayLike) -> Array:
-    x = self.input_embedding[(x,)]
-    x *= jnp.sqrt(x.shape[-1]).astype(x.dtype)
+    embedding = jnp.asarray(self.input_embedding[...], self.dtype)
+    x = embedding[(x,)]
+    x *= jnp.sqrt(x.shape[-1])
     return x
 
   def decode(self, x: ArrayLike) -> Array:
-    return jnp.dot(x, self.input_embedding.T)
+    x = jnp.asarray(x, self.dtype)
+    embedding = jnp.asarray(self.input_embedding, self.dtype)
+    return jnp.dot(x, embedding.T, preferred_element_type=self.dtype)
 
   @property
   def embed_dim(self):
@@ -93,13 +102,14 @@ class Attention(nnx.Module):
       sliding_window_size: int | None = None,
       use_qk_norm: bool = False,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
-      dtype: Any = jnp.float16,
-      kernel_init: nnx.Initializer = nnx.initializers.normal(),
-      scale_init: nnx.Initializer = nnx.initializers.zeros_init(),
-      attn_vec_einsum_kernel_init: nnx.Initializer | None = None,
-      qkv_einsum_kernel_init: nnx.Initializer | None = None,
-      q_einsum_kernel_init: nnx.Initializer | None = None,
-      kv_einsum_kernel_init: nnx.Initializer | None = None,
+      dtype: jnp.dtype = jnp.float32,
+      weight_dtype: jnp.dtype = jnp.float32,
+      attn_vec_einsum_kernel_metadata: dict[str, Any] | None = None,
+      qkv_einsum_kernel_metadata: dict[str, Any] | None = None,
+      q_einsum_kernel_metadata: dict[str, Any] | None = None,
+      kv_einsum_kernel_metadata: dict[str, Any] | None = None,
+      scale_metadata: dict[str, Any] | None = None,
+      dropout_rate: float = 0.0
   ):
     if attn_type == AttentionType.LOCAL_SLIDING and sliding_window_size is None:
       raise ValueError(
@@ -110,12 +120,13 @@ class Attention(nnx.Module):
     self.attn_type = attn_type
     self.sliding_window_size = sliding_window_size
     self.attn_logits_soft_cap = attn_logits_soft_cap
-    attn_vec_einsum_kernel_init = attn_vec_einsum_kernel_init if attn_vec_einsum_kernel_init else kernel_init
+    attn_vec_einsum_kernel_metadata = attn_vec_einsum_kernel_metadata if attn_vec_einsum_kernel_metadata else {}
     self.attn_vec_einsum = layers.Einsum(
         einsum_str='BTNH,NHD->BTD',
         shape=(num_heads, head_dim, features),
-        kernel_init=attn_vec_einsum_kernel_init,
+        kernel_metadata=attn_vec_einsum_kernel_metadata,
         dtype=dtype,
+        weight_dtype=weight_dtype,
         rngs=rngs,
     )
     self.rope_base_frequency = rope_base_frequency
@@ -124,12 +135,13 @@ class Attention(nnx.Module):
     self.sow_config = sow_config
 
     if num_heads == num_kv_heads:
-      qkv_einsum_kernel_init = qkv_einsum_kernel_init if qkv_einsum_kernel_init else kernel_init
+      qkv_einsum_kernel_metadata = qkv_einsum_kernel_metadata if qkv_einsum_kernel_metadata else {}
       self.qkv_einsum = layers.Einsum(
           einsum_str='BTD,SNDH->SBTNH',
           shape=(3, num_heads, features, head_dim),
-          kernel_init=qkv_einsum_kernel_init,
+          kernel_metadata=qkv_einsum_kernel_metadata,
           dtype=dtype,
+          weight_dtype=weight_dtype,
           rngs=rngs,
       )
     else:
@@ -139,36 +151,43 @@ class Attention(nnx.Module):
           f"number of key/value heads ({num_kv_heads})."
         )
 
-      q_einsum_kernel_init = q_einsum_kernel_init if q_einsum_kernel_init else kernel_init
+      q_einsum_kernel_metadata = q_einsum_kernel_metadata if q_einsum_kernel_metadata else {}
       self.q_einsum = layers.Einsum(
           einsum_str='BTD,NDH->BTNH',
           shape=(num_heads, features, head_dim),
-          kernel_init=q_einsum_kernel_init,
+          kernel_metadata=q_einsum_kernel_metadata,
           dtype=dtype,
+          weight_dtype=weight_dtype,
           rngs=rngs,
       )
-      kv_einsum_kernel_init = kv_einsum_kernel_init if kv_einsum_kernel_init else kernel_init
+      kv_einsum_kernel_metadata = kv_einsum_kernel_metadata if kv_einsum_kernel_metadata else {}
       self.kv_einsum = layers.Einsum(
           einsum_str='BSD,CKDH->CBSKH',
           shape=(2, num_kv_heads, features, head_dim),
-          kernel_init=kv_einsum_kernel_init,
+          kernel_metadata=kv_einsum_kernel_metadata,
           dtype=dtype,
+          weight_dtype=weight_dtype,
           rngs=rngs,
       )
 
     if self.use_qk_norm:
+      scale_metadata = scale_metadata if scale_metadata else {}
       self._query_norm = layers.RMSNorm(
         head_dim,
-        scale_init=scale_init,
+        scale_metadata=scale_metadata,
         dtype=dtype,
+        weight_dtype=weight_dtype,
         rngs=rngs,
       )
       self._key_norm = layers.RMSNorm(
         head_dim,
-        scale_init=scale_init,
+        scale_metadata=scale_metadata,
         dtype=dtype,
+        weight_dtype=weight_dtype,
         rngs=rngs,
       )
+
+    self.dropout = nnx.Dropout(dropout_rate)
 
   def __call__(
       self,
@@ -176,6 +195,7 @@ class Attention(nnx.Module):
       segment_pos: Array,
       cache: LayerCache | None,
       attn_mask: Array,
+      rngs: nnx.Rngs | None = None,
   ) -> tuple[LayerCache | None, Array]:
     seq_len = x.shape[1]
 
@@ -252,6 +272,8 @@ class Attention(nnx.Module):
     self.sow_config.maybe_sow_attn_logits_topk(padded_logits, self)
     probs = jax.nn.softmax(padded_logits, axis=-1).astype(key_proj.dtype)
 
+    probs = self.dropout(probs, rngs=rngs)
+
     if use_gqa:
       # Reshape matrices to enable einsums over groups.
       num_groups = self.num_heads // self.num_kv_heads
@@ -306,7 +328,7 @@ class Attention(nnx.Module):
       self,
       cache_size: int,
       batch_size: int,
-      dtype: jnp.dtype = jnp.bfloat16,
+      dtype: jnp.dtype = jnp.float32,
   ) -> LayerCache:
     return {
         'v': jnp.zeros(
@@ -330,37 +352,52 @@ class FeedForward(nnx.Module):
       hidden_dim: int,
       *,
       kernel_init: nnx.Initializer = nnx.initializers.normal(),
+      gate_proj_kernel_metadata: dict[str, Any] | None = None,
+      up_proj_kernel_metadata: dict[str, Any] | None = None,
+      down_proj_kernel_metadata: dict[str, Any] | None = None,
       rngs: nnx.Rngs,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
-      dtype: Any = jnp.float32,
+      dtype: jnp.dtype = jnp.float32,
+      weight_dtype: jnp.dtype = jnp.float32,
+      dropout_rate: float = 0.0,
   ):
+    gate_proj_kernel_metadata = gate_proj_kernel_metadata if gate_proj_kernel_metadata else {}
     self.gate_proj = nnx.Linear(
         in_features=features,
         out_features=hidden_dim,
         use_bias=False,
         rngs=rngs,
         kernel_init=kernel_init,
+        kernel_metadata=gate_proj_kernel_metadata,
         dtype=dtype,
+        param_dtype=weight_dtype,
     )
+    up_proj_kernel_metadata = up_proj_kernel_metadata if up_proj_kernel_metadata else {}
     self.up_proj = nnx.Linear(
         in_features=features,
         out_features=hidden_dim,
         use_bias=False,
         rngs=rngs,
         kernel_init=kernel_init,
+        kernel_metadata=up_proj_kernel_metadata,
         dtype=dtype,
+        param_dtype=weight_dtype,
     )
+    down_proj_kernel_metadata = down_proj_kernel_metadata if down_proj_kernel_metadata else {}
     self.down_proj = nnx.Linear(
         in_features=hidden_dim,
         out_features=features,
         use_bias=False,
         rngs=rngs,
         kernel_init=kernel_init,
+        kernel_metadata=down_proj_kernel_metadata,
         dtype=dtype,
+        param_dtype=weight_dtype,
     )
+    self.dropout = nnx.Dropout(dropout_rate)
     self.sow_config = sow_config
 
-  def __call__(self, x: ArrayLike) -> Array:
+  def __call__(self, x: ArrayLike, rngs: nnx.Rngs | None = None) -> Array:
     ff_gate = self.gate_proj(x)
     gate_value = nnx.gelu(ff_gate)
 
@@ -368,6 +405,7 @@ class FeedForward(nnx.Module):
     activations = gate_value * ff1
     self.sow_config.maybe_sow_mlp_hidden_topk(activations, self)
 
+    activations = self.dropout(activations, rngs=rngs)
     outputs = self.down_proj(activations)
     return outputs
 
@@ -402,16 +440,14 @@ class Block(nnx.Module):
     attn_logits_soft_cap = config.attn_logits_soft_cap
     use_qk_norm = config.use_qk_norm
     dtype = config.dtype
+    weight_dtype = config.weight_dtype
 
     self.pre_attention_norm = layers.RMSNorm(
       embed_dim,
-      scale_init=maybe_with_partitioning(
-        nnx.initializers.zeros_init(),
-        config.axis_rules,
-        ("embed", ),
-      ),
+      scale_metadata={"sharding_names": ("tensor", )},
       rngs=rngs,
       dtype=dtype,
+      weight_dtype=weight_dtype,
     )
     self.attn = Attention(
         num_heads=num_heads,
@@ -427,81 +463,70 @@ class Block(nnx.Module):
         rngs=rngs,
         use_qk_norm=use_qk_norm,
         sow_config=sow_config,
-        attn_vec_einsum_kernel_init=maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          (None, "embed", "kv"),  # sharded array shape: (num_heads, head_dim, features)
-        ),
-        qkv_einsum_kernel_init=maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          (None, None, "embed", "kv"),  # sharded array shape: (3, num_heads, features, head_dim)
-        ),
-        q_einsum_kernel_init=maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          (None, "embed", "kv"),  # sharded array shape: (num_heads, features, head_dim)
-        ),
-        kv_einsum_kernel_init=maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          (None, None, "embed", "kv"),  # sharded array shape: (2, num_kv_heads, features, head_dim)
-        ),
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        attn_vec_einsum_kernel_metadata={
+          "sharding_names": ("tensor", None, "fsdp"),  # shape: (num_heads, head_dim, embed_dim)
+        },
+        qkv_einsum_kernel_metadata={
+          "sharding_names": (None, "tensor", "fsdp", None),  # shape: (3, num_heads, embed_dim, head_dim)
+        },
+        q_einsum_kernel_metadata={
+          "sharding_names": ("tensor", "fsdp", None),  # shape: (num_heads, embed_dim, head_dim)
+        },
+        kv_einsum_kernel_metadata={
+          "sharding_names": (
+            None,
+            "tensor" if num_kv_heads > 1 else None,  # Gemma3 1B has num_kv_heads=1
+            "fsdp",
+            None
+          ),  # shape: (2, num_kv_heads, embed_dim, head_dim)
+        },
+        scale_metadata={"sharding_names": ("tensor", )},
         dtype=dtype,
+        weight_dtype=weight_dtype,
+        dropout_rate=config.dropout_rate,
     )
     if use_post_attn_norm:
       self.post_attention_norm = layers.RMSNorm(
         embed_dim,
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        scale_metadata={"sharding_names": ("tensor", )},
         rngs=rngs,
         dtype=dtype,
+        weight_dtype=weight_dtype,
       )
     else:
       self.post_attention_norm = None
 
     self.pre_ffw_norm = layers.RMSNorm(
       embed_dim,
-      scale_init=maybe_with_partitioning(
-        nnx.initializers.zeros_init(),
-        config.axis_rules,
-        ("embed", ),
-      ),
+      scale_metadata={"sharding_names": ("tensor", )},
       rngs=rngs,
       dtype=dtype,
+      weight_dtype=weight_dtype,
     )
     self.mlp = FeedForward(
         features=embed_dim,
         hidden_dim=hidden_dim,
-        kernel_init=maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          ("embed", "mlp"),
-        ),
+        gate_proj_kernel_metadata={"sharding_names": ("fsdp", "tensor")},
+        up_proj_kernel_metadata={"sharding_names": ("fsdp", "tensor")},
+        down_proj_kernel_metadata={"sharding_names": ("tensor", "fsdp")},
         rngs=rngs,
         sow_config=sow_config,
+        dtype=dtype,
+        weight_dtype=weight_dtype,
+        dropout_rate=config.dropout_rate,
     )
     if use_post_ffw_norm:
       self.post_ffw_norm = layers.RMSNorm(
         embed_dim,
-        scale_init=maybe_with_partitioning(
-          nnx.initializers.zeros_init(),
-          config.axis_rules,
-          ("embed", ),
-        ),
+        scale_metadata={"sharding_names": ("tensor", )},
         rngs=rngs,
         dtype=dtype,
+        weight_dtype=weight_dtype,
       )
     else:
       self.post_ffw_norm = None
+
+    self.dropout = nnx.Dropout(config.dropout_rate)
     self.sow_config = sow_config
 
   def __call__(
@@ -510,6 +535,7 @@ class Block(nnx.Module):
       segment_pos: jax.Array,
       cache: LayerCache | None,
       attn_mask: jax.Array,
+      rngs: nnx.Rngs | None = None,
   ) -> tuple[LayerCache | None, jax.Array]:
 
     # Attention.
@@ -519,6 +545,7 @@ class Block(nnx.Module):
         segment_pos,
         cache,
         attn_mask,
+        rngs=rngs,
     )
     if self.post_attention_norm is not None:
       attn_output = self.post_attention_norm(attn_output)
@@ -527,10 +554,11 @@ class Block(nnx.Module):
 
     # Feed forward.
     ffw_inputs = self.pre_ffw_norm(x)
-    ffw_outputs = self.mlp(ffw_inputs)
+    ffw_outputs = self.mlp(ffw_inputs, rngs=rngs)
     if self.post_ffw_norm is not None:
       ffw_outputs = self.post_ffw_norm(ffw_outputs)
     x += ffw_outputs
+    x = self.dropout(x, rngs=rngs)
     self.sow_config.maybe_sow_rs_after_ffw(x, self)
 
     return cache, x
@@ -539,16 +567,10 @@ class Block(nnx.Module):
       self,
       cache_size: int,
       batch_size: int,
-      dtype: jnp.dtype = jnp.bfloat16,
+      dtype: jnp.dtype = jnp.float32,
   ) -> LayerCache:
     return self.attn.init_cache(
         cache_size=cache_size,
         batch_size=batch_size,
         dtype=dtype,
     )
-
-
-def maybe_with_partitioning(fn, axis_rules, axis_rules_args=()):
-  if axis_rules is None:
-    return fn
-  return nnx.with_partitioning(fn, axis_rules(*axis_rules_args))
