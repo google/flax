@@ -51,7 +51,7 @@ def to_opt_state(tree):
     if isinstance(x, Variable):
       opt_metadata = x.get_metadata()
       if 'opt_sharding' in opt_metadata:
-        opt_metadata['sharding_names'] = opt_metadata['opt_sharding']
+        opt_metadata['sharding_names'] = opt_metadata.pop('opt_sharding')
       opt_state = OptVariable(x.get_value(), **opt_metadata)  # type: ignore
     else:
       opt_state = OptArray(x)
