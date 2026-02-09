@@ -284,7 +284,7 @@ class ScopeTest(absltest.TestCase):
       init_fn(random.key(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
 
   @config.temp_flip_flag('fix_rng_separator', True)
-  def test_fold_in_static_seperator(self):
+  def test_fold_in_static_separator(self):
     x = LazyRng(random.key(0), ('ab', 'c'))
     y = LazyRng(random.key(0), ('a', 'bc'))
     self.assertFalse(np.all(x.as_jax_rng() == y.as_jax_rng()))
