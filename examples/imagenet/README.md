@@ -109,7 +109,7 @@ gcs bucket. Point the environment variable `GCS_TFDS_BUCKET` to your bucket and
 run the following command:
 
 ```shell
-gsutil cp -r ~/tensorflow_datasets gs://$GCS_TFDS_BUCKET/datasets
+gcloud storage cp --recursive ~/tensorflow_datasets gs://$GCS_TFDS_BUCKET/datasets
 ```
 
 #### Google Cloud TPU

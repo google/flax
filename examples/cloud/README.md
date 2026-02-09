@@ -6,7 +6,7 @@ on Google Cloud, train an example on that VM and then shutting it down.
 The training is implemented in a shell that is run on the VM after startup by
 setting the `startup_script_file` in the metadata. The script opens a TMUX
 session, installs Flax repository from Github with all dependencies, and then
-runs the training in parallel with `gsutil rsync` that copies the training
+runs the training in parallel with `gcloud storage rsync` that copies the training
 artifacts in a storage bucket.
 
 The advantage of this approach is that every training is run in a single VM
