@@ -18,17 +18,17 @@ import copy
 import functools
 from typing import Any
 
-import jax
-import jax.numpy as jnp
-import numpy as np
-import optax
 from absl.testing import absltest, parameterized
-from jax import random
-
+import chex
 from flax import ids
 from flax import linen as nn
 from flax.linen import fp8_ops
 from flax.training import train_state
+import jax
+from jax import random
+import jax.numpy as jnp
+import numpy as np
+import optax
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -918,6 +918,49 @@ class NormalizationTest(parameterized.TestCase):
       state, loss = train_step(state, {'image': x, 'label': y})
       self.assertLess(loss, prev_loss)
       prev_loss = loss
+
+  def test_weight_norm_compatibility_with_partitioning(self):
+    replicated_module = nn.WeightNorm(nn.Dense(10))
+
+    @jax.jit
+    def _init_replicated(x):
+      return replicated_module.init(jax.random.key(0), x)
+
+    expected = _init_replicated(jnp.ones((10, 10)))
+
+    sharded_module = nn.WeightNorm(
+        nn.Dense(
+            10,
+            kernel_init=nn.with_partitioning(
+                nn.initializers.lecun_normal(), ('x',)
+            ),
+        )
+    )
+
+    @jax.jit
+    def _init_sharded(x):
+      return sharded_module.init(jax.random.key(0), x)
+
+    got = _init_sharded(jnp.ones((10, 10)))
+
+    def _strip_partitioning(x):
+      if isinstance(x, nn.Partitioned):
+        return x.value
+      return x
+
+    got = jax.tree.map(
+        _strip_partitioning,
+        got,
+        is_leaf=lambda x: isinstance(x, nn.Partitioned),
+    )
+
+    expected_scale = expected['params'].pop('layer_instance/kernel/scale')
+    # NOTE: `value` is from `nn.Partitioned.value`
+    got_scale = got['params'].pop('layer_instance/kernel/value/scale')
+    np.testing.assert_array_equal(got_scale, expected_scale)
+
+    # Compares the rest of PyTree nodes
+    chex.assert_trees_all_close(expected, got)
 
 
 class StochasticTest(parameterized.TestCase):
