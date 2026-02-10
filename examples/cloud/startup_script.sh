@@ -71,7 +71,7 @@ tmux split-window -h
 # - bottom right: rsync files to GCS bucket.
 tmux send "
 while true; do
-  gsutil rsync -r workdir_base __GCS_WORKDIR_BASE__
+  gcloud storage rsync --recursive workdir_base __GCS_WORKDIR_BASE__
   sleep 60
 done 2>&1 | tee -a $WORKDIR/gcs_rsync_'__TIMESTAMP__'.txt
 "
