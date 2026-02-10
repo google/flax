@@ -1348,9 +1348,9 @@ class WeightNorm(Module):
     """
     value = jnp.asarray(vs)
     str_path = (
-      self.layer_instance.name
-      + '/'
-      + '/'.join(dict_key.key for dict_key in path[1:])
+        self.layer_instance.name
+        + '/'
+        + jax.tree_util.keystr(path[1:], simple=True, separator='/')
     )
     if self.variable_filter:
       for variable_name in self.variable_filter:
