@@ -39,23 +39,46 @@ class StatefulLinear(nnx.Module):
 
 
 class TestGraphUtils(absltest.TestCase):
+  def test_data_is_not_static(self):
+    class Module(nnx.Module):
+        def __init__(self):
+            self.data = nnx.data({"a": jnp.ones((8, 8))})
+
+    module = Module()
+    # assert False
+    f1 = nnx.flatten(module)
+    abstract_module = nnx.eval_shape(Module)
+    f2 = nnx.flatten(abstract_module)
+    assert f1[0].attributes == f2[0].attributes
+
   def test_flatten(self):
-    a = {'a': 1, 'b': nnx.Param(2)}
-    g = [a, 3, a, nnx.Param(4)]
+    class A(nnx.Module):
+        def __init__(self):
+            self.a = 1
+            self.b = nnx.Param(2)
+
+    a = A()
+    g = nnx.List([a, 3, a, nnx.Param(4)])
 
     refmap = nnx.graph.RefMap()
     graphdef, flat_state = nnx.graph.flatten(g, ref_index=refmap)
 
+    print(refmap)
+
     assert flat_state[0][1].get_value() == 2
     assert flat_state[1][1].get_value() == 4
 
-    assert len(refmap) == 2  # 2 Variables
-    assert a['b'] in refmap
+    assert len(refmap) == 4  # 2 Variables, 2 Modules
+    assert a.b in refmap
     assert g[3] in refmap
 
   def test_flatten_no_paths(self):
-    a = {'a': 1, 'b': nnx.Param(jnp.array(2))}
-    g = [a, 3, a, nnx.Param(jnp.array(4))]
+    class A(nnx.Module):
+        def __init__(self):
+            self.a = 1
+            self.b = nnx.Param(jnp.array(2))
+    a = A()
+    g = nnx.List([a, 3, a, nnx.Param(jnp.array(4))])
 
     refmap = nnx.graph.RefMap()
     graphdef, flat_state = nnx.graph.flatten(
@@ -65,8 +88,8 @@ class TestGraphUtils(absltest.TestCase):
     assert flat_state[0][...] == 2
     assert flat_state[1][...] == 4
 
-    assert len(refmap) == 2  # 2 Variables
-    assert a['b'] in refmap
+    assert len(refmap) == 4  # 2 Variables, 2 Modules
+    assert a.b in refmap
     assert g[3] in refmap
 
   def test_unflatten(self):
