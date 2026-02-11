@@ -11,7 +11,7 @@ jupytext:
 # Hijax
 
 ```{code-cell} ipython3
-from flax import nnx
+import nnx
 import jax
 import jax.numpy as jnp
 import optax
