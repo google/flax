@@ -15,8 +15,11 @@
 
 from typing import Any
 
+from flax.benchmarks.tracing import tracing_benchmark
 from flax.examples.ppo import models
 from flax.examples.ppo import ppo_lib
+from flax.examples.ppo.configs import default as ppo_config
+import google_benchmark
 import jax
 import jax.numpy as jnp
 import ml_collections
@@ -106,3 +109,23 @@ def get_apply_fn_and_args(
           'entropy_coeff': entropy_coeff,
       },
   )
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_ppo_trace(state):
+  tracing_benchmark.benchmark_tracing(
+      get_apply_fn_and_args, ppo_config.get_config, state
+  )
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_ppo_lower(state):
+  tracing_benchmark.benchmark_lowering(
+      get_apply_fn_and_args, ppo_config.get_config, state
+  )
+
+
+if __name__ == '__main__':
+  tracing_benchmark.run_benchmarks()
