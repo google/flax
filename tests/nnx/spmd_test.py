@@ -90,6 +90,28 @@ class TestSPMD(parameterized.TestCase):
     assert m.w.shape == (8, 2)
     assert m.w.sharding.shard_shape(m.w.shape) == (8, 2)
 
+  def test_separate_opt_sharding(self):
+    mesh = jax.make_mesh((2, 2), ("row", "col"),
+                         axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto))
+    with jax.set_mesh(mesh):
+      model = nnx.Linear(4, 2, rngs=nnx.Rngs(0), kernel_metadata={'opt_sharding': ('row', 'col')})
+      optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
+
+      assert model.kernel.sharding.is_equivalent_to(
+        NamedSharding(mesh, P()), ndim=2)
+      assert optimizer.opt_state[0].mu['kernel'].sharding.is_equivalent_to(
+        NamedSharding(mesh, P('row', 'col')), ndim=2)
+
+      def loss(model, x):
+        return jnp.sum(model(x))
+
+      def train_step(model, x):
+        grads = jax.grad(loss)(model, x)
+        optimizer.update(model, grads)
+
+      train_step(model, jnp.ones(4))
+      train_step(model, jnp.ones(4))
+
   def test_shard_optimizer_state(self):
     class Foo(nnx.Module):
       def __init__(self):
