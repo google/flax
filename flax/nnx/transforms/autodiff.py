@@ -137,7 +137,10 @@ def _grad_general(
 
   if not graph:
     if any(isinstance(x, DiffState) for x in jax.tree.leaves(argnums)):
-      raise ValueError('`argnums` cannot contain `DiffState` objects when `graph=False`')
+      raise ValueError(
+        '`argnums` cannot contain `DiffState` objects '
+        'when `graph=False`'
+      )
 
     gradded_fn = transform(
         TreeGradFn(f, has_aux),
