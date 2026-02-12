@@ -74,10 +74,10 @@ def remove_axis(
 
   def _remove_axis(x: tp.Any):
     if isinstance(x, variablelib.Variable):
-      if hasattr(x, 'out_sharding') and x.out_sharding is not None:
-        x.set_metadata(
-          out_sharding=remove_field(x.out_sharding, index, axis_name)
-        )
+      if hasattr(x, 'out_sharding') and x.out_sharding:
+          x.set_metadata(
+            out_sharding=remove_field(x.out_sharding, index, axis_name)
+          )
 
       for k, v in other_meta.items():
         if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
