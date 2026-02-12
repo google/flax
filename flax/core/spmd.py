@@ -19,6 +19,7 @@ import threading
 import jax
 from jax.sharding import PartitionSpec, NamedSharding
 from flax.core import meta
+from jax.experimental.layout import Format
 from flax.typing import (
     LogicalRules,
     Sharding,
@@ -26,13 +27,36 @@ from flax.typing import (
 
 def get_pspec(sharding, sharding_rules = None) -> PartitionSpec:
   """Given an `nnx.Variable`, return its `PartitionSpec`."""
+  return apply_rules(sharding, sharding_rules)   # type: ignore
+
+def map_sharding(f, sharding):
+  if isinstance(sharding, PartitionSpec) or isinstance(sharding, tuple):
+    return PartitionSpec(*map(f, sharding))
+  elif isinstance(sharding, NamedSharding):
+    return NamedSharding(sharding.mesh, map_sharding(f, sharding.spec)) # type: ignore
+  elif isinstance(sharding, Format):
+    return Format(sharding.layout, map_sharding(f, sharding.sharding))  # type: ignore
+
+def get_mesh(sharding):
+  if isinstance(sharding, PartitionSpec) or isinstance(sharding, tuple):
+    return None
+  elif isinstance(sharding, NamedSharding):
+    return sharding.mesh
+  elif isinstance(sharding, Format):
+    return get_mesh(sharding.sharding)
+
+def apply_rules(sharding, sharding_rules):
+  """Rename the axes of a sharding specification (which can include `PartitionSpec`, `NamedSharding` or `Format` objects)."""
   if get_logical_axis_rules() or sharding_rules:
     context_rules = get_logical_axis_rules()
-    rules = composite_rules(context_rules, sharding_rules)
-    return PartitionSpec(*from_sharding_rules(sharding, rules))
-  return PartitionSpec(*sharding)
+    rules = {alias: on_mesh for (alias, on_mesh) in composite_rules(context_rules, sharding_rules)}
+  else:
+    rules = {}
+  return map_sharding(lambda a: rules.get(a, a), sharding)
 
 def _apply_sharding(value, sharding, mesh):
+  if isinstance(sharding, Format):
+    return jax.device_put(value, sharding)
   if mesh.are_all_axes_explicit:
     return jax.sharding.reshard(value, sharding)
   elif mesh.are_all_axes_auto:
@@ -42,23 +66,32 @@ def _apply_sharding(value, sharding, mesh):
         'Mesh must have all axes as Explicit or all axes as Auto. '
         f'Got mixed axis types: {mesh.axis_types}')
 
-
-def shard_value(
-  value, sharding, sharding_rules, mesh: jax.sharding.AbstractMesh | jax.sharding.Mesh | None
-):
-  if not sharding:
+def shard_value(value, out_sharding, sharding_rules, mesh):
+  if not out_sharding:
     return value
 
   if mesh is None:
     mesh = meta.get_global_mesh()
 
+  out_sharding = apply_rules(out_sharding, sharding_rules)
+
+  sharding_mesh = get_mesh(out_sharding)
+
+  if sharding_mesh:
+    if mesh:
+      assert mesh == out_sharding.mesh
+    mesh = sharding_mesh
+
   if mesh is None:
     raise ValueError(
       'An auto mesh context or metadata is required if creating a variable'
-      f' with annotation {sharding=}. '
+      f' with annotation {out_sharding=}. '
       'For more guidance, see https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html.')
-  pspec = get_pspec(sharding, sharding_rules)
-  return _apply_sharding(value, NamedSharding(mesh, pspec), mesh)
+
+  if isinstance(out_sharding, PartitionSpec):
+    out_sharding = NamedSharding(mesh, out_sharding)
+
+  return _apply_sharding(value, out_sharding, mesh)
 
 
 
