@@ -950,6 +950,17 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   # -------------------------
   def _graph_node_flatten(self):
     obj_items = vars(self).items()
+    if self._pytree__is_pytree:
+      pytree_nodes = self._pytree__nodes
+      obj_items = (
+          (
+              name,
+              nnx.graph.DataElem(value)
+              if name in pytree_nodes and pytree_nodes[name]
+              else nnx.graph.StaticElem(value),
+          )
+          for name, value in obj_items
+      )
     if self._pytree__has_int_keys:
       obj_items = ((_maybe_int(name), value) for name, value in obj_items)
       key_fn = graph._type_aware_sort
