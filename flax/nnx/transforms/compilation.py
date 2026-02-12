@@ -990,6 +990,21 @@ class TreeTraced(Stage):
 
 
 @dataclasses.dataclass(eq=False)
+class TreeShardMapFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  def __call__(self, *args):
+    updates, snapshot = extract.updates_and_snapshot(args)
+    out = self.f(*args)
+    extract.check_no_aliases(updates, out)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    return out, updates
+
+
+@dataclasses.dataclass(eq=False)
 class ShardMapFn:
   f: tp.Callable[..., tp.Any]
   in_specs: tp.Any
@@ -1030,6 +1045,7 @@ def shard_map(
     out_specs: Specs,
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
+    graph: bool = True,
 ) -> F:
   ...
 
@@ -1042,6 +1058,7 @@ def shard_map(
     out_specs: Specs,
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
+    graph: bool = True,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -1054,6 +1071,7 @@ def shard_map(
     out_specs: Specs,
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
+    graph: bool = True,
 ) -> F | tp.Callable[[F], F]:
   """
   Lifted version of
@@ -1211,13 +1229,32 @@ def shard_map(
         out_specs=out_specs,
         axis_names=axis_names,
         check_vma=check_vma,
+        graph=graph,
     )  # type: ignore[return-value]
   assert not isinstance(f, type)
 
-  # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('shard_map')
+
+  if not graph:
+    tree_shard_map_fn = jax.shard_map(
+        TreeShardMapFn(f_unbound),
+        mesh=mesh,
+        in_specs=in_specs,
+        out_specs=(out_specs, in_specs),
+        axis_names=axis_names,
+        check_vma=check_vma,
+    )
+
+    @functools.wraps(f)
+    def tree_shard_map_wrapper(*args, **kwargs):
+      out, updates = tree_shard_map_fn(*args, **kwargs)
+      extract.apply_variable_updates(args, updates)
+      return out
+
+    tree_shard_map_wrapper.inner = tree_shard_map_fn  # type: ignore
+    return tree_shard_map_wrapper  # type: ignore
 
   kwarg_specs = PartitionSpec()
   jax_in_specs = jax.tree.map(
@@ -1243,7 +1280,6 @@ def shard_map(
 
   @functools.wraps(f)
   def shard_map_wrapper(*args, **kwargs):
-    # run dynamic_cache_context before update_context
     with graphlib.update_context(shard_map_wrapper):
       pure_args, pure_kwargs = extract.to_tree(
         (args, kwargs),

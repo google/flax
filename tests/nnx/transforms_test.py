@@ -703,7 +703,7 @@ class TestEvalShape(absltest.TestCase):
     self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
     self.assertEqual(abs_model.kernel.shape, (1, 2))
 
-class TestShardMap(absltest.TestCase):
+class TestShardMap(parameterized.TestCase):
   def test_basic_shardmap(self):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
@@ -732,7 +732,8 @@ class TestShardMap(absltest.TestCase):
 
     self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
 
-  def test_basic_shardmap_variables(self):
+  @parameterized.parameters(True, False)
+  def test_basic_shardmap_variables(self, graph):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('a',))
@@ -745,7 +746,7 @@ class TestShardMap(absltest.TestCase):
 
     self.assertNotIsInstance(w.sharding, jax.sharding.NamedSharding)
 
-    @nnx.shard_map(mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None)
+    @nnx.shard_map(mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None, graph=graph)
     def f(w, b, count):
       count[...] += 1
       self.assertEqual(w.shape, (16, 32 // n_devices))
@@ -753,8 +754,9 @@ class TestShardMap(absltest.TestCase):
 
     f(w, b, count)
 
-    self.assertIsInstance(w.sharding, jax.sharding.NamedSharding)
-    self.assertIsInstance(b.sharding, jax.sharding.NamedSharding)
+    if graph:
+      self.assertIsInstance(w.sharding, jax.sharding.NamedSharding)
+      self.assertIsInstance(b.sharding, jax.sharding.NamedSharding)
     self.assertEqual(count[...], 1)
 
   def test_from_state(self):
@@ -787,17 +789,25 @@ class TestShardMap(absltest.TestCase):
     self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
     self.assertIsInstance(m.bias.sharding, jax.sharding.NamedSharding)
 
-  def test_simple_data_parallel(self):
+  @parameterized.parameters(True, False)
+  def test_simple_data_parallel(self, graph):
     P = jax.sharding.PartitionSpec
     n_devices = jax.local_device_count()
 
     mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
 
-    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    with jax.set_mesh(mesh):
+      m = nnx.Linear(
+          in_features=2,
+          out_features=3,
+          kernel_metadata={'sharding_names': jax.P(None)},
+          bias_metadata={'sharding_names': jax.P(None)},
+          rngs=nnx.Rngs(0),
+    )
     x = jnp.ones((32, 2))
 
     @nnx.shard_map(
-      mesh=mesh, in_specs=(P(None), P('data')), out_specs=P('data')
+      mesh=mesh, in_specs=(P(None), P('data')), out_specs=P('data'), graph=graph
     )
     def f(m, x):
       self.assertEqual(x.shape, (32 // n_devices, 2))
@@ -844,6 +854,57 @@ class TestShardMap(absltest.TestCase):
       return jax.lax.psum(y, 'model')
 
     y = f(m, x)
+
+  @parameterized.parameters(True, False)
+  def test_shardmap_with_sharding_names(self, graph):
+    n_devices = jax.local_device_count()
+    P = jax.sharding.PartitionSpec
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
+
+    with jax.set_mesh(mesh):
+      w = nnx.Param(jnp.ones((8, 4)), sharding_names=('data', None))
+      b = nnx.Param(jnp.ones((4,)), sharding_names=(None,))
+
+    self.assertIsInstance(w.get_raw_value().sharding, jax.sharding.NamedSharding)
+    self.assertEqual(w.sharding_names, ('data', None))
+    self.assertEqual(b.sharding_names, (None,))
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P('data', None), P(None)), out_specs=P('data', None),
+      graph=graph,
+    )
+    def f(w, b):
+      self.assertEqual(w.shape, (8 // n_devices, 4))
+      self.assertEqual(b.shape, (4,))
+      return w + b[None]
+
+    y = f(w, b)
+    self.assertEqual(y.shape, (8, 4))
+    self.assertIsInstance(y.sharding, jax.sharding.NamedSharding)
+
+  @parameterized.parameters(True, False)
+  def test_shardmap_sharding_names_mutation(self, graph):
+    n_devices = jax.local_device_count()
+    P = jax.sharding.PartitionSpec
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
+
+    with jax.set_mesh(mesh):
+      w = nnx.Param(jnp.zeros((8, 4)), sharding_names=('data', None))
+      count = nnx.BatchStat(jnp.array(0))
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P('data', None), P()), out_specs=P('data', None),
+      graph=graph,
+    )
+    def f(w, count):
+      count[...] += 1
+      self.assertEqual(w.shape, (8 // n_devices, 4))
+      return w + 1.0
+
+    y = f(w, count)
+    self.assertEqual(count[...], 1)
+    self.assertEqual(y.shape, (8, 4))
+    np.testing.assert_allclose(w[...], jnp.zeros((8, 4)))
 
 
 class TestGrad(parameterized.TestCase):
