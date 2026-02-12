@@ -60,11 +60,12 @@ class TestJIT(parameterized.TestCase):
     self.assertIs(m, m_out)
     self.assertIsInstance(m2, jax.Ref)
 
-  def test_simple_double_call(self):
+  @parameterized.parameters(True, False)
+  def test_simple_double_call(self, graph_mode):
     n = 0
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.jit
+    @nnx.jit(graph=graph_mode)
     def f(m: nnx.Linear, x: jnp.ndarray) -> jnp.ndarray:
       nonlocal n
       n += 1
@@ -107,7 +108,8 @@ class TestJIT(parameterized.TestCase):
     m = Foo(2, 3, rngs=nnx.Rngs(0))
     assert n == 1
 
-  def test_jit_on_call(self):
+  @parameterized.parameters(True, False)
+  def test_jit_on_call(self, graph_mode):
     n = 0
 
     class Foo(nnx.Module):
@@ -117,7 +119,7 @@ class TestJIT(parameterized.TestCase):
         self.din = din
         self.dout = dout
 
-      @nnx.jit
+      @nnx.jit(graph=graph_mode)
       def __call__(self, x: jax.Array) -> jax.Array:
         nonlocal n
         n += 1
@@ -191,7 +193,8 @@ class TestJIT(parameterized.TestCase):
     assert m.a is a
     assert m.b is b
 
-  def test_jit_custom_vjp(self):
+  @parameterized.parameters(True, False)
+  def test_jit_custom_vjp(self, graph_mode):
     @nnx.custom_vjp
     def f(x, y):
       return jnp.sin(x) * y
@@ -205,7 +208,7 @@ class TestJIT(parameterized.TestCase):
 
     f.defvjp(f_fwd, f_bwd)
 
-    nnx_out = nnx.jit(f)(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
+    nnx_out = nnx.jit(f, graph=graph_mode)(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
     jax_out = jax.jit(f)(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
     assert (nnx_out == jax_out).all()
 
@@ -406,12 +409,13 @@ class TestJIT(parameterized.TestCase):
     cached_m2 = cached_f(m)
     self.assertIs(cached_m, cached_m2)
 
-  def test_jit_wrapped(self):
+  @parameterized.parameters(True, False)
+  def test_jit_wrapped(self, graph_mode):
     class Foo(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.count = nnx.Variable(jnp.array(0))
 
-      @nnx.jit
+      @nnx.jit(graph=graph_mode)
       def __call__(self, x: jax.Array) -> jax.Array:
         self.count[...] += 1
         return x * 2
@@ -419,7 +423,7 @@ class TestJIT(parameterized.TestCase):
     m = Foo(rngs=nnx.Rngs(0))
     x = jnp.array(3.0)
 
-    @nnx.jit
+    @nnx.jit(graph=graph_mode)
     def f(m: nnx.Linear, x):
       return m(x)
 
@@ -437,10 +441,12 @@ class TestJIT(parameterized.TestCase):
     self.assertEqual(m.count[...], 2)
 
   @parameterized.parameters(
-    {'static_argnums': (2,), 'static_argnames': None},
-    {'static_argnums': None, 'static_argnames': ('use_relu',)},
+    {'graph_mode': True, 'static_argnums': (2,), 'static_argnames': None},
+    {'graph_mode': True, 'static_argnums': None, 'static_argnames': ('use_relu',)},
+    {'graph_mode': False, 'static_argnums': (2,), 'static_argnames': None},
+    {'graph_mode': False, 'static_argnums': None, 'static_argnames': ('use_relu',)},
   )
-  def test_jit_static_args_with_shardings(self, static_argnums, static_argnames):
+  def test_jit_static_args_with_shardings(self, graph_mode, static_argnums, static_argnames):
     """Test static arguments work correctly with in_shardings."""
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
@@ -456,7 +462,8 @@ class TestJIT(parameterized.TestCase):
     x_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('data'))
 
     f = nnx.jit(fn, in_shardings=(x_sharding, None),
-                static_argnums=static_argnums, static_argnames=static_argnames)
+                static_argnums=static_argnums, static_argnames=static_argnames,
+                graph=graph_mode)
     y_relu = f(x, 0.5, True)
     y_no_relu = f(x, 0.5, False)
     self.assertNotEqual(y_relu, y_no_relu)
@@ -500,6 +507,187 @@ class TestJIT(parameterized.TestCase):
 
     constrain_object(m, 0.5, True, True)
     self.assertEqual(m.kernel.sharding.spec, jax.sharding.PartitionSpec("a", "b"))
+
+
+class TestTreeJIT(parameterized.TestCase):
+  def test_tree_jit_basic(self):
+    m = nnx.Dict(a=nnx.Param(jnp.array(1)))
+
+    @nnx.jit(graph=False)
+    def g(m: nnx.Dict):
+      m.a[...] = 2
+      return 1.0
+
+    out = g(m)
+
+    assert m.a[...] == 2
+    assert out == 1.0
+
+  def test_tree_jit_module(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit(graph=False)
+    def f(m, x):
+      return m(x)
+
+    x = jnp.ones((1, 2))
+    y = f(m, x)
+    self.assertEqual(y.shape, (1, 3))
+
+  def test_tree_jit_variable_update(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.count = nnx.Variable(jnp.array(0))
+
+      @nnx.jit(graph=False)
+      def __call__(self, x):
+        self.count[...] += 1
+        return x * 2
+
+    m = Foo()
+    y = m(jnp.array(3.0))
+    np.testing.assert_allclose(y, 6.0)
+    self.assertEqual(m.count[...], 1)
+    y = m(jnp.array(3.0))
+    self.assertEqual(m.count[...], 2)
+
+  def test_tree_jit_no_retrace(self):
+    n = 0
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit(graph=False)
+    def f(m, x):
+      nonlocal n
+      n += 1
+      return m(x)
+
+    x = jnp.ones((1, 2))
+    y = f(m, x)
+    self.assertEqual(n, 1)
+    self.assertEqual(y.shape, (1, 3))
+
+    y = f(m, x)
+    self.assertEqual(n, 1)
+    self.assertEqual(y.shape, (1, 3))
+
+  def test_tree_jit_static_argnums(self):
+    @nnx.jit(graph=False, static_argnums=(1,))
+    def f(x, use_relu):
+      if use_relu:
+        return jnp.maximum(x, 0)
+      return x
+
+    x = jnp.array([-1.0, 2.0])
+    y_relu = f(x, True)
+    np.testing.assert_allclose(y_relu, jnp.array([0.0, 2.0]))
+    y_no_relu = f(x, False)
+    np.testing.assert_allclose(y_no_relu, x)
+
+  def test_tree_jit_no_input_output_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    @nnx.jit(graph=False)
+    def f(v):
+      return v
+
+    with self.assertRaisesRegex(ValueError, 'same instance'):
+      f(v)
+
+  def test_tree_jit_no_shared_variable_refs(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    @nnx.jit(graph=False)
+    def f(v1, v2):
+      v1[...] += 1
+      return None
+
+    with self.assertRaisesRegex(ValueError, 'already seen'):
+      f(v, v)
+
+  def test_tree_jit_new_variable_output_ok(self):
+    @nnx.jit(graph=False)
+    def f(x):
+      return nnx.Param(x + 1)
+
+    v = f(jnp.array(1.0))
+    self.assertIsInstance(v, nnx.Param)
+    np.testing.assert_allclose(v[...], 2.0)
+
+  def test_tree_jit_donate_argnums_unchanged_var(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    @nnx.jit(graph=False, donate_argnums=(0,))
+    def f(v):
+      return v[...] + 1.0
+
+    out = f(v)
+    np.testing.assert_allclose(out, 2.0)
+    np.testing.assert_allclose(v[...], 1.0)
+
+    out = f(v)
+    np.testing.assert_allclose(out, 2.0)
+    np.testing.assert_allclose(v[...], 1.0)
+
+  def test_tree_jit_donate_argnums_module(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    original_kernel = jnp.copy(m.kernel[...])
+
+    @nnx.jit(graph=False, donate_argnums=(0,))
+    def f(m, x):
+      return m(x)
+
+    x = jnp.ones((1, 2))
+    y = f(m, x)
+    self.assertEqual(y.shape, (1, 3))
+    np.testing.assert_allclose(m.kernel[...], original_kernel)
+
+    y = f(m, x)
+    self.assertEqual(y.shape, (1, 3))
+    np.testing.assert_allclose(m.kernel[...], original_kernel)
+
+  def test_tree_jit_donate_argnums_with_mutation(self):
+    v = nnx.Param(jnp.array(0.0))
+
+    @nnx.jit(graph=False, donate_argnums=(0,))
+    def f(v):
+      v[...] += 1.0
+      return None
+
+    f(v)
+    np.testing.assert_allclose(v[...], 1.0)
+    f(v)
+    np.testing.assert_allclose(v[...], 2.0)
+
+  def test_tree_jit_donate_argnames(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    @nnx.jit(graph=False, donate_argnames=('v',))
+    def f(v):
+      return v[...] + 1.0
+
+    out = f(v=v)
+    np.testing.assert_allclose(out, 2.0)
+    np.testing.assert_allclose(v[...], 1.0)
+
+    out = f(v=v)
+    np.testing.assert_allclose(out, 2.0)
+    np.testing.assert_allclose(v[...], 1.0)
+
+  def test_tree_jit_donate_selective(self):
+    donated = nnx.Param(jnp.array(1.0))
+    not_donated = nnx.Param(jnp.array(2.0))
+
+    @nnx.jit(graph=False, donate_argnums=(0,))
+    def f(donated, not_donated):
+      return donated[...] + not_donated[...]
+
+    out = f(donated, not_donated)
+    np.testing.assert_allclose(out, 3.0)
+    np.testing.assert_allclose(donated[...], 1.0)
+    np.testing.assert_allclose(not_donated[...], 2.0)
+
+    out = f(donated, not_donated)
+    np.testing.assert_allclose(out, 3.0)
 
 
 class TestEvalShape(absltest.TestCase):

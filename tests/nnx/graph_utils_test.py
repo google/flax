@@ -38,7 +38,7 @@ class StatefulLinear(nnx.Module):
     return x @ self.w + self.b[None]
 
 
-class TestGraphUtils(absltest.TestCase):
+class TestGraphUtils(parameterized.TestCase):
   def test_flatten(self):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
@@ -901,10 +901,11 @@ class TestGraphUtils(absltest.TestCase):
 
     self.assertEqual(v[...], 2)
 
-  def test_jit_variable(self):
+  @parameterized.parameters(True, False)
+  def test_jit_variable(self, graph):
     v = nnx.Param(1)
 
-    @nnx.jit
+    @nnx.jit(graph=graph)
     def f(v):
       v[...] += 1
 
@@ -946,7 +947,8 @@ class TestGraphUtils(absltest.TestCase):
     increment_var(var, foo)
     self.assertEqual(foo.var[...], 2)
 
-  def test_variables_example(self):
+  @parameterized.parameters(True, False)
+  def test_variables_example(self, graph):
     def stateful_linear_init(din: int, dout: int, rngs: nnx.Rngs):
       w = nnx.Param(jax.random.normal(rngs(), (din, dout)))
       b = nnx.Param(jnp.zeros((dout,)))
@@ -956,7 +958,7 @@ class TestGraphUtils(absltest.TestCase):
     rngs = nnx.Rngs(0)
     w, b, count = stateful_linear_init(2, 3, rngs=rngs)
 
-    @nnx.jit
+    @nnx.jit(graph=graph)
     def stateful_linear(w, b, count, x):
       count[...] += 1
       return x @ w + b[None]

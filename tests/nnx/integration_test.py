@@ -16,6 +16,7 @@ import tempfile
 import typing as tp
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -27,9 +28,10 @@ from flax import nnx
 A = tp.TypeVar('A')
 
 
-class TestIntegration(absltest.TestCase):
+class TestIntegration(parameterized.TestCase):
 
-  def test_basic_view_example(self):
+  @parameterized.parameters(True, False)
+  def test_basic_view_example(self, graph_mode):
     class Model(nnx.Module):
 
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
@@ -57,7 +59,7 @@ class TestIntegration(absltest.TestCase):
     self.assertEqual(eval_model.bn.use_running_average, True)
     self.assertIs(train_model.dropout.rngs.count, eval_model.dropout.rngs.count)
 
-    @nnx.jit  # automatic state management for JAX transforms
+    @nnx.jit(graph=graph_mode)  # automatic state management for JAX transforms
     def train_step(model, optimizer, x, y):
       def loss_fn(model):
         y_pred = model(x)
@@ -68,7 +70,7 @@ class TestIntegration(absltest.TestCase):
 
       return loss
 
-    @nnx.jit
+    @nnx.jit(graph=graph_mode)
     def eval_step(model, x, y):
       y_pred = model(x)
       return jnp.mean((y_pred - y) ** 2)
@@ -299,7 +301,8 @@ class TestIntegration(absltest.TestCase):
     assert model.block1.linear.bias is model.block2.linear.bias
     assert model.block1.bn is not model.block2.bn
 
-  def test_stateful_example(self):
+  @parameterized.parameters(True, False)
+  def test_stateful_example(self, graph_mode):
     class State(nnx.Variable[A]):
       pass
 
@@ -320,7 +323,7 @@ class TestIntegration(absltest.TestCase):
     y = model(x)
     assert model.count[...] == 1
 
-    @nnx.jit
+    @nnx.jit(graph=graph_mode)
     def train_step(model, x, y):
       def loss_fn(model):
         y_pred = model(x)

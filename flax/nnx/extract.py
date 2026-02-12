@@ -333,3 +333,123 @@ def clear_non_graph_nodes(tree):
     is_leaf=lambda x: isinstance(x, variablelib.Variable)
     or graph.is_graph_node(x),
   )
+
+
+def updates_and_snapshot(args: A) -> tuple[A, A]:
+  is_leaf = lambda x: isinstance(x, variablelib.Variable)
+  leaves, treedef = jax.tree.flatten(args, is_leaf=is_leaf)
+  updates_leaves: list[variablelib.Variable | None] = []
+  snapshot_leaves: list[variablelib.Variable | None] = []
+  for leaf in leaves:
+    if isinstance(leaf, variablelib.Variable):
+      updates_leaves.append(leaf)
+      snapshot_leaves.append(leaf.copy())
+    else:
+      updates_leaves.append(None)
+      snapshot_leaves.append(None)
+  updates = jax.tree.unflatten(treedef, updates_leaves)
+  snapshot = jax.tree.unflatten(treedef, snapshot_leaves)
+  return updates, snapshot
+
+
+class _InputsAndOutputs(tp.NamedTuple):
+  args: tuple
+  kwargs: dict | None
+  output: tp.Any
+
+
+@tp.overload
+def check_no_aliases(args: tuple[tp.Any, ...], output: tp.Any) -> None:
+  ...
+
+
+@tp.overload
+def check_no_aliases(
+    args: tuple[tp.Any, ...], kwargs: dict[str, tp.Any], output: tp.Any
+) -> None:
+  ...
+
+
+def check_no_aliases(*positional_args):
+  if len(positional_args) == 2:
+    args, output = positional_args  # pytype: disable=bad-unpacking
+    kwargs = None
+  elif len(positional_args) == 3:
+    args, kwargs, output = positional_args  # pytype: disable=bad-unpacking
+  else:
+    raise TypeError(
+      f'check_no_aliases expects 2 or 3 arguments, got {len(positional_args)}'
+    )
+
+  container = _InputsAndOutputs(args=args, kwargs=kwargs, output=output)
+  is_leaf = lambda x: isinstance(x, variablelib.Variable)
+  seen: dict[int, jax.tree_util.KeyPath] = {}
+  for path, leaf in jax.tree.leaves_with_path(
+    container, is_leaf=is_leaf
+  ):
+    if not isinstance(leaf, variablelib.Variable):
+      continue
+    var_id = id(leaf)
+    if var_id in seen:
+      path_str = jax.tree_util.keystr(path)
+      seen_path_str = jax.tree_util.keystr(seen[var_id])
+      raise ValueError(
+        f'Variable at {path_str} is the same instance as at '
+        f'{seen_path_str}. tree-mode transforms do not support '
+        f'returning input Variables as outputs.'
+      )
+    seen[var_id] = path
+
+
+def _variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
+  post_leaves, post_td = jax.tree.flatten(post)
+  pre_leaves, pre_td = jax.tree.flatten(pre)
+  return post_td != pre_td or any(  # type: ignore[operator]
+    a is not b for a, b in zip(post_leaves, pre_leaves)
+  )
+
+MaskFn = tp.Callable[
+    [PathParts, variablelib.Variable, variablelib.Variable], bool
+]
+
+def mask_variable_updates(
+    current_tree: A,
+    snapshot_tree: A,
+    *,
+    keep_fn: MaskFn | None = None,
+) -> A:
+  if keep_fn is None:
+    keep_fn = lambda _, cur, snap: False
+
+  def _mask_updates(jax_path, current, snapshot):
+    path = graph.jax_to_nnx_path(jax_path)
+    if isinstance(current, variablelib.Variable) and (
+        keep_fn(path, current, snapshot) or _variable_changed(current, snapshot)
+    ):
+      return current
+    return None
+  is_leaf = lambda x: isinstance(x, variablelib.Variable)
+  return jax.tree.map_with_path(
+      _mask_updates, current_tree, snapshot_tree, is_leaf=is_leaf
+  )
+
+
+def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
+  is_leaf = lambda x: isinstance(x, variablelib.Variable) or x is None
+  args_leaves, treedef = jax.tree.flatten_with_path(args_tree, is_leaf=is_leaf)
+  updates_leaves = treedef.flatten_up_to(updates_tree)
+  seen: dict[int, jax.tree_util.KeyPath] = {}
+  for (path, variable), update in zip(args_leaves, updates_leaves):
+    if not isinstance(variable, variablelib.Variable):
+      continue
+    var_id = id(variable)
+    if var_id in seen:
+      path_str = jax.tree_util.keystr(path)
+      seen_path_str = jax.tree_util.keystr(seen[var_id])
+      raise ValueError(
+        f'Variable at {path_str} was already seen at {seen_path_str}. '
+        'tree-mode jit does not support shared Variable references.'
+      )
+    seen[var_id] = path
+    if update is not None:
+      variable.update_from_state(update)
