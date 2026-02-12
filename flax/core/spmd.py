@@ -24,13 +24,13 @@ from flax.typing import (
     Sharding,
 )
 
-def get_pspec(sharding_names, sharding_rules = None) -> PartitionSpec:
+def get_pspec(sharding, sharding_rules = None) -> PartitionSpec:
   """Given an `nnx.Variable`, return its `PartitionSpec`."""
   if get_logical_axis_rules() or sharding_rules:
     context_rules = get_logical_axis_rules()
     rules = composite_rules(context_rules, sharding_rules)
-    return PartitionSpec(*from_sharding_rules(sharding_names, rules))
-  return PartitionSpec(*sharding_names)
+    return PartitionSpec(*from_sharding_rules(sharding, rules))
+  return PartitionSpec(*sharding)
 
 def _apply_sharding(value, sharding, mesh):
   if mesh.are_all_axes_explicit:
@@ -44,10 +44,9 @@ def _apply_sharding(value, sharding, mesh):
 
 
 def shard_value(
-  value, sharding_names, sharding_rules,
-  mesh: jax.sharding.AbstractMesh | jax.sharding.Mesh | None
+  value, sharding, sharding_rules, mesh: jax.sharding.AbstractMesh | jax.sharding.Mesh | None
 ):
-  if not sharding_names:
+  if not sharding:
     return value
 
   if mesh is None:
@@ -56,9 +55,9 @@ def shard_value(
   if mesh is None:
     raise ValueError(
       'An auto mesh context or metadata is required if creating a variable'
-      f' with annotation {sharding_names=}. '
+      f' with annotation {sharding=}. '
       'For more guidance, see https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html.')
-  pspec = get_pspec(sharding_names, sharding_rules)
+  pspec = get_pspec(sharding, sharding_rules)
   return _apply_sharding(value, NamedSharding(mesh, pspec), mesh)
 
 

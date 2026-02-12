@@ -56,12 +56,12 @@ with jax.set_mesh(mesh):
   ...
 ```
 
-For JAX explicit mode, remove the `sharding_names=` annotation on the `nnx.Variable`.
+For JAX explicit mode, remove the `out_sharding=` annotation on the `nnx.Variable`.
 
 
 # Implementation
 [implementation]: #implementation
 
-When an `nnx.Variable` is created, check for the metadata `sharding_names`, and if present, check if under a valid global mesh context of was supplied with a valid mesh. If no, throw error; if yes, call `jax.lax.with_sharding_constraint` to apply sharding constraint on the value.
+When an `nnx.Variable` is created, check for the metadata `out_sharding`, and if present, check if under a valid global mesh context of was supplied with a valid mesh. If no, throw error; if yes, call `jax.lax.with_sharding_constraint` to apply sharding constraint on the value.
 
 Note that this only works in auto sharding mode. User should use JAX-level APIs to annotate shardings for explicit mode.

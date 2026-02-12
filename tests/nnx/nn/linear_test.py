@@ -391,16 +391,16 @@ class TestLayersParamsMetadata(parameterized.TestCase):
   def test(self, module_args_kwargs_initargs):
     module_cls, args, metadata_argnames = module_args_kwargs_initargs
     kwargs = {"rngs": nnx.Rngs(0)}
-    sharding_names = ("din", "dout")
+    out_sharding = ("din", "dout")
     metadata_kwargs = {
-      f"{key}_metadata": {"sharding_names": sharding_names[:le]}
+      f"{key}_metadata": {"out_sharding": out_sharding[:le]}
       for key, le, _ in metadata_argnames
     }
 
     mesh = jax.make_mesh(
       (1, 1),
-      sharding_names,
-      axis_types=(jax.sharding.AxisType.Auto,) * len(sharding_names),
+      out_sharding,
+      axis_types=(jax.sharding.AxisType.Auto,) * len(out_sharding),
     )
     with jax.set_mesh(mesh):
       module = module_cls(*args, **metadata_kwargs, **kwargs)
@@ -410,8 +410,8 @@ class TestLayersParamsMetadata(parameterized.TestCase):
       for attr_name, param_name in attrs:
         attr = getattr(module, attr_name) if attr_name is not None else module
         param = getattr(attr, param_name)
-        self.assertIsNotNone(param.sharding_names)
-        self.assertEqual(param.sharding_names, sharding_names[:le])
+        self.assertIsNotNone(param.out_sharding)
+        self.assertEqual(param.out_sharding, out_sharding[:le])
 
 
 if __name__ == '__main__':
