@@ -127,7 +127,7 @@ def _fold_in_static(
   m = hashlib.sha1()
   for x in data:
     if config.flax_fix_rng_separator:
-      # encode seperate to avoid collisions like for example: ("ab", "c") and ("a", "bc")
+      # encode separate to avoid collisions like for example: ("ab", "c") and ("a", "bc")
       m.update(b'\00')
     if isinstance(x, str):
       m.update(x.encode('utf-8'))
