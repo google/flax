@@ -666,7 +666,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       return False
 
     visited: set[int] = set()
-    leaves = jax.tree.leaves(value, is_leaf=_has_visited)
+    leaves = jax.tree.leaves(
+        value, is_leaf=lambda x: _has_visited(x) or is_data(x)
+    )
     current_is_data = (
         self._pytree__nodes[key] if key in self._pytree__nodes else False
     )
@@ -724,7 +726,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
             base_pytree_type = t
             break
         raise ValueError(
-          f'Found unexpected Arrays on value of type {type(value)} in static'
+          f'Found unexpected data on value of type {type(value)} in static'
           f" attribute '{key}' of Pytree type '{type(self)}'. This is an"
           ' error starting from Flax version 0.12.0.\nConsider one of the'
           ' following options:\n\n1. If the attribute is meant to be static,'
