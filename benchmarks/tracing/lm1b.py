@@ -16,27 +16,89 @@
 import functools
 from typing import Any
 
+from flax import linen as nn
+from flax.benchmarks.tracing import tracing_benchmark
 from flax.examples.lm1b import models
-from flax.examples.lm1b import train
+from flax.examples.lm1b.configs import default as lm1b_config
+from flax.training import common_utils
+from flax.training import train_state
+import google_benchmark
 import jax
 import jax.numpy as jnp
 import ml_collections
+import numpy as np
 import optax
 
 
+def rsqrt_schedule(init_value: float, shift: int = 0):
+  def schedule(count):
+    return init_value * (count + shift) ** -0.5 * shift**0.5
+  return schedule
+
+
+def create_learning_rate_schedule(learning_rate: float, warmup_steps: int):
+  return optax.join_schedules(
+      [
+          optax.linear_schedule(
+              init_value=0,
+              end_value=learning_rate,
+              transition_steps=warmup_steps,
+          ),
+          rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
+      ],
+      boundaries=[warmup_steps],
+  )
+
+
+def compute_weighted_cross_entropy(
+    logits, targets, weights=None, label_smoothing=0.0
+):
+  if logits.ndim != targets.ndim + 1:
+    raise ValueError(
+        'Incorrect shapes. Got shape %s logits and %s targets'
+        % (str(logits.shape), str(targets.shape))
+    )
+  vocab_size = logits.shape[-1]
+  confidence = 1.0 - label_smoothing
+  low_confidence = (1.0 - confidence) / (vocab_size - 1)
+  normalizing_constant = -(
+      confidence * jnp.log(confidence)
+      + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+  )
+  soft_targets = common_utils.onehot(
+      targets, vocab_size, on_value=confidence, off_value=low_confidence
+  )
+
+  loss = -jnp.sum(soft_targets * nn.log_softmax(logits), axis=-1)
+  loss = loss - normalizing_constant
+
+  normalizing_factor = np.prod(targets.shape)
+  if weights is not None:
+    loss = loss * weights
+    normalizing_factor = weights.sum()
+
+  return loss.sum(), normalizing_factor
+
+
+def compute_weighted_accuracy(logits, targets, weights=None):
+  if logits.ndim != targets.ndim + 1:
+    raise ValueError(
+        'Incorrect shapes. Got shape %s logits and %s targets'
+        % (str(logits.shape), str(targets.shape))
+    )
+  loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
+  normalizing_factor = np.prod(logits.shape[:-1])
+  if weights is not None:
+    loss = loss * weights
+    normalizing_factor = weights.sum()
+
+  return loss.sum(), normalizing_factor
+
+
 def get_fake_batch(config: ml_collections.ConfigDict) -> dict[str, jnp.ndarray]:
-  """Generate a batch of fake LM1B data.
-
-  Args:
-    config: The training configuration.
-
-  Returns:
-    A dictionary with 'inputs', 'inputs_position', and 'inputs_segmentation'.
-  """
   batch_size = config.per_device_batch_size
   max_len = config.max_target_length
 
-  # Inputs: integers [0, vocab_size)
   inputs = jax.random.randint(
       jax.random.key(0),
       (batch_size, max_len),
@@ -44,13 +106,9 @@ def get_fake_batch(config: ml_collections.ConfigDict) -> dict[str, jnp.ndarray]:
       maxval=config.vocab_size,
       dtype=jnp.int32,
   )
-
-  # Inputs position: integers [0, max_len)
   inputs_position = jnp.tile(
       jnp.arange(max_len, dtype=jnp.int32), (batch_size, 1)
   )
-
-  # Inputs segmentation: all ones (single segment)
   inputs_segmentation = jnp.ones((batch_size, max_len), dtype=jnp.int32)
 
   return {
@@ -62,13 +120,12 @@ def get_fake_batch(config: ml_collections.ConfigDict) -> dict[str, jnp.ndarray]:
 
 @functools.partial(jax.jit, static_argnums=(2, 3))
 def bench_train_step(state, batch, config, learning_rate_fn):
-  """Perform a single training step (JIT-compiled)."""
 
   def compute_metrics(logits, labels, weights):
-    loss, weight_sum = train.compute_weighted_cross_entropy(
+    loss, weight_sum = compute_weighted_cross_entropy(
         logits, labels, weights, 0.0
     )
-    acc, _ = train.compute_weighted_accuracy(logits, labels, weights)
+    acc, _ = compute_weighted_accuracy(logits, labels, weights)
     metrics = {
         'loss': loss,
         'accuracy': acc,
@@ -76,7 +133,6 @@ def bench_train_step(state, batch, config, learning_rate_fn):
     }
     return metrics
 
-  # Unpack batch
   inputs = batch['inputs']
   inputs_positions = batch['inputs_position']
   inputs_segmentation = batch['inputs_segmentation']
@@ -85,7 +141,6 @@ def bench_train_step(state, batch, config, learning_rate_fn):
   dropout_rng = jax.random.fold_in(jax.random.key(0), state.step)
 
   def loss_fn(params):
-    """loss function used for training."""
     logits = models.TransformerLM(config).apply(
         {'params': params},
         inputs,
@@ -94,7 +149,7 @@ def bench_train_step(state, batch, config, learning_rate_fn):
         rngs={'dropout': dropout_rng},
     )
 
-    loss, weight_sum = train.compute_weighted_cross_entropy(
+    loss, weight_sum = compute_weighted_cross_entropy(
         logits, inputs, weights, 0.0
     )
     mean_loss = loss / weight_sum
@@ -115,15 +170,6 @@ def bench_train_step(state, batch, config, learning_rate_fn):
 def get_apply_fn_and_args(
     config: ml_collections.ConfigDict,
 ) -> tuple[Any, tuple[Any, ...], dict[str, Any]]:
-  """Returns the apply function and args for the given config.
-
-  Args:
-    config: The training configuration.
-
-  Returns:
-    A tuple of the apply function, args, and kwargs.
-  """
-  # Create model configuration
   train_config = models.TransformerConfig(
       vocab_size=config.vocab_size,
       output_vocab_size=config.vocab_size,
@@ -143,15 +189,12 @@ def get_apply_fn_and_args(
       bias_init=jax.nn.initializers.normal(stddev=1e-6),
   )
 
-  # Create model
   model = models.TransformerLM(train_config)
 
-  # Create learning rate function
-  learning_rate_fn = train.create_learning_rate_schedule(
+  learning_rate_fn = create_learning_rate_schedule(
       learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
   )
 
-  # Create optimizer
   optimizer = optax.adamw(
       learning_rate_fn,
       b1=0.9,
@@ -160,13 +203,8 @@ def get_apply_fn_and_args(
       weight_decay=config.weight_decay,
   )
 
-  # Create initial state
   rng = jax.random.key(0)
   init_rng, _ = jax.random.split(rng)
-
-  # We need to mock the mesh for setup_initial_state or just create state manually
-  # setup_initial_state uses mesh for sharding, which we might want to avoid for simple tracing
-  # Let's create state manually to be safe and simple
 
   initial_variables = model.init(
       init_rng,
@@ -181,20 +219,36 @@ def get_apply_fn_and_args(
       ),
   )
 
-  from flax.training import train_state
-
   state = train_state.TrainState.create(
       apply_fn=model.apply,
       params=initial_variables['params'],
       tx=optimizer,
   )
 
-  # Generate fake batch
   batch = get_fake_batch(config)
 
-  # Return bench_train_step and its arguments
   return (
       bench_train_step,
       (state, batch, train_config, learning_rate_fn),
       {},
   )
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_lm1b_trace(state):
+  tracing_benchmark.benchmark_tracing(
+      get_apply_fn_and_args, lm1b_config.get_config, state
+  )
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_lm1b_lower(state):
+  tracing_benchmark.benchmark_lowering(
+      get_apply_fn_and_args, lm1b_config.get_config, state
+  )
+
+
+if __name__ == '__main__':
+  tracing_benchmark.run_benchmarks()

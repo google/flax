@@ -16,40 +16,91 @@
 import functools
 from typing import Any
 
+from flax import linen as nn
+from flax.benchmarks.tracing import tracing_benchmark
 from flax.examples.imagenet import models
-from flax.examples.imagenet import train
+from flax.examples.imagenet.configs import default as imagenet_config
+from flax.training import common_utils
+from flax.training import dynamic_scale as dynamic_scale_lib
+from flax.training import train_state
+import google_benchmark
 import jax
 import jax.numpy as jnp
 import ml_collections
+import optax
+
+NUM_CLASSES = 1000
+
+
+class TrainState(train_state.TrainState):
+  batch_stats: Any
+  dynamic_scale: dynamic_scale_lib.DynamicScale
+
+
+def create_model(*, model_cls, half_precision, **kwargs):
+  platform = jax.local_devices()[0].platform
+  if half_precision:
+    if platform == 'tpu':
+      model_dtype = jnp.bfloat16
+    else:
+      model_dtype = jnp.float16
+  else:
+    model_dtype = jnp.float32
+  return model_cls(num_classes=NUM_CLASSES, dtype=model_dtype, **kwargs)
+
+
+def initialized(key, image_size, model):
+  input_shape = (1, image_size, image_size, 3)
+
+  @jax.jit
+  def init(*args):
+    return model.init(*args)
+
+  variables = init({'params': key}, jnp.ones(input_shape, model.dtype))
+  return variables['params'], variables['batch_stats']
+
+
+def cross_entropy_loss(logits, labels):
+  one_hot_labels = common_utils.onehot(labels, num_classes=NUM_CLASSES)
+  xentropy = optax.softmax_cross_entropy(logits=logits, labels=one_hot_labels)
+  return jnp.mean(xentropy)
+
+
+def create_train_state(
+    rng, config: ml_collections.ConfigDict, model, image_size, learning_rate_fn
+):
+  dynamic_scale = None
+  platform = jax.local_devices()[0].platform
+  if config.half_precision and platform == 'gpu':
+    dynamic_scale = dynamic_scale_lib.DynamicScale()
+
+  params, batch_stats = initialized(rng, image_size, model)
+  tx = optax.sgd(
+      learning_rate=learning_rate_fn,
+      momentum=config.momentum,
+      nesterov=True,
+  )
+  state = TrainState.create(
+      apply_fn=model.apply,
+      params=params,
+      tx=tx,
+      batch_stats=batch_stats,
+      dynamic_scale=dynamic_scale,
+  )
+  return state
 
 
 def get_fake_batch(batch_size: int = 128) -> dict[str, jnp.ndarray]:
-  """Generate a batch of fake ImageNet data.
-
-  Args:
-    batch_size: Number of images in the batch.
-
-  Returns:
-    A dictionary with 'image' and 'label' keys.
-  """
-  # ImageNet images: (batch_size, 224, 224, 3)
   images = jax.random.uniform(
       jax.random.key(0), (batch_size, 224, 224, 3), dtype=jnp.float32
   )
-
-  # Labels: integers [0, 1000)
   labels = jax.random.randint(
       jax.random.key(1), (batch_size,), minval=0, maxval=1000, dtype=jnp.int32
   )
-
   return {'image': images, 'label': labels}
 
 
-from flax import linen as nn
-
-
 class BenchmarkResNet(models.ResNet):
-  """ResNetV1.5 without axis_name in BatchNorm for single-device benchmarking."""
 
   @nn.compact
   def __call__(self, x, train: bool = True):
@@ -60,7 +111,7 @@ class BenchmarkResNet(models.ResNet):
         momentum=0.9,
         epsilon=1e-5,
         dtype=self.dtype,
-        axis_name=None,  # Changed from 'batch' to None
+        axis_name=None,
     )
 
     x = conv(
@@ -92,16 +143,6 @@ class BenchmarkResNet(models.ResNet):
 def get_apply_fn_and_args(
     config: ml_collections.ConfigDict,
 ) -> tuple[Any, tuple[Any, ...], dict[str, Any]]:
-  """Returns the apply function and args for the given config.
-
-  Args:
-    config: The training configuration.
-
-  Returns:
-    A tuple of the apply function, args, and kwargs.
-  """
-  # Create model (ResNet50 by default in config)
-  # We use BenchmarkResNet to avoid axis_name issues in JIT
   if config.model == 'ResNet50':
     model_cls = functools.partial(
         BenchmarkResNet,
@@ -109,28 +150,22 @@ def get_apply_fn_and_args(
         block_cls=models.BottleneckResNetBlock,
     )
   else:
-    # Fallback to original model if not ResNet50 (might fail if it uses axis_name)
     model_cls = getattr(models, config.model)
 
-  model = train.create_model(
+  model = create_model(
       model_cls=model_cls, half_precision=config.half_precision
   )
 
-  # Create learning rate function (needed for train_step)
-  # We use a dummy function for benchmarking
   learning_rate_fn = lambda step: 0.1
 
-  # Create train state
   rng = jax.random.key(0)
   image_size = 224
-  state = train.create_train_state(
+  state = create_train_state(
       rng, config, model, image_size, learning_rate_fn
   )
 
-  # Generate fake batch
   batch = get_fake_batch(config.batch_size)
 
-  # Return bench_train_step and its arguments
   return (
       bench_train_step,
       (state, batch, learning_rate_fn),
@@ -140,26 +175,23 @@ def get_apply_fn_and_args(
 
 @functools.partial(jax.jit, static_argnums=(2,))
 def bench_train_step(state, batch, learning_rate_fn):
-  """Perform a single training step (JIT-compiled, no pmean)."""
 
   def compute_metrics(logits, labels):
-    loss = train.cross_entropy_loss(logits, labels)
+    loss = cross_entropy_loss(logits, labels)
     accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
     metrics = {
         'loss': loss,
         'accuracy': accuracy,
     }
-    # metrics = lax.pmean(metrics, axis_name='batch')  # Removed pmean
     return metrics
 
   def loss_fn(params):
-    """loss function used for training."""
     logits, new_model_state = state.apply_fn(
         {'params': params, 'batch_stats': state.batch_stats},
         batch['image'],
         mutable=['batch_stats'],
     )
-    loss = train.cross_entropy_loss(logits, batch['label'])
+    loss = cross_entropy_loss(logits, batch['label'])
     weight_penalty_params = jax.tree_util.tree_leaves(params)
     weight_decay = 0.0001
     weight_l2 = sum(jnp.sum(x**2) for x in weight_penalty_params if x.ndim > 1)
@@ -201,3 +233,23 @@ def bench_train_step(state, batch, learning_rate_fn):
     metrics['scale'] = dynamic_scale.scale
 
   return new_state, metrics
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_imagenet_trace(state):
+  tracing_benchmark.benchmark_tracing(
+      get_apply_fn_and_args, imagenet_config.get_config, state
+  )
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_imagenet_lower(state):
+  tracing_benchmark.benchmark_lowering(
+      get_apply_fn_and_args, imagenet_config.get_config, state
+  )
+
+
+if __name__ == '__main__':
+  tracing_benchmark.run_benchmarks()
