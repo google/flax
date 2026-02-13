@@ -366,8 +366,8 @@ class TestSPMD(parameterized.TestCase):
 
     class Model(nnx.Module):
         def __init__(self):
-            self.p1 = nnx.Linear(16, 16, rngs=nnx.Rngs(0), kernel_metadata={"sharding": ("a", "b"), "mesh": mesh1})
-            self.p2 = nnx.Linear(16, 16, rngs=nnx.Rngs(0), kernel_metadata={"sharding": ("c", "d"), "mesh": mesh2})
+            self.p1 = nnx.Linear(16, 16, rngs=nnx.Rngs(0), kernel_metadata={"out_sharding": ("a", "b"), "mesh": mesh1})
+            self.p2 = nnx.Linear(16, 16, rngs=nnx.Rngs(0), kernel_metadata={"out_sharding": ("c", "d"), "mesh": mesh2})
 
     abs_model = nnx.eval_shape(lambda: Model())
     assert isinstance(abs_model.p1.kernel.sharding, jax.sharding.NamedSharding)
@@ -380,7 +380,7 @@ class TestSPMD(parameterized.TestCase):
   def test_eval_shape_with_sharding1(self):
     class Model(nnx.Module):
         def __init__(self):
-            self.linear = nnx.Linear(10, 10, rngs=nnx.Rngs(0), kernel_metadata={"sharding": ("a", "b")})
+            self.linear = nnx.Linear(10, 10, rngs=nnx.Rngs(0), kernel_metadata={"out_sharding": ("a", "b")})
 
     mesh = jax.make_mesh((2, 2), ("a", "b"), (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto))
     with jax.set_mesh(mesh):
