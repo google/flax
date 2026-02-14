@@ -925,12 +925,27 @@ def custom_vjp(
 # -------------------------------
 
 
+@dataclasses.dataclass(eq=False)
+class TreeRematFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  def __call__(self, *args, **kwargs):
+    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    out = self.f(*args, **kwargs)
+    extract.check_no_aliases(*updates, out)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    return out, updates
+
 @tp.overload
 def remat(
   *,
   prevent_cse: bool = True,
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
+  graph: bool = True,
 ) -> tp.Callable[[F], F]: ...
 @tp.overload
 def remat(
@@ -939,6 +954,7 @@ def remat(
   prevent_cse: bool = True,
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
+  graph: bool = True,
 ) -> F: ...
 def remat(
   f: F | Missing = MISSING,
@@ -946,6 +962,7 @@ def remat(
   prevent_cse: bool = True,
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
+  graph: bool = True,
 ) -> F | tp.Callable[[F], F]:
   """A 'lifted' version of the
   `jax.checkpoint <https://jax.readthedocs.io/en/latest/_autosummary/jax.checkpoint.html>`__
@@ -967,6 +984,7 @@ def remat(
       prevent_cse=prevent_cse,
       static_argnums=static_argnums,
       policy=policy,
+      graph=graph,
     )  # type: ignore[return-value]
 
   # Detect bound nnx.Module methods and raise error.
@@ -974,6 +992,22 @@ def remat(
 
   if was_bound:
     _raise_bound_method_error('remat')
+
+  if not graph:
+    checkpointed_fn = jax.checkpoint(
+      TreeRematFn(f_unbound),
+      prevent_cse=prevent_cse,
+      static_argnums=static_argnums,
+      policy=policy,
+    )
+
+    @functools.wraps(f_unbound)
+    def tree_remat_wrapper(*args, **kwargs):
+      out, updates = checkpointed_fn(*args, **kwargs)
+      extract.apply_variable_updates((args, kwargs), updates)
+      return out
+
+    return tree_remat_wrapper  # type: ignore[return-value]
 
   # Unbound function path: preserve the concise composition used in NNX.
   return resolve_kwargs()(  # type: ignore[return-value]
@@ -989,3 +1023,4 @@ def remat(
       ),
     )
   )
+

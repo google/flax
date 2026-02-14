@@ -2443,6 +2443,46 @@ class TestRemat(absltest.TestCase):
     y, _ = m(jnp.ones((1, 3)))
     assert y.shape == (1, 3)
 
+  def test_tree_mode_remat_basic(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.remat(graph=False)
+    def forward(model, x):
+      return model(x)
+
+    def loss_fn(model, x):
+      y = forward(model, x)
+      return jnp.sum(y)
+
+    grads = nnx.grad(loss_fn, graph=False)(model, jnp.ones((1, 2)))
+    assert grads.kernel.shape == (2, 3)
+    assert grads.bias.shape == (3,)
+
+  def test_tree_mode_remat_stateful(self):
+    class Counter(nnx.Variable):
+      pass
+
+    class Linear(nnx.Module):
+      def __init__(self, din, dout, *, rngs):
+        key = rngs.params()
+        self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
+        self.b = nnx.Param(jnp.zeros((dout,)))
+        self.count = Counter(jnp.array(0))
+
+      def __call__(self, x):
+        self.count[...] += 1
+        return x @ self.w + self.b[None]
+
+    model = Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.remat(graph=False)
+    def forward(model, x):
+      return model(x)
+
+    y = forward(model, jnp.ones((1, 2)))
+    assert y.shape == (1, 3)
+    assert model.count[...] == 1
+
 
 class TestVmap(absltest.TestCase):
   def test_basic(self):
