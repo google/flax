@@ -27,7 +27,7 @@ from flax.nnx.proxy_caller import ApplyCaller
 from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 from flax.training.train_state import struct
-from flax.nnx.variablelib import Variable
+from flax.nnx.pytreelib import data
 
 A = tp.TypeVar('A')
 M = tp.TypeVar('M', bound=Module)
@@ -89,136 +89,8 @@ class Dict(reprlib.MappingReprMixin, Module, tp.MutableMapping[str, A]):
     def __setattr__(self, key: str, value: A) -> None:
       ...
 
-
-class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
-  """A Module that implements a mutable sequence.
-
-  This class provides a way to store and manipulate a sequence of values
-  contained a mixed set of data (e.g. Array, Variables, Modules) and static
-  (e.g. functions, strings) types.
-
-  Example:
-    >>> from flax import nnx
-    ...
-    >>> rngs = nnx.Rngs(0)
-    >>> layers = nnx.List([
-    ...     nnx.Linear(1, 32, rngs=rngs),  # data
-    ...     nnx.relu,                      # static
-    ...     nnx.Linear(32, 1, rngs=rngs),  # data
-    ... ])
-  """
-  def __init__(self, it: tp.Iterable[A] | None = None, /):
-    """
-    Args:
-      it: An iterable of values to initialize the list.
-    """
-    self._length: int = 0
-    if it is not None:
-      for value in it:
-        self.append(value)
-
-  def _get_elem(self, key: int) -> A:
-    return getattr(self, str(key))
-
-  def _set_elem(self, key: int, value: A) -> None:
-    setattr(self, str(key), value)
-
-  def _del_elem(self, key: int) -> None:
-    delattr(self, str(key))
-
-  def __len__(self) -> int:
-    return self._length
-
-  def append(self, value: A) -> None:
-    self._set_elem(self._length, value)
-    self._length += 1
-
-  def insert(self, index: int, value: A) -> None:
-    if index < 0:
-      index += self._length
-    if index < 0:
-      index = 0
-    if index > self._length:
-      index = self._length
-
-    # Shift elements to the right
-    for i in range(self._length, index, -1):
-      self._set_elem(i, self._get_elem(i - 1))
-
-    # Insert the new value
-    self._set_elem(index, value)
-    self._length += 1
-
-  def __iter__(self) -> tp.Iterator[A]:
-    for i in range(self._length):
-      yield self._get_elem(i)
-
-  @tp.overload
-  def __getitem__(self, index: int) -> A: ...
-  @tp.overload
-  def __getitem__(self, index: slice) -> tp.List[A]: ...
-  def __getitem__(self, index: int | slice) -> A | tp.List[A]:
-    if isinstance(index, int):
-      if index < 0:
-        index += self._length
-      if index < 0 or index >= self._length:
-        raise IndexError('Index out of bounds')
-      return self._get_elem(index)
-    elif isinstance(index, slice):
-      idxs = list(range(self._length))[index]
-      return [self._get_elem(i) for i in idxs]
-    else:
-      raise TypeError('Invalid index type')
-
-  def __setitem__(self, index: int | slice, value: A | tp.Iterable[A]) -> None:
-    if isinstance(index, int):
-      if index < 0:
-        index += self._length
-      if index < 0 or index >= self._length:
-        raise IndexError('Index out of bounds')
-      self._set_elem(index, value)  # type: ignore[arg-type]
-    elif isinstance(index, slice):
-      if not isinstance(value, tp.Iterable):
-        raise TypeError('Expected an iterable')
-      values = list(value)
-      idxs = list(range(self._length))[index]
-      if len(idxs) != len(values):
-        raise ValueError('Length mismatch')
-      for i, v in zip(idxs, values):
-        self._set_elem(i, v)
-    else:
-      raise TypeError('Invalid index type')
-
-  def _graph_node_set_key(self, key: str, value: tp.Any):
-    if not isinstance(key, int):
-      raise KeyError(f'Invalid key: {key}')
-    elif key < len(self):
-      if isinstance(variable := self[key], Variable) and isinstance(value, Variable):
-        variable.update_from_state(value)
-      else:
-        self[key] = value
-    else:
-      self.insert(key, value)
-
-  def __delitem__(self, index: int | slice) -> None:
-    if isinstance(index, int):
-      if index < 0:
-        index += self._length
-      if index < 0 or index >= self._length:
-        raise IndexError('Index out of bounds')
-      self._del_elem(index)
-      for i in range(index + 1, self._length):
-        self._set_elem(i - 1, self._get_elem(i))
-      self._length -= 1
-    elif isinstance(index, slice):
-      idxs = list(range(self._length))[index]
-      for i in reversed(idxs):
-        # implement recursively
-        del self[i]
-    else:
-      raise TypeError('Invalid index type')
-
-  _pytree__has_int_keys = True
+def List(a):
+  return data(list(a))
 
 
 class Sequential(Module):
