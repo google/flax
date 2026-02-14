@@ -362,6 +362,11 @@ def grad(
     allow_int: Optional, bool. Whether to allow differentiating with
       respect to integer valued inputs. The gradient of an integer input will
       have a trivial vector-space dtype (float0). Default False.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol. Tree-mode does
+      not support ``DiffState`` or shared ``Variable`` references.
   """
   if reduce_axes:
     raise NotImplementedError('reduce_axes argument to grad is deprecated')
@@ -977,6 +982,20 @@ def remat(
   To learn about ``jax.remat``, go to JAX's
     `fundamentals of jax.checkpoint <https://jax.readthedocs.io/en/latest/notebooks/autodiff_remat.html#fundamentals-of-jax-checkpoint>`_
     and `practical notes <https://jax.readthedocs.io/en/latest/notebooks/autodiff_remat.html#practical-notes>`_.
+
+  Args:
+    f: Function to be rematerialized.
+    prevent_cse: Optional, bool. If True, prevents common subexpression
+      elimination. Default True.
+    static_argnums: Optional, int or tuple of ints. Specifies which
+      positional arguments to treat as static.
+    policy: Optional, callable. A policy for which intermediates to save
+      during the forward pass.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol. Tree-mode does
+      not support shared ``Variable`` references.
   """
   if isinstance(f, Missing):
     return functools.partial(

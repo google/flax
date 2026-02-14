@@ -1216,6 +1216,11 @@ def shard_map(
       checks and automatic differentiation optimizations. The validity checks concern
       whether any mesh axis names not mentioned in ``out_specs`` are consistent with
       how the outputs of ``f`` are replicated.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol. Tree-mode does
+      not support ``StateSharding`` or shared ``Variable`` references.
 
   Returns:
     A callable that applies the input function ``f`` across data sharded according to

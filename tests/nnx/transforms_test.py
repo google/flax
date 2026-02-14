@@ -2485,6 +2485,98 @@ class TestRemat(absltest.TestCase):
 
 
 class TestVmap(absltest.TestCase):
+  def test_tree_mode_vmap_basic(self):
+    class LinearEnsemble(nnx.Module):
+      def __init__(self, num, *, rngs):
+        self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
+
+    model = LinearEnsemble(5, rngs=nnx.Rngs(0))
+    x = jnp.ones((2,))
+
+    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=False)
+    def forward(model, x):
+      return x @ model.w
+
+    y = forward(model, x)
+    assert y.shape == (5, 3)
+
+  def test_tree_mode_vmap_stateful(self):
+    class Counter(nnx.Variable):
+      pass
+
+    class Linear(nnx.Module):
+      def __init__(self, din, dout, *, rngs):
+        key = rngs.params()
+        self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
+        self.count = Counter(jnp.array(0))
+
+      def __call__(self, x):
+        self.count[...] += 1
+        return x @ self.w
+
+    model = Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=False)
+    def forward(model, x):
+      return model(x)
+
+    x = jnp.ones((5, 2))
+    y = forward(model, x)
+    assert y.shape == (5, 3)
+    assert model.count[...] == 1
+
+  def test_tree_mode_vmap_variables(self):
+    rngs = nnx.Rngs(0)
+    w = nnx.Param(jax.random.normal(rngs(), (5, 2, 3)))
+    b = nnx.Param(jax.random.normal(rngs(), (5, 3)))
+
+    @nnx.vmap(in_axes=(0, 0, 1), out_axes=1, graph=False)
+    def forward(w, b, x):
+      return x @ w + b
+
+    x = jax.random.uniform(rngs(), (2, 5))
+    y = forward(w, b, x)
+    assert y.shape == (3, 5)
+
+  def test_tree_mode_vmap_ensemble_forward(self):
+    class Linear(nnx.Module):
+      def __init__(self, din, dout, *, rngs):
+        key = rngs.params()
+        self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
+        self.b = nnx.Param(jnp.zeros((dout,)))
+
+      def __call__(self, x):
+        return x @ self.w + self.b[None]
+
+    @nnx.vmap(in_axes=0, out_axes=0, graph=False)
+    def create_ensemble(keys):
+      return Linear(2, 3, rngs=nnx.Rngs(keys))
+
+    keys = jax.random.split(jax.random.key(0), 5)
+    ensemble = create_ensemble(keys)
+
+    assert ensemble.w.shape == (5, 2, 3)
+    assert ensemble.b.shape == (5, 3)
+
+    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=False)
+    def forward(model, x):
+      return model(x)
+
+    x = jnp.ones((1, 2))
+    y = forward(ensemble, x)
+    assert y.shape == (5, 1, 3)
+
+  def test_tree_mode_vmap_replicate(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=False)
+    def forward(model, x):
+      return model(x)
+
+    x = jnp.ones((5, 1, 2))
+    y = forward(model, x)
+    assert y.shape == (5, 1, 3)
+
   def test_basic(self):
     @nnx.split_rngs(splits=5)
     @nnx.vmap(in_axes=0, out_axes=0, axis_size=5)

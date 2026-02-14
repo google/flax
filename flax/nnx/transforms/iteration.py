@@ -22,7 +22,7 @@ import typing as tp
 from flax import struct
 from flax import typing
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx import extract, filterlib, graph, spmd, variablelib
+from flax.nnx import extract, filterlib, graph as graphlib, spmd, variablelib
 from flax.nnx import statelib
 from flax.nnx.module import Module
 from flax.nnx.statelib import State
@@ -130,8 +130,8 @@ class StateAxes(extract.PrefixMapping, tp.Mapping):
 
 
 AxisFn = tp.Callable[
-  [graph.GraphState | variablelib.Variable, int, tp.Mapping],
-  graph.GraphState | variablelib.Variable,
+  [graphlib.GraphState | variablelib.Variable, int, tp.Mapping],
+  graphlib.GraphState | variablelib.Variable,
 ]
 
 
@@ -148,9 +148,9 @@ def _update_variable_sharding_metadata(
         state = axis_fn(state, node_states.metadata, transform_metadata)
         return node_states.replace(states=(state,))
       else:
-        states_out: list[graph.GraphState | variablelib.Variable] = []
+        states_out: list[graphlib.GraphState | variablelib.Variable] = []
         for state, axis in zip(node_states.states, node_states.metadata.axes):
-          assert isinstance(state, graph.State | variablelib.Variable)
+          assert isinstance(state, graphlib.State | variablelib.Variable)
           if isinstance(axis, int):
             state = axis_fn(state, axis, transform_metadata)
           states_out.append(state)
@@ -162,12 +162,27 @@ def _update_variable_sharding_metadata(
   )
 
 
-def _vmap_split_fn(ctx: graph.SplitContext, path, prefix, x):
+def _vmap_split_fn(ctx: graphlib.SplitContext, path, prefix, x):
   if isinstance(prefix, StateAxes):
     return extract.NodeStates.from_split(
       *ctx.split(x, *prefix.filters), metadata=prefix
     )
   return extract.NodeStates.from_split(*ctx.split(x), metadata=prefix)
+
+
+@dataclasses.dataclass(eq=False)
+class TreeVmapFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  def __call__(self, *args, **kwargs):
+    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    out = self.f(*args, **kwargs)
+    extract.check_no_aliases(*updates, out)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    return out, updates
 
 
 @dataclasses.dataclass(eq=False)
@@ -213,6 +228,7 @@ def vmap(
     spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+    graph: bool = True,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -228,6 +244,7 @@ def vmap(
     spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+    graph: bool = True,
 ) -> F:
   ...
 
@@ -242,6 +259,7 @@ def vmap(
   spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  graph: bool = True,
 ) -> F | tp.Callable[[F], F]:
   """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
 
@@ -261,6 +279,11 @@ def vmap(
       axis so that parallel collectives can be applied.
     axis_size: Optional, an integer indicating the size of the axis to be
       mapped. If not provided, the mapped axis size is inferred from arguments.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol. Tree-mode does
+      not support ``StateAxes`` or shared ``Variable`` references.
 
   Returns:
     Batched/vectorized version of ``f`` with arguments that correspond to
@@ -332,12 +355,32 @@ def vmap(
         axis_size=axis_size,
         spmd_axis_name=spmd_axis_name,
         transform_metadata=transform_metadata,
+        graph=graph,
     )  # type: ignore[return-value]
 
   # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('vmap')
+
+  if not graph:
+    vmapped_fn = jax.vmap(
+      TreeVmapFn(f_unbound),
+      in_axes=in_axes,
+      out_axes=(out_axes, (in_axes, 0)),
+      axis_name=axis_name,
+      axis_size=axis_size,
+      spmd_axis_name=spmd_axis_name,
+    )
+
+    @functools.wraps(f_unbound)
+    def tree_vmap_wrapper(*args, **kwargs):
+      out, updates = vmapped_fn(*args, **kwargs)
+      extract.apply_variable_updates((args, kwargs), updates)
+      return out
+
+    return tree_vmap_wrapper  # type: ignore[return-value]
+
 
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
@@ -351,7 +394,7 @@ def vmap(
     else x,
     out_axes,
   )
-  vmapped_fn = jax.vmap(
+  vmapped_fn = jax.vmap(  # type: ignore[assignment]
       VmapFn(f_unbound, transform_metadata, in_axes, out_axes),
       in_axes=jax_in_axes,
       out_axes=(jax_in_axes, jax_out_axes),
@@ -361,7 +404,7 @@ def vmap(
   )
 
   @functools.wraps(f)
-  @graph.update_context('vmap')
+  @graphlib.update_context('vmap')
   def vmap_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
     pure_args = extract.to_tree(
@@ -592,7 +635,7 @@ def pmap(
   )
 
   @functools.wraps(f)
-  @graph.update_context('pmap')
+  @graphlib.update_context('pmap')
   def vmap_wrapper(*args):
     pure_args = extract.to_tree(
         args, prefix=in_axes, split_fn=_vmap_split_fn, ctxtag='pmap'
@@ -682,23 +725,23 @@ def _check_carry_same_references(carry_arg, carry_arg_out):
       check_carry_same_references,
       carry_arg,
       carry_arg_out,
-      is_leaf=lambda x: graph.is_graph_node(x)
+      is_leaf=lambda x: graphlib.is_graph_node(x)
       and not isinstance(x, variablelib.Variable),
   )
 
 
 def _scan_split_in(
   carry_deque: PytreeDeque[list[State | variablelib.Variable]],
-  graphdefs_deque: PytreeDeque[graph.GraphDef],
+  graphdefs_deque: PytreeDeque[graphlib.GraphDef],
   broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   broadcast_arrays: PytreeDeque[Broadcasted],
   /,
-  ctx: graph.SplitContext,
+  ctx: graphlib.SplitContext,
   path,
   prefix,
   x,
 ):
-  if graph.is_graph_node(x) or isinstance(x, variablelib.Variable):
+  if graphlib.is_graph_node(x) or isinstance(x, variablelib.Variable):
     vectorized_states: list[State | variablelib.Variable] = []
     carry_states: list[State | variablelib.Variable] = []
     broadcast_states: list[State | variablelib.Variable] = []
@@ -776,10 +819,10 @@ def _scan_split_in(
 
 def _scan_split_out(
   carry_deque: PytreeDeque[list[State | variablelib.Variable]],
-  graphdefs_deque: PytreeDeque[graph.GraphDef],
+  graphdefs_deque: PytreeDeque[graphlib.GraphDef],
   broadcast_deque: PytreeDeque[list[State | variablelib.Variable]],
   /,
-  ctx: graph.SplitContext,
+  ctx: graphlib.SplitContext,
   path: extract.KeyPath,
   prefix,
   x,
@@ -787,7 +830,7 @@ def _scan_split_out(
   assert isinstance(path[0], jax.tree_util.SequenceKey)
   is_input_arg = path[0].idx == 0
 
-  if graph.is_graph_node(x) or isinstance(x, variablelib.Variable):
+  if graphlib.is_graph_node(x) or isinstance(x, variablelib.Variable):
     vectorized_states: list[State | variablelib.Variable] = []
     carry_states: list[State | variablelib.Variable] = []
     broadcast_states: list[State | variablelib.Variable] = []
@@ -869,11 +912,11 @@ def _scan_split_out(
 
 def _scan_merge_in(
   carry_deque: PytreeDeque[list[State]],
-  graphdefs_deque: PytreeDeque[graph.GraphDef],
+  graphdefs_deque: PytreeDeque[graphlib.GraphDef],
   broadcast_deque: PytreeDeque[list[State]],
   broadcast_arrays: PytreeDeque[Broadcasted],
   /,
-  ctx: graph.MergeContext,
+  ctx: graphlib.MergeContext,
   path,
   prefix,
   x,
@@ -892,10 +935,10 @@ def _scan_merge_in(
 
 def _scan_merge_out(
   carry_deque: PytreeDeque[list[State]],
-  graphdefs_deque: PytreeDeque[graph.GraphDef],
+  graphdefs_deque: PytreeDeque[graphlib.GraphDef],
   broadcast_deque: PytreeDeque[list[State]],
   /,
-  ctx: graph.MergeContext,
+  ctx: graphlib.MergeContext,
   path,
   prefix,
   x,
@@ -1075,7 +1118,7 @@ class ScanFn:
       assert carry_arg_out is None
 
     carry_deque_out = PytreeDeque[list[State | variablelib.Variable]]()
-    graphdefs_out = PytreeDeque[graph.GraphDef]()
+    graphdefs_out = PytreeDeque[graphlib.GraphDef]()
     _broadcast_deque_out_tmp = PytreeDeque[
       list[State | variablelib.Variable]
     ]()  # discarded
@@ -1300,7 +1343,7 @@ def scan(
   )
 
   @functools.wraps(f)
-  @graph.update_context('scan')
+  @graphlib.update_context('scan')
   def scan_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
 
@@ -1428,7 +1471,7 @@ class WhileLoopCondFn:
 def _reconsile_index_mapping(tree_to_fix, example_tree):
   def f(a, b):
     if not isinstance(a, extract.NodeStates) or not isinstance(
-      a._graphdef, graph.GraphDef
+      a._graphdef, graphlib.GraphDef
     ):
       return a
     return dataclasses.replace(
@@ -1441,7 +1484,7 @@ def _reconsile_index_mapping(tree_to_fix, example_tree):
 def _add_fake_index_mapping(tree: tp.Any):
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.GraphDef
+      node_state._graphdef, graphlib.GraphDef
     ):
       return node_state
 
@@ -1458,10 +1501,10 @@ def _remove_index_mapping(tree: tp.Any):
 
   def per_node_state(node_state: extract.NodeStates | tp.Any):
     if not isinstance(node_state, extract.NodeStates) or not isinstance(
-      node_state._graphdef, graph.GraphDef
+      node_state._graphdef, graphlib.GraphDef
     ):
       return node_state
-    assert isinstance(node_state._graphdef, graph.GraphDef)
+    assert isinstance(node_state._graphdef, graphlib.GraphDef)
     node_state = dataclasses.replace(
       node_state, _graphdef=node_state._graphdef.with_no_outer_index()
     )
@@ -1478,7 +1521,7 @@ class WhileLoopBodyFn:
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
 
-  @graph.update_context('while_loop_body')
+  @graphlib.update_context('while_loop_body')
   def __call__(self, pure_val):
     # Removing the dummy index mapping being added outside of body function.
     pure_val_in = _remove_index_mapping(pure_val)
@@ -1505,7 +1548,7 @@ class WhileLoopBodyFn:
     return pure_out
 
 
-@graph.update_context('while_loop')
+@graphlib.update_context('while_loop')
 def while_loop(cond_fun: tp.Callable[[T], tp.Any],
                body_fun: tp.Callable[[T], T],
                init_val: T) -> T:
@@ -1561,7 +1604,7 @@ class ForiLoopBodyFn:
   def __post_init__(self):
     functools.update_wrapper(self, self.f)
 
-  @graph.update_context('fori_loop_body')
+  @graphlib.update_context('fori_loop_body')
   def __call__(self, i, pure_val_in):
     val = extract.from_tree(pure_val_in, ctxtag='fori_loop_body', is_inner=True)
     out = self.f(i, val)
@@ -1569,7 +1612,7 @@ class ForiLoopBodyFn:
     return pure_out
 
 
-@graph.update_context('fori_loop')
+@graphlib.update_context('fori_loop')
 def fori_loop(lower: int, upper: int,
               body_fun: tp.Callable[[int, T], T],
               init_val: T,
