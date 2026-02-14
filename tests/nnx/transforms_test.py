@@ -1137,7 +1137,6 @@ class TestGrad(parameterized.TestCase):
 
     @nnx.grad
     def f(m: dict):
-      # sum all params
       return m['a'][0] + m['a'][1] + m['b']
 
     grads = f(m)
@@ -1157,6 +1156,66 @@ class TestGrad(parameterized.TestCase):
     assert m['a'][0][...] == 2.0
     assert m['a'][1][...] == 1.0
     assert m['b'][...] == 2.0
+
+  def test_tree_mode_grad(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.grad(graph=False)
+    def loss_fn(m: nnx.Linear):
+      return jnp.mean(m.kernel) + jnp.mean(m.bias)
+
+    grads = loss_fn(m)
+
+    self.assertIsInstance(grads, nnx.Linear)
+    self.assertEqual(grads.kernel.shape, (2, 3))
+    self.assertEqual(grads.bias.shape, (3,))
+
+  def test_tree_mode_grad_multiple_inputs(self):
+    rngs = nnx.Rngs(0)
+    m = nnx.Linear(2, 3, rngs=rngs)
+    loss_fn = lambda m, x, y: jnp.mean((m(x) - y) ** 2)
+    grad_fn = nnx.grad(loss_fn, graph=False)
+    x = jax.random.uniform(rngs(), (1, 2))
+    y = jnp.ones((1, 3))
+    grads = grad_fn(m, x, y)
+
+    self.assertIsInstance(grads, nnx.Linear)
+    self.assertEqual(grads.kernel.shape, (2, 3))
+    self.assertEqual(grads.bias.shape, (3,))
+
+  def test_tree_mode_grad_multiple_graph_nodes(self):
+    rngs = nnx.Rngs(0)
+    m1 = nnx.Linear(2, 3, rngs=rngs)
+    m2 = nnx.Linear(3, 3, rngs=rngs)
+    loss_fn = lambda m1, m2, x, y: jnp.mean((m2(m1(x)) - y) ** 2)
+    grad_fn = nnx.grad(loss_fn, argnums=(0, 1), graph=False)
+    x = jax.random.uniform(rngs(), (1, 2))
+    y = jnp.ones((1, 3))
+    grads_m1, grads_m2 = grad_fn(m1, m2, x, y)
+
+    self.assertIsInstance(grads_m1, nnx.Linear)
+    self.assertEqual(grads_m1.kernel.shape, (2, 3))
+    self.assertEqual(grads_m1.bias.shape, (3,))
+    self.assertIsInstance(grads_m2, nnx.Linear)
+    self.assertEqual(grads_m2.kernel.shape, (3, 3))
+    self.assertEqual(grads_m2.bias.shape, (3,))
+
+  def test_tree_mode_value_and_grad_with_aux(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.value_and_grad(has_aux=True, graph=False)
+    def loss_fn(m: nnx.Linear):
+      loss = jnp.mean(m.kernel)
+      m.kernel[...] = jnp.ones_like(m.kernel[...])
+      return loss, {'aux': 1}
+
+    (loss, aux), grads = loss_fn(m)
+
+    self.assertEqual(loss.shape, ())
+    self.assertEqual(aux, {'aux': 1})
+    self.assertIsInstance(grads, nnx.Linear)
+    self.assertEqual(grads.kernel.shape, (2, 3))
+    np.testing.assert_allclose(m.kernel[...], jnp.ones((2, 3)))
 
 
 class TestCustomVJP(parameterized.TestCase):
@@ -3587,7 +3646,7 @@ class TestCheckify(absltest.TestCase):
       err.throw()
 
 
-class TestBoundMethodTransforms(absltest.TestCase):
+class TestBoundMethodTransforms(parameterized.TestCase):
   def test_remat_with_bound_method_raises(self):
     class M(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
@@ -3636,7 +3695,8 @@ class TestBoundMethodTransforms(absltest.TestCase):
     with self.assertRaisesRegex(ValueError, 'bound methods'):
       nnx.eval_shape(m.__call__, x_spec)
 
-  def test_grad_with_bound_method_raises(self):
+  @parameterized.parameters(True, False)
+  def test_grad_with_bound_method_raises(self, graph_mode):
     class M(nnx.Module):
       def __init__(self):
         self.w = nnx.Param(jnp.array(1.0))
@@ -3645,10 +3705,10 @@ class TestBoundMethodTransforms(absltest.TestCase):
 
     m = M()
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.grad(m.loss)
+      nnx.grad(m.loss, graph=graph_mode)
 
-  def test_value_and_grad_with_bound_method_raises(self):
-    """Test that value_and_grad raises error for bound methods."""
+  @parameterized.parameters(True, False)
+  def test_value_and_grad_with_bound_method_raises(self, graph_mode):
     class TestModel(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 1, rngs=rngs)
@@ -3659,7 +3719,7 @@ class TestBoundMethodTransforms(absltest.TestCase):
 
     model = TestModel(rngs=nnx.Rngs(0))
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.value_and_grad(model.loss_fn)
+      nnx.value_and_grad(model.loss_fn, graph=graph_mode)
 
   def test_checkify_with_bound_method_raises(self):
     """Test that checkify raises error for bound methods."""

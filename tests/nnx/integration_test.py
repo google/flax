@@ -498,6 +498,107 @@ class TestIntegration(parameterized.TestCase):
 
     train_step(x, y)
 
+  def test_tree_mode_train_step(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
+
+    @nnx.jit(graph=False)
+    def train_step(model, optimizer, x, y):
+      def loss_fn(model):
+        y_pred = model(x)
+        return jnp.mean((y_pred - y) ** 2)
+
+      loss, grads = nnx.value_and_grad(loss_fn, graph=False)(model)
+      optimizer.update(model, grads)
+      return loss
+
+    x = jax.random.normal(jax.random.key(0), (4, 2))
+    y = jax.random.normal(jax.random.key(1), (4, 3))
+
+    loss0 = train_step(model, optimizer, x, y)
+    loss1 = train_step(model, optimizer, x, y)
+    self.assertLess(loss1, loss0)
+
+  def test_tree_mode_multi_module(self):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.bn = nnx.BatchNorm(dout, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.linear(x)
+        x = self.bn(x)
+        return nnx.relu(x)
+
+    class Model(nnx.Module):
+      def __init__(self, *, rngs):
+        self.block1 = Block(2, 2, rngs=rngs)
+        self.block2 = Block(2, 2, rngs=rngs)
+
+      def __call__(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        return x
+
+    @nnx.jit(graph=False)
+    def train_step(model: Model, x, y):
+      @nnx.grad(graph=False)
+      def loss_fn(model: Model):
+        y_pred = model(x)
+        return jnp.mean((y - y_pred) ** 2)
+
+      grads = loss_fn(model)
+      model = jax.tree.map(
+        lambda w, g: w - 0.1 * g, model, grads,
+      )
+      return model
+
+    model = Model(rngs=nnx.Rngs(0))
+
+    x = np.random.uniform(size=(4, 2))
+    y = np.random.uniform(size=(4, 2))
+    model.set_attributes(use_running_average=False)
+
+    for _i in range(3):
+      model = train_step(model, x, y)
+
+  def test_tree_mode_stateful(self):
+    class State(nnx.Variable[A]):
+      pass
+
+    class Linear(nnx.Module):
+      def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
+        key = rngs.params()
+        self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
+        self.b = nnx.Param(jnp.zeros((dout,)))
+        self.count = State(jnp.array(0))
+
+      def __call__(self, x):
+        self.count[...] = self.count[...] + 1
+        return x @ self.w + self.b[None]
+
+    model = Linear(din=12, dout=2, rngs=nnx.Rngs(0))
+    x = jnp.ones((8, 12))
+    y = model(x)
+    assert model.count[...] == 1
+
+    @nnx.jit(graph=False)
+    def train_step(model, x, y):
+      def loss_fn(model):
+        y_pred = model(x)
+        return jax.numpy.mean((y_pred - y) ** 2)
+
+      grads = nnx.grad(loss_fn, graph=False, allow_int=True)(model)
+      params = jax.tree.map(
+        lambda w, g: w - 0.1 * g,
+        nnx.state(model, nnx.Param),
+        nnx.state(grads, nnx.Param),
+      )
+      nnx.update(model, params)
+
+    train_step(model, x, y)
+    assert model.count[...] == 2
+
 
 if __name__ == '__main__':
   absltest.main()
