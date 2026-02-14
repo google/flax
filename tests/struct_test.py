@@ -15,7 +15,7 @@
 """Tests for flax.struct."""
 
 import dataclasses
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 import jax
 from absl.testing import absltest, parameterized
@@ -155,6 +155,39 @@ class StructTest(parameterized.TestCase):
     obj = B()
     obj.b = 2
     self.assertEqual(obj.b, 2)
+
+
+  def test_generic_pytreenode_base_order(self):
+    # PyTreeNode + Generic should work regardless of base order (#5233).
+    T = TypeVar('T')
+    U = TypeVar('U')
+
+    # Generic after PyTreeNode.
+    class A(struct.PyTreeNode, Generic[T, U]):
+      x: int = 0
+
+    self.assertEqual(A.__parameters__, (T, U))
+    A[int, int]  # should not raise
+
+    # Generic before PyTreeNode.
+    class B(Generic[T, U], struct.PyTreeNode):
+      x: int = 0
+
+    self.assertEqual(B.__parameters__, (T, U))
+    B[int, int]  # should not raise
+
+    # Subclassing a parameterized generic PyTreeNode.
+    class Base(struct.PyTreeNode, Generic[T, U]):
+      x: int = 0
+
+    class Sub(Base[int, str]):
+      y: int = 1
+
+    obj = Sub(x=1, y=2)
+    self.assertEqual(obj.x, 1)
+    self.assertEqual(obj.y, 2)
+    leaves = jax.tree_util.tree_leaves(obj)
+    self.assertEqual(leaves, [1, 2])
 
 
 if __name__ == '__main__':
