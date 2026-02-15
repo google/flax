@@ -145,6 +145,7 @@ class TestMultiHeadAttention(parameterized.TestCase):
     )
     x = jnp.ones((1, 3, 4), dtype=jnp.float32)
     y = model(x)
+    assert y.dtype == jnp.float16
     assert y.shape == (1, 3, 4)
     assert model.preferred_element_type == jnp.float16
 
