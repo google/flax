@@ -28,6 +28,7 @@ from flax import errors
 from flax.core import spmd as core_spmd
 from flax.nnx import reprlib, tracers, visualization
 from flax.typing import MISSING, Missing, SizeBytes
+from jax.sharding import NamedSharding
 import jax
 from jax._src.state.types import AbstractRef
 import jax.experimental
@@ -1418,6 +1419,10 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     if ref:
       value = jax.new_ref(value)  # type: ignore
     object.__setattr__(self, '_raw_value', value)
+    if (('out_sharding' not in metadata) and hasattr(value, 'sharding') and
+      isinstance(value.sharding, NamedSharding) and any(value.sharding.spec)):
+      metadata['out_sharding'] = value.sharding.spec
+      metadata['mesh'] = value.sharding.mesh
 
   @property
   def _can_update(self) -> bool:
