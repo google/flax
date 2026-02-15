@@ -63,6 +63,7 @@ def dot_product_attention_weights(
   module: Module | None = None,
   promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
   is_causal: bool = False,
+  preferred_element_type: Dtype | None = None,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -100,6 +101,9 @@ def dot_product_attention_weights(
       the logits to mask out the non-causal parts of the attention matrix,
       but other implementations like cudnn will avoid computing the
       non-causal regions, providing speedups.
+    preferred_element_type: Optional parameter controls the data type output by
+      the dot product. This argument is passed to ``dot_general`` function.
+      See ``jax.lax.dot`` for details.
 
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
@@ -142,7 +146,10 @@ def dot_product_attention_weights(
   query = query / jnp.sqrt(depth).astype(dtype)
 
   # attn weight shape is (batch..., num_heads, q_length, kv_length)
-  attn_weights = jnp.einsum(einsum_str, query, key, precision=precision)
+  attn_weights = jnp.einsum(
+    einsum_str, query, key, precision=precision,
+    preferred_element_type=preferred_element_type,
+  )
 
   if is_gqa:
       attn_weights = attn_weights.reshape(attn_weights.shape[:-4] + (q_heads, attn_weights.shape[-2], attn_weights.shape[-1]))
@@ -202,6 +209,7 @@ def dot_product_attention(
   module: Module | None = None,
   promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
   is_causal: bool = False,
+  preferred_element_type: Dtype | None = None,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -248,6 +256,8 @@ def dot_product_attention(
       the logits to mask out the non-causal parts of the attention matrix,
       but other implementations like cudnn will avoid computing the
       non-causal regions, providing speedups.
+    preferred_element_type: Optional parameter controls the data type output by
+      the dot product.
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
@@ -275,7 +285,7 @@ def dot_product_attention(
     out = jax.nn.dot_product_attention(query, key, value, bias, mask, is_causal=is_causal)
     if len(query_shape) > 4:
       out = jnp.reshape(out, query_shape)
-    return out
+    return out if preferred_element_type is None else out.astype(preferred_element_type)
 
   # compute attention weights
   attn_weights = dot_product_attention_weights(
@@ -292,6 +302,7 @@ def dot_product_attention(
     module,
     promote_dtype,
     is_causal,
+    preferred_element_type=preferred_element_type,
   )
 
   # return weighted sum over values for each query position
@@ -308,12 +319,18 @@ def dot_product_attention(
       # Expand Value: [..., K, H_v, 1, D]
       value = jnp.expand_dims(value, axis=-2)
       # Contract: hgqk, kh1d -> qhgd (h=H_v, g=n_rep)
-      out = jnp.einsum('...hgqk,...kh1d->...qhgd', attn_weights, value, precision=precision)
+      out = jnp.einsum(
+        '...hgqk,...kh1d->...qhgd', attn_weights, value,
+        precision=precision,
+        preferred_element_type=preferred_element_type,
+      )
       # Flatten: [..., Q, H_q, D]
       out = out.reshape(out.shape[:-3] + (q_heads, out.shape[-1]))
   else:
       out = jnp.einsum(
-        '...hqk,...khd->...qhd', attn_weights, value, precision=precision
+        '...hqk,...khd->...qhd', attn_weights, value,
+        precision=precision,
+        preferred_element_type=preferred_element_type,
       )
 
   return out
@@ -398,6 +415,8 @@ class MultiHeadAttention(Module):
       the scale of the query layer norm layer.
     key_ln_scale_metadata: Optional metadata dictionary to set when initializing
       the scale of the key layer norm layer.
+    preferred_element_type: numerical precision of the computation, see
+      `jax.lax.dot_general` for details.
   """
 
   def __init__(
@@ -425,6 +444,7 @@ class MultiHeadAttention(Module):
     qkv_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     out_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
     ln_promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+    preferred_element_type: Dtype | None = None,
     # Deprecated, will be removed.
     qkv_dot_general: DotGeneralT | None = None,
     out_dot_general: DotGeneralT | None = None,
@@ -459,6 +479,7 @@ class MultiHeadAttention(Module):
     self.use_bias = use_bias
     self.attention_fn = attention_fn
     self.decode = decode
+    self.preferred_element_type = preferred_element_type
     self.normalize_qk = normalize_qk
     self.qkv_promote_dtype = qkv_promote_dtype
     self.out_promote_dtype = out_promote_dtype
@@ -488,6 +509,7 @@ class MultiHeadAttention(Module):
       promote_dtype=self.qkv_promote_dtype,
       dot_general=self.qkv_dot_general,
       dot_general_cls=self.qkv_dot_general_cls,
+      preferred_element_type=self.preferred_element_type,
       kernel_metadata=kernel_metadata,
       bias_metadata=bias_metadata,
     )
@@ -537,6 +559,7 @@ class MultiHeadAttention(Module):
       promote_dtype=self.out_promote_dtype,
       dot_general=self.out_dot_general,
       dot_general_cls=self.out_dot_general_cls,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=out_kernel_metadata or kernel_metadata,
       bias_metadata=out_bias_metadata or bias_metadata,
@@ -712,6 +735,7 @@ class MultiHeadAttention(Module):
       deterministic=deterministic,
       dtype=self.dtype,
       precision=self.precision,
+      preferred_element_type=self.preferred_element_type,
       module=self if sow_weights else None,
     )
     # back to the original inputs dimensions
