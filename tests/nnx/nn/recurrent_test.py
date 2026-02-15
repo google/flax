@@ -642,5 +642,26 @@ class TestRNN(absltest.TestCase):
     self.assertEqual(model.lstm.cell.recurrent_dropout.rngs.count[...], 1)
 
 
+class TestCellSharding(absltest.TestCase):
+  def test_out_sharding_signature(self):
+    rngs = nnx.Rngs(0)
+    
+    cell_types = [
+      (nnx.SimpleCell, {'in_features': 4, 'hidden_features': 4}),
+      (nnx.LSTMCell, {'in_features': 4, 'hidden_features': 4}),
+      (nnx.OptimizedLSTMCell, {'in_features': 4, 'hidden_features': 4}),
+      (nnx.GRUCell, {'in_features': 4, 'hidden_features': 4}),
+    ]
+
+    for cell_cls, kwargs in cell_types:
+      with self.subTest(cell_cls=cell_cls.__name__):
+        model = cell_cls(**kwargs, rngs=rngs)
+        carry = model.initialize_carry((1, 4), rngs=rngs)
+        x = jnp.ones((1, 4))
+        # Just verify it accepts out_sharding=None without error
+        out = model(carry, x, out_sharding=None)
+        self.assertLen(out, 2)  # All cells return (new_carry, output) or equivalent structure
+
+
 if __name__ == '__main__':
   absltest.main()

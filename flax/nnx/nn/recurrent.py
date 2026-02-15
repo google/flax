@@ -193,7 +193,7 @@ class LSTMCell(RNNCellBase):
     self.carry_init = carry_init
 
   def __call__(
-    self, carry: tuple[Array, Array], inputs: Array
+    self, carry: tuple[Array, Array], inputs: Array, *, out_sharding=None
   ) -> tuple[tuple[Array, Array], Array]:  # type: ignore[override]
     r"""A long short-term memory (LSTM) cell.
 
@@ -202,15 +202,16 @@ class LSTMCell(RNNCellBase):
         initialized using ``LSTMCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
+      out_sharding: sharding to apply to the output of each Linear layer.
 
     Returns:
       A tuple with the new carry and the output.
     """
     c, h = carry
-    i = self.gate_fn(self.ii(inputs) + self.hi(h))
-    f = self.gate_fn(self.if_(inputs) + self.hf(h))
-    g = self.activation_fn(self.ig(inputs) + self.hg(h))
-    o = self.gate_fn(self.io(inputs) + self.ho(h))
+    i = self.gate_fn(self.ii(inputs, out_sharding=out_sharding) + self.hi(h, out_sharding=out_sharding))
+    f = self.gate_fn(self.if_(inputs, out_sharding=out_sharding) + self.hf(h, out_sharding=out_sharding))
+    g = self.activation_fn(self.ig(inputs, out_sharding=out_sharding) + self.hg(h, out_sharding=out_sharding))
+    o = self.gate_fn(self.io(inputs, out_sharding=out_sharding) + self.ho(h, out_sharding=out_sharding))
     new_c = f * c + i * g
     new_h = o * self.activation_fn(new_c)
     return (new_c, new_h), new_h
@@ -371,7 +372,7 @@ class OptimizedLSTMCell(RNNCellBase):
     self.carry_init = carry_init
 
   def __call__(
-    self, carry: tuple[Array, Array], inputs: Array
+    self, carry: tuple[Array, Array], inputs: Array, *, out_sharding=None
   ) -> tuple[tuple[Array, Array], Array]:  # type: ignore[override]
     r"""An optimized long short-term memory (LSTM) cell.
 
@@ -380,6 +381,7 @@ class OptimizedLSTMCell(RNNCellBase):
         ``LSTMCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
+      out_sharding: sharding to apply to the output of each Linear layer.
 
     Returns:
       A tuple with the new carry and the output.
@@ -387,7 +389,7 @@ class OptimizedLSTMCell(RNNCellBase):
     c, h = carry
 
     # Compute combined transformations for inputs and hidden state
-    y = self.dense_i(inputs) + self.dense_h(h)
+    y = self.dense_i(inputs, out_sharding=out_sharding) + self.dense_h(h, out_sharding=out_sharding)
 
     # Split the combined transformations into individual gates
     i, f, g, o = jnp.split(y, indices_or_sections=4, axis=-1)
@@ -534,8 +536,21 @@ class SimpleCell(RNNCellBase):
 
     self.carry_init = carry_init
 
-  def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]:  # type: ignore[override]
-    new_carry = self.dense_i(inputs) + self.dense_h(carry)
+  def __call__(self, carry: Array, inputs: Array, *, out_sharding=None) -> tuple[Array, Array]:  # type: ignore[override]
+    """Simple RNN cell.
+
+    Args:
+      carry: the hidden state of the RNN cell,
+        initialized using ``SimpleCell.initialize_carry``.
+      inputs: an ndarray with the input for the current time step.
+        All dimensions except the final are considered batch dimensions.
+      out_sharding: the sharding of the output. If None, the output is not
+        sharded.
+
+    Returns:
+      A tuple with the new carry and the output.
+    """
+    new_carry = self.dense_i(inputs, out_sharding=out_sharding) + self.dense_h(carry, out_sharding=out_sharding)
     if self.residual:
       new_carry += carry
     new_carry = self.activation_fn(new_carry)
@@ -691,7 +706,7 @@ class GRUCell(RNNCellBase):
 
     self.carry_init = carry_init
 
-  def __call__(self, carry: Array, inputs: Array) -> tuple[Array, Array]:  # type: ignore[override]
+  def __call__(self, carry: Array, inputs: Array, *, out_sharding=None) -> tuple[Array, Array]:  # type: ignore[override]
     """Gated recurrent unit (GRU) cell.
 
     Args:
@@ -699,6 +714,7 @@ class GRUCell(RNNCellBase):
           initialized using ``GRUCell.initialize_carry``.
         inputs: an ndarray with the input for the current time step.
           All dimensions except the final are considered batch dimensions.
+        out_sharding: sharding to apply to the output of each Linear layer.
 
     Returns:
         A tuple with the new carry and the output.
@@ -706,8 +722,8 @@ class GRUCell(RNNCellBase):
     h = carry
 
     # Compute combined transformations for inputs and hidden state
-    x_transformed = self.dense_i(inputs)
-    h_transformed = self.dense_h(h)
+    x_transformed = self.dense_i(inputs, out_sharding=out_sharding)
+    h_transformed = self.dense_h(h, out_sharding=out_sharding)
 
     # Split the combined transformations into individual components
     xi_r, xi_z, xi_n = jnp.split(x_transformed, 3, axis=-1)
