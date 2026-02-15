@@ -1029,7 +1029,7 @@ class TestGraphUtils(parameterized.TestCase):
         self.ls.append(jnp.array(1))
 
     with self.assertRaisesRegex(
-        ValueError, 'Found unexpected Arrays on value of type'
+        ValueError, 'Found unexpected data on value of type'
     ):
       m = Foo()
 

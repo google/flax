@@ -939,9 +939,34 @@ class TestModuleDataclass(absltest.TestCase):
 
     with self.assertRaisesRegex(
       ValueError,
-      'Found unexpected Arrays on value of type',
+      'Found unexpected data on value of type',
     ):
       m = Bar(a=jnp.array(3))
+
+  def test_variable_in_static_list(self):
+    @nnx.dataclass
+    class Foo(nnx.Module):
+      filters: list
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found unexpected data on value of type',
+    ):
+      Foo([nnx.Variable(1)])
+
+  def test_module_in_static_list(self):
+    class Bar(nnx.Module):
+      pass
+
+    @nnx.dataclass
+    class Foo(nnx.Module):
+      filters: list
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found unexpected data on value of type',
+    ):
+      Foo([Bar()])
 
   def test_post_init(self):
 
