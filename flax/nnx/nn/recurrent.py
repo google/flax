@@ -544,8 +544,7 @@ class SimpleCell(RNNCellBase):
         initialized using ``SimpleCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
-      out_sharding: the sharding of the output. If None, the output is not
-        sharded.
+      out_sharding: sharding to apply to the output of each Linear layer.
 
     Returns:
       A tuple with the new carry and the output.
