@@ -255,8 +255,8 @@ def dot_product_attention(
       the logits to mask out the non-causal parts of the attention matrix,
       but other implementations like cudnn will avoid computing the
       non-causal regions, providing speedups.
-    preferred_element_type: Optional parameter controls the data type output by
-      the dot product.
+    preferred_element_type: numerical precision of the computation, see
+      `jax.lax.dot_general` for details.
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
