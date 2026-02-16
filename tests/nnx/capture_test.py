@@ -198,5 +198,115 @@ class TestCapture(absltest.TestCase):
       self.assertIn('pre_act', intms)
       np.testing.assert_allclose(jnp.sin(intms['pre_act']), y)
 
+  def test_method_outputs_single_module(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
+      def __call__(self, x):
+        return x @ self.w
+      def helper(self, x):
+        return jnp.sin(x)
+
+    model = Foo(8)
+    x = jnp.ones((4, 8))
+
+    with nnx.capture_intermediates(model, method_outputs=True):
+      y = model(x)
+      z = model.helper(y)
+      intms = nnx.get_intermediates()
+
+    self.assertIn('', intms)
+    self.assertIn('helper', intms)
+    np.testing.assert_allclose(intms[''], y)
+    np.testing.assert_allclose(intms['helper'], z)
+
+  def test_method_outputs_nested_modules(self):
+    class Inner(nnx.Module):
+      def __init__(self, dim, rngs):
+        self.w = nnx.Param(jax.random.normal(rngs.params(), (dim, dim)))
+      def __call__(self, x):
+        return x @ self.w
+      def process(self, x):
+        return jnp.sin(x)
+
+    class Outer(nnx.Module):
+      def __init__(self, rngs):
+        self.inner1 = Inner(8, rngs)
+        self.inner2 = Inner(8, rngs)
+      def __call__(self, x):
+        x = self.inner1(x)
+        x = self.inner2.process(x)
+        return x
+
+    model = Outer(nnx.Rngs(0))
+    x = jnp.ones((4, 8))
+
+    with nnx.capture_intermediates(model, method_outputs=True):
+      y = model(x)
+      intms = nnx.get_intermediates()
+
+    self.assertIn('', intms)
+    self.assertIn('inner1/', intms)
+    self.assertIn('inner2/process', intms)
+    self.assertEqual(intms['inner1/'].shape, (4, 8))
+    self.assertEqual(intms['inner2/process'].shape, (4, 8))
+
+  def test_method_outputs_with_jit(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
+      def __call__(self, x):
+        return x @ self.w
+
+    model = Foo(8)
+    x = jnp.ones((4, 8))
+
+    @jax.jit
+    def run(model, x):
+      with nnx.capture_intermediates(model, method_outputs=True):
+        y = model(x)
+        return y, nnx.get_intermediates()
+
+    y, intms = run(model, x)
+    self.assertIn('', intms)
+    np.testing.assert_allclose(intms[''], y)
+
+  def test_method_outputs_without_module_arg(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
+      def __call__(self, x):
+        return x @ self.w
+
+    model = Foo(8)
+    x = jnp.ones((4, 8))
+
+    with nnx.capture_intermediates(method_outputs=True):
+      y = model(x)
+      intms = nnx.get_intermediates()
+
+    self.assertEqual(len(intms), 0)
+
+  def test_method_outputs_mixed_with_capture_fwd(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
+      def __call__(self, x):
+        x = x @ self.w
+        self.capture_fwd('intermediate', x)
+        return jnp.sin(x)
+
+    model = Foo(8)
+    x = jnp.ones((4, 8))
+
+    with nnx.capture_intermediates(model, method_outputs=True):
+      y = model(x)
+      intms = nnx.get_intermediates()
+
+    self.assertIn('', intms)
+    self.assertIn('intermediate', intms)
+    np.testing.assert_allclose(intms[''], y)
+    np.testing.assert_allclose(jnp.sin(intms['intermediate']), y)
+
 if __name__ == '__main__':
   absltest.main()

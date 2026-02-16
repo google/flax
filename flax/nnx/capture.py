@@ -7,16 +7,16 @@ from threading import local
 BOXES = local()
 
 @contextmanager
-def capture_intermediates(module=None):
+def capture_intermediates(module=None, method_outputs=False):
     if not hasattr(BOXES, 'local'):
      BOXES.local = []
     BOXES.local.append(Box({}))
-    if module: module._save_paths()
+    if module: module._save_paths(method_outputs=method_outputs)
     try:
         yield
     finally:
         BOXES.local.pop()
-        if module: module._del_paths()
+        if module: module._del_paths(method_outputs=method_outputs)
 
 def capture_fwd(name, value):
     "Record an intermediate value"
