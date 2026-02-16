@@ -2260,7 +2260,8 @@ def state(
   node,
   *filters: filterlib.Filter,
 ) -> tp.Union[GraphState, tuple[GraphState, ...]]:
-  """Similar to :func:`split` but only returns the :class:`State`'s indicated by the filters.
+  """Similar to :func:`flax.nnx.split` but only returns the :class:`flax.nnx.State`'s indicated
+  by the NNX ``Filter``'s (``flax.nnx.filterlib``).
 
   Example usage::
 
@@ -2285,9 +2286,9 @@ def state(
 
   Args:
     node: A graph node object.
-    *filters: One or more :class:`Variable` objects to filter by.
+    *filters: One or more :class:`flax.nnx.Variable` objects to filter by.
   Returns:
-    One or more :class:`State` mappings.
+    One or more :class:`flax.nnx.State` mappings.
   """
   _, flat_state = flatten(node)
   state = flat_state.to_nested_state()
