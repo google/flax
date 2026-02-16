@@ -1,76 +1,46 @@
-# Copyright 2024 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-from __future__ import annotations
-
-import contextlib
-import dataclasses
-import threading
-import typing as tp
-
+import jax
+from contextlib import contextmanager
 from jax._src.hijax import Box
+from functools import partial
+from threading import local
 
-from flax.nnx.module import Module, CAPTURE_BOX_NAME
-from flax import traverse_util
+BOXES = local()
 
+@contextmanager
+def capture_intermediates(module=None):
+    if not hasattr(BOXES, 'local'):
+     BOXES.local = []
+    BOXES.local.append(Box({}))
+    if module: module._save_paths()
+    try:
+        yield
+    finally:
+        BOXES.local.pop()
+        if module: module._del_paths()
 
-@dataclasses.dataclass
-class CaptureContext(threading.local):
-  model: Module
+def capture_fwd(name, value):
+    "Record an intermediate value"
+    if len(BOXES.local) > 0:
+        box = BOXES.local[-1]
+        box.set({**box.get(), name: jax.lax.stop_gradient(value)})
+    else:
+        raise ValueError("`capture_fwd` must be called within a `capture_intermediates` context.")
 
-  def extract_boxes(self, remove: bool = True):
-    if self not in CAPTURE_CONTEXTS:
-      raise ValueError('`extract_boxes` only works inside the capture context.')
-    return extract_boxes(self.model, remove=remove)
+def get_intermediates():
+  if BOXES.local:
+    return BOXES.local[-1].get()
+  else:
+    raise ValueError("`get_intermediates` must be called within a `capture_intms`")
 
+@partial(jax.custom_vjp, nondiff_argnums=(0,))
+def capture_bwd(name, a):
+  "Record the intermediate gradient of the given value"
+  return a
 
-CAPTURE_CONTEXTS = []
+def _fn_fwd(name, a):
+    return a, None
 
-
-@contextlib.contextmanager
-def capture_intms(model: Module):
-  context = CaptureContext(model)
-  add_boxes(context.model)
-  CAPTURE_CONTEXTS.append(context)
-  boxes: dict[str, tp.Any] = {}
-  try:
-    yield boxes
-  finally:
-    boxes.update(context.extract_boxes(remove=True))
-    CAPTURE_CONTEXTS.pop()
-    return boxes
-
-
-def add_boxes(model: Module):
-  for path, m in model.iter_modules():
-    setattr(m, CAPTURE_BOX_NAME, Box({}))
-
-
-def extract_boxes(model: Module, remove: bool = True) -> dict[str, tp.Any]:
-  boxes = {}
-  for path, m in model.iter_modules():
-    if hasattr(m, CAPTURE_BOX_NAME):
-      assert isinstance((box := getattr(m, CAPTURE_BOX_NAME)), Box)
-      captures = box.get()
-      for k, v in captures.items():
-        boxes[(*path, k)] = v
-      if remove:
-        delattr(m, CAPTURE_BOX_NAME)
-  return traverse_util.unflatten_dict(boxes)
-
-
-def remove_boxes(model: Module):
-  for path, m in model.iter_modules():
-    if hasattr(m, CAPTURE_BOX_NAME):
-      delattr(m, CAPTURE_BOX_NAME)
-
+def _fn_bwd(name, _, g):
+    capture_fwd(name, g)
+    return g,
+capture_bwd.defvjp(_fn_fwd, _fn_bwd)

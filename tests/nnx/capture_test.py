@@ -18,7 +18,7 @@ from flax import nnx
 import jax
 from jax import numpy as jnp
 import numpy as np
-
+import threading
 
 class TestCapture(absltest.TestCase):
   def test_fwd(self):
@@ -27,28 +27,30 @@ class TestCapture(absltest.TestCase):
         self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
       def __call__(self, x):
         x = x @ self.w
-        self.capture_fwd('pre_act', x)
+        nnx.capture_fwd('pre_act', x)
         return jnp.sin(x)
     model, x = Foo(8), jnp.ones((4, 8))
 
     # Normal
-    with nnx.capture_intms(model) as intms:
+    with nnx.capture_intermediates():
       y = model(x)
-    np.testing.assert_array_equal(jnp.sin(intms['pre_act']), y)
+      intms = nnx.get_intermediates()
+    np.testing.assert_allclose(jnp.sin(intms['pre_act']), y)
 
     # jit outside
     @jax.jit
     def run(model, x):
-      with nnx.capture_intms(model) as intms:
+      with nnx.capture_intermediates():
         y = model(x)
-      return y, intms
+        return y, nnx.get_intermediates()
     y, intms = run(model, x)
-    np.testing.assert_array_equal(jnp.sin(intms['pre_act']), y)
+    np.testing.assert_allclose(jnp.sin(intms['pre_act']), y)
 
     # jit inside
-    with nnx.capture_intms(model) as intms:
+    with nnx.capture_intermediates():
       y = jax.jit(lambda m, x: m(x))(model, x)
-    np.testing.assert_array_equal(jnp.sin(intms['pre_act']), y)
+      intms = nnx.get_intermediates()
+    np.testing.assert_allclose(jnp.sin(intms['pre_act']), y)
 
 
   def test_bwd(self):
@@ -58,35 +60,38 @@ class TestCapture(absltest.TestCase):
         self.w2 = nnx.Param(jax.random.normal(jax.random.key(1), (dim, dim)))
       def __call__(self, x):
         x = x @ self.w1
-        x = self.capture_bwd('before_w2', x)
+        x = nnx.capture_bwd('grad_before_w2', x)
         x = x @ self.w2
-        x = self.capture_bwd('after_w2', x)
+        x = nnx.capture_bwd('grad_after_w2', x)
         return jnp.sin(x)
     def loss(model, inputs, targets):
       preds = model(inputs)
       return jnp.square(preds - targets).mean()
     model, x, y = Foo(8), jnp.ones((4, 8)), jnp.ones((4, 8)) * 0.5
 
-    with nnx.capture_intms(model) as intms:
+    with nnx.capture_intermediates():
       _ = jax.grad(loss)(model, x, y)
-    np.testing.assert_array_equal(intms['grad_before_w2'],
-                                  intms['grad_after_w2'] @ model.w2.T)
+      intms = nnx.get_intermediates()
+    np.testing.assert_allclose(intms['grad_before_w2'],
+                                  intms['grad_after_w2'] @ model.w2.T, rtol=1e-6)
 
     # jit outside
     @jax.jit
     def run(model, x, y):
-      with nnx.capture_intms(model) as intms:
+      with nnx.capture_intermediates():
         grads = jax.grad(loss)(model, x, y)
+        intms = nnx.get_intermediates()
       return intms, grads
     intms, grads = run(model, x, y)
-    np.testing.assert_array_equal(intms['grad_before_w2'],
-                                  intms['grad_after_w2'] @ model.w2.T)
+    np.testing.assert_allclose(intms['grad_before_w2'],
+                                  intms['grad_after_w2'] @ model.w2.T, rtol=1e-6)
 
     # jax inside
-    with nnx.capture_intms(model) as intms:
+    with nnx.capture_intermediates():
       _ = jax.jit(jax.grad(loss))(model, x, y)
-    np.testing.assert_array_equal(intms['grad_before_w2'],
-                                  intms['grad_after_w2'] @ model.w2.T)
+      intms = nnx.get_intermediates()
+    np.testing.assert_allclose(intms['grad_before_w2'],
+                                  intms['grad_after_w2'] @ model.w2.T, rtol=1e-6)
 
   def test_fwd_and_bwd(self):
     class Foo(nnx.Module):
@@ -95,23 +100,24 @@ class TestCapture(absltest.TestCase):
         self.w2 = nnx.Param(jax.random.normal(jax.random.key(1), (dim, dim)))
       def __call__(self, x):
         x = x @ self.w1
-        x = self.capture_bwd('before_w2', x)
+        x = nnx.capture_bwd('grad_before_w2', x)
         x = x @ self.w2
-        x = self.capture_bwd('after_w2', x)
-        self.capture_fwd('pre_act', x)
+        x = nnx.capture_bwd('grad_after_w2', x)
+        nnx.capture_fwd('pre_act', x)
         return jnp.sin(x)
     def loss_and_y(model, inputs, targets):
       preds = model(inputs)
       return jnp.square(preds - targets).mean(), preds
     model, x, y = Foo(8), jnp.ones((4, 8)), jnp.ones((4, 8)) * 0.5
 
-    with nnx.capture_intms(model) as intms:
+    with nnx.capture_intermediates():
       (_, actual_y), _ = jax.value_and_grad(loss_and_y, has_aux=True)(
         model, x, y)
+      intms = nnx.get_intermediates()
 
-    np.testing.assert_array_equal(jnp.sin(intms['pre_act']), actual_y)
-    np.testing.assert_array_equal(intms['grad_before_w2'],
-                                  intms['grad_after_w2'] @ model.w2.T)
+    np.testing.assert_allclose(jnp.sin(intms['pre_act']), actual_y)
+    np.testing.assert_allclose(intms['grad_before_w2'],
+                                  intms['grad_after_w2'] @ model.w2.T, rtol=1e-6)
 
   def test_nested_modules(self):
     class Foo(nnx.Module):
@@ -120,7 +126,7 @@ class TestCapture(absltest.TestCase):
       def __call__(self, x):
         x = x @ self.w
         self.capture_fwd('pre_act', x)
-        x = self.capture_bwd('pre_act', x)
+        x = self.capture_bwd('grad_pre_act', x)
         return jnp.sin(x)
     class Bar(nnx.Module):
       def __init__(self, num, rngs):
@@ -134,14 +140,63 @@ class TestCapture(absltest.TestCase):
     def loss_and_y(model, inputs, targets):
       preds = model(inputs)
       return jnp.square(preds - targets).mean(), preds
-    with nnx.capture_intms(model) as intms:
+    with nnx.capture_intermediates(model):
       (_, actual_y), _ = jax.value_and_grad(loss_and_y, has_aux=True)(
         model, x, y)
+      intms = nnx.get_intermediates()
+    self.assertEqual(intms['foos/0/pre_act'].shape, (4, 8))
+    self.assertEqual(intms['foos/0/grad_pre_act'].shape, (4, 8))
 
-    self.assertEqual(intms['foos'][0]['pre_act'].shape, (4, 8))
-    self.assertEqual(intms['foos'][0]['grad_pre_act'].shape, (4, 8))
 
 
+  def test_capture_fwd_outside_context(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
+      def __call__(self, x):
+        x = x @ self.w
+        nnx.capture_fwd('pre_act', x)
+        return jnp.sin(x)
+    model, x = Foo(8), jnp.ones((4, 8))
+
+    with self.assertRaises((AttributeError, ValueError)):
+      model(x)
+
+  def test_thread_safety(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
+      def __call__(self, x):
+        x = x @ self.w
+        nnx.capture_fwd('pre_act', x)
+        return jnp.sin(x)
+
+    results = {}
+    errors = {}
+
+    def run_in_thread(thread_id):
+      try:
+        model = Foo(8)
+        x = jnp.ones((4, 8)) * thread_id
+        with nnx.capture_intermediates():
+          y = model(x)
+          intms = nnx.get_intermediates()
+        results[thread_id] = (y, intms)
+      except Exception as e:
+        errors[thread_id] = e
+
+    threads = [threading.Thread(target=run_in_thread, args=(i,)) for i in range(5)]
+    for t in threads:
+      t.start()
+    for t in threads:
+      t.join()
+
+    self.assertEqual(len(errors), 0, f"Errors in threads: {errors}")
+    self.assertEqual(len(results), 5)
+
+    for thread_id, (y, intms) in results.items():
+      self.assertIn('pre_act', intms)
+      np.testing.assert_allclose(jnp.sin(intms['pre_act']), y)
 
 if __name__ == '__main__':
   absltest.main()

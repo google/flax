@@ -28,6 +28,7 @@ from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
 from flax.nnx.graph import GraphState
 from flax.typing import Key, Path, PathParts
+from flax.nnx.capture import capture_fwd, capture_bwd
 import warnings
 
 A = tp.TypeVar('A')
@@ -40,9 +41,6 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 StateMapping = tp.Mapping[Path, tp.Any]
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
-
-
-CAPTURE_BOX_NAME = '_capture_box'
 
 
 class ModuleMeta(PytreeMeta):
@@ -82,39 +80,26 @@ class Module(Pytree, metaclass=ModuleMeta):
     >>> y = model(x)
   """
 
-  def capture_fwd(self, name: str, value: jax.Array, prefix = ''):
-    """Record the intermediate gradient of the given value.
+  def capture_fwd(self, name: str, value: jax.Array):
+    "Record an intermediate value"
+    if hasattr(self, '__module_path__') and self.__module_path__:
+      name = self.__module_path__ + '/' + name
+    capture_fwd(name, value)
 
-    NOTE: This is a work-in-progress feature! Doesn't work in `vmap` or `scan`.
+  def capture_bwd(self, name: str, value: jax.Array):
+    "Record the intermediate gradient of the given value"
+    if hasattr(self, '__module_path__') and self.__module_path__:
+      name = self.__module_path__ + '/' + name
+    return capture_bwd(name, value)
 
-    Only works inside an ``nnx.capture_intermediates`` context.
-    """
-    box = getattr(self, CAPTURE_BOX_NAME, None)
-    if box is not None:
-      box.set({**box.get(), f'{prefix}{name}': jax.lax.stop_gradient(value)})
-    return value
+  def _save_paths(self):
+    "Add a `__module_path__` attribute to all sub-modules relative to the current module"
+    for path, m in iter_modules(self):
+      m.__module_path__ = "/".join(str(p) for p in path)
 
-  def capture_bwd(self, name: str, value: jax.Array, prefix = 'grad_') -> jax.Array:
-    """Record the intermediate gradient of the given value.
-
-    NOTE: This is a work-in-progress feature! Doesn't work in `vmap` or `scan`.
-
-    Only works inside an ``nnx.capture_intermediates`` context. Must use this output value for future computations.
-    """
-    box = getattr(self, CAPTURE_BOX_NAME, None)
-    if box is None:
-      return value
-    @jax.custom_vjp
-    def _fn(x):
-      return x
-    def _fn_fwd(x):
-      return x, None
-    def _fn_bwd(_, g):
-      box.set({**box.get(), f'{prefix}{name}': g})
-      return g,
-    _fn.defvjp(_fn_fwd, _fn_bwd)
-    return _fn(value)
-
+  def _del_paths(self):
+    for _, m in iter_modules(self):
+      del m.__module_path__
 
   def sow(
       self,
