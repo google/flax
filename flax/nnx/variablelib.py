@@ -1766,6 +1766,14 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       else:
         self._raw_value[index] = value  # type: ignore
 
+    if (
+      hasattr(self._raw_value, 'sharding')
+      and isinstance(self._raw_value.sharding, NamedSharding)
+      and any(self._raw_value.sharding.spec)
+    ):
+      self._var_metadata['out_sharding'] = self._raw_value.sharding.spec
+      self._var_metadata['mesh'] = self._raw_value.sharding.mesh
+
   def add_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
     if 'on_add_axis' in self._var_metadata:
       self._var_metadata['on_add_axis'](self, axis_index, axis_name)
