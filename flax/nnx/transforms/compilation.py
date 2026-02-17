@@ -355,6 +355,18 @@ def jit(
   if was_bound:
     _raise_bound_method_error('jit')
 
+  if not graph:
+    if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_shardings)):
+      raise ValueError(
+        '`in_shardings` cannot contain `StateSharding` objects '
+        'when `graph=False`'
+      )
+    if any(isinstance(x, StateSharding) for x in jax.tree.leaves(out_shardings)):
+      raise ValueError(
+        '`out_shardings` cannot contain `StateSharding` objects '
+        'when `graph=False`'
+      )
+
   wrapped_cls = JitWrapped if graph else TreeJitWrapped
   return wrapped_cls(
     fun_unbound,
@@ -1243,6 +1255,17 @@ def shard_map(
     _raise_bound_method_error('shard_map')
 
   if not graph:
+    if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_specs)):
+      raise ValueError(
+        '`in_specs` cannot contain `StateSharding` objects '
+        'when `graph=False`'
+      )
+    if any(isinstance(x, StateSharding) for x in jax.tree.leaves(out_specs)):
+      raise ValueError(
+        '`out_specs` cannot contain `StateSharding` objects '
+        'when `graph=False`'
+      )
+
     tree_shard_map_fn = jax.shard_map(
         TreeShardMapFn(f_unbound),
         mesh=mesh,

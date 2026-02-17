@@ -364,6 +364,17 @@ def vmap(
     _raise_bound_method_error('vmap')
 
   if not graph:
+    if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
+      raise ValueError(
+        '`in_axes` cannot contain `StateAxes` objects '
+        'when `graph=False`'
+      )
+    if any(isinstance(x, StateAxes) for x in jax.tree.leaves(out_axes)):
+      raise ValueError(
+        '`out_axes` cannot contain `StateAxes` objects '
+        'when `graph=False`'
+      )
+
     vmapped_fn = jax.vmap(
       TreeVmapFn(f_unbound),
       in_axes=in_axes,
