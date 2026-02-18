@@ -352,6 +352,10 @@ class MultiHeadAttention(Module):
     qkv_features: dimension of the key, query, and value.
     out_features: dimension of the last projection.
     in_kv_features: number of input features for computing key and value.
+    num_key_value_heads: number of key and value heads. If None, it defaults to
+      ``num_heads``. If set to a value smaller than ``num_heads``, Grouped Query
+      Attention (GQA) is used. ``num_heads`` must be divisible by
+      ``num_key_value_heads``.
     dtype: the dtype of the computation (default: infer from inputs and params)
     param_dtype: the dtype passed to parameter initializers (default: float32)
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
@@ -682,8 +686,7 @@ class MultiHeadAttention(Module):
       if expected_shape != key.shape:
         raise ValueError(
           'Autoregressive cache shape error, '
-          'expected key shape %s instead got %s.'
-          % (expected_shape, key.shape)
+          f'expected key shape {expected_shape} instead got {key.shape}.'
         )
       # update key, value caches with our new 1d spatial slices
       cur_index = self.cache_index[...]
