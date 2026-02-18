@@ -406,6 +406,7 @@ class MultiHeadAttention(Module):
     in_features: int,
     qkv_features: int | None = None,
     out_features: int | None = None,
+    num_key_value_heads: int | None = None,
     in_kv_features: int | None = None,
     *,
     dtype: Dtype | None = None,
@@ -450,6 +451,16 @@ class MultiHeadAttention(Module):
     self.in_kv_features = (
       in_kv_features if in_kv_features is not None else in_features
     )
+    self.num_key_value_heads = (
+        num_key_value_heads if num_key_value_heads is not None else num_heads
+    )
+
+    if self.num_heads % self.num_key_value_heads != 0:
+        raise ValueError(
+            f"num_heads ({self.num_heads}) must be divisible by "
+            f"num_key_value_heads ({self.num_key_value_heads})."
+        )
+
     self.dtype = dtype
     self.param_dtype = param_dtype
     self.broadcast_dropout = broadcast_dropout
@@ -478,7 +489,7 @@ class MultiHeadAttention(Module):
 
     linear_general = functools.partial(
       LinearGeneral,
-      out_features=(self.num_heads, self.head_dim),
+      # out_features is removed here so we can customize it below for GQA
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       kernel_init=kernel_init,
@@ -491,11 +502,28 @@ class MultiHeadAttention(Module):
       kernel_metadata=kernel_metadata,
       bias_metadata=bias_metadata,
     )
+
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
-    self.query = linear_general(self.in_features, rngs=rngs)
-    self.key = linear_general(self.in_kv_features, rngs=rngs)
-    self.value = linear_general(self.in_kv_features, rngs=rngs)
+
+    # 1. Query Projection: Uses standard num_heads
+    self.query = linear_general(
+        self.in_features,
+        out_features=(self.num_heads, self.head_dim),
+        rngs=rngs
+    )
+
+    # 2. Key/Value Projections: Uses num_key_value_heads (GQA)
+    self.key = linear_general(
+        self.in_kv_features,
+        out_features=(self.num_key_value_heads, self.head_dim),
+        rngs=rngs
+    )
+    self.value = linear_general(
+        self.in_kv_features,
+        out_features=(self.num_key_value_heads, self.head_dim),
+        rngs=rngs
+    )
 
     self.query_ln: LayerNorm | None
     self.key_ln: LayerNorm | None
@@ -646,16 +674,16 @@ class MultiHeadAttention(Module):
       (
         *batch_dims,
         max_length,
-        num_heads,
+        num_kv_heads,
         depth_per_head,
       ) = self.cached_key.shape
-      # shape check of cached keys against query input
-      expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
-      if expected_shape != query.shape:
+      # shape check of cached keys against key input
+      expected_shape = tuple(batch_dims) + (1, num_kv_heads, depth_per_head)
+      if expected_shape != key.shape:
         raise ValueError(
           'Autoregressive cache shape error, '
-          'expected query shape %s instead got %s.'
-          % (expected_shape, query.shape)
+          'expected key shape %s instead got %s.'
+          % (expected_shape, key.shape)
         )
       # update key, value caches with our new 1d spatial slices
       cur_index = self.cache_index[...]
@@ -747,7 +775,7 @@ class MultiHeadAttention(Module):
       >>> model_nnx.init_cache(x.shape)
       >>> out_nnx = model_nnx(x)
     """
-    cache_shape = (*input_shape[:-1], self.num_heads, self.head_dim)
+    cache_shape = (*input_shape[:-1], self.num_key_value_heads, self.head_dim)
     self.cached_key = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cached_value = nnx.Cache(jnp.zeros(cache_shape, dtype))
     self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
@@ -791,7 +819,7 @@ class MultiHeadAttention(Module):
           batch_size = (batch_size,)
 
         # initialize cache
-        cache_shape = (*batch_size, max_length, self.num_heads, self.head_dim)
+        cache_shape = (*batch_size, max_length, self.num_key_value_heads, self.head_dim)
         self.cached_key = nnx.Cache(jnp.zeros(cache_shape, self.dtype))
         self.cached_value = nnx.Cache(jnp.zeros(cache_shape, self.dtype))
         self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
