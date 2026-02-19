@@ -15,57 +15,115 @@
 
 from typing import Any
 
-from absl import flags
+from flax import linen as nn
+from flax.benchmarks.tracing import tracing_benchmark
+from flax.examples.seq2seq import models
+from flax.examples.seq2seq.configs import default as seq2seq_config
 from flax.examples.seq2seq.input_pipeline import CharacterTable
+from flax.examples.seq2seq.input_pipeline import get_sequence_lengths
+from flax.examples.seq2seq.input_pipeline import mask_sequences
+from flax.training import train_state
+import google_benchmark
 import jax
+import jax.numpy as jnp
 import ml_collections
+import optax
+
+
+def cross_entropy_loss(logits, labels, lengths):
+  xe = jnp.sum(nn.log_softmax(logits) * labels, axis=-1)
+  masked_xe = jnp.mean(mask_sequences(xe, lengths))
+  return -masked_xe
+
+
+def compute_metrics(logits, labels, eos_id):
+  lengths = get_sequence_lengths(labels, eos_id)
+  loss = cross_entropy_loss(logits, labels, lengths)
+  token_accuracy = jnp.argmax(logits, -1) == jnp.argmax(labels, -1)
+  sequence_accuracy = (
+      jnp.sum(mask_sequences(token_accuracy, lengths), axis=-1) == lengths
+  )
+  accuracy = jnp.mean(sequence_accuracy)
+  metrics = {
+      'loss': loss,
+      'accuracy': accuracy,
+  }
+  return metrics
+
+
+@jax.jit
+def seq2seq_train_step(state, batch, lstm_rng, eos_id):
+  labels = batch['answer'][:, 1:]
+  lstm_key = jax.random.fold_in(lstm_rng, state.step)
+
+  def loss_fn(params):
+    logits, _ = state.apply_fn(
+        {'params': params},
+        batch['query'],
+        batch['answer'],
+        rngs={'lstm': lstm_key},
+    )
+    loss = cross_entropy_loss(
+        logits, labels, get_sequence_lengths(labels, eos_id)
+    )
+    return loss, logits
+
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  (_, logits), grads = grad_fn(state.params)
+  state = state.apply_gradients(grads=grads)
+  metrics = compute_metrics(logits, labels, eos_id)
+
+  return state, metrics
 
 
 def get_fake_batch(batch_size: int, ctable: CharacterTable) -> dict[str, Any]:
-  """Returns fake data for the given batch size.
-
-  Args:
-    batch_size: The global batch size to generate.
-    ctable: CharacterTable for encoding.
-
-  Returns:
-    A fake batch dictionary with query and answer one-hot encoded.
-  """
   return ctable.get_batch(batch_size)
 
 
 def get_apply_fn_and_args(
     config: ml_collections.ConfigDict,
 ) -> tuple[Any, tuple[Any, ...], dict[str, Any]]:
-  """Returns the apply function and args for the given config.
-
-  Args:
-    config: The training configuration.
-
-  Returns:
-    A tuple of the apply function, args, kwargs, and any metadata.
-  """
-  # Import train module - it registers its flags at module level
-  # Only delete conflicting flags if the module hasn't been imported yet
-  import sys
-
-  if "flax.examples.seq2seq.train" not in sys.modules:
-    # Undefine flags that conflict between nlp_seq and seq2seq
-    # Both modules define: learning_rate, batch_size, num_train_steps
-    for flag_name in ["learning_rate", "batch_size", "num_train_steps"]:
-      if flag_name in flags.FLAGS:
-        delattr(flags.FLAGS, flag_name)
-
-  from flax.examples.seq2seq import train  # pylint: disable=g-import-not-at-top
-
-  # Set flag values from config (flags are now registered by train module)
-  flags.FLAGS.learning_rate = config.learning_rate
-  flags.FLAGS.batch_size = config.batch_size
-  flags.FLAGS.hidden_size = config.hidden_size
-  flags.FLAGS.max_len_query_digit = config.max_len_query_digit
-
   rng = jax.random.key(0)
   ctable = CharacterTable("0123456789+= ", config.max_len_query_digit)
-  state = train.get_train_state(rng, ctable)
+
+  model = models.Seq2seq(
+      teacher_force=False,
+      hidden_size=config.hidden_size,
+      eos_id=ctable.eos_id,
+      vocab_size=ctable.vocab_size,
+  )
+
+  rng1, rng2 = jax.random.split(rng)
+  params = model.init(
+      {'params': rng1, 'lstm': rng2},
+      jnp.ones(ctable.encoder_input_shape, jnp.float32),
+      jnp.ones(ctable.decoder_input_shape, jnp.float32),
+  )['params']
+
+  tx = optax.adam(config.learning_rate)
+  state = train_state.TrainState.create(
+      apply_fn=model.apply, params=params, tx=tx
+  )
+
   batch = get_fake_batch(config.batch_size, ctable)
-  return train.train_step, (state, batch, rng, ctable.eos_id), {}
+  return seq2seq_train_step, (state, batch, rng, ctable.eos_id), {}
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_seq2seq_trace(state):
+  tracing_benchmark.benchmark_tracing(
+      get_apply_fn_and_args, seq2seq_config.get_config, state
+  )
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_seq2seq_lower(state):
+  tracing_benchmark.benchmark_lowering(
+      get_apply_fn_and_args, seq2seq_config.get_config, state
+  )
+
+
+if __name__ == "__main__":
+  tracing_benchmark.run_benchmarks()

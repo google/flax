@@ -11,136 +11,137 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""OGBG-MolPCBA helper functions for graph neural network benchmarking."""
+"""OGBG-MolPCBA helper functions for benchmarking."""
 
 from typing import Any
 
-from flax.examples.ogbg_molpcba import train
+from clu import metrics
+import flax
+import flax.linen as nn
+from flax.benchmarks.tracing import tracing_benchmark
+from flax.examples.ogbg_molpcba import models
+from flax.examples.ogbg_molpcba.configs import default as ogbg_config
 from flax.training import train_state
+import google_benchmark
 import jax
 import jax.numpy as jnp
 import jraph
 import ml_collections
+import optax
+
+
+def create_model(
+    config: ml_collections.ConfigDict, deterministic: bool
+) -> nn.Module:
+  if config.model == 'GraphNet':
+    return models.GraphNet(
+        latent_size=config.latent_size,
+        num_mlp_layers=config.num_mlp_layers,
+        message_passing_steps=config.message_passing_steps,
+        output_globals_size=config.num_classes,
+        dropout_rate=config.dropout_rate,
+        skip_connections=config.skip_connections,
+        layer_norm=config.layer_norm,
+        use_edge_model=config.use_edge_model,
+        deterministic=deterministic,
+    )
+  if config.model == 'GraphConvNet':
+    return models.GraphConvNet(
+        latent_size=config.latent_size,
+        num_mlp_layers=config.num_mlp_layers,
+        message_passing_steps=config.message_passing_steps,
+        output_globals_size=config.num_classes,
+        dropout_rate=config.dropout_rate,
+        skip_connections=config.skip_connections,
+        layer_norm=config.layer_norm,
+        deterministic=deterministic,
+    )
+  raise ValueError(f'Unsupported model: {config.model}.')
+
+
+def create_optimizer(
+    config: ml_collections.ConfigDict,
+) -> optax.GradientTransformation:
+  if config.optimizer == 'adam':
+    return optax.adam(learning_rate=config.learning_rate)
+  if config.optimizer == 'sgd':
+    return optax.sgd(
+        learning_rate=config.learning_rate, momentum=config.momentum
+    )
+  raise ValueError(f'Unsupported optimizer: {config.optimizer}.')
+
+
+def binary_cross_entropy_with_mask(
+    *, logits: jnp.ndarray, labels: jnp.ndarray, mask: jnp.ndarray
+):
+  assert logits.shape == labels.shape == mask.shape
+  assert len(logits.shape) == 2
+
+  labels = jnp.where(mask, labels, -1)
+
+  positive_logits = logits >= 0
+  relu_logits = jnp.where(positive_logits, logits, 0)
+  abs_logits = jnp.where(positive_logits, logits, -logits)
+  return relu_logits - (logits * labels) + (jnp.log(1 + jnp.exp(-abs_logits)))
+
+
+def predictions_match_labels(
+    *, logits: jnp.ndarray, labels: jnp.ndarray, **kwargs
+) -> jnp.ndarray:
+  del kwargs
+  preds = logits > 0
+  return (preds == labels).astype(jnp.float32)
 
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
-  """Replaces the globals attribute with a constant feature for each graph."""
   return graphs._replace(globals=jnp.ones([graphs.n_node.shape[0], 1]))
 
 
-def get_fake_batch(batch_size: int = 32) -> jraph.GraphsTuple:
-  """Generate a batch of fake molecular graphs.
-
-  Args:
-    batch_size: Number of graphs in the batch.
-
-  Returns:
-    A jraph.GraphsTuple with fake molecular graph data.
-  """
-  # Graph sizes (average nodes and edges per graph from OGBG-MolPCBA)
-  avg_nodes_per_graph = 26
-  avg_edges_per_graph = 56
-
-  # Total nodes and edges in the batch
-  total_nodes = batch_size * avg_nodes_per_graph
-  total_edges = batch_size * avg_edges_per_graph
-
-  # Node features [total_nodes, 9]
-  nodes = jax.random.normal(
-      jax.random.key(0), (total_nodes, 9), dtype=jnp.float32
-  )
-
-  # Edge features [total_edges, 3]
-  edges = jax.random.normal(
-      jax.random.key(1), (total_edges, 3), dtype=jnp.float32
-  )
-
-  # Globals: 128 binary classification tasks per graph
-  globals_features = jax.random.uniform(
-      jax.random.key(2), (batch_size, 128), dtype=jnp.float32
-  )
-
-  # Build edge connectivity
-  senders_list = []
-  receivers_list = []
-  offset = 0
-
-  for i in range(batch_size):
-    # Random edges within this graph
-    graph_senders = (
-        jax.random.randint(
-            jax.random.key(10 + i * 2),
-            (avg_edges_per_graph,),
-            0,
-            avg_nodes_per_graph,
-            dtype=jnp.int32,
-        )
-        + offset
-    )
-
-    graph_receivers = (
-        jax.random.randint(
-            jax.random.key(11 + i * 2),
-            (avg_edges_per_graph,),
-            0,
-            avg_nodes_per_graph,
-            dtype=jnp.int32,
-        )
-        + offset
-    )
-
-    senders_list.append(graph_senders)
-    receivers_list.append(graph_receivers)
-    offset += avg_nodes_per_graph
-
-  senders = jnp.concatenate(senders_list)
-  receivers = jnp.concatenate(receivers_list)
-
-  # Number of nodes/edges per graph
-  n_node = jnp.full((batch_size,), avg_nodes_per_graph, dtype=jnp.int32)
-  n_edge = jnp.full((batch_size,), avg_edges_per_graph, dtype=jnp.int32)
-
-  return jraph.GraphsTuple(
-      nodes=nodes,
-      edges=edges,
-      globals=globals_features,
-      senders=senders,
-      receivers=receivers,
-      n_node=n_node,
-      n_edge=n_edge,
-  )
+def get_predicted_logits(
+    state: train_state.TrainState,
+    graphs: jraph.GraphsTuple,
+    rngs: dict[str, jnp.ndarray] | None,
+) -> jnp.ndarray:
+  pred_graphs = state.apply_fn(state.params, graphs, rngs=rngs)
+  logits = pred_graphs.globals
+  return logits
 
 
-from flax.examples.ogbg_molpcba.train import TrainMetrics, get_predicted_logits, get_valid_mask, binary_cross_entropy_with_mask
+def get_valid_mask(
+    labels: jnp.ndarray, graphs: jraph.GraphsTuple
+) -> jnp.ndarray:
+  labels_mask = ~jnp.isnan(labels)
+  graph_mask = jraph.get_graph_padding_mask(graphs)
+  return labels_mask & graph_mask[:, None]
+
+
+@flax.struct.dataclass
+class TrainMetrics(metrics.Collection):
+  accuracy: metrics.Average.from_fun(predictions_match_labels)
+  loss: metrics.Average.from_output('loss')
 
 
 @jax.jit
-def bench_train_step(
+def ogbg_train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rngs: dict[str, jnp.ndarray],
-) -> tuple[train_state.TrainState, TrainMetrics]:
-  """Performs one update step over the current batch of graphs."""
+) -> tuple[train_state.TrainState, metrics.Collection]:
 
   def loss_fn(params, graphs):
     curr_state = state.replace(params=params)
+
     labels = graphs.globals
+
     graphs = replace_globals(graphs)
+
     logits = get_predicted_logits(curr_state, graphs, rngs)
     mask = get_valid_mask(labels, graphs)
-
-    # Force shapes to match for benchmarking purposes
-    # This ensures the assertion passes even if padding/batching causes slight mismatches
-    min_b = min(logits.shape[0], labels.shape[0], mask.shape[0])
-    min_f = min(logits.shape[1], labels.shape[1], mask.shape[1])
-    logits = logits[:min_b, :min_f]
-    labels = labels[:min_b, :min_f]
-    mask = mask[:min_b, :min_f]
-
     loss = binary_cross_entropy_with_mask(
         logits=logits, labels=labels, mask=mask
     )
     mean_loss = jnp.sum(jnp.where(mask, loss, 0)) / jnp.sum(mask)
+
     return mean_loss, (loss, logits, labels, mask)
 
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
@@ -153,48 +154,74 @@ def bench_train_step(
   return state, metrics_update
 
 
+def get_fake_graphs(config: ml_collections.ConfigDict) -> jraph.GraphsTuple:
+  rng = jax.random.key(0)
+  n_graphs = config.batch_size
+  n_total_nodes = n_graphs * 20
+  n_total_edges = n_graphs * 40
+
+  nodes = jax.random.normal(rng, (n_total_nodes, 9))
+  edges = jax.random.normal(rng, (n_total_edges, 3))
+  senders = jax.random.randint(rng, (n_total_edges,), 0, n_total_nodes)
+  receivers = jax.random.randint(rng, (n_total_edges,), 0, n_total_nodes)
+  n_node = jnp.full((n_graphs,), 20, dtype=jnp.int32)
+  n_edge = jnp.full((n_graphs,), 40, dtype=jnp.int32)
+  globals_ = jax.random.bernoulli(
+      rng, shape=(n_graphs, config.num_classes)
+  ).astype(jnp.float32)
+
+  return jraph.GraphsTuple(
+      nodes=nodes,
+      edges=edges,
+      senders=senders,
+      receivers=receivers,
+      n_node=n_node,
+      n_edge=n_edge,
+      globals=globals_,
+  )
+
+
 def get_apply_fn_and_args(
     config: ml_collections.ConfigDict,
 ) -> tuple[Any, tuple[Any, ...], dict[str, Any]]:
-  """Returns the apply function and args for the given config.
-
-  Args:
-    config: The training configuration.
-
-  Returns:
-    A tuple of the apply function, args, and kwargs.
-  """
   rng = jax.random.key(0)
-
-  # Create model for initialization (deterministic=True)
-  init_model = train.create_model(config, deterministic=True)
-
-  # Initialize with a proper fake batch
-  init_graph = get_fake_batch(batch_size=1)
-  init_graph = replace_globals(init_graph)
-
   rng, init_rng, dropout_rng = jax.random.split(rng, 3)
 
-  # Use jax.jit for init as done in train.py, and pass single RNG
-  init_params = jax.jit(init_model.init)(init_rng, init_graph)
+  graphs = get_fake_graphs(config)
 
-  # Create model for training (deterministic=False)
-  model = train.create_model(config, deterministic=False)
+  init_net = create_model(config, deterministic=True)
+  init_graphs = replace_globals(graphs)
+  params = jax.jit(init_net.init)(init_rng, init_graphs)
 
-  # Create optimizer and state
-  tx = train.create_optimizer(config)
+  tx = create_optimizer(config)
+
+  net = create_model(config, deterministic=False)
   state = train_state.TrainState.create(
-      apply_fn=model.apply,
-      params=init_params,
-      tx=tx,
+      apply_fn=net.apply, params=params, tx=tx
   )
 
-  # Generate batch for benchmarking
-  graphs = get_fake_batch(config.batch_size)
-  graphs = replace_globals(graphs)
+  return (
+      ogbg_train_step,
+      (state, graphs, {'dropout': dropout_rng}),
+      {},
+  )
 
-  # RNGs for dropout
-  rngs = {'dropout': jax.random.fold_in(dropout_rng, 1)}
 
-  # Use bench_train_step
-  return bench_train_step, (state, graphs, rngs), {}
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_ogbg_molpcba_trace(state):
+  tracing_benchmark.benchmark_tracing(
+      get_apply_fn_and_args, ogbg_config.get_config, state
+  )
+
+
+@google_benchmark.register
+@google_benchmark.option.unit(google_benchmark.kMillisecond)
+def test_flax_ogbg_molpcba_lower(state):
+  tracing_benchmark.benchmark_lowering(
+      get_apply_fn_and_args, ogbg_config.get_config, state
+  )
+
+
+if __name__ == '__main__':
+  tracing_benchmark.run_benchmarks()
