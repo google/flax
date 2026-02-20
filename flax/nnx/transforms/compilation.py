@@ -21,6 +21,7 @@ import operator
 import typing as tp
 
 import jax
+from flax import config
 from jax.sharding import AbstractMesh, Mesh, PartitionSpec
 
 from flax.nnx import (
@@ -158,7 +159,7 @@ def jit(
   device: tp.Optional[jax.Device] = None,
   backend: tp.Optional[str] = None,
   inline: bool = False,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]: ...
 @tp.overload
 def jit(
@@ -174,7 +175,7 @@ def jit(
   device: tp.Optional[jax.Device] = None,
   backend: tp.Optional[str] = None,
   inline: bool = False,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> JitWrapped[P, R]: ...
 def jit(
   fun: tp.Callable[P, R] | Missing = MISSING,
@@ -189,7 +190,7 @@ def jit(
   device: tp.Optional[jax.Device] = None,
   backend: tp.Optional[str] = None,
   inline: bool = False,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> JitWrapped[P, R] | tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]:
   """
   Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
@@ -336,6 +337,8 @@ def jit(
     A wrapped version of ``fun``, set up for just-in-time compilation.
   """
 
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if isinstance(fun, Missing):
     return functools.partial(
       jit,
@@ -1057,7 +1060,7 @@ def shard_map(
     out_specs: Specs,
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
-    graph: bool = True,
+    graph: bool | None = None,
 ) -> F:
   ...
 
@@ -1070,7 +1073,7 @@ def shard_map(
     out_specs: Specs,
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
-    graph: bool = True,
+    graph: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -1083,7 +1086,7 @@ def shard_map(
     out_specs: Specs,
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
-    graph: bool = True,
+    graph: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """
   Lifted version of
@@ -1238,6 +1241,8 @@ def shard_map(
     A callable that applies the input function ``f`` across data sharded according to
     the ``mesh`` and ``in_specs``.
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if f is Missing:
     return functools.partial(
         shard_map,

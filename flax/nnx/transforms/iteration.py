@@ -19,6 +19,7 @@ import functools
 import typing as tp
 
 
+from flax import config
 from flax import struct
 from flax import typing
 from flax.core.frozen_dict import FrozenDict
@@ -228,7 +229,7 @@ def vmap(
     spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-    graph: bool = True,
+    graph: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -244,7 +245,7 @@ def vmap(
     spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-    graph: bool = True,
+    graph: bool | None = None,
 ) -> F:
   ...
 
@@ -259,7 +260,7 @@ def vmap(
   spmd_axis_name: AxisName | tuple[AxisName, ...] | None = None,
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
 
@@ -346,6 +347,8 @@ def vmap(
            [0, 2, 4, 6],
            [0, 3, 6, 9]], dtype=int32)
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if f is Missing:
     return functools.partial(
         vmap,

@@ -749,7 +749,7 @@ def flatten(  # type: ignore[invalid-annotation]
   with_paths: bool = True,
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tuple[
   GraphDef[Node],
   FlatState[tp.Any] | list[tp.Any],
@@ -768,6 +768,8 @@ def flatten(  # type: ignore[invalid-annotation]
       tree-mode which treats Modules as regular JAX pytrees, avoiding
       the overhead of the graph protocol.
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if ref_index is None:
     ref_index = RefMap()
   leaves: list[tp.Any] = []
@@ -2148,11 +2150,11 @@ def _split_state(
 
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
-  graph_node: A, /, *, graph: bool = True,
+  graph_node: A, /, *, graph: bool | None = None,
 ) -> tuple[GraphDef[A], GraphState]: ...
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
-  graph_node: A, first: filterlib.Filter, /, *, graph: bool = True,
+  graph_node: A, first: filterlib.Filter, /, *, graph: bool | None = None,
 ) -> tuple[GraphDef[A], GraphState]: ...
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
@@ -2161,14 +2163,14 @@ def split(  # type: ignore[invalid-annotation]
   second: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tuple[
   GraphDef[A],
   GraphState,
   tpe.Unpack[tuple[GraphState, ...]],
 ]: ...
 def split(  # type: ignore[invalid-annotation]
-  node: A, *filters: filterlib.Filter, graph: bool = True,
+  node: A, *filters: filterlib.Filter, graph: bool | None = None,
 ) -> tuple[
   GraphDef[A],
   GraphState,
@@ -2240,6 +2242,8 @@ def split(  # type: ignore[invalid-annotation]
     ``GraphDef`` and one or more ``States`` equal to the number of filters passed. If no
     filters are passed, a single ``State`` is returned.
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   graphdef, flat_state = flatten(node, graph=graph)
   flat_states = _split_state(flat_state, filters)
   states = _to_nested_state(graphdef, flat_states)
@@ -2396,9 +2400,9 @@ def update(node, state: tp.Any, /, *states: tp.Any) -> None:
 
 
 @tp.overload
-def state(node, /, *, graph: bool = True) -> GraphState: ...
+def state(node, /, *, graph: bool | None = None) -> GraphState: ...
 @tp.overload
-def state(node, first: filterlib.Filter, /, *, graph: bool = True) -> GraphState: ...
+def state(node, first: filterlib.Filter, /, *, graph: bool | None = None) -> GraphState: ...
 @tp.overload
 def state(
   node,
@@ -2406,12 +2410,12 @@ def state(
   second: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tuple[GraphState, ...]: ...
 def state(
   node,
   *filters: filterlib.Filter,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tp.Union[GraphState, tuple[GraphState, ...]]:
   """Similar to :func:`split` but only returns the :class:`State`'s indicated by the filters.
 
@@ -2446,6 +2450,8 @@ def state(
   Returns:
     One or more :class:`State` mappings.
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   _, flat_state = flatten(node, graph=graph)
   state = flat_state.to_nested_state()
 
@@ -2464,7 +2470,7 @@ variables = state
 
 
 def graphdef(
-  node: tp.Any, /, *, graph: bool = True,
+  node: tp.Any, /, *, graph: bool | None = None,
 ) -> GraphDef[tp.Any]:
   """Get the :class:`GraphDef` of the given graph node.
 
@@ -2485,6 +2491,8 @@ def graphdef(
   Returns:
     The :class:`GraphDef` of the :class:`Module` object.
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   graphdef, _ = flatten(node, graph=graph)
   return graphdef
 

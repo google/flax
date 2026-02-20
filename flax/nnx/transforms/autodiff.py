@@ -18,6 +18,7 @@ import functools
 import typing as tp
 
 
+from flax import config
 from flax import struct
 from flax.nnx import (
   extract,
@@ -130,7 +131,7 @@ def _grad_general(
     holomorphic: bool,
     allow_int: bool,
     return_value: bool,
-    graph: bool = True,
+    graph: bool,
 ) -> tp.Callable[..., tp.Any]:
 
   transform = jax.value_and_grad if return_value else jax.grad
@@ -272,7 +273,7 @@ def grad(
   holomorphic: bool = False,
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 @tp.overload
 def grad(
@@ -282,7 +283,7 @@ def grad(
   holomorphic: bool = False,
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 def grad(
   f: tp.Callable[..., tp.Any] | Missing = MISSING,
@@ -292,7 +293,7 @@ def grad(
   holomorphic: bool = False,
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> (
   tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
@@ -371,6 +372,8 @@ def grad(
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support ``DiffState`` or shared ``Variable`` references.
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if reduce_axes:
     raise NotImplementedError('reduce_axes argument to grad is deprecated')
   del reduce_axes
@@ -410,7 +413,7 @@ def value_and_grad(
   holomorphic: bool = False,
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 @tp.overload
 def value_and_grad(
@@ -420,7 +423,7 @@ def value_and_grad(
   holomorphic: bool = False,
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 def value_and_grad(
   f: tp.Callable[..., tp.Any] | type[Missing] = Missing,
@@ -430,11 +433,13 @@ def value_and_grad(
   holomorphic: bool = False,
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> (
   tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if reduce_axes:
     raise NotImplementedError(
         'reduce_axes argument to value_and_grad is deprecated')
@@ -953,7 +958,7 @@ def remat(
   prevent_cse: bool = True,
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> tp.Callable[[F], F]: ...
 @tp.overload
 def remat(
@@ -962,7 +967,7 @@ def remat(
   prevent_cse: bool = True,
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> F: ...
 def remat(
   f: F | Missing = MISSING,
@@ -970,7 +975,7 @@ def remat(
   prevent_cse: bool = True,
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
-  graph: bool = True,
+  graph: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """A 'lifted' version of the
   `jax.checkpoint <https://jax.readthedocs.io/en/latest/_autosummary/jax.checkpoint.html>`__
@@ -1000,6 +1005,8 @@ def remat(
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support shared ``Variable`` references.
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if isinstance(f, Missing):
     return functools.partial(
       remat,
