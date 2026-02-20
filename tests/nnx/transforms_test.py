@@ -1598,6 +1598,152 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(grad.shape, (10,))
     self.assertEqual(mod.n[...], 1)
 
+  def test_tree_mode_basic_call(self):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(1, 1, rngs=nnx.Rngs(1))
+
+    @nnx.custom_vjp(graph=False)
+    def f(m1: nnx.Linear, m2: nnx.Linear):
+      y = m1.kernel * m2.kernel
+      m1.kernel[...] = jnp.array(-1.0)
+      return y
+
+    def f_fwd(m1, m2):
+      y = f(m1, m2)
+      return y, (m1, m2)
+
+    def f_bwd(res, g):
+      m1, m2 = res
+      return g, g
+
+    f.defvjp(f_fwd, f_bwd)
+
+    y = f(m1, m2)
+
+    self.assertEqual(m1.kernel[...], -1.0)
+    self.assertEqual(y.shape, (1, 1))
+
+  def test_tree_mode_jax_example(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
+
+    @nnx.custom_vjp(graph=False)
+    def f(m: Foo):
+      return jnp.sin(m.x) * m.y
+
+    def f_fwd(m: Foo):
+      y = f(m)
+      res = (jnp.cos(m.x), jnp.sin(m.x), m)
+      return y, res
+
+    def f_bwd(res, g):
+      cos_x, sin_x, m = res
+      m_g = jax.tree.map(lambda x: x, m)
+      m_g.x[...] = cos_x * g * m.y
+      m_g.y[...] = sin_x * g
+      return (m_g,)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
+
+    grads = nnx.grad(f, graph=False)(m)
+
+    self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))
+
+  def test_tree_mode_with_remat(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
+
+    @nnx.custom_vjp(graph=False)
+    @nnx.remat(graph=False)
+    def f(m: Foo):
+      return jnp.sin(m.x) * m.y
+
+    def f_fwd(m: Foo):
+      y = f(m)
+      res = (jnp.cos(m.x), jnp.sin(m.x), m)
+      return y, res
+
+    def f_bwd(res, g):
+      cos_x, sin_x, m = res
+      m_g = jax.tree.map(lambda x: x, m)
+      m_g.x[...] = cos_x * g * m.y
+      m_g.y[...] = sin_x * g
+      return (m_g,)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
+
+    @nnx.jit(graph=False)
+    def loss_fn(m):
+      return f(m)
+
+    grads = nnx.grad(loss_fn, graph=False)(m)
+
+    self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))
+
+  def test_tree_mode_non_diff_args(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
+
+    @nnx.custom_vjp(nondiff_argnums=(0, 2), graph=False)
+    def f(a, m: Foo, b):
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      return jnp.sin(m.x) * m.y
+
+    def f_fwd(a, m: Foo, b):
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      y = f(a, m, b)
+      res = (jnp.cos(m.x), jnp.sin(m.x), m)
+      return y, res
+
+    def f_bwd(a, b, res, g):
+      cos_x, sin_x, m = res
+      self.assertEqual(a, 1)
+      self.assertEqual(b, 2)
+      m_g = jax.tree.map(lambda x: x, m)
+      m_g.x[...] = cos_x * g * m.y
+      m_g.y[...] = sin_x * g
+      return (m_g,)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
+
+    def loss_fn(m):
+      a = 1
+      b = 2
+      return f(a, m, b)
+
+    grads = nnx.grad(loss_fn, graph=False)(m)
+
+    self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))
+
+  def test_tree_mode_diffstate_error(self):
+    x_in_path = nnx.PathContains('x')
+    diff_state = nnx.DiffState(0, x_in_path)
+    with self.assertRaisesRegex(
+      ValueError,
+      r'`nondiff_argnums` cannot contain `DiffState` objects',
+    ):
+      nnx.custom_vjp(lambda m: m, nondiff_argnums=(diff_state,), graph=False)
+
 
 class TestScan(parameterized.TestCase):
   def test_basic(self):

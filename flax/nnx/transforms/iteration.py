@@ -1188,6 +1188,7 @@ class TreeScanFn:
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
+  @extract.treemap_copy_args
   def __call__(self, carry, x):
     carry_updates, _ = extract.updates_and_snapshot(carry)
     x_updates, x_snapshot = extract.updates_and_snapshot(x)

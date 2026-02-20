@@ -474,6 +474,92 @@ def value_and_grad(
 # -----------------------------------------------
 # custom_vjp
 # -----------------------------------------------
+
+
+@dataclasses.dataclass(eq=False)
+class TreeCustomVjpFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, *args):
+    updates, snapshot = extract.updates_and_snapshot(args)
+    out = self.f(*args)
+    extract.check_no_aliases(updates, out)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    return out, updates
+
+
+@dataclasses.dataclass(eq=False)
+class TreeFwdFn:
+  fwd: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.fwd, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, *args):
+    updates, snapshot = extract.updates_and_snapshot(args)
+    out, residual = self.fwd(*args)
+    extract.check_no_aliases(updates, out)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    return (out, updates), residual
+
+
+@dataclasses.dataclass(eq=False)
+class TreeBwdFn:
+  bwd: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.bwd, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, *args):
+    *nondiff, residual, (out_g, _updates_g) = args
+    return self.bwd(*nondiff, residual, out_g)
+
+
+class TreeCustomVjp(tp.Generic[A]):
+  def __init__(
+    self,
+    fun: tp.Callable[..., A],
+    nondiff_argnums: tuple[int, ...],
+  ):
+    functools.update_wrapper(self, fun)
+    self.fun = fun
+    self.nondiff_argnums = nondiff_argnums
+    self.custom_vjp_fn = jax.custom_vjp(
+      fun=TreeCustomVjpFn(fun),
+      nondiff_argnums=nondiff_argnums,
+    )
+
+  def __call__(
+    self, *args: tp.Any, **kwargs: tp.Any
+  ) -> A:
+    args = resolve_kwargs(self.fun, args, kwargs)
+    del kwargs
+    (out, updates) = self.custom_vjp_fn(*args)
+    extract.apply_variable_updates(args, updates)
+    return out
+
+  def defvjp(
+    self,
+    fwd: tp.Callable[..., tuple[A, tp.Any]],
+    bwd: tp.Callable[..., tuple[tp.Any, ...]],
+    symbolic_zeros: bool = False,
+  ) -> None:
+    self.fwd = fwd
+    self.bwd = bwd
+    self.symbolic_zeros = symbolic_zeros
+    self.custom_vjp_fn.defvjp(
+      fwd=TreeFwdFn(fwd),
+      bwd=TreeBwdFn(bwd),
+      symbolic_zeros=symbolic_zeros,
+    )
+
+
 # custom_vjp is one of the most complicated transforms as it requires
 # to handle 4 different functions:
 # 1. CustomVJP: the main object that runs the outer logic, converts input graph nodes
@@ -801,17 +887,20 @@ def custom_vjp(
   fun: tp.Callable[..., A],
   *,
   nondiff_argnums: tuple[int | DiffState, ...] = (),
-) -> CustomVjp[A]: ...
+  graph: bool | None = None,
+) -> CustomVjp[A] | TreeCustomVjp[A]: ...
 @tp.overload
 def custom_vjp(
   *,
   nondiff_argnums: tuple[int | DiffState, ...] = (),
-) -> tp.Callable[[tp.Callable[..., A]], CustomVjp[A]]: ...
+  graph: bool | None = None,
+) -> tp.Callable[[tp.Callable[..., A]], CustomVjp[A] | TreeCustomVjp[A]]: ...
 def custom_vjp(
   fun: tp.Callable[..., A] | Missing = MISSING,
   *,
   nondiff_argnums: tuple[int | DiffState, ...] = (),
-) -> CustomVjp[A] | tp.Callable[[tp.Callable[..., A]], CustomVjp[A]]:
+  graph: bool | None = None,
+) -> CustomVjp[A] | TreeCustomVjp[A] | tp.Callable[[tp.Callable[..., A]], CustomVjp[A] | TreeCustomVjp[A]]:
   """Reference aware version of
   `jax.custom_vjp <https://jax.readthedocs.io/en/latest/_autosummary/jax.custom_vjp.html>`__.
 
@@ -923,13 +1012,25 @@ def custom_vjp(
       argument suggests, this is done for compatibility with ``grad``.
 
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if isinstance(fun, Missing):
-    return functools.partial(custom_vjp, nondiff_argnums=nondiff_argnums)
+    return functools.partial(
+      custom_vjp, nondiff_argnums=nondiff_argnums, graph=graph,
+    )
 
   # Detect bound nnx.Module methods and raise error.
   fun_unbound, _, was_bound = _resolve_bound_callable(fun)
   if was_bound:
     _raise_bound_method_error('custom_vjp')
+
+  if not graph:
+    if any(isinstance(x, DiffState) for x in nondiff_argnums):
+      raise ValueError(
+        '`nondiff_argnums` cannot contain `DiffState` objects '
+        'when `graph=False`'
+      )
+    return TreeCustomVjp(fun_unbound, nondiff_argnums)  # type: ignore[arg-type]
 
   return CustomVjp(fun_unbound, nondiff_argnums)
 
