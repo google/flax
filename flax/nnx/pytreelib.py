@@ -44,6 +44,7 @@ BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
 
 A = tp.TypeVar('A')
 P = tp.TypeVar('P', bound='Pytree')
+T = tp.TypeVar('T', bound=type)
 
 DataAnnotation = '__data__'
 Data = tp.Annotated[A, DataAnnotation]
@@ -112,7 +113,7 @@ def data(value: tp.Any = MISSING, /, **kwargs) -> tp.Any:
   return dataclasses.field(**kwargs, metadata=metadata)  # type: ignore[return-value]
 
 
-def register_data_type(type_: type, /) -> None:
+def register_data_type(type_: T, /) -> T:
   """Registers a type as pytree data type recognized by Object.
 
   Custom types registered as data will be automatically recognized
@@ -140,8 +141,16 @@ def register_data_type(type_: type, /) -> None:
 
     assert nnx.is_data(foo.a)  # True
     assert jax.tree.leaves(foo) == [MyType(value=42)]
+
+  Can also be used as a decorator::
+
+    @nnx.register_data_type
+    @dataclass(frozen=True)
+    class MyType:
+      value: int
   """
   DATA_REGISTRY.add(type_)
+  return type_
 
 
 def is_data(value: tp.Any, /) -> bool:
@@ -187,6 +196,17 @@ def is_data(value: tp.Any, /) -> bool:
     or graph.is_graph_node(value)
     or type(value) in DATA_REGISTRY
   )
+
+
+def has_data(value: tp.Any, /) -> list[tp.Any]:
+  visited: set[int] = set()
+  def _is_leaf(x):
+    if id(x) in visited:
+      return True
+    visited.add(id(x))
+    return is_data(x)
+  leaves = jax.tree.leaves(value, is_leaf=_is_leaf)
+  return [leaf for leaf in leaves if is_data(leaf)]
 
 
 StaticAnnotation = '__static__'
@@ -649,8 +669,6 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     object.__setattr__(self, name, value)
 
   def _check_value(self, key, value, new_status: AttributeStatus | None):
-    def _has_data(leaves):
-      return any(is_data(leaf) for leaf in leaves)
 
     def _get_annotations(leaves):
       return {
@@ -665,8 +683,6 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       visited.add(id(x))
       return False
 
-    visited: set[int] = set()
-    leaves = jax.tree.leaves(value, is_leaf=_has_visited)
     current_is_data = (
         self._pytree__nodes[key] if key in self._pytree__nodes else False
     )
@@ -685,33 +701,40 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
           f' _.{key} = nnx.data(...)\n\n'
       )
 
-    if _has_data(leaves):
+    visited: set[int] = set()
+    leaves = jax.tree.leaves(
+      value, is_leaf=lambda x: _has_visited(x) or is_data(x)
+    )
+    data_leaves = [leaf for leaf in leaves if is_data(leaf)]
+    if data_leaves:
       # check no data in nnx.static assignments
       if new_status is not None:
         if not new_status.is_data and new_status.explicit:
           raise ValueError(
-              f"Found Arrays in value of type '{type(value)}' annotated with "
+              f"Found data in value of type '{type(value)}' annotated with "
               f"nnx.static(...) when setting attribute '{key}' of Pytree type "
               f"'{type(self)}'."
           )
-        if not new_status.explicit and not current_is_data and existing_attr:
+        if not new_status.is_data and not current_is_data:
           base_pytree_type = Pytree
           for t in type(self).mro()[1:]:
             if issubclass(t, nnx.Pytree):
               base_pytree_type = t
               break
+          data_leaves_type_names = {type(leaf).__name__ for leaf in data_leaves}
           raise ValueError(
-            f"Found Arrays on value of type '{type(value)}' assigned to"
+            f"Found data on value of type '{type(value)}' assigned to"
             f" static attribute '{key}' of Pytree type '{type(self)}'. Static"
-            ' attributes should not contain Array values. Consider one of'
+            ' attributes should not contain data values. Consider one of'
             ' the following options:\n\n1. If the attribute is meant to be'
-            ' static, either remove the Array value or wrap it in a static'
-            ' container (e.g., using `nnx.static(...)`).\n2. If the'
-            ' attribute is meant to be data, wrap the value with nnx.data on'
-            f' assignment:\n\n  _.{key} = nnx.data(...)\n\n3. Alternatively,'
+            f' static, remove the data values of type(s):\n\n  {", ".join(data_leaves_type_names)}'
+            f'\n\n2. If the attribute is meant to be data, wrap the value with nnx.data '
+            f' on assignment:\n\n  _.{key} = nnx.data(...)\n\n3. Alternatively,'
             ' annotate the class attribute with nnx.data:\n\n  class'
             f' {type(self).__name__}({base_pytree_type.__name__}):\n   '
-            f' {key}: {type(value).__name__} = nnx.data()\n\n4. Disable pytree'
+            f' {key}: {type(value).__name__} = nnx.data()\n\n4. If the'
+            ' container is a list or dict, try using nnx.List(...) or'
+            ' nnx.Dict(...) instead.\n\n5. Disable pytree'
             ' for this class:\n\n  class'
             f' {type(self).__name__}({base_pytree_type.__name__},'
             ' pytree=False):\n\n'
@@ -724,11 +747,11 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
             base_pytree_type = t
             break
         raise ValueError(
-          f'Found unexpected Arrays on value of type {type(value)} in static'
+          f'Found unexpected data on value of type {type(value)} in static'
           f" attribute '{key}' of Pytree type '{type(self)}'. This is an"
           ' error starting from Flax version 0.12.0.\nConsider one of the'
           ' following options:\n\n1. If the attribute is meant to be static,'
-          ' either remove the Array value or wrap it in a static'
+          ' either remove the data value or wrap it in a static'
           ' container.\n2. Wrap the value with nnx.data on'
           f' assignment:\n\n  _.{key} = nnx.data(...)\n\n3. Annotate the'
           ' class attribute with nnx.data:\n\n  class'

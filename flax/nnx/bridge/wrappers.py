@@ -156,6 +156,11 @@ class ToNNX(Module):
     )
     return self.to_nnx__module
 
+  def _setattr(self, name, value):
+    if not nnx.is_data(value) and nnx.has_data(value):
+      value = nnx.data(value)
+    super()._setattr(name, value)
+
   def lazy_init(self, *args, **kwargs):
     """A shortcut of calling `nnx.bridge.lazy_init()` upon this module."""
     return lazy_init(self, *args, **kwargs)

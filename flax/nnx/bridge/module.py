@@ -63,6 +63,9 @@ MODULE_CONTEXT = ModuleContext()
 class ModuleState(statelib.State):
   pass
 
+from flax.nnx.pytreelib import register_data_type
+register_data_type(ModuleState)
+
 
 class Scope(Pytree):
   def __init__(self, rngs: rnglib.Rngs, mutable: CollectionFilter):

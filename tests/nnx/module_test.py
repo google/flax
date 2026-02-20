@@ -77,15 +77,26 @@ class PytreeTest(absltest.TestCase):
 
     with self.assertRaisesRegex(
         ValueError,
-        'Found Arrays on value of type',
+        'Found data on value of type',
     ):
       foo.a = ['hi', jnp.array(6)]
 
     with self.assertRaisesRegex(
         ValueError,
-        'Found Arrays in value of type',
+        'Found data in value of type',
     ):
       foo.b = nnx.static(jnp.array(4))
+
+  def test_assing_pytree_with_data(self):
+    class Foo(nnx.Pytree):
+      pass
+
+    foo = Foo()
+    with self.assertRaisesRegex(
+        ValueError,
+        'Found data on value of type',
+    ):
+      foo.a = [nnx.Variable(1)]
 
   def test_consistent_attrs_frozen_dataclass(self):
     @nnx.dataclass
@@ -127,13 +138,13 @@ class PytreeTest(absltest.TestCase):
 
     with self.assertRaisesRegex(
         ValueError,
-        'Found Arrays on value of type',
+        'Found data on value of type',
     ):
       foo.a = ['hi', jnp.array(6)]
 
     with self.assertRaisesRegex(
         ValueError,
-        'Found Arrays in value of type',
+        'Found data in value of type',
     ):
       foo.b = nnx.static(jnp.array(4))
 
@@ -154,7 +165,7 @@ class PytreeTest(absltest.TestCase):
 
     with self.assertRaisesRegex(
         ValueError,
-        'Found Arrays in value of type',
+        'Found data in value of type',
     ):
       foo = Foo()
 
@@ -939,9 +950,34 @@ class TestModuleDataclass(absltest.TestCase):
 
     with self.assertRaisesRegex(
       ValueError,
-      'Found unexpected Arrays on value of type',
+      'Found unexpected data on value of type',
     ):
       m = Bar(a=jnp.array(3))
+
+  def test_variable_in_static_list(self):
+    @nnx.dataclass
+    class Foo(nnx.Module):
+      filters: list
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found data on value of type',
+    ):
+      Foo([nnx.Variable(1)])
+
+  def test_module_in_static_list(self):
+    class Bar(nnx.Module):
+      pass
+
+    @nnx.dataclass
+    class Foo(nnx.Module):
+      filters: list
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Found data on value of type',
+    ):
+      Foo([Bar()])
 
   def test_post_init(self):
 
