@@ -690,9 +690,10 @@ class TestTreeJIT(parameterized.TestCase):
     np.testing.assert_allclose(out, 3.0)
 
 
-class TestEvalShape(absltest.TestCase):
-  def test_eval_shape(self):
-    abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
+class TestEvalShape(parameterized.TestCase):
+  @parameterized.parameters(True, False)
+  def test_eval_shape(self, graph):
+    abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)), graph=graph)
     self.assertIsInstance(abs_model, nnx.Linear)
     self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
 
@@ -702,6 +703,49 @@ class TestEvalShape(absltest.TestCase):
     self.assertIsInstance(abs_model, nnx.Linear)
     self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
     self.assertEqual(abs_model.kernel.shape, (1, 2))
+
+  @parameterized.parameters(True, False)
+  def test_eval_shape_with_module_input(self, graph):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    def f(m, x):
+      return m(x)
+
+    x = jnp.ones((4, 2))
+    out = nnx.eval_shape(f, model, x, graph=graph)
+    self.assertIsInstance(out, jax.ShapeDtypeStruct)
+    self.assertEqual(out.shape, (4, 3))
+
+  def test_eval_shape_no_state_update(self):
+    count = nnx.Variable(jnp.array(0))
+
+    def f(c):
+      c[...] += 1
+      return jnp.ones((3, 4)) * c[...]
+
+    out = nnx.eval_shape(f, count)
+    self.assertIsInstance(out, jax.ShapeDtypeStruct)
+    self.assertEqual(out.shape, (3, 4))
+    self.assertEqual(count[...], 0)
+
+  def test_eval_shape_no_input_output_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    def f(v):
+      return v
+
+    with self.assertRaises(ValueError):
+      nnx.eval_shape(f, v, graph=False)
+
+  def test_eval_shape_no_shared_variable_refs(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    def f(v1, v2):
+      v1[...] += 1
+      return None
+
+    with self.assertRaises(ValueError):
+      nnx.eval_shape(f, v, v, graph=False)
 
 class TestShardMap(parameterized.TestCase):
   def test_basic_shardmap(self):
@@ -3330,7 +3374,7 @@ class TestPmap(absltest.TestCase):
     assert module.dropout.rngs.key[...] == initial_key
 
 
-class TestCond(absltest.TestCase):
+class TestCond(parameterized.TestCase):
   def test_basic(self):
     class TimeStep(tp.NamedTuple):
       step: nnx.Variable[jax.Array]
@@ -3375,7 +3419,8 @@ class TestCond(absltest.TestCase):
     self.assertEqual(foo.timestep.step[...], 4)
     self.assertEqual(foo.timestep.reward[...], 0.0)
 
-  def test_basic_variable(self):
+  @parameterized.parameters(True, False)
+  def test_basic_variable(self, graph):
     def collatz(x):
       def even(x):
         x[...] = x // 2
@@ -3383,7 +3428,7 @@ class TestCond(absltest.TestCase):
       def odd(x):
         x[...] = 3 * x + 1
 
-      return nnx.cond(x % 2 == 0, even, odd, x)
+      return nnx.cond(x % 2 == 0, even, odd, x, graph=graph)
 
     x = nnx.Variable(jnp.array(8))
     collatz(x)
@@ -3395,7 +3440,8 @@ class TestCond(absltest.TestCase):
     collatz(x)
     self.assertEqual(x[...], 4)
 
-  def test_cond_and_vmap(self):
+  @parameterized.parameters(True, False)
+  def test_cond_and_vmap(self, graph):
     class Env(nnx.Pytree):
       def __init__(self):
         self.index = nnx.Variable(jnp.arange(8))
@@ -3404,7 +3450,7 @@ class TestCond(absltest.TestCase):
     env = Env()
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.vmap(in_axes=(0, None), out_axes=None)
+    @nnx.vmap(in_axes=(0, None), out_axes=None, graph=graph)
     def f(env: Env, model: nnx.Linear):
       self.assertEqual(env.index.shape, ())
 
@@ -3415,7 +3461,7 @@ class TestCond(absltest.TestCase):
         pass
 
       is_even = env.index % 2 == 0
-      nnx.cond(is_even, increment, no_nothing, env)
+      nnx.cond(is_even, increment, no_nothing, env, graph=graph)
 
     f(env, model)
 
@@ -3423,9 +3469,28 @@ class TestCond(absltest.TestCase):
       env.step[...], np.array([1, 0, 1, 0, 1, 0, 1, 0], np.uint32)
     )
 
+  @parameterized.parameters(True, False)
+  def test_cond_different_variable_per_branch(self, graph):
+    a = nnx.Variable(jnp.array(0))
+    b = nnx.Variable(jnp.array(0))
 
-class TestSwitch(absltest.TestCase):
-  def test_basic(self):
+    def update_a(a, b):
+      a[...] += 1
+
+    def update_b(a, b):
+      b[...] += 10
+
+    nnx.cond(True, update_a, update_b, a, b, graph=graph)
+    self.assertEqual(a[...], 1)
+    self.assertEqual(b[...], 0)
+
+    nnx.cond(False, update_a, update_b, a, b, graph=graph)
+    self.assertEqual(a[...], 1)
+    self.assertEqual(b[...], 10)
+
+class TestSwitch(parameterized.TestCase):
+  @parameterized.parameters(True, False)
+  def test_basic(self, graph):
     class RoundTable(nnx.Module):
       def __init__(self):
         self.next_index = 0
@@ -3444,7 +3509,7 @@ class TestSwitch(absltest.TestCase):
           return m.linear(x)
 
         # y = nnx.cond(self.next_index[...] == 0, fn0, fn1, self, x)
-        y = nnx.switch(self.next_index, (fn0, fn1, fn2), self, x)
+        y = nnx.switch(self.next_index, (fn0, fn1, fn2), self, x, graph=graph)
         self.next_index = (self.next_index + 1) % 3
         return y
 
@@ -3759,23 +3824,37 @@ class TestSplitMergeInputs(absltest.TestCase):
       env.step[...], np.array([1, 0, 1, 0, 1, 0, 1, 0], np.uint32)
     )
 
-class TestCheckify(absltest.TestCase):
-  def test_basic(self):
+class TestCheckify(parameterized.TestCase):
+  @parameterized.parameters(True, False)
+  def test_basic(self, graph):
 
     @dataclasses.dataclass
     class Foo(nnx.Module):
       a: nnx.Param
 
-    @nnx.jit
+    @nnx.jit(graph=graph)
     def f(m):
       y = jnp.sin(m.a)  # error
       return m.a + y
 
     m = Foo(a=nnx.Param(jnp.inf))
-    err, out = nnx.checkify(f, errors=checkify.float_checks)(m)
+    err, out = nnx.checkify(f, errors=checkify.float_checks, graph=graph)(m)
 
     with self.assertRaisesRegex(ValueError, 'nan generated by primitive: sin'):
       err.throw()
+
+  @parameterized.parameters(True, False)
+  def test_checkify_stateful(self, graph):
+    count = nnx.Variable(jnp.array(0))
+
+    @nnx.jit(graph=graph)
+    def f(c):
+      c[...] += 1
+      return c[...]
+
+    err, out = nnx.checkify(f, graph=graph)(count)
+    self.assertEqual(count[...], 1)
+    np.testing.assert_allclose(out, 1)
 
 
 class TestBoundMethodTransforms(parameterized.TestCase):

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import abc
+import functools
 import typing as tp
 
 import jax
@@ -453,3 +454,11 @@ def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
     seen[var_id] = path
     if update is not None:
       variable.update_from_state(update)
+
+
+def treemap_copy_args(f):
+  @functools.wraps(f)
+  def wrapper(*args, **kwargs):
+    args, kwargs = jax.tree.map(lambda x: x, (args, kwargs))
+    return f(*args, **kwargs)
+  return wrapper

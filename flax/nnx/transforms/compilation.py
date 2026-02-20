@@ -395,6 +395,7 @@ class TreeJitFn:
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
+  @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     args_updates, kwargs_updates = updates
@@ -1011,6 +1012,7 @@ class TreeShardMapFn:
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
+  @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
     out = self.f(*args)

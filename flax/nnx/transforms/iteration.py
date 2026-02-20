@@ -178,6 +178,7 @@ class TreeVmapFn:
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
+  @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     out = self.f(*args, **kwargs)
