@@ -279,7 +279,7 @@ def eval_shape(
     f: the function to evaluate.
     *args: positional arguments to ``f``.
     graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``flax_nnx_graph_mode`` config.
+      If None, uses the value of ``nnx_graph_mode`` config.
     **kwargs: keyword arguments to ``f``.
   """
   f_call, _, was_bound = _resolve_bound_callable(f)
@@ -288,7 +288,7 @@ def eval_shape(
     _raise_bound_method_error('eval_shape')
 
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if not graph:
     out, updates = jax.eval_shape(
       TreeEvalShapeFn(f_call), *args, **kwargs
@@ -377,7 +377,7 @@ def checkify(
     f: the function to checkify.
     errors: the set of error checks to enable.
     graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``flax_nnx_graph_mode`` config.
+      If None, uses the value of ``nnx_graph_mode`` config.
   """
   f_call, _, was_bound = _resolve_bound_callable(f)
 
@@ -385,7 +385,7 @@ def checkify(
     _raise_bound_method_error('checkify')
 
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if not graph:
     checkify_fn = checkify_lib.checkify(TreeCheckifyFn(f_call), errors)
 
@@ -454,10 +454,10 @@ def cond(
     false_fun: function to apply if ``pred`` is False.
     *operands: operands passed to whichever branch is selected.
     graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``flax_nnx_graph_mode`` config.
+      If None, uses the value of ``nnx_graph_mode`` config.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if not graph:
     out, updates = jax.lax.cond(
       pred,
@@ -496,10 +496,10 @@ def switch(
     branches: sequence of functions to select from.
     *operands: operands passed to the selected branch.
     graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``flax_nnx_graph_mode`` config.
+      If None, uses the value of ``nnx_graph_mode`` config.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if not graph:
     out, updates = jax.lax.switch(
       index,

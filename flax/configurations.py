@@ -28,7 +28,7 @@ class Config:
   flax_max_repr_depth: int | None
   flax_always_shard_variable: bool
   flax_hijax_variable: bool
-  flax_nnx_graph_mode: bool
+  nnx_graph_mode: bool
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
 
@@ -298,7 +298,7 @@ flax_hijax_variable = bool_flag(
   help='Whether to enable HiJAX support for `nnx.Variable`.',
 )
 nnx_graph_mode = bool_flag(
-  name='flax_nnx_graph_mode',
+  name='nnx_graph_mode',
   default=True,
   help='Whether NNX APIs default to graph-mode (True) or tree-mode (False).',
 )
