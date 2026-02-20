@@ -28,7 +28,9 @@ from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
 from flax.nnx.graph import GraphState
 from flax.typing import Key, Path, PathParts
+from flax.nnx.capture import capture_fwd, capture_bwd
 import warnings
+import functools as ft
 
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
@@ -40,6 +42,32 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 StateMapping = tp.Mapping[Path, tp.Any]
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
+
+
+def add_capturing(cls):
+  """Adds capturing to methods of a Module.
+  Does not instrument superclass methods."""
+  for name, method in cls.__dict__.items():
+    if callable(method) and (not name.startswith('_') or name == '__call__'):
+      if not hasattr(method, '_does_capturing'):
+        def closure(name, method): # Necessary to make 'name' immutable during iteration
+          @ft.wraps(method)
+          def wrapper(self, *args, **kwargs):
+            result = method(self, *args, **kwargs)
+            self.capture_fwd("" if name == '__call__' else name, result)
+            return result
+          wrapper._does_capturing = True
+          setattr(cls, name, wrapper)
+        closure(name, method)
+  return cls
+
+
+def remove_capturing(cls):
+  """Remove capturing methods from a Module."""
+  for name, method in cls.__dict__.items():
+    if hasattr(method, '_does_capturing'):
+      setattr(cls, name, method.__wrapped__)
+  return cls
 
 
 class ModuleMeta(PytreeMeta):
@@ -78,6 +106,35 @@ class Module(Pytree, metaclass=ModuleMeta):
     >>> model = Model(rngs=nnx.Rngs(0))
     >>> y = model(x)
   """
+
+  def capture_fwd(self, name: str, value: jax.Array):
+    "Record an intermediate value"
+    if hasattr(self, '__module_path__') and self.__module_path__:
+      name = self.__module_path__ + '/' + name
+    capture_fwd(name, value)
+
+  def capture_bwd(self, name: str, value: jax.Array):
+    "Record the intermediate gradient of the given value"
+    if hasattr(self, '__module_path__') and self.__module_path__:
+      name = self.__module_path__ + '/' + name
+    return capture_bwd(name, value)
+
+  def _save_paths(self, method_outputs=False):
+    """
+    Add a `__module_path__` attribute to all sub-modules relative to the current module.
+    If `method_outputs` is True, instrument all method calls to call `capture_fwd` before
+    returning.
+    """
+    for path, m in iter_modules(self):
+      m.__module_path__ = "/".join(str(p) for p in path)
+      if method_outputs:
+        add_capturing(type(m))
+
+  def _del_paths(self, method_outputs=False):
+    for _, m in iter_modules(self):
+      if method_outputs:
+        remove_capturing(type(m))
+      del m.__module_path__
 
   def sow(
       self,
