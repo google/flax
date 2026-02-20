@@ -518,11 +518,28 @@ if config.flax_use_flaxlib:
   jax.tree_util.register_static(flaxlib.NodeDef)
   globals()['NodeDef'] = flaxlib.NodeDef
 
+@jax.tree_util.register_static
+@dataclasses.dataclass(frozen=True, slots=True)
+class TreeNodeDef(tp.Generic[Node]):
+  type: tp.Type[Node]
+  treedef: jax.tree_util.PyTreeDef
+  path_index: tuple[tuple[PathParts, int], ...]
+
+  def with_no_outer_index(self) -> TreeNodeDef[Node]:
+    return self
+
+  def with_same_outer_index(self) -> TreeNodeDef[Node]:
+    return self
+
+  def with_matching_outer_index(self, other) -> TreeNodeDef[Node]:
+    return self
+
 NodeDefType = tp.Union[
   NodeDef[Node],
   NodeRef[Node],
   VariableDef[Node],
   ArrayRefDef,
+  TreeNodeDef[Node],
 ]
 
 
@@ -609,13 +626,82 @@ class GraphDef(tp.Generic[Node]):
 PureState = tuple[GraphDef[Node], GraphState]
 
 
+def _tree_flatten(
+  node: tp.Any,
+  nodes: list[NodeDefType[tp.Any]],
+  leaves: list[tp.Any],
+  paths: list[PathParts] | None,
+) -> None:
+  is_variable = lambda x: isinstance(x, Variable)
+  jax_leaves, treedef = jax.tree_util.tree_flatten_with_path(
+    node, is_leaf=is_variable
+  )
+  nnx_paths_and_leaves: list[tuple[PathParts, tp.Any]] = [
+    (jax_to_nnx_path(jax_path), value) for jax_path, value in jax_leaves
+  ]
+  original_indices = {p: i for i, (p, _) in enumerate(nnx_paths_and_leaves)}
+  nnx_paths_and_leaves.sort()
+  path_index = tuple(
+    (p, original_indices[p]) for p, _ in nnx_paths_and_leaves
+  )
+
+  tree_nodedef: TreeNodeDef[tp.Any] = TreeNodeDef(
+    type=type(node),
+    treedef=treedef,
+    path_index=path_index,
+  )
+  nodes.append(tree_nodedef)
+
+  seen_variables: set[int] = set()
+  seen_refs: set[int] = set()
+  sorted_leaf_index = 0
+  for nnx_path, value in nnx_paths_and_leaves:
+    if isinstance(value, Variable):
+      var_id = id(value)
+      if var_id in seen_variables:
+        raise ValueError(
+          f'Duplicate Variable found at path {nnx_path!r}. '
+          'Tree mode (graph=False) does not support shared references.'
+        )
+      seen_variables.add(var_id)
+      raw_value = value.get_raw_value()
+      if variablelib.is_array_ref(raw_value):
+        ref_id = id(raw_value)
+        if ref_id in seen_refs:
+          raise ValueError(
+            f'Duplicate Ref found inside Variable at path {nnx_path!r}. '
+            'Tree mode (graph=False) does not support shared references.'
+          )
+        seen_refs.add(ref_id)
+      nodes.append(VariableDef(
+        type=value.var_type,
+        index=sorted_leaf_index,
+        outer_index=None,
+        metadata=HashableMapping(value.get_metadata()),
+        array_refdef=None,
+      ))
+    elif variablelib.is_array_ref(value):
+      ref_id = id(value)
+      if ref_id in seen_refs:
+        raise ValueError(
+          f'Duplicate Ref found at path {nnx_path!r}. '
+          'Tree mode (graph=False) does not support shared references.'
+        )
+      seen_refs.add(ref_id)
+    leaves.append(value)
+    if paths is not None:
+      paths.append(nnx_path)
+    sorted_leaf_index += 1
+
+
 @tp.overload
 def flatten(  # type: ignore[invalid-annotation]
   node: Node,
   /,
   *,
-  ref_index: RefMap | None = None,
-  ref_outer_index: RefMap | None = None,
+  ref_index: RefMap | None = ...,
+  ref_outer_index: RefMap | None = ...,
+  graph: bool = ...,
 ) -> tuple[GraphDef[Node], FlatState[tp.Any]]: ...
 @tp.overload
 def flatten(  # type: ignore[invalid-annotation]
@@ -623,8 +709,9 @@ def flatten(  # type: ignore[invalid-annotation]
   /,
   *,
   with_paths: tp.Literal[True],
-  ref_index: RefMap | None = None,
-  ref_outer_index: RefMap | None = None,
+  ref_index: RefMap | None = ...,
+  ref_outer_index: RefMap | None = ...,
+  graph: bool = ...,
 ) -> tuple[
   GraphDef[Node],
   FlatState[tp.Any],
@@ -635,8 +722,9 @@ def flatten(  # type: ignore[invalid-annotation]
   /,
   *,
   with_paths: tp.Literal[False],
-  ref_index: RefMap | None = None,
-  ref_outer_index: RefMap | None = None,
+  ref_index: RefMap | None = ...,
+  ref_outer_index: RefMap | None = ...,
+  graph: bool = ...,
 ) -> tuple[
   GraphDef[Node],
   list[tp.Any],
@@ -647,8 +735,9 @@ def flatten(  # type: ignore[invalid-annotation]
   /,
   *,
   with_paths: bool,
-  ref_index: RefMap | None = None,
-  ref_outer_index: RefMap | None = None,
+  ref_index: RefMap | None = ...,
+  ref_outer_index: RefMap | None = ...,
+  graph: bool = ...,
 ) -> tuple[
   GraphDef[Node],
   FlatState[tp.Any] | list[tp.Any],
@@ -660,6 +749,7 @@ def flatten(  # type: ignore[invalid-annotation]
   with_paths: bool = True,
   ref_index: RefMap | None = None,
   ref_outer_index: RefMap | None = None,
+  graph: bool = True,
 ) -> tuple[
   GraphDef[Node],
   FlatState[tp.Any] | list[tp.Any],
@@ -673,27 +763,38 @@ def flatten(  # type: ignore[invalid-annotation]
       nodes that share references.
     with_paths: A boolean that indicates whether to return a FlatState object that includes
       the paths, or just a list of the Variable's inner values.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   """
   if ref_index is None:
     ref_index = RefMap()
-
   leaves: list[tp.Any] = []
   path: list[Key] | None = [] if with_paths else None
   paths: list[PathParts] | None = [] if with_paths else None
   nodes: list[NodeDefType[tp.Any]] = []
   attributes: list[tuple[Key, AttrType]] = []
-  node_impl = get_node_impl(node)
-  _graph_flatten(
-    node,
-    node_impl,
-    path,
-    ref_index,
-    ref_outer_index,
-    nodes,
-    attributes,
-    leaves,
-    paths,
-  )
+  if graph:
+    node_impl = get_node_impl(node)
+    _graph_flatten(
+      node,
+      node_impl,
+      path,
+      ref_index,
+      ref_outer_index,
+      nodes,
+      attributes,
+      leaves,
+      paths,
+    )
+  else:
+    _tree_flatten(
+      node,
+      nodes,
+      leaves,
+      paths,
+    )
   graphdef: GraphDef = GraphDef(
     nodes=nodes, attributes=attributes, num_leaves=len(leaves)
   )
@@ -896,6 +997,35 @@ def _get_sorted_leaves(
   return leaves
 
 
+def _tree_unflatten(
+  graphdef: GraphDef[tp.Any],
+  leaves: list[tp.Any],
+  copy_variables: bool,
+) -> tp.Any:
+  tree_nodedef = graphdef.nodes[0]
+  assert isinstance(tree_nodedef, TreeNodeDef)
+  variable_defs_iter = iter(
+    node for node in graphdef.nodes[1:] if isinstance(node, VariableDef)
+  )
+  variabledef = next(variable_defs_iter, None)
+
+  original_leaves: list[tp.Any] = [None] * len(leaves)
+  for i, (path, original_index) in enumerate(tree_nodedef.path_index):
+    leaf = leaves[i]
+    if variabledef is not None and variabledef.index == i:
+      if isinstance(leaf, Variable):
+        if copy_variables:
+          leaf = leaf.copy()
+      else:
+        leaf = variabledef.type.from_metadata(
+          leaf, dict(variabledef.metadata)
+        )
+      variabledef = next(variable_defs_iter, None)
+    original_leaves[original_index] = leaf
+
+  return tree_nodedef.treedef.unflatten(original_leaves)
+
+
 def unflatten(  # type: ignore[invalid-annotation]
   graphdef: GraphDef[Node],
   state: State[Key, tp.Any] | FlatState[tp.Any] | list[tp.Any],
@@ -930,16 +1060,19 @@ def unflatten(  # type: ignore[invalid-annotation]
     leaves = state
   else:
     raise ValueError(f'Unsupported state type: {type(state)}')
-  if index_ref is None:
-    index_ref = IndexMap()
 
   if len(leaves) != graphdef.num_leaves:
     raise ValueError(
       f'Incorrect number of leaves, expected {graphdef.num_leaves} leaves, but got {len(leaves)}.'
     )
 
+  if graphdef.nodes and isinstance(graphdef.nodes[0], TreeNodeDef):
+    return _tree_unflatten(graphdef, leaves, copy_variables)
+
+  if index_ref is None:
+    index_ref = IndexMap()
+
   if len(graphdef.nodes) == 0:
-    # unkown leaf
     return leaves[0]
   elif isinstance(nodedef := graphdef.nodes[0], NodeRef):
     node = index_ref[nodedef.index]
@@ -1504,7 +1637,7 @@ class SplitContext:
       ctx.inner_ref_outer_index if ctx and ctx.inner_ref_outer_index else None
     )
     graphdef, flat_state = flatten(
-      node, ref_index=self.ref_index, ref_outer_index=inner_ref_outer_index
+      node, ref_index=self.ref_index, ref_outer_index=inner_ref_outer_index, graph=True
     )
     flat_states = _split_state(flat_state, filters)
     states = _to_nested_state(graphdef, flat_states)
@@ -1580,6 +1713,7 @@ class SplitContext:
         ref_index=self.ref_index,
         ref_outer_index=ref_outer_index,
         with_paths=with_paths,
+        graph=True,
       )
       if with_paths:
         assert isinstance(flat_state, FlatState)
@@ -1609,6 +1743,7 @@ class SplitContext:
         ref_index=self.ref_index,
         ref_outer_index=ref_outer_index,
         with_paths=with_paths,
+        graph=True,
       )
       if with_paths:
         assert isinstance(flat_state, FlatState)
@@ -2013,11 +2148,11 @@ def _split_state(
 
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
-  graph_node: A, /
+  graph_node: A, /, *, graph: bool = True,
 ) -> tuple[GraphDef[A], GraphState]: ...
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
-  graph_node: A, first: filterlib.Filter, /
+  graph_node: A, first: filterlib.Filter, /, *, graph: bool = True,
 ) -> tuple[GraphDef[A], GraphState]: ...
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
@@ -2026,13 +2161,14 @@ def split(  # type: ignore[invalid-annotation]
   second: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
+  graph: bool = True,
 ) -> tuple[
   GraphDef[A],
   GraphState,
   tpe.Unpack[tuple[GraphState, ...]],
 ]: ...
 def split(  # type: ignore[invalid-annotation]
-  node: A, *filters: filterlib.Filter
+  node: A, *filters: filterlib.Filter, graph: bool = True,
 ) -> tuple[
   GraphDef[A],
   GraphState,
@@ -2041,7 +2177,7 @@ def split(  # type: ignore[invalid-annotation]
   """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
   a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef
   contains all the static information needed to reconstruct a ``Module`` graph, it is analogous
-  to JAX’s ``PyTreeDef``. :func:`split` is used in conjunction with :func:`merge` to switch
+  to JAX's ``PyTreeDef``. :func:`split` is used in conjunction with :func:`merge` to switch
   seamlessly between stateful and stateless representations of the graph.
 
   Example usage::
@@ -2096,11 +2232,15 @@ def split(  # type: ignore[invalid-annotation]
   Arguments:
     node: graph node to split.
     *filters: some optional filters to group the state into mutually exclusive substates.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   Returns:
     ``GraphDef`` and one or more ``States`` equal to the number of filters passed. If no
     filters are passed, a single ``State`` is returned.
   """
-  graphdef, flat_state = flatten(node)
+  graphdef, flat_state = flatten(node, graph=graph)
   flat_states = _split_state(flat_state, filters)
   states = _to_nested_state(graphdef, flat_states)
   return graphdef, *states  # type: ignore[return-value]
@@ -2112,14 +2252,25 @@ def _to_nested_state(
   if not graphdef.nodes or type(graphdef.nodes[0]) in (
     VariableDef,
     ArrayRefDef,
+  ) or (
+    type(graphdef.nodes[0]) is TreeNodeDef
+    and graphdef.num_leaves == 1
+    and len(graphdef.nodes) == 2
+    and type(graphdef.nodes[1]) in (VariableDef, ArrayRefDef)
   ):
     states = tuple(
       flat_state[0][1] if flat_state else State({})
       for flat_state in flat_states
     )
   else:
+    def _nested_or_leaf(flat_state):
+      if not flat_state:
+        return State({})
+      if len(flat_state) == 1 and flat_state[0][0] == ():
+        return flat_state[0][1]
+      return statelib.from_flat_state(flat_state)
     states = tuple(
-      statelib.from_flat_state(flat_state) for flat_state in flat_states
+      _nested_or_leaf(flat_state) for flat_state in flat_states
     )
   return states
 
@@ -2245,9 +2396,9 @@ def update(node, state: tp.Any, /, *states: tp.Any) -> None:
 
 
 @tp.overload
-def state(node, /) -> GraphState: ...
+def state(node, /, *, graph: bool = True) -> GraphState: ...
 @tp.overload
-def state(node, first: filterlib.Filter, /) -> GraphState: ...
+def state(node, first: filterlib.Filter, /, *, graph: bool = True) -> GraphState: ...
 @tp.overload
 def state(
   node,
@@ -2255,10 +2406,12 @@ def state(
   second: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
+  graph: bool = True,
 ) -> tuple[GraphState, ...]: ...
 def state(
   node,
   *filters: filterlib.Filter,
+  graph: bool = True,
 ) -> tp.Union[GraphState, tuple[GraphState, ...]]:
   """Similar to :func:`split` but only returns the :class:`State`'s indicated by the filters.
 
@@ -2286,10 +2439,14 @@ def state(
   Args:
     node: A graph node object.
     *filters: One or more :class:`Variable` objects to filter by.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   Returns:
     One or more :class:`State` mappings.
   """
-  _, flat_state = flatten(node)
+  _, flat_state = flatten(node, graph=graph)
   state = flat_state.to_nested_state()
 
   states: GraphState | tuple[GraphState, ...]
@@ -2306,7 +2463,9 @@ def state(
 variables = state
 
 
-def graphdef(node: tp.Any, /) -> GraphDef[tp.Any]:
+def graphdef(
+  node: tp.Any, /, *, graph: bool = True,
+) -> GraphDef[tp.Any]:
   """Get the :class:`GraphDef` of the given graph node.
 
   Example usage::
@@ -2319,10 +2478,14 @@ def graphdef(node: tp.Any, /) -> GraphDef[tp.Any]:
 
   Args:
     node: A graph node object.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   Returns:
     The :class:`GraphDef` of the :class:`Module` object.
   """
-  graphdef, _ = flatten(node)
+  graphdef, _ = flatten(node, graph=graph)
   return graphdef
 
 
@@ -2407,7 +2570,7 @@ def pop(
     return states
 
 
-def clone(node: Node, variables: bool = True) -> Node:
+def clone(node: Node, variables: bool = True, *, graph: bool = True) -> Node:
   """Create a deep copy of the given graph node.
 
   Example usage::
@@ -2423,10 +2586,14 @@ def clone(node: Node, variables: bool = True) -> Node:
     node: A graph node object.
     variables: If ``True`` (default) copies of the :class:`Variable` objects are created,
       otherwise the Variables are shared between the original and cloned node.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   Returns:
     A deep copy of the :class:`Module` object.
   """
-  graphdef, state = split(node)
+  graphdef, state = split(node, graph=graph)
   return merge(graphdef, state, copy=variables)
 
 
@@ -2935,7 +3102,10 @@ def _flatten_pytree(pytree: tp.Any):
   key_index = HashableMapping(
     {key: i for i, (key, _) in enumerate(nodes)}, copy=False
   )
-  nodes.sort()  # sort by key
+  # Sort by key to match the path-sorted order used by _merge_to_flat_state.
+  # key_index records the original jax tree_flatten order so _unflatten_pytree
+  # can restore it before calling treedef.unflatten.
+  nodes.sort()
   return nodes, IndexesPytreeDef(key_index, treedef)
 
 
