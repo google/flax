@@ -1181,6 +1181,37 @@ class ScanFn:
     return carry_arg_out, scan_out
 
 
+@dataclasses.dataclass(eq=False)
+class TreeScanFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  def __call__(self, carry, x):
+    carry_updates, _ = extract.updates_and_snapshot(carry)
+    x_updates, x_snapshot = extract.updates_and_snapshot(x)
+
+    out = self.f(carry, x)
+    carry_out, y = out
+
+    def check_same_id(in_leaf, out_leaf):
+      if isinstance(in_leaf, variablelib.Variable) and in_leaf is not out_leaf:
+        raise ValueError(
+          'Carry Variable identity must be preserved across '
+          'scan iterations.'
+        )
+    jax.tree.map(
+      check_same_id, carry_updates, carry_out,
+      is_leaf=lambda x: isinstance(x, variablelib.Variable),
+    )
+
+    extract.check_no_aliases(x_updates, y)
+    x_updates = extract.mask_variable_updates(x_updates, x_snapshot)
+
+    return carry_out, (y, x_updates)
+
+
 @tp.overload
 def scan(
   *,
@@ -1193,6 +1224,7 @@ def scan(
   out_axes: tp.Any = (Carry, 0),
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  graph: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -1210,6 +1242,7 @@ def scan(
   out_axes: tp.Any = (Carry, 0),
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  graph: bool | None = None,
 ) -> F:
   ...
 
@@ -1226,6 +1259,7 @@ def scan(
   out_axes: tp.Any = (Carry, 0),
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  graph: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """A Flax NNX transformation of `jax.lax.scan`_.
 
@@ -1329,11 +1363,58 @@ def scan(
         in_axes=in_axes,
         out_axes=out_axes,
         transform_metadata=transform_metadata,
+        graph=graph,
     )  # type: ignore[return-value]
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('scan')
+
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
+  if not graph:
+    if in_axes != (Carry, 0):
+      raise ValueError(
+        'tree-mode scan only supports `in_axes=(Carry, 0)`, '
+        f'got {in_axes=}'
+      )
+    if out_axes != (Carry, 0):
+      raise ValueError(
+        'tree-mode scan only supports `out_axes=(Carry, 0)`, '
+        f'got {out_axes=}'
+      )
+
+    tree_scan_fn = TreeScanFn(f_unbound)
+
+    @functools.wraps(f)
+    def tree_scan_wrapper(carry_in, x):
+
+      carry_out, (y, updates) = jax.lax.scan(
+        tree_scan_fn,
+        carry_in,
+        x,
+        length=length,
+        reverse=reverse,
+        unroll=unroll,
+        _split_transpose=_split_transpose,
+      )
+
+      extract.apply_variable_updates(x, updates)
+
+      def update_carry(in_leaf, out_leaf):
+        if isinstance(in_leaf, variablelib.Variable):
+          in_leaf.update_from_state(out_leaf)
+          return in_leaf
+        return out_leaf
+
+      carry_out = jax.tree.map(
+        update_carry, carry_in, carry_out,
+        is_leaf=lambda x: isinstance(x, variablelib.Variable),
+      )
+
+      return carry_out, y
+
+    return tree_scan_wrapper  # type: ignore[return-value]
 
   _check_out_axes(out_axes)
 

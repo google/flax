@@ -1599,7 +1599,7 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(mod.n[...], 1)
 
 
-class TestScan(absltest.TestCase):
+class TestScan(parameterized.TestCase):
   def test_basic(self):
     class Block(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
@@ -1655,25 +1655,19 @@ class TestScan(absltest.TestCase):
 
     x = jnp.ones((1, 3))
     y = stack_forward(w, b, x)
-
     assert y.shape == (1, 3)
 
-  def test_variables_as_carries_in_scan(self):
-    def block_init(din, dout, rngs):
-      w = nnx.Param(jax.random.normal(rngs.params(), (din, dout)))
-      b = nnx.Param(jnp.zeros((dout,)))
-      count = nnx.BatchStat(0)
-      return w, b, count
+  @parameterized.parameters(True, False)
+
+  def test_variables_as_carries_in_scan(self, graph):
+    w = nnx.Param(jax.random.normal(jax.random.key(0), (3, 3)))
+    b = nnx.Param(jnp.zeros((3,)))
+    count = nnx.BatchStat(0)
 
     def block_forward(w, b, x):
       return nnx.gelu(x @ w + b[None])
 
-    (w, b, count) = block_init(3, 3, nnx.Rngs(0))
-
-    assert w.shape == (3, 3)
-    assert b.shape == (3,)
-
-    @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0))
+    @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0), graph=graph)
     def stack_forward(params, x):
       w, b, count = params
       y = block_forward(w, b, x)
@@ -1849,6 +1843,44 @@ class TestScan(absltest.TestCase):
         in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, nnx.StateAxes({...: None}))
       )
       def loop(a, b): ...
+
+  def test_tree_mode_scan_stateful(self):
+    count = nnx.Variable(jnp.array(0))
+
+    @nnx.scan(graph=False)
+    def f(count, x):
+      count[...] += 1
+      return count, x + count[...]
+
+    xs = jnp.arange(5)
+    count_out, ys = f(count, xs)
+
+    self.assertIs(count_out, count)
+    self.assertEqual(count[...], 5)
+    np.testing.assert_allclose(ys, jnp.array([1, 3, 5, 7, 9]))
+
+  def test_tree_mode_scan_carry_identity_error(self):
+    count = nnx.Variable(jnp.array(0))
+
+    @nnx.scan(graph=False)
+    def f(count, x):
+      new_count = nnx.Variable(count[...] + 1)
+      return new_count, x
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Carry Variable identity must be preserved',
+    ):
+      f(count, jnp.arange(3))
+
+  def test_tree_mode_non_default_axes_error(self):
+    with self.assertRaisesRegex(
+      ValueError,
+      'tree-mode scan only supports',
+    ):
+      @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3, graph=False)
+      def loop(x):
+        return x
 
   def test_only_carry(self):
     class Foo(nnx.Module):
