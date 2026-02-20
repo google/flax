@@ -148,12 +148,6 @@ class Optimizer(Pytree, tp.Generic[M]):
         gradients that will be passed into the ``grads`` argument of the
         :func:`update` method. The filter should match the filter used in nnx.grad.
     """
-    if isinstance(wrt, _Missing):
-      raise TypeError(
-        'Missing required argument `wrt`. As of Flax 0.11.0 the `wrt` argument is required, '
-        'if you want to keep the previous use nnx.ModelAndOptimizer instead of nnx.Optimizer.'
-      )
-      wrt = nnx.Param
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.tx = tx
     self.opt_state = nnx.data(
