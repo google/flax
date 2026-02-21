@@ -27,6 +27,7 @@ import jax
 from jax.experimental import checkify, mesh_utils
 import jax.numpy as jnp
 import numpy as np
+import optax
 from flax import errors
 
 
@@ -688,6 +689,178 @@ class TestTreeJIT(parameterized.TestCase):
 
     out = f(donated, not_donated)
     np.testing.assert_allclose(out, 3.0)
+
+  def test_jit_partial_basic(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    def f(m, x):
+      return m(x)
+
+    f_jit = nnx.jit_partial(f, m, graph=False)
+    x = jnp.ones((1, 2))
+    y = f_jit(x)
+    self.assertEqual(y.shape, (1, 3))
+
+  def test_jit_partial_variable_update(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.count = nnx.Variable(jnp.array(0))
+
+    m = Foo()
+
+    def f(m, x):
+      m.count[...] += 1
+      return x * 2
+
+    f_jit = nnx.jit_partial(f, m, graph=False)
+    y = f_jit(jnp.array(3.0))
+    np.testing.assert_allclose(y, 6.0)
+    self.assertEqual(m.count[...], 1)
+    y = f_jit(jnp.array(3.0))
+    self.assertEqual(m.count[...], 2)
+
+  def test_jit_partial_multiple_args(self):
+    m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(3, 4, rngs=nnx.Rngs(1))
+
+    def f(m1, m2, x):
+      return m2(m1(x))
+
+    f_jit = nnx.jit_partial(f, m1, m2, graph=False)
+    x = jnp.ones((1, 2))
+    y = f_jit(x)
+    self.assertEqual(y.shape, (1, 4))
+
+  def test_jit_partial_no_retrace(self):
+    n = 0
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    def f(m, x):
+      nonlocal n
+      n += 1
+      return m(x)
+
+    f_jit = nnx.jit_partial(f, m, graph=False)
+    x = jnp.ones((1, 2))
+    f_jit(x)
+    self.assertEqual(n, 1)
+    f_jit(x)
+    self.assertEqual(n, 1)
+
+  def test_jit_partial_no_retrace_after_mutation(self):
+    n = 0
+
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.w = nnx.Param(jnp.ones((2, 3)))
+
+    m = Foo()
+
+    def f(m, x):
+      nonlocal n
+      n += 1
+      return x @ m.w[...]
+
+    f_jit = nnx.jit_partial(f, m, graph=False)
+    x = jnp.ones((1, 2))
+    f_jit(x)
+    self.assertEqual(n, 1)
+    m.w[...] = jnp.zeros((2, 3))
+    y = f_jit(x)
+    self.assertEqual(n, 1)
+    np.testing.assert_allclose(y, jnp.zeros((1, 3)))
+
+  def test_jit_partial_no_partial_args(self):
+    f_partial = nnx.jit_partial(lambda x: x * 2, graph=False)
+    y = f_partial(jnp.array(3.0))
+    np.testing.assert_allclose(y, 6.0)
+
+  def test_jit_partial_in_shardings_none_broadcast(self):
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+
+    m = nnx.Linear(4, 3, rngs=nnx.Rngs(0))
+
+    def f(m, x):
+      return m(x)
+
+    f_jit = nnx.jit_partial(f, m, in_shardings=(None, None), graph=False)
+    x = jnp.ones((n_devices, 4))
+    y = f_jit(x)
+    self.assertEqual(y.shape, (n_devices, 3))
+
+  def test_jit_partial_in_shardings_named(self):
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+    PS = jax.sharding.PartitionSpec
+
+    v = nnx.Param(jnp.ones((n_devices, 4)))
+
+    def f(v, x):
+      return v[...] + x
+
+    x_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
+    v_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
+    f_jit = nnx.jit_partial(
+        f, v, in_shardings=(v_sharding, x_sharding), graph=False)
+    x = jnp.ones((n_devices, 4))
+    y = f_jit(x)
+    self.assertEqual(y.shape, (n_devices, 4))
+
+  def test_jit_partial_mixed_shardings(self):
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+    PS = jax.sharding.PartitionSpec
+
+    m1 = nnx.Linear(4, 3, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(3, 2, rngs=nnx.Rngs(1))
+
+    def f(m1, m2, x):
+      return m2(m1(x))
+
+    x_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
+    f_jit = nnx.jit_partial(
+        f, m1, m2, in_shardings=(None, None, x_sharding), graph=False)
+    x = jnp.ones((n_devices, 4))
+    y = f_jit(x)
+    self.assertEqual(y.shape, (n_devices, 2))
+
+  def test_jit_partial_in_shardings_non_tuple(self):
+    n_devices = jax.local_device_count()
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('data',))
+    PS = jax.sharding.PartitionSpec
+
+    m = nnx.Linear(4, 3, rngs=nnx.Rngs(0))
+
+    def f(m, x):
+      return m(x)
+
+    sharding = jax.sharding.NamedSharding(mesh, PS())
+    f_jit = nnx.jit_partial(f, m, in_shardings=sharding, graph=False)
+    x = jnp.ones((n_devices, 4))
+    y = f_jit(x)
+    self.assertEqual(y.shape, (n_devices, 3))
+
+  def test_jit_partial_train_step(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=nnx.Param)
+
+    def train_step(model, optimizer, x, y):
+      def loss_fn(model):
+        return jnp.mean((model(x) - y) ** 2)
+      loss, grads = nnx.value_and_grad(loss_fn)(model)
+      optimizer.update(model, grads)
+      return loss
+
+    train_step_fn = nnx.jit_partial(train_step, model, optimizer, graph=False)
+    for _ in range(2):
+      x, y = jnp.ones((10, 2)), jnp.ones((10, 3))
+      loss = train_step_fn(x, y)
+      self.assertIsInstance(loss, jax.Array)
 
 
 class TestEvalShape(parameterized.TestCase):
@@ -1743,6 +1916,207 @@ class TestCustomVJP(parameterized.TestCase):
       r'`nondiff_argnums` cannot contain `DiffState` objects',
     ):
       nnx.custom_vjp(lambda m: m, nondiff_argnums=(diff_state,), graph=False)
+
+
+class TestVjpJvp(parameterized.TestCase):
+
+  def test_vjp_basic(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      w: nnx.Param[jax.Array]
+
+    def f(m: Foo, x):
+      return jnp.sum(m.w * x)
+
+    m = Foo(w=nnx.Param(jnp.array([1.0, 2.0, 3.0])))
+    x = jnp.array([4.0, 5.0, 6.0])
+
+    primals_out, vjp_fn = nnx.vjp(f, m, x, graph=False)
+
+    np.testing.assert_allclose(primals_out, 1.0 * 4.0 + 2.0 * 5.0 + 3.0 * 6.0)
+
+    m_grad, x_grad = vjp_fn(jnp.ones_like(primals_out))
+    self.assertIsInstance(m_grad, Foo)
+    np.testing.assert_allclose(m_grad.w[...], x)
+    np.testing.assert_allclose(x_grad, m.w[...])
+
+  def test_vjp_has_aux(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      w: nnx.Param[jax.Array]
+
+    def f(m: Foo, x):
+      y = jnp.sum(m.w * x)
+      return y, {'input': x}
+
+    m = Foo(w=nnx.Param(jnp.array([1.0, 2.0])))
+    x = jnp.array([3.0, 4.0])
+
+    primals_out, vjp_fn, aux = nnx.vjp(f, m, x, has_aux=True, graph=False)
+
+    np.testing.assert_allclose(primals_out, 1.0 * 3.0 + 2.0 * 4.0)
+    np.testing.assert_allclose(aux['input'], x)
+
+  def test_vjp_state_propagation(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      w: nnx.Param[jax.Array]
+      count: nnx.BatchStat[jax.Array]
+
+    def f(m: Foo, x):
+      m.count[...] += 1
+      return jnp.sum(m.w * x)
+
+    m = Foo(
+      w=nnx.Param(jnp.array([1.0, 2.0])),
+      count=nnx.BatchStat(jnp.array(0)),
+    )
+    x = jnp.array([3.0, 4.0])
+
+    self.assertEqual(m.count[...], 0)
+    primals_out, vjp_fn = nnx.vjp(f, m, x, graph=False)
+    self.assertEqual(m.count[...], 1)
+
+  def test_vjp_matches_jax(self):
+    def f(w, x):
+      return jnp.sum(w * x)
+
+    w = jnp.array([1.0, 2.0, 3.0])
+    x = jnp.array([4.0, 5.0, 6.0])
+
+    jax_primals, jax_vjp_fn = jax.vjp(f, w, x)
+    jax_grads = jax_vjp_fn(jnp.ones_like(jax_primals))
+
+    nnx_primals, nnx_vjp_fn = nnx.vjp(f, w, x, graph=False)
+    nnx_grads = nnx_vjp_fn(jnp.ones_like(nnx_primals))
+
+    np.testing.assert_allclose(nnx_primals, jax_primals)
+    for ng, jg in zip(nnx_grads, jax_grads):
+      np.testing.assert_allclose(ng, jg)
+
+  def test_vjp_decorator(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      w: nnx.Param[jax.Array]
+
+    @nnx.vjp(graph=False)
+    def f(m: Foo, x):
+      return jnp.sum(m.w * x)
+
+    m = Foo(w=nnx.Param(jnp.array([1.0, 2.0])))
+    x = jnp.array([3.0, 4.0])
+
+    primals_out, vjp_fn = f(m, x)
+    np.testing.assert_allclose(primals_out, 11.0)
+    m_grad, x_grad = vjp_fn(jnp.ones_like(primals_out))
+    np.testing.assert_allclose(m_grad.w[...], x)
+
+  def test_jvp_basic(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      w: nnx.Param[jax.Array]
+
+    def f(m: Foo, x):
+      return jnp.sum(m.w * x)
+
+    m = Foo(w=nnx.Param(jnp.array([1.0, 2.0, 3.0])))
+    x = jnp.array([4.0, 5.0, 6.0])
+
+    m_tangent = jax.tree.map(jnp.ones_like, m)
+    x_tangent = jnp.ones_like(x)
+
+    primals_out, tangent_out = nnx.jvp(
+      f, (m, x), (m_tangent, x_tangent), graph=False
+    )
+
+    np.testing.assert_allclose(primals_out, 1.0 * 4.0 + 2.0 * 5.0 + 3.0 * 6.0)
+    expected_tangent = jnp.sum(jnp.ones(3) * x + m.w[...] * jnp.ones(3))
+    np.testing.assert_allclose(tangent_out, expected_tangent)
+
+  def test_jvp_has_aux(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      w: nnx.Param[jax.Array]
+
+    def f(m: Foo, x):
+      y = jnp.sum(m.w * x)
+      return y, {'input': x}
+
+    m = Foo(w=nnx.Param(jnp.array([1.0, 2.0])))
+    x = jnp.array([3.0, 4.0])
+
+    m_tangent = jax.tree.map(jnp.ones_like, m)
+    x_tangent = jnp.ones_like(x)
+
+    primals_out, tangent_out, aux = nnx.jvp(
+      f, (m, x), (m_tangent, x_tangent), has_aux=True, graph=False
+    )
+
+    np.testing.assert_allclose(primals_out, 11.0)
+    np.testing.assert_allclose(aux['input'], x)
+
+  def test_jvp_state_propagation(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      w: nnx.Param[jax.Array]
+      count: nnx.BatchStat[jax.Array]
+
+    def f(m: Foo, x):
+      m.count[...] += 1
+      return jnp.sum(m.w * x)
+
+    m = Foo(
+      w=nnx.Param(jnp.array([1.0, 2.0])),
+      count=nnx.BatchStat(jnp.array(0.0)),
+    )
+    x = jnp.array([3.0, 4.0])
+
+    m_tangent = jax.tree.map(jnp.zeros_like, m)
+    x_tangent = jnp.zeros_like(x)
+
+    self.assertEqual(m.count[...], 0.0)
+    primals_out, tangent_out = nnx.jvp(
+      f, (m, x), (m_tangent, x_tangent), graph=False
+    )
+    self.assertEqual(m.count[...], 1.0)
+
+  def test_jvp_matches_jax(self):
+    def f(w, x):
+      return jnp.sum(w * x)
+
+    w = jnp.array([1.0, 2.0, 3.0])
+    x = jnp.array([4.0, 5.0, 6.0])
+
+    w_tangent = jnp.ones_like(w)
+    x_tangent = jnp.ones_like(x)
+
+    jax_primals, jax_tangents = jax.jvp(f, (w, x), (w_tangent, x_tangent))
+    nnx_primals, nnx_tangents = nnx.jvp(
+      f, (w, x), (w_tangent, x_tangent), graph=False
+    )
+
+    np.testing.assert_allclose(nnx_primals, jax_primals)
+    np.testing.assert_allclose(nnx_tangents, jax_tangents)
+
+  def test_jvp_decorator(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      w: nnx.Param[jax.Array]
+
+    @nnx.jvp(graph=False)
+    def f(m: Foo, x):
+      return jnp.sum(m.w * x)
+
+    m = Foo(w=nnx.Param(jnp.array([1.0, 2.0])))
+    x = jnp.array([3.0, 4.0])
+
+    m_tangent = jax.tree.map(jnp.ones_like, m)
+    x_tangent = jnp.ones_like(x)
+
+    primals_out, tangent_out = f((m, x), (m_tangent, x_tangent))
+    np.testing.assert_allclose(primals_out, 11.0)
+    expected_tangent = jnp.sum(jnp.ones(2) * x + m.w[...] * jnp.ones(2))
+    np.testing.assert_allclose(tangent_out, expected_tangent)
 
 
 class TestScan(parameterized.TestCase):
