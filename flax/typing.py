@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import MutableMapping
 from functools import partial
 from typing import (
   Any,
@@ -40,7 +41,7 @@ import jax.tree_util as jtu
 
 Array = Union[jax.Array, Any]
 PRNGKey = jax.Array
-RNGSequences = dict[str, PRNGKey]
+RNGSequences = MutableMapping[str, PRNGKey]
 Dtype = Union[jax.typing.DTypeLike, Any]
 Shape = Sequence[int]
 K = TypeVar('K')
@@ -83,14 +84,14 @@ Initializer = Union[jax.nn.initializers.Initializer, Callable[..., Any]]
 # Collections
 
 Collection = Mapping[str, Any]
-MutableCollection = dict[str, Any]
+MutableCollection = MutableMapping[str, Any]
 
 
 # Dicts
 
 VariableDict = Mapping[str, Collection]
 FrozenVariableDict = FrozenDict[str, Collection]
-MutableVariableDict = dict[str, MutableCollection]
+MutableVariableDict = MutableMapping[str, MutableCollection]
 
 PRNGFoldable = Union[int, str]
 
