@@ -896,31 +896,31 @@ def _tree_split_rngs(
   only: filterlib.Filter = ...,
   squeeze: bool = False,
 ) -> tp.Any:
-  node = graphlib.clone(node, graph=False)
   predicate = filterlib.to_predicate(only)
-  for path, stream in graphlib.iter_graph(node, graph=False):
+
+  def _split_stream(path, node):
     if (
-      isinstance(stream, RngStream)
-      and predicate((*path, 'key'), stream.key)
-      and predicate((*path, 'count'), stream.count)
+      isinstance(node, RngStream)
+      and predicate((*path, 'key'), node.key)
+      and predicate((*path, 'count'), node.count)
     ):
-      key = stream()
-      key = random.split(key, splits)
+      key = random.split(node(), splits)
       if squeeze:
         key = key[0]
       if squeeze:
-        counts_shape = stream.count.shape
+        counts_shape = node.count.shape
       elif isinstance(splits, int):
-        counts_shape = (splits, *stream.count.shape)
+        counts_shape = (splits, *node.count.shape)
       else:
-        counts_shape = (*splits, *stream.count.shape)
+        counts_shape = (*splits, *node.count.shape)
 
-      stream.key = RngKey(key, tag=stream.tag)
-      stream.count = RngCount(
-        jnp.zeros(counts_shape, dtype=jnp.uint32), tag=stream.tag
+      node.key = RngKey(key, tag=node.tag)
+      node.count = RngCount(
+        jnp.zeros(counts_shape, dtype=jnp.uint32), tag=node.tag
       )
+    return node
 
-  return node
+  return graphlib.recursive_map(_split_stream, node, graph=False)
 
 @tp.overload
 def fork_rngs(

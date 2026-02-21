@@ -1209,7 +1209,8 @@ class TestGraphUtils(parameterized.TestCase):
     self.assertEqual(bar2[1].d, -20)
     self.assertEqual(n, 2)
 
-  def test_recursive_map_with_list(self):
+  @parameterized.parameters(True, False)
+  def test_recursive_map_with_list(self, graph):
     rngs = nnx.Rngs(0)
     model = nnx.Sequential(nnx.Linear(2, 3, rngs=rngs), nnx.relu, nnx.Linear(3, 4, rngs=rngs))
 
@@ -1218,7 +1219,7 @@ class TestGraphUtils(parameterized.TestCase):
         return nnx.LoRA(node.in_features, 2, node.out_features, base_module=node, rngs=rngs)
       return node
 
-    self.assertEqual(len(nnx.recursive_map(add_rank2_lora, model).layers), 3)
+    self.assertEqual(len(nnx.recursive_map(add_rank2_lora, model, graph=graph).layers), 3)
 
   def test_graphdef_hash_with_sequential(self):
     rngs = nnx.Rngs(0)
@@ -1502,6 +1503,86 @@ class TestTreeFlatten(parameterized.TestCase):
     self.assertIn('Linear', module_types)
     self.assertIn('Dropout', module_types)
     self.assertLen(modules, 3)
+
+  def test_recursive_map_tree_mode(self):
+    class Foo(nnx.Pytree):
+      def __init__(self, d):
+        self.d = d
+
+    foo1 = Foo(10)
+    foo2 = Foo(20)
+    bar = [foo1, foo2]
+    n = 0
+
+    def inc_d(path, node):
+      nonlocal n
+      if isinstance(node, Foo):
+        n += 1
+        node.d += 1
+      return node
+
+    bar2 = nnx.recursive_map(inc_d, bar, graph=False)
+    self.assertEqual(bar2[0].d, 11)
+    self.assertEqual(bar2[1].d, 21)
+    self.assertEqual(n, 2)
+
+  def test_recursive_map_tree_mode_replace(self):
+    class Foo(nnx.Pytree):
+      def __init__(self, d):
+        self.d = d
+
+    foo1 = Foo(10)
+    foo2 = Foo(20)
+    bar = [foo1, foo2]
+    n = 0
+
+    def swap(path, node):
+      nonlocal n
+      if isinstance(node, Foo):
+        n += 1
+        node = Foo(-node.d)
+      return node
+
+    bar2 = nnx.recursive_map(swap, bar, graph=False)
+    self.assertEqual(bar2[0].d, -10)
+    self.assertEqual(bar2[1].d, -20)
+    self.assertEqual(n, 2)
+
+  def test_recursive_map_tree_mode_with_list(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.Sequential(
+      nnx.Linear(2, 3, rngs=rngs), nnx.relu, nnx.Linear(3, 4, rngs=rngs)
+    )
+
+    def add_rank2_lora(_, node):
+      if isinstance(node, nnx.Linear):
+        return nnx.LoRA(
+          node.in_features, 2, node.out_features,
+          base_module=node, rngs=rngs,
+        )
+      return node
+
+    result = nnx.recursive_map(add_rank2_lora, model, graph=False)
+    self.assertLen(result.layers, 3)
+
+  def test_recursive_map_tree_mode_shared_variable_raises(self):
+    v = nnx.Param(jnp.array(1))
+    g = [v, v]
+
+    with self.assertRaisesRegex(
+      ValueError, 'Shared references are not supported with graph=False'
+    ):
+      nnx.recursive_map(lambda path, node: node, g, graph=False)
+
+  def test_recursive_map_tree_mode_cycle_raises(self):
+    a = nnx.List([1])
+    b = nnx.List([2, a])
+    a.append(b)
+
+    with self.assertRaisesRegex(
+      ValueError, 'Cycles are not supported with graph=False'
+    ):
+      nnx.recursive_map(lambda path, node: node, a, graph=False)
 
 
 if __name__ == '__main__':

@@ -20,6 +20,7 @@ import tempfile
 from typing import TypeVar
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import cloudpickle
 from flax import errors, nnx
 import jax
@@ -178,7 +179,7 @@ class SowMod(nnx.Module):
         self.sow(nnx.Intermediate, "my_summary", y.mean())
         return y * 2
 
-class TestModule(absltest.TestCase):
+class TestModule(parameterized.TestCase):
   def test_has_module_state(self):
     class Foo(nnx.Module): ...
 
@@ -699,7 +700,8 @@ class TestModule(absltest.TestCase):
       raise_if_not_found=False,
     )
 
-  def test_view(self):
+  @parameterized.parameters(True, False)
+  def test_view(self, graph):
     class Block(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
@@ -712,18 +714,18 @@ class TestModule(absltest.TestCase):
     assert block.dropout.deterministic == False
     assert block.batch_norm.use_running_average == False
 
-    new_block = nnx.view(block, deterministic=True, use_running_average=True)
+    new_block = nnx.view(block, deterministic=True, use_running_average=True, graph=graph)
     assert new_block.dropout.deterministic == True
     assert new_block.batch_norm.use_running_average == True
     assert new_block.linear.kernel is block.linear.kernel
 
     block = Block(2, 5, rngs=nnx.Rngs(0))
-    new_block = nnx.view(block, only=nnx.Dropout, deterministic=True)
-    # Only the dropout will be modified
+    new_block = nnx.view(block, only=nnx.Dropout, deterministic=True, graph=graph)
     assert new_block.dropout.deterministic == True
     assert new_block.batch_norm.use_running_average == False
 
-  def test_view_error(self):
+  @parameterized.parameters(True, False)
+  def test_view_error(self, graph):
     class Block(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
@@ -739,7 +741,7 @@ class TestModule(absltest.TestCase):
             "Unused keys found in nnx.view: \\['unknown'\\]"
         ),
     ):
-      nnx.view(block, deterministic=True, use_running_average=True, unknown=True)
+      nnx.view(block, deterministic=True, use_running_average=True, unknown=True, graph=graph)
 
   def test_cloud_pickle(self):
     import platform
@@ -812,7 +814,8 @@ class TestModule(absltest.TestCase):
     self.assertIn(str(expected_total_batch_stats), foo_repr[0])
     self.assertIn(str(expected_total_rng_states), foo_repr[0])
 
-  def test_view_info(self):
+  @parameterized.parameters(True, False)
+  def test_view_info(self, graph):
     class Block(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
@@ -831,11 +834,12 @@ class TestModule(absltest.TestCase):
         return self.block2(self.block1(x))
 
     obj = Foo(rngs=nnx.Rngs(0))
-    info_str = nnx.view_info(obj)
+    info_str = nnx.view_info(obj, graph=graph)
     self.assertEqual(info_str.count("BatchNorm:"), 1)
     self.assertEqual(info_str.count("Dropout:"), 1)
 
-  def test_view_info_with_filter(self):
+  @parameterized.parameters(True, False)
+  def test_view_info_with_filter(self, graph):
     class Block(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
@@ -846,14 +850,15 @@ class TestModule(absltest.TestCase):
         return nnx.relu(self.dropout(self.bn(self.linear(x))))
 
     obj = Block(4, 8, rngs=nnx.Rngs(0))
-    info_str = nnx.view_info(obj, only=nnx.Dropout)
+    info_str = nnx.view_info(obj, only=nnx.Dropout, graph=graph)
     self.assertIn("Dropout:", info_str)
     self.assertNotIn("BatchNorm:", info_str)
 
-    info_str = nnx.view_info(obj, only=nnx.MultiHeadAttention)
+    info_str = nnx.view_info(obj, only=nnx.MultiHeadAttention, graph=graph)
     self.assertEmpty(info_str)
 
-  def test_view_info_with_custom_set_mode(self):
+  @parameterized.parameters(True, False)
+  def test_view_info_with_custom_set_mode(self, graph):
     class Block(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         pass
@@ -872,7 +877,7 @@ class TestModule(absltest.TestCase):
         return kwargs
 
     obj = Block(rngs=nnx.Rngs(0))
-    info_str = nnx.view_info(obj)
+    info_str = nnx.view_info(obj, graph=graph)
     self.assertEqual(f"{obj.__class__.__qualname__}:\n  arg1: bool | None = None\n    The first argument.\n  arg2: int | None = None\n    The second argument.\n    This has two lines.", info_str)
 
 

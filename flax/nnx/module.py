@@ -428,7 +428,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       raise_if_not_found=False,
     )
 
-def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool = True,  **kwargs) -> A:
+def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool = True, graph: bool | None = None, **kwargs) -> A:
   """Creates a new node with static attributes updated according to ``**kwargs``.
 
   The new node contains references to jax arrays in the original node. If a
@@ -462,6 +462,10 @@ def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool =
   Args:
     node: the object to create a copy of.
     only: Filters to select the Modules to set the attributes of.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
     **kwargs: The attributes to set.
   """
   predicate = filterlib.to_predicate(only)
@@ -477,7 +481,7 @@ def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool =
         counts[k] += 1
     return node
 
-  out = graphlib.recursive_map(_set_mode_fn, node)
+  out = graphlib.recursive_map(_set_mode_fn, node, graph=graph)
 
   if raise_if_not_found:
     set_mode_calls = counts.pop("_set_mode_calls")
@@ -518,7 +522,7 @@ def _parse_docstring_args(doc_str: str) -> dict[str, str]:
 
 
 
-def view_info(node: Module, /, *, only: filterlib.Filter = ...) -> str:
+def view_info(node: Module, /, *, only: filterlib.Filter = ..., graph: bool | None = None) -> str:
   """Provides information about the ``view`` arguments for a module and all
   submodules. If no docstring is provided for a module's `set_view`, this function
   puts the `set_view` signature below the function.
@@ -554,6 +558,10 @@ def view_info(node: Module, /, *, only: filterlib.Filter = ...) -> str:
   Args:
     node: the object to display ``view`` information for.
     only: Filters to select the Modules to display information for.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   """
   predicate = filterlib.to_predicate(only)
   classes: set[Module] = set()
@@ -563,7 +571,7 @@ def view_info(node: Module, /, *, only: filterlib.Filter = ...) -> str:
       classes.add(node.__class__)
     return node
 
-  graphlib.recursive_map(_set_mode_info_fn, node)
+  graphlib.recursive_map(_set_mode_info_fn, node, graph=graph)
 
   class_list = sorted(list(classes), key=lambda x: x.__qualname__)
   out_str = []

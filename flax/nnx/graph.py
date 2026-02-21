@@ -2907,35 +2907,37 @@ def _iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
 
 
 def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
-  seen_ids: set[int] = set()
+  in_progress: set[int] = set()
+  seen_refs: set[int] = set()
   stack: list[tuple[PathParts, tp.Any, bool]] = [((), node, False)]
   while stack:
     path, current, traversed = stack.pop()
 
     if traversed:
+      in_progress.discard(id(current))
       yield path, current
       continue
 
     if not is_pytree_node(current, check_graph_registry=False):
       if isinstance(current, Variable) or variablelib.is_array_ref(current):
         obj_id = id(current)
-        if obj_id in seen_ids:
+        if obj_id in seen_refs:
           raise ValueError(
             f'Found duplicate Variable or Ref at path '
             f'"{"/".join(map(str, path))}". '
             'Shared references are not supported with graph=False.'
           )
-        seen_ids.add(obj_id)
+        seen_refs.add(obj_id)
       yield path, current
       continue
 
     obj_id = id(current)
-    if obj_id in seen_ids:
+    if obj_id in in_progress:
       raise ValueError(
         f'Found cycle at path "{"/".join(map(str, path))}". '
         'Cycles are not supported with graph=False.'
       )
-    seen_ids.add(obj_id)
+    in_progress.add(obj_id)
 
     stack.append((path, current, True))
     children, _ = jax.tree_util.tree_flatten_with_path(
@@ -2946,7 +2948,13 @@ def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
       stack.append(((*path, key), child, False))
 
 
-def recursive_map(f: tp.Callable[[PathParts, tp.Any], tp.Any], node: tp.Any, /):
+def recursive_map(
+  f: tp.Callable[[PathParts, tp.Any], tp.Any],
+  node: tp.Any,
+  /,
+  *,
+  graph: bool | None = None,
+):
   """Recursively applies a function to all nodes and leaves of the given graph node.
 
   Example::
@@ -2969,15 +2977,28 @@ def recursive_map(f: tp.Callable[[PathParts, tp.Any], tp.Any], node: tp.Any, /):
     Path = .conv     Conv
     Path = .lin      Linear
     Path = .         MyModule
+
+  Args:
+    f: A function that takes a path and a node and returns a new node.
+    node: A graph node object.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   """
-  node = clone(node, variables=False)
-  path_parts: PathParts = ()
-  visited: set[int] = set()
-  results: dict[int, tp.Any] = {}
-  return _recursive_map(f, node, path_parts, visited, results)
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
+  if graph:
+    node = clone(node, variables=False)
+    path_parts: PathParts = ()
+    visited: set[int] = set()
+    results: dict[int, tp.Any] = {}
+    return _recursive_map_graph(f, node, path_parts, visited, results)
+  else:
+    return _recursive_map_tree(f, node)
 
 
-def _recursive_map(
+def _recursive_map_graph(
     f: tp.Callable[[PathParts, tp.Any], tp.Any],
     node: tp.Any,
     path: PathParts,
@@ -3002,7 +3023,7 @@ def _recursive_map(
     visited.add(node_id)
   if node_impl is not None:
     for key, value in node_impl.node_dict(node).items():
-      new_value = _recursive_map(f, value, (*path, key), visited, results)
+      new_value = _recursive_map_graph(f, value, (*path, key), visited, results)
       if new_value is not value:
         if node_impl.set_key is not None and value is not new_value:
           node_impl.set_key(node, key, new_value)
@@ -3015,6 +3036,52 @@ def _recursive_map(
   new_node = f(path, node)
   results[node_id] = new_node
   return new_node
+
+
+def _recursive_map_tree(
+    f: tp.Callable[[PathParts, tp.Any], tp.Any],
+    node: tp.Any,
+) -> tp.Any:
+  in_progress: set[int] = set()
+  seen_refs: set[int] = set()
+
+  def _recurse(path: PathParts, current: tp.Any) -> tp.Any:
+    if not is_pytree_node(current, check_graph_registry=False):
+      if isinstance(current, Variable) or is_array_ref(current):
+        obj_id = id(current)
+        if obj_id in seen_refs:
+          raise ValueError(
+            f'Found duplicate Variable or Ref at path '
+            f'"{"/".join(map(str, path))}". '
+            'Shared references are not supported with graph=False.'
+          )
+        seen_refs.add(obj_id)
+      return f(path, current)
+
+    obj_id = id(current)
+    if obj_id in in_progress:
+      raise ValueError(
+        f'Found cycle at path "{"/".join(map(str, path))}". '
+        'Cycles are not supported with graph=False.'
+      )
+    in_progress.add(obj_id)
+
+    children_with_path, treedef = jax.tree_util.tree_flatten_with_path(
+      current, is_leaf=lambda x: x is not current
+    )
+    new_children = []
+    for jax_key_path, child in children_with_path:
+      key = _key_path_to_key(jax_key_path[0])
+      new_child = _recurse((*path, key), child)
+      new_children.append(new_child)
+
+    new_node = treedef.unflatten(new_children)
+    result = f(path, new_node)
+
+    in_progress.discard(obj_id)
+    return result
+
+  return _recurse((), node)
 
 
 def find_duplicates(node: tp.Any, /, *, only: filterlib.Filter = ...) -> list[list[PathParts]]:
