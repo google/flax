@@ -188,6 +188,22 @@ class TreeVmapFn:
 
 
 @dataclasses.dataclass(eq=False)
+class TreePmapFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, *args, **kwargs):
+    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    out = self.f(*args, **kwargs)
+    extract.check_no_aliases(*updates, out)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    return out, updates
+
+
+@dataclasses.dataclass(eq=False)
 class VmapFn:
   f: tp.Callable[..., tp.Any]
   transform_metadata: tp.Mapping[str, tp.Any]
@@ -486,6 +502,7 @@ def pmap(
     global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+    graph: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -505,6 +522,7 @@ def pmap(
     global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+    graph: bool | None = None,
 ) -> F:
   ...
 
@@ -523,6 +541,7 @@ def pmap(
   global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
+  graph: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
 
@@ -604,6 +623,8 @@ def pmap(
            [0, 2, 4, 6],
            [0, 3, 6, 9]], dtype=int32)
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
   if f is Missing:
     return functools.partial(
         pmap,
@@ -617,12 +638,45 @@ def pmap(
         donate_argnums=donate_argnums,
         global_arg_shapes=global_arg_shapes,
         transform_metadata=transform_metadata,
+        graph=graph,
     )  # type: ignore[return-value]
 
-  # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('pmap')
+
+  if not graph:
+    if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
+      raise ValueError(
+        '`in_axes` cannot contain `StateAxes` objects '
+        'when `graph=False`'
+      )
+    if any(isinstance(x, StateAxes) for x in jax.tree.leaves(out_axes)):
+      raise ValueError(
+        '`out_axes` cannot contain `StateAxes` objects '
+        'when `graph=False`'
+      )
+
+    pmapped_fn = jax.pmap(
+      TreePmapFn(f_unbound),
+      axis_name=axis_name,
+      in_axes=in_axes,
+      out_axes=(out_axes, (in_axes, 0)),
+      static_broadcasted_argnums=static_broadcasted_argnums,
+      devices=devices,
+      backend=backend,
+      axis_size=axis_size,
+      donate_argnums=donate_argnums,
+      global_arg_shapes=global_arg_shapes,
+    )
+
+    @functools.wraps(f_unbound)
+    def tree_pmap_wrapper(*args, **kwargs):
+      out, updates = pmapped_fn(*args, **kwargs)
+      extract.apply_variable_updates((args, kwargs), updates)
+      return out
+
+    return tree_pmap_wrapper  # type: ignore[return-value]
 
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)

@@ -3426,7 +3426,7 @@ class TestVmap(absltest.TestCase):
     self.assertEqual(model.bn.bias.shape, (3,))
 
 
-class TestPmap(absltest.TestCase):
+class TestPmap(parameterized.TestCase):
   def test_basic_single(self):
     class Block(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
@@ -3470,7 +3470,8 @@ class TestPmap(absltest.TestCase):
 
     assert not jnp.allclose(y, y2)
 
-  def test_basic_demo_single(self):
+  @parameterized.parameters(True, False)
+  def test_basic_demo_single(self, graph):
     class Block(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(20, 20, rngs=rngs)
@@ -3480,11 +3481,11 @@ class TestPmap(absltest.TestCase):
         return self.dropout(nnx.relu(self.linear(x)))
 
     @nnx.split_rngs(splits=1)
-    @nnx.pmap(axis_size=1)
+    @nnx.pmap(axis_size=1, graph=graph)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
-    @nnx.pmap(axis_size=1)
+    @nnx.pmap(axis_size=1, graph=graph)
     def forward_block(module: Block, x):
       return module(x)
 
@@ -4268,5 +4269,170 @@ class TestBoundMethodTransforms(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, 'bound methods'):
       _ = nnx.scan(m.__call__, in_axes=(0,), out_axes=0)
 
+  def test_tree_mode_pmap_basic(self):
+    class LinearEnsemble(nnx.Module):
+      def __init__(self, num, *, rngs):
+        self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
+
+    model = LinearEnsemble(1, rngs=nnx.Rngs(0))
+    x = jnp.ones((2,))
+
+    @nnx.pmap(in_axes=(0, None), out_axes=0, axis_size=1, graph=False)
+    def forward(model, x):
+      return x @ model.w
+
+    y = forward(model, x)
+    assert y.shape == (1, 3)
+
+  def test_tree_mode_pmap_stateful(self):
+    class Counter(nnx.Variable):
+      pass
+
+    class Linear(nnx.Module):
+      def __init__(self, din, dout, *, rngs):
+        key = rngs.params()
+        self.w = nnx.Param(jax.random.uniform(key, (din, dout)))
+        self.count = Counter(jnp.array(0))
+
+      def __call__(self, x):
+        self.count[...] += 1
+        return x @ self.w
+
+    model = Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.pmap(in_axes=(None, 0), out_axes=0, axis_size=1, graph=False)
+    def forward(model, x):
+      return model(x)
+
+    x = jnp.ones((1, 2))
+    y = forward(model, x)
+    assert y.shape == (1, 3)
+    assert model.count.get_value() == 1
+
+  @absltest.skip('TODO: fix tree-mode split_rngs')
+  def test_tree_mode_pmap_split_merge(self):
+    class Block(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(3, 10, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+
+      def __call__(self, x: jax.Array) -> jax.Array:
+        x = self.linear(x)
+        x = nnx.elu(x)
+        x = self.dropout(x)
+        return x
+
+    @nnx.split_rngs(splits=1)
+    @nnx.pmap(in_axes=(0, 0, None), out_axes=(None, 0, None), axis_size=1,
+              graph=False)
+    def create_block(
+        params_state, rng_state, rest_state,
+    ):
+      module = nnx.merge(graphdef, params_state, rng_state, rest_state)
+      return module
+
+    rngs = nnx.Rngs(0)
+    block = Block(rngs)
+    graphdef, params_state, rng_state, rest_state = nnx.split(
+        block, nnx.Param, nnx.RngState, ...,
+    )
+    params_state = jax.tree.map(
+        lambda x: jnp.expand_dims(x, 0), params_state,
+    )
+    rng_state = jax.tree.map(
+        lambda x: jnp.expand_dims(x, 0), rng_state,
+    )
+    module = create_block(params_state, rng_state, rest_state)
+    initial_key = module.dropout.rngs.key[...]
+
+    assert module.dropout.rngs.count[0] == 0
+    assert module.linear.kernel.shape == (1, 3, 10)
+    assert module.linear.bias.shape == (1, 10)
+
+    x = jnp.ones((1, 1, 3))
+
+    @nnx.pmap(in_axes=(0, 0, None, 0), axis_size=1, graph=False)
+    def forward_block(params_state, rng_state, rest_state, x):
+      module = nnx.merge(graphdef, params_state, rng_state, rest_state)
+      y = module(x)
+      _, new_params, new_rng, new_rest = nnx.split(
+          module, nnx.Param, nnx.RngState, ...,
+      )
+      return y, new_params, new_rng, new_rest
+
+    graphdef, params_state, rng_state, rest_state = nnx.split(
+        module, nnx.Param, nnx.RngState, ...,
+    )
+    y, params_state, rng_state, rest_state = forward_block(
+        params_state, rng_state, rest_state, x,
+    )
+    module = nnx.merge(graphdef, params_state, rng_state, rest_state)
+
+    assert y.shape == (1, 1, 10)
+    assert module.dropout.rngs.count[0] == 1
+    assert module.dropout.rngs.key[...] == initial_key
+
+    graphdef, params_state, rng_state, rest_state = nnx.split(
+        module, nnx.Param, nnx.RngState, ...,
+    )
+    y2, params_state, rng_state, rest_state = forward_block(
+        params_state, rng_state, rest_state, x,
+    )
+
+    assert not jnp.allclose(y, y2)
+
+  @absltest.skip('TODO: fix tree-mode split_rngs')
+  def test_tree_mode_pmap_replicate(self):
+    din = 3
+    dout = 10
+
+    class Block(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+
+      def __call__(self, x: jax.Array) -> jax.Array:
+        return self.dropout(nnx.relu(self.linear(x)))
+
+    rngs = nnx.Rngs(0)
+    module = Block(rngs)
+    initial_key = module.dropout.rngs.key[...]
+
+    assert module.dropout.rngs.count[...] == 0
+    assert module.linear.kernel.shape == (din, dout)
+    assert module.linear.bias.shape == (dout,)
+
+    @nnx.split_rngs(splits=1)
+    @partial(nnx.pmap, in_axes=(0, None, 0), out_axes=0, axis_size=1,
+             graph=False)
+    def forward_block(rng_state, rest_state, x):
+      module = nnx.merge(graphdef, rng_state, rest_state)
+      y = module(x)
+      _, new_rng, new_rest = nnx.split(module, nnx.RngState, ...)
+      return y, new_rng, new_rest
+
+    x = jnp.ones((1, 5, din))
+
+    graphdef, rng_state, rest_state = nnx.split(
+        module, nnx.RngState, ...,
+    )
+    y, rng_state, rest_state = forward_block(rng_state, rest_state, x)
+    module = nnx.merge(graphdef, rng_state, rest_state)
+
+    assert y.shape == (1, 5, dout)
+    assert module.dropout.rngs.count[...] == 1
+
+    graphdef, rng_state, rest_state = nnx.split(
+        module, nnx.RngState, ...,
+    )
+    y2, rng_state, rest_state = forward_block(rng_state, rest_state, x)
+
+    assert not jnp.allclose(y, y2)
+
+    module = nnx.merge(graphdef, rng_state, rest_state)
+    assert module.dropout.rngs.key[...] == initial_key
+
+
 if __name__ == '__main__':
   absltest.main()
+
