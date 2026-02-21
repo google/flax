@@ -324,6 +324,37 @@ class TestGQADotProductAttention(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, "must be a multiple"):
         nnx.dot_product_attention(query, key, value)
 
+  def test_gqa_multihead_attention(self):
+    in_feat = 128
+    n_heads = 32
+    n_kv_heads = 8
+    qkv_feat = 2048
+    head_dim = qkv_feat // n_heads
+
+    model = nnx.MultiHeadAttention(
+      num_heads=n_heads,
+      in_features=in_feat,
+      qkv_features=qkv_feat,
+      num_key_value_heads=n_kv_heads,
+      rngs=nnx.Rngs(0),
+    )
+
+    assert model.query.kernel.shape == (in_feat, n_heads, head_dim)
+    assert model.key.kernel.shape == (in_feat, n_kv_heads, head_dim)
+    assert model.value.kernel.shape == (in_feat, n_kv_heads, head_dim)
+
+    x = jnp.ones((1, 10, in_feat))
+    y = model(x, decode=False)
+    assert y.shape == (1, 10, in_feat)
+
+    model.init_cache((1, 10, in_feat))
+    assert model.cached_key.shape == (1, 10, n_kv_heads, head_dim)
+
+    x_token = jnp.ones((1, 1, in_feat))
+    y_token = model(x_token, decode=True)
+    assert y_token.shape == (1, 1, in_feat)
+    assert model.cache_index == 1
+
   def test_gqa_parity_with_jax(self):
     class DummyModule(nnx.Module):
       pass
