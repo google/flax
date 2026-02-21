@@ -1196,16 +1196,7 @@ class TreeScanFn:
     out = self.f(carry, x)
     carry_out, y = out
 
-    def check_same_id(in_leaf, out_leaf):
-      if isinstance(in_leaf, variablelib.Variable) and in_leaf is not out_leaf:
-        raise ValueError(
-          'Carry Variable identity must be preserved across '
-          'scan iterations.'
-        )
-    jax.tree.map(
-      check_same_id, carry_updates, carry_out,
-      is_leaf=lambda x: isinstance(x, variablelib.Variable),
-    )
+    extract.check_same_variables(carry_updates, carry_out, 'scan')
 
     extract.check_no_aliases(x_updates, y)
     x_updates = extract.mask_variable_updates(x_updates, x_snapshot)
@@ -1402,16 +1393,7 @@ def scan(
 
       extract.apply_variable_updates(x, updates)
 
-      def update_carry(in_leaf, out_leaf):
-        if isinstance(in_leaf, variablelib.Variable):
-          in_leaf.update_from_state(out_leaf)
-          return in_leaf
-        return out_leaf
-
-      carry_out = jax.tree.map(
-        update_carry, carry_in, carry_out,
-        is_leaf=lambda x: isinstance(x, variablelib.Variable),
-      )
+      carry_out = extract.update_carry_variables(carry_in, carry_out)
 
       return carry_out, y
 
@@ -1553,6 +1535,21 @@ def scan(
 
 
 @dataclasses.dataclass(eq=False)
+class TreeWhileLoopBodyFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, val):
+    val_variables, _ = extract.updates_and_snapshot(val)
+    out = self.f(val)
+    extract.check_same_variables(val_variables, out, 'while_loop')
+    return out
+
+
+@dataclasses.dataclass(eq=False)
 class WhileLoopCondFn:
   f: tp.Callable[..., tp.Any]
 
@@ -1648,7 +1645,9 @@ class WhileLoopBodyFn:
 @graphlib.update_context('while_loop')
 def while_loop(cond_fun: tp.Callable[[T], tp.Any],
                body_fun: tp.Callable[[T], T],
-               init_val: T) -> T:
+               init_val: T,
+               *,
+               graph: bool | None = None) -> T:
   """A Flax NNX transformation of `jax.lax.while_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.while_loop.html>`_.
 
   Caution: for the NNX internal reference tracing mechanism to work, you cannot
@@ -1676,8 +1675,19 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
       Note that both data and modules of ``T`` must have the same reference
       structure between inputs and outputs.
     init_val: The initial input for ``cond_fun`` and ``body_fun``. Must be of type ``T``.
+    graph: if True, use graph-mode (default). If False, use tree-mode.
+      If None, uses the value of ``flax_nnx_graph_mode`` config.
 
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
+  if not graph:
+    val_out = jax.lax.while_loop(
+      cond_fun,
+      TreeWhileLoopBodyFn(body_fun),
+      init_val,
+    )
+    return extract.update_carry_variables(init_val, val_out)
 
   pure_init_val = extract.to_tree(init_val, ctxtag='while_loop')
 
@@ -1692,6 +1702,21 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
   )
   out = extract.from_tree(pure_out, ctxtag='while_loop', is_inner=False)
   return out
+
+
+@dataclasses.dataclass(eq=False)
+class TreeForiLoopBodyFn:
+  f: tp.Callable[..., tp.Any]
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, i, val):
+    val_variables, _ = extract.updates_and_snapshot(val)
+    out = self.f(i, val)
+    extract.check_same_variables(val_variables, out, 'fori_loop')
+    return out
 
 
 @dataclasses.dataclass(eq=False)
@@ -1714,7 +1739,8 @@ def fori_loop(lower: int, upper: int,
               body_fun: tp.Callable[[int, T], T],
               init_val: T,
               *,
-              unroll: int | bool | None = None) -> T:
+              unroll: int | bool | None = None,
+              graph: bool | None = None) -> T:
   """A Flax NNX transformation of `jax.lax.fori_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.fori_loop.html>`_.
 
   Caution: for the NNX internal reference tracing mechanism to work, you cannot
@@ -1749,11 +1775,23 @@ def fori_loop(lower: int, upper: int,
       boolean is provided, it will determine if the loop is competely unrolled
       (i.e. ``unroll=True``) or left completely unrolled (i.e. ``unroll=False``).
       This argument is only applicable if the loop bounds are statically known.
+    graph: if True, use graph-mode (default). If False, use tree-mode.
+      If None, uses the value of ``flax_nnx_graph_mode`` config.
 
   Returns:
     A loop value from the final iteration, of type ``T``.
 
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
+  if not graph:
+    val_out = jax.lax.fori_loop(
+      lower, upper,
+      TreeForiLoopBodyFn(body_fun),
+      init_val,
+      unroll=unroll,
+    )
+    return extract.update_carry_variables(init_val, val_out)
 
   pure_init_val = extract.to_tree(init_val, ctxtag='fori_loop')
   body = ForiLoopBodyFn(body_fun)

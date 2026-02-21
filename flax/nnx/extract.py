@@ -462,3 +462,30 @@ def treemap_copy_args(f):
     args, kwargs = jax.tree.map(lambda x: x, (args, kwargs))
     return f(*args, **kwargs)
   return wrapper
+
+
+def check_same_variables(inputs, outputs, transform_name: str = ''):
+  def _check(in_leaf, out_leaf):
+    if isinstance(in_leaf, variablelib.Variable) and in_leaf is not out_leaf:
+      raise ValueError(
+        f'{transform_name} Variable identity must be preserved '
+        'across iterations.'
+      )
+  is_leaf = lambda x: x is None or isinstance(x, variablelib.Variable)
+  jax.tree.map(
+    _check, inputs, outputs,
+    is_leaf=is_leaf,
+  )
+
+
+def update_carry_variables(init_val, val_out):
+  def _update(in_leaf, out_leaf):
+    if isinstance(in_leaf, variablelib.Variable):
+      in_leaf.update_from_state(out_leaf)
+      return in_leaf
+    return out_leaf
+
+  return jax.tree.map(
+    _update, init_val, val_out,
+    is_leaf=lambda x: isinstance(x, variablelib.Variable),
+  )

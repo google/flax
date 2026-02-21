@@ -2015,7 +2015,7 @@ class TestScan(parameterized.TestCase):
 
     with self.assertRaisesRegex(
       ValueError,
-      'Carry Variable identity must be preserved',
+      'scan Variable identity must be preserved',
     ):
       f(count, jnp.arange(3))
 
@@ -3707,8 +3707,9 @@ class TestSwitch(parameterized.TestCase):
     assert model.next_index == 1
 
 
-class TestWhileLoop(absltest.TestCase):
-  def test_basic(self):
+class TestWhileLoop(parameterized.TestCase):
+  @parameterized.parameters(True, False)
+  def test_basic(self, graph):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -3719,10 +3720,11 @@ class TestWhileLoop(absltest.TestCase):
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     _, y, _ = nnx.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
     np.testing.assert_array_equal(y, x * 8)
 
-  def test_multiple_objects(self):
+  @parameterized.parameters(True, False)
+  def test_multiple_objects(self, graph):
     def fwd_fn(input):
       m1, (w2,), x, c = input
       y = m1(x) @ w2
@@ -3734,10 +3736,11 @@ class TestWhileLoop(absltest.TestCase):
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     _, _, y, _ = nnx.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (m1, (w2,), x, 3.0))
+      lambda input: input[-1] > 0, fwd_fn, (m1, (w2,), x, 3.0), graph=graph)
     np.testing.assert_allclose(y, x)
 
-  def test_nested_module(self):
+  @parameterized.parameters(True, False)
+  def test_nested_module(self, graph):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -3749,7 +3752,7 @@ class TestWhileLoop(absltest.TestCase):
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     _, y, _ = nnx.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
     np.testing.assert_array_equal(y, x * 8)
 
   def test_shared_module(self):
@@ -3779,7 +3782,8 @@ class TestWhileLoop(absltest.TestCase):
     )
     np.testing.assert_array_equal(y, jnp.zeros((10,)))
 
-  def test_value_changed(self):
+  @parameterized.parameters(True, False)
+  def test_value_changed(self, graph):
     def fwd_fn(input):
       m, x, c = input
       m.kernel[...] = jnp.zeros_like(m.kernel)
@@ -3790,14 +3794,15 @@ class TestWhileLoop(absltest.TestCase):
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     _, y, _ = nnx.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
     np.testing.assert_array_equal(
       module.kernel[...],
       jnp.zeros((10, 10)),
     )
     np.testing.assert_array_equal(y, jnp.zeros((10,)))
 
-  def test_ref_changed(self):
+  @parameterized.parameters(True, False)
+  def test_ref_changed(self, graph):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -3809,9 +3814,10 @@ class TestWhileLoop(absltest.TestCase):
 
     with self.assertRaises(ValueError):
       _, y, _ = nnx.while_loop(
-        lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0))
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0), graph=graph)
 
-  def test_structure_changed(self):
+  @parameterized.parameters(True, False)
+  def test_structure_changed(self, graph):
     def fwd_fn(input):
       m, x, c = input
       m = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(1))
@@ -3822,9 +3828,9 @@ class TestWhileLoop(absltest.TestCase):
     module = nnx.Linear(10, 10, use_bias=True, rngs=nnx.Rngs(0))
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    with self.assertRaises(ValueError):
+    with self.assertRaises((ValueError, TypeError)):
       _, y, _ = nnx.while_loop(
-        lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0))
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
 
   def test_repeated_object(self):
     m = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
@@ -3850,7 +3856,19 @@ class TestWhileLoop(absltest.TestCase):
     g_accum = jax.tree.map(jnp.zeros_like, nnx.state(model))
     nnx.fori_loop(0, 2, immut_fn, g_accum)
 
-  def test_fori_loop_basic(self):
+  @parameterized.parameters(True, False)
+  def test_fori_loop_grad_accum(self, graph):
+    accum = nnx.Variable(jnp.zeros((10, 10)))
+
+    def accum_fn(i, accum):
+      accum[...] += 1
+      return accum
+
+    accum = nnx.fori_loop(0, 3, accum_fn, accum, graph=graph)
+    np.testing.assert_array_equal(accum[...], jnp.full((10, 10), 3.0))
+
+  @parameterized.parameters(True, False)
+  def test_fori_loop_basic(self, graph):
     def fwd_fn(i, input):
       m, x = input
       m.kernel[...] = jnp.identity(10) * i
@@ -3859,7 +3877,7 @@ class TestWhileLoop(absltest.TestCase):
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
     x = jax.random.normal(jax.random.key(0), (10,))
 
-    _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x))
+    _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x), graph=graph)
     np.testing.assert_array_equal(y, x * 2 * 3)
 
   def test_fori_loop_with_sharing(self):
@@ -3896,7 +3914,8 @@ class TestWhileLoop(absltest.TestCase):
       d.a.params[...], np.full((10,), 10, dtype=int)
     )
 
-  def test_loops_multiple_modules(self):
+  @parameterized.parameters(True, False)
+  def test_loops_multiple_modules(self, graph):
     class Foo(nnx.Module):
       def __init__(self):
         self.param = nnx.Param(jnp.zeros((1,)))
@@ -3909,9 +3928,99 @@ class TestWhileLoop(absltest.TestCase):
     fori_loop_fn = lambda i, inputs: loop_fn(inputs)
     a = Foo()
     b = Foo()
-    nnx.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2))
-    nnx.fori_loop(0, 2, fori_loop_fn, (a, b))
+    nnx.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2),
+                   graph=graph)
+    nnx.fori_loop(0, 2, fori_loop_fn, (a, b), graph=graph)
 
+  @parameterized.parameters(True, False)
+  def test_tree_mode_while_loop_stateful(self, graph):
+    class Counter(nnx.Module):
+      def __init__(self):
+        self.count = nnx.Variable(jnp.array(0))
+
+    counter = Counter()
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    module.kernel[...] = jnp.identity(10) * 2
+    x = jax.random.normal(jax.random.key(0), (10,))
+
+    def body_fn(val):
+      counter, module, x, i = val
+      counter.count[...] += 1
+      x = module(x)
+      return counter, module, x, i - 1
+
+    counter, module, y, _ = nnx.while_loop(
+      lambda val: val[-1] > 0,
+      body_fn,
+      (counter, module, x, 3),
+      graph=graph,
+    )
+    np.testing.assert_array_equal(counter.count[...], 3)
+    np.testing.assert_array_equal(y, x * 8)
+
+  @parameterized.parameters(True, False)
+  def test_tree_mode_while_loop_inside_jit(self, graph):
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    module.kernel[...] = jnp.identity(10) * 2
+    x = jax.random.normal(jax.random.key(0), (10,))
+
+    @nnx.jit(graph=graph)
+    def f(module, x):
+      def body_fn(val):
+        m, x, c = val
+        return m, m(x), c - 1.0
+      _, y, _ = nnx.while_loop(
+        lambda val: val[-1] > 0,
+        body_fn,
+        (module, x, 3.0),
+        graph=graph,
+      )
+      return y
+
+    y = f(module, x)
+    np.testing.assert_array_equal(y, x * 8)
+
+  @parameterized.parameters(True, False)
+  def test_tree_mode_fori_loop_stateful(self, graph):
+    class Counter(nnx.Module):
+      def __init__(self):
+        self.count = nnx.Variable(jnp.array(0))
+
+    counter = Counter()
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    module.kernel[...] = jnp.identity(10) * 2
+    x = jax.random.normal(jax.random.key(0), (10,))
+
+    def body_fn(i, val):
+      counter, module, x = val
+      counter.count[...] += 1
+      x = module(x)
+      return counter, module, x
+
+    counter, module, y = nnx.fori_loop(
+      0, 3, body_fn, (counter, module, x), graph=graph,
+    )
+    np.testing.assert_array_equal(counter.count[...], 3)
+    np.testing.assert_array_equal(y, x * 8)
+
+  @parameterized.parameters(True, False)
+  def test_tree_mode_fori_loop_inside_jit(self, graph):
+    module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
+    module.kernel[...] = jnp.identity(10) * 2
+    x = jax.random.normal(jax.random.key(0), (10,))
+
+    @nnx.jit(graph=graph)
+    def f(module, x):
+      def body_fn(i, val):
+        m, x = val
+        return m, m(x)
+      _, y = nnx.fori_loop(
+        0, 3, body_fn, (module, x), graph=graph,
+      )
+      return y
+
+    y = f(module, x)
+    np.testing.assert_array_equal(y, x * 8)
 
 class TestSplitMergeInputs(absltest.TestCase):
   def test_split_inputs(self):
