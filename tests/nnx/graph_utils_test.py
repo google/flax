@@ -71,12 +71,12 @@ class TestGraphUtils(parameterized.TestCase):
 
   def test_unflatten(self):
     a = nnx.Dict(a=1, b=nnx.Param(2))
-    g = nnx.List([a, 3, a, nnx.Param(4)])
+    g = nnx.Sequential(a, 3, a, nnx.Param(4))
 
     graphdef, state = nnx.split(g)
     g = nnx.merge(graphdef, state)
 
-    assert g[0] is g[2]
+    assert g.layers[0] is g.layers[2]
 
   @parameterized.parameters(True, False)
   def test_flatten_unflatten_unkown_leaves(self, graph):
@@ -110,14 +110,14 @@ class TestGraphUtils(parameterized.TestCase):
 
   def test_unflatten_pure_dict(self):
     a = nnx.Dict(a=1, b=nnx.Param(2))
-    g = nnx.List([a, 3, a, nnx.Param(4)])
+    g = nnx.Sequential(a, 3, a, nnx.Param(4))
 
     graphdef, state = nnx.split(g)
     pure_state = nnx.to_pure_dict(state)
 
     g = nnx.merge(graphdef, pure_state)
 
-    assert g[0] is g[2]
+    assert g.layers[0] is g.layers[2]
 
   def test_unflatten_pytree(self):
     a = {'a': 1, 'b': nnx.Param(2)}
@@ -139,7 +139,7 @@ class TestGraphUtils(parameterized.TestCase):
 
   def test_unflatten_return_variables(self):
     a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
-    g = nnx.List([a, 3, a, nnx.Param(4)])
+    g = nnx.Sequential(a, 3, a, nnx.Param(4))
 
     graphdef, state = nnx.graph.flatten(
       g, with_paths=True
