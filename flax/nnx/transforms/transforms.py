@@ -25,7 +25,7 @@ from jax._src import checkify as checkify_lib
 from flax import config
 from flax.nnx import (
   extract,
-  graph as graphlib,
+  graphlib,
   variablelib,
 )
 from flax.nnx.module import Module

@@ -45,7 +45,7 @@ class TestSPMD(parameterized.TestCase):
 
     @jax.jit
     def create_module():
-      return nnx.split(Foo())
+      return nnx.graph.split(Foo())
 
     mesh = jax.make_mesh(
         (2, 2),
@@ -76,7 +76,7 @@ class TestSPMD(parameterized.TestCase):
 
     @jax.jit
     def create_module():
-      return nnx.split(Foo())
+      return nnx.graph.split(Foo())
 
     mesh = jax.make_mesh(
         (1, 1),
@@ -109,7 +109,7 @@ class TestSPMD(parameterized.TestCase):
         axis_types=(jax.sharding.AxisType.Auto,) * len(('row', 'col')),
     )
     with jax.set_mesh(mesh):
-      graphdef, params = nnx.split(Foo())
+      graphdef, params = nnx.graph.split(Foo())
       state = nnx.TrainState.create(
         graphdef,
         params=params,
@@ -128,8 +128,8 @@ class TestSPMD(parameterized.TestCase):
     kadds, kremoves, badds, bremoves = [], [], [], []
     class MLP(nnx.Module):
 
-      @nnx.split_rngs(splits=5)
-      @nnx.vmap(
+      @nnx.graph.split_rngs(splits=5)
+      @nnx.graph.vmap(
           in_axes=(0, 0),
           transform_metadata={nnx.PARTITION_NAME: 'layers', 'nickname': 'nick'},
       )
@@ -152,7 +152,7 @@ class TestSPMD(parameterized.TestCase):
           rngs=rngs,
         )
 
-      @nnx.scan(
+      @nnx.graph.scan(
           in_axes=(0, nnx.Carry),
           transform_metadata={nnx.PARTITION_NAME: 'layers'}
       )
@@ -324,7 +324,7 @@ class TestSPMD(parameterized.TestCase):
         ('batch', 'model'),
         axis_types=(jax.sharding.AxisType.Auto,) * len(('batch', 'model')),
     )
-    gdef, abs_state = nnx.get_abstract_model(lambda: Foo(nnx.Rngs(0)), mesh)
+    gdef, abs_state = nnx.graph.get_abstract_model(lambda: Foo(nnx.Rngs(0)), mesh)
     assert len(jax.tree.leaves(abs_state)) == 1
     assert jax.tree.leaves(abs_state)[0].sharding.is_equivalent_to(
       NamedSharding(mesh, P(None, 'model')), ndim=2)

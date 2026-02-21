@@ -27,7 +27,7 @@ from jax.sharding import AbstractMesh, Mesh, PartitionSpec
 from flax.nnx import (
   extract,
   filterlib,
-  graph as graphlib,
+  graphlib,
   statelib,
   variablelib,
 )

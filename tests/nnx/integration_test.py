@@ -59,18 +59,18 @@ class TestIntegration(parameterized.TestCase):
     self.assertEqual(eval_model.bn.use_running_average, True)
     self.assertIs(train_model.dropout.rngs.count, eval_model.dropout.rngs.count)
 
-    @nnx.jit(graph=graph_mode)  # automatic state management for JAX transforms
+    @nnx.graph.jit(graph=graph_mode)  # automatic state management for JAX transforms
     def train_step(model, optimizer, x, y):
       def loss_fn(model):
         y_pred = model(x)
         return jnp.mean((y_pred - y) ** 2)
 
-      loss, grads = nnx.value_and_grad(loss_fn)(model)
+      loss, grads = nnx.graph.value_and_grad(loss_fn)(model)
       optimizer.update(model, grads)  # in-place updates
 
       return loss
 
-    @nnx.jit(graph=graph_mode)
+    @nnx.graph.jit(graph=graph_mode)
     def eval_step(model, x, y):
       y_pred = model(x)
       return jnp.mean((y_pred - y) ** 2)
@@ -105,9 +105,9 @@ class TestIntegration(parameterized.TestCase):
         x = self.block2(x)
         return x
 
-    @nnx.jit
+    @nnx.graph.jit
     def train_step(model: Model, x, y):
-      @nnx.grad
+      @nnx.graph.grad
       def loss_fn(model: Model):
         y_pred = model(x)
         return jnp.mean((y - y_pred) ** 2)
@@ -116,7 +116,7 @@ class TestIntegration(parameterized.TestCase):
       nnx.update(
         model,
         jax.tree.map(
-          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+          lambda w, g: w - 0.1 * g, nnx.graph.state(model, nnx.Param), grads
         ),
       )
 
@@ -124,7 +124,7 @@ class TestIntegration(parameterized.TestCase):
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
-    model.set_attributes(use_running_average=False)
+    model.set_attributes(use_running_average=False, graph=True)
 
     for _i in range(3):
       train_step(model, x, y)
@@ -155,9 +155,9 @@ class TestIntegration(parameterized.TestCase):
         x = self.block2(x)
         return x
 
-    @nnx.jit
+    @nnx.graph.jit
     def train_step(model: Model, x, y):
-      @nnx.grad
+      @nnx.graph.grad
       def loss_fn(model: Model):
         y_pred = model(x)
         return jnp.mean((y - y_pred) ** 2)
@@ -166,7 +166,7 @@ class TestIntegration(parameterized.TestCase):
       nnx.update(
         model,
         jax.tree.map(
-          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+          lambda w, g: w - 0.1 * g, nnx.graph.state(model, nnx.Param), grads
         ),
       )
 
@@ -174,7 +174,7 @@ class TestIntegration(parameterized.TestCase):
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
-    new_model = nnx.view(model, use_running_average=False)
+    new_model = nnx.graph.view(model, use_running_average=False)
 
     for _i in range(3):
       train_step(model, x, y)
@@ -208,9 +208,9 @@ class TestIntegration(parameterized.TestCase):
     @jax.jit
     def train_step(state: nnx.State, graphdef: nnx.GraphDef[Model], x, y):
       model = nnx.merge(graphdef, state)
-      model.set_attributes(use_running_average=False)
+      model.set_attributes(use_running_average=False, graph=True)
 
-      @nnx.grad
+      @nnx.graph.grad
       def loss_fn(model: Model):
         y_pred = model(x)
         return jnp.mean((y - y_pred) ** 2)
@@ -219,14 +219,14 @@ class TestIntegration(parameterized.TestCase):
       nnx.update(
         model,
         jax.tree.map(
-          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+          lambda w, g: w - 0.1 * g, nnx.graph.state(model, nnx.Param), grads
         ),
       )
 
-      return nnx.split(model)
+      return nnx.graph.split(model)
 
     graphdef: nnx.GraphDef[Model]
-    graphdef, state = nnx.split(Model(rngs=nnx.Rngs(0)))
+    graphdef, state = nnx.graph.split(Model(rngs=nnx.Rngs(0)))
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
@@ -267,9 +267,9 @@ class TestIntegration(parameterized.TestCase):
     @jax.jit
     def train_step(state: nnx.State, graphdef: nnx.GraphDef[Model], x, y):
       model = nnx.merge(graphdef, state)
-      new_model = nnx.view(model, use_running_average=False)
+      new_model = nnx.view(model, use_running_average=False, graph=True)
 
-      @nnx.grad
+      @nnx.graph.grad
       def loss_fn(model: Model):
         y_pred = model(x)
         return jnp.mean((y - y_pred) ** 2)
@@ -278,14 +278,14 @@ class TestIntegration(parameterized.TestCase):
       nnx.update(
         new_model,
         jax.tree.map(
-          lambda w, g: w - 0.1 * g, nnx.state(new_model, nnx.Param), grads
+          lambda w, g: w - 0.1 * g, nnx.graph.state(new_model, nnx.Param), grads
         ),
       )
 
-      return nnx.split(new_model)
+      return nnx.graph.split(new_model)
 
     graphdef: nnx.GraphDef[Model]
-    graphdef, state = nnx.split(Model(rngs=nnx.Rngs(0)))
+    graphdef, state = nnx.graph.split(Model(rngs=nnx.Rngs(0)))
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
@@ -323,19 +323,19 @@ class TestIntegration(parameterized.TestCase):
     y = model(x)
     assert model.count[...] == 1
 
-    @nnx.jit(graph=graph_mode)
+    @nnx.graph.jit(graph=graph_mode)
     def train_step(model, x, y):
       def loss_fn(model):
         y_pred = model(x)
         return jax.numpy.mean((y_pred - y) ** 2)
 
       # compute gradient
-      grads: nnx.State = nnx.grad(loss_fn)(model)
+      grads: nnx.State = nnx.graph.grad(loss_fn)(model)
       # SGD update
       nnx.update(
         model,
         jax.tree.map(
-          lambda w, g: w - 0.1 * g, nnx.state(model, nnx.Param), grads
+          lambda w, g: w - 0.1 * g, nnx.graph.state(model, nnx.Param), grads
         ),
       )
 
@@ -364,14 +364,14 @@ class TestIntegration(parameterized.TestCase):
     y = model(x)
     assert model.count[...] == 1
 
-    graphdef, params, counts = nnx.split(model, nnx.Param, Count)
+    graphdef, params, counts = nnx.graph.split(model, nnx.Param, Count)
 
     @jax.jit
     def train_step(params, counts, x, y):
       def loss_fn(params):
         model = nnx.merge(graphdef, params, counts, copy=True)
         loss = jax.numpy.mean((model(x) - y) ** 2)
-        return loss, nnx.state(model, Count)
+        return loss, nnx.graph.state(model, Count)
 
       # compute gradient
       grads, counts = jax.grad(loss_fn, has_aux=True)(params)
@@ -419,7 +419,7 @@ class TestIntegration(parameterized.TestCase):
 
     model = Linear(12, 2, rngs=nnx.Rngs(0))
 
-    graphdef, state = nnx.split(model)
+    graphdef, state = nnx.graph.split(model)
 
     y, (_, state) = graphdef.apply(state)(jnp.ones((8, 12)))
 
@@ -443,7 +443,7 @@ class TestIntegration(parameterized.TestCase):
     x = jax.random.normal(jax.random.key(42), (3, 4))
     assert model(x).shape == (3, 4)
 
-    _, state = nnx.split(model)
+    _, state = nnx.graph.split(model)
     pure_dict_state = nnx.to_pure_dict(state)
     nnx.display(pure_dict_state)
 
@@ -459,7 +459,7 @@ class TestIntegration(parameterized.TestCase):
       restored_pure_dict = checkpointer.restore(ckpt_dir / 'pure_dict')
       restored_pure_dict = nnx.statelib.restore_int_paths(restored_pure_dict)
 
-      model = nnx.eval_shape(lambda: MLPs(4, rngs=nnx.Rngs(0)))
+      model = nnx.graph.eval_shape(lambda: MLPs(4, rngs=nnx.Rngs(0)))
       nnx.update(model, restored_pure_dict)
       assert model(x).shape == (3, 4)  # The model still works!
 
@@ -481,7 +481,7 @@ class TestIntegration(parameterized.TestCase):
 
     @jax.jit  # automatic state management for JAX transforms
     def train_step(x, y):
-      graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
+      graphdef, params, nondiff = nnx.graph.split(model, nnx.Param, ...)
       def loss_fn(params):
         model =  nnx.merge(graphdef, params, nondiff)
         return ((model(x) - y) ** 2).mean()  # call methods directly
@@ -502,13 +502,13 @@ class TestIntegration(parameterized.TestCase):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
-    @nnx.jit(graph=False)
+    @nnx.graph.jit(graph=False)
     def train_step(model, optimizer, x, y):
       def loss_fn(model):
         y_pred = model(x)
         return jnp.mean((y_pred - y) ** 2)
 
-      loss, grads = nnx.value_and_grad(loss_fn, graph=False)(model)
+      loss, grads = nnx.graph.value_and_grad(loss_fn, graph=False)(model)
       optimizer.update(model, grads)
       return loss
 
@@ -540,9 +540,9 @@ class TestIntegration(parameterized.TestCase):
         x = self.block2(x)
         return x
 
-    @nnx.jit(graph=False)
+    @nnx.graph.jit(graph=False)
     def train_step(model: Model, x, y):
-      @nnx.grad(graph=False)
+      @nnx.graph.grad(graph=False)
       def loss_fn(model: Model):
         y_pred = model(x)
         return jnp.mean((y - y_pred) ** 2)
@@ -582,17 +582,17 @@ class TestIntegration(parameterized.TestCase):
     y = model(x)
     assert model.count[...] == 1
 
-    @nnx.jit(graph=False)
+    @nnx.graph.jit(graph=False)
     def train_step(model, x, y):
       def loss_fn(model):
         y_pred = model(x)
         return jax.numpy.mean((y_pred - y) ** 2)
 
-      grads = nnx.grad(loss_fn, graph=False, allow_int=True)(model)
+      grads = nnx.graph.grad(loss_fn, graph=False, allow_int=True)(model)
       params = jax.tree.map(
         lambda w, g: w - 0.1 * g,
-        nnx.state(model, nnx.Param),
-        nnx.state(grads, nnx.Param),
+        nnx.graph.state(model, nnx.Param),
+        nnx.graph.state(grads, nnx.Param),
       )
       nnx.update(model, params)
 

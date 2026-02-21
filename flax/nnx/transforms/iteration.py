@@ -23,7 +23,7 @@ from flax import config
 from flax import struct
 from flax import typing
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx import extract, filterlib, graph as graphlib, spmd, variablelib
+from flax.nnx import extract, filterlib, graphlib, spmd, variablelib
 from flax.nnx import statelib
 from flax.nnx.module import Module
 from flax.nnx.statelib import State
