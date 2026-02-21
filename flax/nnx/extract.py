@@ -57,7 +57,7 @@ def check_consistent_aliasing(
   node_id_to_variable: dict[int, tp.Any] = {}
 
   # collect all paths and prefixes for each node
-  for path, value in graph.iter_graph(node):
+  for path, value in graph.iter_graph(node, graph=True):
     if graph.is_graph_node(value) or isinstance(value, graph.Variable):
       if isinstance(value, Pytree):
         value._check_valid_context(

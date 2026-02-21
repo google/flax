@@ -104,7 +104,7 @@ def _maybe_call_setup(module: Module):
 def _bind_module(parent: Module, module: Module) -> Module:
   assert parent.scope is not None
 
-  for _, value in reversed(list(graph.iter_graph(module))):
+  for _, value in reversed(list(graph.iter_graph(module, graph=True))):
     if isinstance(value, Module):
       if module.scope is None:
         value.scope = parent.scope.copy()  # type: ignore[attribute-error]
@@ -471,7 +471,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     _method = _get_unbound_fn(_method)
 
     # set temporary state
-    for _, value in graph.iter_graph(module):
+    for _, value in graph.iter_graph(module, graph=True):
       if isinstance(value, Pytree):
         value._pytree__state._initializing = _initialize
       if isinstance(value, Module):
@@ -486,7 +486,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     finally:
       MODULE_CONTEXT.module_stack.pop()
       # reset temporary state
-      for _, value in graph.iter_graph(module):
+      for _, value in graph.iter_graph(module, graph=True):
         if isinstance(value, Pytree):
           value._pytree__state._initializing = False
         if isinstance(value, Module):

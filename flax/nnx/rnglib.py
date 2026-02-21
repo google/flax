@@ -20,9 +20,10 @@ import jax
 from jax import random
 import jax.numpy as jnp
 
+from flax import config
 from flax import struct
 from flax import typing
-from flax.nnx import graph
+from flax.nnx import graph as graphlib
 from flax.nnx.nn import initializers
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
@@ -30,6 +31,7 @@ from flax.nnx.pytreelib import Pytree
 from flax.typing import MISSING, Key, Missing
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
+A = tp.TypeVar('A')
 Counts = list[int]
 AxesValue = tp.Union[int, None]
 SplitPattern = tp.Union[AxesValue, tuple[AxesValue, ...]]
@@ -690,13 +692,25 @@ def split_rngs(
   splits: int | tuple[int, ...],
   only: filterlib.Filter = ...,
   squeeze: bool = False,
+  graph: tp.Literal[True] | None = None,
 ) -> SplitBackups: ...
+@tp.overload
+def split_rngs(
+  node: A,
+  /,
+  *,
+  splits: int | tuple[int, ...],
+  only: filterlib.Filter = ...,
+  squeeze: bool = False,
+  graph: tp.Literal[False],
+) -> A: ...
 @tp.overload
 def split_rngs(
   *,
   splits: int | tuple[int, ...],
   only: filterlib.Filter = ...,
   squeeze: bool = False,
+  graph: bool | None = None,
 ) -> tp.Callable[[F], F]: ...
 def split_rngs(
   node: tp.Any = MISSING,
@@ -705,7 +719,8 @@ def split_rngs(
   splits: int | tuple[int, ...],
   only: filterlib.Filter = ...,
   squeeze: bool = False,
-) -> SplitBackups | tp.Callable[[F], F]:
+  graph: bool | None = None,
+) -> SplitBackups | tp.Any | tp.Callable[[F], F]:
   """Splits the (nested) Rng states of the given node.
 
   Args:
@@ -713,6 +728,10 @@ def split_rngs(
     splits: an integer or tuple of integers specifying the
       shape of the split rng keys.
     only: a Filter selecting which rng states to split.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
 
   Returns:
     A SplitBackups iterable if ``node`` is provided, otherwise a
@@ -797,14 +816,25 @@ def split_rngs(
 
 
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
+
   if isinstance(node, Missing):
 
     def split_rngs_decorator(f: F) -> F:
       @functools.wraps(f)
       def split_rngs_wrapper(*args, **kwargs):
-        with split_rngs(
-          (args, kwargs), splits=splits, only=only, squeeze=squeeze
-        ):
+        if graph:
+          with split_rngs(
+            (args, kwargs), splits=splits, only=only, squeeze=squeeze,
+            graph=True,
+          ):
+            return f(*args, **kwargs)
+        else:
+          args, kwargs = split_rngs(
+            (args, kwargs), splits=splits, only=only, squeeze=squeeze,
+            graph=False,
+          )
           return f(*args, **kwargs)
 
       return tp.cast(F, split_rngs_wrapper)
@@ -814,9 +844,27 @@ def split_rngs(
   if squeeze and splits != 1:
     raise ValueError('squeeze=True is only supported for splits=1')
 
+  if graph:
+    return _graph_split_rngs(
+      node, splits=splits, only=only, squeeze=squeeze,
+    )
+  else:
+    return _tree_split_rngs(
+      node, splits=splits, only=only, squeeze=squeeze,
+    )
+
+
+def _graph_split_rngs(
+  node: tp.Any,
+  /,
+  *,
+  splits: int | tuple[int, ...],
+  only: filterlib.Filter = ...,
+  squeeze: bool = False,
+) -> SplitBackups:
   predicate = filterlib.to_predicate(only)
   backups: list[StreamBackup] = []
-  for path, stream in graph.iter_graph(node):
+  for path, stream in graphlib.iter_graph(node, graph=True):
     if (
       isinstance(stream, RngStream)
       and predicate((*path, 'key'), stream.key)
@@ -839,6 +887,41 @@ def split_rngs(
 
   return SplitBackups(backups)
 
+
+def _tree_split_rngs(
+  node: tp.Any,
+  /,
+  *,
+  splits: int | tuple[int, ...],
+  only: filterlib.Filter = ...,
+  squeeze: bool = False,
+) -> tp.Any:
+  node = graphlib.clone(node, graph=False)
+  predicate = filterlib.to_predicate(only)
+  for path, stream in graphlib.iter_graph(node, graph=False):
+    if (
+      isinstance(stream, RngStream)
+      and predicate((*path, 'key'), stream.key)
+      and predicate((*path, 'count'), stream.count)
+    ):
+      key = stream()
+      key = random.split(key, splits)
+      if squeeze:
+        key = key[0]
+      if squeeze:
+        counts_shape = stream.count.shape
+      elif isinstance(splits, int):
+        counts_shape = (splits, *stream.count.shape)
+      else:
+        counts_shape = (*splits, *stream.count.shape)
+
+      stream.key = RngKey(key, tag=stream.tag)
+      stream.count = RngCount(
+        jnp.zeros(counts_shape, dtype=jnp.uint32), tag=stream.tag
+      )
+
+  return node
+
 @tp.overload
 def fork_rngs(
   node: tp.Any,
@@ -847,6 +930,7 @@ def fork_rngs(
   split: tp.Mapping[filterlib.Filter, int | tuple[int, ...] | None]
     | int
     | None = None,
+  graph: bool | None = None,
 ) -> SplitBackups: ...
 @tp.overload
 def fork_rngs(
@@ -854,6 +938,7 @@ def fork_rngs(
   split: tp.Mapping[filterlib.Filter, int | tuple[int, ...] | None]
     | int
     | None = None,
+  graph: bool | None = None,
 ) -> tp.Callable[[F], F]: ...
 def fork_rngs(
   node: tp.Any = MISSING,
@@ -862,6 +947,7 @@ def fork_rngs(
   split: tp.Mapping[filterlib.Filter, int | tuple[int, ...] | None]
     | int
     | None = None,
+  graph: bool | None = None,
 ) -> SplitBackups | tp.Callable[[F], F]:
   """Forks the (nested) Rng states of the given node.
 
@@ -870,6 +956,10 @@ def fork_rngs(
     split: an integer, tuple of integers, or mapping specifying the
       shape of the forked rng keys. If a mapping, keys are filters selecting
       which rng states to fork with the corresponding split shape.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
 
   Returns:
     A SplitBackups iterable if ``node`` is provided, otherwise a
@@ -973,7 +1063,7 @@ def fork_rngs(
     filterlib.to_predicate(k): v for k, v in split.items()
   }
   backups: list[StreamBackup] = []
-  for path, stream in graph.iter_graph(node):
+  for path, stream in graphlib.iter_graph(node, graph=graph):
     for predicate, splits in predicate_splits.items():
       if (
         isinstance(stream, RngStream)
@@ -990,9 +1080,9 @@ def fork_rngs(
   return SplitBackups(backups)
 
 
-def backup_keys(node: tp.Any, /):
+def backup_keys(node: tp.Any, /, *, graph: bool | None = None):
   backups: list[StreamBackup] = []
-  for _, stream in graph.iter_graph(node):
+  for _, stream in graphlib.iter_graph(node, graph=graph):
     if isinstance(stream, RngStream):
       backups.append((stream, stream.key[...]))
   return backups
@@ -1022,6 +1112,7 @@ def reseed(
   node,
   /,
   *,
+  graph: bool | None = None,
   policy: tp.Literal['scalars_only', 'match_shape']
   | tp.Callable[
     [tuple, jax.Array, tuple[int, ...]], jax.Array
@@ -1032,6 +1123,10 @@ def reseed(
 
   Args:
     node: the node to reseed the RNG streams in.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
     policy: defines how the the new scalar key is for each RngStream is used to
       reseed the stream. If ``'scalars_only'`` is given (the default), an error is raised
       if the target stream key is not a scalar. If ``'match_shape'`` is given, the new
@@ -1075,7 +1170,7 @@ def reseed(
       f'got {policy!r}'
     )
   rngs = Rngs(**stream_keys)
-  for path, stream in graph.iter_graph(node):
+  for path, stream in graphlib.iter_graph(node, graph=graph):
     if isinstance(stream, RngStream):
       if stream.key.tag in stream_keys:
         key = rngs[stream.key.tag]()

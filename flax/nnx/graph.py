@@ -2834,7 +2834,9 @@ def set_metadata(
   map_state(_set_metadata, state(node, only))
 
 
-def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
+def iter_graph(
+  node: tp.Any, /, *, graph: bool | None = None,
+) -> tp.Iterator[tuple[PathParts, tp.Any]]:
   """Iterates over all nested nodes and leaves of the given graph node, including the current node.
 
   ``iter_graph`` creates a generator that yields path and value pairs, where the
@@ -2866,22 +2868,35 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
     (0, 'w') Param
     (0,) Linear
     () list
+
+  Args:
+    node: A graph node object.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   """
+  if graph is None:
+    graph = config.flax_nnx_graph_mode
+  if graph:
+    return _iter_graph(node)
+  else:
+    return _iter_tree(node)
+
+
+def _iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
   visited: set[int] = set()
   stack: list[tuple[PathParts, tp.Any, bool]] = [((), node, False)]
   while stack:
-    # Yield if the node is either a leaf or has been traversed already.
     path_parts, node, traversed = stack.pop(-1)
     if traversed or not (is_node(node) or isinstance(node, Variable)):
       yield path_parts, node
       continue
 
-    # Skip if the node has been visited already.
     if id(node) in visited:
       continue
     visited.add(id(node))
 
-    # Traverse the node.
     if (node_impl := get_node_impl(node)) is None:
       yield path_parts, node
       continue
@@ -2889,6 +2904,46 @@ def iter_graph(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
     stack.append((path_parts, node, True))
     for key, child in reversed(node_impl.node_dict(node).items()):
       stack.append(((*path_parts, key), child, False))
+
+
+def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
+  seen_ids: set[int] = set()
+  stack: list[tuple[PathParts, tp.Any, bool]] = [((), node, False)]
+  while stack:
+    path, current, traversed = stack.pop()
+
+    if traversed:
+      yield path, current
+      continue
+
+    if not is_pytree_node(current, check_graph_registry=False):
+      if isinstance(current, Variable) or variablelib.is_array_ref(current):
+        obj_id = id(current)
+        if obj_id in seen_ids:
+          raise ValueError(
+            f'Found duplicate Variable or Ref at path '
+            f'"{"/".join(map(str, path))}". '
+            'Shared references are not supported with graph=False.'
+          )
+        seen_ids.add(obj_id)
+      yield path, current
+      continue
+
+    obj_id = id(current)
+    if obj_id in seen_ids:
+      raise ValueError(
+        f'Found cycle at path "{"/".join(map(str, path))}". '
+        'Cycles are not supported with graph=False.'
+      )
+    seen_ids.add(obj_id)
+
+    stack.append((path, current, True))
+    children, _ = jax.tree_util.tree_flatten_with_path(
+      current, is_leaf=lambda x: x is not current
+    )
+    for jax_key_path, child in reversed(children):
+      key = _key_path_to_key(jax_key_path[0])
+      stack.append(((*path, key), child, False))
 
 
 def recursive_map(f: tp.Callable[[PathParts, tp.Any], tp.Any], node: tp.Any, /):
@@ -3063,8 +3118,10 @@ class GenericPytree: ...
 from jax._src.tree_util import _registry as JAX_PYTREE_REGISTRY
 
 
-def is_pytree_node(x: tp.Any) -> bool:
-  if type(x) in GRAPH_REGISTRY:
+def is_pytree_node(
+  x: tp.Any, *, check_graph_registry: bool = True,
+) -> bool:
+  if check_graph_registry and type(x) in GRAPH_REGISTRY:
     return False
   elif isinstance(x, Variable):
     return False

@@ -22,7 +22,7 @@ import jax.numpy as jnp
 
 from flax.nnx import (
   filterlib,
-  graph,
+  graph as graphlib,
 )
 from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
@@ -477,7 +477,7 @@ def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool =
         counts[k] += 1
     return node
 
-  out = graph.recursive_map(_set_mode_fn, node)
+  out = graphlib.recursive_map(_set_mode_fn, node)
 
   if raise_if_not_found:
     set_mode_calls = counts.pop("_set_mode_calls")
@@ -563,7 +563,7 @@ def view_info(node: Module, /, *, only: filterlib.Filter = ...) -> str:
       classes.add(node.__class__)
     return node
 
-  graph.recursive_map(_set_mode_info_fn, node)
+  graphlib.recursive_map(_set_mode_info_fn, node)
 
   class_list = sorted(list(classes), key=lambda x: x.__qualname__)
   out_str = []
@@ -613,7 +613,9 @@ def first_from(*args: tp.Optional[A], error_msg: str) -> A:
       return arg
   raise ValueError(error_msg)
 
-def iter_modules(module: Module) -> tp.Iterator[tuple[PathParts, Module]]:
+def iter_modules(
+  module: Module, /, *, graph: bool | None = None,
+) -> tp.Iterator[tuple[PathParts, Module]]:
   """Recursively iterates over all nested :class:`Module`'s of the given Module, including
   the argument.
 
@@ -648,8 +650,15 @@ def iter_modules(module: Module) -> tp.Iterator[tuple[PathParts, Module]]:
     ('submodule', 'linear2') Linear
     ('submodule',) SubModule
     () Block
+
+  Args:
+    module: A :class:`Module` object.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   """
-  for path, value in graph.iter_graph(module):
+  for path, value in graphlib.iter_graph(module, graph=graph):
     if isinstance(value, Module):
       yield path, value
 
@@ -687,7 +696,7 @@ def iter_children(module: Module) -> tp.Iterator[tuple[Key, Module]]:
     linear Linear
     submodule SubModule
   """
-  node_impl = graph.get_node_impl(module)
+  node_impl = graphlib.get_node_impl(module)
   assert node_impl is not None
   node_dict = node_impl.node_dict(module)
   for key, value in node_dict.items():

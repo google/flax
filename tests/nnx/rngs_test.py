@@ -18,13 +18,13 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
-from absl.testing import absltest
+from absl.testing import absltest, parameterized
 
 from flax import nnx
 from flax import errors
 
 
-class TestRngs(absltest.TestCase):
+class TestRngs(parameterized.TestCase):
   def test_call(self):
     rngs = nnx.Rngs(0)
     key = rngs()
@@ -172,7 +172,8 @@ class TestRngs(absltest.TestCase):
     self.assertEqual(m.rngs.params.count[...], 2)
     self.assertEqual(m.rngs['dropout'].count[...], 1)
 
-  def test_reseed(self):
+  @parameterized.parameters(True, False)
+  def test_reseed(self, graph):
     class Model(nnx.Module):
       def __init__(self, rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
@@ -186,11 +187,34 @@ class TestRngs(absltest.TestCase):
 
     y1 = model(x)
 
-    # reset the ``dropout`` stream key to 42
-    nnx.reseed(model, dropout=42)
+    nnx.reseed(model, graph=graph, dropout=42)
     y2 = model(x)
 
     np.testing.assert_allclose(y1, y2)
+
+  @parameterized.parameters(True, False)
+  def test_split_rngs(self, graph):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    result = nnx.split_rngs(rngs, splits=5, graph=graph)
+    if graph:
+      self.assertEqual(rngs.params.key.shape, (5,))
+      self.assertEqual(rngs['dropout'].key.shape, (5,))
+      nnx.restore_rngs(result)
+      self.assertEqual(rngs.params.key.shape, ())
+      self.assertEqual(rngs['dropout'].key.shape, ())
+    else:
+      self.assertEqual(rngs.params.key.shape, ())
+      self.assertEqual(rngs['dropout'].key.shape, ())
+      self.assertEqual(result.params.key.shape, (5,))
+      self.assertEqual(result['dropout'].key.shape, (5,))
+
+  @parameterized.parameters(True, False)
+  def test_fork_rngs(self, graph):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    backups = nnx.fork_rngs(rngs, split={'params': 5}, graph=graph)
+    self.assertEqual(rngs.params.key.shape, (5,))
+    self.assertEqual(rngs['dropout'].key.shape, ())
+    nnx.restore_rngs(backups)
 
   def test_random_helpers(self):
     rngs = nnx.Rngs(0, params=1)

@@ -1436,6 +1436,74 @@ class TestTreeFlatten(parameterized.TestCase):
     self.assertEqual(g2['a'][0][...], 3)
     self.assertEqual(g2['a'][1], 4)
 
+  @parameterized.parameters(True, False)
+  def test_iter_graph(self, graph):
+    var0 = nnx.Variable(jnp.zeros(1))
+    var1 = nnx.Variable(jnp.zeros(1))
+    arr0 = jnp.zeros(1)
+
+    child = nnx.Module()
+    child.a = var0
+    child.b = arr0
+    child.c = var1
+
+    root = nnx.Module()
+    root.x = child
+    root.y = jnp.ones(2)
+
+    nodes = [node for _, node in nnx.iter_graph(root, graph=graph)]
+    self.assertIn(var0, nodes)
+    self.assertIn(var1, nodes)
+    self.assertIn(child, nodes)
+    self.assertIn(root, nodes)
+
+  def test_iter_graph_tree_mode_shared_variable_raises(self):
+    var = nnx.Variable(jnp.zeros(1))
+    root = nnx.Module()
+    root.a = var
+    root.b = var
+
+    with self.assertRaisesRegex(
+      ValueError, 'Shared references are not supported with graph=False'
+    ):
+      list(nnx.iter_graph(root, graph=False))
+
+  def test_iter_graph_tree_mode_cycle_raises(self):
+    a = nnx.List([1])
+    b = nnx.List([2, a])
+    a.append(b)
+
+    with self.assertRaisesRegex(
+      ValueError, 'Cycles are not supported with graph=False'
+    ):
+      list(nnx.iter_graph(a, graph=False))
+
+  @parameterized.parameters(True, False)
+  def test_iter_modules(self, graph):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    modules = list(nnx.iter_modules(model, graph=graph))
+    self.assertLen(modules, 1)
+    path, m = modules[0]
+    self.assertEqual(path, ())
+    self.assertIs(m, model)
+
+  @parameterized.parameters(True, False)
+  def test_iter_modules_nested(self, graph):
+    class Block(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5)
+
+    model = Block(nnx.Rngs(0))
+    modules = list(nnx.iter_modules(model, graph=graph))
+    module_types = [type(m).__name__ for _, m in modules]
+    self.assertIn('Block', module_types)
+    self.assertIn('Linear', module_types)
+    self.assertIn('Dropout', module_types)
+    self.assertLen(modules, 3)
+
 
 if __name__ == '__main__':
   absltest.main()
+
