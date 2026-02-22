@@ -18,7 +18,7 @@ import typing as tp
 import numpy as np
 
 from flax import struct
-from flax.nnx import filterlib, graph
+from flax.nnx import filterlib, graphlib
 from flax.nnx.pytreelib import Pytree
 from flax.nnx.variablelib import Variable
 import jax, jax.numpy as jnp
@@ -52,7 +52,7 @@ class Metric(Pytree):
     raise NotImplementedError('Must override `compute()` method.')
 
   def split(self, *filters: filterlib.Filter):
-    return graph.split(self, *filters)
+    return graphlib.split(self, *filters)
 
 
 class Average(Metric):

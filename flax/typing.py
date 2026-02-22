@@ -13,7 +13,9 @@
 # limitations under the License.
 from __future__ import annotations
 
+import abc
 from collections import deque
+import functools
 from functools import partial
 from typing import (
   Any,
@@ -283,3 +285,57 @@ class HashableMapping(Mapping[HA, HB], Hashable):
     mapping = dict(self._mapping)
     mapping.update(other)
     return HashableMapping(mapping, copy=False)
+
+
+F = TypeVar('F', bound=Callable[..., Any])
+
+
+class BaseConfigContext(abc.ABC):
+  @classmethod
+  @abc.abstractmethod
+  def get_default(cls):
+    ...
+
+  @classmethod
+  @abc.abstractmethod
+  def get_stack(cls) -> list:
+    ...
+
+  def __init__(self, value, /):
+    stack = self.get_stack()
+    if stack:
+      self.prev_value = stack[-1]
+      stack[-1] = value
+    else:
+      self.prev_value = None
+      stack.append(value)
+    self.new_value = value
+
+  @classmethod
+  def current_value(cls):
+    stack = cls.get_stack()
+    if stack:
+      return stack[-1]
+    return cls.get_default()
+
+  def __enter__(self):
+    if self.prev_value is not None:
+      self.get_stack().insert(-1, self.prev_value)
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    self.get_stack().pop()
+
+  def __call__(self, f: F) -> F:
+    self.get_stack().pop()
+    if self.prev_value is not None:
+      self.get_stack().append(self.prev_value)
+
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+      self.get_stack().append(self.new_value)
+      try:
+        return f(*args, **kwargs)
+      finally:
+        self.get_stack().pop()
+
+    return wrapper  # type: ignore[return-value]

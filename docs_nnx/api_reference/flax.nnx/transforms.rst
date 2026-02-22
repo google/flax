@@ -13,6 +13,8 @@ transforms
 .. autofunction:: vmap
 .. autofunction:: eval_shape
 .. autofunction:: custom_vjp
+.. autofunction:: vjp
+.. autofunction:: jvp
 .. autofunction:: cond
 .. autofunction:: switch
 .. autofunction:: while_loop

@@ -23,7 +23,7 @@ from flax import config
 from flax import struct
 from flax import typing
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx import extract, filterlib, graph as graphlib, spmd, variablelib
+from flax.nnx import extract, filterlib, graphlib, spmd, variablelib
 from flax.nnx import statelib
 from flax.nnx.module import Module
 from flax.nnx.statelib import State
@@ -365,7 +365,7 @@ def vmap(
            [0, 3, 6, 9]], dtype=int32)
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if f is Missing:
     return functools.partial(
         vmap,
@@ -624,7 +624,7 @@ def pmap(
            [0, 3, 6, 9]], dtype=int32)
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if f is Missing:
     return functools.partial(
         pmap,
@@ -1417,7 +1417,7 @@ def scan(
     _raise_bound_method_error('scan')
 
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if not graph:
     if in_axes != (Carry, 0):
       raise ValueError(
@@ -1730,11 +1730,11 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
       structure between inputs and outputs.
     init_val: The initial input for ``cond_fun`` and ``body_fun``. Must be of type ``T``.
     graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``flax_nnx_graph_mode`` config.
+      If None, uses the value of ``nnx_graph_mode`` config.
 
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if not graph:
     val_out = jax.lax.while_loop(
       cond_fun,
@@ -1830,14 +1830,14 @@ def fori_loop(lower: int, upper: int,
       (i.e. ``unroll=True``) or left completely unrolled (i.e. ``unroll=False``).
       This argument is only applicable if the loop bounds are statically known.
     graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``flax_nnx_graph_mode`` config.
+      If None, uses the value of ``nnx_graph_mode`` config.
 
   Returns:
     A loop value from the final iteration, of type ``T``.
 
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if not graph:
     val_out = jax.lax.fori_loop(
       lower, upper,

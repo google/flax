@@ -27,7 +27,7 @@ from flax import config
 from flax import errors
 from flax.core import spmd as core_spmd
 from flax.nnx import reprlib, tracers, visualization
-from flax.typing import MISSING, Missing, SizeBytes
+from flax.typing import BaseConfigContext, MISSING, Missing, SizeBytes
 import jax
 from jax._src.state.types import AbstractRef
 import jax.experimental
@@ -72,60 +72,7 @@ class VariableContext(threading.local):
 VARIABLE_CONTEXT = VariableContext()
 
 
-class UseEagerShardContext:
-  def __init__(self, prev_value: bool | None, new_value: bool):
-    self.prev_value: bool | None = prev_value
-    self.new_value: bool = new_value
-
-  def __enter__(self):
-    if self.prev_value is not None:
-      VARIABLE_CONTEXT.eager_shard_stack.insert(-1, self.prev_value)
-
-  def __exit__(self, exc_type, exc_value, traceback):
-    VARIABLE_CONTEXT.eager_shard_stack.pop()
-
-  def __call__(self, f: F) -> F:
-    # undo eager stack change
-    VARIABLE_CONTEXT.eager_shard_stack.pop()
-    if self.prev_value is not None:
-      VARIABLE_CONTEXT.eager_shard_stack.append(self.prev_value)
-
-    @functools.wraps(f)
-    def use_eager_sharding_wrapper(*args, **kwargs):
-      VARIABLE_CONTEXT.eager_shard_stack.append(self.new_value)
-      try:
-        return f(*args, **kwargs)
-      finally:
-        VARIABLE_CONTEXT.eager_shard_stack.pop()
-
-    return use_eager_sharding_wrapper  # type: ignore[return-value]
-
-def using_eager_sharding() -> bool:
-  """Returns whether Variables are using eager sharding by default.
-
-  Example::
-
-    >>> from flax import nnx
-    >>> nnx.use_eager_sharding(True)
-    <...>
-    >>> nnx.using_eager_sharding()
-    True
-    >>> nnx.use_eager_sharding(False)
-    <...>
-    >>> nnx.using_eager_sharding()
-    False
-
-
-  Returns:
-    A boolean indicating if Variables are using eager sharding by default.
-  """
-  do_eager_sharding = config.flax_always_shard_variable
-  if VARIABLE_CONTEXT.eager_shard_stack:
-    do_eager_sharding = VARIABLE_CONTEXT.eager_shard_stack[-1]
-  return do_eager_sharding
-
-
-def use_eager_sharding(value: bool, /):
+class use_eager_sharding(BaseConfigContext):
   """Sets whether Variables should use eager sharding by default or not.
 
   Example usage::
@@ -157,13 +104,31 @@ def use_eager_sharding(value: bool, /):
   Returns:
     A context manager that resets the context to the previous value.
   """
-  if VARIABLE_CONTEXT.eager_shard_stack:
-    prev_value = VARIABLE_CONTEXT.eager_shard_stack[-1]
-    VARIABLE_CONTEXT.eager_shard_stack[-1] = value
-  else:
-    prev_value = None
-    VARIABLE_CONTEXT.eager_shard_stack.append(value)
-  return UseEagerShardContext(prev_value, value)
+  get_default = classmethod(lambda cls: config.flax_always_shard_variable)
+  get_stack = classmethod(lambda cls: VARIABLE_CONTEXT.eager_shard_stack)
+
+
+def using_eager_sharding() -> bool:
+  """Returns whether Variables are using eager sharding by default.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> nnx.use_eager_sharding(True)
+    <...>
+    >>> nnx.using_eager_sharding()
+    True
+    >>> nnx.use_eager_sharding(False)
+    <...>
+    >>> nnx.using_eager_sharding()
+    False
+
+
+  Returns:
+    A boolean indicating if Variables are using eager sharding by default.
+  """
+  return use_eager_sharding.current_value()
+
 
 @dataclasses.dataclass(frozen=True)
 class VarDefaults(tp.Mapping[str, tp.Any]):

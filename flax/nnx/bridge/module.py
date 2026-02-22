@@ -28,7 +28,7 @@ from flax import errors
 from flax.core import meta
 from flax.core.scope import CollectionFilter
 from flax.core.frozen_dict import FrozenDict
-from flax.nnx import graph, rnglib, statelib, traversals
+from flax.nnx import graphlib, rnglib, statelib, traversals
 from flax.nnx import variablelib
 import flax.nnx.module as nnx_module
 from flax.nnx.pytreelib import Pytree
@@ -104,7 +104,7 @@ def _maybe_call_setup(module: Module):
 def _bind_module(parent: Module, module: Module) -> Module:
   assert parent.scope is not None
 
-  for _, value in reversed(list(graph.iter_graph(module, graph=True))):
+  for _, value in reversed(list(graphlib.iter_graph(module, graph=True))):
     if isinstance(value, Module):
       if module.scope is None:
         value.scope = parent.scope.copy()  # type: ignore[attribute-error]
@@ -245,8 +245,8 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
       if name in vars(self) and isinstance(
         state := vars(self)[name], ModuleState
       ):
-        graph.update(value, state)
-      for leaf in jax.tree.leaves(value, is_leaf=graph.is_graph_node):
+        graphlib.update(value, state)
+      for leaf in jax.tree.leaves(value, is_leaf=graphlib.is_graph_node):
         if isinstance(leaf, Module):
           leaf._pytree__state._initializing = self.is_initializing()
           _bind_module(self, leaf)
@@ -374,7 +374,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     return variable
 
   def _get_variables(self) -> tp.Mapping:
-    state = graph.state(self)
+    state = graphlib.state(self, graph=True)
     _variables: dict = {}
 
     variable: variablelib.Variable
@@ -422,7 +422,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     _initialize: bool = False,
     **kwargs,
   ) -> tp.Any:
-    module = graph.clone(self)
+    module = graphlib.clone(self, graph=True)
 
     # create variables
     real_variables = dict(variables)
@@ -440,7 +440,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
 
     states = ({},) if not real_variables else real_variables.values()
     state = statelib.merge_state(*states, cls=ModuleState)
-    graph.update(module, state)
+    graphlib.update(module, state)
 
     if rngs is None:
       rngs = rnglib.Rngs()
@@ -471,7 +471,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     _method = _get_unbound_fn(_method)
 
     # set temporary state
-    for _, value in graph.iter_graph(module, graph=True):
+    for _, value in graphlib.iter_graph(module, graph=True):
       if isinstance(value, Pytree):
         value._pytree__state._initializing = _initialize
       if isinstance(value, Module):
@@ -486,7 +486,7 @@ class Module(nnx_module.Module, ModuleBase, metaclass=ModuleMeta):
     finally:
       MODULE_CONTEXT.module_stack.pop()
       # reset temporary state
-      for _, value in graph.iter_graph(module, graph=True):
+      for _, value in graphlib.iter_graph(module, graph=True):
         if isinstance(value, Pytree):
           value._pytree__state._initializing = False
         if isinstance(value, Module):
