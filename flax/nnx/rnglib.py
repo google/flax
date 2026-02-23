@@ -121,6 +121,9 @@ class RngStream(Pytree):
     self.count[...] += 1
     return key
 
+  def split(self, k: int):
+      return self.fork(split=k)
+
   def fork(self, *, split: int | tuple[int, ...] | None = None):
     key = self()
     if split is not None:
