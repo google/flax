@@ -23,7 +23,7 @@ from flax import struct
 from flax.nnx import (
   extract,
   filterlib,
-  graph as graphlib,
+  graphlib,
   variablelib,
 )
 from flax.nnx.statelib import State
@@ -374,7 +374,7 @@ def grad(
       not support ``DiffState`` or shared ``Variable`` references.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if reduce_axes:
     raise NotImplementedError('reduce_axes argument to grad is deprecated')
   del reduce_axes
@@ -440,7 +440,7 @@ def value_and_grad(
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if reduce_axes:
     raise NotImplementedError(
         'reduce_axes argument to value_and_grad is deprecated')
@@ -470,6 +470,300 @@ def value_and_grad(
     return_value=True,
     graph=graph,
   )
+
+# -----------------------------------------------
+# vjp
+# -----------------------------------------------
+
+
+@dataclasses.dataclass(eq=False)
+class TreeVjpFn:
+  f: tp.Callable[..., tp.Any]
+  has_aux: bool
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, *args):
+    updates, snapshot = extract.updates_and_snapshot(args)
+    out = self.f(*args)
+    extract.check_no_aliases(updates, out)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    if self.has_aux:
+      primals_out, aux = out
+      return primals_out, (updates, aux)
+    else:
+      return out, updates
+
+
+@tp.overload
+def vjp(
+  f: tp.Callable[..., tp.Any],
+  *primals: tp.Any,
+  has_aux: bool = False,
+  reduce_axes: tp.Sequence[AxisName] = (),
+  graph: bool | None = None,
+) -> tuple[tp.Any, tp.Callable] | tuple[tp.Any, tp.Callable, tp.Any]: ...
+@tp.overload
+def vjp(
+  *,
+  has_aux: bool = False,
+  reduce_axes: tp.Sequence[AxisName] = (),
+  graph: bool | None = None,
+) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
+def vjp(
+  f: tp.Callable[..., tp.Any] | Missing = MISSING,
+  *primals: tp.Any,
+  has_aux: bool = False,
+  reduce_axes: tp.Sequence[AxisName] = (),
+  graph: bool | None = None,
+) -> (
+  tuple[tp.Any, tp.Callable]
+  | tuple[tp.Any, tp.Callable, tp.Any]
+  | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
+):
+  """Stateful version of ``jax.vjp`` that propagates NNX Variable updates.
+  Only tree-mode is supported (``graph=False``).
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+    ...
+    >>> m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> x = jnp.ones((1, 2))
+    ...
+    >>> def loss_fn(m, x):
+    ...   return jnp.sum(m(x))
+    ...
+    >>> primals_out, vjp_fn = nnx.vjp(loss_fn, m, x, graph=False)
+    >>> m_grad, x_grad = vjp_fn(jnp.ones_like(primals_out))
+
+  Can also be used as a decorator::
+
+    >>> @nnx.vjp(graph=False)
+    ... def f(m, x):
+    ...   return jnp.sum(m(x))
+    ...
+    >>> primals_out, vjp_fn = f(m, x)
+
+  Args:
+    f: Function to be differentiated. Its arguments can be arrays, scalars,
+      or pytrees containing arrays and NNX Variables.
+    *primals: A sequence of primal values at which the Jacobian of ``f``
+      should be evaluated.
+    has_aux: Optional, bool. Indicates whether ``f`` returns a pair where the
+      first element is considered the output of the mathematical function to be
+      differentiated and the second element is auxiliary data. Default False.
+    reduce_axes: Deprecated, do not use.
+    graph: If False, use tree-mode. If None, use the ``nnx_graph_mode``
+      config value.
+
+  Returns:
+    If ``has_aux`` is False, returns a ``(primals_out, vjp_fn)`` pair.
+    ``vjp_fn`` takes a cotangent with the same structure as ``primals_out``
+    and returns gradients for each primal argument.
+    If ``has_aux`` is True, returns ``(primals_out, vjp_fn, aux)``.
+  """
+  if graph is None:
+    graph = config.nnx_graph_mode
+  if graph:
+    raise NotImplementedError(
+      'graph-mode is not supported for nnx.vjp. '
+      'Set graph=False or use the nnx_graph_mode config.'
+    )
+  if reduce_axes:
+    raise NotImplementedError('reduce_axes argument to vjp is deprecated')
+  del reduce_axes
+
+  if isinstance(f, Missing):
+    return functools.partial(  # type: ignore[return-value]
+      vjp,
+      has_aux=has_aux,
+      graph=graph,
+    )
+
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    _raise_bound_method_error('vjp')
+
+  if not primals:
+    return functools.partial(  # type: ignore[return-value]
+      vjp,
+      f,
+      has_aux=has_aux,
+      graph=graph,
+    )
+
+  primals_out, vjp_fn, aux = jax.vjp(
+    TreeVjpFn(f_unbound, has_aux=has_aux),
+    *primals,
+    has_aux=True,
+  )
+  if has_aux:
+    updates, user_aux = aux
+  else:
+    updates = aux
+    user_aux = None
+  extract.apply_variable_updates(primals, updates)
+  if has_aux:
+    return primals_out, vjp_fn, user_aux
+  else:
+    return primals_out, vjp_fn
+
+
+# -----------------------------------------------
+# jvp
+# -----------------------------------------------
+
+
+@dataclasses.dataclass(eq=False)
+class TreeJvpFn:
+  f: tp.Callable[..., tp.Any]
+  has_aux: bool
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, *args):
+    updates, snapshot = extract.updates_and_snapshot(args)
+    out = self.f(*args)
+    extract.check_no_aliases(updates, out)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    if self.has_aux:
+      primals_out, aux = out
+      return (primals_out, updates), aux
+    else:
+      return out, updates
+
+
+@tp.overload
+def jvp(
+  f: tp.Callable[..., tp.Any],
+  primals: tuple[tp.Any, ...],
+  tangents: tuple[tp.Any, ...],
+  *,
+  has_aux: bool = False,
+  graph: bool | None = None,
+) -> tuple[tp.Any, ...]: ...
+@tp.overload
+def jvp(
+  *,
+  has_aux: bool = False,
+  graph: bool | None = None,
+) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
+@tp.overload
+def jvp(
+  f: tp.Callable[..., tp.Any],
+  *,
+  has_aux: bool = False,
+  graph: bool | None = None,
+) -> tp.Callable[..., tp.Any]: ...
+def jvp(
+  f: tp.Callable[..., tp.Any] | Missing = MISSING,
+  primals: tuple[tp.Any, ...] | Missing = MISSING,
+  tangents: tuple[tp.Any, ...] | Missing = MISSING,
+  *,
+  has_aux: bool = False,
+  graph: bool | None = None,
+) -> (
+  tuple[tp.Any, ...]
+  | tp.Callable[..., tp.Any]
+  | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
+):
+  """Stateful version of ``jax.jvp`` that propagates NNX Variable updates.
+  Only tree-mode is supported (``graph=False``).
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+    ...
+    >>> m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> x = jnp.ones((1, 2))
+    ...
+    >>> def f(m, x):
+    ...   return jnp.sum(m(x))
+    ...
+    >>> m_tangent = jax.tree.map(jnp.zeros_like, m)
+    >>> x_tangent = jnp.ones_like(x)
+    >>> primals_out, tangent_out = nnx.jvp(
+    ...   f, (m, x), (m_tangent, x_tangent), graph=False
+    ... )
+
+  Can also be used as a decorator::
+
+    >>> @nnx.jvp(graph=False)
+    ... def f(m, x):
+    ...   return jnp.sum(m(x))
+    ...
+    >>> primals_out, tangent_out = f((m, x), (m_tangent, x_tangent))
+
+  Args:
+    f: Function to be differentiated. Its arguments can be arrays, scalars,
+      or pytrees containing arrays and NNX Variables.
+    primals: A tuple of primal values at which the Jacobian of ``f``
+      should be evaluated.
+    tangents: A tuple of tangent vectors, with the same structure as
+      ``primals``.
+    has_aux: Optional, bool. Indicates whether ``f`` returns a pair where the
+      first element is considered the output of the mathematical function to be
+      differentiated and the second element is auxiliary data. Default False.
+    graph: If False, use tree-mode. If None, use the ``nnx_graph_mode``
+      config value.
+
+  Returns:
+    If ``has_aux`` is False, returns ``(primals_out, tangent_out)``.
+    If ``has_aux`` is True, returns ``(primals_out, tangent_out, aux)``.
+  """
+  if graph is None:
+    graph = config.nnx_graph_mode
+  if graph:
+    raise NotImplementedError(
+      'graph-mode is not supported for nnx.jvp. '
+      'Set graph=False or use the nnx_graph_mode config.'
+    )
+
+  if isinstance(f, Missing):
+    return functools.partial(
+      jvp,
+      has_aux=has_aux,
+      graph=graph,
+    )
+
+  f_unbound, _, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    _raise_bound_method_error('jvp')
+
+  if isinstance(primals, Missing) or isinstance(tangents, Missing):
+    return functools.partial(
+      jvp,
+      f,
+      has_aux=has_aux,
+      graph=graph,
+    )
+
+  if has_aux:
+    (primals_out, updates), (tangent_out, _updates_tangent), aux = jax.jvp(
+      TreeJvpFn(f_unbound, has_aux=True),
+      primals,
+      tangents,
+      has_aux=True,
+    )
+  else:
+    (primals_out, updates), (tangent_out, _updates_tangent) = jax.jvp(
+      TreeJvpFn(f_unbound, has_aux=False),
+      primals,
+      tangents,
+    )
+  extract.apply_variable_updates(primals, updates)
+  if has_aux:
+    return primals_out, tangent_out, aux
+  else:
+    return primals_out, tangent_out
+
 
 # -----------------------------------------------
 # custom_vjp
@@ -1013,7 +1307,7 @@ def custom_vjp(
 
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if isinstance(fun, Missing):
     return functools.partial(
       custom_vjp, nondiff_argnums=nondiff_argnums, graph=graph,
@@ -1109,7 +1403,7 @@ def remat(
       not support shared ``Variable`` references.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if isinstance(f, Missing):
     return functools.partial(
       remat,

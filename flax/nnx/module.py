@@ -22,11 +22,11 @@ import jax.numpy as jnp
 
 from flax.nnx import (
   filterlib,
-  graph as graphlib,
+  graphlib,
 )
 from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
-from flax.nnx.graph import GraphState
+from flax.nnx.graphlib import GraphState
 from flax.typing import Key, Path, PathParts
 import warnings
 
@@ -302,6 +302,7 @@ class Module(Pytree, metaclass=ModuleMeta):
     self,
     *filters: filterlib.Filter,
     raise_if_not_found: bool = True,
+    graph: bool | None = None,
     **attributes: tp.Any,
   ) -> None:
     """Sets the attributes of nested Modules including the current Module.
@@ -342,7 +343,7 @@ class Module(Pytree, metaclass=ModuleMeta):
     if not filters:
       filters = (True,)
     predicates = tuple(map(filterlib.to_predicate, filters))
-    for path, module in iter_modules(self):
+    for path, module in iter_modules(self, graph=graph):
       for predicate in predicates:
         if predicate(path, module):
           for name, value in attributes.items():

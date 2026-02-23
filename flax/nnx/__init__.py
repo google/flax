@@ -28,9 +28,9 @@ from .filterlib import All as All
 from .filterlib import Not as Not
 from .filterlib import Everything as Everything
 from .filterlib import Nothing as Nothing
-from .graph import GraphDef as GraphDef
-from .graph import GraphState as GraphState
-from .graph import PureState as PureState
+from .graphlib import GraphDef as GraphDef
+from .graphlib import GraphState as GraphState
+from .graphlib import PureState as PureState
 from . import pytreelib as object
 from .pytreelib import Pytree as Pytree
 from .pytreelib import Object as Object
@@ -52,31 +52,31 @@ from .module import Module as Module
 from .module import view as view
 from .module import view_info as view_info
 from .module import iter_children as iter_children, iter_modules as iter_modules
-from .graph import merge as merge
-from .graph import UpdateContext as UpdateContext
-from .graph import update_context as update_context
-from .graph import current_update_context as current_update_context
-from .graph import split as split
-from .graph import update as update
-from .graph import clone as clone
-from .graph import pop as pop
-from .graph import state as state
-from .graph import graphdef as graphdef
-from .graph import iter_graph as iter_graph
-from .graph import recursive_map as recursive_map
-from .graph import find_duplicates as find_duplicates
-from .graph import call as call
-from .graph import set_metadata as set_metadata
-from .graph import SplitContext as SplitContext
-from .graph import split_context as split_context
-from .graph import MergeContext as MergeContext
-from .graph import merge_context as merge_context
-from .graph import variables as variables
-from .graph import vars_as as vars_as
-from .graph import pure as pure
-from .graph import cached_partial as cached_partial
-from .graph import flatten as flatten
-from .graph import unflatten as unflatten
+from .graphlib import merge as merge
+from .graphlib import UpdateContext as UpdateContext
+from .graphlib import update_context as update_context
+from .graphlib import current_update_context as current_update_context
+from .graphlib import split as split
+from .graphlib import update as update
+from .graphlib import clone as clone
+from .graphlib import pop as pop
+from .graphlib import state as state
+from .graphlib import graphdef as graphdef
+from .graphlib import iter_graph as iter_graph
+from .graphlib import recursive_map as recursive_map
+from .graphlib import find_duplicates as find_duplicates
+from .graphlib import call as call
+from .graphlib import set_metadata as set_metadata
+from .graphlib import SplitContext as SplitContext
+from .graphlib import split_context as split_context
+from .graphlib import MergeContext as MergeContext
+from .graphlib import merge_context as merge_context
+from .graphlib import variables as variables
+from .graphlib import vars_as as vars_as
+from .graphlib import pure as pure
+from .graphlib import cached_partial as cached_partial
+from .graphlib import flatten as flatten
+from .graphlib import unflatten as unflatten
 from .nn import initializers as initializers
 from .nn.activations import celu as celu
 from .nn.activations import elu as elu
@@ -174,8 +174,11 @@ from .transforms.autodiff import DiffState as DiffState
 from .transforms.autodiff import grad as grad
 from .transforms.autodiff import value_and_grad as value_and_grad
 from .transforms.autodiff import custom_vjp as custom_vjp
+from .transforms.autodiff import vjp as vjp
+from .transforms.autodiff import jvp as jvp
 from .transforms.autodiff import remat as remat
 from .transforms.compilation import jit as jit
+from .transforms.compilation import jit_partial as jit_partial
 from .transforms.compilation import shard_map as shard_map
 from .transforms.compilation import StateSharding as StateSharding
 from .transforms.iteration import Carry as Carry
@@ -207,7 +210,9 @@ from .extract import from_tree as from_tree
 from .extract import NodeStates as NodeStates
 from .summary import tabulate as tabulate
 from . import traversals as traversals
-
+# import last
+from . import graphlib as graphlib
+from . import graph as graph
 
 import typing as _tp
 
