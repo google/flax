@@ -179,7 +179,7 @@ print(f"""
 
 +++
 
-There are cases were you do want to explicitely annotate the attributes to avoid ambiguity or protect yourself against possible edge cases. These include constraining input arguments which might have unexpected types, forcing attributes as data when their type is not treated as data by default, or using `nnx.static` as a way to assert the attribute should not contain data.
+There are cases where you do want to explicitly annotate the attributes to avoid ambiguity or to protect yourself against possible edge cases. These include constraining input arguments which might have unexpected types, forcing attributes as data when their type is not treated as data by default, or using `nnx.static` as a way to assert the attribute should not contain data.
 
 ```{code-cell} ipython3
 class Bar(nnx.Pytree):
