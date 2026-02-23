@@ -3364,7 +3364,7 @@ class TestVmap(absltest.TestCase):
     rngs = nnx.Rngs(0)
     initial_key = rngs.default.key[...]
 
-    module = create_block(rngs.fork(split=5))
+    module = create_block(rngs.split(5))
 
     assert rngs.default.count[...] == 1
     assert rngs.default.key[...] == initial_key
