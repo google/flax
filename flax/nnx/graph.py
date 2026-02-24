@@ -769,7 +769,7 @@ def flatten(  # type: ignore[invalid-annotation]
       the overhead of the graph protocol.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if ref_index is None:
     ref_index = RefMap()
   leaves: list[tp.Any] = []
@@ -2243,7 +2243,7 @@ def split(  # type: ignore[invalid-annotation]
     filters are passed, a single ``State`` is returned.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   graphdef, flat_state = flatten(node, graph=graph)
   flat_states = _split_state(flat_state, filters)
   states = _to_nested_state(graphdef, flat_states)
@@ -2451,7 +2451,7 @@ def state(
     One or more :class:`State` mappings.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   _, flat_state = flatten(node, graph=graph)
   state = flat_state.to_nested_state()
 
@@ -2492,7 +2492,7 @@ def graphdef(
     The :class:`GraphDef` of the :class:`Module` object.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   graphdef, _ = flatten(node, graph=graph)
   return graphdef
 
@@ -2578,7 +2578,7 @@ def pop(
     return states
 
 
-def clone(node: Node, variables: bool = True, *, graph: bool = True) -> Node:
+def clone(node: Node, variables: bool = True, *, graph: bool | None = None) -> Node:
   """Create a deep copy of the given graph node.
 
   Example usage::
@@ -2877,7 +2877,7 @@ def iter_graph(
       the overhead of the graph protocol.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if graph:
     return _iter_graph(node)
   else:
@@ -2987,7 +2987,7 @@ def recursive_map(
       the overhead of the graph protocol.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if graph:
     node = clone(node, variables=False)
     path_parts: PathParts = ()

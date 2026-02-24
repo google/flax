@@ -338,7 +338,7 @@ def jit(
   """
 
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if isinstance(fun, Missing):
     return functools.partial(
       jit,
@@ -386,6 +386,35 @@ def jit(
   )
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class PartialState:
+  """Container for a pre-flattened partial argument.
+
+  Stores the pytree structure (``treedef``) as static metadata and the
+  flattened leaves as dynamic data.  Variables within the original argument
+  are kept as leaves so their values can change between calls without
+  triggering recompilation.
+  """
+  treedef: jax.tree_util.PyTreeDef
+  leaves: list[tp.Any]
+
+jax.tree_util.register_dataclass(
+  PartialState,
+  data_fields=['leaves'],
+  meta_fields=['treedef'],
+)
+
+
+def _flatten_to_partial_state(arg: tp.Any) -> PartialState:
+  is_leaf = lambda x: isinstance(x, variablelib.Variable)
+  leaves, treedef = jax.tree.flatten(arg, is_leaf=is_leaf)
+  return PartialState(treedef=treedef, leaves=leaves)
+
+
+def _unflatten_partial_state(state: PartialState) -> tp.Any:
+  return jax.tree.unflatten(state.treedef, state.leaves)
+
+
 @dataclasses.dataclass(eq=False)
 class TreeJitFn:
   f: tp.Callable[..., tp.Any]
@@ -400,6 +429,10 @@ class TreeJitFn:
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     args_updates, kwargs_updates = updates
     args_snapshot, kwargs_snapshot = snapshot
+    args = tuple(
+      _unflatten_partial_state(a) if isinstance(a, PartialState) else a
+      for a in args
+    )
     out = self.f(*args, **kwargs)
     extract.check_no_aliases(args_updates, kwargs_updates, out)
     donated_arg = lambda path, *_: path[0] in self.donate_argnums
@@ -426,11 +459,13 @@ class TreeJitWrapped(tp.Generic[P, R]):
       device: tp.Optional[jax.Device] = None,
       backend: tp.Optional[str] = None,
       inline: bool = False,
+      partial_args: tuple[PartialState, ...] = (),
   ):
     functools.update_wrapper(self, fun)
     self.fun: tp.Callable[P, R] = fun
     self.in_shardings = in_shardings
     self.out_shardings = out_shardings
+    self.partial_args = partial_args
 
     jit_out_shardings: tp.Any
     if in_shardings is not None or out_shardings is not None:
@@ -471,8 +506,9 @@ class TreeJitWrapped(tp.Generic[P, R]):
     )
 
   def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
-    out, updates = self.jitted_fn(*args, **kwargs)
-    extract.apply_variable_updates((args, kwargs), updates)
+    out, updates = self.jitted_fn(*self.partial_args, *args, **kwargs)
+    extract.apply_variable_updates(
+        ((*self.partial_args, *args), kwargs), updates)
     return out
 
   def __get__(self, obj, objtype=None):
@@ -481,17 +517,148 @@ class TreeJitWrapped(tp.Generic[P, R]):
     return functools.partial(self, obj)
 
   def eval_shape(self, *args, **kwargs):
-    out, updates = self.jitted_fn.eval_shape(*args, **kwargs)
-    extract.apply_variable_updates((args, kwargs), updates)
+    out, updates = self.jitted_fn.eval_shape(
+        *self.partial_args, *args, **kwargs)
+    extract.apply_variable_updates(
+        ((*self.partial_args, *args), kwargs), updates)
     return out
 
   def trace(self, *args, **kwargs) -> TreeTraced:
-    traced = self.jitted_fn.trace(*args, **kwargs)
+    traced = self.jitted_fn.trace(*self.partial_args, *args, **kwargs)
     return TreeTraced(traced, self)
 
   def lower(self, *args, **kwargs) -> TreeLowered:
-    lowered = self.jitted_fn.lower(*args, **kwargs)
+    lowered = self.jitted_fn.lower(*self.partial_args, *args, **kwargs)
     return TreeLowered(lowered, self)
+
+
+def jit_partial(
+    fun: tp.Callable[..., R],
+    *partial_args: tp.Any,
+    in_shardings: tp.Any = None,
+    out_shardings: tp.Any = None,
+    donate_argnums: int | tp.Sequence[int] | None = None,
+    donate_argnames: str | tp.Iterable[str] | None = None,
+    keep_unused: bool = False,
+    device: tp.Optional[jax.Device] = None,
+    backend: tp.Optional[str] = None,
+    inline: bool = False,
+    graph: bool | None = None,
+) -> TreeJitWrapped[..., R]:
+  """JIT-compile ``fun`` with pre-flattened partial arguments.
+
+  Similar to ``nnx.cached_partial`` but designed for tree-mode
+  (``graph=False``). Each ``partial_arg`` is flattened into a
+  ``PartialState`` whose pytree structure is fixed at construction time.
+  Variable values inside partial arguments can still change between calls
+  without triggering recompilation, and any mutations to Variables are
+  propagated back to the originals after each call.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+    >>> import optax
+    ...
+    >>> x, y = jnp.ones((4, 2)), jnp.ones((4, 3))
+    >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=nnx.Param)
+    ...
+    >>> def train_step(model, optimizer, x, y):
+    ...   def loss_fn(model):
+    ...     return jnp.mean((model(x) - y) ** 2)
+    ...   loss, grads = nnx.value_and_grad(loss_fn)(model)
+    ...   optimizer.update(model, grads)
+    ...   return loss
+    ...
+    >>> train_step_fn = nnx.jit_partial(train_step, model, optimizer, graph=False)
+    ...
+    >>> loss = train_step_fn(x, y)
+
+  Args:
+    fun: The function to JIT-compile.
+    *partial_args: Arguments to be pre-flattened and bound. These must
+      appear as the first positional arguments of ``fun``.
+    in_shardings: Sharding specification for inputs. When a tuple/list,
+      the first ``len(partial_args)`` entries correspond to partial
+      arguments and are broadcast against their original pytree
+      structure. A non-tuple value (e.g. a single ``PartitionSpec``)
+      is passed through directly to ``jax.jit`` and broadcast across
+      all arguments uniformly.
+    out_shardings: Like ``in_shardings``, but for function outputs.
+    donate_argnums: Positional argument indices whose buffers may be
+      donated to the computation.
+    donate_argnames: Named arguments whose buffers may be donated.
+    keep_unused: If ``True``, unused arguments are not pruned.
+    device: Optional device to run on.
+    backend: Optional backend to use.
+    inline: If ``True``, inline the function.
+    graph: If ``False``, uses tree-mode. If ``None``, uses the
+      ``nnx_graph_mode`` config value. Graph-mode (``True``) is
+      not supported.
+
+  Returns:
+    A ``TreeJitWrapped`` callable expecting the remaining (runtime)
+    arguments.
+  """
+  if graph is None:
+    graph = config.nnx_graph_mode
+  if graph:
+    raise NotImplementedError(
+      'graph-mode is not supported for nnx.jit_partial. '
+      'Set graph=False or use the nnx_graph_mode config.'
+    )
+  if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_shardings)):
+    raise ValueError(
+      '`in_shardings` cannot contain `StateSharding` objects '
+      'in `jit_partial`'
+    )
+  if any(isinstance(x, StateSharding) for x in jax.tree.leaves(out_shardings)):
+    raise ValueError(
+      '`out_shardings` cannot contain `StateSharding` objects '
+      'in `jit_partial`'
+    )
+
+  is_variable = lambda x: isinstance(x, variablelib.Variable)
+  flat_partial_args = tuple(
+    _flatten_to_partial_state(arg) for arg in partial_args
+  )
+
+  jit_in_shardings: tp.Any = None
+  if in_shardings is not None and isinstance(in_shardings, (tuple, list)):
+    num_partial = len(partial_args)
+    partial_shardings = in_shardings[:num_partial]
+    runtime_shardings = in_shardings[num_partial:]
+
+    flat_partial_shardings = []
+    for flat_arg, orig_arg, sharding in zip(
+        flat_partial_args, partial_args, partial_shardings):
+      broadcasted = extract.broadcast_prefix(
+        sharding, orig_arg,
+        prefix_is_leaf=lambda x: x is None
+          or isinstance(x, variablelib.Variable),
+        tree_is_leaf=is_variable,
+      )
+      flat_partial_shardings.append(
+        PartialState(treedef=flat_arg.treedef, leaves=broadcasted)
+      )
+    jit_in_shardings = (*flat_partial_shardings, *runtime_shardings)
+  else:
+    jit_in_shardings = in_shardings
+
+  return TreeJitWrapped(
+    fun,
+    in_shardings=jit_in_shardings,
+    out_shardings=out_shardings,
+    donate_argnums=donate_argnums,
+    donate_argnames=donate_argnames,
+    keep_unused=keep_unused,
+    device=device,
+    backend=backend,
+    inline=inline,
+    partial_args=flat_partial_args,
+  )
+
 
 class JitWrapped(tp.Generic[P, R]):
   """A function ready to be traced, lowered, and compiled.
@@ -1244,7 +1411,7 @@ def shard_map(
     the ``mesh`` and ``in_specs``.
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
   if f is Missing:
     return functools.partial(
         shard_map,

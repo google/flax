@@ -817,7 +817,7 @@ def split_rngs(
 
   """
   if graph is None:
-    graph = config.flax_nnx_graph_mode
+    graph = config.nnx_graph_mode
 
   if isinstance(node, Missing):
 
