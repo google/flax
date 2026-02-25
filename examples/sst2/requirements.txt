@@ -4,6 +4,6 @@ flax==0.3.6
 ml-collections==0.1.0
 numpy==1.22.0
 optax==0.1.0
-tensorflow==2.11.1
+tensorflow==2.12.1
 tensorflow-datasets==4.4.0
 tensorflow-text==2.7.0
