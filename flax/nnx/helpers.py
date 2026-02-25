@@ -359,3 +359,33 @@ def has_keyword_arg(func: tp.Callable[..., tp.Any], name: str) -> bool:
     and param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
     for param in inspect.signature(func).parameters.values()
   )
+
+
+@jax.jit
+def fix_checkpoint(checkpoint, model_class: nnx.Module, rngs: nnx.Rngs):
+  """Removes RNG keys from a >0.11 checkpoints
+  Args:
+    checkpoint: (pytree) The checkpoint to be fixed.
+    model_class: (nnx.Module) The class defining the model in the checkpoint.
+    rngs: (nnx.Rngs) The random number generator to use in the fixed checkpoint.
+  Returns:
+    The fixed checkpoint (pytree)
+  """
+
+  # drop rngs keys
+  flat_paths = nnx.traversals.flatten_mapping(checkpoint)
+  flat_paths = {
+      path[:-1] if path[-1] == "value" else path: value  # remove "value" suffix
+      for path, value in flat_paths.items()
+      if "rngs" not in path  # remove rngs paths
+  }
+  checkpoint = nnx.traversals.unflatten_mapping(flat_paths)
+
+  # initialize new model with given rngs
+  model = model_class(rngs=rngs)
+  # overwrite model parameters with checkpoint
+  nnx.update(model, checkpoint)
+  # get full checkpoint with new rngs
+  new_checkpoint = nnx.state(model)
+
+  return new_checkpoint
