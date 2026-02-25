@@ -19,8 +19,10 @@ import warnings
 import dataclasses
 
 from flax import linen
+from flax import core
 from flax import nnx
 from flax.core import FrozenDict
+from flax.core import meta
 from flax.nnx import graph
 from flax.nnx import variablelib
 from flax.nnx.bridge import variables as bv
@@ -30,6 +32,7 @@ from flax.nnx.statelib import State
 from flax.nnx.pytreelib import Pytree
 from flax.nnx.rnglib import Rngs
 import jax
+from jax import tree_util as jtu
 
 M = tp.TypeVar('M', bound=Module)
 
@@ -347,10 +350,19 @@ class ToLinen(linen.Module):
     module = self.nnx_class(*self.args, **_module_kwargs())
 
     # update nnx module from linen variables
-    if self.variables:
-      new_state = nnx.State(bv.linen_vars_to_nnx_attrs(self.variables))
-    else:
-      new_state = nnx.State({})
+    def maybe_unbox(x):
+      if isinstance(x, meta.AxisMetadata):
+        return x.unbox()
+      return x
+    states = jtu.tree_map(
+        maybe_unbox,
+        list(core.unfreeze(self.variables).values()),  # type: ignore[wrong-arg-types, arg-type]
+        is_leaf=lambda x: isinstance(x, meta.AxisMetadata),
+    )
+    if not states:
+      states = ({},)
+
+    new_state = nnx.merge_state(*states)
     new_state_flat = nnx.traversals.flatten_mapping(new_state)
     current_state_flat = nnx.traversals.flatten_mapping(nnx.state(module))
     unknown_state_flat = {path: v for path, v in new_state_flat.items() if path not in current_state_flat}
