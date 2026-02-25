@@ -65,7 +65,44 @@ extensions = [
   'codediff',
   'flax_module',
   'sphinx_design',
+  'sphinx_collections',
 ]
+
+# -- Sphinx-collections configuration ----------------------------------------
+# Custom function to clone optax repo and extract only the docs/api folder
+def clone_optax_api_docs(config):
+  """Clone optax repo and copy only docs/api folder."""
+  import tempfile
+  import shutil
+  from pathlib import Path
+  from git import Repo
+
+  target = Path(config['target'])
+  if target.exists():
+    return None  # Already cloned, return None to skip writing
+
+  with tempfile.TemporaryDirectory() as tmpdir:
+    Repo.clone_from(
+      'https://github.com/google-deepmind/optax.git',
+      tmpdir,
+      depth=1,
+    )
+    src = Path(tmpdir) / 'docs' / 'api'
+    shutil.copytree(src, target)
+
+  return None  # We handle file creation ourselves
+
+
+collections = {
+  'optax_api': {
+    'driver': 'function',
+    'source': clone_optax_api_docs,
+    'target': 'optax_api',  # Will be placed in _collections/optax_api
+    'write_result': False,  # We handle file creation ourselves
+    'final_clean': False,  # Keep the cloned files after build
+    'clean': False,  # Don't clean before building (we check if exists)
+  }
+}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
