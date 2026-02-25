@@ -89,7 +89,8 @@ def is_vanilla_variable(vs: variablelib.Variable) -> bool:
 def to_linen_var(vs: variablelib.Variable) -> meta.AxisMetadata:
   metadata = vs.get_metadata()
   if 'linen_meta_type' in metadata:
-    linen_type = metadata['linen_meta_type']
+    metadata = dict(metadata)
+    linen_type = metadata.pop('linen_meta_type')
     if hasattr(linen_type, 'from_nnx_metadata'):
       return linen_type.from_nnx_metadata({'value': vs.get_value(), **metadata})
     return linen_type(vs.get_value(), **metadata)
