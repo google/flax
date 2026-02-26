@@ -145,7 +145,7 @@ the new changes:
     .. code-block:: python
       :emphasize-lines: 17, 26
 
-      from flax import nnx
+      import nnx
       import optax
 
 
@@ -180,7 +180,7 @@ the new changes:
     .. code-block:: python
       :emphasize-lines: 17, 26
 
-      from flax import nnx
+      import nnx
       import optax
 
 

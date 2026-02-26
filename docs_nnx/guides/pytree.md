@@ -15,7 +15,7 @@ jupytext:
 Flax NNX's Modules are by default registered as JAX Pytrees, this allows using them throughout most of JAX APIs but in particular JAX transforms and the `jax.tree.*` functions. Thanks to the pytree protocol a simple NNX program might look like this:
 
 ```{code-cell} ipython3
-from flax import nnx
+import nnx
 import jax
 import jax.numpy as jnp
 

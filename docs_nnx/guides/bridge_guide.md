@@ -31,7 +31,7 @@ And all built-in Linen layers should have equivalent NNX versions! Check out the
 import os
 os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=8'
 
-from flax import nnx
+import nnx
 from flax import linen as nn
 from flax.nnx import bridge
 import jax

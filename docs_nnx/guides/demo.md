@@ -13,7 +13,7 @@ jupytext:
 ```{code-cell} ipython3
 import jax
 from jax import numpy as jnp
-from flax import nnx
+import nnx
 ```
 
 ### [1] NNX is Pythonic

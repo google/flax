@@ -72,7 +72,7 @@ vocab_path = f'{weights_dir}/tokenizer.model'
 ## Python imports
 
 ```{code-cell} ipython3
-from flax import nnx
+import nnx
 import sentencepiece as spm
 ```
 

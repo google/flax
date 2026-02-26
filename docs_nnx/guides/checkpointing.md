@@ -34,7 +34,7 @@ The Orbax API examples used throughout the guide are for demonstration purposes,
 Import the necessary dependencies, set up a checkpoint directory and an example Flax NNX model - `TwoLayerMLP` - by subclassing [`nnx.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html).
 
 ```{code-cell} ipython3
-from flax import nnx
+import nnx
 import orbax.checkpoint as ocp
 import jax
 from jax import numpy as jnp
