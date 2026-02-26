@@ -28,6 +28,7 @@ import layers
 import modules
 import params as params_lib
 import sow_lib
+import jax
 import jax.numpy as jnp
 from jaxtyping import Array  # pylint: disable=g-importing-member,g-multiple-import
 
@@ -106,7 +107,10 @@ class TransformerConfig:
   use_qk_norm: bool = False
   sliding_window_size: int | None = None
   dtype: Any = jnp.float32
-  axis_rules: Any | None = None
+  weight_dtype: Any = jnp.float32
+  dropout_rate: float = 0.0
+
+  activations_sharding: jax.sharding.Sharding | None = None
 
   def query_pre_attn_scalar(self) -> float:
     """Returns the scalar to multiply the query by before attention."""
@@ -151,33 +155,41 @@ class TransformerConfig:
     layer_names = [name.replace('layer_', '') for name in layer_names]
     num_layers = max([int(layer) for layer in layer_names]) + 1
 
+    # set dtype and weight_dtype according to params
+    flat_params, _ = jax.tree.flatten(params)
+    wdtypes = {p.dtype for p in flat_params}
+    assert len(wdtypes) == 1, wdtypes
+    wdtype = next(iter(wdtypes))
+    assert wdtype in (jnp.float32, jnp.bfloat16), wdtypes
+    dtype = weight_dtype = wdtype
+
     if not use_post_attn_norm:  # Gemma 1.
       if num_layers == _NUM_LAYERS_GEMMA_2B:
-        return cls.gemma_2b()
+        return cls.gemma_2b(dtype=dtype, weight_dtype=weight_dtype)
       if num_layers == _NUM_LAYERS_GEMMA_7B:
-        return cls.gemma_7b()
+        return cls.gemma_7b(dtype=dtype, weight_dtype=weight_dtype)
       raise ValueError(
           'Guessing Gemma 1 model, but could not determine size from params.'
       )
     elif not use_qk_norm:  # Gemma 2.
       if num_layers == _NUM_LAYERS_GEMMA2_2B:
-        return cls.gemma2_2b()
+        return cls.gemma2_2b(dtype=dtype, weight_dtype=weight_dtype)
       if num_layers == _NUM_LAYERS_GEMMA2_9B:
-        return cls.gemma2_9b()
+        return cls.gemma2_9b(dtype=dtype, weight_dtype=weight_dtype)
       if num_layers == _NUM_LAYERS_GEMMA2_27B:
-        return cls.gemma2_27b()
+        return cls.gemma2_27b(dtype=dtype, weight_dtype=weight_dtype)
       raise ValueError(
           'Guessing Gemma 2 model but could not determine size from params.'
       )
     else:  # Gemma 3.
       if num_layers == _NUM_LAYERS_GEMMA3_1B:
-        return cls.gemma3_1b()
+        return cls.gemma3_1b(dtype=dtype, weight_dtype=weight_dtype)
       if num_layers == _NUM_LAYERS_GEMMA3_4B:
-        return cls.gemma3_4b()
+        return cls.gemma3_4b(dtype=dtype, weight_dtype=weight_dtype)
       if num_layers == _NUM_LAYERS_GEMMA3_12B:
-        return cls.gemma3_12b()
+        return cls.gemma3_12b(dtype=dtype, weight_dtype=weight_dtype)
       if num_layers == _NUM_LAYERS_GEMMA3_27B:
-        return cls.gemma3_27b()
+        return cls.gemma3_27b(dtype=dtype, weight_dtype=weight_dtype)
 
     raise ValueError('Could not determine Gemma variant from params.')
 
@@ -529,12 +541,9 @@ class Transformer(nnx.Module):
     self.embedder = modules.Embedder(
         vocab_size=config.num_embed,
         embed_dim=config.embed_dim,
-        embedding_init=modules.maybe_with_partitioning(
-          nnx.initializers.normal(),
-          config.axis_rules,
-          ("vocab", "embed"),
-        ),
+        embedding_metadata={"sharding_names": ("tensor", "fsdp")},
         dtype=config.dtype,
+        weight_dtype=config.weight_dtype,
         rngs=rngs,
     )
     self.layers = nnx.List([
@@ -550,15 +559,15 @@ class Transformer(nnx.Module):
     ])
     self.final_norm = layers.RMSNorm(
       config.embed_dim,
-      scale_init=modules.maybe_with_partitioning(
-        nnx.initializers.zeros_init(),
-        config.axis_rules,
-        ("embed", ),
-      ),
+      scale_metadata={"sharding_names": ("tensor", )},
       rngs=rngs,
+      dtype=config.dtype,
+      weight_dtype=config.weight_dtype,
     )
+    self.final_dropout = nnx.Dropout(config.dropout_rate)
     self.final_logits_softcap = config.final_logit_softcap
     self.sow_config = sow_config
+    self.activations_sharding = config.activations_sharding
 
   def __call__(
       self,
@@ -566,6 +575,7 @@ class Transformer(nnx.Module):
       positions: Array,  # [B, L]
       cache: Cache | None,  # (sequence length L')
       attention_mask: Array,  # [B, L, L']
+      rngs: nnx.Rngs | None = None,
   ) -> tuple[Array, Cache | None]:
     """Transformer forward pass.
 
@@ -577,6 +587,7 @@ class Transformer(nnx.Module):
       positions: input absolute positions.
       cache: Attention KV cache or None.
       attention_mask: transformer input mask.
+      rngs: optional rngs to pass in stochastic layers
 
     Returns:
       predicted_logits, new_cache
@@ -587,6 +598,11 @@ class Transformer(nnx.Module):
     new_cache = None if cache is None else {}
     x = self.embedder.encode(last_tokens)
     self.sow_config.maybe_sow_embeddings(x, self)
+
+    if self.activations_sharding is not None:
+      # Sharding x: [B // (data, fsdp), L, D] -> [B // (data, fsdp), L, D // tensor]
+      x = jax.lax.with_sharding_constraint(x, self.activations_sharding)
+
     for i, layer in enumerate(self.layers):
       layer_name = f'layer_{i}'
       layer_cache = cache[layer_name] if cache else None
@@ -595,11 +611,13 @@ class Transformer(nnx.Module):
           positions,
           layer_cache,
           attention_mask,
+          rngs=rngs,
       )
       if cache is not None:
         new_cache[layer_name] = layer_cache  # pytype: disable=container-type-mismatch
 
     x = self.final_norm(x)
+    x = self.final_dropout(x, rngs=rngs)
     logits = self.embedder.decode(x)
 
     if self.final_logits_softcap is not None:
@@ -624,7 +642,7 @@ class Transformer(nnx.Module):
       self,
       cache_size: int,
       batch_size: int,
-      dtype: jnp.dtype = jnp.bfloat16,
+      dtype: jnp.dtype = jnp.float32,
   ) -> Cache:
     """Initializes a new Transformer cache."""
     return {

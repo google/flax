@@ -21,11 +21,12 @@ that can be easily tested and imported in Colab.
 from absl import app
 from absl import flags
 from absl import logging
+
 from clu import platform
+import flax
 import train
 import jax
 from ml_collections import config_flags
-import tensorflow as tf
 
 
 FLAGS = flags.FLAGS
@@ -38,18 +39,36 @@ config_flags.DEFINE_config_file(
     lock_config=True,
 )
 flags.mark_flags_as_required(['workdir'])
+flags.DEFINE_string(
+  'chpt_bucket',
+  None,
+  'Optional checkpoint bucket URL passed to Orbax Checkpoint. Default, workdir/checkpoint is used to store checkpoints'
+)
 
 
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
-  # it unavailable to JAX.
-  tf.config.experimental.set_visible_devices([], 'GPU')
+  # Please make sure you have installed tensorflow-cpu package without GPU support.
+  # Otherwise, you have to call: tf.config.experimental.set_visible_devices([], 'GPU')
 
-  logging.info('JAX process: %d / %d', jax.process_index(), jax.process_count())
-  logging.info('JAX local devices: %r', jax.local_devices())
+  logging.info(f'JAX version: {jax.__version__}')
+  logging.info(f'Flax version: {flax.__version__}')
+
+  try:
+    jax.distributed.initialize()
+  except ValueError:
+    # On single GPU host above command can raise ValueError: coordinator_address should be defined.
+    # This is fine.
+    pass
+
+  logging.info(f'JAX process: {jax.process_index()} / {jax.process_count()}')
+  logging.info(f'JAX devices: {jax.devices()}')
+  logging.info(f'FLAGS:')
+  logging.info(f'- {FLAGS.config=}')
+  logging.info(f'- {FLAGS.workdir=}')
+  logging.info(f'- {FLAGS.chpt_bucket=}')
 
   # Add a note so that we can tell which task is which JAX host.
   # (Depending on the platform task 0 is not guaranteed to be host 0)
@@ -60,8 +79,7 @@ def main(argv):
   platform.work_unit().create_artifact(
       platform.ArtifactType.DIRECTORY, FLAGS.workdir, 'workdir'
   )
-
-  train.train_and_evaluate(FLAGS.config, FLAGS.workdir)
+  train.train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.chpt_bucket)
 
 
 if __name__ == '__main__':
