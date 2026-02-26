@@ -177,7 +177,7 @@ The order in which you define submodules determines the name of a submodule if n
         return nn.Dense(features=4)(x)
 
 
-The above Module will break because either the encoder or decoder path will construct a Module named "Dense_0". This means the two Modules will share parameters which is not intended here. Actually, the two Modules cannot share parameters because they each have a different number of features.
+The above Module will break because either the encoder or decoder path will construct a Module named "Dense_0". This means the two Modules will share parameters which are not intended here. Actually, the two Modules cannot share parameters because they each have a different number of features.
 
 This problem can be solved in various ways:
  - Provide explicit names
@@ -232,12 +232,12 @@ When we call ``apply``, a copy of the top-level Module is created which will act
 #. It does not change anything outside the function. This means you cannot manipulate stateful objects that are accessible outside the pure function.
 
 
-Pure functions have many advantages but when using JAX they are often essential. For example, most code requires compilation using ``jax.jit`` to be fast and once you created a Module you probably want to optimize its parameters using ``jax.grad``. However, these APIs expect a pure function and don't work on stateful bound ``Module`` instances directly. Moreover, pure functions allow for flexible interoperability with other libraries. For example, We recommend `Optax <https://github.com/deepmind/optax>`_ for optimizing parameters. The optimizers in Optax expect and return a PyTree of JAX arrays to optimize, just like the ``apply`` function of a Linen Module.
+Pure functions have many advantages but when using JAX they are often essential. For example, most code requires compilation using ``jax.jit`` to be fast and once you create a Module you probably want to optimize its parameters using ``jax.grad``. However, these APIs expect a pure function and don't work on stateful bound ``Module`` instances directly. Moreover, pure functions allow for flexible interoperability with other libraries. For example, We recommend `Optax <https://github.com/deepmind/optax>`_ for optimizing parameters. The optimizers in Optax expect and return a PyTree of JAX arrays to optimize, just like the ``apply`` function of a Linen Module.
 
 Cloning
 ===============================================
 
-To make this approach work reliably we need well-defined cloning behavior. Rather than relying on a complex nested cloning procedure like Python's ``deepcopy``, Flax enforces that a ``Module`` is exactly defined by its construction arguments. Therefore cloning a Module reduces to calling the constructor with its original construction arguments. Because ``Module`` acts as an immutable dataclass, the construction arguments are mapped directly to instance attributes. Non-construction attributes that are computed in ``setup`` or ``__post_init__`` should also depend only on the construciton arguments to ensure a well-defined clone.
+To make this approach work reliably we need well-defined cloning behavior. Rather than relying on a complex nested cloning procedure like Python's ``deepcopy``, Flax enforces that a ``Module`` is exactly defined by its construction arguments. Therefore cloning a Module reduces to calling the constructor with its original construction arguments. Because ``Module`` acts as an immutable dataclass, the construction arguments are mapped directly to instance attributes. Non-construction attributes that are computed in ``setup`` or ``__post_init__`` should also depend only on the construction arguments to ensure a well-defined clone.
 
 Bind
 ===============================================
