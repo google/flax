@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import inspect
 import typing as tp
 
 import numpy as np
@@ -23,7 +24,11 @@ from flax.nnx.pytreelib import Pytree
 from flax.nnx.variablelib import Variable
 import jax, jax.numpy as jnp
 
-# TODO: add tests and docstrings
+
+_MULTIMETRIC_RESERVED_NAMES = frozenset({
+  'reset', 'update', 'compute', 'split',
+  '_metric_names', '_expected_kwargs',
+})
 
 
 class MetricState(Variable):
@@ -123,6 +128,15 @@ class Average(Metric):
 
 @struct.dataclass
 class Statistics:
+  """Running statistics computed by the Welford algorithm.
+
+  Attributes:
+    mean: the running mean of the data.
+    standard_error_of_mean: the standard error of the mean.
+    standard_deviation: the population standard deviation
+      (ddof=0) of the data.
+  """
+
   mean: jnp.float32
   standard_error_of_mean: jnp.float32
   standard_deviation: jnp.float32
@@ -386,11 +400,52 @@ class MultiMetric(Metric):
       **metrics: the key-word arguments that will be used to access
         the corresponding ``Metric``.
     """
-    # TODO: raise error if a kwarg is passed that is in ('reset', 'update', 'compute'), since these names are reserved for methods
-    self._metric_names = []
+    # Validate metric names before any mutation.
+    for name in metrics:
+      if name in _MULTIMETRIC_RESERVED_NAMES:
+        raise ValueError(
+          f"Metric name '{name}' conflicts with a reserved "
+          f'name. Reserved names: '
+          f'{sorted(_MULTIMETRIC_RESERVED_NAMES)}'
+        )
+
+    self._metric_names: list[str] = []
+    self._expected_kwargs: set[str] | None = set()
     for metric_name, metric in metrics.items():
       self._metric_names.append(metric_name)
       setattr(self, metric_name, metric)
+      # Collect expected kwargs for validation in update().
+      if self._expected_kwargs is None:
+        continue
+      sig = inspect.signature(metric.update)
+      has_named_params = False
+      has_var_keyword = False
+      named_param_names: set[str] = set()
+      for pname, param in sig.parameters.items():
+        if pname == 'self':
+          continue
+        if param.kind in (
+          param.POSITIONAL_OR_KEYWORD,
+          param.KEYWORD_ONLY,
+        ):
+          named_param_names.add(pname)
+          has_named_params = True
+        elif param.kind == param.VAR_KEYWORD:
+          has_var_keyword = True
+      if has_named_params and has_var_keyword:
+        # Metric declares specific params but also absorbs
+        # extras (e.g. Accuracy's **_); can't validate
+        # without false positives.
+        self._expected_kwargs = None
+      elif has_named_params:
+        self._expected_kwargs.update(named_param_names)
+      elif hasattr(metric, 'argname'):
+        # Use argname convention (e.g. Average, Welford).
+        self._expected_kwargs.add(metric.argname)
+      elif has_var_keyword:
+        # Pure **kwargs with no specific params; can't
+        # validate.
+        self._expected_kwargs = None
 
   def reset(self) -> None:
     """Reset all underlying ``Metric``'s."""
@@ -398,16 +453,29 @@ class MultiMetric(Metric):
       getattr(self, metric_name).reset()
 
   def update(self, **updates) -> None:
-    """In-place update all underlying ``Metric``'s in this ``MultiMetric``. All
-    ``**updates`` will be passed to the ``update`` method of all underlying
-    ``Metric``'s.
+    """In-place update all underlying ``Metric``'s.
+
+    All ``**updates`` are forwarded to each metric's
+    ``update`` method.
 
     Args:
-      **updates: the key-word arguments that will be passed to the underlying ``Metric``'s
-        ``update`` method.
+      **updates: keyword arguments forwarded to each
+        underlying metric's ``update`` method.
+
+    Raises:
+      TypeError: if an unexpected keyword argument is
+        provided and the expected set can be statically
+        determined from the underlying metrics.
     """
     # TODO: should we give the option of updating only some of the metrics and not all? e.g. if for some kwargs==None, don't do update
-    # TODO: should we raise an error if a kwarg is passed into **updates that has no match with any underlying metric? e.g. user typo
+    if self._expected_kwargs is not None:
+      unexpected = set(updates) - self._expected_kwargs
+      if unexpected:
+        raise TypeError(
+          f'Unexpected keyword argument(s): '
+          f'{sorted(unexpected)}. '
+          f'Expected: {sorted(self._expected_kwargs)}'
+        )
     for metric_name in self._metric_names:
       getattr(self, metric_name).update(**updates)
 
