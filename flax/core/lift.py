@@ -1801,6 +1801,7 @@ def _broadcast_prefix_tree(prefix_tree: Any, full_tree: Any) -> list[Any]:
       lambda x, subtree: bcast_flat.extend([x] * num_leaves_fn(subtree)),
       prefix_tree,
       full_tree,
+      is_leaf=lambda x: x is None,
   )
   return bcast_flat
 
