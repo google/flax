@@ -828,6 +828,7 @@ def vmap(
         any_vmapped_axis_sharded = any(
             jax.typeof(x).sharding.spec[i] == spmd_axis_name
             for x, i in zip(args_flat, axes_flat)
+            if i is not None
         )
         if any_vmapped_axis_sharded:
           rngs = jax.sharding.reshard(rngs, jax.P(spmd_axis_name))
