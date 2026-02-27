@@ -32,7 +32,7 @@ import jax.numpy as jnp
 
 from flax import nnx
 from flax import typing
-from flax.nnx import graph, statelib, variablelib
+from flax.nnx import graphlib, statelib, variablelib
 
 from functools import wraps
 
@@ -73,7 +73,7 @@ def _collect_stats(
   node_stats: NodeStats,
   object_types: set[type],
 ):
-  if not graph.is_node(node) and not isinstance(node, variablelib.Variable):
+  if not graphlib.is_node(node) and not isinstance(node, variablelib.Variable):
     raise ValueError(f'Expected a graph node or Variable, got {type(node)!r}.')
 
   if id(node) in node_stats:
@@ -89,7 +89,7 @@ def _collect_stats(
     node._nnx_tabulate_id = id(node)  # type: ignore
     object_types.add(type(node))
 
-  node_impl = graph.get_node_impl(node)
+  node_impl = graphlib.get_node_impl(node)
   assert node_impl is not None
   node_dict = node_impl.node_dict(node)
   for key, value in node_dict.items():
@@ -106,7 +106,7 @@ def _collect_stats(
         stats[var_type] = size_bytes
       variable_groups[var_type][key] = value
       node_stats[id(value)] = None
-    elif graph.is_node(value):
+    elif graphlib.is_node(value):
       _collect_stats((*path, key), value, node_stats, object_types)
       # accumulate stats from children
       child_info = node_stats[id(value)]
@@ -158,7 +158,7 @@ def _to_dummy_array(x):
     return ArrayRepr(x.shape, x.dtype)
   elif isinstance(x, jax.Array | np.ndarray):
     return ArrayRepr.from_array(x)
-  elif graph.is_graph_node(x):
+  elif graphlib.is_graph_node(x):
     return SimpleObjectRepr(x)
   else:
     return x
@@ -379,7 +379,7 @@ def tabulate(
   _console_kwargs = {'force_terminal': True, 'force_jupyter': in_ipython}
   _console_kwargs.update(console_kwargs)
 
-  obj = graph.clone(obj)  # create copy to avoid side effects
+  obj = graphlib.clone(obj)  # create copy to avoid side effects
   node_stats: NodeStats = {}
   object_types: set[type] = set()
   _collect_stats((), obj, node_stats, object_types)
@@ -552,7 +552,7 @@ def _normalize_values(x):
 def _maybe_pytree_to_dict(pytree: tp.Any):
   path_leaves = jax.tree_util.tree_flatten_with_path(pytree)[0]
   path_leaves = [
-    (tuple(map(graph._key_path_to_key, path)), value)
+    (tuple(map(graphlib._key_path_to_key, path)), value)
     for path, value in path_leaves
   ]
   if len(path_leaves) < 1:

@@ -80,7 +80,7 @@ class TestBridgeModule(absltest.TestCase):
         x = self.linear(x)
 
         # NNX
-        graphdef, state = nnx.split(self)
+        graphdef, state = nnx.graph.split(self)
         test.assertIn('Linear_0', state)
         test.assertIn('w', state['Linear_0'])
         test.assertIn('b', state['Linear_0'])
@@ -337,7 +337,7 @@ class TestBridgeModule(absltest.TestCase):
         keys = jax.random.split(key, in_dim)
         self.rngs = nnx.Rngs(keys)
       def __call__(self, x):
-        @nnx.vmap
+        @nnx.graph.vmap
         def generate_weights(r):
           return jax.random.normal(r.default(), (2,))
         w = generate_weights(self.rngs)
@@ -430,8 +430,8 @@ class TestBridgeModule(absltest.TestCase):
       dim: int
       num_layers: int
       def setup(self):
-        @nnx.split_rngs(splits=self.num_layers)
-        @nnx.vmap(
+        @nnx.graph.split_rngs(splits=self.num_layers)
+        @nnx.graph.vmap(
             in_axes=(nnx.StateAxes({nnx.RngState: 0, ...: None}),),
             axis_size=self.num_layers,
             transform_metadata={nnx.PARTITION_NAME: None},
@@ -442,8 +442,8 @@ class TestBridgeModule(absltest.TestCase):
         create_block(self)
 
       def __call__(self, x):
-        @nnx.split_rngs(splits=self.num_layers)
-        @nnx.scan(
+        @nnx.graph.split_rngs(splits=self.num_layers)
+        @nnx.graph.scan(
             in_axes=(0, nnx.Carry),
             out_axes=nnx.Carry,
             transform_metadata={nnx.PARTITION_NAME: None},
@@ -486,7 +486,7 @@ class TestBridgeModule(absltest.TestCase):
         return self.aaa(x)
 
       def __call__(self, x):
-        forward = nnx.remat(self.__class__.forward)
+        forward = nnx.graph.remat(self.__class__.forward)
         return forward(self, x)
 
     model = Top()

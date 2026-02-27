@@ -203,14 +203,14 @@ class TestModule(parameterized.TestCase):
   def test_tree_map(self):
     m = nnx.Dict(a=nnx.Param(1))
 
-    graphdef, state = nnx.split(m)
+    graphdef, state = nnx.graph.split(m)
 
     state = jax.tree.map(lambda x: x + 1, state)
 
   def test_split_2(self):
     m = nnx.Dict(a=nnx.Param(1))
 
-    graphdef, empty, some = nnx.split(m, None, ...)
+    graphdef, empty, some = nnx.graph.split(m, None, ...)
 
     some = jax.tree.map(lambda x: x + 1, some)
 
@@ -221,9 +221,9 @@ class TestModule(parameterized.TestCase):
     def g(graphdef: nnx.GraphDef[nnx.Dict], state: nnx.State):
       m = nnx.merge(graphdef, state)
       m.a = 2
-      return nnx.split(m)
+      return nnx.graph.split(m)
 
-    graphdef, state = g(*nnx.split(m))
+    graphdef, state = g(*nnx.graph.split(m))
     m2 = nnx.merge(graphdef, state)
 
     assert m2.a == 2
@@ -248,7 +248,7 @@ class TestModule(parameterized.TestCase):
     m1 = nnx.Dict(a=nnx.Param(1), b=nnx.Param(2))
     m2 = nnx.Dict(x=m1, y=m1, z=nnx.Param(3))
 
-    m3 = nnx.merge(*nnx.split(m2))
+    m3 = nnx.merge(*nnx.graph.split(m2))
 
     assert m3['x'] is m3['y']
     assert m3['x']['a'] is m3['y']['a']
@@ -262,7 +262,7 @@ class TestModule(parameterized.TestCase):
 
     m = Foo()
 
-    graphdef, state = nnx.split(m)
+    graphdef, state = nnx.graph.split(m)
     assert len(state) == 1
 
     m2 = nnx.merge(graphdef, state)
@@ -281,9 +281,9 @@ class TestModule(parameterized.TestCase):
       assert m['a'][0] is m['b']
       assert m['a'][1] is not m['b']
 
-      return nnx.split(m)
+      return nnx.graph.split(m)
 
-    graphdef, state = f(*nnx.split(m))
+    graphdef, state = f(*nnx.graph.split(m))
     m = nnx.merge(graphdef, state)
 
     assert m['a'][0] is m['b']
@@ -301,9 +301,9 @@ class TestModule(parameterized.TestCase):
     def g(graphdef: nnx.GraphDef[nnx.Dict], state: nnx.State):
       m = nnx.merge(graphdef, state)
       m.a[...] += 1
-      return nnx.split(m)
+      return nnx.graph.split(m)
 
-    graphdef, state = g(*nnx.split(m))
+    graphdef, state = g(*nnx.graph.split(m))
     m2 = nnx.merge(graphdef, state)
     assert m2 is not m
     assert m.a[...] == 1
@@ -319,23 +319,23 @@ class TestModule(parameterized.TestCase):
       n += 1
       m = nnx.merge(*state_and_def)
       m.a[...] += 1
-      return nnx.split(m)
+      return nnx.graph.split(m)
 
-    m2 = nnx.merge(*g(nnx.split(m)))
+    m2 = nnx.merge(*g(nnx.graph.split(m)))
 
     assert n == 1
     assert m2 is not m
     assert m.a[...] == 1
     assert m2.a[...] == 2
 
-    g(nnx.split(m))
+    g(nnx.graph.split(m))
     assert n == 1
 
-    g(nnx.split(m2))
+    g(nnx.graph.split(m2))
     assert n == 1
 
     m2.b = nnx.Param(10)
-    g(nnx.split(m2))
+    g(nnx.graph.split(m2))
 
     assert n == 2
 
@@ -350,7 +350,7 @@ class TestModule(parameterized.TestCase):
       }
     )
 
-    graphdef, p = nnx.split(m)
+    graphdef, p = nnx.graph.split(m)
     assert len(nnx.to_flat_state(p)) == 2
     assert len(jax.tree_util.tree_leaves(p)) == 2
 
@@ -435,13 +435,13 @@ class TestModule(parameterized.TestCase):
     model = SowMod(nnx.Rngs(42))
     x = jnp.ones((2, 4))
 
-    @nnx.jit
+    @nnx.graph.jit
     def train_step(model, x):
       out = model(x)
       intermediates = nnx.pop(model, nnx.Intermediate)
       return out, intermediates
 
-    train_step_fn = nnx.cached_partial(train_step, model)
+    train_step_fn = nnx.graph.cached_partial(train_step, model)
     train_step_fn(x)
 
   def test_perturb_basic(self):
@@ -468,7 +468,7 @@ class TestModule(parameterized.TestCase):
     np.testing.assert_array_equal(model.after_multiply, jnp.zeros_like(x))
 
     take_gradient_filter = nnx.Any(nnx.Param, nnx.Perturbation)
-    @nnx.grad(argnums=nnx.DiffState(argnum=0, filter=take_gradient_filter))
+    @nnx.graph.grad(argnums=nnx.DiffState(argnum=0, filter=take_gradient_filter))
     def grad_loss(model, inputs, targets):
       preds = model(inputs)
       return jnp.square(preds - targets).mean()
@@ -599,13 +599,13 @@ class TestModule(parameterized.TestCase):
     assert hasattr(m1, 'c')
 
   def test_create_abstract(self):
-    linear = nnx.eval_shape(lambda: nnx.Linear(2, 3, rngs=nnx.Rngs(0)))
+    linear = nnx.graph.eval_shape(lambda: nnx.Linear(2, 3, rngs=nnx.Rngs(0)))
 
     assert linear.kernel.get_value() == jax.ShapeDtypeStruct((2, 3), jnp.float32)
     assert linear.bias.get_value() == jax.ShapeDtypeStruct((3,), jnp.float32)
 
   def test_create_abstract_stateful(self):
-    linear = nnx.eval_shape(lambda: nnx.Dropout(0.5, rngs=nnx.Rngs(0)))
+    linear = nnx.graph.eval_shape(lambda: nnx.Dropout(0.5, rngs=nnx.Rngs(0)))
 
     assert linear.rngs.key.get_value() == jax.ShapeDtypeStruct(
       (), jax.random.key(0).dtype
@@ -613,11 +613,11 @@ class TestModule(parameterized.TestCase):
 
   def test_partial_init(self):
     linear = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    state = nnx.state(linear)
+    state = nnx.graph.state(linear)
 
     del state['bias']
 
-    @nnx.jit
+    @nnx.graph.jit
     def partial_init(state: nnx.State):
       m = nnx.Linear(
         2, 3, bias_init=nnx.initializers.ones_init(), rngs=nnx.Rngs(1)
@@ -794,7 +794,7 @@ class TestModule(parameterized.TestCase):
 
     obj = Foo(nnx.Rngs(0))
 
-    leaves = nnx.to_flat_state(nnx.state(obj)).leaves
+    leaves = nnx.to_flat_state(nnx.graph.state(obj)).leaves
 
     expected_total = sum(int(np.prod(x.shape)) for x in leaves)
     expected_total_params = sum(
@@ -902,7 +902,7 @@ class TestModuleDataclass(absltest.TestCase):
       f=6,  # graphdef int
     )
 
-    graphdef, state = nnx.split(m)
+    graphdef, state = nnx.graph.split(m)
 
     assert len(state) == 4
     assert state['b'].get_value() == 2
@@ -1003,7 +1003,7 @@ class TestModuleDataclass(absltest.TestCase):
     assert hasattr(m, 'bar')
 
 
-class TestModuleDef:
+class TestModuleDef(parameterized.TestCase):
   def test_apply(self):
     class Foo(nnx.Module):
       def __init__(self, c: float, *, rngs: nnx.Rngs):
@@ -1016,7 +1016,7 @@ class TestModuleDef:
     rngs = nnx.Rngs(0)
     foo = Foo(c=1.0, rngs=rngs)
 
-    graphdef, states = nnx.split(foo)
+    graphdef, states = nnx.graph.split(foo)
 
     assert isinstance(states, nnx.State)
     assert isinstance(states['w'], nnx.Param)
@@ -1038,9 +1038,9 @@ class TestModuleDef:
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 
-    graphdef, state = nnx.split(foo)
+    graphdef, state = nnx.graph.split(foo)
 
-    assert isinstance(graphdef.nodes[0], nnx.graph.NodeDef | nnx.graph.NodeRef)
+    assert isinstance(graphdef.nodes[0], nnx.graphlib.NodeDef | nnx.graphlib.NodeRef)
     assert isinstance(state, nnx.State)
     assert isinstance(state['w'], nnx.Param)
     assert isinstance(state['c'], nnx.Variable)
@@ -1061,7 +1061,7 @@ class TestModuleDef:
 
     module = Foo(rngs=nnx.Rngs(0))
 
-    modules = list(nnx.iter_modules(module))
+    modules = list(nnx.graph.iter_modules(module))
 
     assert len(modules) == 5
     assert modules[0][0] == ('dropout',)
@@ -1075,7 +1075,8 @@ class TestModuleDef:
     assert modules[4][0] == ()
     assert isinstance(modules[4][1], Foo)
 
-  def test_children_modules_iterator(self):
+  @parameterized.parameters(True, False)
+  def test_children_modules_iterator(self, graph):
     class Foo(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.submodules = nnx.data([
@@ -1087,7 +1088,7 @@ class TestModuleDef:
 
     module = Foo(rngs=nnx.Rngs(0))
 
-    modules = list(nnx.iter_children(module))
+    modules = list(nnx.iter_children(module, graph=graph))
 
     assert len(modules) == 2
     assert modules[0][0] == 'dropout'
@@ -1102,7 +1103,7 @@ class TestModuleDef:
 
     foo = Foo()
 
-    graphdef, state = nnx.split(foo)
+    graphdef, state = nnx.graph.split(foo)
 
     assert isinstance(state, nnx.State)
     assert isinstance(state['a'], nnx.State)

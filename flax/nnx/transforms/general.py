@@ -16,7 +16,7 @@ import typing as tp
 
 from flax.nnx import (
   extract,
-  graph,
+  graphlib,
 )
 from flax.typing import MISSING, Missing
 
@@ -146,7 +146,7 @@ def split_inputs(
   if isinstance(f, Missing):
     return functools.partial(split_inputs, ctxtag=ctxtag)  # type: ignore[return-value]
 
-  @graph.update_context(ctxtag)
+  @graphlib.update_context(ctxtag)
   @functools.wraps(f)
   def split_inputs_wrapper(*args):
     pure_args = extract.to_tree(args, ctxtag=ctxtag)

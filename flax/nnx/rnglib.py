@@ -23,7 +23,7 @@ import jax.numpy as jnp
 from flax import config
 from flax import struct
 from flax import typing
-from flax.nnx import graph as graphlib
+from flax.nnx import graphlib
 from flax.nnx.nn import initializers
 from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
