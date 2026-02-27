@@ -80,13 +80,9 @@ def get_metrics(device_metrics):
   """
   # We select the first element of x in order to get a single copy of a
   # device-replicated metric.
-  # Avoid degraded performance under the new jax.pmap. See
-  # https://docs.jax.dev/en/latest/migrate_pmap.html#int-indexing-into-sharded-arrays.
-  if jax.config.jax_pmap_shmap_merge:
-    device_metrics = jax.tree_util.tree_map(
-        lambda x: x.addressable_shards[0].data.squeeze(0), device_metrics)
-  else:
-    device_metrics = jax.tree_util.tree_map(lambda x: x[0], device_metrics)
+  device_metrics = jax.tree_util.tree_map(
+      lambda x: x.addressable_shards[0].data.squeeze(0), device_metrics
+  )
   metrics_np = jax.device_get(device_metrics)
   return stack_forest(metrics_np)
 
