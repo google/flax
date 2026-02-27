@@ -228,6 +228,7 @@ class PyTreeNode:
   """
 
   def __init_subclass__(cls, **kwargs):
+    super().__init_subclass__()
     dataclass(cls, **kwargs)  # pytype: disable=wrong-arg-types
 
   def __init__(self, *args, **kwargs):
