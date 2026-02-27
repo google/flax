@@ -2154,7 +2154,7 @@ class Param(Variable[A]):
 
 class BatchStat(Variable[A]):
   """The mean and variance batch statistics stored in
-  the :class:`BatchNorm` layer. Note, these are not the
+  the :class:`flax.nnx.BatchNorm` layer. Note that these are not the
   learnable scale and bias parameters, but rather the
   running average statistics that are typically used
   during post-training inference::
@@ -2184,7 +2184,7 @@ class BatchStat(Variable[A]):
 
 
 class Cache(Variable[A]):
-  """Autoregressive cache in :class:`MultiHeadAttention`::
+  """Autoregressive cache in :class:`flax.nnx.MultiHeadAttention`::
 
   >>> from flax import nnx
   >>> import jax, jax.numpy as jnp
@@ -2217,8 +2217,8 @@ class Cache(Variable[A]):
 
 
 class Intermediate(Variable[A]):
-  """:class:`Variable` type that is typically used for
-  :func:`Module.sow`::
+  """A :class:`flax.nnx.Variable` type that is typically used for
+  :func:`flax.nnx.Module.sow`::
 
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
