@@ -41,12 +41,15 @@ StateMapping = tp.Mapping[Path, tp.Any]
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
-
 class ModuleMeta(PytreeMeta):
   # we keep a trivial derived class just in case we need to
   # add more functionality in the future
   pass
 
+
+class Capture(variableslib.Perturbation):
+  "Variable type for captured intermediates."
+  pass
 
 class Module(Pytree, metaclass=ModuleMeta):
   """Base class for all neural network modules.
@@ -172,6 +175,16 @@ class Module(Pytree, metaclass=ModuleMeta):
           variable_type, allow_register=True
       )
 
+    # Use capture API if available
+    if hasattr(self, '__capture__'):
+      from flax.nnx.transforms.autodiff import _capture_fwd
+      if not isinstance(self.__capture__, variable_type):
+        raise ValueError(
+          f"Expected '{name}' to be of type '{variable_type.__name__}', "
+          f"got '{type(self.__capture).__name__}'"
+        )
+      return _capture_fwd(self.__capture__, name, value)
+
     if hasattr(self, name):
       variable = getattr(self, name)
       if not isinstance(variable, variableslib.Variable):
@@ -258,6 +271,18 @@ class Module(Pytree, metaclass=ModuleMeta):
       variable_type = variableslib.variable_type_from_name(
           variable_type, allow_register=True
       )
+
+    # Use capture API if available
+    if hasattr(self, '__capture__'):
+      if not isinstance(self.__capture__, variable_type):
+        raise ValueError(
+          f"Expected '{name}' to be of type '{variable_type.__name__}', "
+          f"got '{type(self.__capture).__name__}'"
+        )
+      from flax.nnx.transforms.autodiff import _capture_bwd
+      self.__capture__.set_value({**self.__capture__.get_value(), name: jnp.zeros_like(value)})
+      return _capture_bwd(self, name, value)
+
     if not hasattr(self, name):
       zeros = jax.tree.map(jnp.zeros_like, value)
       setattr(self, name, variable_type(zeros))

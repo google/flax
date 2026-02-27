@@ -16,11 +16,12 @@ from collections import deque
 import dataclasses
 import functools
 import typing as tp
-
+from functools import partial
 
 from flax import config
 from flax import struct
 from flax.nnx import (
+  graph,
   extract,
   filterlib,
   graph as graphlib,
@@ -101,6 +102,10 @@ class GradFn:
       ctx: graphlib.MergeContext, path, prefix, value: extract.NodeStates
     ):
       nondiff = self.nondiff_states.popleft()
+      # If __capture__ is in value.state (updated during backward pass),
+      # use it instead of the original nondiff __capture__
+      if nondiff is not None and '__capture__' in value.state:
+        nondiff = State({k: v for k, v in nondiff.items() if k != '__capture__'})
       if nondiff is None:
         return ctx.merge(value.graphdef, value.state)
       else:
@@ -1450,3 +1455,23 @@ def remat(
     )
   )
 
+@partial(custom_vjp, nondiff_argnums=(1,))
+def _capture_bwd(module, name, a):
+  "Record the intermediate gradient of the given value"
+  return a
+
+def _capture_fwd(log, name, value):
+  "Record an intermediate value"
+  log.set_value({**log.get_value(), f'{name}': jax.lax.stop_gradient(value)})
+
+def _fn_fwd(module, name, a):
+  return a, (module, a)
+
+def _fn_bwd(name, res, g):
+  module, a = res
+  module.__capture__.set_value({**module.__capture__.get_value(), f'{name}': g[1]})
+  return (graph.state(module), g[1])
+
+_capture_bwd.defvjp(_fn_fwd, _fn_bwd) # type: ignore
+
+#
