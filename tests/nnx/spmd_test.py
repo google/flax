@@ -61,6 +61,41 @@ class TestSPMD(parameterized.TestCase):
     assert m.w.shape == (8, 2)
     assert m.w.sharding.shard_shape(m.w.shape) == (4, 1)
 
+  def test_init_with_sharded_value(self):
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('model', 'data'),
+        axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto),
+    )
+
+    with jax.set_mesh(mesh):
+      data = jax.device_put(jnp.ones((4, 4)), NamedSharding(mesh, P('model', 'data')))
+      v = nnx.Variable(data)
+
+    self.assertEqual(v.out_sharding, P('model', 'data'))
+    self.assertEqual(v.mesh, mesh)
+
+  def test_set_value_with_different_sharding(self):
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('model', 'data'),
+        axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto),
+    )
+
+    with jax.set_mesh(mesh):
+      data = jax.device_put(jnp.ones((4, 4)), NamedSharding(mesh, P('model', 'data')))
+      v = nnx.Variable(data)
+
+    self.assertEqual(v.out_sharding, P('model', 'data'))
+    self.assertEqual(v.mesh, mesh)
+
+    with jax.set_mesh(mesh):
+      new_data = jax.device_put(jnp.zeros((4, 4)), NamedSharding(mesh, P('data', 'model')))
+      v.set_value(new_data)
+
+    self.assertEqual(v.out_sharding, P('data', 'model'))
+    self.assertEqual(v.mesh, mesh)
+
   def test_init_all_devices(self):
     class Foo(nnx.Module):
       def __init__(self):
