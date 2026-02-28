@@ -1274,7 +1274,14 @@ class Module(ModuleBase):
     if not self._state.in_setup:
       if not self._state.is_initialized:
         # Setting attributes before end of Module.__post_init__()
-        object.__setattr__(self, name, val)
+        try:
+          object.__setattr__(self, name, val)
+        except AttributeError as exc:
+          if exc.args == ("can't set attribute",):
+            exc.args = (f"can't set attribute {name!r} on value " +
+                        f'with type {type(self).__qualname__}.',)
+          raise
+
         return
       else:
         # If the attribute is a python special method, we allow setting it (this
