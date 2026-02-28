@@ -21,6 +21,8 @@ from flax import nnx
 import jax
 import jax.numpy as jnp
 from jax.sharding import PartitionSpec as P, NamedSharding, AxisType, reshard
+from jax.experimental.layout import Format, Layout
+
 import optax
 
 
@@ -358,6 +360,38 @@ class TestSPMD(parameterized.TestCase):
       )
       self.assertEqual(v.sharding.mesh, mesh)
       self.assertEqual(v.sharding.spec, P('row', 'col'))
+
+
+  @parameterized.product(axis_type_name=['auto', 'explicit'])
+  def test_variable_out_sharding_types(self, axis_type_name):
+    if axis_type_name == 'auto':
+      axis_types = (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto)
+    else: # 'explicit'
+      axis_types = (jax.sharding.AxisType.Explicit, jax.sharding.AxisType.Explicit)
+
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('data', 'model'),
+        axis_types=axis_types,
+    )
+
+    with jax.set_mesh(mesh):
+      value = jnp.ones((4, 4))
+
+      # Test with PartitionSpec
+      v_pspec = nnx.Variable(value, out_sharding=P('data', 'model'))
+      self.assertEqual(v_pspec.sharding.spec, P('data', 'model'))
+
+    # Test with NamedSharding
+    ns = NamedSharding(mesh, P('data', None))
+    v_namedsharding = nnx.Variable(value, out_sharding=ns)
+    self.assertEqual(v_namedsharding.sharding, ns)
+
+    # Test with Format
+    if axis_type_name == 'auto':
+      v_format = nnx.Variable(value, out_sharding=Format(Layout(major_to_minor=(1, 0)), ns))
+      self.assertEqual(v_format.sharding, ns)
+
 
 def has_sharding_spec(array):
     sharding = array.sharding
