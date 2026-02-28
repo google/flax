@@ -2518,7 +2518,7 @@ def pop(
 def pop(
   node, *filters: filterlib.Filter
 ) -> tp.Union[GraphState, tuple[GraphState, ...]]:
-  """Pop one or more :class:`Variable` types from the graph node.
+  """Pop one or more :class:`flax.nnx.Variable` types from the graph node.
 
   Example usage::
 
@@ -2547,9 +2547,9 @@ def pop(
 
   Args:
     node: A graph node object.
-    *filters: One or more :class:`Variable` objects to filter by.
+    *filters: One or more :class:`flax.nnx.Variable` objects to filter by.
   Returns:
-    The popped :class:`State` containing the :class:`Variable`
+    The popped :class:`flax.nnx.State` containing the :class:`flax.nnx.Variable`
     objects that were filtered for.
   """
   if len(filters) == 0:
