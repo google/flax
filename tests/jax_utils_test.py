@@ -20,7 +20,6 @@ os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 
 from absl.testing import absltest
 from absl.testing import parameterized
-import chex
 from flax import jax_utils
 import jax
 import jax.numpy as jnp
@@ -29,13 +28,30 @@ import numpy as np
 NDEV = 4
 
 
-class PadShardUnpadTest(chex.TestCase):
+def assert_max_traces(n):
+  """Decorator to assert that a function is traced at most n times."""
+  def decorator(fn):
+    trace_count = {'count': 0}
+
+    def wrapped(*args, **kwargs):
+      trace_count['count'] += 1
+      if trace_count['count'] > n:
+        raise AssertionError(
+          f"Function was traced {trace_count['count']} times, "
+          f"expected at most {n} traces"
+        )
+      return fn(*args, **kwargs)
+
+    wrapped.trace_count = trace_count
+    return wrapped
+  return decorator
+
+
+class PadShardUnpadTest(parameterized.TestCase):
   BATCH_SIZES = [NDEV, NDEV + 1, NDEV - 1, 5 * NDEV, 5 * NDEV + 1, 5 * NDEV - 1]
   DTYPES = [np.float32, np.uint8, jax.numpy.bfloat16, np.int32]
 
-  def tearDown(self):
-    chex.clear_trace_counter()
-    super().tearDown()
+
 
   @parameterized.product(dtype=DTYPES, bs=BATCH_SIZES)
   def test_basics(self, dtype, bs):
@@ -47,7 +63,7 @@ class PadShardUnpadTest(chex.TestCase):
 
     x = np.arange(bs, dtype=dtype)
     y = add(x, 10 * x)
-    chex.assert_type(y.dtype, x.dtype)
+    self.assertEqual(y.dtype, x.dtype)
     np.testing.assert_allclose(np.float64(y), np.float64(x + 10 * x))
 
   @parameterized.product(dtype=DTYPES, bs=BATCH_SIZES)
@@ -59,24 +75,22 @@ class PadShardUnpadTest(chex.TestCase):
 
     x = jnp.arange(bs, dtype=dtype)
     y = add(dict(a=x), (10 * x,))
-    chex.assert_type(y.dtype, x.dtype)
+    self.assertEqual(y.dtype, x.dtype)
     np.testing.assert_allclose(np.float64(y), np.float64(x + 10 * x))
 
   @parameterized.parameters(DTYPES)
   def test_min_device_batch_avoids_recompile(self, dtype):
     @partial(jax_utils.pad_shard_unpad, static_argnums=())
     @jax.jit
-    @chex.assert_max_traces(n=1)
+    @assert_max_traces(n=1)
     def add(a, b):
       b = jnp.asarray(b, dtype=dtype)
       return a + b
 
-    chex.clear_trace_counter()
-
     for bs in self.BATCH_SIZES:
       x = jnp.arange(bs, dtype=dtype)
       y = add(x, 10 * x, min_device_batch=9)  # pylint: disable=unexpected-keyword-arg
-      chex.assert_type(y.dtype, x.dtype)
+      self.assertEqual(y.dtype, x.dtype)
       np.testing.assert_allclose(np.float64(y), np.float64(x + 10 * x))
 
   @parameterized.product(dtype=DTYPES, bs=BATCH_SIZES)
@@ -87,7 +101,7 @@ class PadShardUnpadTest(chex.TestCase):
 
     x = jnp.arange(bs, dtype=dtype)
     y = add(x, 10)
-    chex.assert_type(y.dtype, x.dtype)
+    self.assertEqual(y.dtype, x.dtype)
     np.testing.assert_allclose(np.float64(y), np.float64(x + 10))
 
   @parameterized.product(dtype=DTYPES, bs=BATCH_SIZES)
@@ -102,7 +116,7 @@ class PadShardUnpadTest(chex.TestCase):
 
     x = jnp.arange(bs, dtype=dtype)
     y = add(5, x, b=10)
-    chex.assert_type(y.dtype, x.dtype)
+    self.assertEqual(y.dtype, x.dtype)
     np.testing.assert_allclose(np.float64(y), np.float64(5 * x + 10))
 
 
