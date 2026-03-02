@@ -30,9 +30,11 @@ NDEV = 4
 
 def assert_max_traces(n):
   """Decorator to assert that a function is traced at most n times."""
+  from functools import wraps
   def decorator(fn):
     trace_count = {'count': 0}
 
+    @wraps(fn)
     def wrapped(*args, **kwargs):
       trace_count['count'] += 1
       if trace_count['count'] > n:
