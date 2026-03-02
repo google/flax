@@ -8,15 +8,17 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
-# Using `nnx.view`
-This guide covers how to use the `nnx.view` function. This function is useful for handling state in layers like `Dropout`, which behave differently in training and evaluation. Similar to `.view` for numpy arrays, `nnx.view` allows you to set modes of the model while still sharing the same data. For a quick intro to how this method works, refer to the following example:
+# Model Views
+This guide covers how to use the `nnx.view` function. This function is useful for handling state in layers like `Dropout` and `BatchNorm`, which behave differently in training and evaluation. Similar to `.view` for numpy arrays, `nnx.view` allows you to set modes of the model while still sharing the same data. For a quick intro to how this function works, refer to the following example:
 
 ```{code-cell} ipython3
 from flax import nnx
 
 # example model with different train/eval behavior
 rngs = nnx.Rngs(0)
-model = nnx.Sequential(nnx.Linear(2, 4, rngs=rngs), nnx.BatchNorm(4, rngs=rngs), nnx.Dropout(0.1))
+model = nnx.Sequential(
+  nnx.Linear(2, 4, rngs=rngs), nnx.BatchNorm(4, rngs=rngs), nnx.Dropout(0.1)
+)
 
 # set train and eval modes
 train_model = nnx.view(model, deterministic=False, use_running_average=False)
@@ -35,9 +37,9 @@ print(nnx.view_info(model))
 
 ## Motivation
 
-Some layers in ML inherently involve state. Consider for example the `nnx.Dropout` layer, which behaves differently during training and evaluation. In these different scenarios, we need a simple way to ensure that the model behaves as intended to avoid silent bugs. A common pattern for doing this is to have a single `model` and use a method like `.train()` before running training code. This requires that the programmer remembers to call these functions in many places in the code and can make the code less readable. Moreover, it can be cumbersome to trace through someone else's code trying to infer the state of a model. 
+Some layers in ML inherently involve state. Consider for example the `nnx.Dropout` layer, which behaves differently during training and evaluation. In these different scenarios, we need a simple way to ensure that the model behaves as intended to avoid silent bugs. A common pattern in other frameworks is to mutate a single `model` object to switch between training and evaluation modes. This requires the programmer to remember to toggle modes in many places throughout the code, which can hurt readability and lead to subtle bugs when a mode switch is forgotten.
 
-An alternative to this pattern is to declare the different model states at the beginning of the code. The `nnx.view` method lets you apply multiple model configurations at the beginning of your code and then just use these later without having to call functions like `.train()` or `.eval()`. We demonstrate this with a simple example below.
+`nnx.view` offers a cleaner alternative: you declare the different model configurations once at the beginning of your code and then simply use the appropriate view wherever needed. Each view shares the same underlying weights, so parameter updates are automatically reflected across all views. We demonstrate this with a simple example below.
 
 ```{code-cell} ipython3
 import jax
@@ -46,19 +48,25 @@ import matplotlib.pyplot as plt
 
 in_dim, hidden_dim, out_dim = 16, 32, 2
 
+
 class MyModel(nnx.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, dropout_rate: float, *, rngs: nnx.Rngs):
-        self.lin1 = nnx.Linear(in_dim, hidden_dim, rngs=rngs)
-        self.do = nnx.Dropout(dropout_rate)
-        self.bn = nnx.BatchNorm(hidden_dim, rngs=rngs)
-        self.lin2 = nnx.Linear(hidden_dim, out_dim, rngs=rngs)
-    
-    def __call__(self, x, *, rngs):
-        x = self.lin1(x)
-        x = self.bn(x)
-        x = nnx.relu(self.do(x, rngs=rngs))
-        x = self.lin2(x)
-        return x
+  def __init__(
+    self,
+    in_dim: int,
+    hidden_dim: int,
+    out_dim: int,
+    dropout_rate: float,
+    *,
+    rngs: nnx.Rngs,
+  ):
+    self.lin1 = nnx.Linear(in_dim, hidden_dim, rngs=rngs)
+    self.do = nnx.Dropout(dropout_rate)
+    self.bn = nnx.BatchNorm(hidden_dim, rngs=rngs)
+    self.lin2 = nnx.Linear(hidden_dim, out_dim, rngs=rngs)
+
+  def __call__(self, x, *, rngs=None):
+    x = nnx.relu(self.do(self.bn(self.lin1(x)), rngs=rngs))
+    return self.lin2(x)
 ```
 
 Lets take a look at the model to see what is going on.
@@ -81,73 +89,55 @@ train_model = nnx.view(model, deterministic=False)
 eval_model = nnx.view(model, deterministic=True)
 
 # weights are references to the same data
-assert train_model.lin1.kernel[...] is eval_model.lin1.kernel[...]
+assert train_model.lin1.kernel is eval_model.lin1.kernel
 
 # Dropout.deterministic is different in each model
 assert train_model.do.deterministic is False
 assert eval_model.do.deterministic is True
 ```
 
-Lets see what implications this has for our code design. We set up some simple training and evaluation functions below.
+## Example with `nnx.view`
+
++++
+
+We first set up data generators and define train/eval step functions. The `train_step` receives an `nnx.Rngs` object for dropout randomness, while `eval_step` doesn't since dropout is disabled in `eval_model`.
 
 ```{code-cell} ipython3
 ndata, batch_size, total_epochs, lr = 2048, 32, 100, 1e-3
-x = jax.random.normal(jax.random.key(0), (ndata, in_dim))
-y = jax.random.normal(jax.random.key(0), (ndata, out_dim))
+rngs = nnx.Rngs(0)
+x = rngs.normal((ndata, in_dim))
+y = rngs.normal((ndata, out_dim))
+
 
 @nnx.jit
 def train_step(model, optimizer, x, y, rngs):
-  def loss_fn(model):
-    y_pred = model(x, rngs=rngs)
-    return ((y_pred - y) ** 2).mean()
+  def loss_fn(model, rngs):
+    return ((model(x, rngs=rngs) - y) ** 2).mean()
 
-  loss, grads = nnx.value_and_grad(loss_fn)(model)
+  grads = nnx.grad(loss_fn)(model, rngs)
   optimizer.update(model, grads)
-  return loss
+
 
 @nnx.jit
 def eval_step(model, x, y):
-   return ((model(x, rngs=None) - y) ** 2).mean()
+  return ((model(x) - y) ** 2).mean()
 ```
 
-## Example with `nnx.view`
+Now we create `train_model` and `eval_model` views up front. During the training loop we simply use the appropriate view — there is no need to call `.train()` or `.eval()`, and it is always clear from the code which mode the model is in.
 
 ```{code-cell} ipython3
-model = MyModel(in_dim, hidden_dim, out_dim, 0.1, rngs=nnx.Rngs(0))
-train_model = nnx.view(model, deterministic=False) # create training view
-eval_model = nnx.view(model, deterministic=True) # create evaluation view
+model = MyModel(in_dim, hidden_dim, out_dim, 0.1, rngs=rngs)
 optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
-key = jax.random.key(0)
+train_model = nnx.view(model, deterministic=False)  # training view
+eval_model = nnx.view(model, deterministic=True)  # eval view
 
-eval_results = [None] * total_epochs
+eval_results = []
 for epoch in range(total_epochs):
-    for i in range(ndata // batch_size):
-        sl = slice(i*batch_size,(i+1)*batch_size)
-        key, subkey = jax.random.split(key)
-        train_step(train_model, optimizer, x[sl], y[sl], subkey) # use train_model
+  for i in range(ndata // batch_size):
+    idx = slice(i * batch_size, (i + 1) * batch_size)
+    train_step(train_model, optimizer, x[idx], y[idx], rngs)  # use train_model
 
-    eval_results[epoch] = eval_step(eval_model, x, y) # use eval_model
-plt.plot(eval_results)
-plt.show()
-```
-
-## Example with Old API
-
-```{code-cell} ipython3
-model = MyModel(in_dim, hidden_dim, out_dim, 0.1, rngs=nnx.Rngs(0))
-optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
-key = jax.random.key(0)
-
-eval_results = [None] * total_epochs
-for epoch in range(total_epochs):
-    model.set_attributes(deterministic=False) # set to train mode
-    for i in range(ndata // batch_size):
-        sl = slice(i*batch_size,(i+1)*batch_size)
-        key, subkey = jax.random.split(key)
-        train_step(model, optimizer, x[sl], y[sl], subkey)
-
-    model.set_attributes(deterministic=True) # set to eval mode
-    eval_results[epoch] = eval_step(model, x, y)
+  eval_results.append(eval_step(eval_model, x, y))  # use eval_model
 plt.plot(eval_results)
 plt.show()
 ```
@@ -160,68 +150,71 @@ print(nnx.view_info(model))
 ```
 
 ## Writing modules compatible with `nnx.view`
-To implement a module that is compatible with `nnx.view` you just need do define a `set_view` class method. This method should
-1. Include input kwargs, type annotations, and a default value of `None`.
-2. Only update the mode if the kwarg is not `None`. 
-3. Include input `**kwargs` for additional keyword arguments used in `nnx.view`. These should not be used by `set_view`.
-4. Include a google-style docstring (for parsing with `nnx.view_info`).
-5. Return kwargs for identifying unused kwargs.
 
-This will look like
+You can make any custom module work with `nnx.view` by defining a `set_view` method. When `nnx.view` is called, it traverses the module tree and calls `set_view` on every submodule that defines one, forwarding the keyword arguments you passed.
+
+Your `set_view` method should follow these conventions:
+
+1. **Accept keyword arguments with `None` defaults.** Each kwarg represents a configurable mode for this module. A `None` default means "leave unchanged", so views only override the modes you explicitly set.
+2. **Only update the attribute when the kwarg is not `None`.** This ensures that unrelated views don't accidentally reset each other's settings.
+3. **Accept `**kwargs` and return it.** This lets other submodules in the tree consume their own keyword arguments without raising errors about unexpected kwargs.
+4. **Include a Google-style docstring.** The `nnx.view_info` function parses these docstrings to display human-readable information about available view options.
+
+The general pattern looks like this:
+
 ```python
 class MyLayer(nnx.Module):
     ...
 
-    def set_view(self, kwarg1: type1 = default1, ..., kwargN: typeN = defaultN, **kwargs) -> dict:
-        """Module docstring following Google-style docstrings"""
-        # logic to update the mode
+    def set_view(self, kwarg1: type1 = None, ..., kwargN: typeN = None, **kwargs) -> dict:
+        """Description of the module's configurable modes.
+
+        Args:
+          kwarg1: description of kwarg1.
+          ...
+          kwargN: description of kwargN.
+        """
+        if kwarg1 is not None:
+            self.kwarg1 = kwarg1
+        ...
         return kwargs
 ```
 
-Consider the following example
+Here is a concrete example — a `PrintLayer` that can be toggled to print a message during its forward pass:
 
 ```{code-cell} ipython3
 class PrintLayer(nnx.Module):
-    def __init__(self, msg: str, *, rngs: nnx.Rngs):
-        self.print_msg = None
-        self.msg = msg
+  def __init__(self, msg: str | None = None):
+    self.msg = msg
 
-    def __call__(self, *args, **kwargs):
-        if self.print_msg:
-            print(self.msg)
-    
-    def set_view(self, print_msg: bool | None = None, **kwargs) -> dict:
-        """Example set_view docstring. This follows Google style docstrings.
+  def __call__(self, *args, **kwargs):
+    if self.msg:
+      print(self.msg)
 
-        Args:
-          print_msg: bool indicating if a message should be printed.
-            If True, the `__call__` method prints the message. 
-        """
-        if print_msg is not None:
-            self.print_msg = print_msg
-        return kwargs
-    
-l = PrintLayer("Hello, World!", rngs=nnx.Rngs(0))
-l_print = nnx.view(l, print_msg=True)
+  def set_view(self, msg: bool | None = None, **kwargs) -> dict:
+    """Example set_view docstring. This follows Google style docstrings.
+
+    Args:
+      msg: bool indicating if a message should be printed.
+        If True, the `__call__` method prints the message.
+    """
+    if msg is not None:
+      self.msg = msg
+    return kwargs
+
+
+model = PrintLayer()
+model_print = nnx.view(model, msg='Hello, World!')
+
+model() # nothing printed
+model_print() # prints "Hello, World!"
 ```
 
-```{code-cell} ipython3
-# print the default view
-print(l)
-
-# Nothing printed from call method
-l()
-```
-
-```{code-cell} ipython3
-# print the l_print view
-print(l_print)
-
-# Prints "Hello, World!" from the call method
-l_print()
-```
+We can use `nnx.view_info` to inspect what view options `PrintLayer` exposes. This is especially handy when working with unfamiliar models — it lists every submodule that defines `set_view`, along with the accepted kwargs, their types, defaults, and docstring descriptions.
 
 ```{code-cell} ipython3
 # Display the information for nnx.view
-print(nnx.view_info(l))
+print(nnx.view_info(model))
 ```
+
+The output shows that `PrintLayer` accepts a `msg` kwarg of type `bool` in its `set_view` method. When building larger models composed of many custom submodules, `nnx.view_info` gives you a quick summary of all the configurable modes across the entire module tree.
