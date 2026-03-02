@@ -73,9 +73,9 @@ class TestCompatibility(absltest.TestCase):
 
     x = jax.random.normal(jax.random.key(0), (2, 4))
     model = NNXOuter(3, rngs=nnx.Rngs(0))
-    gdef_before_lazy_init, _ = nnx.split(model)
+    gdef_before_lazy_init, _ = nnx.graph.split(model)
     bridge.lazy_init(model, x)
-    gdef_full, state = nnx.split(model)
+    gdef_full, state = nnx.graph.split(model)
     assert gdef_before_lazy_init != gdef_full
     assert 'nn_dense1' in state
     assert 'batchnorm' in state
@@ -83,7 +83,7 @@ class TestCompatibility(absltest.TestCase):
     y = model(x)
     k, b = state['nn_dense1']['kernel'][...], state['b'][...]
     np.testing.assert_allclose(y, x @ k + b, rtol=1e-5)
-    assert gdef_full == nnx.graphdef(model)  # static data is stable now
+    assert gdef_full == nnx.graph.graphdef(model)  # static data is stable now
 
   def test_linen_to_nnx_noncall_method(self):
     class Foo(nn.Module):
@@ -104,7 +104,7 @@ class TestCompatibility(absltest.TestCase):
     model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0))
     bridge.lazy_init(model.dot, x)
     y = model.dot(x)
-    np.testing.assert_allclose(y, x @ nnx.state(model)['w'][...])
+    np.testing.assert_allclose(y, x @ nnx.graph.state(model)['w'][...])
     # lazy_init only initialized param w inside dot(), so calling __call__ should fail
     with self.assertRaises(flax.errors.ScopeParamNotFoundError):
       y = model(x)
@@ -122,9 +122,9 @@ class TestCompatibility(absltest.TestCase):
 
     x = lambda: jnp.zeros((), jnp.int32)
     model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0)).lazy_init(x)
-    self.assertEqual(nnx.state(model)['count'][...], 0)
+    self.assertEqual(nnx.graph.state(model)['count'][...], 0)
     y = model(x, mutable=True)
-    self.assertEqual(nnx.state(model)['count'][...], 1)
+    self.assertEqual(nnx.graph.state(model)['count'][...], 1)
 
   def test_linen_to_nnx_transform(self):
     class NNXOuter(nnx.Module):
@@ -134,8 +134,8 @@ class TestCompatibility(absltest.TestCase):
 
       def __call__(self, x):
 
-        @nnx.split_rngs(splits=5)
-        @nnx.vmap(in_axes=(0, None), axis_size=5)
+        @nnx.graph.split_rngs(splits=5)
+        @nnx.graph.vmap(in_axes=(0, None), axis_size=5)
         def vmap_fn(inner, x):
           return inner(x)
 
@@ -160,10 +160,10 @@ class TestCompatibility(absltest.TestCase):
     x = jax.numpy.ones((1, 32))
     linen_vars = linen_module.init(jax.random.key(0), x)
 
-    @nnx.jit
+    @nnx.graph.jit
     def create_sharded_nnx_module(x):
       model = bridge.lazy_init(bridge.ToNNX(linen_module, rngs=nnx.Rngs(0)), x)
-      state = nnx.state(model)
+      state = nnx.graph.state(model)
       sharded_state = jax.lax.with_sharding_constraint(state, nnx.get_partition_spec(state))
       nnx.update(model, sharded_state)
       return model
@@ -225,7 +225,7 @@ class TestCompatibility(absltest.TestCase):
     # Remove the NNX-module-local RNG states, which will be different
     # because the NNX modules are on different level
     def get_weights(model):
-      return nnx.split(model, nnx.RngCount, nnx.RngKey, ...)[3]
+      return nnx.graph.split(model, nnx.RngCount, nnx.RngKey, ...)[3]
     from_top_weights = get_weights(from_top)
     from_middle_weights = get_weights(from_middle)
 

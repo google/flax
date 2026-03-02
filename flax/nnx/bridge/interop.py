@@ -15,7 +15,7 @@
 import typing as tp
 
 from flax.linen import module as nn_module
-from flax.nnx import graph, rnglib
+from flax.nnx import graphlib, rnglib
 from flax.nnx.bridge import wrappers
 from flax.nnx.bridge import module as bdg_module
 import flax.nnx.module as nnx_module
@@ -47,15 +47,15 @@ def nnx_in_bridge_mdl(factory: tp.Callable[[rnglib.Rngs], nnx_module.Module],
     module = factory(parent.scope.rngs)
   else:
     rngs = parent.scope.rngs if parent.scope.rngs else rnglib.Rngs(7)  # dummy
-    module = nnx_eval_shape(factory, rngs)
+    module = nnx_eval_shape(factory, rngs, graph=True)
 
     @nnx_jit
     def rng_state(rngs):
-      return graph.state(factory(rngs), rnglib.RngState)
+      return graphlib.state(factory(rngs), rnglib.RngState, graph=True)
 
     # Make sure the internal rng state is not abstract - other vars shall be
     if parent.scope.rngs:
-      graph.update(module, rng_state(parent.scope.rngs))
+      graphlib.update(module, rng_state(parent.scope.rngs))
 
   # Automatically set the attribute if compact. If setup, user is responsible
   # for setting the attribute of the superlayer.

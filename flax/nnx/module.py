@@ -20,13 +20,14 @@ import typing as tp
 import jax
 import jax.numpy as jnp
 
+from flax import config
 from flax.nnx import (
   filterlib,
-  graph as graphlib,
+  graphlib,
 )
 from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
-from flax.nnx.graph import GraphState
+from flax.nnx.graphlib import GraphState
 from flax.typing import Key, Path, PathParts
 import warnings
 
@@ -302,6 +303,7 @@ class Module(Pytree, metaclass=ModuleMeta):
     self,
     *filters: filterlib.Filter,
     raise_if_not_found: bool = True,
+    graph: bool | None = None,
     **attributes: tp.Any,
   ) -> None:
     """Sets the attributes of nested Modules including the current Module.
@@ -342,7 +344,7 @@ class Module(Pytree, metaclass=ModuleMeta):
     if not filters:
       filters = (True,)
     predicates = tuple(map(filterlib.to_predicate, filters))
-    for path, module in iter_modules(self):
+    for path, module in iter_modules(self, graph=graph):
       for predicate in predicates:
         if predicate(path, module):
           for name, value in attributes.items():
@@ -670,7 +672,7 @@ def iter_modules(
     if isinstance(value, Module):
       yield path, value
 
-def iter_children(module: Module) -> tp.Iterator[tuple[Key, Module]]:
+def iter_children(module: Module, graph: bool | None = None) -> tp.Iterator[tuple[Key, Module]]:
   """Iterates over all children :class:`Module`'s of a given Module. This
   method is similar to :func:`iter_modules`, except it only iterates over the
   immediate children, and does not recurse further down.
@@ -703,10 +705,28 @@ def iter_children(module: Module) -> tp.Iterator[tuple[Key, Module]]:
     dropout Dropout
     linear Linear
     submodule SubModule
+
+  Args:
+    module: A :class:`Module` object.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
   """
-  node_impl = graphlib.get_node_impl(module)
-  assert node_impl is not None
-  node_dict = node_impl.node_dict(module)
-  for key, value in node_dict.items():
-    if isinstance(value, Module):
-      yield key, value
+  if graph is None:
+    graph = config.nnx_graph_mode
+  if graph:
+    node_impl = graphlib.get_node_impl(module)
+    assert node_impl is not None
+    node_dict = node_impl.node_dict(module)
+    for key, value in node_dict.items():
+      if isinstance(value, Module):
+        yield key, value
+  else:
+    children, _ = jax.tree_util.tree_flatten_with_path(
+      module, is_leaf=lambda x: x is not module
+    )
+    for jax_key_path, child in children:
+      if isinstance(child, Module):
+        key = graphlib._key_path_to_key(jax_key_path[0])
+        yield key, child

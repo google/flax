@@ -116,7 +116,7 @@ class TestPytree(absltest.TestCase):
 class TestVariableRefMode(absltest.TestCase):
   def test_split_mutable_array(self):
     m = jax.new_ref(1)
-    graphdef, state = nnx.split(m)
+    graphdef, state = nnx.graph.split(m)
 
     self.assertIs(m, state)
 
@@ -218,8 +218,8 @@ class TestVariableRefMode(absltest.TestCase):
 
     m = Foo()
 
-    ref_map = nnx.graph.RefMap()
-    graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
+    ref_map = nnx.graphlib.RefMap()
+    graphdef, state = nnx.graphlib.flatten(m, ref_index=ref_map, graph=True)
     self.assertLen(state, 1)
     self.assertLen(ref_map, 2)  # 1 Foo + 1 ArrayRef
 
@@ -235,8 +235,8 @@ class TestVariableRefMode(absltest.TestCase):
 
     m = Foo()
 
-    ref_map = nnx.graph.RefMap()
-    graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
+    ref_map = nnx.graphlib.RefMap()
+    graphdef, state = nnx.graphlib.flatten(m, ref_index=ref_map, graph=True)
     self.assertLen(state, 1)
     self.assertLen(ref_map, 3)  # 1 Foo + 1 Param + 1 Ref
 
@@ -253,8 +253,8 @@ class TestVariableRefMode(absltest.TestCase):
 
     m = Foo()
 
-    ref_map = nnx.graph.RefMap()
-    graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
+    ref_map = nnx.graphlib.RefMap()
+    graphdef, state = nnx.graphlib.flatten(m, ref_index=ref_map, graph=True)
     self.assertLen(state, 2)
     self.assertLen(ref_map, 5)  # 1 Foo + 2 Param + 2 Ref
 
@@ -278,8 +278,8 @@ class TestVariableRefMode(absltest.TestCase):
 
     m = Foo()
 
-    ref_map = nnx.graph.RefMap()
-    graphdef, state = nnx.graph.flatten(m, ref_index=ref_map)
+    ref_map = nnx.graphlib.RefMap()
+    graphdef, state = nnx.graphlib.flatten(m, ref_index=ref_map, graph=True)
     state = nnx.vars_as(state, mutable=False)
     self.assertLen(state, 1)
 
@@ -302,16 +302,16 @@ class TestVariableRefMode(absltest.TestCase):
         graphdef_out, state_out = ctx.split((m2, m_out1, m2))
 
       self.assertIsInstance(
-        state_out[0]['kernel'].get_value(), nnx.graph.NoUpdate
+        state_out[0]['kernel'].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        state_out[0]['bias'].get_value(), nnx.graph.NoUpdate
+        state_out[0]['bias'].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        state_out[1]['kernel'].get_value(), nnx.graph.ArrayRefOutput
+        state_out[1]['kernel'].get_value(), nnx.graphlib.ArrayRefOutput
       )
       self.assertIsInstance(
-        state_out[1]['bias'].get_value(), nnx.graph.ArrayRefOutput
+        state_out[1]['bias'].get_value(), nnx.graphlib.ArrayRefOutput
       )
       # 2 ArrayRefOutput + 2 NoUpdate, however, NoUpdate are empty nodes
       self.assertLen(jax.tree.leaves(state_out), 2)
@@ -339,16 +339,16 @@ class TestVariableRefMode(absltest.TestCase):
       state_out_dict = dict(state_out)
 
       self.assertIsInstance(
-        state_out_dict[(0, 'kernel')].get_value(), nnx.graph.NoUpdate
+        state_out_dict[(0, 'kernel')].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        state_out_dict[(0, 'bias')].get_value(), nnx.graph.NoUpdate
+        state_out_dict[(0, 'bias')].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        state_out_dict[(1, 'kernel')].get_value(), nnx.graph.ArrayRefOutput
+        state_out_dict[(1, 'kernel')].get_value(), nnx.graphlib.ArrayRefOutput
       )
       self.assertIsInstance(
-        state_out_dict[(1, 'bias')].get_value(), nnx.graph.ArrayRefOutput
+        state_out_dict[(1, 'bias')].get_value(), nnx.graphlib.ArrayRefOutput
       )
       # 2 ArrayRefOutput + 2 NoUpdate, however, NoUpdate are empty nodes
       self.assertLen(jax.tree.leaves(state_out), 2)
@@ -373,16 +373,16 @@ class TestVariableRefMode(absltest.TestCase):
       out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example')
 
       self.assertIsInstance(
-        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[0][0].states[0]['bias'].get_value(), nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['bias'].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['kernel'].get_value(), nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['kernel'].get_value(), nnx.graphlib.ArrayRefOutput
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['bias'].get_value(), nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['bias'].get_value(), nnx.graphlib.ArrayRefOutput
       )
       self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
 
@@ -412,16 +412,16 @@ class TestVariableRefMode(absltest.TestCase):
       out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example')
 
       self.assertIsInstance(
-        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[0][0].states[0]['bias'].get_value(), nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['bias'].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['kernel'].get_value(), nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['kernel'].get_value(), nnx.graphlib.ArrayRefOutput
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['bias'].get_value(), nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['bias'].get_value(), nnx.graphlib.ArrayRefOutput
       )
       self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
 
@@ -451,16 +451,16 @@ class TestVariableRefMode(absltest.TestCase):
       out_tree = nnx.to_tree(((m2,), m_out1, m2), ctxtag='example', prefix=0)
 
       self.assertIsInstance(
-        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['kernel'].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[0][0].states[0]['bias'].get_value(), nnx.graph.NoUpdate
+        out_tree[0][0].states[0]['bias'].get_value(), nnx.graphlib.NoUpdate
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['kernel'].get_value(), nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['kernel'].get_value(), nnx.graphlib.ArrayRefOutput
       )
       self.assertIsInstance(
-        out_tree[1].states[0]['bias'].get_value(), nnx.graph.ArrayRefOutput
+        out_tree[1].states[0]['bias'].get_value(), nnx.graphlib.ArrayRefOutput
       )
       self.assertEmpty(out_tree[2].states[0])  # Repeated m2 State
 
@@ -480,7 +480,7 @@ class TestVariableRefMode(absltest.TestCase):
     m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), ref=True)
     m_out1 = None
 
-    @nnx.jit
+    @nnx.graph.jit
     def f(m2):
       nonlocal m_out1
       m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), ref=True)
@@ -499,7 +499,7 @@ class TestVariableRefMode(absltest.TestCase):
 
     m1 = Foo(a=jax.new_ref(1))
 
-    @nnx.jit
+    @nnx.graph.jit
     def f(m2: Foo):
       m2.a[...] += 1
       return m2
@@ -671,11 +671,11 @@ class TestOptimizer(absltest.TestCase):
 
     @jax.jit
     def train_step(model, optimizer, x, y):
-      graphdef, params, nondiff = nnx.split(model, wrt, ...)
+      graphdef, params, nondiff = nnx.graph.split(model, wrt, ...)
 
       def loss_fn(params):
         model = nnx.merge(graphdef, params, nondiff)
-        return jnp.mean((model(x) - y) ** 2), nnx.state(model, nnx.Not(wrt))
+        return jnp.mean((model(x) - y) ** 2), nnx.graph.state(model, nnx.Not(wrt))
 
       (loss, updates), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
       nnx.update(model, updates)
@@ -709,7 +709,7 @@ class TestOptimizer(absltest.TestCase):
 
     @jax.jit
     def train_step(model, optimizer, x, y):
-      graphdef, params, nondiff = nnx.split(model, wrt, ...)
+      graphdef, params, nondiff = nnx.graph.split(model, wrt, ...)
 
       def loss_fn(params):
         model = nnx.merge(graphdef, params, nondiff)

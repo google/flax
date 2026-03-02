@@ -20,8 +20,8 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from flax.nnx import graph, reprlib
-from flax.nnx.graph import GraphDef
+from flax.nnx import graphlib, reprlib
+from flax.nnx.graphlib import GraphDef
 from flax.nnx.module import Module
 from flax.nnx.proxy_caller import ApplyCaller
 from flax.nnx.rnglib import Rngs
@@ -292,7 +292,7 @@ class ModuleDefApply(tp.Protocol, tp.Generic[M]):
 
 
 class TrainState(tp.Generic[M], struct.PyTreeNode):
-  graphdef: graph.GraphDef[M]
+  graphdef: graphlib.GraphDef[M]
   params: State
   opt_state: optax.OptState
   step: jax.Array
@@ -301,7 +301,7 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
   @classmethod
   def create(
     cls,
-    graphdef: graph.GraphDef[M],
+    graphdef: graphlib.GraphDef[M],
     *,
     params: State,
     tx: optax.GradientTransformation,

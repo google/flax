@@ -15,7 +15,7 @@
 import typing as tp
 
 import flax.core.spmd as core_spmd
-from flax.nnx import variablelib, graph
+from flax.nnx import variablelib, graphlib
 from flax.nnx.transforms.transforms import eval_shape
 from flax.typing import (
   Sharding,
@@ -166,10 +166,10 @@ def get_named_sharding(tree: A, mesh: jax.sharding.Mesh) -> A:
 # ------------------------------------------------------------------------------
 
 
-def get_abstract_model(init_fn, mesh):
+def get_abstract_model(init_fn, mesh, *, graph: bool | None = None):
   with jax.set_mesh(mesh):
-    abs_model = eval_shape(init_fn)
-    gdef, abs_state = graph.split(abs_model)
+    abs_model = eval_shape(init_fn, graph=graph)
+    gdef, abs_state = graphlib.split(abs_model, graph=graph)
     abs_state = jax.tree.map(
       lambda a, s: jax.ShapeDtypeStruct(a.shape, a.dtype, sharding=s),
       abs_state, get_named_sharding(abs_state, mesh)

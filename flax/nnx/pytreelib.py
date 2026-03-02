@@ -31,7 +31,7 @@ from treescope import rendering_parts
 
 from flax import errors, nnx
 from flax.nnx import (
-  graph,
+  graphlib,
   reprlib,
   tracers,
   visualization,
@@ -192,8 +192,8 @@ def is_data(value: tp.Any, /) -> bool:
     A string representing the attribute status.
   """
   return (
-    graph.is_node_leaf(value)
-    or graph.is_graph_node(value)
+    graphlib.is_node_leaf(value)
+    or graphlib.is_graph_node(value)
     or type(value) in DATA_REGISTRY
   )
 
@@ -312,7 +312,7 @@ def dataclass(
 def _collect_stats(
   node: tp.Any, node_stats: dict[int, dict[type[Variable], SizeBytes]]
 ):
-  if not graph.is_node(node) and not isinstance(node, Variable):
+  if not graphlib.is_node(node) and not isinstance(node, Variable):
     raise ValueError(f'Expected a graph node or Variable, got {type(node)!r}.')
 
   if id(node) in node_stats:
@@ -330,13 +330,13 @@ def _collect_stats(
       stats[var_type] = size_bytes
 
   else:
-    node_impl = graph.get_node_impl(node)
+    node_impl = graphlib.get_node_impl(node)
     assert node_impl is not None
     node_dict = node_impl.node_dict(node)
     for key, value in node_dict.items():
       if id(value) in node_stats:
         continue
-      if graph.is_node(value) or isinstance(value, Variable):
+      if graphlib.is_node(value) or isinstance(value, Variable):
         _collect_stats(value, node_stats)
         child_stats = node_stats[id(value)]
         for var_type, size_bytes in child_stats.items():
@@ -506,7 +506,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   """Base class for all NNX objects."""
 
   if tp.TYPE_CHECKING:
-    _pytree__nodes: graph.HashableMapping[tp.Any, bool]
+    _pytree__nodes: graphlib.HashableMapping[tp.Any, bool]
     _pytree__state: PytreeState
     _pytree__is_pytree: bool
 
@@ -524,7 +524,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       )
     cls._pytree__is_pytree = pytree
 
-    graph.register_graph_node_type(
+    graphlib.register_graph_node_type(
       type=cls,
       flatten=cls._graph_node_flatten,
       set_key=cls._graph_node_set_key,  # type: ignore
@@ -606,7 +606,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
           )
         nodes[name] = is_node
 
-    cls._pytree__nodes = graph.HashableMapping(nodes, copy=False)
+    cls._pytree__nodes = graphlib.HashableMapping(nodes, copy=False)
 
     if pytree:
       jax.tree_util.register_pytree_with_keys(
@@ -776,10 +776,10 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       raise errors.TraceContextError(error_msg())
 
   def __deepcopy__(self: P, memo=None) -> P:
-    graphdef, state = graph.split(self)
+    graphdef, state = graphlib.split(self, graph=True)
     graphdef = deepcopy(graphdef)
     state = deepcopy(state)
-    return graph.merge(graphdef, state)
+    return graphlib.merge(graphdef, state)
 
   def __nnx_repr__(self):
     if OBJECT_CONTEXT.node_stats is None or id(self) not in OBJECT_CONTEXT.node_stats:
@@ -821,7 +821,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         if str(name).startswith('_'):
           continue
 
-        value = jax.tree.map(_to_shape_dtype, value, is_leaf=graph.is_graph_node)
+        value = jax.tree.map(_to_shape_dtype, value, is_leaf=graphlib.is_graph_node)
         yield reprlib.Attr(name, value)
     finally:
       if clear_seen:
@@ -897,7 +897,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     obj_items = vars(self).items()
     if self._pytree__has_int_keys:
       obj_items = ((_maybe_int(name), value) for name, value in obj_items)
-      key_fn = graph._type_aware_sort
+      key_fn = graphlib._type_aware_sort
     else:
       key_fn = None
     node_attributes = self._pytree__nodes
@@ -930,7 +930,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     obj_items = vars(self).items()
     if self._pytree__has_int_keys:
       obj_items = ((_maybe_int(name), value) for name, value in obj_items)
-      key_fn = graph._type_aware_sort
+      key_fn = graphlib._type_aware_sort
     else:
       key_fn = None
     node_attributes = self._pytree__nodes
@@ -978,15 +978,15 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       obj_items = (
           (
               name,
-              nnx.graph.DataElem(value)
+              nnx.graphlib.DataElem(value)
               if name in pytree_nodes and pytree_nodes[name]
-              else nnx.graph.StaticElem(value),
+              else nnx.graphlib.StaticElem(value),
           )
           for name, value in obj_items
       )
     if self._pytree__has_int_keys:
       obj_items = ((_maybe_int(name), value) for name, value in obj_items)
-      key_fn = graph._type_aware_sort
+      key_fn = graphlib._type_aware_sort
     else:
       key_fn = None
     nodes = sorted(obj_items, key=key_fn)
@@ -1017,7 +1017,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     if name in self._pytree__nodes:
       mapping = {k: v for k, v in self._pytree__nodes.items() if k != name}
       object.__setattr__(
-        self, '_pytree__nodes', graph.HashableMapping(mapping, copy=False)
+        self, '_pytree__nodes', graphlib.HashableMapping(mapping, copy=False)
       )
 
     super().__delattr__(name)

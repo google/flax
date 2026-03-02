@@ -23,7 +23,7 @@ from flax import struct
 from flax.nnx import (
   extract,
   filterlib,
-  graph as graphlib,
+  graphlib,
   variablelib,
 )
 from flax.nnx.statelib import State

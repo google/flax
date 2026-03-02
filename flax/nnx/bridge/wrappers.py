@@ -23,7 +23,7 @@ from flax import core
 from flax import nnx
 from flax.core import FrozenDict
 from flax.core import meta
-from flax.nnx import graph
+from flax.nnx import graphlib
 from flax.nnx import variablelib
 from flax.nnx.bridge import variables as bv
 from flax.nnx.bridge import module as bdg_module
@@ -40,7 +40,7 @@ M = tp.TypeVar('M', bound=Module)
 @dataclasses.dataclass
 class Functional(tp.Generic[M]):
   module_type: tp.Type[M]
-  graphdef: tp.Optional[graph.GraphDef[M]]
+  graphdef: tp.Optional[graphlib.GraphDef[M]]
   args: tuple[tp.Any, ...]
   kwargs: dict[str, tp.Any]
 
@@ -66,7 +66,7 @@ def functional(cls: tp.Type[M]) -> tp.Callable[..., Functional[M]]:
 
 
 def _set_initializing(module: Module, initializing: bool):
-  for _, value in graph.iter_graph(module, graph=True):
+  for _, value in graphlib.iter_graph(module, graph=True):
     if isinstance(value, Pytree):
       value._pytree__state._initializing = initializing
 
