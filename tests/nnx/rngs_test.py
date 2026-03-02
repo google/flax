@@ -211,10 +211,10 @@ class TestRngs(parameterized.TestCase):
   @parameterized.parameters(True, False)
   def test_fork_rngs(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
-    backups = nnx.fork_rngs(rngs, split={'params': 5}, graph=graph)
-    self.assertEqual(rngs.params.key.shape, (5,))
-    self.assertEqual(rngs['dropout'].key.shape, ())
+    backups = nnx.fork_rngs(rngs, graph=graph)
+    new_key = rngs.params.key.copy()
     nnx.restore_rngs(backups)
+    self.assertNotEqual(rngs.params.key, new_key)
 
   def test_random_helpers(self):
     rngs = nnx.Rngs(0, params=1)

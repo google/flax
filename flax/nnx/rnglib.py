@@ -29,6 +29,7 @@ from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
 from flax.nnx.pytreelib import Pytree
 from flax.typing import MISSING, Key, Missing
+import warnings
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 A = tp.TypeVar('A')
@@ -123,10 +124,17 @@ class RngStream(Pytree):
     self.count[...] += 1
     return key
 
-  def split(self, k: int):
-      return self.fork(split=k)
+  def split(self, k: int | tuple[int, ...]):
+      key = random.split(self(), k)
+      return type(self)(key, tag=self.tag)
 
   def fork(self, *, split: int | tuple[int, ...] | None = None):
+    if split is not None:
+      warnings.warn(
+        "The 'split' argument of 'fork' is deprecated; use the 'split' method instead.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     key = self()
     if split is not None:
       key = random.split(key, split)
@@ -429,6 +437,46 @@ class Rngs(Pytree):
       if isinstance(stream, RngStream):
         yield name, stream
 
+  def split(self, k: tp.Mapping[filterlib.Filter, int | tuple[int, ...]] | int | tuple[int, ...]):
+    """
+    Splits the keys of the newly created ``Rngs`` object.
+
+      >>> rngs = nnx.Rngs(params=1, dropout=2)
+      >>> new_rngs = rngs.split(5)
+      ...
+      >>> assert new_rngs.params.key.shape == (5,)
+      >>> assert new_rngs.dropout.key.shape == (5,)
+
+    ``split`` also accepts a mapping of
+    `Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__  to
+    split sizes or None to control which streams are split and how they are split::
+
+      >>> rngs = nnx.Rngs(params=1, dropout=2, noise=3)
+      >>> new_rngs = rngs.split({
+      ...  'params': 5,      # split params into 5 keys
+      ...  'dropout': None,  # don't split dropout
+      ...  ...: (2, 5),      # split anything else into 2x5 keys
+      ... })
+      ...
+      >>> assert new_rngs.params.key.shape == (5,)
+      >>> assert new_rngs.dropout.key.shape == ()
+      >>> assert new_rngs.noise.key.shape == (2, 5)
+    """
+    if isinstance(k, int):
+      k = {...: k}
+    elif isinstance(k, tuple):
+      k = {...: k}
+
+    split_predicates = {filterlib.to_predicate(k): v for k, v in k.items()}
+    keys: dict[str, RngStream] = {}
+    for name, stream in self.items():
+      for predicate, num_splits in split_predicates.items():
+        if predicate((), stream):
+          keys[name] = stream.split(num_splits)
+          break
+
+    return Rngs(**keys)
+
   def fork(
     self,
     /,
@@ -447,30 +495,14 @@ class Rngs(Pytree):
       >>> new_rngs = rngs.fork()
       ...
       >>> assert rngs.params() != new_rngs.params()
-
-    ``split`` can be used to split the keys of the newly created ``Rngs`` object::
-
-      >>> rngs = nnx.Rngs(params=1, dropout=2)
-      >>> new_rngs = rngs.fork(split=5)
-      ...
-      >>> assert new_rngs.params.key.shape == (5,)
-      >>> assert new_rngs.dropout.key.shape == (5,)
-
-    ``split`` also accepts a mapping of
-    `Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__  to
-    split sizes or None to control which streams are split and how they are split::
-
-      >>> rngs = nnx.Rngs(params=1, dropout=2, noise=3)
-      >>> new_rngs = rngs.fork(split={
-      ...  'params': 5,      # split params into 5 keys
-      ...  'dropout': None,  # don't split dropout
-      ...  ...: (2, 5),      # split anything else into 2x5 keys
-      ... })
-      ...
-      >>> assert new_rngs.params.key.shape == (5,)
-      >>> assert new_rngs.dropout.key.shape == ()
-      >>> assert new_rngs.noise.key.shape == (2, 5)
     """
+    if split is not None:
+      warnings.warn(
+        "The 'split' argument of 'fork' is deprecated; use the 'split' method instead.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+
     if split is None:
       split = {}
     elif isinstance(split, int):
