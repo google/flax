@@ -21,7 +21,6 @@ import operator
 import typing as tp
 
 import jax
-from flax import config
 from jax.sharding import AbstractMesh, Mesh, PartitionSpec
 
 from flax.nnx import (
@@ -338,7 +337,7 @@ def jit(
   """
 
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if isinstance(fun, Missing):
     return functools.partial(
       jit,
@@ -602,7 +601,7 @@ def jit_partial(
     arguments.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if graph:
     raise NotImplementedError(
       'graph-mode is not supported for nnx.jit_partial. '
@@ -1411,7 +1410,7 @@ def shard_map(
     the ``mesh`` and ``in_specs``.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if f is Missing:
     return functools.partial(
         shard_map,

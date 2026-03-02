@@ -32,7 +32,7 @@ from flax.nnx.proxy_caller import (
 )
 from flax.nnx.statelib import FlatState, State, map_state
 from flax.nnx.variablelib import Variable, is_array_ref, V
-from flax.typing import HashableMapping, Key, PathParts, is_key_like
+from flax.typing import BaseConfigContext, HashableMapping, Key, PathParts, is_key_like
 import jax
 import numpy as np
 import treescope  # type: ignore[import-not-found,import-untyped]
@@ -774,7 +774,7 @@ def flatten(  # type: ignore[invalid-annotation]
       the overhead of the graph protocol.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = set_graph_mode.current_value()
   if ref_index is None:
     ref_index = RefMap()
   leaves: list[tp.Any] = []
@@ -1487,9 +1487,15 @@ class GraphContext(threading.local):
   index_ref_stack: list[MergeContext] = dataclasses.field(default_factory=list)
   tmp_static_cache: tp.MutableMapping[tp.Any, StaticCache] | None = None
   caching: bool = False
+  graph_mode_stack: list[bool] = dataclasses.field(default_factory=list)
 
 
 GRAPH_CONTEXT = GraphContext()
+
+
+class set_graph_mode(BaseConfigContext):
+  get_default = classmethod(lambda cls: config.nnx_graph_mode)
+  get_stack = classmethod(lambda cls: GRAPH_CONTEXT.graph_mode_stack)
 
 
 @contextlib.contextmanager
@@ -1557,7 +1563,7 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args, graph: bool | Non
     A partial function expecting the remaining arguments to the original function.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = set_graph_mode.current_value()
   if not graph:
     raise ValueError(
       'cached_partial is a graph-mode-only API and does not support '
@@ -2256,7 +2262,7 @@ def split(  # type: ignore[invalid-annotation]
     filters are passed, a single ``State`` is returned.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = set_graph_mode.current_value()
   graphdef, flat_state = flatten(node, graph=graph)
   flat_states = _split_state(flat_state, filters)
   states = _to_nested_state(graphdef, flat_states)
@@ -2450,7 +2456,7 @@ def state(
     One or more :class:`State` mappings.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = set_graph_mode.current_value()
   _, flat_state = flatten(node, graph=graph)
   state = flat_state.to_nested_state()
 
@@ -2491,7 +2497,7 @@ def graphdef(
     The :class:`GraphDef` of the :class:`Module` object.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = set_graph_mode.current_value()
   graphdef, _ = flatten(node, graph=graph)
   return graphdef
 
@@ -2876,7 +2882,7 @@ def iter_graph(
       the overhead of the graph protocol.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = set_graph_mode.current_value()
   if graph:
     return _iter_graph(node)
   else:
@@ -2986,7 +2992,7 @@ def recursive_map(
       the overhead of the graph protocol.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = set_graph_mode.current_value()
   if graph:
     node = clone(node, variables=False, graph=True)
     path_parts: PathParts = ()

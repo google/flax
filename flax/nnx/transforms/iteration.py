@@ -19,7 +19,6 @@ import functools
 import typing as tp
 
 
-from flax import config
 from flax import struct
 from flax import typing
 from flax.core.frozen_dict import FrozenDict
@@ -365,7 +364,7 @@ def vmap(
            [0, 3, 6, 9]], dtype=int32)
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if f is Missing:
     return functools.partial(
         vmap,
@@ -624,7 +623,7 @@ def pmap(
            [0, 3, 6, 9]], dtype=int32)
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if f is Missing:
     return functools.partial(
         pmap,
@@ -1417,7 +1416,7 @@ def scan(
     _raise_bound_method_error('scan')
 
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if not graph:
     if in_axes != (Carry, 0):
       raise ValueError(
@@ -1734,7 +1733,7 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
 
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if not graph:
     val_out = jax.lax.while_loop(
       cond_fun,
@@ -1837,7 +1836,7 @@ def fori_loop(lower: int, upper: int,
 
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if not graph:
     val_out = jax.lax.fori_loop(
       lower, upper,

@@ -18,7 +18,6 @@ import functools
 import typing as tp
 
 
-from flax import config
 from flax import struct
 from flax.nnx import (
   extract,
@@ -374,7 +373,7 @@ def grad(
       not support ``DiffState`` or shared ``Variable`` references.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if reduce_axes:
     raise NotImplementedError('reduce_axes argument to grad is deprecated')
   del reduce_axes
@@ -440,7 +439,7 @@ def value_and_grad(
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if reduce_axes:
     raise NotImplementedError(
         'reduce_axes argument to value_and_grad is deprecated')
@@ -567,7 +566,7 @@ def vjp(
     If ``has_aux`` is True, returns ``(primals_out, vjp_fn, aux)``.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if graph:
     raise NotImplementedError(
       'graph-mode is not supported for nnx.vjp. '
@@ -719,7 +718,7 @@ def jvp(
     If ``has_aux`` is True, returns ``(primals_out, tangent_out, aux)``.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if graph:
     raise NotImplementedError(
       'graph-mode is not supported for nnx.jvp. '
@@ -1307,7 +1306,7 @@ def custom_vjp(
 
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if isinstance(fun, Missing):
     return functools.partial(
       custom_vjp, nondiff_argnums=nondiff_argnums, graph=graph,
@@ -1403,7 +1402,7 @@ def remat(
       not support shared ``Variable`` references.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if isinstance(f, Missing):
     return functools.partial(
       remat,

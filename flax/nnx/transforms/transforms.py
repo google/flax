@@ -22,7 +22,6 @@ import typing as tp
 
 from jax._src import checkify as checkify_lib
 
-from flax import config
 from flax.nnx import (
   extract,
   graphlib,
@@ -288,7 +287,7 @@ def eval_shape(
     _raise_bound_method_error('eval_shape')
 
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if not graph:
     out, updates = jax.eval_shape(
       TreeEvalShapeFn(f_call), *args, **kwargs
@@ -385,7 +384,7 @@ def checkify(
     _raise_bound_method_error('checkify')
 
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if not graph:
     checkify_fn = checkify_lib.checkify(TreeCheckifyFn(f_call), errors)
 
@@ -457,7 +456,7 @@ def cond(
       If None, uses the value of ``nnx_graph_mode`` config.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if not graph:
     out, updates = jax.lax.cond(
       pred,
@@ -499,7 +498,7 @@ def switch(
       If None, uses the value of ``nnx_graph_mode`` config.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if not graph:
     out, updates = jax.lax.switch(
       index,

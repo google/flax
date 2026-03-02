@@ -20,7 +20,6 @@ import jax
 from jax import random
 import jax.numpy as jnp
 
-from flax import config
 from flax import struct
 from flax import typing
 from flax.nnx import graphlib
@@ -817,7 +816,7 @@ def split_rngs(
 
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
 
   if isinstance(node, Missing):
 

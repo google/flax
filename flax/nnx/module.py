@@ -20,7 +20,6 @@ import typing as tp
 import jax
 import jax.numpy as jnp
 
-from flax import config
 from flax.nnx import (
   filterlib,
   graphlib,
@@ -714,7 +713,7 @@ def iter_children(module: Module, graph: bool | None = None) -> tp.Iterator[tupl
       the overhead of the graph protocol.
   """
   if graph is None:
-    graph = config.nnx_graph_mode
+    graph = graphlib.set_graph_mode.current_value()
   if graph:
     node_impl = graphlib.get_node_impl(module)
     assert node_impl is not None
