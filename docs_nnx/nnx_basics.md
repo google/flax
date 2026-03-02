@@ -96,8 +96,8 @@ The example below shows how to define a simple `MLP` by subclassing `Module`. Th
 class MLP(nnx.Module):
   def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
     self.linear1 = Linear(din, dmid, rngs=rngs)
-    self.dropout = nnx.Dropout(rate=0.1)
-    self.bn = nnx.BatchNorm(dmid, rngs=rngs)
+    self.dropout = nnx.Dropout(rate=0.1, deterministic=False)
+    self.bn = nnx.BatchNorm(dmid, use_running_average=False, rngs=rngs)
     self.linear2 = Linear(dmid, dout, rngs=rngs)
 
   def __call__(self, x: jax.Array, rngs: nnx.Rngs):
