@@ -43,7 +43,7 @@ recursive_map = functools.partial(recursive_map, graph=True)
 view = functools.partial(_module.view, graph=True)
 view_info = functools.partial(_module.view_info, graph=True)
 iter_modules = functools.partial(_module.iter_modules, graph=True)
-iter_children = functools.partial(_module.iter_children, graph=True)
+iter_children = functools.partial(_module.iter_children, graph=True)  # type: ignore[has-type]
 
 # rnglib
 split_rngs = functools.partial(_rnglib.split_rngs, graph=True)
