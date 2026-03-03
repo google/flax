@@ -7,6 +7,7 @@ Basic Guides
 
    guides/pytree
    guides/transforms
+   guides/view
    guides/filters_guide
    guides/randomness
    guides/checkpointing
