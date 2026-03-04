@@ -48,6 +48,27 @@ HB = tp.TypeVar('HB', bound=tp.Hashable)
 KeyT = tp.TypeVar('KeyT', bound=Key)
 
 Index = int
+
+def _tree_mode_suggestion(fn_name: str) -> str:
+  return (
+    f'\n\nIf the structure is intended to be a graph, consider '
+    f'using graph=True or nnx.graph.{fn_name}.'
+  )
+
+def _check_valid_pytree(node: tp.Any, fn_name: str) -> None:
+  from flax.nnx import pytreelib
+  if (
+    isinstance(node, pytreelib.Pytree)
+    and not node._pytree__is_pytree
+  ):
+    raise ValueError(
+      f"Cannot use '{fn_name}' with graph=False on a "
+      f"'{type(node).__name__}' instance that has pytree=False. "
+      f"Pytree subclasses with pytree=False are not registered as "
+      f"JAX pytrees and cannot be used in tree-mode. "
+      + _tree_mode_suggestion(fn_name)
+    )
+
 Names = tp.Sequence[int]
 Node = tp.TypeVar('Node')
 Leaf = tp.TypeVar('Leaf')
@@ -637,9 +658,13 @@ def _tree_flatten(
   leaves: list[tp.Any],
   paths: list[PathParts] | None,
 ) -> None:
-  is_variable = lambda x: isinstance(x, Variable)
+  def _is_leaf(x):
+    if isinstance(x, Variable):
+      return True
+    _check_valid_pytree(x, 'flatten')
+    return False
   jax_leaves, treedef = jax.tree_util.tree_flatten_with_path(
-    node, is_leaf=is_variable
+    node, is_leaf=_is_leaf
   )
   nnx_paths_and_leaves: list[tuple[PathParts, tp.Any]] = [
     (jax_to_nnx_path(jax_path), value) for jax_path, value in jax_leaves
@@ -666,7 +691,8 @@ def _tree_flatten(
       if var_id in seen_variables:
         raise ValueError(
           f'Duplicate Variable found at path {nnx_path!r}. '
-          'Tree mode (graph=False) does not support shared references.'
+          'Tree mode (graph=False) does not support shared references. '
+          + _tree_mode_suggestion('split')
         )
       seen_variables.add(var_id)
       raw_value = value.get_raw_value()
@@ -675,7 +701,8 @@ def _tree_flatten(
         if ref_id in seen_refs:
           raise ValueError(
             f'Duplicate Ref found inside Variable at path {nnx_path!r}. '
-            'Tree mode (graph=False) does not support shared references.'
+            'Tree mode (graph=False) does not support shared references. '
+            + _tree_mode_suggestion('split')
           )
         seen_refs.add(ref_id)
       nodes.append(VariableDef(
@@ -690,7 +717,8 @@ def _tree_flatten(
       if ref_id in seen_refs:
         raise ValueError(
           f'Duplicate Ref found at path {nnx_path!r}. '
-          'Tree mode (graph=False) does not support shared references.'
+          'Tree mode (graph=False) does not support shared references. '
+          + _tree_mode_suggestion('split')
         )
       seen_refs.add(ref_id)
     leaves.append(value)
@@ -2924,13 +2952,15 @@ def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
       continue
 
     if not is_pytree_node(current, check_graph_registry=False):
+      _check_valid_pytree(current, 'iter_graph')
       if isinstance(current, Variable) or variablelib.is_array_ref(current):
         obj_id = id(current)
         if obj_id in seen_refs:
           raise ValueError(
             f'Found duplicate Variable or Ref at path '
             f'"{"/".join(map(str, path))}". '
-            'Shared references are not supported with graph=False.'
+            'Shared references are not supported with graph=False. '
+            + _tree_mode_suggestion('iter_graph')
           )
         seen_refs.add(obj_id)
       yield path, current
@@ -2940,7 +2970,8 @@ def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
     if obj_id in in_progress:
       raise ValueError(
         f'Found cycle at path "{"/".join(map(str, path))}". '
-        'Cycles are not supported with graph=False.'
+        'Cycles are not supported with graph=False. '
+        + _tree_mode_suggestion('iter_graph')
       )
     in_progress.add(obj_id)
 
@@ -3010,6 +3041,7 @@ def iter_children(
       if is_graph_node(value):
         yield key, value
   else:
+    _check_valid_pytree(node, 'iter_children')
     if not is_pytree_node(node, check_graph_registry=False):
       raise ValueError(
         f'Expected a pytree node, got {type(node).__name__}. '
@@ -3123,13 +3155,15 @@ def _recursive_map_tree(
 
   def _recurse(path: PathParts, current: tp.Any) -> tp.Any:
     if not is_pytree_node(current, check_graph_registry=False):
+      _check_valid_pytree(current, 'recursive_map')
       if isinstance(current, Variable) or is_array_ref(current):
         obj_id = id(current)
         if obj_id in seen_refs:
           raise ValueError(
             f'Found duplicate Variable or Ref at path '
             f'"{"/".join(map(str, path))}". '
-            'Shared references are not supported with graph=False.'
+            'Shared references are not supported with graph=False. '
+            + _tree_mode_suggestion('recursive_map')
           )
         seen_refs.add(obj_id)
       return f(path, current)
@@ -3138,7 +3172,8 @@ def _recursive_map_tree(
     if obj_id in in_progress:
       raise ValueError(
         f'Found cycle at path "{"/".join(map(str, path))}". '
-        'Cycles are not supported with graph=False.'
+        'Cycles are not supported with graph=False. '
+        + _tree_mode_suggestion('recursive_map')
       )
     in_progress.add(obj_id)
 

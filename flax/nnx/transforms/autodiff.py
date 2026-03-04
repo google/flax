@@ -140,7 +140,8 @@ def _grad_general(
     if any(isinstance(x, DiffState) for x in jax.tree.leaves(argnums)):
       raise ValueError(
         '`argnums` cannot contain `DiffState` objects '
-        'when `graph=False`'
+        'when `graph=False`. '
+        + graphlib._tree_mode_suggestion('grad')
       )
 
     gradded_fn = transform(
@@ -1321,7 +1322,8 @@ def custom_vjp(
     if any(isinstance(x, DiffState) for x in nondiff_argnums):
       raise ValueError(
         '`nondiff_argnums` cannot contain `DiffState` objects '
-        'when `graph=False`'
+        'when `graph=False`. '
+        + graphlib._tree_mode_suggestion('custom_vjp')
       )
     return TreeCustomVjp(fun_unbound, nondiff_argnums)  # type: ignore[arg-type]
 

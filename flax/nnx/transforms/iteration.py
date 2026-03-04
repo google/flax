@@ -386,12 +386,14 @@ def vmap(
     if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
       raise ValueError(
         '`in_axes` cannot contain `StateAxes` objects '
-        'when `graph=False`'
+        'when `graph=False`. '
+        + graphlib._tree_mode_suggestion('vmap')
       )
     if any(isinstance(x, StateAxes) for x in jax.tree.leaves(out_axes)):
       raise ValueError(
         '`out_axes` cannot contain `StateAxes` objects '
-        'when `graph=False`'
+        'when `graph=False`. '
+        + graphlib._tree_mode_suggestion('vmap')
       )
 
     vmapped_fn = jax.vmap(
@@ -648,12 +650,14 @@ def pmap(
     if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
       raise ValueError(
         '`in_axes` cannot contain `StateAxes` objects '
-        'when `graph=False`'
+        'when `graph=False`. '
+        + graphlib._tree_mode_suggestion('pmap')
       )
     if any(isinstance(x, StateAxes) for x in jax.tree.leaves(out_axes)):
       raise ValueError(
         '`out_axes` cannot contain `StateAxes` objects '
-        'when `graph=False`'
+        'when `graph=False`. '
+        + graphlib._tree_mode_suggestion('pmap')
       )
 
     pmapped_fn = jax.pmap(

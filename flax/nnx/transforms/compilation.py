@@ -361,12 +361,14 @@ def jit(
     if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_shardings)):
       raise ValueError(
         '`in_shardings` cannot contain `StateSharding` objects '
-        'when `graph=False`'
+        'when `graph=False`. '
+        + graphlib._tree_mode_suggestion('jit')
       )
     if any(isinstance(x, StateSharding) for x in jax.tree.leaves(out_shardings)):
       raise ValueError(
         '`out_shardings` cannot contain `StateSharding` objects '
-        'when `graph=False`'
+        'when `graph=False`. '
+        + graphlib._tree_mode_suggestion('jit')
       )
 
   wrapped_cls = JitWrapped if graph else TreeJitWrapped
