@@ -15,7 +15,7 @@ dependencies = [
     # keep in sync with jax-version in .github/workflows/build.yml
     "jax>=0.8.1",
     "msgpack",
-    "optax==0.2.6",
+    "optax",
     "orbax-checkpoint",
     "tensorstore",
     "rich>=11.1",
