@@ -177,23 +177,6 @@ class Module(Pytree, metaclass=ModuleMeta):
           variable_type, allow_register=True
       )
 
-    # Use capture API if available
-    if hasattr(self, '__capture__'):
-      if not isinstance(self.__capture__, variable_type):
-        raise ValueError(
-          f"Expected '{name}' to be of type '{variable_type.__name__}', "
-          f"got '{type(self.__capture).__name__}'"
-        )
-      if name in self.__capture__:
-        current_variable: variableslib.Variable = self.__capture__[name]
-        current_variable.set_value(
-          reduce_fn(current_variable.get_value(), value)
-        )
-        self.__capture__[name] = current_variable
-      else:
-        self.__capture__[name] = variable_type(reduce_fn(init_fn(), value))
-      return True
-
     if hasattr(self, name):
       variable = getattr(self, name)
       if not isinstance(variable, variableslib.Variable):
@@ -206,10 +189,19 @@ class Module(Pytree, metaclass=ModuleMeta):
           f"got '{type(variable).__name__}'"
         )
       variable.set_value(reduce_fn(variable.get_value(), value))
+    elif hasattr(self, '__capture__'):
+      if name in self.__capture__:
+        current_variable: variableslib.Variable = self.__capture__[name]
+        current_variable.set_value(
+          reduce_fn(current_variable.get_value(), value)
+        )
+        self.__capture__[name] = current_variable
+      else:
+        self.__capture__[name] = variable_type(reduce_fn(init_fn(), value))
+      return True
     else:
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
-
     return True
 
   def perturb(
@@ -284,11 +276,6 @@ class Module(Pytree, metaclass=ModuleMeta):
     if hasattr(self, name):
       old_value = getattr(self, name)
     elif hasattr(self, '__capture__'):
-      if not isinstance(self.__capture__, variable_type):
-        raise ValueError(
-          f"Expected '{name}' to be of type '{variable_type.__name__}', "
-          f"got '{type(self.__capture).__name__}'"
-        )
       if name not in self.__capture__:
         zeros = jax.tree.map(jnp.zeros_like, value)
         self.__capture__[name] = variable_type(zeros)
@@ -808,12 +795,16 @@ def capture_intermediates(
       _extract_state(interms)
     return result, (nnx_state(interms, filter) if filter else interms)
 
+def fix_key(key):
+  "Hack to remove '__capturing__' prefix from keys in intermediate state"
+  return key.replace('__capturing__', '')
+
 def _extract_state(state):
   if not isinstance(state, MutableMapping):
     return
   for k, v in list(state.items()):
     if k == '__capture__':
-      state.update(v.get_value())
+      state.update({fix_key(k): val for k,val in v.get_value().items()})
       del state[k]
     else:
       _extract_state(v)
@@ -828,7 +819,7 @@ def _add_capturing(cls, variable_type):
           @ft.wraps(method)
           def wrapper(self, *args, **kwargs):
             result = method(self, *args, **kwargs)
-            self.sow(variable_type, name, result)
+            self.sow(variable_type, '__capturing__' + name, result)
             return result
           wrapper._does_capturing = True
           setattr(cls, name, wrapper)
