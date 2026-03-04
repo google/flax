@@ -1283,8 +1283,7 @@ class SimpleScanFn:
       carry = extract.from_tree2(carry)
       x = extract.from_tree2(x)
 
-    out = self.f(carry, x)
-    carry_out, y = out
+    carry_out, y = self.f(carry, x)
 
     if self.graph:
       carry_out = extract.to_tree2(carry_out)
