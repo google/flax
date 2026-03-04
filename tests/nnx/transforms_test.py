@@ -395,6 +395,53 @@ class TestJIT(parameterized.TestCase):
 
     self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
 
+  def test_state_sharding_with_variable_types(self):
+    """Test StateSharding with different Variable types."""
+
+    class Count(nnx.Variable):
+      pass
+
+    class Weights(nnx.Module):
+      def __init__(self, kernel, count):
+        self.kernel = nnx.Param(kernel)
+        self.count = Count(count)
+
+    # Use multiple CPU devices for testing
+    n_devices = min(jax.local_device_count(), 8)
+    if n_devices < 2:
+      self.skipTest('Test requires at least 2 devices')
+
+    rngs = nnx.Rngs(1)
+    devices = mesh_utils.create_device_mesh((n_devices,))
+    mesh = jax.sharding.Mesh(devices, ('devices',))
+
+    def sharding(*args):
+      return jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(*args))
+
+    weights = Weights(
+      kernel=rngs.uniform((16, 16)),
+      count=jnp.array(0),
+    )
+    x = jnp.ones((16, 16))
+
+    # Define sharding for different Variable types
+    state_sharding = nnx.StateSharding(
+      {
+        nnx.Param: sharding(None, 'devices'),  # shard Param
+        Count: sharding(),  # replicate Count
+      }
+    )
+
+    @nnx.graph.jit(in_shardings=(state_sharding, sharding('devices')))
+    def forward(weights, x):
+      weights.count[...] += 1
+      return x @ weights.kernel
+
+    y = forward(weights, x)
+
+    self.assertEqual(y.shape, (16, 16))
+    self.assertEqual(weights.count[...], 1)
+
   def test_cache_args(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
