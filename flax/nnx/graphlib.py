@@ -3038,7 +3038,7 @@ def iter_children(
       )
     node_dict = node_impl.node_dict(node)
     for key, value in node_dict.items():
-      if is_graph_node(value):
+      if type(value) in GRAPH_REGISTRY:
         yield key, value
   else:
     _check_valid_pytree(node, 'iter_children')
@@ -3051,7 +3051,7 @@ def iter_children(
       node, is_leaf=lambda x: x is not node
     )
     for jax_key_path, child in children:
-      if is_graph_node(child):
+      if type(child) in GRAPH_REGISTRY:
         key = _key_path_to_key(jax_key_path[0])
         yield key, child
 
