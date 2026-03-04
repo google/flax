@@ -19,7 +19,6 @@ import functools
 from typing import Any
 
 from absl.testing import absltest, parameterized
-import chex
 from flax import ids
 from flax import linen as nn
 from flax.linen import fp8_ops
@@ -960,7 +959,7 @@ class NormalizationTest(parameterized.TestCase):
     np.testing.assert_array_equal(got_scale, expected_scale)
 
     # Compares the rest of PyTree nodes
-    chex.assert_trees_all_close(expected, got)
+    jax.tree.map(lambda x, y: np.testing.assert_allclose(x, y), expected, got)
 
 
 class StochasticTest(parameterized.TestCase):
