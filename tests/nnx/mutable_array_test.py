@@ -124,42 +124,6 @@ class TestVariableRefMode(absltest.TestCase):
 
     self.assertIs(m2, m)
 
-  def test_freeze_and_mutable(self):
-    class Foo(nnx.Module):
-      def __init__(self):
-        self.a = nnx.Param(1)
-
-    m = nnx.vars_as(Foo(), ref=True)
-    self.assertTrue(m.a.ref)
-    self.assertFalse(m.a.hijax)
-
-    m2 = nnx.vars_as(m, mutable=False)
-    self.assertTrue(m2.a.had_ref)
-    self.assertFalse(m2.a.ref)
-    self.assertFalse(m2.a.hijax)
-    self.assertIsNot(m, m2)
-
-    m3 = nnx.vars_as(m2, ref=True)
-    self.assertTrue(m3.a.ref)
-    self.assertIsNot(m2, m3)
-    self.assertIsNot(m2.a, m3.a)
-
-    m4 = nnx.vars_as(m2, mutable=True)
-    self.assertTrue(m4.a.ref)
-    self.assertFalse(m4.a.hijax)
-    self.assertNotIn('had_ref', m4.a.get_metadata())
-
-    m5 = nnx.vars_as(m2, hijax=True)
-    self.assertFalse(m5.a.ref)
-    self.assertTrue(m5.a.hijax)
-    self.assertIn('had_ref', m5.a.get_metadata())
-
-    m6 = nnx.vars_as(m5, mutable=True)
-    self.assertIsInstance(m6.a.get_raw_value(), jax.Ref)
-    self.assertTrue(m6.a.ref)
-    self.assertTrue(m6.a.hijax)
-    self.assertNotIn('had_ref', m6.a.get_metadata())
-
   def test_to_arrays_example(self):
     node = [nnx.Variable(1.0), nnx.Variable(2.0, mode='ref')]
     mutable_node = nnx.vars_as(node, ref=True)
@@ -184,18 +148,21 @@ class TestVariableRefMode(absltest.TestCase):
         self.a = nnx.Param(1)
         self.b = nnx.BatchStat(2)
 
-    m = nnx.vars_as(Foo(), ref=True)
+    m = nnx.vars_as(Foo(), hijax=True, ref=True)
     self.assertEqual(m.a.ref, True)
     self.assertEqual(m.b.ref, True)
 
-    m2 = nnx.vars_as(m, mutable=False, only=nnx.BatchStat)
+    m2 = nnx.vars_as(m, hijax=False, only=nnx.BatchStat)
     self.assertEqual(m2.a.ref, True)
-    self.assertEqual(m2.b.ref, False)
+    self.assertEqual(m2.a.hijax, True)
+    self.assertEqual(m2.b.ref, True)
+    self.assertEqual(m2.b.hijax, False)
     self.assertIsNot(m, m2)
 
-    m3 = nnx.vars_as(m2, ref=True, only=nnx.BatchStat)
+    m3 = nnx.vars_as(m2, hijax=True, only=nnx.BatchStat)
     self.assertEqual(m3.a.ref, True)
     self.assertEqual(m3.b.ref, True)
+    self.assertEqual(m3.b.hijax, True)
     self.assertIsNot(m2, m3)
     self.assertIs(m.a, m3.a)
 
@@ -208,7 +175,7 @@ class TestVariableRefMode(absltest.TestCase):
     m = Foo()
 
     with self.assertRaisesRegex(ValueError, 'Found duplicate at path'):
-      nnx.vars_as(m, mutable=False)
+      nnx.vars_as(m, ref=True)
 
   def test_mutable_array_split(self):
     class Foo(nnx.Module):
@@ -280,10 +247,10 @@ class TestVariableRefMode(absltest.TestCase):
 
     ref_map = nnx.graphlib.RefMap()
     graphdef, state = nnx.graphlib.flatten(m, ref_index=ref_map, graph=True)
-    state = nnx.vars_as(state, mutable=False)
+    state = nnx.vars_as(state, hijax=False)
     self.assertLen(state, 1)
 
-    m1 = nnx.merge(graphdef, nnx.vars_as(state, hijax=True))
+    m1 = nnx.merge(graphdef, state)
     self.assertIs(m1.a, m1.b)
     self.assertIsInstance(m1.a, jax.Ref)
 
@@ -715,7 +682,7 @@ class TestOptimizer(absltest.TestCase):
         model = nnx.merge(graphdef, params, nondiff)
         return jnp.mean((model(x) - y) ** 2)
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(params, mutable=False))
+      loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(params, hijax=False))
       optimizer.update(params, grads)
       return loss
 
@@ -748,9 +715,10 @@ class TestHijaxVariables(parameterized.TestCase):
     self.assertEqual(v_hi[...], 15)
     self.assertEqual(y, 17)
 
-    v_low = nnx.vars_as(v_hi, mutable=False)
-    self.assertFalse(v_low.mutable)
+    v_low = nnx.vars_as(v_hi, hijax=False)
     self.assertIsInstance(v_low, nnx.Param)
+    self.assertFalse(v_low.hijax)
+    self.assertEqual(v_low[...], 15)
 
   def test_from_metadata(self):
     value = 1
@@ -758,7 +726,6 @@ class TestHijaxVariables(parameterized.TestCase):
       'a': 'hi',
       'hijax': False,
       'ref': False,
-      'mutable': True,
     }
     v_low = nnx.Param.from_metadata(value, metadata)
     self.assertIsInstance(v_low, nnx.Param)
@@ -790,21 +757,12 @@ class TestHijaxVariables(parameterized.TestCase):
 
     assert v_hi[...] == 10
 
-    v_low = nnx.vars_as(v_hi, mutable=False)
+    v_low = nnx.vars_as(v_hi, hijax=False)
 
-    assert v_low.hijax
-    assert not v_low.mutable
+    assert not v_low.hijax
     assert v_low[...] == 10
 
-  def test_immutable_variable(self):
-    v_imm = nnx.Param(jnp.array([1]), mutable=False)
-    assert not v_imm.mutable
 
-    with self.assertRaisesRegex(
-      flax.errors.ImmutableVariableError,
-      'Cannot mutate Param as it is marked as immutable',
-    ):
-      v_imm[...] = 1
 
   def test_pytree_value(self):
     v = nnx.Variable({'a': jnp.array(0), 'b': jnp.array(2)}, hijax=True)
@@ -922,13 +880,11 @@ class TestHijaxVariables(parameterized.TestCase):
 
   @nnx.var_defaults(hijax=True)
   def test_no_qdd_grad(self):
-    v = nnx.Param(jnp.array(3.0), mutable=False)
+    v = nnx.Param(jnp.array(3.0), hijax=False)
 
-    self.assertFalse(v.mutable)
-    self.assertTrue(v.hijax)
+    self.assertFalse(v.hijax)
 
     def f(v):
-      self.assertTrue(v.hijax)
       return v[...] ** 2
 
     grad = jax.grad(f)(v)
@@ -941,10 +897,8 @@ class TestHijaxVariables(parameterized.TestCase):
     x = jnp.array(3.0)
 
     def f(x):
-      v = nnx.Param(x, mutable=False)
-      self.assertFalse(v.mutable)
-      self.assertTrue(v.hijax)
-      self.assertTrue(v.hijax)
+      v = nnx.Param(x, hijax=False)
+      self.assertFalse(v.hijax)
       return v[...] ** 2
 
     grad = jax.grad(f)(x)
@@ -953,97 +907,59 @@ class TestHijaxVariables(parameterized.TestCase):
     self.assertEqual(grad, 6.0)
 
   @parameterized.product(
-    mutable=[True, False],
     hijax=[True, False],
     ref=[True, False],
   )
-  def test_variable_properties(self, mutable, hijax, ref):
-    def create_variable():
-      return nnx.Variable(jnp.array(1), mutable=mutable, hijax=hijax, ref=ref)
-
-    # ref=True requires mutable=True (Refs are inherently mutable)
-    if ref and not mutable:
-      with self.assertRaisesRegex(
-        ValueError, 'Cannot set ref=True and mutable=False simultaneously.'
-      ):
-        create_variable()
+  def test_variable_properties(self, hijax, ref):
+    v = nnx.Variable(jnp.array(1), hijax=hijax, ref=ref)
+    self.assertEqual(v.hijax, hijax)
+    self.assertEqual(v.ref, ref)
+    if hijax:
+      self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
     else:
-      v = create_variable()
-      self.assertEqual(v.mutable, mutable)
-      self.assertEqual(v.hijax, hijax)
-      self.assertEqual(v.ref, ref)
-      # Validate object type based on hijax
-      if hijax:
-        self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
-      else:
-        self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
-      # Validate raw value type based on ref
-      if ref:
-        self.assertIsInstance(v.get_raw_value(), jax.Ref)
-      else:
-        self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
+      self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
+    if ref:
+      self.assertIsInstance(v.get_raw_value(), jax.Ref)
+    else:
+      self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
 
   @parameterized.product(
-    mutable=[True, False],
     hijax=[True, False],
     ref=[True, False],
   )
-  def test_variable_copy_properties(self, mutable, hijax, ref):
-    # Start with a vanilla Variable
+  def test_variable_copy_properties(self, hijax, ref):
     v_original = nnx.Variable(jnp.array(1))
 
-    # ref=True requires mutable=True (Refs are inherently mutable)
-    if ref and not mutable:
-      with self.assertRaisesRegex(
-        ValueError, 'Cannot set ref=True and mutable=False simultaneously.'
-      ):
-        v_original.copy(mutable=mutable, hijax=hijax, ref=ref)
+    v = v_original.copy(hijax=hijax, ref=ref)
+    self.assertEqual(v.hijax, hijax)
+    self.assertEqual(v.ref, ref)
+    if hijax:
+      self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
     else:
-      v = v_original.copy(mutable=mutable, hijax=hijax, ref=ref)
-      self.assertEqual(v.mutable, mutable)
-      self.assertEqual(v.hijax, hijax)
-      self.assertEqual(v.ref, ref)
-      # Validate object type based on hijax
-      if hijax:
-        self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
-      else:
-        self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
-      # Validate raw value type based on ref
-      if ref:
-        self.assertIsInstance(v.get_raw_value(), jax.Ref)
-      else:
-        self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
+      self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
+    if ref:
+      self.assertIsInstance(v.get_raw_value(), jax.Ref)
+    else:
+      self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
 
   @parameterized.product(
-    mutable=[True, False],
     hijax=[True, False],
     ref=[True, False],
   )
-  def test_variable_vars_as_properties(self, mutable, hijax, ref):
-    # Start with a vanilla Variable
+  def test_variable_vars_as_properties(self, hijax, ref):
     v_original = nnx.Variable(jnp.array(1))
 
-    # ref=True requires mutable=True (Refs are inherently mutable)
-    if ref and not mutable:
-      with self.assertRaisesRegex(
-        ValueError, 'Cannot set ref=True and mutable=False simultaneously.'
-      ):
-        nnx.vars_as(v_original, mutable=mutable, hijax=hijax, ref=ref)
+    v = nnx.vars_as(v_original, hijax=hijax, ref=ref)
+    self.assertEqual(v.hijax, hijax)
+    self.assertEqual(v.ref, ref)
+    if hijax:
+      self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
     else:
-      v = nnx.vars_as(v_original, mutable=mutable, hijax=hijax, ref=ref)
-      self.assertEqual(v.mutable, mutable)
-      self.assertEqual(v.hijax, hijax)
-      self.assertEqual(v.ref, ref)
-      # Validate object type based on hijax
-      if hijax:
-        self.assertIsInstance(v, nnx.variablelib.HijaxVariable)
-      else:
-        self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
-      # Validate raw value type based on ref
-      if ref:
-        self.assertIsInstance(v.get_raw_value(), jax.Ref)
-      else:
-        self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
+      self.assertNotIsInstance(v, nnx.variablelib.HijaxVariable)
+    if ref:
+      self.assertIsInstance(v.get_raw_value(), jax.Ref)
+    else:
+      self.assertNotIsInstance(v.get_raw_value(), jax.Ref)
 
 
 class TestVarDefaults(absltest.TestCase):
@@ -1124,7 +1040,7 @@ class HijaxTransformCoverageTest(absltest.TestCase):
   # ------------
   # with differentiable hijax arguments (immutable variable)
   def test_hitypes_as_grad_args(self):
-    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True, mutable=False)
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=False)
 
     def loss_fn(v):
       x = v[0]
@@ -1133,9 +1049,8 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     grads = jax.grad(loss_fn)(v)
     np.testing.assert_allclose(grads[0], 4.0)
 
-  # with non-differentiable hijax arguments (immutable variable)
   def test_hitypes_as_nondiff_grad_args(self):
-    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True, mutable=False)
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=False)
     x = jnp.array(3.0)
 
     def loss_fn(x, v):
@@ -1145,9 +1060,8 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     grad = jax.grad(loss_fn)(x, v)
     np.testing.assert_allclose(grad, 6.0)
 
-  # with hijax captured arguments (immutable variable)
   def test_hitypes_as_captured_args(self):
-    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True, mutable=False)
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=False)
 
     def loss_fn(x):
       y = v[1]

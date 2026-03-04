@@ -141,7 +141,6 @@ class TestVariable(parameterized.TestCase):
         {
             'hijax': False,
             'ref': False,
-            'mutable': True,
             'eager_sharding': True,
         },
     )
@@ -153,7 +152,6 @@ class TestVariable(parameterized.TestCase):
         'c': 4,
         'hijax': False,
         'ref': False,
-        'mutable': True,
         'eager_sharding': True,
     })
     self.assertEqual(
@@ -163,7 +161,6 @@ class TestVariable(parameterized.TestCase):
             'c': 4,
             'hijax': False,
             'ref': False,
-            'mutable': True,
             'eager_sharding': True,
         },
     )
@@ -192,7 +189,6 @@ class TestVariable(parameterized.TestCase):
     # Check that default metadata is preserved
     self.assertIn('hijax', v_metadata)
     self.assertIn('ref', v_metadata)
-    self.assertIn('mutable', v_metadata)
 
     self.assertNotIn('differentiable', m.v.get_metadata())
     self.assertNotIn('differentiable', m.p.get_metadata())
