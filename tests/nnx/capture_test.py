@@ -19,6 +19,16 @@ import jax
 import flax
 from jax import numpy as jnp
 import numpy as np
+from contextlib import contextmanager
+
+@contextmanager
+def set_graph_mode(mode):
+  old_mode = flax.config._read('nnx_graph_mode')
+  try:
+    flax.config.update('nnx_graph_mode', mode)
+    yield
+  finally:
+    flax.config.update('nnx_graph_mode', old_mode)
 
 class TestCapture(parameterized.TestCase):
 
@@ -59,65 +69,65 @@ class TestCapture(parameterized.TestCase):
 
   @parameterized.parameters(True, False)
   def test_fwd_bwd(self, graph_mode):
-    flax.config.update('nnx_graph_mode', graph_mode)
+    with set_graph_mode(graph_mode):
 
-    class Foo(nnx.Module):
-      @nnx.jit
-      def __call__(self, x):
-        x = self.perturb('grad_of_x', x)
-        y = 3 * x
-        self.sow(nnx.Intermediate, 'y', y)
-        return y
+        class Foo(nnx.Module):
+          @nnx.jit
+          def __call__(self, x):
+            x = self.perturb('grad_of_x', x)
+            y = 3 * x
+            self.sow(nnx.Intermediate, 'y', y)
+            return y
 
-    model = Foo()
+        model = Foo()
 
-    @nnx.jit
-    def train_step(model, perturbations, x):
-      def loss(model, perturbations, x):
-        return nnx.capture_intermediates(model, x, state=perturbations, filter=nnx.Not(nnx.Perturbation))
+        @nnx.jit
+        def train_step(model, perturbations, x):
+          def loss(model, perturbations, x):
+            return nnx.capture_intermediates(model, x, state=perturbations, filter=nnx.Not(nnx.Perturbation))
 
-      (grads, perturbations), sowed = nnx.grad(loss, argnums=(0, 1), has_aux=True)(model, perturbations, x)
-      return nnx.merge_state(sowed, perturbations)
+          (grads, perturbations), sowed = nnx.grad(loss, argnums=(0, 1), has_aux=True)(model, perturbations, x)
+          return nnx.merge_state(sowed, perturbations)
 
-    x = 1.0
-    _, perturbations = nnx.capture_intermediates(model, x, filter=nnx.Perturbation)
-    metrics = train_step(model, perturbations, x)
-    self.assertEqual(metrics['grad_of_x'], 3)
-    self.assertEqual(metrics['y'][0], 3)
+        x = 1.0
+        _, perturbations = nnx.capture_intermediates(model, x, filter=nnx.Perturbation)
+        metrics = train_step(model, perturbations, x)
+        self.assertEqual(metrics['grad_of_x'], 3)
+        self.assertEqual(metrics['y'][0], 3)
 
   @parameterized.parameters(True, False)
   def test_nested_modules(self, graph_mode):
-    flax.config.update('nnx_graph_mode', graph_mode)
+    with set_graph_mode(graph_mode):
 
-    class Foo(nnx.Module):
-      def __call__(self, x):
-        x = self.perturb('grad_of_x', x)
-        y = 3 * x
-        self.sow(nnx.Intermediate, 'y', y)
-        return y
-    class Bar(nnx.Module):
-      def __init__(self):
-        self.foos = nnx.data([Foo() for _ in range(3)])
-      def __call__(self, x):
-        for block in self.foos:
-          x = block(x)
-        return x
+      class Foo(nnx.Module):
+        def __call__(self, x):
+          x = self.perturb('grad_of_x', x)
+          y = 3 * x
+          self.sow(nnx.Intermediate, 'y', y)
+          return y
+      class Bar(nnx.Module):
+        def __init__(self):
+          self.foos = nnx.data([Foo() for _ in range(3)])
+        def __call__(self, x):
+          for block in self.foos:
+            x = block(x)
+          return x
 
-    model = Bar()
+      model = Bar()
 
-    @nnx.jit
-    def train_step(model, perturbations, x):
-      def loss(model, perturbations, x):
-        return nnx.capture_intermediates(model, x, state=perturbations, filter=nnx.Not(nnx.Perturbation))
-      (grads, perturbations), sowed = nnx.grad(loss, argnums=(0, 1), has_aux=True)(model, perturbations, x)
-      return nnx.merge_state(sowed, perturbations)
+      @nnx.jit
+      def train_step(model, perturbations, x):
+        def loss(model, perturbations, x):
+          return nnx.capture_intermediates(model, x, state=perturbations, filter=nnx.Not(nnx.Perturbation))
+        (grads, perturbations), sowed = nnx.grad(loss, argnums=(0, 1), has_aux=True)(model, perturbations, x)
+        return nnx.merge_state(sowed, perturbations)
 
-    x = 1.0
-    _, perturbations = nnx.capture_intermediates(model, x, filter=nnx.Perturbation)
-    metrics = train_step(model, perturbations, x)
-    for i in range(3):
-      self.assertEqual(metrics['foos'][i]['grad_of_x'], 3**(3-i))
-      self.assertEqual(metrics['foos'][i]['y'][0], 3**(i+1))
+      x = 1.0
+      _, perturbations = nnx.capture_intermediates(model, x, filter=nnx.Perturbation)
+      metrics = train_step(model, perturbations, x)
+      for i in range(3):
+        self.assertEqual(metrics['foos'][i]['grad_of_x'], 3**(3-i))
+        self.assertEqual(metrics['foos'][i]['y'][0], 3**(i+1))
 
   def test_method_outputs_single_module(self):
     class Foo(nnx.Module):
