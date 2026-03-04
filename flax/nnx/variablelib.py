@@ -1744,11 +1744,11 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     yield reprlib.Object(type=type(self).__name__, comment=comment)
     yield reprlib.Attr('value', self.get_value())
     for name, value in self._var_metadata.items():
-      if name == 'hijax' and not value:
+      if name == 'hijax' and value == config.flax_hijax_variable:
         continue
       if name == 'ref' and not value:
         continue
-      if name == 'eager_sharding' and value:
+      if name == 'eager_sharding' and value == config.flax_always_shard_variable:
         continue
       yield reprlib.Attr(name, value)
 
@@ -1762,7 +1762,14 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     else:
       first_line_annotation = None
 
-    children = {'value': self.get_value(), **self._var_metadata}
+    metadata = {
+      name: value
+      for name, value in self._var_metadata.items()
+      if not (name == 'hijax' and value == config.flax_hijax_variable)
+      and not (name == 'ref' and not value)
+      and not (name == 'eager_sharding' and value == config.flax_always_shard_variable)
+    }
+    children = {'value': self.get_value(), **metadata}
     return visualization.render_object_constructor(
       object_type=type(self),
       attributes=children,

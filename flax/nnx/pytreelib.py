@@ -818,7 +818,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       OBJECT_CONTEXT.seen_modules_repr.add(id(self))
 
       for name, value in vars(self).items():
-        if str(name).startswith('_'):
+        if str(name).startswith('_pytree__'):
+          continue
+        if str(name).startswith('_') and not self._pytree__nodes.get(str(name), False):
           continue
 
         value = jax.tree.map(_to_shape_dtype, value, is_leaf=graphlib.is_graph_node)
@@ -859,7 +861,9 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         first_line_annotation = None
       children = {}
       for name, value in vars(self).items():
-        if str(name).startswith('_'):
+        if str(name).startswith('_pytree__'):
+          continue
+        if str(name).startswith('_') and not self._pytree__nodes.get(str(name), False):
           continue
         children[name] = value
 
