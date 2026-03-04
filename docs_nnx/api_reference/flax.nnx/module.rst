@@ -6,3 +6,6 @@ module
 .. currentmodule:: flax.nnx
 .. autoclass:: Module
    :members:
+.. autofunction:: view
+.. autofunction:: view_info
+.. autofunction:: with_attributes

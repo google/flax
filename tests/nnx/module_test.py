@@ -686,7 +686,7 @@ class TestModule(parameterized.TestCase):
         ValueError,
         (
             'Could not find at least one instance of the following attributes:'
-            " {'unknown'}"
+            " \\['unknown'\\]"
         ),
     ):
       block.set_attributes(
@@ -723,6 +723,76 @@ class TestModule(parameterized.TestCase):
     new_block = nnx.view(block, only=nnx.Dropout, deterministic=True, graph=graph)
     assert new_block.dropout.deterministic == True
     assert new_block.batch_norm.use_running_average == False
+
+  @parameterized.parameters(True, False)
+  def test_with_attributes(self, graph):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    assert block.dropout.deterministic == False
+    assert block.batch_norm.use_running_average == False
+
+    new_block = nnx.with_attributes(
+      block, deterministic=True, use_running_average=True, graph=graph
+    )
+    assert new_block.dropout.deterministic == True
+    assert new_block.batch_norm.use_running_average == True
+    assert new_block.linear.kernel is block.linear.kernel
+    assert block.dropout.deterministic == False
+    assert block.batch_norm.use_running_average == False
+
+  @parameterized.parameters(True, False)
+  def test_with_attributes_filter(self, graph):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    new_block = nnx.with_attributes(
+      block, only=nnx.Dropout, deterministic=True, graph=graph
+    )
+    assert new_block.dropout.deterministic == True
+    assert new_block.batch_norm.use_running_average == False
+
+  @parameterized.parameters(True, False)
+  def test_with_attributes_error(self, graph):
+    class Block(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(din, dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False)
+        self.batch_norm = nnx.BatchNorm(
+          10, use_running_average=False, rngs=rngs
+        )
+
+    block = Block(2, 5, rngs=nnx.Rngs(0))
+    with self.assertRaisesRegex(
+        ValueError,
+        (
+            'Could not find at least one instance of the following attributes:'
+            " \\['unknown'\\]"
+        ),
+    ):
+      nnx.with_attributes(
+        block, deterministic=True, use_running_average=True,
+        unknown=True, graph=graph,
+      )
+
+    new_block = nnx.with_attributes(
+      block, deterministic=True, use_running_average=True,
+      unknown=True, raise_if_not_found=False, graph=graph,
+    )
+    assert new_block.dropout.deterministic == True
+    assert new_block.batch_norm.use_running_average == True
 
   @parameterized.parameters(True, False)
   def test_view_error(self, graph):

@@ -51,6 +51,7 @@ from .module import M as M
 from .module import Module as Module
 from .module import view as view
 from .module import view_info as view_info
+from .module import with_attributes as with_attributes
 from .module import iter_children as iter_children, iter_modules as iter_modules
 from .graphlib import merge as merge
 from .graphlib import UpdateContext as UpdateContext

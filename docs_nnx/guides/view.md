@@ -215,3 +215,37 @@ print(nnx.view_info(model))
 ```
 
 The output shows that `PrintLayer` accepts a `msg` kwarg of type `bool` in its `set_view` method. When building larger models composed of many custom submodules, `nnx.view_info` gives you a quick summary of all the configurable modes across the entire module tree.
+
+## Using `with_attributes`
+
+If you are working with modules that don't implement the `set_view` API, you can use {func}`nnx.with_attributes <flax.nnx.with_attributes>` to create views by directly replacing their attributes. Like `nnx.view`, it returns a new instance that shares jax arrays with the original, leaving the original unchanged.
+
+```{code-cell}
+class NoisyLinear(nnx.Module):
+  def __init__(self, din, dout, *, training=None, rngs: nnx.Rngs):
+    self.linear = nnx.Linear(din, dout, rngs=rngs)
+    self.training = training
+
+  def __call__(self, x, rngs=None):
+    if self.training is None:
+      raise ValueError('training must be set')
+    x = self.linear(x)
+    if self.training:
+      x = x + rngs.normal(x.shape) * 0.1
+    return x
+
+rngs = nnx.Rngs(0)
+model = nnx.Sequential(
+    NoisyLinear(4, 8, rngs=rngs),
+    NoisyLinear(8, 2, rngs=rngs),
+)
+
+train_model = nnx.with_attributes(model, training=True)
+eval_model = nnx.with_attributes(model, training=False)
+
+print(f'{train_model.layer1.training=}')
+y1 = train_model(jnp.ones((1, 4)), rngs=rngs)
+
+print(f'{eval_model.layer1.training=}')
+y2 = eval_model(jnp.ones((1, 4)))
+```
