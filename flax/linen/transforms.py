@@ -397,7 +397,7 @@ def decorator_lift_transform(
   prewrapped_fns = [wrap_method_once(class_fn) for class_fn in class_fns]
 
   @functools.wraps(prewrapped_fns[0])
-  def wrapped_fn(self, *args, **kwargs):
+  def wrapped_fn(self: Module, *args, **kwargs):
     state = self._state.export()
 
     # make a scope-function to transform
