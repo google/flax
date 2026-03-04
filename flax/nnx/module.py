@@ -471,24 +471,39 @@ def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool =
   """
   predicate = filterlib.to_predicate(only)
 
-  counts = {k: 0 for k in kwargs}
-  counts["_set_mode_calls"] = 0
+  remaining = set(kwargs)
 
   def _set_mode_fn(path, node):
     if hasattr(node, 'set_view') and predicate(path, node):
-      counts["_set_mode_calls"] += 1
-      unused = node.set_view(**kwargs)
-      for k in unused:
-        counts[k] += 1
+      sig = inspect.signature(node.set_view)
+      has_var_keyword = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD
+        for p in sig.parameters.values()
+      )
+      if has_var_keyword:
+        node.set_view(**kwargs)
+        remaining.clear()
+      else:
+        named_params = {
+          name
+          for name, p in sig.parameters.items()
+          if p.kind
+          in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+          )
+        }
+        filtered_kwargs = {
+          k: v for k, v in kwargs.items() if k in named_params
+        }
+        node.set_view(**filtered_kwargs)
+        remaining.difference_update(named_params)
     return node
 
   out = graphlib.recursive_map(_set_mode_fn, node, graph=graph)
 
-  if raise_if_not_found:
-    set_mode_calls = counts.pop("_set_mode_calls")
-    unused_keys = [k for k, v in counts.items() if v == set_mode_calls]
-    if unused_keys:
-      raise ValueError(f"Unused keys found in nnx.view: {unused_keys}")
+  if raise_if_not_found and remaining:
+    raise ValueError(f"Unused keys found in nnx.view: {sorted(remaining)}")
 
   return out
 

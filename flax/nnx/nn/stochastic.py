@@ -159,8 +159,7 @@ class Dropout(Module):
   def set_view(
       self,
       deterministic: bool | None = None,
-      **kwargs,
-  ) -> dict:
+  ):
     """Class method used by ``nnx.view``.
 
     Args:
@@ -168,4 +167,3 @@ class Dropout(Module):
     """
     if deterministic is not None:
       self.deterministic = deterministic
-    return kwargs

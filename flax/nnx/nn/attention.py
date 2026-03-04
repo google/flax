@@ -758,8 +758,7 @@ class MultiHeadAttention(Module):
       decode: bool | None = None,
       batch_size: int | Shape | None = None,
       max_length: int | None = None,
-      **kwargs,
-  ) -> dict:
+  ):
     """Class method used by ``nnx.view``.
 
     Args:
@@ -795,7 +794,6 @@ class MultiHeadAttention(Module):
         self.cached_key = nnx.Cache(jnp.zeros(cache_shape, self.dtype))
         self.cached_value = nnx.Cache(jnp.zeros(cache_shape, self.dtype))
         self.cache_index = nnx.Cache(jnp.array(0, dtype=jnp.int32))
-    return kwargs
 
 
 # mask-making utility functions

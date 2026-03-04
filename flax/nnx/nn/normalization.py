@@ -414,8 +414,7 @@ class BatchNorm(Module):
   def set_view(
       self,
       use_running_average: bool | None = None,
-      **kwargs,
-  ) -> dict:
+  ):
     """Class method used by ``nnx.view``.
 
     Args:
@@ -424,7 +423,6 @@ class BatchNorm(Module):
     """
     if use_running_average is not None:
       self.use_running_average = use_running_average
-    return kwargs
 
 
 class LayerNorm(Module):
