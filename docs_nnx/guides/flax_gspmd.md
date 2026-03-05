@@ -22,7 +22,7 @@ If you want to follow explicit sharding style, follow [JAX Explicit Sharding](ht
 
 ### Setup
 
-```{code-cell} ipython3
+```{code-cell}
 from functools import partial
 
 import jax
@@ -42,28 +42,28 @@ Set up a `2x4` device mesh as the [JAX data sharding tutorial](https://docs.jax.
 
 In this guide we use a standard FSDP layout and shard our devices on two axes - `data` and `model`, for doing batch data parallelism and tensor parallelism.
 
-```{code-cell} ipython3
+```{code-cell}
 # Create an auto-mode mesh of two dimensions and annotate each axis with a name.
 auto_mesh = jax.make_mesh((2, 4), ('data', 'model'))
 ```
 
 > Compatibility Note: This guide covers the [eager sharding feature](https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html) that greatly simplifies creating sharded model. If your project already used Flax GSPMD API on version `flax<0.12`, you might have turned the feature off to keep your code working. Users can toggle this feature using the `nnx.use_eager_sharding` function.
 
-```{code-cell} ipython3
+```{code-cell}
 nnx.use_eager_sharding(True)
 assert nnx.using_eager_sharding()
 ```
 
 The `nnx.use_eager_sharding` function can also be used as a context manager to toggle the eager sharding feature within a specific scope.
 
-```{code-cell} ipython3
+```{code-cell}
 with nnx.use_eager_sharding(False):
   assert not nnx.using_eager_sharding()
 ```
 
 You can also enable eager sharding on a per-variable basis by passing `eager_sharding=False` during variable initialization. The mesh can also be passed this way.
 
-```{code-cell} ipython3
+```{code-cell}
 nnx.Param(jnp.ones(4,4), out_sharding=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
 ```
 
@@ -71,11 +71,11 @@ nnx.Param(jnp.ones(4,4), out_sharding=(None, 'model'), eager_sharding=True, mesh
 
 Let's begin by sharding the simplest component possible - a Flax variable.
 
-When you define a Flax variable, you can pass in a metadata field called `out_sharding`, to specify how the underlying JAX array should be sharded. This field should be a tuple of names, each of which refer to how an axis of the array should be sharded.
+When you define a Flax variable, you can pass in a metadata field called `out_sharding`, to specify how the underlying JAX array should be sharded. This field should be a tuple of names, each of which refer to how an axis of the array should be sharded. This sharding will also apply to any `nnx.Optimizer` created from the variable. To specify a different sharding for optimization, use the `opt_sharding` metadata field. 
 
 **You must have an existing device mesh** and create a sharding-annotated `nnx.Variable` within its scope. This allows the result variable to be sharded accordingly on those devices. The device mesh can be your actual accelerator mesh, or a dummy fake CPU mesh like in this notebook.
 
-```{code-cell} ipython3
+```{code-cell}
 rngs = nnx.Rngs(0)
 
 with jax.set_mesh(auto_mesh):
@@ -93,7 +93,7 @@ When using existing modules, you can apply [`flax.nnx.with_partitioning`](https:
 
 Also, you should use `jax.jit` for the whole initialization for maximum performance. This is because without `jax.jit`, a single-device variable must be created first before we apply sharding constraints and then make it sharded, which is wasteful. `jax.jit` will automatically optimize this out.
 
-```{code-cell} ipython3
+```{code-cell}
 @jax.jit
 def init_sharded_linear(key):
   init_fn = nnx.nn.linear.default_kernel_init
@@ -115,7 +115,7 @@ You should still make sure to `jax.jit` for maximum performance, and also to exp
 
 > Note: You need to `jax.jit` a pure function that takes the model as an argument, instead of jitting the callable model directly.
 
-```{code-cell} ipython3
+```{code-cell}
 # For simple computations, you can get correctly-sharded output without jitting
 # In this case, ('data', None) @ (None, 'model') = ('data', 'model')
 with jax.set_mesh(auto_mesh):
@@ -138,7 +138,7 @@ Make note of the following:
 
 * [`jax.lax.with_sharding_constraint`](https://docs.jax.dev/en/latest/notebooks/Distributed_arrays_and_automatic_parallelization.html#constraining-shardings-of-intermediates-in-jitted-code): They can help you to enforce specific shardings on intermediate activations. Only works under an auto mode mesh context.
 
-```{code-cell} ipython3
+```{code-cell}
 class DotReluDot(nnx.Module):
   def __init__(self, depth: int, rngs: nnx.Rngs):
     init_fn = nnx.initializers.lecun_normal()
@@ -177,7 +177,7 @@ class MultiDotReluDot(nnx.Module):
 
 Now a sample training loop, using `jax.jit`.
 
-```{code-cell} ipython3
+```{code-cell}
 @jax.jit
 def train_step(model, optimizer, x, y):
   def loss_fn(model: DotReluDot):
@@ -207,7 +207,7 @@ with jax.set_mesh(auto_mesh):
 
 If you are using a Google TPU pod or a pod slice, you can create a custom `block_all()` utility function, as defined below, to measure the performance:
 
-```{code-cell} ipython3
+```{code-cell}
 %%timeit
 
 def block_all(xs):
@@ -224,7 +224,7 @@ Now you learned how to initialize a sharded model without OOM, but what about sa
 
 Make sure you save a model's state, especially if your model shares some variables across modules. Given a You can generate an identical abstract pytree with shardings using Flax’s `nnx.get_abstract_model`.
 
-```{code-cell} ipython3
+```{code-cell}
 import orbax.checkpoint as ocp
 
 # Save the sharded state.
@@ -249,7 +249,7 @@ JAX's [automatic](https://jax.readthedocs.io/en/latest/notebooks/Distributed_arr
 
 You can provide the mapping along with the annotation as another metadata of the corresponding [`nnx.Variable`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Variable), or overwrite it at top-level. Check out the `LogicalDotReluDot` example below.
 
-```{code-cell} ipython3
+```{code-cell}
 # The mapping from alias annotation to the device mesh.
 sharding_rules = (('batch', 'data'), ('hidden', 'model'), ('embed', None))
 
@@ -290,7 +290,7 @@ class LogicalMultiDotReluDot(nnx.Module):
 
 If you didn't provide all `sharding_rule` annotations in the model definition, you can apply them at top level by put them into the context via `nnx.logical_axis_rules`.
 
-```{code-cell} ipython3
+```{code-cell}
 with jax.set_mesh(auto_mesh), nnx.logical_axis_rules(sharding_rules):
   # Model and optimizer
   logical_model = LogicalMultiDotReluDot(1024, 2, rngs=nnx.Rngs(0))
@@ -334,7 +334,7 @@ For education purposes, we provide a simple Flax model example using explicit sh
 
 * Additional dimension from transforms: use `jax.vmap`'s argument `spmd_axis_name`, instead of Flax lifted transforms.
 
-```{code-cell} ipython3
+```{code-cell}
 # Explicit axis mesh
 explicit_mesh = jax.make_mesh((2, 4), ('data', 'model'),
                               axis_types=(AxisType.Explicit, AxisType.Explicit))
@@ -389,7 +389,7 @@ assert x.sharding.is_equivalent_to(y.sharding, ndim=2)
 
 One thing easier in explicit mode is that you can obtain the abstract array tree with shardings via `jax.eval_shape`, instead of calling `nnx.get_abstract_sharding`. This is not possible in auto mode.
 
-```{code-cell} ipython3
+```{code-cell}
 # Get the sharding tree to load checkpoint with
 with jax.set_mesh(explicit_mesh):
   abs_model = jax.eval_shape(

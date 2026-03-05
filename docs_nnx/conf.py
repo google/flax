@@ -169,6 +169,7 @@ always_document_param_types = True
 doctest_default_flags = doctest.NORMALIZE_WHITESPACE
 doctest_global_setup = """
 import jax
+jax.config.update('jax_num_cpu_devices', 8)
 import jax.numpy as jnp
 from flax import nnx
 
