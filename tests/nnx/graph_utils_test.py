@@ -1464,11 +1464,11 @@ class TestTreeFlatten(parameterized.TestCase):
     root.x = child
     root.y = jnp.ones(2)
 
-    nodes = [node for _, node in nnx.graph.iter_graph(root, graph=graph)]
-    self.assertIn(var0, nodes)
-    self.assertIn(var1, nodes)
-    self.assertIn(child, nodes)
-    self.assertIn(root, nodes)
+    node_ids = [id(node) for _, node in nnx.graph.iter_graph(root, graph=graph)]
+    self.assertIn(id(var0), node_ids)
+    self.assertIn(id(var1), node_ids)
+    self.assertIn(id(child), node_ids)
+    self.assertIn(id(root), node_ids)
 
   def test_iter_graph_tree_mode_shared_variable_raises(self):
     var = nnx.Variable(jnp.zeros(1))
