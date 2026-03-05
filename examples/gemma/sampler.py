@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 import dataclasses
+import math
 
 import flax
 from flax import nnx
@@ -31,6 +32,7 @@ from flax.nnx import graph
 from flax.nnx import statelib
 import jax
 import jax.numpy as jnp
+from jax.experimental.multihost_utils import process_allgather
 
 import sentencepiece as spm
 
@@ -143,9 +145,10 @@ class Sampler:
 
   def __init__(
       self,
-      transformer: transformer_lib.Transformer,
+      *,
       vocab: spm.SentencePieceProcessor,
       cache_size: int = 1024,
+      transformer: transformer_lib.Transformer | None = None,
   ):
     """Initializes a sampler for a Gemma model.
 
@@ -156,24 +159,21 @@ class Sampler:
     """
     self.vocab = vocab
     self.cache_size = cache_size
-    graphdef, state = nnx.split(transformer)
-    self._transformer_graphdef: graph.NodeDef = graphdef
-    self._transformer_state: statelib.State = state
+    self.transformer = transformer
     # we separate out state and graph def so that the state can be passed as an
     # argument to _sample_fn, resulting in it not being treated as a static
     # arg. This greatly reduces the size of the HLO and reduces compile time
     self._compiled_sample_fn = jax.jit(self._sample_fn)
 
   @property
-  def transformer(self) -> transformer_lib.Transformer:
-    return nnx.merge(self._transformer_graphdef, self._transformer_state)
-
-  @property
   def transformer_state(self) -> statelib.State:
-    return self._transformer_state
+    assert self.transformer is not None
+    return nnx.state(self.transformer)
 
   @transformer_state.setter
   def transformer_state(self, state: statelib.State) -> statelib.State:
+    assert self.transformer is not None
+
     def check_tree_structure(tree1, tree2):
       if jax.tree_util.tree_structure(tree1) != jax.tree_util.tree_structure(
           tree2
@@ -194,17 +194,19 @@ class Sampler:
             "New state must have the same shape and dtype as the old state."
         )
 
-    check_tree_structure(self._transformer_state, state)
-    self._transformer_state = state
+    check_tree_structure(self.transformer_state, state)
+    nnx.update(self.transformer, state)
 
   @property
   def dtype(self) -> jnp.dtype:
-    return jax.tree_util.tree_leaves(
-        nnx.to_flat_state(self._transformer_state)
-    )[0].dtype
+    assert self.transformer is not None
+    return jax.tree_util.tree_leaves(self.transformer_state)[0].dtype
 
   def _sample_step(
-      self, params: statelib.State, sampler_state: _SamplingState
+      self,
+      graphdef: graph.GraphDef,
+      params: statelib.State,
+      sampler_state: _SamplingState
   ) -> _SamplingState:
     """Performs a single sampling step."""
     batch_size = sampler_state.token_buffer.shape[0]
@@ -219,7 +221,7 @@ class Sampler:
     )
     last_token = last_token.reshape((batch_size, 1))
 
-    transformer = nnx.merge(self._transformer_graphdef, params)
+    transformer = nnx.merge(graphdef, params)
     logits, cache = transformer(
         last_token,
         step_positions,
@@ -295,20 +297,26 @@ class Sampler:
       temperature: float,
       top_p: float,
       seed: jax.Array,
+      dtype: jnp.dtype | None = None,
+      data_sharding: jax.sharding.Sharding | None = None,
   ) -> _SamplingState:
     """Initializes the sampling state given input prompts."""
-    batch_size = len(all_input_ids)
+    dtype = self.dtype if dtype is None else dtype
+    num_inputs = len(all_input_ids)
+    batch_size = num_inputs
     num_input_tokens = [len(input_ids) for input_ids in all_input_ids]
     buffer_size = total_sampling_steps + 1
 
-    token_buffer = jnp.full(
-        (
-            batch_size,
-            buffer_size,
-        ),
-        self.vocab.pad_id(),
-        dtype=jnp.int32,
-    )
+    if data_sharding is not None:
+      # Get the number of devices for data sharding
+      assert len(data_sharding.spec) == 1, data_sharding
+      n = data_sharding.num_devices
+      out = data_sharding.shard_shape((n,))
+      num_data_devs = n // out[0]
+      batch_size = int(math.ceil(batch_size / num_data_devs) * num_data_devs)
+      num_input_tokens += [0] * (batch_size - num_inputs)
+
+    token_buffer = jnp.full((batch_size, buffer_size), self.vocab.pad_id(), dtype=jnp.int32)
     input_mask = jnp.ones_like(token_buffer, dtype=jnp.bool_)
     for i, (input_ids, num_tokens) in enumerate(
         zip(all_input_ids, num_input_tokens)
@@ -317,15 +325,22 @@ class Sampler:
       input_mask = input_mask.at[i, :num_tokens].set(
           input_ids != self.vocab.pad_id()
       )
-    positions = transformer_lib.build_positions_from_mask(input_mask)
 
     done = jnp.zeros((batch_size,), dtype=jnp.bool_)
+    if data_sharding is not None:
+      token_buffer = jax.device_put(token_buffer, data_sharding)
+      input_mask = jax.device_put(input_mask, data_sharding)
+      done = jax.device_put(done, data_sharding)
+
+    positions = transformer_lib.build_positions_from_mask(input_mask)
 
     if include_logits:
       logits_buffer = jnp.zeros(
           (batch_size, buffer_size, self.transformer.num_embed),
-          dtype=jnp.float32,
+          dtype=dtype,
       )
+      if data_sharding is not None:
+        logits_buffer = jax.device_put(logits_buffer, data_sharding)
     else:
       logits_buffer = None
 
@@ -338,13 +353,13 @@ class Sampler:
         cache=self.transformer.init_cache(
             cache_size=self.cache_size,
             batch_size=batch_size,
-            dtype=self.dtype,
+            dtype=dtype,
         ),
         done=done,
         total_sampling_steps=total_sampling_steps,
         forbidden_token_ids=forbidden_token_ids,
         intermediates=self.transformer.init_intermediates(
-            batch_size, buffer_size, self.transformer.sow_config
+            batch_size, buffer_size, self.transformer.sow_config, dtype=dtype
         ),
         temperature=temperature,
         top_p=top_p,
@@ -377,13 +392,14 @@ class Sampler:
 
   def _sample_fn(
       self,
+      graphdef: graph.GraphDef,
       params: statelib.State,
       initial_sampling_state: _SamplingState,
   ) -> _SamplingState:
     """Internal sampling function (to be jitted)."""
 
     def sample_with_params(sampler_state: _SamplingState):
-      return self._sample_step(params, sampler_state)
+      return self._sample_step(graphdef, params, sampler_state)
 
     def cond_fn(sampler_state: _SamplingState):
       return (
@@ -404,6 +420,9 @@ class Sampler:
       temperature: float = 0.0,
       top_p: float = 0.95,
       seed: jax.Array | None = None,
+      dtype: jnp.dtype | None = None,
+      transformer: transformer_lib.Transformer | None = None,
+      data_sharding: jax.sharding.Sharding | None = None,
   ) -> SamplerOutput:
     """Samples a completion of the input string.
 
@@ -418,10 +437,16 @@ class Sampler:
       temperature: temperature for sampling.
       top_p: top-p sampling threshold.
       seed: random seed for sampling.
+      dtype: dtype for cache, buffers and intermediates initialization
+      transformer: optional, model to use for sampling
 
     Returns:
       sampler_output: A SamplerOutput object containing the generated samples.
     """
+    assert self.transformer or transformer
+    if transformer is not None:
+      self.transformer = transformer
+
     forbidden_token_ids = None
     if forbidden_tokens is not None:
       forbidden_token_ids = []
@@ -436,9 +461,11 @@ class Sampler:
     all_input_ids = [self.tokenize(x) for x in input_strings]
     max_input_length = max(len(input_ids) for input_ids in all_input_ids)
     total_sampling_steps = max_input_length + total_generation_steps
+    num_inputs = len(all_input_ids)
 
     if seed is None:
       seed = jax.random.PRNGKey(0)
+    dtype = self.dtype if dtype is None else dtype
     initial_sampling_state = self.init_sample_state(
         all_input_ids,
         include_logits=return_logits,
@@ -447,30 +474,46 @@ class Sampler:
         temperature=temperature,
         top_p=top_p,
         seed=seed,
+        dtype=dtype,
+        data_sharding=data_sharding,
     )
 
+    graphdef, state = nnx.split(self.transformer)
     sampling_state = self._compiled_sample_fn(
-        self._transformer_state, initial_sampling_state
+      graphdef, state, initial_sampling_state
     )
 
     masked_token_buffer = self.mask_tokens_after_eos_ids(
         sampling_state.token_buffer
     )
 
+    if not masked_token_buffer.is_fully_addressable:
+      masked_token_buffer = process_allgather(masked_token_buffer, tiled=True)
+
+    num_input_tokens = sampling_state.num_input_tokens
+
+    if not num_input_tokens.is_fully_addressable:
+      num_input_tokens = process_allgather(num_input_tokens, tiled=True)
+
+    # We padded token_buffer and num_input_tokens if data_sharding provided to
+    # a multiple of number of data sharding devices
+    if len(num_input_tokens) > num_inputs:
+      num_input_tokens = num_input_tokens[:num_inputs]
+
+    logits_buffer = sampling_state.logits_buffer
+    if not logits_buffer.is_fully_addressable:
+      logits_buffer = process_allgather(logits_buffer, tiled=True)
+
     out_tokens = []
     out_logits = []
     for i, (token_buffer, num_tokens) in enumerate(
-        zip(
-            masked_token_buffer,
-            sampling_state.num_input_tokens,
-        )
+        zip(masked_token_buffer, num_input_tokens, strict=False)
     ):
       start_idx = 0 if echo else num_tokens
       out_tokens.append(token_buffer[start_idx:total_sampling_steps].tolist())
       if return_logits:
-        logits_buffer = sampling_state.logits_buffer[i]
         out_logits.append(
-            logits_buffer[start_idx:total_sampling_steps].tolist()
+            logits_buffer[i, start_idx:total_sampling_steps].tolist()
         )
 
     decoded_outputs = [self.vocab.DecodeIds(tokens) for tokens in out_tokens]
