@@ -94,7 +94,7 @@ class TestSPMD(parameterized.TestCase):
     mesh = jax.make_mesh((2, 2), ("row", "col"),
                          axis_types=(jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto))
     with jax.set_mesh(mesh):
-      model = nnx.Linear(4, 2, rngs=nnx.Rngs(0), kernel_metadata={'opt_sharding': ('row', 'col')})
+      model = nnx.Linear(4, 2, rngs=nnx.Rngs(0), kernel_metadata={'optimizer_sharding': ('row', 'col')})
       optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
       assert model.kernel.sharding.is_equivalent_to(
