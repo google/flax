@@ -290,7 +290,7 @@ class BatchNorm(Module):
     self,
     num_features: int,
     *,
-    use_running_average: bool = False,
+    use_running_average: bool | None = None,
     axis: int = -1,
     momentum: float = 0.99,
     epsilon: float = 1e-5,
@@ -364,8 +364,17 @@ class BatchNorm(Module):
     use_running_average = first_from(
       use_running_average,
       self.use_running_average,
-      error_msg="""No `use_running_average` argument was provided to BatchNorm
-        as either a __call__ argument, class attribute, or nnx.flag.""",
+      error_msg=(
+          'No `use_running_average` argument was provided to BatchNorm.'
+          ' Consider one of the following options:\n\n'
+          '1. Pass `use_running_average` to the BatchNorm constructor:\n\n'
+          '  self.bn = nnx.BatchNorm(..., use_running_average=True/False)\n\n'
+          '2. Pass `use_running_average` to the BatchNorm __call__:\n\n'
+          '  self.bn(x, use_running_average=True/False)\n\n'
+          '3. Use `nnx.view` to create a view of the model with a'
+          ' specific `use_running_average` value:\n\n'
+          '  model_view = nnx.view(model, use_running_average=True/False)\n'
+      ),
     )
     feature_axes = _canonicalize_axes(x.ndim, self.axis)
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)

@@ -177,7 +177,7 @@ class TestRngs(parameterized.TestCase):
     class Model(nnx.Module):
       def __init__(self, rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
-        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
 
       def __call__(self, x):
         return self.dropout(self.linear(x))

@@ -26,8 +26,8 @@ import optax
 class Model(nnx.Module):
   def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
     self.linear = nnx.Linear(din, dmid, rngs=rngs)
-    self.bn = nnx.BatchNorm(dmid, rngs=rngs)
-    self.dropout = nnx.Dropout(0.2, rngs=rngs)
+    self.bn = nnx.BatchNorm(dmid, use_running_average=False, rngs=rngs)
+    self.dropout = nnx.Dropout(0.2, deterministic=False, rngs=rngs)
     self.linear_out = nnx.Linear(dmid, dout, rngs=rngs)
 
   def __call__(self, x):

@@ -73,7 +73,7 @@ class Dropout(Module):
     rate: float,
     *,
     broadcast_dims: Sequence[int] = (),
-    deterministic: bool = False,
+    deterministic: bool | None = None,
     rng_collection: str = 'dropout',
     rngs: rnglib.Rngs | rnglib.RngStream | None = None,
   ):
@@ -117,8 +117,17 @@ class Dropout(Module):
     deterministic = first_from(
       deterministic,
       self.deterministic,
-      error_msg="""No `deterministic` argument was provided to Dropout
-          as either a __call__ argument or class attribute""",
+      error_msg=(
+          'No `deterministic` argument was provided to Dropout.'
+          ' Consider one of the following options:\n\n'
+          '1. Pass `deterministic` to the Dropout constructor:\n\n'
+          '  self.dropout = nnx.Dropout(..., deterministic=True/False)\n\n'
+          '2. Pass `deterministic` to the Dropout __call__:\n\n'
+          '  self.dropout(x, deterministic=True/False)\n\n'
+          '3. Use `nnx.view` to create a view of the model with a'
+          ' specific `deterministic` value:\n\n'
+          '  model_view = nnx.view(model, deterministic=True/False)\n'
+      ),
     )
 
     if (self.rate == 0.0) or deterministic:

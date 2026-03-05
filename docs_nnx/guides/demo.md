@@ -25,7 +25,7 @@ from flax import nnx
 class Block(nnx.Module):
   def __init__(self, din, dout, *, rngs):
     self.linear = nnx.Linear(din, dout, rngs=rngs)
-    self.bn = nnx.BatchNorm(dout, rngs=rngs)
+    self.bn = nnx.BatchNorm(dout, use_running_average=False, rngs=rngs)
 
   def __call__(self, x):
     return nnx.relu(self.bn(self.linear(x)))

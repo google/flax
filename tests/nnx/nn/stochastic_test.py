@@ -67,7 +67,7 @@ class TestStochastic:
     np.testing.assert_allclose(y1, y2)
 
   def test_dropout_arg_override(self):
-    m = nnx.Dropout(rate=0.5)
+    m = nnx.Dropout(rate=0.5, deterministic=False)
     x = jnp.ones((1, 10))
 
     # deterministic call arg provided
@@ -89,7 +89,7 @@ class TestStochastic:
       m(x)
 
   def test_dropout_arg_override_view(self):
-    m = nnx.Dropout(rate=0.5)
+    m = nnx.Dropout(rate=0.5, deterministic=False)
     x = jnp.ones((1, 10))
 
     # deterministic call arg provided
