@@ -359,6 +359,18 @@ class TestSPMD(parameterized.TestCase):
       self.assertEqual(v.sharding.mesh, mesh)
       self.assertEqual(v.sharding.spec, P('row', 'col'))
 
+  def test_eval_shape_with_explicit_sharding(self):
+    axis_types = (jax.sharding.AxisType.Explicit, jax.sharding.AxisType.Explicit)
+    mesh1 = jax.make_mesh((2, 2), ("a", "b"), axis_types)
+    class Model(nnx.Module):
+        def __init__(self):
+          self.p1 = nnx.Param(
+            reshard(jnp.ones((4,4)), NamedSharding(mesh1, P('a', 'b'))),
+            mesh=mesh1)
+
+    abs_model = nnx.eval_shape(lambda: Model())
+    self.assertEqual(abs_model.p1.sharding.spec, P('a', 'b'))
+
   def test_eval_shape_with_sharding0(self):
     # based on https://github.com/google/flax/issues/5110
     mesh1 = jax.make_mesh((2, 2), ("a", "b"), (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto))
