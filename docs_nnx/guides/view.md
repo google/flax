@@ -227,8 +227,7 @@ class NoisyLinear(nnx.Module):
     self.training = training
 
   def __call__(self, x, rngs=None):
-    if self.training is None:
-      raise ValueError('training must be set')
+    assert self.training is not None
     x = self.linear(x)
     if self.training:
       x = x + rngs.normal(x.shape) * 0.1
@@ -249,3 +248,35 @@ y1 = train_model(jnp.ones((1, 4)), rngs=rngs)
 print(f'{eval_model.layer1.training=}')
 y2 = eval_model(jnp.ones((1, 4)))
 ```
+
+## Using `recursive_map`
+
+For more advanced transformations — such as replacing submodules — you can use {func}`nnx.recursive_map <flax.nnx.recursive_map>`. This function traverses the entire module tree bottom-up, calling a user-defined function `f(path, node)` on every node and leaf. Whatever `f` returns is used as the replacement for that node in the new tree. The resulting model view shares the Variables with the original (unless instructed otherwise).
+
+In the example below, we use `recursive_map` to replace every `nnx.Linear` layer with a `NoisyLinear` version (reusing the class defined earlier) that adds random noise during training:
+
+```{code-cell}
+import jax.numpy as jnp
+
+def add_noise(path, node):
+  if isinstance(node, nnx.Linear):
+    noisy = nnx.eval_shape(
+      lambda: NoisyLinear(node.in_features, node.out_features, rngs=nnx.Rngs(0))
+    )
+    noisy.linear = node
+    return noisy
+  return node
+
+rngs = nnx.Rngs(0)
+model = nnx.Sequential(
+    nnx.Linear(4, 8, rngs=rngs),
+    nnx.Linear(8, 2, rngs=rngs),
+)
+
+noisy_model = nnx.recursive_map(add_noise, model)
+
+y = noisy_model(jnp.ones((1, 4)), rngs=rngs)
+print(noisy_model)s
+```
+
+Here `recursive_map` visited each node, and when it found an `nnx.Linear` instance it created a `NoisyLinear`, swapped in the original `Linear` as its inner layer, and returned it. The original `model` is unchanged and its weights are shared with `noisy_model`.
