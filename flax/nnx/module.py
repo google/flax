@@ -26,8 +26,10 @@ from flax.nnx import (
 )
 from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
-from flax.nnx.graphlib import GraphState
+from flax.nnx.graphlib import GraphState, pop as nnx_pop, update as nnx_update, state as nnx_state
+import functools as ft
 from flax.typing import Key, Path, PathParts
+from collections.abc import MutableMapping
 import warnings
 
 A = tp.TypeVar('A')
@@ -41,12 +43,15 @@ StateMapping = tp.Mapping[Path, tp.Any]
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
-
 class ModuleMeta(PytreeMeta):
   # we keep a trivial derived class just in case we need to
   # add more functionality in the future
   pass
 
+
+class Capture(variableslib.Perturbation):
+  "Variable type for captured intermediates."
+  pass
 
 class Module(Pytree, metaclass=ModuleMeta):
   """Base class for all neural network modules.
@@ -184,10 +189,19 @@ class Module(Pytree, metaclass=ModuleMeta):
           f"got '{type(variable).__name__}'"
         )
       variable.set_value(reduce_fn(variable.get_value(), value))
+    elif hasattr(self, '__capture__'):
+      if name in self.__capture__:
+        current_variable: variableslib.Variable = self.__capture__[name]
+        current_variable.set_value(
+          reduce_fn(current_variable.get_value(), value)
+        )
+        self.__capture__[name] = current_variable
+      else:
+        self.__capture__[name] = variable_type(reduce_fn(init_fn(), value))
+      return True
     else:
       reduced_value = reduce_fn(init_fn(), value)
       setattr(self, name, variable_type(reduced_value))
-
     return True
 
   def perturb(
@@ -258,10 +272,18 @@ class Module(Pytree, metaclass=ModuleMeta):
       variable_type = variableslib.variable_type_from_name(
           variable_type, allow_register=True
       )
-    if not hasattr(self, name):
+
+    if hasattr(self, name):
+      old_value = getattr(self, name)
+    elif hasattr(self, '__capture__'):
+      if name not in self.__capture__:
+        zeros = jax.tree.map(jnp.zeros_like, value)
+        self.__capture__[name] = variable_type(zeros)
+      old_value = self.__capture__[name]
+    else:
       zeros = jax.tree.map(jnp.zeros_like, value)
-      setattr(self, name, variable_type(zeros))
-    old_value: variableslib.Variable[tp.Any] = getattr(self, name)
+      old_value = variable_type(zeros)
+      setattr(self, name, old_value)
     if not isinstance(old_value, variable_type):
       raise ValueError(
         f"Expected '{name}' to be of type '{variable_type.__name__}', "
@@ -759,3 +781,126 @@ def iter_modules(
       yield path, value
 
 iter_children = graphlib.iter_children
+
+def capture_intermediates(
+  module, *args, method='__call__', method_output_type=None, state=None, filter=None):
+    """Captures intermediate values from a module during execution.
+
+    This function executes a module method and collects intermediate values that were
+    stored using ``Module.sow()`` or ``Module.perturb()``.
+
+    Args:
+      module: The module to execute.
+      *args: Arguments to pass to the module method.
+      method: Name of the method to call (default: '__call__').
+      method_output_type: If provided, automatically sows the output of each method
+        in the module and its submodules using this variable type.
+      state: Optional state to merge into the module before execution. Useful for
+        perturbation-based gradient extraction.
+      filter: Optional filter to apply to the returned intermediate state.
+
+    Returns:
+      A tuple of (result, intermediates) where result is the output of the method
+      and intermediates is a State containing the captured values.
+
+    Example with manual sowing::
+
+      class CNN(nnx.Module):
+        def __call__(self, x):
+          x = self.conv(x)
+          self.sow(nnx.Intermediate, 'features', x)
+          x = self.linear(x)
+          return x
+
+      model = CNN(rngs=nnx.Rngs(0))
+      result, intermediates = nnx.capture_intermediates(model, x)
+      # intermediates['features'] contains the sowed value
+
+    Example with method outputs::
+
+      class CNN(nnx.Module):
+        def features(self, x):
+          return self.conv(x)
+        def classifier(self, x):
+          return self.linear(x)
+        def __call__(self, x):
+          return self.classifier(self.features(x))
+
+      model = CNN(rngs=nnx.Rngs(0))
+      result, intermediates = nnx.capture_intermediates(
+        model, x, method_output_type=nnx.Intermediate)
+      # intermediates contains outputs of features(), classifier(), and __call__()
+
+    Example with gradient extraction::
+
+      class Model(nnx.Module):
+        def __call__(self, x):
+          x2 = self.perturb('grad_of_x', x)
+          return 3 * x2
+
+      model = Model()
+      # Initialize perturbations
+      _, perturbations = nnx.capture_intermediates(
+        model, x, filter=nnx.Perturbation)
+
+      # Compute gradients with respect to perturbations
+      def loss(model, perturbations, x):
+        return nnx.capture_intermediates(
+          model, x, state=perturbations, filter=nnx.Not(nnx.Perturbation))
+
+      (grads, perturb_grads), sowed = nnx.grad(
+        loss, argnums=(0, 1), has_aux=True)(model, perturbations, x)
+    """
+    if state:
+      nnx_update(module, state)
+    for path, m in iter_modules(module):
+      m.__capture__ = Capture({})
+      if method_output_type:
+        _add_capturing(type(m), method_output_type)
+    try:
+      result = getattr(module, method)(*args)
+    finally:
+      if method_output_type:
+        for _, m in iter_modules(module):
+            _remove_capturing(type(m))
+      interms = nnx_pop(module, variableslib.Intermediate)
+      _extract_state(interms)
+    return result, (nnx_state(interms, filter) if filter else interms)
+
+def fix_key(key):
+  "Hack to remove '__capturing__' prefix from keys in intermediate state"
+  return key.replace('__capturing__', '')
+
+def _extract_state(state):
+  if not isinstance(state, MutableMapping):
+    return
+  for k, v in list(state.items()):
+    if k == '__capture__':
+      state.update({fix_key(k): val for k,val in v.get_value().items()})
+      del state[k]
+    else:
+      _extract_state(v)
+
+def _add_capturing(cls, variable_type):
+  """Adds capturing to methods of a Module.
+  Does not instrument superclass methods."""
+  for name, method in cls.__dict__.items():
+    if callable(method) and (not name.startswith('_') or name == '__call__'):
+      if not hasattr(method, '_does_capturing'):
+        def closure(name, method): # Necessary to make 'name' immutable during iteration
+          @ft.wraps(method)
+          def wrapper(self, *args, **kwargs):
+            result = method(self, *args, **kwargs)
+            self.sow(variable_type, '__capturing__' + name, result)
+            return result
+          wrapper._does_capturing = True
+          setattr(cls, name, wrapper)
+        closure(name, method)
+  return cls
+
+def _remove_capturing(cls):
+  """Remove capturing methods from a Module."""
+  for name, method in cls.__dict__.items():
+    if hasattr(method, '_does_capturing'):
+      setattr(cls, name, method.__wrapped__)
+  return cls
