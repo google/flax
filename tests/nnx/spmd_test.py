@@ -91,10 +91,9 @@ class TestSPMD(parameterized.TestCase):
 
     with jax.set_mesh(mesh):
       new_data = jax.device_put(jnp.zeros((4, 4)), NamedSharding(mesh, P('data', 'model')))
-      v.set_value(new_data)
-
-    self.assertEqual(v.out_sharding, P('data', 'model'))
-    self.assertEqual(v.mesh, mesh)
+      def value_setter():
+        v.set_value(new_data)
+      self.assertRaises(AssertionError, value_setter)
 
   def test_init_all_devices(self):
     class Foo(nnx.Module):
