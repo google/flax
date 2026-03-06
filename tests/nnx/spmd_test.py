@@ -397,9 +397,9 @@ class TestSPMD(parameterized.TestCase):
     mesh = jax.make_mesh((2, 2), ("a", "b"), (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto))
     with jax.set_mesh(mesh):
         abs_model = nnx.eval_shape(lambda: Model())
-    assert isinstance(abs_model.linear.kernel.sharding, jax.sharding.NamedSharding)
-    assert abs_model.linear.kernel.sharding.mesh is mesh
-    assert abs_model.linear.kernel.sharding.spec == jax.P("a", "b")
+        assert isinstance(abs_model.linear.kernel.sharding, jax.sharding.NamedSharding)
+        assert abs_model.linear.kernel.sharding.mesh is jax.sharding.get_abstract_mesh()
+        assert abs_model.linear.kernel.sharding.spec == jax.P("a", "b")
 
 def has_sharding_spec(array):
     sharding = array.sharding
