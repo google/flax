@@ -1,6 +1,8 @@
 ---
 jupyter:
   jupytext:
+    formats: ipynb,md
+    main_language: python
     text_representation:
       extension: .md
       format_name: markdown
@@ -108,20 +110,20 @@ refactored_model = CNN_Refactor(rngs=nnx.Rngs(0))
 refactored_model.features(y, nnx.Rngs(1))
 ```
 
-To observe the output at each step of a refactored module, we can use `nnx.capture_intermediates` as before, but adding the `method_outputs=True` argument. This will automatically `sow` the output of each method, including methods of sub-modules. 
+To observe the output at each step of a refactored module, we can use `nnx.capture_intermediates` as before, but adding the `method_output_type=nnx.Intermediate` argument. This will automatically `sow` the output of each method using the given variable type, including methods of sub-modules. 
 
 ```python
-result, intms = nnx.capture_intermediates(refactored_model, y, nnx.Rngs(1), method_outputs=True)
+result, intms = nnx.capture_intermediates(refactored_model, y, nnx.Rngs(1), method_output_type=nnx.Intermediate)
 jax.tree.map(lambda a: a.shape, intms)
 ```
 
 This pattern should be considered the “sledge hammer” approach to capturing intermediates. As a debugging and inspection tool it is very useful, but using the other patterns described in this guide will give you more fine-grained control over what intermediates you want to extract.
 
 
-We can also combine the `method_outputs` flag with manual calls to sow to capture both layer outputs and computations mid-layer. 
+We can also combine the `method_output_type` flag with manual calls to sow to capture both layer outputs and computations mid-layer. 
 
 ```python
-result, intms = nnx.capture_intermediates(sow_model, y, nnx.Rngs(1), method_outputs=True)
+result, intms = nnx.capture_intermediates(sow_model, y, nnx.Rngs(1), method_output_type=True)
 jax.tree.map(lambda a: a.shape, intms)
 ```
 
