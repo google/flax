@@ -1250,8 +1250,7 @@ class TreeScanFn:
     carry_updates, _ = extract.updates_and_snapshot(carry)
     x_updates, x_snapshot = extract.updates_and_snapshot(x)
 
-    out = self.f(carry, x)
-    carry_out, y = out
+    carry_out, y = self.f(carry, x)
 
     extract.check_same_variables(carry_updates, carry_out, 'scan')
 
