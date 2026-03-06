@@ -231,9 +231,21 @@ def _to_value_metadata(node):
 
 
 def _to_variable(node):
+  # import here to avoid circular imports
+  from flax.nnx.spmd import get_var_pspec
+
   def to_variable(x):
     if isinstance(x, ValueMetadata):
       var = x.var_type._new(x.value, x.metadata)
+
+      global_mesh = jax.sharding.get_mesh()
+      if global_mesh.axis_sizes == ():
+        global_mesh = None
+      mesh = var.get_metadata("mesh", None) or global_mesh
+      if mesh is not None and (not hasattr(var, 'sharding') or var.sharding is None):
+        pspec = get_var_pspec(var)
+        sharding = jax.sharding.NamedSharding(mesh=mesh, spec=pspec)
+        var.set_value(jax.ShapeDtypeStruct(shape=var.shape, dtype=var.dtype, sharding=sharding))
       return var
     return x
 
@@ -272,7 +284,9 @@ def eval_shape(
 
   Similar to ``jax.eval_shape``, it computes the shape/dtype of a function `f` without
     performing any floating point operations (FLOPs) which can be expensive. This can be
-    useful for performing shape inference, for example.
+    useful for performing shape inference, for example. Unlike `jax.eval_shape`,
+    `nnx.eval_shape` will automatically compute the expected sharding based on Flax sharding metadata
+    for all Variables not using explicit sharding.
 
   Args:
     f: the function to evaluate.
@@ -280,7 +294,7 @@ def eval_shape(
     graph: if True, use graph-mode (default). If False, use tree-mode.
       If None, uses the value of ``nnx_graph_mode`` config.
     **kwargs: keyword arguments to ``f``.
-  """
+"""
   f_call, _, was_bound = _resolve_bound_callable(f)
 
   if was_bound:
