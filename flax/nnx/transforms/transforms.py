@@ -238,7 +238,7 @@ def _to_variable(node):
     if isinstance(x, ValueMetadata):
       var = x.var_type._new(x.value, x.metadata)
 
-      global_mesh = jax.sharding.get_mesh()
+      global_mesh = jax.sharding.get_abstract_mesh()
       if global_mesh.axis_sizes == ():
         global_mesh = None
       mesh = var.get_metadata("mesh", None) or global_mesh
