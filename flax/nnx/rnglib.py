@@ -28,6 +28,7 @@ from flax.nnx.variablelib import Variable
 from flax.nnx import filterlib
 from flax.nnx.pytreelib import Pytree
 from flax.typing import MISSING, Key, Missing
+import warnings
 
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 A = tp.TypeVar('A')
@@ -122,7 +123,17 @@ class RngStream(Pytree):
     self.count[...] += 1
     return key
 
+  def split(self, k: int | tuple[int, ...]):
+      key = random.split(self(), k)
+      return type(self)(key, tag=self.tag)
+
   def fork(self, *, split: int | tuple[int, ...] | None = None):
+    if split is not None:
+      warnings.warn(
+        "The 'split' argument of 'fork' is deprecated; use the 'split' method instead.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     key = self()
     if split is not None:
       key = random.split(key, split)
@@ -425,6 +436,52 @@ class Rngs(Pytree):
       if isinstance(stream, RngStream):
         yield name, stream
 
+  def split(self, k: tp.Mapping[filterlib.Filter, int | tuple[int, ...]] | int | tuple[int, ...]):
+    """
+    Splits the keys of the newly created ``Rngs`` object.
+
+    Example::
+      >>> from flax import nnx
+      ...
+      >>> rngs = nnx.Rngs(params=1, dropout=2)
+      >>> new_rngs = rngs.split(5)
+      ...
+      >>> assert new_rngs.params.key.shape == (5,)
+      >>> assert new_rngs.dropout.key.shape == (5,)
+
+    ``split`` also accepts a mapping of
+    `Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__  to
+    split sizes or None to control which streams are split and how they are split::
+
+      >>> rngs = nnx.Rngs(params=1, dropout=2, noise=3)
+      >>> new_rngs = rngs.split({
+      ...  'params': 5,      # split params into 5 keys
+      ...  'dropout': None,  # don't split dropout
+      ...  ...: (2, 5),      # split anything else into 2x5 keys
+      ... })
+      ...
+      >>> assert new_rngs.params.key.shape == (5,)
+      >>> assert new_rngs.dropout.key.shape == ()
+      >>> assert new_rngs.noise.key.shape == (2, 5)
+    """
+    if isinstance(k, int):
+      k = {...: k}
+    elif isinstance(k, tuple):
+      k = {...: k}
+
+    split_predicates = {filterlib.to_predicate(k): v for k, v in k.items()}
+    keys: dict[str, RngStream] = {}
+    for name, stream in self.items():
+      for predicate, num_splits in split_predicates.items():
+        if predicate((), stream):
+          if num_splits is None:
+            keys[name] = stream
+          else:
+            keys[name] = stream.split(num_splits)
+          break
+
+    return Rngs(**keys)
+
   def fork(
     self,
     /,
@@ -443,30 +500,14 @@ class Rngs(Pytree):
       >>> new_rngs = rngs.fork()
       ...
       >>> assert rngs.params() != new_rngs.params()
-
-    ``split`` can be used to split the keys of the newly created ``Rngs`` object::
-
-      >>> rngs = nnx.Rngs(params=1, dropout=2)
-      >>> new_rngs = rngs.fork(split=5)
-      ...
-      >>> assert new_rngs.params.key.shape == (5,)
-      >>> assert new_rngs.dropout.key.shape == (5,)
-
-    ``split`` also accepts a mapping of
-    `Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__  to
-    split sizes or None to control which streams are split and how they are split::
-
-      >>> rngs = nnx.Rngs(params=1, dropout=2, noise=3)
-      >>> new_rngs = rngs.fork(split={
-      ...  'params': 5,      # split params into 5 keys
-      ...  'dropout': None,  # don't split dropout
-      ...  ...: (2, 5),      # split anything else into 2x5 keys
-      ... })
-      ...
-      >>> assert new_rngs.params.key.shape == (5,)
-      >>> assert new_rngs.dropout.key.shape == ()
-      >>> assert new_rngs.noise.key.shape == (2, 5)
     """
+    if split is not None:
+      warnings.warn(
+        "The 'split' argument of 'fork' is deprecated; use the 'split' method instead.",
+        DeprecationWarning,
+        stacklevel=2,
+      )
+
     if split is None:
       split = {}
     elif isinstance(split, int):
@@ -952,9 +993,6 @@ def fork_rngs(
 
   Args:
     node: the base node containing the rng states to fork.
-    split: an integer, tuple of integers, or mapping specifying the
-      shape of the forked rng keys. If a mapping, keys are filters selecting
-      which rng states to fork with the corresponding split shape.
     graph: If ``True`` (default), uses graph-mode which supports the full
       NNX feature set including shared references. If ``False``, uses
       tree-mode which treats Modules as regular JAX pytrees, avoiding
@@ -970,40 +1008,7 @@ def fork_rngs(
     >>> from flax import nnx
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.fork_rngs(rngs, split=5)
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
-    ((5,), (5,))
-
-    >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.fork_rngs(rngs, split=(2, 5))
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
-    ((2, 5), (2, 5))
-
-
-    >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.fork_rngs(rngs, split={'params': 5})
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
-    ((5,), ())
-
-  Once forked, random state can be used with transforms like :func:`nnx.vmap`::
-
-    >>> class Model(nnx.Module):
-    ...   def __init__(self, rngs):
-    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
-    ...     self.dropout = nnx.Dropout(0.5, rngs=rngs)
-    ...
-    >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.fork_rngs(rngs, split={'params': 5})
-    ...
-    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
-    ...
-    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
-    ... def create_model(rngs):
-    ...   return Model(rngs)
-    ...
-    >>> model = create_model(rngs)
-    >>> model.dropout.rngs.key.shape
-    ()
+    >>> _ = nnx.fork_rngs(rngs)
 
   ``fork_rngs`` returns a SplitBackups object that can be used to restore the
   original unforked rng states using :func:`nnx.restore_rngs`, this is useful
@@ -1011,35 +1016,19 @@ def fork_rngs(
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     ...
-    >>> backups = nnx.fork_rngs(rngs, split={'params': 5})
-    >>> model = create_model(rngs)
+    >>> backups = nnx.fork_rngs(rngs)
+    >>> model = nnx.Linear(2, 3, rngs=rngs)
     >>> nnx.restore_rngs(backups)
     ...
-    >>> model.dropout.rngs.key.shape
-    ()
 
   SplitBackups can also be used as a context manager to automatically restore
   the rng states when exiting the context::
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     ...
-    >>> with nnx.fork_rngs(rngs, split={'params': 5}):
-    ...   model = create_model(rngs)
-    ...
-    >>> model.dropout.rngs.key.shape
-    ()
+    >>> with nnx.fork_rngs(rngs):
+    ...   model = nnx.Linear(2, 3, rngs=rngs)
 
-    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
-    ...
-    >>> @nnx.fork_rngs(split={'params': 5})
-    ... @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
-    ... def create_model(rngs):
-    ...   return Model(rngs)
-    ...
-    >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> model = create_model(rngs)
-    >>> model.dropout.rngs.key.shape
-    ()
   """
   if isinstance(node, Missing):
 
