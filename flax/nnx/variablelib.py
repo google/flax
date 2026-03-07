@@ -28,6 +28,7 @@ from flax import errors
 from flax.core import spmd as core_spmd
 from flax.nnx import reprlib, tracers, visualization
 from flax.typing import BaseConfigContext, MISSING, Missing, SizeBytes
+from jax.sharding import NamedSharding
 import jax
 from jax._src.state.types import AbstractRef
 import jax.experimental
@@ -1358,6 +1359,10 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     if ref:
       value = jax.new_ref(value)  # type: ignore
     object.__setattr__(self, '_raw_value', value)
+    if (('out_sharding' not in metadata) and hasattr(value, 'sharding') and
+      isinstance(value.sharding, NamedSharding) and any(value.sharding.spec)):
+      metadata['out_sharding'] = value.sharding.spec
+      metadata['mesh'] = value.sharding.mesh
 
   @property
   def _can_update(self) -> bool:
@@ -1695,6 +1700,22 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
         self._raw_value = value
       else:
         self._raw_value[index] = value  # type: ignore
+
+    if (
+      hasattr(self._raw_value, 'sharding')
+      and isinstance(self._raw_value.sharding, NamedSharding)
+      and any(self._raw_value.sharding.spec)
+    ):
+      if 'out_sharding' in self._var_metadata and self._var_metadata['out_sharding'] is not None:
+        assert self._var_metadata['out_sharding'] == self._raw_value.sharding.spec, \
+          "Mismatched out_sharding: Flax metadata {} does not match exlicit sharding time {}".format(
+            self._var_metadata['out_sharding'], self._raw_value.sharding.spec)
+      if 'mesh' in self._var_metadata and self._var_metadata['mesh'] is not None:
+        assert self._var_metadata['mesh'] == self._raw_value.sharding.mesh, \
+          "Mismatched meshes: Flax metadata {} does not match explicit sharding type {}".format(
+            self._var_metadata['mesh'], self._raw_value.sharding.mesh)
+      self._var_metadata['out_sharding'] = self._raw_value.sharding.spec
+      self._var_metadata['mesh'] = self._raw_value.sharding.mesh
 
   def add_axis(self, axis_index: AxisIndex, axis_name: AxisName | None):
     if 'on_add_axis' in self._var_metadata:
