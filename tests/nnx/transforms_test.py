@@ -1017,8 +1017,8 @@ class TestShardMap(parameterized.TestCase):
       m = nnx.Linear(
           in_features=2,
           out_features=3,
-          kernel_metadata={'sharding_names': jax.P(None)},
-          bias_metadata={'sharding_names': jax.P(None)},
+          kernel_metadata={'out_sharding': jax.P(None)},
+          bias_metadata={'out_sharding': jax.P(None)},
           rngs=nnx.Rngs(0),
     )
     x = jnp.ones((32, 2))
@@ -1073,14 +1073,14 @@ class TestShardMap(parameterized.TestCase):
     y = f(m, x)
 
   @parameterized.parameters(True, False)
-  def test_shardmap_with_sharding_names(self, graph):
+  def test_shardmap_with_out_sharding(self, graph):
     n_devices = jax.local_device_count()
     P = jax.sharding.PartitionSpec
     mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
 
     with jax.set_mesh(mesh):
-      w = nnx.Param(jnp.ones((8, 4)), sharding_names=('data', None))
-      b = nnx.Param(jnp.ones((4,)), sharding_names=(None,))
+      w = nnx.Param(jnp.ones((8, 4)), out_sharding=('data', None))
+      b = nnx.Param(jnp.ones((4,)), out_sharding=(None,))
 
     self.assertIsInstance(w.get_raw_value().sharding, jax.sharding.NamedSharding)
     self.assertEqual(w.out_sharding, ('data', None))
@@ -1100,13 +1100,13 @@ class TestShardMap(parameterized.TestCase):
     self.assertIsInstance(y.sharding, jax.sharding.NamedSharding)
 
   @parameterized.parameters(True, False)
-  def test_shardmap_sharding_names_mutation(self, graph):
+  def test_shardmap_out_sharding_mutation(self, graph):
     n_devices = jax.local_device_count()
     P = jax.sharding.PartitionSpec
     mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
 
     with jax.set_mesh(mesh):
-      w = nnx.Param(jnp.zeros((8, 4)), sharding_names=('data', None))
+      w = nnx.Param(jnp.zeros((8, 4)), out_sharding=('data', None))
       count = nnx.BatchStat(jnp.array(0))
 
     @nnx.shard_map(

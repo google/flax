@@ -1104,6 +1104,23 @@ class AbstractVariable(tp.Generic[A], hjx.MutableHiType):
 # --------------------------------------------
 
 
+def _remap_sharding_metadata(metadata: dict[str, tp.Any]) -> None:
+  if 'sharding' in metadata:
+    warnings.warn(
+      "'sharding' is deprecated, use 'out_sharding' instead.",
+      DeprecationWarning,
+      stacklevel=3,
+    )
+    metadata['out_sharding'] = metadata.pop('sharding')
+  if 'sharding_names' in metadata:
+    warnings.warn(
+      "'sharding_names' is deprecated, use 'out_sharding' instead.",
+      DeprecationWarning,
+      stacklevel=3,
+    )
+    metadata['out_sharding'] = metadata.pop('sharding_names')
+
+
 def _variable_operator(name: str) -> tp.Callable[[Variable[A], tp.Any], A]:
   def variable_operator_method(self, other):
     value = self.get_value()
@@ -1321,10 +1338,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     if hasattr(var_t, 'on_remove_axis') and 'on_remove_axis' not in metadata:
       metadata['on_remove_axis'] = var_t.on_remove_axis
 
-    if 'sharding' in metadata:
-      metadata['out_sharding'] = metadata.pop('sharding')
-    if 'sharding_names' in metadata:
-      metadata['out_sharding'] = metadata.pop('sharding_names')
+    _remap_sharding_metadata(metadata)
 
     # run create_value hooks
     if 'on_create_value' in metadata:
@@ -1464,6 +1478,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       )
     if len(args) == 1:
       metadata = dict(args[0])
+      _remap_sharding_metadata(metadata)
       if 'hijax' not in metadata:
         metadata['hijax'] = self.hijax
       if metadata['hijax'] != self.hijax:
@@ -1488,6 +1503,20 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       self._var_metadata = metadata
     elif len(args) == 2:
       name, value = args
+      if name == 'sharding_names':
+        warnings.warn(
+          "'sharding_names' is deprecated, use 'out_sharding' instead.",
+          DeprecationWarning,
+          stacklevel=2,
+        )
+        name = 'out_sharding'
+      elif name == 'sharding':
+        warnings.warn(
+          "'sharding' is deprecated, use 'out_sharding' instead.",
+          DeprecationWarning,
+          stacklevel=2,
+        )
+        name = 'out_sharding'
       if name == 'hijax' and value != self.hijax:
         raise ValueError(
           f'Cannot change `hijax` metadata, expected {self.hijax}, got {value}'
@@ -1498,6 +1527,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
         )
       self._var_metadata[name] = value
     elif kwargs:
+      _remap_sharding_metadata(kwargs)
       if 'hijax' in kwargs and kwargs['hijax'] != self.hijax:
         raise ValueError(
           f'Cannot change `hijax` metadata, expected {self.hijax}, '
