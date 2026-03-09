@@ -79,6 +79,20 @@ class DenyList:
 
   deny: Filter
 
+  def __lt__(self, other):
+    if isinstance(other, str):
+      return False
+    if isinstance(other, DenyList):
+      return str(self.deny) < str(other.deny)
+    return NotImplemented
+
+  def __gt__(self, other):
+    if isinstance(other, str):
+      return True
+    if isinstance(other, DenyList):
+      return str(self.deny) > str(other.deny)
+    return NotImplemented
+
 
 CollectionFilter = Filter
 PRNGSequenceFilter = Filter

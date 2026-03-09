@@ -2218,6 +2218,35 @@ class TransformTest(parameterized.TestCase):
         )
       )
 
+  def test_while_loop_denylist_split_rngs(self):
+    def cond_fn(module, carry):
+      del module
+      return carry < 10
+
+    def body_fn(module, carry):
+      rng = module.make_rng('random')
+      return carry + 1
+
+    class Foo(nn.Module):
+
+      def setup(self):
+        pass
+
+    f = Foo().bind({}, rngs={'random': jax.random.PRNGKey(0)})
+    init = jnp.zeros(())
+
+    result = nn.while_loop(
+        cond_fn,
+        body_fn,
+        f,
+        init,
+        split_rngs={
+            'params': False,
+            nn.DenyList(('params',)): True,
+        },
+    )
+    np.testing.assert_array_equal(result, jnp.array(10.0))
+
   def test_cond(self):
     class Foo(nn.Module):
 
