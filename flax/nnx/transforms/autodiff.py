@@ -63,9 +63,10 @@ class DiffState:
 
 
 @dataclasses.dataclass(eq=False)
-class TreeGradFn:
+class SimpleGradFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -73,8 +74,12 @@ class TreeGradFn:
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(*updates, out)
+    if self.graph:
+      out = extract.to_tree2(out)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
 
     if self.has_aux:
@@ -132,11 +137,12 @@ def _grad_general(
     allow_int: bool,
     return_value: bool,
     graph: bool,
+    graph_updates: bool,
 ) -> tp.Callable[..., tp.Any]:
 
   transform = jax.value_and_grad if return_value else jax.grad
 
-  if not graph:
+  if not graph or not graph_updates:
     if any(isinstance(x, DiffState) for x in jax.tree.leaves(argnums)):
       raise ValueError(
         '`argnums` cannot contain `DiffState` objects '
@@ -145,7 +151,7 @@ def _grad_general(
       )
 
     gradded_fn = transform(
-        TreeGradFn(f, has_aux),
+        SimpleGradFn(f, has_aux, graph=graph),
         argnums=argnums,  # type: ignore[arg-type]
         has_aux=True,
         holomorphic=holomorphic,
@@ -153,21 +159,34 @@ def _grad_general(
     )
 
     def tree_grad_wrapper(*args, **kwargs):
+      if graph:
+        diff_argnums = (argnums,) if isinstance(argnums, int) else argnums
+        args_prefix = tuple(
+          i in diff_argnums for i in range(len(args))
+        )
+        args, kwargs = extract.to_tree2(
+          (args, kwargs), prefix=(args_prefix, False),
+        )
+
       fn_out = gradded_fn(*args, **kwargs)
 
       if return_value:
         if has_aux:
           (loss, (updates, aux)), grads = fn_out
+          if graph: grads, aux = extract.from_tree2((grads, aux))
           result = (loss, aux), grads
         else:
           (loss, updates), grads = fn_out
+          if graph: grads = extract.from_tree2(grads)
           result = loss, grads
       else:
         if has_aux:
           grads, (updates, aux) = fn_out
+          if graph: grads, aux = extract.from_tree2((grads, aux))
           result = grads, aux
         else:
           grads, updates = fn_out
+          if graph: grads = extract.from_tree2(grads)
           result = grads
 
       extract.apply_variable_updates((args, kwargs), updates)
@@ -275,6 +294,7 @@ def grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 @tp.overload
 def grad(
@@ -285,6 +305,7 @@ def grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 def grad(
   f: tp.Callable[..., tp.Any] | Missing = MISSING,
@@ -295,6 +316,7 @@ def grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> (
   tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
@@ -372,9 +394,15 @@ def grad(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support ``DiffState`` or shared ``Variable`` references.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``DiffState``
+      is not supported.
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if reduce_axes:
     raise NotImplementedError('reduce_axes argument to grad is deprecated')
   del reduce_axes
@@ -387,6 +415,7 @@ def grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
       graph=graph,
+      graph_updates=graph_updates,
     )
   # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -402,6 +431,7 @@ def grad(
     allow_int,
     return_value=False,
     graph=graph,
+    graph_updates=graph_updates,
   )
 
 
@@ -415,6 +445,7 @@ def value_and_grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 @tp.overload
 def value_and_grad(
@@ -425,6 +456,7 @@ def value_and_grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 def value_and_grad(
   f: tp.Callable[..., tp.Any] | type[Missing] = Missing,
@@ -435,12 +467,46 @@ def value_and_grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> (
   tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
+  """Object-aware version of ``jax.value_and_grad``.
+
+  Like :func:`grad`, but returns both the value and the gradient of ``f``.
+
+  Args:
+    f: Function to be differentiated. Its arguments at positions specified by
+      ``argnums`` should be arrays, scalars, graph nodes or standard Python
+      containers. Argument arrays in the positions specified by ``argnums`` must
+      be of inexact (i.e., floating-point or complex) type. It should return a
+      scalar (which includes arrays with shape ``()`` but not arrays with shape
+      ``(1,)`` etc.)
+    argnums: Optional, integer or sequence of integers. Specifies which
+      positional argument(s) to differentiate with respect to (default 0).
+    has_aux: Optional, bool. Indicates whether ``f`` returns a pair where the
+      first element is considered the output of the mathematical function to be
+      differentiated and the second element is auxiliary data. Default False.
+    holomorphic: Optional, bool. Indicates whether ``f`` is promised to be
+      holomorphic. If True, inputs and outputs must be complex. Default False.
+    allow_int: Optional, bool. Whether to allow differentiating with
+      respect to integer valued inputs. The gradient of an integer input will
+      have a trivial vector-space dtype (float0). Default False.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol. Tree-mode does
+      not support ``DiffState`` or shared ``Variable`` references.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``DiffState``
+      is not supported.
+  """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if reduce_axes:
     raise NotImplementedError(
         'reduce_axes argument to value_and_grad is deprecated')
@@ -454,6 +520,7 @@ def value_and_grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
       graph=graph,
+      graph_updates=graph_updates,
     )
   # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -469,6 +536,7 @@ def value_and_grad(
     allow_int,
     return_value=True,
     graph=graph,
+    graph_updates=graph_updates,
   )
 
 # -----------------------------------------------
@@ -477,9 +545,10 @@ def value_and_grad(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeVjpFn:
+class SimpleVjpFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -487,8 +556,12 @@ class TreeVjpFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out = self.f(*args)
-    extract.check_no_aliases(updates, out)
+    if self.graph:
+      out = extract.to_tree2(out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
       primals_out, aux = out
@@ -504,6 +577,7 @@ def vjp(
   has_aux: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tuple[tp.Any, tp.Callable] | tuple[tp.Any, tp.Callable, tp.Any]: ...
 @tp.overload
 def vjp(
@@ -511,6 +585,7 @@ def vjp(
   has_aux: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 def vjp(
   f: tp.Callable[..., tp.Any] | Missing = MISSING,
@@ -518,13 +593,13 @@ def vjp(
   has_aux: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> (
   tuple[tp.Any, tp.Callable]
   | tuple[tp.Any, tp.Callable, tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
   """Stateful version of ``jax.vjp`` that propagates NNX Variable updates.
-  Only tree-mode is supported (``graph=False``).
 
   Example::
 
@@ -557,8 +632,13 @@ def vjp(
       first element is considered the output of the mathematical function to be
       differentiated and the second element is auxiliary data. Default False.
     reduce_axes: Deprecated, do not use.
-    graph: If False, use tree-mode. If None, use the ``nnx_graph_mode``
-      config value.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
 
   Returns:
     If ``has_aux`` is False, returns a ``(primals_out, vjp_fn)`` pair.
@@ -568,10 +648,12 @@ def vjp(
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if graph and graph_updates:
     raise NotImplementedError(
-      'graph-mode is not supported for nnx.vjp. '
-      'Set graph=False or use the nnx_graph_mode config.'
+      'graph-mode with graph_updates is not supported for nnx.vjp. '
+      'Set graph=False or graph_updates=False.'
     )
   if reduce_axes:
     raise NotImplementedError('reduce_axes argument to vjp is deprecated')
@@ -582,6 +664,7 @@ def vjp(
       vjp,
       has_aux=has_aux,
       graph=graph,
+      graph_updates=graph_updates,
     )
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -594,10 +677,13 @@ def vjp(
       f,
       has_aux=has_aux,
       graph=graph,
+      graph_updates=graph_updates,
     )
 
+  if graph:
+    primals = extract.to_tree2(primals)
   primals_out, vjp_fn, aux = jax.vjp(
-    TreeVjpFn(f_unbound, has_aux=has_aux),
+    SimpleVjpFn(f_unbound, has_aux=has_aux, graph=graph),
     *primals,
     has_aux=True,
   )
@@ -606,6 +692,11 @@ def vjp(
   else:
     updates = aux
     user_aux = None
+  if graph:
+    primals_out = extract.from_tree2(primals_out)
+    raw_vjp_fn = vjp_fn
+    def vjp_fn(g):
+      return extract.from_tree2(raw_vjp_fn(g))
   extract.apply_variable_updates(primals, updates)
   if has_aux:
     return primals_out, vjp_fn, user_aux
@@ -619,9 +710,10 @@ def vjp(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeJvpFn:
+class SimpleJvpFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -629,8 +721,12 @@ class TreeJvpFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out = self.f(*args)
-    extract.check_no_aliases(updates, out)
+    if self.graph:
+      out = extract.to_tree2(out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
       primals_out, aux = out
@@ -647,12 +743,14 @@ def jvp(
   *,
   has_aux: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tuple[tp.Any, ...]: ...
 @tp.overload
 def jvp(
   *,
   has_aux: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 @tp.overload
 def jvp(
@@ -660,6 +758,7 @@ def jvp(
   *,
   has_aux: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 def jvp(
   f: tp.Callable[..., tp.Any] | Missing = MISSING,
@@ -668,13 +767,13 @@ def jvp(
   *,
   has_aux: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> (
   tuple[tp.Any, ...]
   | tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
   """Stateful version of ``jax.jvp`` that propagates NNX Variable updates.
-  Only tree-mode is supported (``graph=False``).
 
   Example::
 
@@ -711,8 +810,13 @@ def jvp(
     has_aux: Optional, bool. Indicates whether ``f`` returns a pair where the
       first element is considered the output of the mathematical function to be
       differentiated and the second element is auxiliary data. Default False.
-    graph: If False, use tree-mode. If None, use the ``nnx_graph_mode``
-      config value.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
 
   Returns:
     If ``has_aux`` is False, returns ``(primals_out, tangent_out)``.
@@ -720,10 +824,12 @@ def jvp(
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if graph and graph_updates:
     raise NotImplementedError(
-      'graph-mode is not supported for nnx.jvp. '
-      'Set graph=False or use the nnx_graph_mode config.'
+      'graph-mode with graph_updates is not supported for nnx.jvp. '
+      'Set graph=False or graph_updates=False.'
     )
 
   if isinstance(f, Missing):
@@ -731,6 +837,7 @@ def jvp(
       jvp,
       has_aux=has_aux,
       graph=graph,
+      graph_updates=graph_updates,
     )
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -743,21 +850,28 @@ def jvp(
       f,
       has_aux=has_aux,
       graph=graph,
+      graph_updates=graph_updates,
     )
 
+  if graph:
+    primals = extract.to_tree2(primals)
+    tangents = extract.to_tree2(tangents)
   if has_aux:
     (primals_out, updates), (tangent_out, _updates_tangent), aux = jax.jvp(
-      TreeJvpFn(f_unbound, has_aux=True),
+      SimpleJvpFn(f_unbound, has_aux=True, graph=graph),
       primals,
       tangents,
       has_aux=True,
     )
   else:
     (primals_out, updates), (tangent_out, _updates_tangent) = jax.jvp(
-      TreeJvpFn(f_unbound, has_aux=False),
+      SimpleJvpFn(f_unbound, has_aux=False, graph=graph),
       primals,
       tangents,
     )
+  if graph:
+    primals_out = extract.from_tree2(primals_out)
+    tangent_out = extract.from_tree2(tangent_out)
   extract.apply_variable_updates(primals, updates)
   if has_aux:
     return primals_out, tangent_out, aux
@@ -771,8 +885,9 @@ def jvp(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeCustomVjpFn:
+class SimpleCustomVjpFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -780,15 +895,20 @@ class TreeCustomVjpFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out = self.f(*args)
-    extract.check_no_aliases(updates, out)
+    if self.graph:
+      out = extract.to_tree2(out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
 
 @dataclasses.dataclass(eq=False)
-class TreeFwdFn:
+class SimpleFwdFn:
   fwd: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.fwd, updated=())
@@ -796,15 +916,21 @@ class TreeFwdFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out, residual = self.fwd(*args)
-    extract.check_no_aliases(updates, out)
+    if self.graph:
+      out = extract.to_tree2(out)
+      residual = extract.to_tree2(residual)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return (out, updates), residual
 
 
 @dataclasses.dataclass(eq=False)
-class TreeBwdFn:
+class SimpleBwdFn:
   bwd: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.bwd, updated=())
@@ -812,20 +938,28 @@ class TreeBwdFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     *nondiff, residual, (out_g, _updates_g) = args
-    return self.bwd(*nondiff, residual, out_g)
+    if self.graph:
+      nondiff = extract.from_tree2(nondiff)
+      residual = extract.from_tree2(residual)
+    result = self.bwd(*nondiff, residual, out_g)
+    if self.graph:
+      result = extract.to_tree2(result)
+    return result
 
 
-class TreeCustomVjp(tp.Generic[A]):
+class SimpleCustomVjp(tp.Generic[A]):
   def __init__(
     self,
     fun: tp.Callable[..., A],
     nondiff_argnums: tuple[int, ...],
+    graph: bool,
   ):
     functools.update_wrapper(self, fun)
     self.fun = fun
     self.nondiff_argnums = nondiff_argnums
+    self.graph = graph
     self.custom_vjp_fn = jax.custom_vjp(
-      fun=TreeCustomVjpFn(fun),
+      fun=SimpleCustomVjpFn(fun, graph=graph),
       nondiff_argnums=nondiff_argnums,
     )
 
@@ -834,7 +968,36 @@ class TreeCustomVjp(tp.Generic[A]):
   ) -> A:
     args = resolve_kwargs(self.fun, args, kwargs)
     del kwargs
+    if self.graph:
+      prefix = tuple(
+        i not in self.nondiff_argnums for i in range(len(args))
+      )
+      args = extract.to_tree2(args, prefix=prefix)
     (out, updates) = self.custom_vjp_fn(*args)
+    # check that differentiable arguments were not mutated
+    diff_argnums = tuple(
+      i for i in range(len(args)) if i not in self.nondiff_argnums
+    )
+    is_var = lambda x: isinstance(x, variablelib.Variable)
+    for i in diff_argnums:
+      changed = [
+        jax.tree_util.keystr(path)
+        for path, leaf in jax.tree.leaves_with_path(
+          updates[i], is_leaf=is_var
+        )
+        if leaf is not None
+      ]
+      if changed:
+        paths_str = '\n  '.join(changed)
+        raise ValueError(
+          f'Variables in differentiable argument {i} were mutated inside '
+          f'custom_vjp at:\n\n  {paths_str}\n\nThis is not supported when '
+          f'graph_updates=False because the gradient for the Variable '
+          f'updates would be silently dropped. Move the Variable mutation '
+          f'to a non-differentiable argument, or use graph_updates=True.'
+        )
+    if self.graph:
+      out = extract.from_tree2(out)
     extract.apply_variable_updates(args, updates)
     return out
 
@@ -848,8 +1011,8 @@ class TreeCustomVjp(tp.Generic[A]):
     self.bwd = bwd
     self.symbolic_zeros = symbolic_zeros
     self.custom_vjp_fn.defvjp(
-      fwd=TreeFwdFn(fwd),
-      bwd=TreeBwdFn(bwd),
+      fwd=SimpleFwdFn(fwd, graph=self.graph),
+      bwd=SimpleBwdFn(bwd, graph=self.graph),
       symbolic_zeros=symbolic_zeros,
     )
 
@@ -1182,19 +1345,22 @@ def custom_vjp(
   *,
   nondiff_argnums: tuple[int | DiffState, ...] = (),
   graph: bool | None = None,
-) -> CustomVjp[A] | TreeCustomVjp[A]: ...
+  graph_updates: bool | None = None,
+) -> CustomVjp[A] | SimpleCustomVjp[A]: ...
 @tp.overload
 def custom_vjp(
   *,
   nondiff_argnums: tuple[int | DiffState, ...] = (),
   graph: bool | None = None,
-) -> tp.Callable[[tp.Callable[..., A]], CustomVjp[A] | TreeCustomVjp[A]]: ...
+  graph_updates: bool | None = None,
+) -> tp.Callable[[tp.Callable[..., A]], CustomVjp[A] | SimpleCustomVjp[A]]: ...
 def custom_vjp(
   fun: tp.Callable[..., A] | Missing = MISSING,
   *,
   nondiff_argnums: tuple[int | DiffState, ...] = (),
   graph: bool | None = None,
-) -> CustomVjp[A] | TreeCustomVjp[A] | tp.Callable[[tp.Callable[..., A]], CustomVjp[A] | TreeCustomVjp[A]]:
+  graph_updates: bool | None = None,
+) -> CustomVjp[A] | SimpleCustomVjp[A] | tp.Callable[[tp.Callable[..., A]], CustomVjp[A] | SimpleCustomVjp[A]]:
   """Reference aware version of
   `jax.custom_vjp <https://jax.readthedocs.io/en/latest/_autosummary/jax.custom_vjp.html>`__.
 
@@ -1296,6 +1462,39 @@ def custom_vjp(
   defined by ``custom_vjp``, in the example above we reuse the same ``x_attribute``
   filter to keep ``custom_vjp`` and ``grad`` in sync.
 
+  **graph_updates behavior**
+
+  When ``graph_updates=True`` and ``graph=True``, the ``bwd`` function
+  receives gradients as ``(input_updates_g, out_g)`` where ``input_updates_g`` is a
+  tuple of ``nnx.State`` objects (one per Module argument) representing the gradient
+  of the updated state. Non-Module arguments appear as ``None``. The ``bwd`` function
+  must return tangents with the same structure, using ``State`` objects for Module terms.
+  In this mode, state mutations inside ``f`` are propagated to the inputs.
+
+  When ``graph_updates=False`` or ``graph=False``, the behavior is closer to
+  ``jax.custom_vjp``: the ``bwd`` function receives ``out_g`` directly, and
+  tangents for Module arguments are Module instances (or clones) with gradient
+  values set on their fields. This mode does not support ``DiffState`` in 
+  ``nondiff_argnums``. Additionally, Variables in differentiable arguments cannot
+  not be mutated inside ``f``. If mutations are needed, pass the
+  relevant Variables through a non-differentiable argument instead.
+
+  Example with ``graph_updates=False``::
+
+    >>> @nnx.custom_vjp(graph_updates=False)
+    ... def f(m: Foo):
+    ...   return jnp.sin(m.x) * m.y
+    ...
+    >>> def f_fwd(m: Foo):
+    ...   return f(m), (jnp.cos(m.x), jnp.sin(m.x), m)
+    ...
+    >>> def f_bwd(res, g):
+    ...   cos_x, sin_x, m = res
+    ...   m_g = nnx.clone(m)
+    ...   m_g.x[...] = cos_x * g * m.y
+    ...   m_g.y[...] = sin_x * g
+    ...   return (m_g,)
+
   Args:
     fun: Callable base function.
     nondiff_argnums: Tuple of integers or DiffState objects specifying the
@@ -1304,13 +1503,25 @@ def custom_vjp(
       as non-differentiable, in this case use a DiffState object. DiffState objects
       define the set of differentiable substates, contrary to what the name of this
       argument suggests, this is done for compatibility with ``grad``.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol. Tree-mode does
+      not support ``DiffState`` in ``nondiff_argnums``.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``DiffState``
+      is not supported.
 
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if isinstance(fun, Missing):
     return functools.partial(
       custom_vjp, nondiff_argnums=nondiff_argnums, graph=graph,
+      graph_updates=graph_updates,
     )
 
   # Detect bound nnx.Module methods and raise error.
@@ -1318,14 +1529,14 @@ def custom_vjp(
   if was_bound:
     _raise_bound_method_error('custom_vjp')
 
-  if not graph:
+  if not graph or not graph_updates:
     if any(isinstance(x, DiffState) for x in nondiff_argnums):
       raise ValueError(
         '`nondiff_argnums` cannot contain `DiffState` objects '
         'when `graph=False`. '
         + graphlib._tree_mode_suggestion('custom_vjp')
       )
-    return TreeCustomVjp(fun_unbound, nondiff_argnums)  # type: ignore[arg-type]
+    return SimpleCustomVjp(fun_unbound, nondiff_argnums, graph=graph)  # type: ignore[arg-type]
 
   return CustomVjp(fun_unbound, nondiff_argnums)
 
@@ -1336,8 +1547,9 @@ def custom_vjp(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeRematFn:
+class SimpleRematFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1345,8 +1557,12 @@ class TreeRematFn:
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(*updates, out)
+    if self.graph:
+      out = extract.to_tree2(out)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -1357,6 +1573,7 @@ def remat(
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]: ...
 @tp.overload
 def remat(
@@ -1366,6 +1583,7 @@ def remat(
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F: ...
 def remat(
   f: F | Missing = MISSING,
@@ -1374,6 +1592,7 @@ def remat(
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """A 'lifted' version of the
   `jax.checkpoint <https://jax.readthedocs.io/en/latest/_autosummary/jax.checkpoint.html>`__
@@ -1402,9 +1621,14 @@ def remat(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support shared ``Variable`` references.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if isinstance(f, Missing):
     return functools.partial(
       remat,
@@ -1412,29 +1636,33 @@ def remat(
       static_argnums=static_argnums,
       policy=policy,
       graph=graph,
+      graph_updates=graph_updates,
     )  # type: ignore[return-value]
 
-  # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
 
   if was_bound:
     _raise_bound_method_error('remat')
 
-  if not graph:
+  if not graph or not graph_updates:
     checkpointed_fn = jax.checkpoint(
-      TreeRematFn(f_unbound),
+      SimpleRematFn(f_unbound, graph=graph),
       prevent_cse=prevent_cse,
       static_argnums=static_argnums,
       policy=policy,
     )
 
     @functools.wraps(f_unbound)
-    def tree_remat_wrapper(*args, **kwargs):
+    def simple_remat_wrapper(*args, **kwargs):
+      if graph:
+        args, kwargs = extract.to_tree2((args, kwargs))
       out, updates = checkpointed_fn(*args, **kwargs)
+      if graph:
+        out = extract.from_tree2(out)
       extract.apply_variable_updates((args, kwargs), updates)
       return out
 
-    return tree_remat_wrapper  # type: ignore[return-value]
+    return simple_remat_wrapper  # type: ignore[return-value]
 
   # Unbound function path: preserve the concise composition used in NNX.
   return resolve_kwargs()(  # type: ignore[return-value]

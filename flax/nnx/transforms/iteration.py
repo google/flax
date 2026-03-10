@@ -171,8 +171,10 @@ def _vmap_split_fn(ctx: graphlib.SplitContext, path, prefix, x):
 
 
 @dataclasses.dataclass(eq=False)
-class TreeVmapFn:
+class SimpleVmapFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
+  out_axes: tp.Any
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -180,15 +182,21 @@ class TreeVmapFn:
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(*updates, out)
+    if self.graph:
+      out = extract.to_tree2(out, prefix=self.out_axes)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
 
 @dataclasses.dataclass(eq=False)
-class TreePmapFn:
+class SimplePmapFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
+  out_axes: tp.Any
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -196,8 +204,12 @@ class TreePmapFn:
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(*updates, out)
+    if self.graph:
+      out = extract.to_tree2(out, prefix=self.out_axes)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -246,6 +258,7 @@ def vmap(
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -262,6 +275,7 @@ def vmap(
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> F:
   ...
 
@@ -277,6 +291,7 @@ def vmap(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
 
@@ -301,6 +316,10 @@ def vmap(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support ``StateAxes`` or shared ``Variable`` references.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``StateAxes``
+      is not supported.
 
   Returns:
     Batched/vectorized version of ``f`` with arguments that correspond to
@@ -365,6 +384,8 @@ def vmap(
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if f is Missing:
     return functools.partial(
         vmap,
@@ -375,14 +396,14 @@ def vmap(
         spmd_axis_name=spmd_axis_name,
         transform_metadata=transform_metadata,
         graph=graph,
+        graph_updates=graph_updates,
     )  # type: ignore[return-value]
 
-  # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('vmap')
 
-  if not graph:
+  if not graph or not graph_updates:
     if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
       raise ValueError(
         '`in_axes` cannot contain `StateAxes` objects '
@@ -397,7 +418,7 @@ def vmap(
       )
 
     vmapped_fn = jax.vmap(
-      TreeVmapFn(f_unbound),
+      SimpleVmapFn(f_unbound, graph=graph, out_axes=out_axes),
       in_axes=in_axes,
       out_axes=(out_axes, (in_axes, 0)),
       axis_name=axis_name,
@@ -406,12 +427,22 @@ def vmap(
     )
 
     @functools.wraps(f_unbound)
-    def tree_vmap_wrapper(*args, **kwargs):
+    def simple_vmap_wrapper(*args, **kwargs):
+      if graph:
+        args, kwargs = extract.to_tree2(
+            (args, kwargs),
+            prefix=(in_axes, None)
+            if in_axes is not None
+            else None,
+            check_aliasing=in_axes is not None,
+        )
       out, updates = vmapped_fn(*args, **kwargs)
       extract.apply_variable_updates((args, kwargs), updates)
+      if graph:
+        out = extract.from_tree2(out)
       return out
 
-    return tree_vmap_wrapper  # type: ignore[return-value]
+    return simple_vmap_wrapper  # type: ignore[return-value]
 
 
   jax_in_axes = jax.tree.map(
@@ -504,6 +535,7 @@ def pmap(
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -524,6 +556,7 @@ def pmap(
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> F:
   ...
 
@@ -543,89 +576,54 @@ def pmap(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
-  """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
+  """Reference-aware version of `jax.pmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.pmap.html>`__.
 
   Args:
     f: Function to be mapped over additional axes.
+    axis_name: Optional, a hashable Python object used to identify the mapped
+      axis so that parallel collectives can be applied.
     in_axes: An integer, None, or sequence of values specifying which input
-      array axes to map over (see `jax.vmap
-      <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__). In
+      array axes to map over (see `jax.pmap
+      <https://jax.readthedocs.io/en/latest/_autosummary/jax.pmap.html>`__). In
       addition to integers and None, :class:`StateAxes`  can be used to control
       how graph nodes like Modules are vectorized by specifying the axes to be
       applied to substates of the graph node given a `Filter
       <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
     out_axes: An integer, None, or pytree indicating where the mapped axis
-      should appear in the output (see `jax.vmap
-      <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
-    axis_name: Optional, a hashable Python object used to identify the mapped
-      axis so that parallel collectives can be applied.
+      should appear in the output (see `jax.pmap
+      <https://jax.readthedocs.io/en/latest/_autosummary/jax.pmap.html>`__).
+    static_broadcasted_argnums: Specifies which positional arguments to
+      treat as static (compile-time constant).
+    devices: This is an experimental feature and the API is likely to change.
+      Optional, a sequence of Devices to map over.
+    backend: This is an experimental feature and the API is likely to change.
+      Optional, a string representing the XLA backend.
     axis_size: Optional, an integer indicating the size of the axis to be
       mapped. If not provided, the mapped axis size is inferred from arguments.
+    donate_argnums: Specify which positional argument buffers are "donated"
+      to the computation.
+    global_arg_shapes: Optional, a tuple of tuples of ints specifying the
+      shapes of global arguments.
+    transform_metadata: Optional mapping of metadata for the transform.
+    graph: if True, use graph-mode (default). If False, use tree-mode.
+      If None, uses the value of ``nnx_graph_mode`` config.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``StateAxes``
+      is not supported.
 
   Returns:
-    Batched/vectorized version of ``f`` with arguments that correspond to
+    Parallelized version of ``f`` with arguments that correspond to
     those of ``f``, but with extra array axes at positions indicated by
     ``in_axes``, and a return value that corresponds to that of ``f``, but
     with extra array axes at positions indicated by ``out_axes``.
-
-  Example::
-
-    >>> from flax import nnx
-    >>> from jax import random, numpy as jnp
-    ...
-    >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    >>> x = jnp.ones((5, 2))
-    ...
-    >>> @nnx.vmap(in_axes=(None, 0), out_axes=0)
-    ... def forward(model, x):
-    ...   return model(x)
-    ...
-    >>> y = forward(model, x)
-    >>> y.shape
-    (5, 3)
-
-  >>> class LinearEnsemble(nnx.Module):
-  ...   def __init__(self, num, rngs):
-  ...     self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
-  ...
-  >>> model = LinearEnsemble(5, rngs=nnx.Rngs(0))
-  >>> x = jnp.ones((2,))
-  ...
-  >>> @nnx.vmap(in_axes=(0, None), out_axes=0)
-  ... def forward(model, x):
-  ...   return x @ model.w
-  ...
-  >>> y = forward(model, x)
-  >>> y.shape
-  (5, 3)
-
-  To control control how graph node substates are vectorized, ``StateAxes``
-  can be passed to ``in_axes`` and ``out_axes`` specifying the axes to be
-  applied to each substate given a filter. The following example shows how to
-  share the parameters between the ensemble members which keeping different
-  batch statistics and dropout random state::
-
-    >>> class Foo(nnx.Module):
-    ...   def __init__(self):
-    ...     self.a = nnx.Param(jnp.arange(4))
-    ...     self.b = nnx.BatchStat(jnp.arange(4))
-    ...
-    >>> state_axes = nnx.StateAxes({nnx.Param: 0, nnx.BatchStat: None})
-    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=0)
-    ... def mul(foo):
-    ...   return foo.a * foo.b
-    ...
-    >>> foo = Foo()
-    >>> y = mul(foo)
-    >>> y
-    Array([[0, 0, 0, 0],
-           [0, 1, 2, 3],
-           [0, 2, 4, 6],
-           [0, 3, 6, 9]], dtype=int32)
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if f is Missing:
     return functools.partial(
         pmap,
@@ -640,13 +638,14 @@ def pmap(
         global_arg_shapes=global_arg_shapes,
         transform_metadata=transform_metadata,
         graph=graph,
+        graph_updates=graph_updates,
     )  # type: ignore[return-value]
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('pmap')
 
-  if not graph:
+  if not graph or not graph_updates:
     if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
       raise ValueError(
         '`in_axes` cannot contain `StateAxes` objects '
@@ -661,7 +660,7 @@ def pmap(
       )
 
     pmapped_fn = jax.pmap(
-      TreePmapFn(f_unbound),
+      SimplePmapFn(f_unbound, graph=graph, out_axes=out_axes),
       axis_name=axis_name,
       in_axes=in_axes,
       out_axes=(out_axes, (in_axes, 0)),
@@ -674,12 +673,22 @@ def pmap(
     )
 
     @functools.wraps(f_unbound)
-    def tree_pmap_wrapper(*args, **kwargs):
+    def simple_pmap_wrapper(*args, **kwargs):
+      if graph:
+        args, kwargs = extract.to_tree2(
+            (args, kwargs),
+            prefix=(in_axes, None)
+            if in_axes is not None
+            else None,
+            check_aliasing=in_axes is not None,
+        )
       out, updates = pmapped_fn(*args, **kwargs)
       extract.apply_variable_updates((args, kwargs), updates)
+      if graph:
+        out = extract.from_tree2(out)
       return out
 
-    return tree_pmap_wrapper  # type: ignore[return-value]
+    return simple_pmap_wrapper  # type: ignore[return-value]
 
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
@@ -1239,26 +1248,73 @@ class ScanFn:
 
 
 @dataclasses.dataclass(eq=False)
-class TreeScanFn:
+class SimpleScanFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
+  in_axes: tp.Any
+  out_axes: tp.Any
+  out_is_tuple: bool
+  carry_arg_index: int | None
+  carry_out_index: int | None
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
-  def __call__(self, carry, x):
-    carry_updates, _ = extract.updates_and_snapshot(carry)
-    x_updates, x_snapshot = extract.updates_and_snapshot(x)
+  def __call__(self, *args):
+    updates, snapshot = extract.updates_and_snapshot(args)
+    if self.carry_arg_index is not None:
+      carry_in = args[self.carry_arg_index]
+    else:
+      carry_in = None
+    if self.graph:
+      args = extract.from_tree2(args)
 
-    out = self.f(carry, x)
-    carry_out, y = out
+    out = self.f(*args)
 
-    extract.check_same_variables(carry_updates, carry_out, 'scan')
+    if self.graph:
+      out = extract.to_tree2(out, prefix=self.out_axes)
 
-    extract.check_no_aliases(x_updates, y)
-    x_updates = extract.mask_variable_updates(x_updates, x_snapshot)
+    if self.carry_out_index is not None:
+      carry_out = out[self.carry_out_index] if self.out_is_tuple else out
+      extract.check_same_variables(carry_in, carry_out, 'scan')
 
-    return carry_out, (y, x_updates)
+    # Mask variable updates for non-carry args: identify broadcast (None axis)
+    # Variables and drop their updates since they should not change across
+    # scan iterations.
+    masked_carry_updates = extract.mask_at(updates, self.carry_arg_index)
+    masked_carry_snapshot = extract.mask_at(snapshot, self.carry_arg_index)
+    if isinstance(self.in_axes, tuple):
+      masked_carry_in_axes = extract.mask_at(self.in_axes, self.carry_arg_index)
+    else:
+      masked_carry_in_axes = self.in_axes
+    is_var = lambda x: isinstance(x, variablelib.Variable)
+    _, per_leaf_axes = extract.broadcast_prefix2(
+      masked_carry_in_axes, masked_carry_updates, is_leaf=is_var,
+    )
+    broadcast_var_ids = set()
+    carry_leaves = jax.tree.leaves(masked_carry_updates, is_leaf=is_var)
+    for axis, leaf in zip(per_leaf_axes, carry_leaves, strict=True):
+      if axis is None and isinstance(leaf, variablelib.Variable):
+        broadcast_var_ids.add(id(leaf))
+
+    def keep_fn(path, cur, snap):
+      changed = extract.variable_changed(cur, snap)
+      if id(cur) in broadcast_var_ids and changed:
+        raise ValueError(
+            f'Broadcast (None axis) Variable at {jax.tree_util.keystr(path)} '
+            'was mutated during scan. Only Carry and scanned Variables can be '
+            'updated.'
+        )
+      return changed
+
+    extract.check_no_aliases(args=masked_carry_updates, out=out)
+    masked_carry_updates = extract.mask_variable_updates(
+      masked_carry_updates, masked_carry_snapshot, keep_fn=keep_fn,
+    )
+    if self.out_is_tuple:
+      return (*out, masked_carry_updates)
+    return (out, masked_carry_updates)
 
 
 @tp.overload
@@ -1274,6 +1330,7 @@ def scan(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -1292,6 +1349,7 @@ def scan(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F:
   ...
 
@@ -1309,6 +1367,7 @@ def scan(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """A Flax NNX transformation of `jax.lax.scan`_.
 
@@ -1399,6 +1458,10 @@ def scan(
     out_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
       the kind of output args. See ``in_axes`` for details. Note that If ``in_axes``
       contains :class:`flax.nnx.Carry` then ``out_axes`` must also contain :class:`flax.nnx.Carry`.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``StateAxes``
+      is not supported.
 
   .. _jax.lax.scan: https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>
   """
@@ -1413,6 +1476,7 @@ def scan(
         out_axes=out_axes,
         transform_metadata=transform_metadata,
         graph=graph,
+        graph_updates=graph_updates,
     )  # type: ignore[return-value]
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -1421,41 +1485,128 @@ def scan(
 
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
-    if in_axes != (Carry, 0):
-      raise ValueError(
-        'tree-mode scan only supports `in_axes=(Carry, 0)`, '
-        f'got {in_axes=}'
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    return _simple_scan(
+      f, f_unbound, graph=graph,
+      in_axes=in_axes, out_axes=out_axes,
+      length=length, reverse=reverse, unroll=unroll,
+      _split_transpose=_split_transpose,
+    )
+
+  return _graph_updates_scan(
+    f, f_unbound,
+    in_axes=in_axes, out_axes=out_axes,
+    length=length, reverse=reverse, unroll=unroll,
+    _split_transpose=_split_transpose,
+    transform_metadata=transform_metadata,
+  )
+
+def _simple_scan(
+  f, f_unbound, *,
+  graph, in_axes, out_axes,
+  length, reverse, unroll, _split_transpose,
+):
+  if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
+    raise ValueError(
+      '`in_axes` cannot contain `StateAxes` objects '
+      'when `graph=False`. '
+      + graphlib._tree_mode_suggestion('scan')
+    )
+  if any(isinstance(x, StateAxes) for x in jax.tree.leaves(out_axes)):
+    raise ValueError(
+      '`out_axes` cannot contain `StateAxes` objects '
+      'when `graph=False`. '
+      + graphlib._tree_mode_suggestion('scan')
+    )
+
+  out_is_tuple = isinstance(out_axes, tuple)
+  if in_axes is Carry:
+    in_axes = (Carry,)
+  if isinstance(in_axes, tuple):
+    carry_arg_index = next(
+      (i for i, ax in enumerate(in_axes) if ax is Carry), None
+    )
+    updates_out_axes = extract.mask_at(in_axes, carry_arg_index)
+  else:
+    carry_arg_index = None
+    updates_out_axes = in_axes
+
+  if isinstance(out_axes, tuple):
+    carry_out_index = next(
+      (i for i, ax in enumerate(out_axes) if ax is Carry), None
+    )
+  else:
+    carry_out_index = None
+
+  simple_scan_fn = SimpleScanFn(
+    f_unbound, graph=graph,
+    in_axes=in_axes, out_axes=out_axes,
+    out_is_tuple=out_is_tuple,
+    carry_arg_index=carry_arg_index,
+    carry_out_index=carry_out_index,
+  )
+
+  if out_is_tuple:
+    augmented_out_axes = (*out_axes, updates_out_axes)
+  else:
+    augmented_out_axes = (out_axes, updates_out_axes)
+
+  @functools.wraps(f)
+  def simple_scan_wrapper(*args):
+    args = resolve_kwargs(f, args, {})
+    if graph:
+      args = extract.to_tree2(args, prefix=in_axes)
+
+    result = pure_jax_fancy_scan(
+      simple_scan_fn,
+      *args,
+      length=length,
+      reverse=reverse,
+      unroll=unroll,
+      _split_transpose=_split_transpose,
+      in_axes=in_axes,
+      out_axes=augmented_out_axes,
+    )
+
+    if out_is_tuple:
+      n = len(out_axes)
+      out = result[:n]
+      updates = result[n]
+    else:
+      out, updates = result
+
+    masked_args = extract.mask_at(args, carry_arg_index)
+    extract.apply_variable_updates(masked_args, updates)
+
+    if carry_arg_index is not None:
+      carry_in = args[carry_arg_index]
+      carry_out = (
+        out[carry_out_index] if out_is_tuple else out
       )
-    if out_axes != (Carry, 0):
-      raise ValueError(
-        'tree-mode scan only supports `out_axes=(Carry, 0)`, '
-        f'got {out_axes=}'
-      )
+      extract.update_carry_variables(carry_in, carry_out)
+      if out_is_tuple:
+        out_list = list(out)
+        out_list[carry_out_index] = carry_in
+        out = tuple(out_list)
+      else:
+        out = carry_in
 
-    tree_scan_fn = TreeScanFn(f_unbound)
+    if graph:
+      out = extract.from_tree2(out)
 
-    @functools.wraps(f)
-    def tree_scan_wrapper(carry_in, x):
+    return out
 
-      carry_out, (y, updates) = jax.lax.scan(
-        tree_scan_fn,
-        carry_in,
-        x,
-        length=length,
-        reverse=reverse,
-        unroll=unroll,
-        _split_transpose=_split_transpose,
-      )
+  return simple_scan_wrapper
 
-      extract.apply_variable_updates(x, updates)
 
-      carry_out = extract.update_carry_variables(carry_in, carry_out)
-
-      return carry_out, y
-
-    return tree_scan_wrapper  # type: ignore[return-value]
-
+def _graph_updates_scan(
+  f, f_unbound, *,
+  in_axes, out_axes,
+  length, reverse, unroll, _split_transpose,
+  transform_metadata,
+):
   _check_out_axes(out_axes)
 
   input_carry_argnum = _get_carry_argnum(in_axes, is_in_axes=True)
@@ -1538,7 +1689,6 @@ def scan(
       pure_out,
     ) = scan_out
 
-    # insert pure carry into pure_args_out
     if input_carry_argnum == 'all':
       pure_args_out = (pure_carry_arg_out,)
     elif isinstance(input_carry_argnum, int):
@@ -1561,7 +1711,6 @@ def scan(
       is_inner=False,
     )
 
-    # extract the carry from args_out
     if input_carry_argnum == 'all':
       carry_arg = args_out[0]
     elif isinstance(input_carry_argnum, int):
@@ -1570,7 +1719,6 @@ def scan(
       assert input_carry_argnum is None
       carry_arg = None
 
-    # insert carry into the output
     if output_carry_argnum == 'all':
       out = carry_arg
     elif isinstance(output_carry_argnum, int):
@@ -1583,7 +1731,175 @@ def scan(
 
     return out
 
-  return scan_wrapper  # type: ignore
+  return scan_wrapper
+
+
+def pure_jax_fancy_scan(
+  f,
+  *args,
+  length: int | None = None,
+  reverse: bool = False,
+  unroll: int | bool = 1,
+  _split_transpose: bool = False,
+  in_axes: tp.Any = (Carry, 0),
+  out_axes: tp.Any = (Carry, 0),
+):
+  if in_axes is Carry:
+    in_axes = (Carry,)
+  is_axis_leaf = lambda x: x is None or x is Carry
+
+  if isinstance(in_axes, tuple):
+    for i, ax in enumerate(in_axes):
+      if ax is Carry or ax is None or isinstance(ax, int):
+        continue
+      for leaf in jax.tree.leaves(ax, is_leaf=is_axis_leaf):
+        if leaf is Carry:
+          raise ValueError(
+            'Carry must be a top-level argument, it cannot be nested. '
+            f'Found Carry inside in_axes[{i}]={ax}'
+          )
+
+  if isinstance(out_axes, tuple):
+    for i, ax in enumerate(out_axes):
+      if ax is Carry or ax is None or isinstance(ax, int):
+        continue
+      for path, leaf in jax.tree_util.tree_leaves_with_path(
+        ax, is_leaf=is_axis_leaf,
+      ):
+        if leaf is Carry:
+          raise ValueError(
+            'Carry must be a top-level argument, it cannot be nested. '
+            f'Found Carry at out_axes[{i}]{jax.tree_util.keystr(path)}'
+          )
+
+  in_has_carry = in_axes is Carry or (
+    isinstance(in_axes, tuple) and Carry in in_axes
+  )
+  out_has_carry = out_axes is Carry or (
+    isinstance(out_axes, tuple) and Carry in out_axes
+  )
+  if in_has_carry != out_has_carry:
+    raise ValueError(
+      'If one of in_axes or out_axes has Carry, the other must also '
+      f'have Carry. Got {in_axes=}, {out_axes=}'
+    )
+
+
+  args_flat, args_treedef = jax.tree.flatten(args)
+  _, in_axes_flat = extract.broadcast_prefix2(
+    in_axes, args, is_leaf=is_axis_leaf,
+  )
+
+  carry_indices: list[int] = []
+  broadcast_indices: list[int] = []
+  scan_indices: list[int] = []
+  scan_in_axes: list[int] = []
+
+  carry_leaves: list[tp.Any] = []
+  broadcast_leaves: list[tp.Any] = []
+  scan_leaves: list[tp.Any] = []
+
+  for i, (leaf, ax) in enumerate(zip(args_flat, in_axes_flat, strict=True)):
+    if ax is Carry:
+      carry_indices.append(i)
+      carry_leaves.append(leaf)
+    elif ax is None:
+      broadcast_indices.append(i)
+      broadcast_leaves.append(leaf)
+    elif isinstance(ax, int):
+      scan_indices.append(i)
+      scan_in_axes.append(ax)
+      if ax != 0:
+        leaf = jnp.moveaxis(leaf, ax, 0)
+      scan_leaves.append(leaf)
+    else:
+      raise ValueError(f'Invalid in_axes leaf value: {ax}')
+
+  n_in = len(args_flat)
+  out_info: list[tuple[
+    jax.tree_util.PyTreeDef, list[int], list[int], list[int],
+  ]] = []
+
+  in_broadcast = jax.tree.map(lambda x: x, broadcast_leaves)
+
+  def body_fn(carry_state, scan_x):
+    flat = [None] * n_in
+    for idx, j in enumerate(carry_indices):
+      flat[j] = carry_state[idx]
+    for idx, j in enumerate(broadcast_indices):
+      flat[j] = in_broadcast[idx]
+    if scan_x is not None:
+      for idx, j in enumerate(scan_indices):
+        flat[j] = scan_x[idx]
+
+    reconstructed = args_treedef.unflatten(flat)
+    out = f(*reconstructed)
+
+    out_flat, out_treedef = jax.tree.flatten(out)
+    out_axes_paths, out_axes_flat = extract.broadcast_prefix2(
+      out_axes, out, is_leaf=is_axis_leaf,
+    )
+
+    if not out_info:
+      out_carry_idx = []
+      out_scan_idx = []
+      out_scan_axes = []
+      out_broadcast_idx = []
+      for j, oax in enumerate(out_axes_flat):
+        if oax is Carry:
+          out_carry_idx.append(j)
+        elif oax is None:
+          out_broadcast_idx.append(j)
+        elif isinstance(oax, int):
+          out_scan_idx.append(j)
+          out_scan_axes.append(oax)
+        else:
+          raise ValueError(f'Invalid out_axes leaf value: {oax}')
+      if out_broadcast_idx:
+        broadcast_paths = [
+          jax.tree_util.keystr(out_axes_paths[j]) for j in out_broadcast_idx
+        ]
+        broadcast_str = "\n\n  ".join(broadcast_paths)
+        raise ValueError(
+          'Scan does not support broadcast outputs (None axis). The following '
+          f'output leaves are broadcast:\n\n  {broadcast_str}\n'
+        )
+      out_info.append(
+        (out_treedef, out_carry_idx, out_scan_idx, out_scan_axes),
+      )
+
+    oci = out_info[0][1]
+    osi = out_info[0][2]
+    new_carry = [out_flat[j] for j in oci]
+    new_ys = [out_flat[j] for j in osi]
+
+    return new_carry, new_ys
+
+  final_carry, stacked_ys = jax.lax.scan(
+    body_fn,
+    carry_leaves,
+    scan_leaves if scan_leaves else None,
+    length=length,
+    reverse=reverse,
+    unroll=unroll,
+    _split_transpose=_split_transpose,
+  )
+
+  out_treedef, out_carry_idx, out_scan_idx, out_scan_axes = (
+    out_info[0]
+  )
+  n_out = out_treedef.num_leaves
+  out_flat: list[tp.Any] = [None] * n_out
+  for idx, j in enumerate(out_carry_idx):
+    out_flat[j] = final_carry[idx]
+  for idx, j in enumerate(out_scan_idx):
+    y = stacked_ys[idx]
+    ax = out_scan_axes[idx]
+    if ax != 0:
+      y = jnp.moveaxis(y, 0, ax)
+    out_flat[j] = y
+
+  return out_treedef.unflatten(out_flat)
 
 
 # -------------------------------
@@ -1592,8 +1908,9 @@ def scan(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeWhileLoopBodyFn:
+class SimpleWhileLoopBodyFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1601,9 +1918,27 @@ class TreeWhileLoopBodyFn:
   @extract.treemap_copy_args
   def __call__(self, val):
     val_variables, _ = extract.updates_and_snapshot(val)
+    if self.graph:
+      val = extract.from_tree2(val)
     out = self.f(val)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_same_variables(val_variables, out, 'while_loop')
     return out
+
+
+@dataclasses.dataclass(eq=False)
+class SimpleWhileLoopCondFn:
+  f: tp.Callable[..., tp.Any]
+  graph: bool
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f)
+
+  def __call__(self, val):
+    if self.graph:
+      val = extract.from_tree2(val)
+    return self.f(val)
 
 
 @dataclasses.dataclass(eq=False)
@@ -1704,7 +2039,8 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
                body_fun: tp.Callable[[T], T],
                init_val: T,
                *,
-               graph: bool | None = None) -> T:
+               graph: bool | None = None,
+               graph_updates: bool | None = None) -> T:
   """A Flax NNX transformation of `jax.lax.while_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.while_loop.html>`_.
 
   Caution: for the NNX internal reference tracing mechanism to work, you cannot
@@ -1734,22 +2070,29 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
     init_val: The initial input for ``cond_fun`` and ``body_fun``. Must be of type ``T``.
     graph: if True, use graph-mode (default). If False, use tree-mode.
       If None, uses the value of ``nnx_graph_mode`` config.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
 
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
-    val_out = jax.lax.while_loop(
-      cond_fun,
-      TreeWhileLoopBodyFn(body_fun),
-      init_val,
-    )
-    return extract.update_carry_variables(init_val, val_out)
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    simple_body_fn = SimpleWhileLoopBodyFn(body_fun, graph=graph)
+    simple_cond_fn = SimpleWhileLoopCondFn(cond_fun, graph=graph)
+
+    if graph:
+      init_val = extract.to_tree2(init_val)
+    val_out = jax.lax.while_loop(simple_cond_fn, simple_body_fn, init_val)
+    val_out = extract.update_carry_variables(init_val, val_out)
+    if graph:
+      val_out = extract.from_tree2(val_out)
+    return val_out
 
   pure_init_val = extract.to_tree(init_val, ctxtag='while_loop')
 
-  # Adding the expected reference mapping to `pure_init_val` to match
-  # `body_fun`'s output pytree structure, to make JAX while_loop happy.
   pure_init_val = _add_fake_index_mapping(pure_init_val)
 
   pure_out = jax.lax.while_loop(
@@ -1762,8 +2105,9 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
 
 
 @dataclasses.dataclass(eq=False)
-class TreeForiLoopBodyFn:
+class SimpleForiLoopBodyFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1771,7 +2115,11 @@ class TreeForiLoopBodyFn:
   @extract.treemap_copy_args
   def __call__(self, i, val):
     val_variables, _ = extract.updates_and_snapshot(val)
+    if self.graph:
+      val = extract.from_tree2(val)
     out = self.f(i, val)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_same_variables(val_variables, out, 'fori_loop')
     return out
 
@@ -1797,7 +2145,8 @@ def fori_loop(lower: int, upper: int,
               init_val: T,
               *,
               unroll: int | bool | None = None,
-              graph: bool | None = None) -> T:
+              graph: bool | None = None,
+              graph_updates: bool | None = None) -> T:
   """A Flax NNX transformation of `jax.lax.fori_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.fori_loop.html>`_.
 
   Caution: for the NNX internal reference tracing mechanism to work, you cannot
@@ -1834,6 +2183,9 @@ def fori_loop(lower: int, upper: int,
       This argument is only applicable if the loop bounds are statically known.
     graph: if True, use graph-mode (default). If False, use tree-mode.
       If None, uses the value of ``nnx_graph_mode`` config.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
 
   Returns:
     A loop value from the final iteration, of type ``T``.
@@ -1841,14 +2193,23 @@ def fori_loop(lower: int, upper: int,
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    simple_body_fn = SimpleForiLoopBodyFn(body_fun, graph=graph)
+
+    if graph:
+      init_val = extract.to_tree2(init_val)
     val_out = jax.lax.fori_loop(
       lower, upper,
-      TreeForiLoopBodyFn(body_fun),
+      simple_body_fn,
       init_val,
       unroll=unroll,
     )
-    return extract.update_carry_variables(init_val, val_out)
+    val_out = extract.update_carry_variables(init_val, val_out)
+    if graph:
+      val_out = extract.from_tree2(val_out)
+    return val_out
 
   pure_init_val = extract.to_tree(init_val, ctxtag='fori_loop')
   body = ForiLoopBodyFn(body_fun)

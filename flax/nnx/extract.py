@@ -15,6 +15,7 @@
 import abc
 import functools
 import typing as tp
+from collections import namedtuple
 
 import jax
 
@@ -106,6 +107,59 @@ def check_consistent_aliasing(
       + '\n'.join(node_msgs)
     )
 
+
+def check_consistent_aliasing2(
+  node: tp.Any,
+  prefix: tp.Any,
+  /,
+  *,
+  node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] | None = None,
+):
+  if node_prefixes is None:
+    node_prefixes = {}
+
+  node_id_to_variable: dict[int, tp.Any] = {}
+
+  for path, value in graphlib.iter_graph(node, graph=True):
+    if graphlib.is_graph_node(value) or isinstance(value, graphlib.Variable):
+      if isinstance(value, Pytree):
+        value._check_valid_context(
+          lambda: f'Trying to extract graph node from different trace level, got {value!r}'
+        )
+      if isinstance(value, graphlib.Variable):
+        if not value._can_update:
+          raise ValueError(
+            f'Cannot extract graph node from different trace level, got {value!r}'
+          )
+      value_id = id(value)
+      node_id_to_variable[value_id] = value
+      if value_id in node_prefixes:
+        node_prefixes[value_id].append((path, prefix))
+      else:
+        node_prefixes[value_id] = [(path, prefix)]
+
+  node_msgs = []
+  for node_id, paths_prefixes in node_prefixes.items():
+    unique_prefixes = {p for _, p in paths_prefixes}
+    if len(unique_prefixes) > 1:
+      path_prefix_repr = '\n'.join(
+        f'  {"/".join(map(str,path)) if path else "<root>"}: {p}'
+        for path, p in paths_prefixes
+      )
+      if node_id in node_id_to_variable:
+        variable = node_id_to_variable[node_id]
+        node_type_name = type(variable).__name__
+      else:
+        node_type_name = f'Node ID: {node_id}'
+
+      node_msgs.append(f'Node: {node_type_name}\n{path_prefix_repr}')
+
+  if node_msgs:
+    raise ValueError(
+      'Inconsistent aliasing detected. The following nodes have different prefixes:\n'
+      + '\n'.join(node_msgs)
+    )
+
 # -----------------------------
 # to_tree/from_tree
 # -----------------------------
@@ -133,6 +187,22 @@ def broadcast_prefix(
     or (prefix_is_leaf is not None and prefix_is_leaf(x)),
   )
   return result
+
+
+def broadcast_prefix2(
+  prefix_tree: tp.Any,
+  full_tree: tp.Any,
+  is_leaf: tp.Callable[[tp.Any], bool] | None = None,
+) -> tuple[list[KeyPath], list[tp.Any]]:
+  paths: list[KeyPath] = []
+  leaves: list[tp.Any] = []
+  num_leaves = lambda t: jax.tree_util.tree_structure(t).num_leaves
+  def add_leaves(path, x, subtree):
+    n = num_leaves(subtree)
+    paths.extend([path] * n)
+    leaves.extend([x] * n)
+  jax.tree.map_with_path(add_leaves, prefix_tree, full_tree, is_leaf=is_leaf)
+  return paths, leaves
 
 
 class GraphDefState(struct.PyTreeNode):
@@ -260,6 +330,78 @@ def to_tree(
   return pytree_out
 
 
+def to_tree2(
+  tree,
+  /,
+  *,
+  prefix: tp.Any = Missing,
+  check_aliasing: bool = True,
+) -> tp.Any:
+  ref_index: graphlib.RefMap = graphlib.RefMap()
+
+  def _to_node_states(leaf):
+    if not (graphlib.is_graph_node(leaf) or isinstance(leaf, variablelib.Variable)):
+      return leaf
+    graphdef, flat_state = graphlib.flatten(
+      leaf, ref_index=ref_index, graph=True
+    )
+    states = graphlib._to_nested_state(graphdef, (flat_state,))
+    return NodeStates.from_split(graphdef, *states)
+
+  is_leaf = lambda x: (
+    isinstance(x, variablelib.Variable) or graphlib.is_graph_node(x)
+  )
+
+  if prefix is Missing or prefix is None:
+    return jax.tree.map(_to_node_states, tree, is_leaf=is_leaf)
+
+  leaf_prefixes = broadcast_prefix(
+    prefix,
+    tree,
+    prefix_is_leaf=lambda x: x is None or is_leaf(x),
+    tree_is_leaf=is_leaf,
+  )
+  leaves, treedef = jax.tree_util.tree_flatten(tree, is_leaf=is_leaf)
+
+  assert len(leaves) == len(leaf_prefixes)
+  leaves_out = []
+  node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] = {}
+
+  for leaf, leaf_prefix in zip(leaves, leaf_prefixes):
+    if is_leaf(leaf):
+      if check_aliasing:
+        check_consistent_aliasing2(
+          leaf, leaf_prefix, node_prefixes=node_prefixes
+        )
+      leaves_out.append(_to_node_states(leaf))
+    else:
+      leaves_out.append(leaf)
+
+  return jax.tree.unflatten(treedef, leaves_out)
+
+
+def from_tree2(tree: tp.Any, /) -> tp.Any:
+  index_ref = graphlib.IndexMap()
+
+  def _from_node_states(x):
+    if not isinstance(x, NodeStates):
+      return x
+    state = graphlib._merge_to_flat_state(x.states)
+    return graphlib.unflatten(
+      x.graphdef, state, index_ref=index_ref,
+    )
+
+  return jax.tree.map(
+    _from_node_states,
+    tree,
+    is_leaf=lambda x: (
+      isinstance(x, NodeStates)
+      or graphlib.is_graph_node(x)
+      or isinstance(x, variablelib.Variable)
+    ),
+  )
+
+
 def merge_tree_node(
   ctx: graphlib.MergeContext, path: KeyPath, prefix: Prefix, leaf: Leaf
 ) -> tp.Any:
@@ -335,54 +477,37 @@ def clear_non_graph_nodes(tree):
     or graphlib.is_graph_node(x),
   )
 
+class Mask(tp.NamedTuple):
+  pass
+
+def mask_at(t: tuple, index: int | None) -> tuple:
+  if index is None:
+    return t
+  return tuple(
+    Mask() if i == index else x
+    for i, x in enumerate(t)
+  )
 
 def updates_and_snapshot(args: A) -> tuple[A, A]:
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   leaves, treedef = jax.tree.flatten(args, is_leaf=is_leaf)
-  updates_leaves: list[variablelib.Variable | None] = []
-  snapshot_leaves: list[variablelib.Variable | None] = []
+  updates_leaves: list[variablelib.Variable | Mask] = []
+  snapshot_leaves: list[variablelib.Variable | Mask] = []
   for leaf in leaves:
     if isinstance(leaf, variablelib.Variable):
       updates_leaves.append(leaf)
       snapshot_leaves.append(leaf.copy())
     else:
-      updates_leaves.append(None)
-      snapshot_leaves.append(None)
+      updates_leaves.append(Mask())
+      snapshot_leaves.append(Mask())
   updates = jax.tree.unflatten(treedef, updates_leaves)
   snapshot = jax.tree.unflatten(treedef, snapshot_leaves)
   return updates, snapshot
 
 
-class _InputsAndOutputs(tp.NamedTuple):
-  args: tuple
-  kwargs: dict | None
-  output: tp.Any
-
-
-@tp.overload
-def check_no_aliases(args: tuple[tp.Any, ...], output: tp.Any) -> None:
-  ...
-
-
-@tp.overload
-def check_no_aliases(
-    args: tuple[tp.Any, ...], kwargs: dict[str, tp.Any], output: tp.Any
-) -> None:
-  ...
-
-
-def check_no_aliases(*positional_args):
-  if len(positional_args) == 2:
-    args, output = positional_args  # pytype: disable=bad-unpacking
-    kwargs = None
-  elif len(positional_args) == 3:
-    args, kwargs, output = positional_args  # pytype: disable=bad-unpacking
-  else:
-    raise TypeError(
-      f'check_no_aliases expects 2 or 3 arguments, got {len(positional_args)}'
-    )
-
-  container = _InputsAndOutputs(args=args, kwargs=kwargs, output=output)
+def check_no_aliases(**kwargs):
+  Attrs = namedtuple('Attrs', kwargs.keys())
+  container = Attrs(**kwargs)
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   seen: dict[int, jax.tree_util.KeyPath] = {}
   for path, leaf in jax.tree.leaves_with_path(
@@ -402,7 +527,7 @@ def check_no_aliases(*positional_args):
     seen[var_id] = path
 
 
-def _variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
+def variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
   post_leaves, post_td = jax.tree.flatten(post)
   pre_leaves, pre_td = jax.tree.flatten(pre)
   return post_td != pre_td or any(  # type: ignore[operator]
@@ -420,15 +545,15 @@ def mask_variable_updates(
     keep_fn: MaskFn | None = None,
 ) -> A:
   if keep_fn is None:
-    keep_fn = lambda _, cur, snap: False
+    keep_fn = lambda _, cur, snap: variable_changed(cur, snap)
 
-  def _mask_updates(jax_path, current, snapshot):
-    path = graphlib.jax_to_nnx_path(jax_path)
-    if isinstance(current, variablelib.Variable) and (
-        keep_fn(path, current, snapshot) or _variable_changed(current, snapshot)
-    ):
-      return current
-    return None
+  def _mask_updates(path, current, snapshot):
+    if isinstance(current, variablelib.Variable):
+      if current.hijax or current.ref:
+        return Mask()
+      if keep_fn(path, current, snapshot):
+        return current
+    return Mask()
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   return jax.tree.map_with_path(
       _mask_updates, current_tree, snapshot_tree, is_leaf=is_leaf
@@ -436,7 +561,7 @@ def mask_variable_updates(
 
 
 def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
-  is_leaf = lambda x: isinstance(x, variablelib.Variable) or x is None
+  is_leaf = lambda x: isinstance(x, variablelib.Variable) or isinstance(x, Mask)
   args_leaves, treedef = jax.tree.flatten_with_path(args_tree, is_leaf=is_leaf)
   updates_leaves = treedef.flatten_up_to(updates_tree)
   seen: dict[int, jax.tree_util.KeyPath] = {}
@@ -452,7 +577,7 @@ def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
         'tree-mode jit does not support shared Variable references.'
       )
     seen[var_id] = path
-    if update is not None:
+    if isinstance(update, variablelib.Variable):
       variable.update_from_state(update)
 
 

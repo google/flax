@@ -1516,6 +1516,7 @@ class GraphContext(threading.local):
   tmp_static_cache: tp.MutableMapping[tp.Any, StaticCache] | None = None
   caching: bool = False
   graph_mode_stack: list[bool] = dataclasses.field(default_factory=list)
+  graph_updates_stack: list[bool] = dataclasses.field(default_factory=list)
 
 
 GRAPH_CONTEXT = GraphContext()
@@ -1524,6 +1525,11 @@ GRAPH_CONTEXT = GraphContext()
 class set_graph_mode(BaseConfigContext):
   get_default = classmethod(lambda cls: config.nnx_graph_mode)
   get_stack = classmethod(lambda cls: GRAPH_CONTEXT.graph_mode_stack)
+
+
+class set_graph_updates(BaseConfigContext):
+  get_default = classmethod(lambda cls: config.nnx_graph_updates)
+  get_stack = classmethod(lambda cls: GRAPH_CONTEXT.graph_updates_stack)
 
 
 @contextlib.contextmanager
