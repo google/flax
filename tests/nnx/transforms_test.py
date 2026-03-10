@@ -22,6 +22,7 @@ import typing as tp
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
+from flax.nnx.transforms.iteration import pure_jax_fancy_scan
 from flax.nnx.transforms import general
 import jax
 from jax.experimental import checkify, mesh_utils
@@ -36,7 +37,7 @@ class TestJIT(parameterized.TestCase):
   def test_jit(self):
     m = nnx.Dict(a=nnx.Param(1))
 
-    @nnx.graph.jit
+    @nnx.jit
     def g(m: nnx.Dict):
       m.a = 2
       return 1.0
@@ -49,7 +50,7 @@ class TestJIT(parameterized.TestCase):
   def test_mutable_array_input_output(self):
     m = jax.new_ref(jnp.array(1.0))
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m: jax.Ref):
       m[...] += 1.0
       m2 = jax.new_ref(jnp.array(10.0))
@@ -61,12 +62,14 @@ class TestJIT(parameterized.TestCase):
     self.assertIs(m, m_out)
     self.assertIsInstance(m2, jax.Ref)
 
-  @parameterized.parameters(True, False)
-  def test_simple_double_call(self, graph_mode):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_simple_double_call(self, graph_mode, graph_updates):
     n = 0
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.jit(graph=graph_mode)
+    @nnx.jit(graph=graph_mode, graph_updates=graph_updates)
     def f(m: nnx.Linear, x: jnp.ndarray) -> jnp.ndarray:
       nonlocal n
       n += 1
@@ -87,7 +90,7 @@ class TestJIT(parameterized.TestCase):
     n = 0
 
     class Foo(nnx.Module):
-      @nnx.graph.jit(static_argnums=(1, 2))
+      @nnx.jit(static_argnums=(1, 2))
       def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
         nonlocal n
         n += 1
@@ -109,8 +112,10 @@ class TestJIT(parameterized.TestCase):
     m = Foo(2, 3, rngs=nnx.Rngs(0))
     assert n == 1
 
-  @parameterized.parameters(True, False)
-  def test_jit_on_call(self, graph_mode):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_jit_on_call(self, graph_mode, graph_updates):
     n = 0
 
     class Foo(nnx.Module):
@@ -120,7 +125,7 @@ class TestJIT(parameterized.TestCase):
         self.din = din
         self.dout = dout
 
-      @nnx.jit(graph=graph_mode)
+      @nnx.jit(graph=graph_mode, graph_updates=graph_updates)
       def __call__(self, x: jax.Array) -> jax.Array:
         nonlocal n
         n += 1
@@ -148,7 +153,7 @@ class TestJIT(parameterized.TestCase):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.BatchNorm(2, rngs=rngs)
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m: Foo):
       nonlocal n
       n += 1
@@ -194,9 +199,11 @@ class TestJIT(parameterized.TestCase):
     assert m.a is a
     assert m.b is b
 
-  @parameterized.parameters(True, False)
-  def test_jit_custom_vjp(self, graph_mode):
-    @nnx.custom_vjp
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_jit_custom_vjp(self, graph_mode, graph_updates):
+    @nnx.custom_vjp(graph=graph_mode, graph_updates=graph_updates)
     def f(x, y):
       return jnp.sin(x) * y
 
@@ -209,7 +216,7 @@ class TestJIT(parameterized.TestCase):
 
     f.defvjp(f_fwd, f_bwd)
 
-    nnx_out = nnx.jit(f, graph=graph_mode)(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
+    nnx_out = nnx.jit(f, graph=graph_mode, graph_updates=graph_updates)(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
     jax_out = jax.jit(f)(jnp.array([1.0, 2.0]), jnp.array([3.0, 4.0]))
     assert (nnx_out == jax_out).all()
 
@@ -221,7 +228,7 @@ class TestJIT(parameterized.TestCase):
         self.a = nnx.Linear(2, 2, rngs=rngs)
         self.b = nnx.Linear(2, 2, rngs=rngs)
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m: Foo):
       nonlocal n
       n += 1
@@ -254,7 +261,7 @@ class TestJIT(parameterized.TestCase):
     class FooDict(tp.TypedDict):
       foo: Foo
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(tree: tuple[FooDict]):
       nonlocal n
       n += 1
@@ -283,7 +290,7 @@ class TestJIT(parameterized.TestCase):
         self.a = nnx.Param(1)
         self.b = nnx.Param(2)
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m: Foo):
       m.a, m.b = m.b, m.a
 
@@ -303,7 +310,7 @@ class TestJIT(parameterized.TestCase):
       def __init__(self):
         self.ref: tp.Optional[Foo] = nnx.data(None)  # type: ignore[name-error]
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m: Foo):
       nonlocal n
       n += 1
@@ -333,7 +340,7 @@ class TestJIT(parameterized.TestCase):
       def __init__(self):
         self.ref: tp.Optional[Foo] = nnx.data(None)  # type: ignore[name-error]
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m: Foo):
       nonlocal n
       n += 1
@@ -381,7 +388,7 @@ class TestJIT(parameterized.TestCase):
 
     self.assertNotIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
 
-    @nnx.graph.jit(in_shardings=(state_sharding,))
+    @nnx.jit(in_shardings=(state_sharding,))
     def constrain_object(m):
       pass
 
@@ -392,14 +399,14 @@ class TestJIT(parameterized.TestCase):
   def test_cache_args(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(cached_m: nnx.Linear, m: nnx.Linear):
       self.assertIsNot(cached_m, m)
       self.assertIs(cached_m.kernel, m.kernel)
       self.assertIs(cached_m.bias, m.bias)
       return cached_m
 
-    cached_f = nnx.graph.cached_partial(f, m)
+    cached_f = nnx.cached_partial(f, m)
     cached_m = cached_f(m)
 
     self.assertIsNot(m, cached_m)
@@ -410,13 +417,15 @@ class TestJIT(parameterized.TestCase):
     cached_m2 = cached_f(m)
     self.assertIs(cached_m, cached_m2)
 
-  @parameterized.parameters(True, False)
-  def test_jit_wrapped(self, graph_mode):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_jit_wrapped(self, graph_mode, graph_updates):
     class Foo(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.count = nnx.Variable(jnp.array(0))
 
-      @nnx.jit(graph=graph_mode)
+      @nnx.jit(graph=graph_mode, graph_updates=graph_updates)
       def __call__(self, x: jax.Array) -> jax.Array:
         self.count[...] += 1
         return x * 2
@@ -424,7 +433,7 @@ class TestJIT(parameterized.TestCase):
     m = Foo(rngs=nnx.Rngs(0))
     x = jnp.array(3.0)
 
-    @nnx.jit(graph=graph_mode)
+    @nnx.jit(graph=graph_mode, graph_updates=graph_updates)
     def f(m: nnx.Linear, x):
       return m(x)
 
@@ -442,12 +451,14 @@ class TestJIT(parameterized.TestCase):
     self.assertEqual(m.count[...], 2)
 
   @parameterized.parameters(
-    {'graph_mode': True, 'static_argnums': (2,), 'static_argnames': None},
-    {'graph_mode': True, 'static_argnums': None, 'static_argnames': ('use_relu',)},
-    {'graph_mode': False, 'static_argnums': (2,), 'static_argnames': None},
-    {'graph_mode': False, 'static_argnums': None, 'static_argnames': ('use_relu',)},
+    {'graph_mode': True, 'graph_updates': True, 'static_argnums': (2,), 'static_argnames': None},
+    {'graph_mode': True, 'graph_updates': True, 'static_argnums': None, 'static_argnames': ('use_relu',)},
+    {'graph_mode': True, 'graph_updates': False, 'static_argnums': (2,), 'static_argnames': None},
+    {'graph_mode': True, 'graph_updates': False, 'static_argnums': None, 'static_argnames': ('use_relu',)},
+    {'graph_mode': False, 'graph_updates': False, 'static_argnums': (2,), 'static_argnames': None},
+    {'graph_mode': False, 'graph_updates': False, 'static_argnums': None, 'static_argnames': ('use_relu',)},
   )
-  def test_jit_static_args_with_shardings(self, graph_mode, static_argnums, static_argnames):
+  def test_jit_static_args_with_shardings(self, graph_mode, graph_updates, static_argnums, static_argnames):
     """Test static arguments work correctly with in_shardings."""
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
@@ -464,7 +475,7 @@ class TestJIT(parameterized.TestCase):
 
     f = nnx.jit(fn, in_shardings=(x_sharding, None),
                 static_argnums=static_argnums, static_argnames=static_argnames,
-                graph=graph_mode)
+                graph=graph_mode, graph_updates=graph_updates)
     y_relu = f(x, 0.5, True)
     y_no_relu = f(x, 0.5, False)
     self.assertNotEqual(y_relu, y_no_relu)
@@ -497,7 +508,7 @@ class TestJIT(parameterized.TestCase):
     m = nnx.Linear(16, 32, rngs=nnx.Rngs(0))
     self.assertNotIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
 
-    @nnx.graph.jit(
+    @nnx.jit(
       in_shardings=(state_sharding, None),
       **static_args,
     )
@@ -511,10 +522,15 @@ class TestJIT(parameterized.TestCase):
 
 
 class TestTreeJIT(parameterized.TestCase):
-  def test_tree_jit_basic(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_tree_jit_basic(self, graph, graph_updates):
     m = nnx.Dict(a=nnx.Param(jnp.array(1)))
 
-    @nnx.jit(graph=False)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def g(m: nnx.Dict):
       m.a[...] = 2
       return 1.0
@@ -524,10 +540,15 @@ class TestTreeJIT(parameterized.TestCase):
     assert m.a[...] == 2
     assert out == 1.0
 
-  def test_tree_jit_module(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_tree_jit_module(self, graph, graph_updates):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.jit(graph=False)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def f(m, x):
       return m(x)
 
@@ -552,11 +573,16 @@ class TestTreeJIT(parameterized.TestCase):
     y = m(jnp.array(3.0))
     self.assertEqual(m.count[...], 2)
 
-  def test_tree_jit_no_retrace(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_tree_jit_no_retrace(self, graph, graph_updates):
     n = 0
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.jit(graph=False)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def f(m, x):
       nonlocal n
       n += 1
@@ -690,18 +716,24 @@ class TestTreeJIT(parameterized.TestCase):
     out = f(donated, not_donated)
     np.testing.assert_allclose(out, 3.0)
 
-  def test_jit_partial_basic(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_jit_partial_basic(self, graph_mode, graph_updates):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
     def f(m, x):
       return m(x)
 
-    f_jit = nnx.jit_partial(f, m, graph=False)
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=graph_updates)
     x = jnp.ones((1, 2))
     y = f_jit(x)
     self.assertEqual(y.shape, (1, 3))
 
-  def test_jit_partial_variable_update(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_jit_partial_variable_update(self, graph_mode, graph_updates):
     class Foo(nnx.Module):
       def __init__(self):
         self.count = nnx.Variable(jnp.array(0))
@@ -712,26 +744,32 @@ class TestTreeJIT(parameterized.TestCase):
       m.count[...] += 1
       return x * 2
 
-    f_jit = nnx.jit_partial(f, m, graph=False)
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=graph_updates)
     y = f_jit(jnp.array(3.0))
     np.testing.assert_allclose(y, 6.0)
     self.assertEqual(m.count[...], 1)
     y = f_jit(jnp.array(3.0))
     self.assertEqual(m.count[...], 2)
 
-  def test_jit_partial_multiple_args(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_jit_partial_multiple_args(self, graph_mode, graph_updates):
     m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     m2 = nnx.Linear(3, 4, rngs=nnx.Rngs(1))
 
     def f(m1, m2, x):
       return m2(m1(x))
 
-    f_jit = nnx.jit_partial(f, m1, m2, graph=False)
+    f_jit = nnx.jit_partial(f, m1, m2, graph=graph_mode, graph_updates=graph_updates)
     x = jnp.ones((1, 2))
     y = f_jit(x)
     self.assertEqual(y.shape, (1, 4))
 
-  def test_jit_partial_no_retrace(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_jit_partial_no_retrace(self, graph_mode, graph_updates):
     n = 0
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
@@ -740,14 +778,17 @@ class TestTreeJIT(parameterized.TestCase):
       n += 1
       return m(x)
 
-    f_jit = nnx.jit_partial(f, m, graph=False)
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=graph_updates)
     x = jnp.ones((1, 2))
     f_jit(x)
     self.assertEqual(n, 1)
     f_jit(x)
     self.assertEqual(n, 1)
 
-  def test_jit_partial_no_retrace_after_mutation(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_jit_partial_no_retrace_after_mutation(self, graph_mode, graph_updates):
     n = 0
 
     class Foo(nnx.Module):
@@ -761,7 +802,7 @@ class TestTreeJIT(parameterized.TestCase):
       n += 1
       return x @ m.w[...]
 
-    f_jit = nnx.jit_partial(f, m, graph=False)
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=graph_updates)
     x = jnp.ones((1, 2))
     f_jit(x)
     self.assertEqual(n, 1)
@@ -770,12 +811,18 @@ class TestTreeJIT(parameterized.TestCase):
     self.assertEqual(n, 1)
     np.testing.assert_allclose(y, jnp.zeros((1, 3)))
 
-  def test_jit_partial_no_partial_args(self):
-    f_partial = nnx.jit_partial(lambda x: x * 2, graph=False)
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_jit_partial_no_partial_args(self, graph_mode, graph_updates):
+    f_partial = nnx.jit_partial(lambda x: x * 2, graph=graph_mode, graph_updates=graph_updates)
     y = f_partial(jnp.array(3.0))
     np.testing.assert_allclose(y, 6.0)
 
-  def test_jit_partial_in_shardings_none_broadcast(self):
+  @parameterized.parameters(
+    (False, False),
+  )
+  def test_jit_partial_in_shardings_none_broadcast(self, graph_mode, graph_updates):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
@@ -785,12 +832,15 @@ class TestTreeJIT(parameterized.TestCase):
     def f(m, x):
       return m(x)
 
-    f_jit = nnx.jit_partial(f, m, in_shardings=(None, None), graph=False)
+    f_jit = nnx.jit_partial(f, m, in_shardings=(None, None), graph=graph_mode, graph_updates=graph_updates)
     x = jnp.ones((n_devices, 4))
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 3))
 
-  def test_jit_partial_in_shardings_named(self):
+  @parameterized.parameters(
+    (False, False),
+  )
+  def test_jit_partial_in_shardings_named(self, graph_mode, graph_updates):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
@@ -804,12 +854,15 @@ class TestTreeJIT(parameterized.TestCase):
     x_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
     v_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
     f_jit = nnx.jit_partial(
-        f, v, in_shardings=(v_sharding, x_sharding), graph=False)
+        f, v, in_shardings=(v_sharding, x_sharding), graph=graph_mode, graph_updates=graph_updates)
     x = jnp.ones((n_devices, 4))
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 4))
 
-  def test_jit_partial_mixed_shardings(self):
+  @parameterized.parameters(
+    (False, False),
+  )
+  def test_jit_partial_mixed_shardings(self, graph_mode, graph_updates):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
@@ -823,12 +876,15 @@ class TestTreeJIT(parameterized.TestCase):
 
     x_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
     f_jit = nnx.jit_partial(
-        f, m1, m2, in_shardings=(None, None, x_sharding), graph=False)
+        f, m1, m2, in_shardings=(None, None, x_sharding), graph=graph_mode, graph_updates=graph_updates)
     x = jnp.ones((n_devices, 4))
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 2))
 
-  def test_jit_partial_in_shardings_non_tuple(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_jit_partial_in_shardings_non_tuple(self, graph_mode, graph_updates):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
@@ -840,12 +896,15 @@ class TestTreeJIT(parameterized.TestCase):
       return m(x)
 
     sharding = jax.sharding.NamedSharding(mesh, PS())
-    f_jit = nnx.jit_partial(f, m, in_shardings=sharding, graph=False)
+    f_jit = nnx.jit_partial(f, m, in_shardings=sharding, graph=graph_mode, graph_updates=graph_updates)
     x = jnp.ones((n_devices, 4))
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 3))
 
-  def test_jit_partial_train_step(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_jit_partial_train_step(self, graph_mode, graph_updates):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=nnx.Param)
 
@@ -856,61 +915,115 @@ class TestTreeJIT(parameterized.TestCase):
       optimizer.update(model, grads)
       return loss
 
-    train_step_fn = nnx.jit_partial(train_step, model, optimizer, graph=False)
+    train_step_fn = nnx.jit_partial(train_step, model, optimizer, graph=graph_mode, graph_updates=graph_updates)
     for _ in range(2):
       x, y = jnp.ones((10, 2)), jnp.ones((10, 3))
       loss = train_step_fn(x, y)
       self.assertIsInstance(loss, jax.Array)
 
+  def test_jit_partial_shared_variable(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    class Container(nnx.Module):
+      def __init__(self, v):
+        self.v = v
+
+    c1 = Container(v)
+    c2 = Container(v)
+
+    def f(c1, c2, x):
+      c1.v[...] += x
+      return c1.v[...] + c2.v[...]
+
+    f_jit = nnx.jit_partial(f, c1, c2, graph=True, graph_updates=False)
+    y = f_jit(jnp.array(1.0))
+    np.testing.assert_allclose(y, 4.0)
+    np.testing.assert_allclose(v[...], 2.0)
+
+  def test_jit_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+    P = jax.sharding.PartitionSpec
+
+    @nnx.jit(
+      in_shardings=(P(), P('x')),
+      graph=True, graph_updates=False,
+    )
+    def f(a, b):
+      return a[...] + b[...]
+
+    mesh = jax.sharding.Mesh(jax.devices(), ('x',))
+    with mesh:
+      with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+        f(v, v)
+
 
 class TestEvalShape(parameterized.TestCase):
-  @parameterized.parameters(True, False)
-  def test_eval_shape(self, graph):
-    abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)), graph=graph)
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_eval_shape(self, graph, graph_updates):
+    abs_model = nnx.eval_shape(
+      lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)),
+      graph=graph, graph_updates=graph_updates,
+    )
     self.assertIsInstance(abs_model, nnx.Linear)
     self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
 
   def test_eval_shape_mutable_array(self):
     with nnx.var_defaults(hijax=True):
-      abs_model = nnx.graph.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
+      abs_model = nnx.eval_shape(lambda: nnx.Linear(1, 2, rngs=nnx.Rngs(0)))
     self.assertIsInstance(abs_model, nnx.Linear)
     self.assertIsInstance(abs_model.kernel.get_value(), jax.ShapeDtypeStruct)
     self.assertEqual(abs_model.kernel.shape, (1, 2))
 
-  @parameterized.parameters(True, False)
-  def test_eval_shape_with_module_input(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_eval_shape_with_module_input(self, graph, graph_updates):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
     def f(m, x):
       return m(x)
 
     x = jnp.ones((4, 2))
-    out = nnx.eval_shape(f, model, x, graph=graph)
+    out = nnx.eval_shape(f, model, x, graph=graph, graph_updates=graph_updates)
     self.assertIsInstance(out, jax.ShapeDtypeStruct)
     self.assertEqual(out.shape, (4, 3))
 
-  def test_eval_shape_no_state_update(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_eval_shape_no_state_update(self, graph, graph_updates):
     count = nnx.Variable(jnp.array(0))
 
     def f(c):
       c[...] += 1
       return jnp.ones((3, 4)) * c[...]
 
-    out = nnx.graph.eval_shape(f, count)
+    out = nnx.eval_shape(f, count, graph=graph, graph_updates=graph_updates)
     self.assertIsInstance(out, jax.ShapeDtypeStruct)
     self.assertEqual(out.shape, (3, 4))
     self.assertEqual(count[...], 0)
 
-  def test_eval_shape_no_input_output_aliasing(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_eval_shape_no_input_output_aliasing(self, graph, graph_updates):
     v = nnx.Param(jnp.array(1.0))
 
     def f(v):
       return v
 
     with self.assertRaises(ValueError):
-      nnx.eval_shape(f, v, graph=False)
+      nnx.eval_shape(f, v, graph=graph, graph_updates=graph_updates)
 
-  def test_eval_shape_no_shared_variable_refs(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_eval_shape_no_shared_variable_refs(self, graph, graph_updates):
     v = nnx.Param(jnp.array(1.0))
 
     def f(v1, v2):
@@ -918,7 +1031,7 @@ class TestEvalShape(parameterized.TestCase):
       return None
 
     with self.assertRaises(ValueError):
-      nnx.eval_shape(f, v, v, graph=False)
+      nnx.eval_shape(f, v, v, graph=graph, graph_updates=graph_updates)
 
 class TestShardMap(parameterized.TestCase):
   def test_basic_shardmap(self):
@@ -938,7 +1051,7 @@ class TestShardMap(parameterized.TestCase):
 
     self.assertNotIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
 
-    @nnx.graph.shard_map(mesh=mesh, in_specs=(state_sharding,), out_specs=None)
+    @nnx.shard_map(mesh=mesh, in_specs=(state_sharding,), out_specs=None)
     def f(m: nnx.Linear):
       self.assertEqual(
         m.kernel.shape, (m.in_features, m.out_features // n_devices)
@@ -949,8 +1062,10 @@ class TestShardMap(parameterized.TestCase):
 
     self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
 
-  @parameterized.parameters(True, False)
-  def test_basic_shardmap_variables(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_basic_shardmap_variables(self, graph, graph_updates):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('a',))
@@ -963,7 +1078,10 @@ class TestShardMap(parameterized.TestCase):
 
     self.assertNotIsInstance(w.sharding, jax.sharding.NamedSharding)
 
-    @nnx.shard_map(mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None, graph=graph)
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None,
+      graph=graph, graph_updates=graph_updates,
+    )
     def f(w, b, count):
       count[...] += 1
       self.assertEqual(w.shape, (16, 32 // n_devices))
@@ -971,7 +1089,7 @@ class TestShardMap(parameterized.TestCase):
 
     f(w, b, count)
 
-    if graph:
+    if graph and graph_updates:
       self.assertIsInstance(w.sharding, jax.sharding.NamedSharding)
       self.assertIsInstance(b.sharding, jax.sharding.NamedSharding)
     self.assertEqual(count[...], 1)
@@ -994,7 +1112,7 @@ class TestShardMap(parameterized.TestCase):
 
     self.assertNotIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
 
-    @nnx.graph.shard_map(mesh=mesh, in_specs=(state_sharding,), out_specs=None)
+    @nnx.shard_map(mesh=mesh, in_specs=(state_sharding,), out_specs=None)
     def f(m: nnx.Linear):
       self.assertEqual(
         m.kernel.shape, (m.in_features, m.out_features // n_devices)
@@ -1006,8 +1124,10 @@ class TestShardMap(parameterized.TestCase):
     self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
     self.assertIsInstance(m.bias.sharding, jax.sharding.NamedSharding)
 
-  @parameterized.parameters(True, False)
-  def test_simple_data_parallel(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_simple_data_parallel(self, graph, graph_updates):
     P = jax.sharding.PartitionSpec
     n_devices = jax.local_device_count()
 
@@ -1024,7 +1144,8 @@ class TestShardMap(parameterized.TestCase):
     x = jnp.ones((32, 2))
 
     @nnx.shard_map(
-      mesh=mesh, in_specs=(P(None), P('data')), out_specs=P('data'), graph=graph
+      mesh=mesh, in_specs=(P(None), P('data')), out_specs=P('data'),
+      graph=graph, graph_updates=graph_updates,
     )
     def f(m, x):
       self.assertEqual(x.shape, (32 // n_devices, 2))
@@ -1034,8 +1155,9 @@ class TestShardMap(parameterized.TestCase):
 
     self.assertEqual(y.shape, (32, 3))
     self.assertIsInstance(y.sharding, jax.sharding.NamedSharding)
-    self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
-    self.assertIsInstance(m.bias.sharding, jax.sharding.NamedSharding)
+    if graph and graph_updates:
+      self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
+      self.assertIsInstance(m.bias.sharding, jax.sharding.NamedSharding)
 
   def test_simple_tensor_parallel(self):
     P = jax.sharding.PartitionSpec
@@ -1063,7 +1185,7 @@ class TestShardMap(parameterized.TestCase):
       }
     )
 
-    @nnx.graph.shard_map(
+    @nnx.shard_map(
       mesh=mesh, in_specs=(model_sharding, P(None)), out_specs=P(None)
     )
     def f(m, x):
@@ -1072,8 +1194,10 @@ class TestShardMap(parameterized.TestCase):
 
     y = f(m, x)
 
-  @parameterized.parameters(True, False)
-  def test_shardmap_with_out_sharding(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_shardmap_with_sharding_names(self, graph, graph_updates):
     n_devices = jax.local_device_count()
     P = jax.sharding.PartitionSpec
     mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
@@ -1088,7 +1212,7 @@ class TestShardMap(parameterized.TestCase):
 
     @nnx.shard_map(
       mesh=mesh, in_specs=(P('data', None), P(None)), out_specs=P('data', None),
-      graph=graph,
+      graph=graph, graph_updates=graph_updates,
     )
     def f(w, b):
       self.assertEqual(w.shape, (8 // n_devices, 4))
@@ -1099,8 +1223,10 @@ class TestShardMap(parameterized.TestCase):
     self.assertEqual(y.shape, (8, 4))
     self.assertIsInstance(y.sharding, jax.sharding.NamedSharding)
 
-  @parameterized.parameters(True, False)
-  def test_shardmap_out_sharding_mutation(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_shardmap_sharding_names_mutation(self, graph, graph_updates):
     n_devices = jax.local_device_count()
     P = jax.sharding.PartitionSpec
     mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
@@ -1111,7 +1237,7 @@ class TestShardMap(parameterized.TestCase):
 
     @nnx.shard_map(
       mesh=mesh, in_specs=(P('data', None), P()), out_specs=P('data', None),
-      graph=graph,
+      graph=graph, graph_updates=graph_updates,
     )
     def f(w, count):
       count[...] += 1
@@ -1122,6 +1248,75 @@ class TestShardMap(parameterized.TestCase):
     self.assertEqual(count[...], 1)
     self.assertEqual(y.shape, (8, 4))
     np.testing.assert_allclose(w[...], jnp.zeros((8, 4)))
+
+  def test_shardmap_shared_variable(self):
+    P = jax.sharding.PartitionSpec
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
+
+    v = nnx.Param(jnp.array(1.0))
+
+    class Container(nnx.Module):
+      def __init__(self, v):
+        self.v = v
+
+    c1 = Container(v)
+    c2 = Container(v)
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P(), P(), P()), out_specs=P(),
+      graph=True, graph_updates=True,
+    )
+    def f(c1, c2, x):
+      c1.v[...] += x
+      return c1.v[...] + c2.v[...]
+
+    y = f(c1, c2, jnp.array(1.0))
+    np.testing.assert_allclose(y, 4.0)
+    np.testing.assert_allclose(v[...], 2.0)
+
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_shardmap_module_variable_update(self, graph, graph_updates):
+    P = jax.sharding.PartitionSpec
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
+
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.count = nnx.Variable(jnp.array(0))
+
+    m = Foo()
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P(), P()), out_specs=P(),
+      graph=graph, graph_updates=graph_updates,
+    )
+    def f(m, x):
+      m.count[...] += 1
+      return x * 2
+
+    y = f(m, jnp.array(3.0))
+    np.testing.assert_allclose(y, 6.0)
+    self.assertEqual(m.count[...], 1)
+    y = f(m, jnp.array(3.0))
+    self.assertEqual(m.count[...], 2)
+
+  def test_shard_map_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+    P = jax.sharding.PartitionSpec
+    mesh = jax.sharding.Mesh(jax.devices(), ('x',))
+
+    @nnx.shard_map(
+      mesh=mesh,
+      in_specs=(P(), P('x')),
+      out_specs=P(),
+      graph=True, graph_updates=False,
+    )
+    def f(a, b):
+      return a[...] + b[...]
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      f(v, v)
 
 
 class TestGrad(parameterized.TestCase):
@@ -1136,7 +1331,7 @@ class TestGrad(parameterized.TestCase):
       d=5.0,
     )
 
-    @nnx.graph.grad
+    @nnx.grad
     def f(m: nnx.Dict):
       # sum all params
       return m['a'][0][...] + m['a'][1][...] + m['b'][...]
@@ -1168,7 +1363,7 @@ class TestGrad(parameterized.TestCase):
       d=5.0,
     )
 
-    @nnx.graph.grad
+    @nnx.grad
     def f(m: nnx.Dict):
       # sum all params
       return m.a[0] + m.a[1] + m.b
@@ -1196,7 +1391,7 @@ class TestGrad(parameterized.TestCase):
       d=5.0,
     )
 
-    @nnx.graph.grad(argnums=nnx.DiffState(0, nnx.BatchStat))
+    @nnx.grad(argnums=nnx.DiffState(0, nnx.BatchStat))
     def f(m: nnx.Dict):
       # sum all params
       return m.a[0] + m.a[1] + m.b
@@ -1220,7 +1415,7 @@ class TestGrad(parameterized.TestCase):
     rngs = nnx.Rngs(0)
     m = nnx.Linear(2, 3, rngs=rngs)
     loss_fn = lambda m, x, y: jnp.mean((m(x) - y) ** 2)
-    grad_fn = nnx.graph.grad(loss_fn)
+    grad_fn = nnx.grad(loss_fn)
     x = jax.random.uniform(rngs(), (1, 2))
     y = jnp.ones((1, 3))
     grads = grad_fn(m, x, y)
@@ -1244,7 +1439,7 @@ class TestGrad(parameterized.TestCase):
     rngs = nnx.Rngs(0)
     m1 = nnx.Linear(2, 3, rngs=rngs)
     m2 = nnx.Linear(3, 3, rngs=rngs)
-    grad_fn = nnx.graph.grad(loss_fn, argnums=argnums)
+    grad_fn = nnx.grad(loss_fn, argnums=argnums)
     x = jax.random.uniform(rngs(), (1, 2))
     y = jnp.ones((1, 3))
     inputs = [x, y]
@@ -1268,7 +1463,7 @@ class TestGrad(parameterized.TestCase):
     m1_diffstate = nnx.DiffState(0, nnx.PathContains('kernel'))
     m2_diffstate = nnx.DiffState(1, nnx.PathContains('bias'))
 
-    @nnx.graph.grad(argnums=(m1_diffstate, m2_diffstate))
+    @nnx.grad(argnums=(m1_diffstate, m2_diffstate))
     def loss_fn(m1: nnx.Linear, m2: nnx.Linear):
       return jnp.mean(m1.kernel * m2.kernel) + jnp.mean(m1.bias * m2.bias)
 
@@ -1286,7 +1481,7 @@ class TestGrad(parameterized.TestCase):
     m1_diffstate = nnx.DiffState(0, nnx.PathContains('kernel'))
     m2_diffstate = nnx.DiffState(1, nnx.PathContains('bias'))
 
-    @nnx.graph.grad(argnums=(m1_diffstate, m2_diffstate))
+    @nnx.grad(argnums=(m1_diffstate, m2_diffstate))
     def loss_fn(l1: list[nnx.Linear], l2: list[nnx.Linear]):
       return jnp.mean(l1[0].kernel * l2[0].kernel) + jnp.mean(
         l1[0].bias * l2[0].bias
@@ -1306,7 +1501,7 @@ class TestGrad(parameterized.TestCase):
     m1_diffstate = nnx.DiffState(0, nnx.PathContains('kernel'))
     m2_diffstate = nnx.DiffState(1, nnx.PathContains('bias'))
 
-    @nnx.graph.value_and_grad(argnums=(m1_diffstate, m2_diffstate))
+    @nnx.value_and_grad(argnums=(m1_diffstate, m2_diffstate))
     def loss_fn(l1: list[nnx.Linear], l2: list[nnx.Linear]):
       return jnp.mean(l1[0].kernel * l2[0].kernel) + jnp.mean(
         l1[0].bias * l2[0].bias
@@ -1327,7 +1522,7 @@ class TestGrad(parameterized.TestCase):
     m1_diffstate = nnx.DiffState(0, nnx.PathContains('kernel'))
     m2_diffstate = nnx.DiffState(1, nnx.PathContains('bias'))
 
-    @nnx.graph.value_and_grad(argnums=(m1_diffstate, m2_diffstate), has_aux=True)
+    @nnx.value_and_grad(argnums=(m1_diffstate, m2_diffstate), has_aux=True)
     def loss_fn(l1: list[nnx.Linear], l2: list[nnx.Linear]):
       loss = jnp.mean(l1[0].kernel * l2[0].kernel) + jnp.mean(
         l1[0].bias * l2[0].bias
@@ -1352,7 +1547,7 @@ class TestGrad(parameterized.TestCase):
 
     m = dict(a=[p1, p2], b=p1)
 
-    @nnx.graph.grad
+    @nnx.grad
     def f(m: dict):
       return m['a'][0] + m['a'][1] + m['b']
 
@@ -1374,53 +1569,77 @@ class TestGrad(parameterized.TestCase):
     assert m['a'][1][...] == 1.0
     assert m['b'][...] == 2.0
 
-  def test_tree_mode_grad(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_grad(self, graph, graph_updates):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.grad(graph=False)
+    @nnx.grad(graph=graph, graph_updates=graph_updates)
     def loss_fn(m: nnx.Linear):
       return jnp.mean(m.kernel) + jnp.mean(m.bias)
 
     grads = loss_fn(m)
 
-    self.assertIsInstance(grads, nnx.Linear)
+    grad_type = nnx.State if graph and graph_updates else nnx.Linear
+    self.assertIsInstance(grads, grad_type)
     self.assertEqual(grads.kernel.shape, (2, 3))
     self.assertEqual(grads.bias.shape, (3,))
 
-  def test_tree_mode_grad_multiple_inputs(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_grad_multiple_inputs(self, graph, graph_updates):
     rngs = nnx.Rngs(0)
     m = nnx.Linear(2, 3, rngs=rngs)
     loss_fn = lambda m, x, y: jnp.mean((m(x) - y) ** 2)
-    grad_fn = nnx.grad(loss_fn, graph=False)
+    grad_fn = nnx.grad(loss_fn, graph=graph, graph_updates=graph_updates)
     x = jax.random.uniform(rngs(), (1, 2))
     y = jnp.ones((1, 3))
     grads = grad_fn(m, x, y)
 
-    self.assertIsInstance(grads, nnx.Linear)
+    grad_type = nnx.State if graph and graph_updates else nnx.Linear
+    self.assertIsInstance(grads, grad_type)
     self.assertEqual(grads.kernel.shape, (2, 3))
     self.assertEqual(grads.bias.shape, (3,))
 
-  def test_tree_mode_grad_multiple_graph_nodes(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_grad_multiple_graph_nodes(self, graph, graph_updates):
     rngs = nnx.Rngs(0)
     m1 = nnx.Linear(2, 3, rngs=rngs)
     m2 = nnx.Linear(3, 3, rngs=rngs)
     loss_fn = lambda m1, m2, x, y: jnp.mean((m2(m1(x)) - y) ** 2)
-    grad_fn = nnx.grad(loss_fn, argnums=(0, 1), graph=False)
+    grad_fn = nnx.grad(loss_fn, argnums=(0, 1), graph=graph,
+                       graph_updates=graph_updates)
     x = jax.random.uniform(rngs(), (1, 2))
     y = jnp.ones((1, 3))
     grads_m1, grads_m2 = grad_fn(m1, m2, x, y)
 
-    self.assertIsInstance(grads_m1, nnx.Linear)
+    grad_type = nnx.State if graph and graph_updates else nnx.Linear
+    self.assertIsInstance(grads_m1, grad_type)
     self.assertEqual(grads_m1.kernel.shape, (2, 3))
     self.assertEqual(grads_m1.bias.shape, (3,))
-    self.assertIsInstance(grads_m2, nnx.Linear)
+    self.assertIsInstance(grads_m2, grad_type)
     self.assertEqual(grads_m2.kernel.shape, (3, 3))
     self.assertEqual(grads_m2.bias.shape, (3,))
 
-  def test_tree_mode_value_and_grad_with_aux(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_value_and_grad_with_aux(self, graph, graph_updates):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.value_and_grad(has_aux=True, graph=False)
+    @nnx.value_and_grad(has_aux=True, graph=graph, graph_updates=graph_updates)
     def loss_fn(m: nnx.Linear):
       loss = jnp.mean(m.kernel)
       m.kernel[...] = jnp.ones_like(m.kernel[...])
@@ -1430,20 +1649,25 @@ class TestGrad(parameterized.TestCase):
 
     self.assertEqual(loss.shape, ())
     self.assertEqual(aux, {'aux': 1})
-    self.assertIsInstance(grads, nnx.Linear)
+    grad_type = nnx.State if graph and graph_updates else nnx.Linear
+    self.assertIsInstance(grads, grad_type)
     self.assertEqual(grads.kernel.shape, (2, 3))
     np.testing.assert_allclose(m.kernel[...], jnp.ones((2, 3)))
 
 
 class TestCustomVJP(parameterized.TestCase):
-  def test_basic_call(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_basic_call(self, graph, graph_updates):
     m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     m2 = nnx.Linear(1, 1, rngs=nnx.Rngs(1))
 
-    @nnx.graph.custom_vjp
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
     def f(m1: nnx.Linear, m2: nnx.Linear):
       y = m1.kernel * m2.kernel
-      m1.kernel[...] = jnp.array(-1.0)
       return y
 
     def f_fwd(m1, m2):
@@ -1459,17 +1683,54 @@ class TestCustomVJP(parameterized.TestCase):
 
     y = f(m1, m2)
 
-    self.assertEqual(m1.kernel[...], -1.0)
+    self.assertEqual(y.shape, (1, 1))
+  
+  @parameterized.parameters(
+    (True,),
+    (False,),
+  )
+  def test_basic_call_with_state(self, graph):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(1, 1, rngs=nnx.Rngs(1))
+    state = nnx.BatchStat(jnp.array(0.0))
+
+    @nnx.custom_vjp(
+      nondiff_argnums=(2,), graph=graph, graph_updates=False,
+    )
+    def f(m1: nnx.Linear, m2: nnx.Linear, state):
+      y = m1.kernel * m2.kernel
+      state[...] = jnp.array(-1.0)
+      return y
+
+    def f_fwd(m1, m2, state):
+      y = f(m1, m2, state)
+      return y, (m1, m2)
+
+    def f_bwd(state, res, g):
+      inputs_g, out_g = g
+      m1, m2 = res
+      return inputs_g
+
+    f.defvjp(f_fwd, f_bwd)
+
+    y = f(m1, m2, state)
+
+    self.assertEqual(state[...], -1.0)
     self.assertEqual(y.shape, (1, 1))
 
-  def test_jax_example(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_jax_example(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.graph.custom_vjp
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
     def f(m: Foo):
       m.z += 1
       return jnp.sin(m.x) * m.y  # type: ignore
@@ -1480,27 +1741,38 @@ class TestCustomVJP(parameterized.TestCase):
       return y, res
 
     def f_bwd(res, g):
-      (m_g,), out_g = g
       cos_x, sin_x, m = res
-
-      self.assertIsInstance(m_g, nnx.State)
-      self.assertEqual(out_g.shape, ())
-      self.assertIsInstance(m, Foo)
-
-      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g['x'][...] = cos_x * out_g * m.y
-      m_g['y'][...] = sin_x * out_g
-      return (m_g,)
+      if graph and graph_updates:
+        (m_g,), out_g = g
+        self.assertIsInstance(m_g, nnx.State)
+        m_g['x'][...] = cos_x * out_g * m.y
+        m_g['y'][...] = sin_x * out_g
+        return (m_g,)
+      else:
+        out_g = g
+        m_g = nnx.clone(m)
+        m_g.x[...] = cos_x * out_g * m.y
+        m_g.y[...] = sin_x * out_g
+        return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
-    grad: nnx.State = nnx.graph.grad(f, argnums=nnx.DiffState(0, ...))(m)
-
-    np.testing.assert_allclose(grad['x'][...], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'][...], jnp.sin(1.0))  # type: ignore
-    self.assertEqual(m.z, 1)
+    if graph and graph_updates:
+      grads = nnx.grad(f, argnums=nnx.DiffState(0, ...))(m)
+      self.assertIsInstance(grads, nnx.State)
+    else:
+      grads = nnx.grad(
+        f, graph=graph, graph_updates=graph_updates,
+      )(m)
+      self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))  # type: ignore
+    if graph and graph_updates:
+      self.assertEqual(m.z, 1)
+    else:
+      self.assertEqual(m.z, 0)
 
   def test_diff_state(self):
     @dataclasses.dataclass
@@ -1512,7 +1784,7 @@ class TestCustomVJP(parameterized.TestCase):
     x_in_path = nnx.PathContains('x')
     diff_state = nnx.DiffState(0, x_in_path)
 
-    @nnx.graph.custom_vjp(nondiff_argnums=(diff_state,))
+    @nnx.custom_vjp(nondiff_argnums=(diff_state,))
     def f(m: Foo):
       m.z += 1
       return jnp.sin(m.x) * m.y  # type: ignore
@@ -1538,20 +1810,25 @@ class TestCustomVJP(parameterized.TestCase):
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
-    grad: nnx.State = nnx.graph.grad(f, argnums=nnx.DiffState(0, x_in_path))(m)
+    grad: nnx.State = nnx.grad(f, argnums=nnx.DiffState(0, x_in_path))(m)
 
     np.testing.assert_allclose(grad['x'][...], jnp.cos(1.0) * 2.0)  # type: ignore
     self.assertEqual(m.z, 1)
 
-  def test_jax_example_with_remat(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_jax_example_with_remat(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.graph.custom_vjp
-    @nnx.graph.remat
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def f(m: Foo):
       m.z += 1
       return jnp.sin(m.x) * m.y  # type: ignore
@@ -1562,31 +1839,42 @@ class TestCustomVJP(parameterized.TestCase):
       return y, res
 
     def f_bwd(res, g):
-      (m_g,), out_g = g
       cos_x, sin_x, m = res
-
-      self.assertIsInstance(m_g, nnx.State)
-      self.assertEqual(out_g.shape, ())
-      self.assertIsInstance(m, Foo)
-
-      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g['x'][...] = cos_x * out_g * m.y
-      m_g['y'][...] = sin_x * out_g
-      return (m_g,)
+      if graph and graph_updates:
+        (m_g,), out_g = g
+        self.assertIsInstance(m_g, nnx.State)
+        m_g['x'][...] = cos_x * out_g * m.y
+        m_g['y'][...] = sin_x * out_g
+        return (m_g,)
+      else:
+        out_g = g
+        m_g = jax.tree.map(lambda x: x, m)
+        m_g.x[...] = cos_x * out_g * m.y
+        m_g.y[...] = sin_x * out_g
+        return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
-    @nnx.graph.jit
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def loss_fn(m):
       return f(m)
 
-    grad: nnx.State = nnx.graph.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
-
-    np.testing.assert_allclose(grad['x'][...], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'][...], jnp.sin(1.0))  # type: ignore
-    self.assertEqual(m.z, 1)
+    if graph and graph_updates:
+      grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
+      self.assertIsInstance(grads, nnx.State)
+    else:
+      grads = nnx.grad(
+        loss_fn, graph=graph, graph_updates=graph_updates,
+      )(m)
+      self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))  # type: ignore
+    if graph and graph_updates:
+      self.assertEqual(m.z, 1)
+    else:
+      self.assertEqual(m.z, 0)
 
   def test_two_args(self):
     @dataclasses.dataclass
@@ -1595,7 +1883,7 @@ class TestCustomVJP(parameterized.TestCase):
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.graph.custom_vjp
+    @nnx.custom_vjp
     def f(m1: Foo, m2: Foo):
       m1.z += 1
       y = jnp.sin(m1.x) * m1.y  # type: ignore
@@ -1631,7 +1919,7 @@ class TestCustomVJP(parameterized.TestCase):
 
     m1_grad: nnx.State
     m2_grad: nnx.State
-    m1_grad, m2_grad = nnx.graph.grad(
+    m1_grad, m2_grad = nnx.grad(
       loss_fn, argnums=(nnx.DiffState(0, ...), nnx.DiffState(1, ...))
     )(m1, m2)
 
@@ -1641,14 +1929,21 @@ class TestCustomVJP(parameterized.TestCase):
     np.testing.assert_allclose(m2_grad['x'][...], 4.0)  # type: ignore
     np.testing.assert_allclose(m2_grad['y'][...], 3.0)  # type: ignore
 
-  def test_non_diff_args(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_non_diff_args(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.graph.custom_vjp(nondiff_argnums=(0, 2))
+    @nnx.custom_vjp(
+      nondiff_argnums=(0, 2), graph=graph, graph_updates=graph_updates,
+    )
     def f(a, m: Foo, b):
       self.assertEqual(a, 1)
       self.assertEqual(b, 2)
@@ -1663,19 +1958,21 @@ class TestCustomVJP(parameterized.TestCase):
       return y, res
 
     def f_bwd(a, b, res, g):
-      (m_g,), out_g = g
       cos_x, sin_x, m = res
-
       self.assertEqual(a, 1)
       self.assertEqual(b, 2)
-      self.assertIsInstance(m_g, nnx.State)
-      self.assertEqual(out_g.shape, ())
-      self.assertIsInstance(m, Foo)
-
-      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g['x'][...] = cos_x * out_g * m.y
-      m_g['y'][...] = sin_x * out_g
-      return (m_g,)
+      if graph and graph_updates:
+        (m_g,), out_g = g
+        self.assertIsInstance(m_g, nnx.State)
+        m_g['x'][...] = cos_x * out_g * m.y
+        m_g['y'][...] = sin_x * out_g
+        return (m_g,)
+      else:
+        out_g = g
+        m_g = jax.tree.map(lambda x: x, m)
+        m_g.x[...] = cos_x * out_g * m.y
+        m_g.y[...] = sin_x * out_g
+        return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
 
@@ -1686,11 +1983,20 @@ class TestCustomVJP(parameterized.TestCase):
       b = 2
       return f(a, m, b)
 
-    grad: nnx.State = nnx.graph.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
-
-    np.testing.assert_allclose(grad['x'][...], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'][...], jnp.sin(1.0))  # type: ignore
-    self.assertEqual(m.z, 1)
+    if graph and graph_updates:
+      grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
+      self.assertIsInstance(grads, nnx.State)
+    else:
+      grads = nnx.grad(
+        loss_fn, graph=graph, graph_updates=graph_updates,
+      )(m)
+      self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))  # type: ignore
+    if graph and graph_updates:
+      self.assertEqual(m.z, 1)
+    else:
+      self.assertEqual(m.z, 0)
 
   def test_docs_example(self):
     import jax.numpy as jnp
@@ -1701,7 +2007,7 @@ class TestCustomVJP(parameterized.TestCase):
         self.x = nnx.Param(x)
         self.y = nnx.Param(y)
 
-    @nnx.graph.custom_vjp
+    @nnx.custom_vjp
     def f(m: Foo):
       return jnp.sin(m.x) * m.y  # type: ignore
 
@@ -1717,7 +2023,7 @@ class TestCustomVJP(parameterized.TestCase):
     f.defvjp(f_fwd, f_bwd)
 
     m = Foo(x=jnp.array(1.0), y=jnp.array(2.0))
-    grads = nnx.graph.grad(f)(m)
+    grads = nnx.grad(f)(m)
 
   @parameterized.parameters(
     {'use_custom_vjp': False},
@@ -1755,10 +2061,10 @@ class TestCustomVJP(parameterized.TestCase):
       return (m_g, x_grad)
 
     if use_custom_vjp:
-      linear = nnx.graph.custom_vjp(linear)
+      linear = nnx.custom_vjp(linear)
       linear.defvjp(linear_fwd, linear_bwd)
 
-    @nnx.graph.jit
+    @nnx.jit
     def loss_fn(x, mod):
       y = linear(mod, x)
       return y.mean()
@@ -1766,43 +2072,54 @@ class TestCustomVJP(parameterized.TestCase):
     mod = MyLinear(10, 5, rngs=nnx.Rngs(0))
     self.assertEqual(mod.n[...], 0)
     x = jax.random.normal(jax.random.key(0), (10,))
-    loss, grad = nnx.graph.value_and_grad(loss_fn)(x, mod)
+    loss, grad = nnx.value_and_grad(loss_fn)(x, mod)
     self.assertEqual(loss.shape, ())
     self.assertEqual(grad.shape, (10,))
     self.assertEqual(mod.n[...], 1)
 
-  def test_tree_mode_basic_call(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_basic_call(self, graph, graph_updates):
     m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     m2 = nnx.Linear(1, 1, rngs=nnx.Rngs(1))
+    state = nnx.BatchStat(jnp.array(0.0))
 
-    @nnx.custom_vjp(graph=False)
-    def f(m1: nnx.Linear, m2: nnx.Linear):
+    @nnx.custom_vjp(
+      nondiff_argnums=(2,), graph=graph, graph_updates=graph_updates,
+    )
+    def f(m1: nnx.Linear, m2: nnx.Linear, state):
       y = m1.kernel * m2.kernel
-      m1.kernel[...] = jnp.array(-1.0)
+      state[...] = jnp.array(-1.0)
       return y
 
-    def f_fwd(m1, m2):
-      y = f(m1, m2)
+    def f_fwd(m1, m2, state):
+      y = f(m1, m2, state)
       return y, (m1, m2)
 
-    def f_bwd(res, g):
+    def f_bwd(state, res, g):
       m1, m2 = res
       return g, g
 
     f.defvjp(f_fwd, f_bwd)
 
-    y = f(m1, m2)
+    y = f(m1, m2, state)
 
-    self.assertEqual(m1.kernel[...], -1.0)
+    self.assertEqual(state[...], -1.0)
     self.assertEqual(y.shape, (1, 1))
 
-  def test_tree_mode_jax_example(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_jax_example(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
 
-    @nnx.custom_vjp(graph=False)
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
     def f(m: Foo):
       return jnp.sin(m.x) * m.y
 
@@ -1822,20 +2139,24 @@ class TestCustomVJP(parameterized.TestCase):
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
 
-    grads = nnx.grad(f, graph=False)(m)
+    grads = nnx.grad(f, graph=graph, graph_updates=graph_updates)(m)
 
     self.assertIsInstance(grads, Foo)
     np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
     np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))
 
-  def test_tree_mode_with_remat(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_with_remat(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
 
-    @nnx.custom_vjp(graph=False)
-    @nnx.remat(graph=False)
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def f(m: Foo):
       return jnp.sin(m.x) * m.y
 
@@ -1855,23 +2176,28 @@ class TestCustomVJP(parameterized.TestCase):
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
 
-    @nnx.jit(graph=False)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def loss_fn(m):
       return f(m)
 
-    grads = nnx.grad(loss_fn, graph=False)(m)
+    grads = nnx.grad(loss_fn, graph=graph, graph_updates=graph_updates)(m)
 
     self.assertIsInstance(grads, Foo)
     np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
     np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))
 
-  def test_tree_mode_non_diff_args(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_non_diff_args(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
 
-    @nnx.custom_vjp(nondiff_argnums=(0, 2), graph=False)
+    @nnx.custom_vjp(nondiff_argnums=(0, 2), graph=graph,
+                    graph_updates=graph_updates)
     def f(a, m: Foo, b):
       self.assertEqual(a, 1)
       self.assertEqual(b, 2)
@@ -1902,7 +2228,7 @@ class TestCustomVJP(parameterized.TestCase):
       b = 2
       return f(a, m, b)
 
-    grads = nnx.grad(loss_fn, graph=False)(m)
+    grads = nnx.grad(loss_fn, graph=graph, graph_updates=graph_updates)(m)
 
     self.assertIsInstance(grads, Foo)
     np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
@@ -1917,10 +2243,71 @@ class TestCustomVJP(parameterized.TestCase):
     ):
       nnx.custom_vjp(lambda m: m, nondiff_argnums=(diff_state,), graph=False)
 
+  def test_grad_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    def f(v_diff, v_nondiff):
+      return v_diff[...] + v_nondiff[...]
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      nnx.grad(f, argnums=0, graph=True, graph_updates=False)(v, v)
+
+  def test_custom_vjp_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    @nnx.custom_vjp(nondiff_argnums=(1,), graph=True, graph_updates=False)
+    def f(v_diff, v_nondiff):
+      return v_diff[...] + v_nondiff[...]
+
+    def f_fwd(v_diff, v_nondiff):
+      return f(v_diff, v_nondiff), ()
+
+    def f_bwd(v_nondiff, res, g):
+      return (nnx.clone(v_nondiff),)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      f(v, v)
+
+
+  def test_custom_vjp_diff_arg_mutation_error(self):
+    @nnx.custom_vjp(graph=True, graph_updates=False)
+    def f(m):
+      m.x[...] += 1
+      return m.x[...] * m.y[...]
+
+    def f_fwd(m):
+      return f(m), (m,)
+
+    def f_bwd(res, g):
+      (m,) = res
+      m_g = nnx.clone(m)
+      m_g.x[...] = g * m.y[...]
+      m_g.y[...] = g * m.x[...]
+      return (m_g,)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
+
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
+    with self.assertRaisesRegex(
+      ValueError, 'Variables in differentiable argument'
+    ):
+      f(m)
+
 
 class TestVjpJvp(parameterized.TestCase):
 
-  def test_vjp_basic(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_basic(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -1931,7 +2318,9 @@ class TestVjpJvp(parameterized.TestCase):
     m = Foo(w=nnx.Param(jnp.array([1.0, 2.0, 3.0])))
     x = jnp.array([4.0, 5.0, 6.0])
 
-    primals_out, vjp_fn = nnx.vjp(f, m, x, graph=False)
+    primals_out, vjp_fn = nnx.vjp(
+      f, m, x, graph=graph, graph_updates=graph_updates,
+    )
 
     np.testing.assert_allclose(primals_out, 1.0 * 4.0 + 2.0 * 5.0 + 3.0 * 6.0)
 
@@ -1940,7 +2329,11 @@ class TestVjpJvp(parameterized.TestCase):
     np.testing.assert_allclose(m_grad.w[...], x)
     np.testing.assert_allclose(x_grad, m.w[...])
 
-  def test_vjp_has_aux(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_has_aux(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -1952,12 +2345,18 @@ class TestVjpJvp(parameterized.TestCase):
     m = Foo(w=nnx.Param(jnp.array([1.0, 2.0])))
     x = jnp.array([3.0, 4.0])
 
-    primals_out, vjp_fn, aux = nnx.vjp(f, m, x, has_aux=True, graph=False)
+    primals_out, vjp_fn, aux = nnx.vjp(
+      f, m, x, has_aux=True, graph=graph, graph_updates=graph_updates,
+    )
 
     np.testing.assert_allclose(primals_out, 1.0 * 3.0 + 2.0 * 4.0)
     np.testing.assert_allclose(aux['input'], x)
 
-  def test_vjp_state_propagation(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_state_propagation(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -1974,10 +2373,16 @@ class TestVjpJvp(parameterized.TestCase):
     x = jnp.array([3.0, 4.0])
 
     self.assertEqual(m.count[...], 0)
-    primals_out, vjp_fn = nnx.vjp(f, m, x, graph=False)
+    primals_out, vjp_fn = nnx.vjp(
+      f, m, x, graph=graph, graph_updates=graph_updates,
+    )
     self.assertEqual(m.count[...], 1)
 
-  def test_vjp_matches_jax(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_matches_jax(self, graph, graph_updates):
     def f(w, x):
       return jnp.sum(w * x)
 
@@ -1987,19 +2392,25 @@ class TestVjpJvp(parameterized.TestCase):
     jax_primals, jax_vjp_fn = jax.vjp(f, w, x)
     jax_grads = jax_vjp_fn(jnp.ones_like(jax_primals))
 
-    nnx_primals, nnx_vjp_fn = nnx.vjp(f, w, x, graph=False)
+    nnx_primals, nnx_vjp_fn = nnx.vjp(
+      f, w, x, graph=graph, graph_updates=graph_updates,
+    )
     nnx_grads = nnx_vjp_fn(jnp.ones_like(nnx_primals))
 
     np.testing.assert_allclose(nnx_primals, jax_primals)
     for ng, jg in zip(nnx_grads, jax_grads):
       np.testing.assert_allclose(ng, jg)
 
-  def test_vjp_decorator(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_decorator(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
 
-    @nnx.vjp(graph=False)
+    @nnx.vjp(graph=graph, graph_updates=graph_updates)
     def f(m: Foo, x):
       return jnp.sum(m.w * x)
 
@@ -2011,7 +2422,11 @@ class TestVjpJvp(parameterized.TestCase):
     m_grad, x_grad = vjp_fn(jnp.ones_like(primals_out))
     np.testing.assert_allclose(m_grad.w[...], x)
 
-  def test_jvp_basic(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_basic(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2026,14 +2441,19 @@ class TestVjpJvp(parameterized.TestCase):
     x_tangent = jnp.ones_like(x)
 
     primals_out, tangent_out = nnx.jvp(
-      f, (m, x), (m_tangent, x_tangent), graph=False
+      f, (m, x), (m_tangent, x_tangent),
+      graph=graph, graph_updates=graph_updates,
     )
 
     np.testing.assert_allclose(primals_out, 1.0 * 4.0 + 2.0 * 5.0 + 3.0 * 6.0)
     expected_tangent = jnp.sum(jnp.ones(3) * x + m.w[...] * jnp.ones(3))
     np.testing.assert_allclose(tangent_out, expected_tangent)
 
-  def test_jvp_has_aux(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_has_aux(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2049,13 +2469,18 @@ class TestVjpJvp(parameterized.TestCase):
     x_tangent = jnp.ones_like(x)
 
     primals_out, tangent_out, aux = nnx.jvp(
-      f, (m, x), (m_tangent, x_tangent), has_aux=True, graph=False
+      f, (m, x), (m_tangent, x_tangent), has_aux=True,
+      graph=graph, graph_updates=graph_updates,
     )
 
     np.testing.assert_allclose(primals_out, 11.0)
     np.testing.assert_allclose(aux['input'], x)
 
-  def test_jvp_state_propagation(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_state_propagation(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2076,11 +2501,16 @@ class TestVjpJvp(parameterized.TestCase):
 
     self.assertEqual(m.count[...], 0.0)
     primals_out, tangent_out = nnx.jvp(
-      f, (m, x), (m_tangent, x_tangent), graph=False
+      f, (m, x), (m_tangent, x_tangent),
+      graph=graph, graph_updates=graph_updates,
     )
     self.assertEqual(m.count[...], 1.0)
 
-  def test_jvp_matches_jax(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_matches_jax(self, graph, graph_updates):
     def f(w, x):
       return jnp.sum(w * x)
 
@@ -2092,18 +2522,23 @@ class TestVjpJvp(parameterized.TestCase):
 
     jax_primals, jax_tangents = jax.jvp(f, (w, x), (w_tangent, x_tangent))
     nnx_primals, nnx_tangents = nnx.jvp(
-      f, (w, x), (w_tangent, x_tangent), graph=False
+      f, (w, x), (w_tangent, x_tangent),
+      graph=graph, graph_updates=graph_updates,
     )
 
     np.testing.assert_allclose(nnx_primals, jax_primals)
     np.testing.assert_allclose(nnx_tangents, jax_tangents)
 
-  def test_jvp_decorator(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_decorator(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
 
-    @nnx.jvp(graph=False)
+    @nnx.jvp(graph=graph, graph_updates=graph_updates)
     def f(m: Foo, x):
       return jnp.sum(m.w * x)
 
@@ -2130,8 +2565,8 @@ class TestScan(parameterized.TestCase):
         x = nnx.gelu(x)
         return x
 
-    @nnx.graph.split_rngs(splits=5)
-    @nnx.graph.scan(in_axes=(nnx.Carry, 0), length=5)
+    @nnx.split_rngs(splits=5)
+    @nnx.scan(in_axes=(nnx.Carry, 0), length=5)
     def create_block(_, rngs: nnx.Rngs):
       return None, Block(rngs=rngs)
 
@@ -2140,7 +2575,7 @@ class TestScan(parameterized.TestCase):
     assert module.linear.kernel.shape == (5, 3, 3)
     assert module.linear.bias.shape == (5, 3)
 
-    @nnx.graph.scan(in_axes=(nnx.Carry, 0, None), length=5)
+    @nnx.scan(in_axes=(nnx.Carry, 0, None), length=5)
     def forward_block(_, block: Block, x: jax.Array):
       return None, block(x)
 
@@ -2150,7 +2585,8 @@ class TestScan(parameterized.TestCase):
     assert y.shape == (5, 1, 3)
     assert out is None
 
-  def test_variables_in_scan(self):
+  @parameterized.parameters(True, False)
+  def test_variables_in_scan(self, graph_updates):
     def block_init(din, dout, rngs):
       w = nnx.Param(jax.random.normal(rngs.params(), (din, dout)))
       b = nnx.Param(jnp.zeros((dout,)))
@@ -2159,8 +2595,8 @@ class TestScan(parameterized.TestCase):
     def block_forward(w, b, x):
       return nnx.gelu(x @ w + b[None])
 
-    @nnx.graph.split_rngs(splits=5)
-    @nnx.graph.scan(in_axes=0, out_axes=0, length=5)
+    @nnx.split_rngs(splits=5)
+    @nnx.scan(in_axes=0, out_axes=0, length=5, graph_updates=graph_updates)
     def create_block(rngs: nnx.Rngs):
       return block_init(3, 3, rngs)
 
@@ -2169,7 +2605,10 @@ class TestScan(parameterized.TestCase):
     assert w.shape == (5, 3, 3)
     assert b.shape == (5, 3)
 
-    @nnx.graph.scan(in_axes=(0, 0, nnx.Carry), out_axes=nnx.Carry)
+    @nnx.scan(
+      in_axes=(0, 0, nnx.Carry), out_axes=nnx.Carry,
+      graph_updates=graph_updates,
+    )
     def stack_forward(w, b, x):
       return block_forward(w, b, x)
 
@@ -2177,9 +2616,10 @@ class TestScan(parameterized.TestCase):
     y = stack_forward(w, b, x)
     assert y.shape == (1, 3)
 
-  @parameterized.parameters(True, False)
-
-  def test_variables_as_carries_in_scan(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_variables_as_carries_in_scan(self, graph, graph_updates):
     w = nnx.Param(jax.random.normal(jax.random.key(0), (3, 3)))
     b = nnx.Param(jnp.zeros((3,)))
     count = nnx.BatchStat(0)
@@ -2187,7 +2627,10 @@ class TestScan(parameterized.TestCase):
     def block_forward(w, b, x):
       return nnx.gelu(x @ w + b[None])
 
-    @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0), graph=graph)
+    @nnx.scan(
+      in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0),
+      graph=graph, graph_updates=graph_updates,
+    )
     def stack_forward(params, x):
       w, b, count = params
       y = block_forward(w, b, x)
@@ -2210,8 +2653,8 @@ class TestScan(parameterized.TestCase):
         x = nnx.gelu(x)
         return x
 
-    @nnx.graph.split_rngs(splits=5)
-    @nnx.graph.scan(in_axes=(0,), out_axes=0, length=5)
+    @nnx.split_rngs(splits=5)
+    @nnx.scan(in_axes=(0,), out_axes=0, length=5)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs=rngs)
 
@@ -2221,7 +2664,7 @@ class TestScan(parameterized.TestCase):
     assert module.linear.bias.shape == (5, 3)
     # assert module.node.shape == (2,)
 
-    @nnx.graph.scan(in_axes=(0, None), out_axes=0, length=5)
+    @nnx.scan(in_axes=(0, None), out_axes=0, length=5)
     def forward_block(block: Block, x: jax.Array):
       return block(x)
 
@@ -2230,21 +2673,25 @@ class TestScan(parameterized.TestCase):
 
     assert y.shape == (5, 1, 3)
 
-  def test_all_carry(self):
+  @parameterized.parameters(True, False)
+  def test_all_carry(self, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       n: nnx.BatchStat[int]
 
     foo = Foo(n=nnx.BatchStat(0))
 
-    @nnx.graph.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
+    @nnx.scan(
+      in_axes=nnx.Carry, out_axes=nnx.Carry, length=3,
+      graph_updates=graph_updates,
+    )
     def loop(foo: Foo):
       foo.n[...] += 1
       return foo
 
     foo2 = loop(foo)
 
-    self.assertIs(foo2, foo)
+    self.assertIs(foo2.n, foo.n)
     self.assertEqual(foo.n[...], 3)
 
   def test_all_carry_one_argument_error(self):
@@ -2254,7 +2701,7 @@ class TestScan(parameterized.TestCase):
 
     foo = Foo(n=nnx.BatchStat(0))
 
-    @nnx.graph.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
+    @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
     def loop(foo: Foo, x): ...
 
     with self.assertRaisesRegex(
@@ -2271,7 +2718,7 @@ class TestScan(parameterized.TestCase):
     xs = jnp.arange(3)
     foo = Foo(n=nnx.BatchStat(0))
 
-    @nnx.graph.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0))
+    @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0))
     def loop(foo: Foo, x):
       x = x + 1
       foo = Foo(nnx.BatchStat(foo.n[...] + 1))  # new reference
@@ -2283,7 +2730,8 @@ class TestScan(parameterized.TestCase):
     ):
       loop(foo, xs)
 
-  def test_all_scan(self):
+  @parameterized.parameters(True, False)
+  def test_all_scan(self, graph_updates):
     class Foo(nnx.Module):
       def __init__(self, n: nnx.BatchStat[jax.Array]):
         self.n = n
@@ -2291,7 +2739,7 @@ class TestScan(parameterized.TestCase):
     xs = jnp.arange(3)
     foo = Foo(n=nnx.BatchStat(jnp.arange(3)))
 
-    @nnx.graph.scan(in_axes=0, out_axes=0)
+    @nnx.scan(in_axes=0, out_axes=0, graph_updates=graph_updates)
     def loop(foo: Foo, x):
       x = x + 1
       foo.n[...] += 1
@@ -2310,7 +2758,7 @@ class TestScan(parameterized.TestCase):
     xs = jnp.array(1)
     foo = Foo(n=nnx.BatchStat(2))
 
-    @nnx.graph.scan(in_axes=None, out_axes=0, length=4)
+    @nnx.scan(in_axes=None, out_axes=0, length=4)
     def loop(foo: Foo, x):
       return x + foo.n
 
@@ -2325,7 +2773,7 @@ class TestScan(parameterized.TestCase):
       'If one of in_axes or out_axes has Carry, the other must also have Carry',
     ):
 
-      @nnx.graph.scan(in_axes=0, out_axes=(nnx.Carry, 0))
+      @nnx.scan(in_axes=0, out_axes=(nnx.Carry, 0))
       def loop(a, b): ...
 
     with self.assertRaisesRegex(
@@ -2333,7 +2781,7 @@ class TestScan(parameterized.TestCase):
       'If one of in_axes or out_axes has Carry, the other must also have Carry',
     ):
 
-      @nnx.graph.scan(in_axes=(nnx.Carry, 0), out_axes=0)
+      @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=0)
       def loop(a, b): ...
 
   def test_double_carry_error(self):
@@ -2342,7 +2790,7 @@ class TestScan(parameterized.TestCase):
       'Found multiple Carry definitions',
     ):
 
-      @nnx.graph.scan(in_axes=(nnx.Carry, nnx.Carry))
+      @nnx.scan(in_axes=(nnx.Carry, nnx.Carry))
       def loop(a, b): ...
 
   def test_broadcast_in_output_error(self):
@@ -2351,7 +2799,7 @@ class TestScan(parameterized.TestCase):
       'Cannot broadcast output state',
     ):
 
-      @nnx.graph.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, None))
+      @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, None))
       def loop(a, b): ...
 
     with self.assertRaisesRegex(
@@ -2359,15 +2807,18 @@ class TestScan(parameterized.TestCase):
       'Cannot broadcast output state. Got StateAxes',
     ):
 
-      @nnx.graph.scan(
+      @nnx.scan(
         in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, nnx.StateAxes({...: None}))
       )
       def loop(a, b): ...
 
-  def test_tree_mode_scan_stateful(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_scan_stateful(self, graph, graph_updates):
     count = nnx.Variable(jnp.array(0))
 
-    @nnx.scan(graph=False)
+    @nnx.scan(graph=graph, graph_updates=graph_updates)
     def f(count, x):
       count[...] += 1
       return count, x + count[...]
@@ -2379,10 +2830,13 @@ class TestScan(parameterized.TestCase):
     self.assertEqual(count[...], 5)
     np.testing.assert_allclose(ys, jnp.array([1, 3, 5, 7, 9]))
 
-  def test_tree_mode_scan_carry_identity_error(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_scan_carry_identity_error(self, graph, graph_updates):
     count = nnx.Variable(jnp.array(0))
 
-    @nnx.scan(graph=False)
+    @nnx.scan(graph=graph, graph_updates=graph_updates)
     def f(count, x):
       new_count = nnx.Variable(count[...] + 1)
       return new_count, x
@@ -2393,41 +2847,41 @@ class TestScan(parameterized.TestCase):
     ):
       f(count, jnp.arange(3))
 
-  def test_tree_mode_non_default_axes_error(self):
-    with self.assertRaisesRegex(
-      ValueError,
-      'tree-mode scan only supports',
-    ):
-      @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3, graph=False)
-      def loop(x):
-        return x
+  def test_tree_mode_custom_axes(self):
+    @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3, graph=False)
+    def loop(x):
+      return x
 
-  def test_only_carry(self):
+    result = loop(jnp.array(1.0))
+    np.testing.assert_allclose(result, jnp.array(1.0))
+
+  @parameterized.parameters(True, False)
+  def test_only_carry(self, graph_updates):
     class Foo(nnx.Module):
       def __init__(self):
         self.c = nnx.BatchStat(jnp.array(0))
 
-    @nnx.graph.scan(in_axes=(nnx.Carry,), length=5)
+    @nnx.scan(in_axes=(nnx.Carry,), length=5, graph_updates=graph_updates)
     def loop(foo: Foo) -> tuple[Foo, jax.Array]:
       foo.c[...] += 1
       return foo, foo.c[...]
 
     foo = Foo()
     foo2, cs = loop(foo)
-    self.assertIs(foo2, foo)
+    self.assertIs(foo2.c, foo.c)
     np.testing.assert_allclose(cs, jnp.arange(1, 6))
 
   def test_out_axes(self):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class MLP(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes), axis_size=5)
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes), axis_size=5)
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.node = nnx.BatchStat(jnp.ones((2,)))
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry), out_axes=(nnx.Carry, 1, 2))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry), out_axes=(nnx.Carry, 1, 2))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = nnx.gelu(x)
@@ -2450,13 +2904,13 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class MLP(nnx.Module):
-      @nnx.graph.vmap(in_axes=(state_axes, 0))
+      @nnx.vmap(in_axes=(state_axes, 0))
       def __init__(self, key: jax.Array):
         rngs = nnx.Rngs(key)
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry), out_axes=nnx.Carry)
+      @nnx.scan(in_axes=(state_axes, nnx.Carry), out_axes=nnx.Carry)
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = nnx.gelu(x)
@@ -2474,13 +2928,13 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState, nnx.Intermediate): 0, ...: None})
 
     class MLP(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes))
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes))
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry, 0))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry, 0))
       def __call__(
         self, x: jax.Array, a: jax.Array
       ) -> tp.Tuple[jax.Array, None]:
@@ -2512,13 +2966,13 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class MLP(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes))
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes))
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.node = nnx.BatchStat(jnp.ones((2,)))
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry, 0, None))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry, 0, None))
       def __call__(
         self, x: jax.Array, a: jax.Array, b: jax.Array
       ) -> tp.Tuple[jax.Array, None]:
@@ -2547,15 +3001,15 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class MLP(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes))
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes))
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = self.bn(x)
@@ -2579,15 +3033,15 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class MLP(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes))
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes))
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = self.bn(x)
@@ -2611,16 +3065,16 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
 
     class MLP(nnx.Module):
-      @nnx.graph.split_rngs(splits=5, only='params')
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes))
+      @nnx.split_rngs(splits=5, only='params')
+      @nnx.vmap(in_axes=(state_axes, state_axes))
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.graph.split_rngs(splits=5, only='params')
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry))
+      @nnx.split_rngs(splits=5, only='params')
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = self.bn(x)
@@ -2644,16 +3098,16 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
 
     class MLP(nnx.Module):
-      @nnx.graph.split_rngs(splits=5, only='params')
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes))
+      @nnx.split_rngs(splits=5, only='params')
+      @nnx.vmap(in_axes=(state_axes, state_axes))
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
         self.bn = nnx.BatchNorm(3, rngs=rngs)
         self.dropout = nnx.Dropout(0.5, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.graph.split_rngs(splits=5, only='params')
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry))
+      @nnx.split_rngs(splits=5, only='params')
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = self.bn(x)
@@ -2677,8 +3131,8 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class Block(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes), axis_size=5)
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes), axis_size=5)
       def __init__(self, rngs: nnx.Rngs):
         self.d = 3
         self.linear = nnx.Linear(3, 3, rngs=rngs)
@@ -2686,7 +3140,7 @@ class TestScan(parameterized.TestCase):
         self.dropout = nnx.Dropout(0.5, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = self.bn(x)
@@ -2712,8 +3166,8 @@ class TestScan(parameterized.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class Block(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes), axis_size=5)
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes), axis_size=5)
       def __init__(self, rngs: nnx.Rngs):
         self.d = 3
         self.linear = nnx.Linear(3, 3, rngs=rngs)
@@ -2721,7 +3175,7 @@ class TestScan(parameterized.TestCase):
         self.dropout = nnx.Dropout(0.5, rngs=rngs)
         self.node = nnx.Variable(jnp.ones((2,)))
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
       def __call__(self, x: jax.Array):
         x = self.linear(x)
         x = self.bn(x)
@@ -2750,8 +3204,8 @@ class TestScan(parameterized.TestCase):
     transform_metadata = {nnx.PARTITION_NAME: 'layers'}
 
     class MLP(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(
         in_axes=(state_axes, state_axes),
         transform_metadata=transform_metadata,
       )
@@ -2768,7 +3222,7 @@ class TestScan(parameterized.TestCase):
           rngs=rngs,
         )
 
-      @nnx.graph.scan(
+      @nnx.scan(
         in_axes=(state_axes, nnx.Carry), transform_metadata=transform_metadata
       )
       def __call__(self, x: jax.Array):
@@ -2805,7 +3259,7 @@ class TestScan(parameterized.TestCase):
     x = jnp.arange(5)
     count = jnp.array(0)
 
-    @nnx.graph.scan
+    @nnx.scan
     def f(count, x):
       nonlocal n
       n += 1
@@ -2826,15 +3280,15 @@ class TestScan(parameterized.TestCase):
     count = jnp.array(0)
 
     class Foo(nnx.Pytree):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(axis_size=5)
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(axis_size=5)
       def __init__(self, rngs: nnx.Rngs):
         self.x = nnx.Param(jax.random.normal(rngs(), shape=(3,)))
 
     foo = Foo(rngs=nnx.Rngs(0))
     assert foo.x.shape == (5, 3)
 
-    @nnx.graph.scan(in_axes=(nnx.Carry, 0, 0))
+    @nnx.scan(in_axes=(nnx.Carry, 0, 0))
     def f(count, x, foo):
       nonlocal n
       n += 1
@@ -2855,7 +3309,7 @@ class TestScan(parameterized.TestCase):
     rngs = nnx.Rngs(params=params_key, dropout=1)
     state_axes = nnx.StateAxes({'params': 0, ...: None})
 
-    @nnx.graph.scan(in_axes=(nnx.Carry, state_axes), length=3)
+    @nnx.scan(in_axes=(nnx.Carry, state_axes), length=3)
     def f(_, rngs: nnx.Rngs):
       param_key = rngs.params()
       dropout_key = rngs.dropout()
@@ -2892,7 +3346,7 @@ class TestScan(parameterized.TestCase):
     def rnn_forward(cell: RNNCell, x: jax.Array):
       carry = cell.initial_state(x.shape[0])
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry, 1), out_axes=(nnx.Carry, 1))
+      @nnx.scan(in_axes=(state_axes, nnx.Carry, 1), out_axes=(nnx.Carry, 1))
       def unroll(cell: RNNCell, carry, x) -> tuple[jax.Array, jax.Array]:
         return cell(carry, x)
 
@@ -2931,10 +3385,10 @@ class TestScan(parameterized.TestCase):
         state[2].data = new_data2
         return (state[0], out, state[2])
 
-      @nnx.graph.jit(static_argnames=("method"))
+      @nnx.jit(static_argnames=("method"))
       def __call__(self, state, method):
         state_axes = nnx.StateAxes({nnx.Intermediate: 0, ...: nnx.Carry})
-        state_final = nnx.graph.scan(
+        state_final = nnx.scan(
           method,
           in_axes=(state_axes, nnx.Carry),
           out_axes=nnx.Carry,
@@ -2971,15 +3425,68 @@ class TestScan(parameterized.TestCase):
       intermediates['data2'][0], 11.0 + jnp.arange(num_steps)
     )
 
+  def test_broadcast_variable_mutation_rejected(self):
+    v = nnx.Variable(jnp.array(1.0))
 
-class TestRemat(absltest.TestCase):
-  def test_remat_basic(self):
+    @nnx.scan(
+      in_axes=(None, nnx.Carry, 0), graph=False, graph_updates=False,
+    )
+    def fn(v, carry, x):
+      v[...] = v[...] + 1.0
+      return carry + x, carry
+
+    with self.assertRaisesRegex(ValueError, 'Broadcast.*mutated'):
+      fn(v, jnp.array(0.0), jnp.arange(3.0))
+
+  def test_broadcast_out_axes_rejected(self):
+    @nnx.scan(
+      in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, None),
+      graph=False, graph_updates=False,
+    )
+    def fn(carry, x):
+      return carry + x, jnp.zeros(3)
+
+    with self.assertRaisesRegex(ValueError, 'broadcast'):
+      fn(jnp.array(0.0), jnp.arange(3.0))
+
+  def test_scan_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(0.0))
+
+    @nnx.scan(
+      in_axes=(nnx.Carry, 0),
+      out_axes=(nnx.Carry, 0),
+      graph=True,
+      graph_updates=False,
+    )
+    def f(carry, x):
+      return carry, x[...]
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      f(v, v)
+
+  def test_scan_input_output_aliasing(self):
+    v = nnx.Param(jnp.arange(5))
+
+    @nnx.scan(in_axes=0, out_axes=0, graph=True, graph_updates=False)
+    def f(carry):
+      return carry
+
+    with self.assertRaisesRegex(ValueError, 'same instance'):
+      f(v)
+
+
+class TestRemat(parameterized.TestCase):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_remat_basic(self, graph, graph_updates):
     class RematLinear(nnx.Module):
-      @nnx.graph.remat(static_argnums=(1, 2))
       def __init__(self, din: int, dout: int, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
 
-      @nnx.graph.remat
+      @nnx.remat(graph=graph, graph_updates=graph_updates)
       def __call__(self, x: jax.Array) -> jax.Array:
         return self.linear(x)
 
@@ -2989,18 +3496,26 @@ class TestRemat(absltest.TestCase):
       y = module(x)
       return jnp.sum(y)
 
-    loss, grads = nnx.graph.value_and_grad(loss_fn)(module, jnp.ones((1, 2)))
+    grad_type = nnx.State if graph and graph_updates else RematLinear
+    loss, grads = nnx.value_and_grad(
+      loss_fn, graph=graph, graph_updates=graph_updates,
+    )(module, jnp.ones((1, 2)))
 
     assert loss.shape == ()
-    assert isinstance(grads, nnx.State)
+    assert isinstance(grads, grad_type)
 
-  def test_remat_variables(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_remat_variables(self, graph, graph_updates):
     rngs = nnx.Rngs(0)
     w = nnx.Param(jax.random.normal(rngs(), (2, 3)))
     b = nnx.Param(jax.random.normal(rngs(), (3,)))
     count = nnx.BatchStat(jnp.array(0))
 
-    @nnx.graph.remat
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def linear(w, b, count, x):
       count[...] += 1
       return x @ w + b[None]
@@ -3009,7 +3524,9 @@ class TestRemat(absltest.TestCase):
       return jnp.sum(linear(w, b, count, x))
 
     x = jnp.ones((1, 2))
-    loss, grads = nnx.graph.value_and_grad(loss_fn, argnums=(0, 1))(w, b, count, x)
+    loss, grads = nnx.value_and_grad(
+      loss_fn, argnums=(0, 1), graph=graph, graph_updates=graph_updates,
+    )(w, b, count, x)
 
     assert loss.shape == ()
     assert isinstance(grads, tuple)
@@ -3020,13 +3537,13 @@ class TestRemat(absltest.TestCase):
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
     class ScanLinear(nnx.Module):
-      @nnx.graph.split_rngs(splits=5)
-      @nnx.graph.vmap(in_axes=(state_axes, state_axes), axis_size=5)
+      @nnx.split_rngs(splits=5)
+      @nnx.vmap(in_axes=(state_axes, state_axes), axis_size=5)
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(3, 3, rngs=rngs)
 
-      @nnx.graph.scan(in_axes=(state_axes, nnx.Carry))
-      @nnx.graph.remat
+      @nnx.scan(in_axes=(state_axes, nnx.Carry))
+      @nnx.remat
       def __call__(self, x: jax.Array) -> tp.Tuple[jax.Array, None]:
         x = self.linear(x)
         return x, None
@@ -3039,10 +3556,14 @@ class TestRemat(absltest.TestCase):
     y, _ = m(jnp.ones((1, 3)))
     assert y.shape == (1, 3)
 
-  def test_tree_mode_remat_basic(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_remat_basic(self, graph, graph_updates):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.remat(graph=False)
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -3050,11 +3571,17 @@ class TestRemat(absltest.TestCase):
       y = forward(model, x)
       return jnp.sum(y)
 
-    grads = nnx.grad(loss_fn, graph=False)(model, jnp.ones((1, 2)))
+    grads = nnx.grad(
+      loss_fn, graph=graph, graph_updates=graph_updates,
+    )(model, jnp.ones((1, 2)))
     assert grads.kernel.shape == (2, 3)
     assert grads.bias.shape == (3,)
 
-  def test_tree_mode_remat_stateful(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_remat_stateful(self, graph, graph_updates):
     class Counter(nnx.Variable):
       pass
 
@@ -3071,7 +3598,7 @@ class TestRemat(absltest.TestCase):
 
     model = Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.remat(graph=False)
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -3080,8 +3607,11 @@ class TestRemat(absltest.TestCase):
     assert model.count[...] == 1
 
 
-class TestVmap(absltest.TestCase):
-  def test_tree_mode_vmap_basic(self):
+class TestVmap(parameterized.TestCase):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_basic(self, graph, graph_updates):
     class LinearEnsemble(nnx.Module):
       def __init__(self, num, *, rngs):
         self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
@@ -3089,14 +3619,17 @@ class TestVmap(absltest.TestCase):
     model = LinearEnsemble(5, rngs=nnx.Rngs(0))
     x = jnp.ones((2,))
 
-    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=False)
+    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return x @ model.w
 
     y = forward(model, x)
     assert y.shape == (5, 3)
 
-  def test_tree_mode_vmap_stateful(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_stateful(self, graph, graph_updates):
     class Counter(nnx.Variable):
       pass
 
@@ -3112,7 +3645,7 @@ class TestVmap(absltest.TestCase):
 
     model = Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=False)
+    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -3121,12 +3654,15 @@ class TestVmap(absltest.TestCase):
     assert y.shape == (5, 3)
     assert model.count[...] == 1
 
-  def test_tree_mode_vmap_variables(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_variables(self, graph, graph_updates):
     rngs = nnx.Rngs(0)
     w = nnx.Param(jax.random.normal(rngs(), (5, 2, 3)))
     b = nnx.Param(jax.random.normal(rngs(), (5, 3)))
 
-    @nnx.vmap(in_axes=(0, 0, 1), out_axes=1, graph=False)
+    @nnx.vmap(in_axes=(0, 0, 1), out_axes=1, graph=graph, graph_updates=graph_updates)
     def forward(w, b, x):
       return x @ w + b
 
@@ -3134,7 +3670,10 @@ class TestVmap(absltest.TestCase):
     y = forward(w, b, x)
     assert y.shape == (3, 5)
 
-  def test_tree_mode_vmap_ensemble_forward(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_ensemble_forward(self, graph, graph_updates):
     class Linear(nnx.Module):
       def __init__(self, din, dout, *, rngs):
         key = rngs.params()
@@ -3144,7 +3683,7 @@ class TestVmap(absltest.TestCase):
       def __call__(self, x):
         return x @ self.w + self.b[None]
 
-    @nnx.vmap(in_axes=0, out_axes=0, graph=False)
+    @nnx.vmap(in_axes=0, out_axes=0, graph=graph, graph_updates=graph_updates)
     def create_ensemble(keys):
       return Linear(2, 3, rngs=nnx.Rngs(keys))
 
@@ -3154,7 +3693,7 @@ class TestVmap(absltest.TestCase):
     assert ensemble.w.shape == (5, 2, 3)
     assert ensemble.b.shape == (5, 3)
 
-    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=False)
+    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -3162,10 +3701,13 @@ class TestVmap(absltest.TestCase):
     y = forward(ensemble, x)
     assert y.shape == (5, 1, 3)
 
-  def test_tree_mode_vmap_replicate(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_replicate(self, graph, graph_updates):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=False)
+    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -3174,8 +3716,8 @@ class TestVmap(absltest.TestCase):
     assert y.shape == (5, 1, 3)
 
   def test_basic(self):
-    @nnx.graph.split_rngs(splits=5)
-    @nnx.graph.vmap(in_axes=0, out_axes=0, axis_size=5)
+    @nnx.split_rngs(splits=5)
+    @nnx.vmap(in_axes=0, out_axes=0, axis_size=5)
     def create_block(rngs: nnx.Rngs):
       return nnx.Linear(2, 3, rngs=rngs)
 
@@ -3186,7 +3728,7 @@ class TestVmap(absltest.TestCase):
     self.assertEqual(block.kernel.shape, (5, 2, 3))
     self.assertEqual(rngs.default.count[...], 1)
 
-    @nnx.graph.vmap(in_axes=(0, 1), out_axes=1)
+    @nnx.vmap(in_axes=(0, 1), out_axes=1)
     def forward(block: nnx.Linear, x):
       self.assertEqual(block.kernel.shape, (2, 3))
       self.assertEqual(block.bias.shape, (3,))
@@ -3199,8 +3741,8 @@ class TestVmap(absltest.TestCase):
     self.assertEqual(y.shape, (3, 5))
 
   def test_basic_variables(self):
-    @nnx.graph.split_rngs(splits=5)
-    @nnx.graph.vmap(in_axes=0, out_axes=0, axis_size=5)
+    @nnx.split_rngs(splits=5)
+    @nnx.vmap(in_axes=0, out_axes=0, axis_size=5)
     def create_block(rngs: nnx.Rngs):
       w = nnx.Param(jax.random.normal(rngs(), (2, 3)))
       b = nnx.Param(jax.random.normal(rngs(), (3,)))
@@ -3213,7 +3755,7 @@ class TestVmap(absltest.TestCase):
     self.assertEqual(b.shape, (5, 3))
     self.assertEqual(rngs.default.count[...], 1)
 
-    @nnx.graph.vmap(in_axes=(0, 0, 1), out_axes=1)
+    @nnx.vmap(in_axes=(0, 0, 1), out_axes=1)
     def forward(w, b, x):
       self.assertEqual(w.shape, (2, 3))
       self.assertEqual(b.shape, (3,))
@@ -3237,7 +3779,7 @@ class TestVmap(absltest.TestCase):
         x = self.dropout(x)
         return x
 
-    @nnx.graph.vmap(
+    @nnx.vmap(
       in_axes=0,
       out_axes=nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None}),
     )
@@ -3248,7 +3790,7 @@ class TestVmap(absltest.TestCase):
     rngs = nnx.Rngs(0)
     initial_key = rngs.default.key[...]
 
-    backups = nnx.graph.split_rngs(rngs, splits=5)
+    backups = nnx.split_rngs(rngs, splits=5)
     module = create_block(rngs)
     nnx.restore_rngs(backups)
 
@@ -3263,13 +3805,13 @@ class TestVmap(absltest.TestCase):
 
     x = jnp.ones((5, 1, 3))
 
-    @nnx.graph.vmap(
+    @nnx.vmap(
       in_axes=(nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None}), 0),
     )
     def forward_block(module, x):
       return module(x)
 
-    backups = nnx.graph.split_rngs(rngs, splits=5)
+    backups = nnx.split_rngs(rngs, splits=5)
     y = forward_block(module, x)
     nnx.restore_rngs(backups)
 
@@ -3295,7 +3837,7 @@ class TestVmap(absltest.TestCase):
 
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
-    @nnx.graph.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
@@ -3315,7 +3857,7 @@ class TestVmap(absltest.TestCase):
 
     x = jnp.ones((5, 1, 3))
 
-    @nnx.graph.vmap(in_axes=(state_axes, 0))
+    @nnx.vmap(in_axes=(state_axes, 0))
     def forward_block(module, x):
       return module(x)
 
@@ -3342,8 +3884,8 @@ class TestVmap(absltest.TestCase):
 
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
-    @nnx.graph.split_rngs(splits=5)
-    @nnx.graph.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    @nnx.split_rngs(splits=5)
+    @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
@@ -3363,7 +3905,7 @@ class TestVmap(absltest.TestCase):
 
     x = jnp.ones((5, 1, 3))
 
-    @nnx.graph.vmap(in_axes=(state_axes, 0))
+    @nnx.vmap(in_axes=(state_axes, 0))
     def forward_block(module, x):
       self.assertEqual(x.shape, (1, 3))
       return module(x)
@@ -3389,12 +3931,12 @@ class TestVmap(absltest.TestCase):
 
     state_axes = nnx.StateAxes({(nnx.BatchStat, 'dropout'): 0, ...: None})
 
-    @nnx.graph.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
     rngs = nnx.Rngs(params=0, dropout=1)
-    nnx.graph.split_rngs(rngs, splits=5, only='dropout')
+    nnx.split_rngs(rngs, splits=5, only='dropout')
 
     module = create_block(rngs)
 
@@ -3402,7 +3944,7 @@ class TestVmap(absltest.TestCase):
     assert module.bn.scale.shape == (3,)
     assert module.bn.mean.shape == (5, 3)
 
-    @nnx.graph.vmap(in_axes=(state_axes, 0), out_axes=0)
+    @nnx.vmap(in_axes=(state_axes, 0), out_axes=0)
     def forward_block(module, x):
       return module(x)
 
@@ -3423,8 +3965,8 @@ class TestVmap(absltest.TestCase):
 
     state_axes = nnx.StateAxes({(nnx.BatchStat, 'dropout'): 0, ...: None})
 
-    @nnx.graph.split_rngs(splits=5, only='dropout')
-    @nnx.graph.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    @nnx.split_rngs(splits=5, only='dropout')
+    @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
@@ -3438,7 +3980,7 @@ class TestVmap(absltest.TestCase):
     assert module.dropout.rngs is not None
     self.assertEqual(module.dropout.rngs.key.shape, (5,))
 
-    @nnx.graph.vmap(in_axes=(state_axes, 0), out_axes=0)
+    @nnx.vmap(in_axes=(state_axes, 0), out_axes=0)
     def forward_block(module: Block, x):
       assert module.dropout.rngs is not None
       self.assertEqual(module.dropout.rngs.key.shape, ())
@@ -3461,12 +4003,12 @@ class TestVmap(absltest.TestCase):
       def __call__(self, x: jax.Array) -> jax.Array:
         return nnx.relu(self.dropout(self.bn(self.linear(x))))
 
-    @nnx.graph.vmap(in_axes=0, out_axes=0)
+    @nnx.vmap(in_axes=0, out_axes=0)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
     rngs = nnx.Rngs(0)
-    nnx.graph.split_rngs(rngs, splits=5)
+    nnx.split_rngs(rngs, splits=5)
 
     module = create_block(rngs)
 
@@ -3474,7 +4016,7 @@ class TestVmap(absltest.TestCase):
     assert module.bn.scale.shape == (5, 3)
     assert module.bn.mean.shape == (5, 3)
 
-    @nnx.graph.vmap(in_axes=(0, 0), out_axes=0)
+    @nnx.vmap(in_axes=(0, 0), out_axes=0)
     def forward_block(module, x):
       return module(x)
 
@@ -3500,8 +4042,8 @@ class TestVmap(absltest.TestCase):
 
     state_axes = nnx.StateAxes({nnx.RngState: 0, ...: None})
 
-    @nnx.graph.split_rngs(splits=5)
-    @partial(nnx.graph.vmap, in_axes=(state_axes, 0), out_axes=0)
+    @nnx.split_rngs(splits=5)
+    @partial(nnx.vmap, in_axes=(state_axes, 0), out_axes=0)
     def forward_block(module: Block, x):
       return module(x)
 
@@ -3536,7 +4078,7 @@ class TestVmap(absltest.TestCase):
 
     m = Foo()
 
-    @nnx.graph.vmap(in_axes=(0, 1))
+    @nnx.vmap(in_axes=(0, 1))
     def f(m1, m2):
       pass
 
@@ -3550,7 +4092,7 @@ class TestVmap(absltest.TestCase):
 
     m = Foo()
 
-    @partial(nnx.graph.vmap, in_axes=0, out_axes=1)
+    @partial(nnx.vmap, in_axes=0, out_axes=1)
     def f(m):
       return m
 
@@ -3570,7 +4112,7 @@ class TestVmap(absltest.TestCase):
     m1 = Foo(shared)
     m2 = Foo(shared)
 
-    @nnx.graph.vmap(in_axes=(0, 1))
+    @nnx.vmap(in_axes=(0, 1))
     def f(m1, m2):
       pass
 
@@ -3587,7 +4129,7 @@ class TestVmap(absltest.TestCase):
     sa1 = nnx.StateAxes({...: 0})
     sa2 = nnx.StateAxes({nnx.Param: 0})
 
-    @nnx.graph.vmap(in_axes=(0, sa1, sa2))
+    @nnx.vmap(in_axes=(0, sa1, sa2))
     def f(m1, m2, m3):
       pass
 
@@ -3604,7 +4146,7 @@ class TestVmap(absltest.TestCase):
     sa1 = nnx.StateSharding({...: sharding})
     sa2 = nnx.StateSharding({nnx.Param: sharding})
 
-    @nnx.graph.jit(in_shardings=(sharding, sa1, sa2))
+    @nnx.jit(in_shardings=(sharding, sa1, sa2))
     def f(m1, m2, m3):
       pass
 
@@ -3617,7 +4159,7 @@ class TestVmap(absltest.TestCase):
 
     m = Foo()
 
-    @nnx.graph.vmap(in_axes=0, out_axes=0)
+    @nnx.vmap(in_axes=0, out_axes=0)
     def f(x):
       return x, m
 
@@ -3641,7 +4183,7 @@ class TestVmap(absltest.TestCase):
 
     env = Env()
 
-    @nnx.graph.vmap(in_axes=(nnx.StateAxes({Broadcast: None, Vectorized: 0}),))
+    @nnx.vmap(in_axes=(nnx.StateAxes({Broadcast: None, Vectorized: 0}),))
     def f(env: Env):
       self.assertEqual(env.step.shape, ())
 
@@ -3652,7 +4194,7 @@ class TestVmap(absltest.TestCase):
         pass
 
       is_even = env.index % 2 == 0
-      nnx.graph.cond(is_even, increment, no_nothing, env)
+      nnx.cond(is_even, increment, no_nothing, env)
 
     f(env)
 
@@ -3671,7 +4213,7 @@ class TestVmap(absltest.TestCase):
 
     env = Env()
 
-    @nnx.graph.vmap(in_axes=(nnx.StateAxes({Broadcast: None, Vectorized: 0}),))
+    @nnx.vmap(in_axes=(nnx.StateAxes({Broadcast: None, Vectorized: 0}),))
     def f(env: Env):
       self.assertEqual(env.step.shape, ())
 
@@ -3683,7 +4225,7 @@ class TestVmap(absltest.TestCase):
         pass
 
       is_even = env.index % 2 == 0
-      nnx.graph.cond(is_even, increment, no_nothing, env)
+      nnx.cond(is_even, increment, no_nothing, env)
 
     with self.assertRaisesRegex(
       ValueError,
@@ -3702,7 +4244,7 @@ class TestVmap(absltest.TestCase):
       def __call__(self, x):
         return nnx.relu(self.dropout(self.bn(self.linear(x))))
 
-    @nnx.graph.vmap(in_axes=0, out_axes=0)
+    @nnx.vmap(in_axes=0, out_axes=0)
     def initialize_ensemble(key):
       rngs = nnx.Rngs(key)
       return Model(2, 3, rngs=rngs)
@@ -3712,7 +4254,7 @@ class TestVmap(absltest.TestCase):
 
     self.assertEqual(ensemble.linear.kernel.shape, (5, 2, 3))
 
-    @nnx.graph.vmap(in_axes=(0, None), out_axes=0)
+    @nnx.vmap(in_axes=(0, None), out_axes=0)
     def forward(model, x):
       return model(x)
 
@@ -3727,7 +4269,7 @@ class TestVmap(absltest.TestCase):
 
     model = LinearEnsemble(5, rngs=nnx.Rngs(0))
 
-    @nnx.graph.vmap(in_axes=(0, None), out_axes=0)
+    @nnx.vmap(in_axes=(0, None), out_axes=0)
     def forward(model, x):
       self.assertEqual(model.w.shape, (2, 3))
       return jnp.dot(x, model.w)
@@ -3738,7 +4280,7 @@ class TestVmap(absltest.TestCase):
     self.assertEqual(y.shape, (5, 4, 3))
 
   def test_metadata(self):
-    @nnx.graph.vmap(
+    @nnx.vmap(
       in_axes=(None,),
       out_axes=0,
       axis_size=5,
@@ -3786,7 +4328,7 @@ class TestVmap(absltest.TestCase):
     self.assertEqual(state_axes.map_prefix(('bn', 'var'), None), 0)
     self.assertEqual(state_axes.map_prefix(('bn', 'bias'), None), None)
 
-    @nnx.graph.vmap(out_axes=state_axes, axis_size=5)
+    @nnx.vmap(out_axes=state_axes, axis_size=5)
     def create_block():
       return Model(2, 3, rngs=nnx.Rngs(0))
 
@@ -3798,6 +4340,17 @@ class TestVmap(absltest.TestCase):
     self.assertEqual(model.bn.mean.shape, (3, 5))
     self.assertEqual(model.bn.var.shape, (5, 3))
     self.assertEqual(model.bn.bias.shape, (3,))
+
+
+  def test_vmap_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.arange(3.0))
+
+    @nnx.vmap(in_axes=(0, None), graph=True, graph_updates=False)
+    def f(v_mapped, v_broadcast):
+      return v_mapped[...] + v_broadcast[...]
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      f(v, v)
 
 
 class TestPmap(parameterized.TestCase):
@@ -3815,8 +4368,9 @@ class TestPmap(parameterized.TestCase):
 
     state_axes = nnx.StateAxes({(nnx.Param, nnx.RngState): 0, ...: None})
 
-    @nnx.graph.split_rngs(splits=1)
-    @nnx.graph.pmap(in_axes=(state_axes,), out_axes=state_axes, axis_size=1)
+    @nnx.split_rngs(splits=1)
+    @nnx.pmap(in_axes=(state_axes,), out_axes=state_axes, axis_size=1,
+              graph=True)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
@@ -3830,7 +4384,7 @@ class TestPmap(parameterized.TestCase):
 
     x = jnp.ones((1, 1, 3))
 
-    @nnx.graph.pmap(in_axes=(state_axes, 0), axis_size=1)
+    @nnx.pmap(in_axes=(state_axes, 0), axis_size=1, graph=True)
     def forward_block(module, x):
       return module(x)
 
@@ -3844,8 +4398,10 @@ class TestPmap(parameterized.TestCase):
 
     assert not jnp.allclose(y, y2)
 
-  @parameterized.parameters(True, False)
-  def test_basic_demo_single(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_basic_demo_single(self, graph, graph_updates):
     class Block(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(20, 20, rngs=rngs)
@@ -3854,12 +4410,12 @@ class TestPmap(parameterized.TestCase):
       def __call__(self, x: jax.Array) -> jax.Array:
         return self.dropout(nnx.relu(self.linear(x)))
 
-    @nnx.graph.split_rngs(splits=1)
-    @nnx.pmap(axis_size=1, graph=graph)
+    @nnx.split_rngs(splits=1)
+    @nnx.pmap(axis_size=1, graph=graph, graph_updates=graph_updates)
     def create_block(rngs: nnx.Rngs):
       return Block(rngs)
 
-    @nnx.pmap(axis_size=1, graph=graph)
+    @nnx.pmap(axis_size=1, graph=graph, graph_updates=graph_updates)
     def forward_block(module: Block, x):
       return module(x)
 
@@ -3899,8 +4455,9 @@ class TestPmap(parameterized.TestCase):
 
     state_axes = nnx.StateAxes({nnx.RngState: 0, ...: None})
 
-    @nnx.graph.split_rngs(splits=1)
-    @partial(nnx.graph.pmap, in_axes=(state_axes, 0), out_axes=0, axis_size=1)
+    @nnx.split_rngs(splits=1)
+    @partial(nnx.pmap, in_axes=(state_axes, 0), out_axes=0, axis_size=1,
+             graph=True)
     def forward_block(module: Block, x):
       return module(x)
 
@@ -3956,7 +4513,7 @@ class TestCond(parameterized.TestCase):
               reward=nnx.Variable(jnp.array(0.0)),
           )
 
-        nnx.graph.cond(self.timestep.step % 2 == 0, reward_2, reward_0, self)
+        nnx.cond(self.timestep.step % 2 == 0, reward_2, reward_0, self)
 
     foo = Foo(timestep=TimeStep.zero())
     foo.update()
@@ -3972,8 +4529,11 @@ class TestCond(parameterized.TestCase):
     self.assertEqual(foo.timestep.step[...], 4)
     self.assertEqual(foo.timestep.reward[...], 0.0)
 
-  @parameterized.parameters(True, False)
-  def test_basic_variable(self, graph):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_basic_variable(self, graph, graph_updates):
     def collatz(x):
       def even(x):
         x[...] = x // 2
@@ -3981,7 +4541,10 @@ class TestCond(parameterized.TestCase):
       def odd(x):
         x[...] = 3 * x + 1
 
-      return nnx.cond(x % 2 == 0, even, odd, x, graph=graph)
+      return nnx.cond(
+        x % 2 == 0, even, odd, x,
+        graph=graph, graph_updates=graph_updates,
+      )
 
     x = nnx.Variable(jnp.array(8))
     collatz(x)
@@ -3993,8 +4556,10 @@ class TestCond(parameterized.TestCase):
     collatz(x)
     self.assertEqual(x[...], 4)
 
-  @parameterized.parameters(True, False)
-  def test_cond_and_vmap(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_cond_and_vmap(self, graph, graph_updates):
     class Env(nnx.Pytree):
       def __init__(self):
         self.index = nnx.Variable(jnp.arange(8))
@@ -4003,7 +4568,7 @@ class TestCond(parameterized.TestCase):
     env = Env()
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.vmap(in_axes=(0, None), out_axes=None, graph=graph)
+    @nnx.vmap(in_axes=(0, None), out_axes=None, graph=graph, graph_updates=graph_updates)
     def f(env: Env, model: nnx.Linear):
       self.assertEqual(env.index.shape, ())
 
@@ -4014,7 +4579,10 @@ class TestCond(parameterized.TestCase):
         pass
 
       is_even = env.index % 2 == 0
-      nnx.cond(is_even, increment, no_nothing, env, graph=graph)
+      nnx.cond(
+        is_even, increment, no_nothing, env,
+        graph=graph, graph_updates=graph_updates,
+      )
 
     f(env, model)
 
@@ -4022,8 +4590,11 @@ class TestCond(parameterized.TestCase):
       env.step[...], np.array([1, 0, 1, 0, 1, 0, 1, 0], np.uint32)
     )
 
-  @parameterized.parameters(True, False)
-  def test_cond_different_variable_per_branch(self, graph):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_cond_different_variable_per_branch(self, graph, graph_updates):
     a = nnx.Variable(jnp.array(0))
     b = nnx.Variable(jnp.array(0))
 
@@ -4033,17 +4604,52 @@ class TestCond(parameterized.TestCase):
     def update_b(a, b):
       b[...] += 10
 
-    nnx.cond(True, update_a, update_b, a, b, graph=graph)
+    nnx.cond(
+      True, update_a, update_b, a, b,
+      graph=graph, graph_updates=graph_updates,
+    )
     self.assertEqual(a[...], 1)
     self.assertEqual(b[...], 0)
 
-    nnx.cond(False, update_a, update_b, a, b, graph=graph)
+    nnx.cond(
+      False, update_a, update_b, a, b,
+      graph=graph, graph_updates=graph_updates,
+    )
     self.assertEqual(a[...], 1)
     self.assertEqual(b[...], 10)
 
+  def test_cond_shared_references(self):
+
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      a: nnx.Variable
+      b: nnx.Variable
+
+    v = nnx.Variable(jnp.array(0))
+    m = Foo(a=v, b=v)
+
+    def true_fn(m):
+      m.a[...] += 1
+
+    def false_fn(m):
+      m.b[...] += 2
+
+    nnx.cond(True, true_fn, false_fn, m, graph=True, graph_updates=False)
+    np.testing.assert_allclose(m.a[...], 1)
+    np.testing.assert_allclose(m.b[...], 1)
+    nnx.cond(False, true_fn, false_fn, m, graph=True, graph_updates=False)
+    np.testing.assert_allclose(m.a[...], 3)
+    np.testing.assert_allclose(m.b[...], 3)
+
+    with self.assertRaises(ValueError):
+      nnx.cond(True, true_fn, false_fn, m, graph=False)
+
 class TestSwitch(parameterized.TestCase):
-  @parameterized.parameters(True, False)
-  def test_basic(self, graph):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_basic(self, graph, graph_updates):
     class RoundTable(nnx.Module):
       def __init__(self):
         self.next_index = 0
@@ -4061,8 +4667,10 @@ class TestSwitch(parameterized.TestCase):
           m.linear.kernel[...] = jnp.zeros((10, 10))
           return m.linear(x)
 
-        # y = nnx.cond(self.next_index[...] == 0, fn0, fn1, self, x)
-        y = nnx.switch(self.next_index, (fn0, fn1, fn2), self, x, graph=graph)
+        y = nnx.switch(
+          self.next_index, (fn0, fn1, fn2), self, x,
+          graph=graph, graph_updates=graph_updates,
+        )
         self.next_index = (self.next_index + 1) % 3
         return y
 
@@ -4081,10 +4689,62 @@ class TestSwitch(parameterized.TestCase):
     assert model.rounds_count[...] == 2
     assert model.next_index == 1
 
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_switch_variable(self, graph, graph_updates):
+    def add_1(x):
+      x[...] += 1
+
+    def add_10(x):
+      x[...] += 10
+
+    def add_100(x):
+      x[...] += 100
+
+    x = nnx.Variable(jnp.array(0))
+    nnx.switch(0, (add_1, add_10, add_100), x,
+               graph=graph, graph_updates=graph_updates)
+    self.assertEqual(x[...], 1)
+    nnx.switch(1, (add_1, add_10, add_100), x,
+               graph=graph, graph_updates=graph_updates)
+    self.assertEqual(x[...], 11)
+    nnx.switch(2, (add_1, add_10, add_100), x,
+               graph=graph, graph_updates=graph_updates)
+    self.assertEqual(x[...], 111)
+
+  def test_switch_shared_references(self):
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      a: nnx.Variable
+      b: nnx.Variable
+
+    v = nnx.Variable(jnp.array(0))
+    m = Foo(a=v, b=v)
+
+    def add_a(m):
+      m.a[...] += 1
+
+    def add_b(m):
+      m.b[...] += 10
+
+    nnx.switch(0, (add_a, add_b), m, graph=True, graph_updates=False)
+    np.testing.assert_allclose(m.a[...], 1)
+    np.testing.assert_allclose(m.b[...], 1)
+
+    nnx.switch(1, (add_a, add_b), m, graph=True, graph_updates=False)
+    np.testing.assert_allclose(m.a[...], 11)
+    np.testing.assert_allclose(m.b[...], 11)
+
+    with self.assertRaises(ValueError):
+      nnx.switch(0, (add_a, add_b), m, graph=False)
 
 class TestWhileLoop(parameterized.TestCase):
-  @parameterized.parameters(True, False)
-  def test_basic(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_basic(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -4094,12 +4754,15 @@ class TestWhileLoop(parameterized.TestCase):
     module.kernel[...] = jnp.identity(10) * 2
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    _, y, _ = nnx.graph.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0),
+      graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(y, x * 8)
 
-  @parameterized.parameters(True, False)
-  def test_multiple_objects(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_multiple_objects(self, graph, graph_updates):
     def fwd_fn(input):
       m1, (w2,), x, c = input
       y = m1(x) @ w2
@@ -4110,12 +4773,15 @@ class TestWhileLoop(parameterized.TestCase):
     w2 = nnx.Variable(jnp.identity(10) * 0.5)
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    _, _, y, _ = nnx.graph.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (m1, (w2,), x, 3.0), graph=graph)
+    _, _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (m1, (w2,), x, 3.0),
+      graph=graph, graph_updates=graph_updates)
     np.testing.assert_allclose(y, x)
 
-  @parameterized.parameters(True, False)
-  def test_nested_module(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_nested_module(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -4126,8 +4792,9 @@ class TestWhileLoop(parameterized.TestCase):
     module = nnx.Sequential(module)
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    _, y, _ = nnx.graph.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0),
+      graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(y, x * 8)
 
   def test_shared_module(self):
@@ -4135,7 +4802,7 @@ class TestWhileLoop(parameterized.TestCase):
     m2 = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(0))
     m2.kernel = m1.kernel
     module = nnx.Sequential(m1, m2)
-    self.assertLen(jax.tree.leaves(nnx.graph.state(module)), 2)  # only m1 params
+    self.assertLen(jax.tree.leaves(nnx.state(module)), 2)  # only m1 params
 
     def fwd_fn(input):
       m, x, c = input
@@ -4144,9 +4811,9 @@ class TestWhileLoop(parameterized.TestCase):
       return m, y, c - 1.0
 
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
-    _, y, _ = nnx.graph.while_loop(
+    _, y, _ = nnx.while_loop(
       lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0))
-    self.assertLen(jax.tree.leaves(nnx.graph.state(module)), 2)  # only m1 params
+    self.assertLen(jax.tree.leaves(nnx.state(module)), 2)  # only m1 params
     np.testing.assert_array_equal(
       m1.kernel[...],
       jnp.zeros((10, 10)),
@@ -4157,8 +4824,10 @@ class TestWhileLoop(parameterized.TestCase):
     )
     np.testing.assert_array_equal(y, jnp.zeros((10,)))
 
-  @parameterized.parameters(True, False)
-  def test_value_changed(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_value_changed(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       m.kernel[...] = jnp.zeros_like(m.kernel)
@@ -4168,16 +4837,19 @@ class TestWhileLoop(parameterized.TestCase):
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    _, y, _ = nnx.graph.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0),
+      graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(
       module.kernel[...],
       jnp.zeros((10, 10)),
     )
     np.testing.assert_array_equal(y, jnp.zeros((10,)))
 
-  @parameterized.parameters(True, False)
-  def test_ref_changed(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_ref_changed(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -4188,11 +4860,14 @@ class TestWhileLoop(parameterized.TestCase):
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     with self.assertRaises(ValueError):
-      _, y, _ = nnx.graph.while_loop(
-        lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0), graph=graph)
+      _, y, _ = nnx.while_loop(
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0),
+        graph=graph, graph_updates=graph_updates)
 
-  @parameterized.parameters(True, False)
-  def test_structure_changed(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_structure_changed(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       m = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(1))
@@ -4204,8 +4879,9 @@ class TestWhileLoop(parameterized.TestCase):
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     with self.assertRaises((ValueError, TypeError)):
-      _, y, _ = nnx.graph.while_loop(
-        lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
+      _, y, _ = nnx.while_loop(
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0),
+        graph=graph, graph_updates=graph_updates)
 
   def test_repeated_object(self):
     m = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
@@ -4214,7 +4890,7 @@ class TestWhileLoop(parameterized.TestCase):
       count, m, _ = val
       return count + 1, m, m
 
-    count, m, _ = nnx.graph.while_loop(
+    count, m, _ = nnx.while_loop(
       lambda val: val[0] < 2,
       body_fn,
       (0, m, m),
@@ -4229,21 +4905,26 @@ class TestWhileLoop(parameterized.TestCase):
 
     model = nnx.Linear(10, 10, rngs=nnx.Rngs(0), use_bias=False)
     g_accum = jax.tree.map(jnp.zeros_like, nnx.state(model))
-    nnx.graph.fori_loop(0, 2, immut_fn, g_accum)
+    nnx.fori_loop(0, 2, immut_fn, g_accum)
 
-  @parameterized.parameters(True, False)
-  def test_fori_loop_grad_accum(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_fori_loop_grad_accum(self, graph, graph_updates):
     accum = nnx.Variable(jnp.zeros((10, 10)))
 
     def accum_fn(i, accum):
       accum[...] += 1
       return accum
 
-    accum = nnx.fori_loop(0, 3, accum_fn, accum, graph=graph)
+    accum = nnx.fori_loop(0, 3, accum_fn, accum,
+                          graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(accum[...], jnp.full((10, 10), 3.0))
 
-  @parameterized.parameters(True, False)
-  def test_fori_loop_basic(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_fori_loop_basic(self, graph, graph_updates):
     def fwd_fn(i, input):
       m, x = input
       m.kernel[...] = jnp.identity(10) * i
@@ -4252,7 +4933,8 @@ class TestWhileLoop(parameterized.TestCase):
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
     x = jax.random.normal(jax.random.key(0), (10,))
 
-    _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x), graph=graph)
+    _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x),
+                         graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(y, x * 2 * 3)
 
   def test_fori_loop_with_sharing(self):
@@ -4278,9 +4960,9 @@ class TestWhileLoop(parameterized.TestCase):
       d.a.params[...] += 1
       return d
 
-    @nnx.graph.jit
+    @nnx.jit
     def rollout(d: D):
-      nnx.graph.fori_loop(0, 10, increment, d)
+      nnx.fori_loop(0, 10, increment, d)
 
     d = D()
     rollout(d)
@@ -4289,8 +4971,10 @@ class TestWhileLoop(parameterized.TestCase):
       d.a.params[...], np.full((10,), 10, dtype=int)
     )
 
-  @parameterized.parameters(True, False)
-  def test_loops_multiple_modules(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_loops_multiple_modules(self, graph, graph_updates):
     class Foo(nnx.Module):
       def __init__(self):
         self.param = nnx.Param(jnp.zeros((1,)))
@@ -4303,12 +4987,14 @@ class TestWhileLoop(parameterized.TestCase):
     fori_loop_fn = lambda i, inputs: loop_fn(inputs)
     a = Foo()
     b = Foo()
-    nnx.graph.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2),
-                   graph=graph)
+    nnx.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2),
+                   graph=graph, graph_updates=graph_updates)
     nnx.fori_loop(0, 2, fori_loop_fn, (a, b), graph=graph)
 
-  @parameterized.parameters(True, False)
-  def test_tree_mode_while_loop_stateful(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_tree_mode_while_loop_stateful(self, graph, graph_updates):
     class Counter(nnx.Module):
       def __init__(self):
         self.count = nnx.Variable(jnp.array(0))
@@ -4324,27 +5010,30 @@ class TestWhileLoop(parameterized.TestCase):
       x = module(x)
       return counter, module, x, i - 1
 
-    counter, module, y, _ = nnx.graph.while_loop(
+    counter, module, y, _ = nnx.while_loop(
       lambda val: val[-1] > 0,
       body_fn,
       (counter, module, x, 3),
       graph=graph,
+      graph_updates=graph_updates,
     )
     np.testing.assert_array_equal(counter.count[...], 3)
     np.testing.assert_array_equal(y, x * 8)
 
-  @parameterized.parameters(True, False)
-  def test_tree_mode_while_loop_inside_jit(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_tree_mode_while_loop_inside_jit(self, graph, graph_updates):
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
     module.kernel[...] = jnp.identity(10) * 2
     x = jax.random.normal(jax.random.key(0), (10,))
 
-    @nnx.jit(graph=graph)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def f(module, x):
       def body_fn(val):
         m, x, c = val
         return m, m(x), c - 1.0
-      _, y, _ = nnx.graph.while_loop(
+      _, y, _ = nnx.while_loop(
         lambda val: val[-1] > 0,
         body_fn,
         (module, x, 3.0),
@@ -4355,8 +5044,10 @@ class TestWhileLoop(parameterized.TestCase):
     y = f(module, x)
     np.testing.assert_array_equal(y, x * 8)
 
-  @parameterized.parameters(True, False)
-  def test_tree_mode_fori_loop_stateful(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_tree_mode_fori_loop_stateful(self, graph, graph_updates):
     class Counter(nnx.Module):
       def __init__(self):
         self.count = nnx.Variable(jnp.array(0))
@@ -4372,24 +5063,27 @@ class TestWhileLoop(parameterized.TestCase):
       x = module(x)
       return counter, module, x
 
-    counter, module, y = nnx.graph.fori_loop(
-      0, 3, body_fn, (counter, module, x), graph=graph,
+    counter, module, y = nnx.fori_loop(
+      0, 3, body_fn, (counter, module, x),
+      graph=graph, graph_updates=graph_updates,
     )
     np.testing.assert_array_equal(counter.count[...], 3)
     np.testing.assert_array_equal(y, x * 8)
 
-  @parameterized.parameters(True, False)
-  def test_tree_mode_fori_loop_inside_jit(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_tree_mode_fori_loop_inside_jit(self, graph, graph_updates):
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
     module.kernel[...] = jnp.identity(10) * 2
     x = jax.random.normal(jax.random.key(0), (10,))
 
-    @nnx.jit(graph=graph)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def f(module, x):
       def body_fn(i, val):
         m, x = val
         return m, m(x)
-      _, y = nnx.graph.fori_loop(
+      _, y = nnx.fori_loop(
         0, 3, body_fn, (module, x), graph=graph,
       )
       return y
@@ -4487,34 +5181,43 @@ class TestSplitMergeInputs(absltest.TestCase):
     )
 
 class TestCheckify(parameterized.TestCase):
-  @parameterized.parameters(True, False)
-  def test_basic(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_basic(self, graph, graph_updates):
 
     @dataclasses.dataclass
     class Foo(nnx.Module):
       a: nnx.Param
 
-    @nnx.jit(graph=graph)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def f(m):
       y = jnp.sin(m.a)  # error
       return m.a + y
 
     m = Foo(a=nnx.Param(jnp.inf))
-    err, out = nnx.checkify(f, errors=checkify.float_checks, graph=graph)(m)
+    err, out = nnx.checkify(
+      f, errors=checkify.float_checks,
+      graph=graph, graph_updates=graph_updates,
+    )(m)
 
     with self.assertRaisesRegex(ValueError, 'nan generated by primitive: sin'):
       err.throw()
 
-  @parameterized.parameters(True, False)
-  def test_checkify_stateful(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_checkify_stateful(self, graph, graph_updates):
     count = nnx.Variable(jnp.array(0))
 
-    @nnx.jit(graph=graph)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def f(c):
       c[...] += 1
       return c[...]
 
-    err, out = nnx.checkify(f, graph=graph)(count)
+    err, out = nnx.checkify(
+      f, graph=graph, graph_updates=graph_updates,
+    )(count)
     self.assertEqual(count[...], 1)
     np.testing.assert_allclose(out, 1)
 
@@ -4532,7 +5235,7 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     m = M(rngs=nnx.Rngs(0))
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.graph.remat(m.block)
+      nnx.remat(m.block)
 
   def test_jit_with_bound_method_raises(self):
     class M(nnx.Module):
@@ -4543,7 +5246,7 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     m = M(rngs=nnx.Rngs(0))
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.graph.jit(m.apply, static_argnums=1)
+      nnx.jit(m.apply, static_argnums=1)
 
   def test_vmap_with_bound_method_raises(self):
     class M(nnx.Module):
@@ -4554,7 +5257,7 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     m = M(rngs=nnx.Rngs(0))
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.graph.vmap(m.__call__, in_axes=(0,), out_axes=0)
+      nnx.vmap(m.__call__, in_axes=(0,), out_axes=0)
 
   def test_eval_shape_with_bound_method_raises(self):
     class M(nnx.Module):
@@ -4566,10 +5269,12 @@ class TestBoundMethodTransforms(parameterized.TestCase):
     m = M(rngs=nnx.Rngs(0))
     x_spec = jax.ShapeDtypeStruct((1, 2), jnp.float32)
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.graph.eval_shape(m.__call__, x_spec)
+      nnx.eval_shape(m.__call__, x_spec)
 
-  @parameterized.parameters(True, False)
-  def test_grad_with_bound_method_raises(self, graph_mode):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_grad_with_bound_method_raises(self, graph_mode, graph_updates):
     class M(nnx.Module):
       def __init__(self):
         self.w = nnx.Param(jnp.array(1.0))
@@ -4580,8 +5285,10 @@ class TestBoundMethodTransforms(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, 'bound methods'):
       nnx.grad(m.loss, graph=graph_mode)
 
-  @parameterized.parameters(True, False)
-  def test_value_and_grad_with_bound_method_raises(self, graph_mode):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_value_and_grad_with_bound_method_raises(self, graph_mode, graph_updates):
     class TestModel(nnx.Module):
       def __init__(self, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 1, rngs=rngs)
@@ -4602,7 +5309,7 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     m = M()
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.graph.checkify(m.__call__)
+      nnx.checkify(m.__call__)
 
   def test_pmap_with_bound_method_raises(self):
     """Test that pmap raises error for bound methods."""
@@ -4612,7 +5319,7 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     m = M()
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.graph.pmap(m.__call__)
+      nnx.pmap(m.__call__)
 
   def test_shard_map_with_bound_method_raises(self):
     """Test that shard_map raises error for bound methods."""
@@ -4623,7 +5330,7 @@ class TestBoundMethodTransforms(parameterized.TestCase):
     m = M()
     mesh = jax.sharding.Mesh(jax.local_devices()[:1], ('data',))
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.graph.shard_map(m.__call__, mesh=mesh, in_specs=None, out_specs=None)
+      nnx.shard_map(m.__call__, mesh=mesh, in_specs=None, out_specs=None)
 
   def test_custom_vjp_with_bound_method_raises(self):
     """Test that custom_vjp raises error for bound methods."""
@@ -4633,7 +5340,7 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     m = M()
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      nnx.graph.custom_vjp(m.__call__)
+      nnx.custom_vjp(m.__call__)
 
   def test_scan_bound_method_raises(self):
     class M(nnx.Module):
@@ -4641,9 +5348,12 @@ class TestBoundMethodTransforms(parameterized.TestCase):
         return x + 1
     m = M()
     with self.assertRaisesRegex(ValueError, 'bound methods'):
-      _ = nnx.graph.scan(m.__call__, in_axes=(0,), out_axes=0)
+      _ = nnx.scan(m.__call__, in_axes=(0,), out_axes=0)
 
-  def test_tree_mode_pmap_basic(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_tree_mode_pmap_basic(self, graph, graph_updates):
     class LinearEnsemble(nnx.Module):
       def __init__(self, num, *, rngs):
         self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
@@ -4651,14 +5361,18 @@ class TestBoundMethodTransforms(parameterized.TestCase):
     model = LinearEnsemble(1, rngs=nnx.Rngs(0))
     x = jnp.ones((2,))
 
-    @nnx.pmap(in_axes=(0, None), out_axes=0, axis_size=1, graph=False)
+    @nnx.pmap(in_axes=(0, None), out_axes=0, axis_size=1,
+              graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return x @ model.w
 
     y = forward(model, x)
     assert y.shape == (1, 3)
 
-  def test_tree_mode_pmap_stateful(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_tree_mode_pmap_stateful(self, graph, graph_updates):
     class Counter(nnx.Variable):
       pass
 
@@ -4674,7 +5388,8 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     model = Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.pmap(in_axes=(None, 0), out_axes=0, axis_size=1, graph=False)
+    @nnx.pmap(in_axes=(None, 0), out_axes=0, axis_size=1,
+              graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -4767,6 +5482,172 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     assert module.dropout.rngs.count[0] == 2
     assert not jnp.allclose(y, y2)
+
+
+class TestPureJaxFancyScan(absltest.TestCase):
+
+  def test_carry_and_scan(self):
+    def cumsum(carry, x):
+      carry = carry + x
+      return carry, carry
+
+    final_carry, ys = pure_jax_fancy_scan(
+        cumsum, jnp.array(0.0), jnp.arange(5.0),
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 10.0)
+    np.testing.assert_allclose(ys, jnp.array([0., 1., 3., 6., 10.]))
+
+  def test_carry_only_output(self):
+    def sum_fn(carry, x):
+      return carry + x
+
+    result = pure_jax_fancy_scan(
+        sum_fn, jnp.array(0.0), jnp.arange(5.0),
+        in_axes=(nnx.Carry, 0), out_axes=nnx.Carry,
+    )
+    np.testing.assert_allclose(result, 10.0)
+
+  def test_broadcast_args(self):
+    def scale_cumsum(carry, scale, x):
+      carry = carry + x * scale
+      return carry, carry
+
+    final_carry, _ = pure_jax_fancy_scan(
+        scale_cumsum, jnp.array(0.0), jnp.array(2.0), jnp.arange(5.0),
+        in_axes=(nnx.Carry, None, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 20.0)
+
+  def test_pytree_carry(self):
+    def dict_scan(carry, x):
+      carry = {'a': carry['a'] + x['a'], 'b': carry['b'] + x['b']}
+      return carry, carry
+
+    xs = {'a': jnp.arange(3.0), 'b': jnp.ones(3)}
+    init = {'a': jnp.array(0.0), 'b': jnp.array(0.0)}
+    final_carry, _ = pure_jax_fancy_scan(
+        dict_scan, init, xs,
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry['a'], 3.0)
+    np.testing.assert_allclose(final_carry['b'], 3.0)
+
+  def test_no_carry_all_scanned(self):
+    def double(x):
+      return (x * 2,)
+
+    (ys,) = pure_jax_fancy_scan(
+        double, jnp.arange(5.0),
+        in_axes=(0,), out_axes=(0,),
+    )
+    np.testing.assert_allclose(ys, jnp.arange(5.0) * 2)
+
+  def test_reverse(self):
+    def cumsum(carry, x):
+      carry = carry + x
+      return carry, carry
+
+    final_carry, _ = pure_jax_fancy_scan(
+        cumsum, jnp.array(0.0), jnp.arange(5.0),
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0), reverse=True,
+    )
+    np.testing.assert_allclose(final_carry, 10.0)
+
+  def test_pytree_prefix_in_axes(self):
+    def fn(carry, x):
+      carry = carry + x['a'] + x['b']
+      return carry, carry
+
+    xs = {'a': jnp.arange(3.0), 'b': jnp.array(1.0)}
+    final_carry, _ = pure_jax_fancy_scan(
+        fn, jnp.array(0.0), xs,
+        in_axes=(nnx.Carry, {'a': 0, 'b': None}), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 6.0)
+
+  def test_nested_carry_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda x: x,
+          {'a': jnp.array(1.0)},
+          in_axes=({'a': nnx.Carry},), out_axes=nnx.Carry,
+      )
+
+  def test_broadcast_out_axes_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda c, x: (c, x),
+          jnp.array(0.0), jnp.arange(3.0),
+          in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, None),
+      )
+
+  def test_none_broadcast_input(self):
+    def fn(carry, _unused, x):
+      carry = carry + x
+      return carry, carry
+
+    final_carry, _ = pure_jax_fancy_scan(
+        fn, jnp.array(0.0), None, jnp.arange(3.0),
+        in_axes=(nnx.Carry, None, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 3.0)
+
+  def test_none_nested_in_arg(self):
+    def fn(carry, x):
+      carry = carry + x['a']
+      return carry, carry
+
+    xs = {'a': jnp.arange(3.0), 'b': None}
+    final_carry, _ = pure_jax_fancy_scan(
+        fn, jnp.array(0.0), xs,
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 3.0)
+
+  def test_nested_carry_in_out_axes_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda c, x: (c, x),
+          jnp.array(0.0), jnp.arange(3.0),
+          in_axes=(nnx.Carry, 0), out_axes=({'a': nnx.Carry},),
+      )
+
+  def test_carry_in_in_axes_only_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda c, x: (c + x,),
+          jnp.array(0.0), jnp.arange(3.0),
+          in_axes=(nnx.Carry, 0), out_axes=(0,),
+      )
+
+  def test_carry_in_out_axes_only_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda x: x,
+          jnp.arange(3.0),
+          in_axes=(0,), out_axes=nnx.Carry,
+      )
+
+  def test_non_tuple_carry_only(self):
+    def f(carry):
+      return carry + 1.0
+
+    result = pure_jax_fancy_scan(
+        f, jnp.array(0.0),
+        in_axes=nnx.Carry, out_axes=nnx.Carry, length=5,
+    )
+    np.testing.assert_allclose(result, 5.0)
+
+  def test_non_tuple_scan_only(self):
+    def f(x):
+      return x * 2
+
+    ys = pure_jax_fancy_scan(
+        f, jnp.arange(5.0),
+        in_axes=0, out_axes=0,
+    )
+    np.testing.assert_allclose(ys, jnp.arange(5.0) * 2)
 
 
 if __name__ == '__main__':

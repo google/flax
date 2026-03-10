@@ -29,6 +29,7 @@ class Config:
   flax_always_shard_variable: bool
   flax_hijax_variable: bool
   nnx_graph_mode: bool
+  nnx_graph_updates: bool
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
 
@@ -301,4 +302,9 @@ nnx_graph_mode = bool_flag(
   name='nnx_graph_mode',
   default=True,
   help='Whether NNX APIs default to graph-mode (True) or tree-mode (False).',
+)
+nnx_graph_updates = bool_flag(
+  name='nnx_graph_updates',
+  default=True,
+  help='Whether graph-mode uses dynamic (True) or simple (False) graph traversal.',
 )
