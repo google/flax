@@ -69,6 +69,10 @@ def param_remapper(orig_params: Params) -> Params:
         new_params[layer_name] = {}
       if 'w' in v:
         new_params[layer_name][param] = v['w']
+    elif 'input_embedding' in v:
+      new_params[k] = {
+          k2.replace("input_embedding", "embedding"): v2 for k2, v2 in v.items()
+      }
     else:
       new_params[k] = v
   return new_params
