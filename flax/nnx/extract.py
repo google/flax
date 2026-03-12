@@ -106,6 +106,59 @@ def check_consistent_aliasing(
       + '\n'.join(node_msgs)
     )
 
+
+def check_consistent_aliasing2(
+  node: tp.Any,
+  prefix: tp.Any,
+  /,
+  *,
+  node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] | None = None,
+):
+  if node_prefixes is None:
+    node_prefixes = {}
+
+  node_id_to_variable: dict[int, tp.Any] = {}
+
+  for path, value in graphlib.iter_graph(node, graph=True):
+    if graphlib.is_graph_node(value) or isinstance(value, graphlib.Variable):
+      if isinstance(value, Pytree):
+        value._check_valid_context(
+          lambda: f'Trying to extract graph node from different trace level, got {value!r}'
+        )
+      if isinstance(value, graphlib.Variable):
+        if not value._can_update:
+          raise ValueError(
+            f'Cannot extract graph node from different trace level, got {value!r}'
+          )
+      value_id = id(value)
+      node_id_to_variable[value_id] = value
+      if value_id in node_prefixes:
+        node_prefixes[value_id].append((path, prefix))
+      else:
+        node_prefixes[value_id] = [(path, prefix)]
+
+  node_msgs = []
+  for node_id, paths_prefixes in node_prefixes.items():
+    unique_prefixes = {p for _, p in paths_prefixes}
+    if len(unique_prefixes) > 1:
+      path_prefix_repr = '\n'.join(
+        f'  {"/".join(map(str,path)) if path else "<root>"}: {p}'
+        for path, p in paths_prefixes
+      )
+      if node_id in node_id_to_variable:
+        variable = node_id_to_variable[node_id]
+        node_type_name = type(variable).__name__
+      else:
+        node_type_name = f'Node ID: {node_id}'
+
+      node_msgs.append(f'Node: {node_type_name}\n{path_prefix_repr}')
+
+  if node_msgs:
+    raise ValueError(
+      'Inconsistent aliasing detected. The following nodes have different prefixes:\n'
+      + '\n'.join(node_msgs)
+    )
+
 # -----------------------------
 # to_tree/from_tree
 # -----------------------------
@@ -258,6 +311,78 @@ def to_tree(
 
   pytree_out = jax.tree.unflatten(treedef, leaves_out)
   return pytree_out
+
+
+def to_tree2(
+  tree,
+  /,
+  *,
+  prefix: tp.Any = Missing,
+  check_aliasing: bool = True,
+) -> tp.Any:
+  ref_index: graphlib.RefMap = graphlib.RefMap()
+
+  def _to_node_states(leaf):
+    if not (graphlib.is_graph_node(leaf) or isinstance(leaf, variablelib.Variable)):
+      return leaf
+    graphdef, flat_state = graphlib.flatten(
+      leaf, ref_index=ref_index, graph=True
+    )
+    states = graphlib._to_nested_state(graphdef, (flat_state,))
+    return NodeStates.from_split(graphdef, *states)
+
+  is_leaf = lambda x: (
+    isinstance(x, variablelib.Variable) or graphlib.is_graph_node(x)
+  )
+
+  if prefix is Missing or prefix is None:
+    return jax.tree.map(_to_node_states, tree, is_leaf=is_leaf)
+
+  leaf_prefixes = broadcast_prefix(
+    prefix,
+    tree,
+    prefix_is_leaf=lambda x: x is None or is_leaf(x),
+    tree_is_leaf=is_leaf,
+  )
+  leaves, treedef = jax.tree_util.tree_flatten(tree, is_leaf=is_leaf)
+
+  assert len(leaves) == len(leaf_prefixes)
+  leaves_out = []
+  node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] = {}
+
+  for leaf, leaf_prefix in zip(leaves, leaf_prefixes):
+    if is_leaf(leaf):
+      if check_aliasing:
+        check_consistent_aliasing2(
+          leaf, leaf_prefix, node_prefixes=node_prefixes
+        )
+      leaves_out.append(_to_node_states(leaf))
+    else:
+      leaves_out.append(leaf)
+
+  return jax.tree.unflatten(treedef, leaves_out)
+
+
+def from_tree2(tree: tp.Any, /) -> tp.Any:
+  index_ref = graphlib.IndexMap()
+
+  def _from_node_states(x):
+    if not isinstance(x, NodeStates):
+      return x
+    state = graphlib._merge_to_flat_state(x.states)
+    return graphlib.unflatten(
+      x.graphdef, state, index_ref=index_ref,
+    )
+
+  return jax.tree.map(
+    _from_node_states,
+    tree,
+    is_leaf=lambda x: (
+      isinstance(x, NodeStates)
+      or graphlib.is_graph_node(x)
+      or isinstance(x, variablelib.Variable)
+    ),
+  )
 
 
 def merge_tree_node(

@@ -159,6 +159,7 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]: ...
 @tp.overload
 def jit(
@@ -175,6 +176,7 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> JitWrapped[P, R]: ...
 def jit(
   fun: tp.Callable[P, R] | Missing = MISSING,
@@ -190,6 +192,7 @@ def jit(
   backend: tp.Optional[str] = None,
   inline: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> JitWrapped[P, R] | tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]:
   """
   Lifted version of ``jax.jit`` that can handle Modules / graph nodes as
@@ -338,6 +341,8 @@ def jit(
 
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if isinstance(fun, Missing):
     return functools.partial(
       jit,
@@ -352,6 +357,7 @@ def jit(
       backend=backend,
       inline=inline,
       graph=graph,
+      graph_updates=graph_updates,
     )  # type: ignore[return-value]
   fun_unbound, _, was_bound = _resolve_bound_callable(fun)
   if was_bound:
@@ -371,7 +377,11 @@ def jit(
         + graphlib._tree_mode_suggestion('jit')
       )
 
-  wrapped_cls = JitWrapped if graph else TreeJitWrapped
+  wrapped_cls: tp.Any
+  if graph and graph_updates:
+    wrapped_cls = JitWrapped
+  else:
+    wrapped_cls = functools.partial(SimpleJitWrapped, graph=graph)
   return wrapped_cls(
     fun_unbound,
     in_shardings=in_shardings,
@@ -406,21 +416,36 @@ jax.tree_util.register_dataclass(
 )
 
 
-def _flatten_to_partial_state(arg: tp.Any) -> PartialState:
+def _flatten_to_partial_state(
+    arg: tp.Any,
+    ref_index: graphlib.RefMap | None,
+) -> PartialState:
+  if ref_index is not None:
+    graphdef, flat_state = graphlib.flatten(arg, ref_index=ref_index, graph=True)
+    return PartialState(treedef=graphdef, leaves=flat_state.leaves)
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   leaves, treedef = jax.tree.flatten(arg, is_leaf=is_leaf)
   return PartialState(treedef=treedef, leaves=leaves)
 
 
-def _unflatten_partial_state(state: PartialState) -> tp.Any:
+def _unflatten_partial_state(
+    state: PartialState,
+    index_ref: graphlib.IndexMap | None,
+) -> tp.Any:
+  if index_ref is not None:
+    return graphlib.unflatten(
+        state.treedef, state.leaves, index_ref=index_ref,
+        copy_variables=False)
   return jax.tree.unflatten(state.treedef, state.leaves)
 
 
 @dataclasses.dataclass(eq=False)
-class TreeJitFn:
+class SimpleJitFn:
   f: tp.Callable[..., tp.Any]
+  out_shardings: tp.Any
   donate_argnums: frozenset[int]
   donate_argnames: frozenset[str]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -430,11 +455,17 @@ class TreeJitFn:
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     args_updates, kwargs_updates = updates
     args_snapshot, kwargs_snapshot = snapshot
+    index_ref = graphlib.IndexMap() if self.graph else None
     args = tuple(
-      _unflatten_partial_state(a) if isinstance(a, PartialState) else a
+      _unflatten_partial_state(a, index_ref=index_ref)
+      if isinstance(a, PartialState) else a
       for a in args
     )
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
+    if self.graph:
+      out = extract.to_tree2(out, prefix=self.out_shardings)
     extract.check_no_aliases(args_updates, kwargs_updates, out)
     donated_arg = lambda path, *_: path[0] in self.donate_argnums
     args_updates = extract.mask_variable_updates(
@@ -445,7 +476,7 @@ class TreeJitFn:
     return out, (args_updates, kwargs_updates)
 
 
-class TreeJitWrapped(tp.Generic[P, R]):
+class SimpleJitWrapped(tp.Generic[P, R]):
 
   def __init__(
       self,
@@ -461,12 +492,24 @@ class TreeJitWrapped(tp.Generic[P, R]):
       backend: tp.Optional[str] = None,
       inline: bool = False,
       partial_args: tuple[PartialState, ...] = (),
+      graph: bool = True,
   ):
     functools.update_wrapper(self, fun)
     self.fun: tp.Callable[P, R] = fun
-    self.in_shardings = in_shardings
     self.out_shardings = out_shardings
     self.partial_args = partial_args
+    self.graph = graph
+
+    if in_shardings is not None and isinstance(in_shardings, (tuple, list)) and (
+        static_argnums or static_argnames
+    ):
+      resolved = _resolve_argnums(fun, static_argnums, static_argnames)
+      expanded = list(in_shardings)
+      for i in sorted(resolved):
+        expanded.insert(i, None)
+      self.in_shardings = tuple(expanded)
+    else:
+      self.in_shardings = in_shardings
 
     jit_out_shardings: tp.Any
     if in_shardings is not None or out_shardings is not None:
@@ -493,7 +536,7 @@ class TreeJitWrapped(tp.Generic[P, R]):
         else donate_argnames or ()
     )
     self.jitted_fn = jax.jit(
-        TreeJitFn(fun, donate_argnums_set, donate_argnames_set),
+        SimpleJitFn(fun, out_shardings, donate_argnums_set, donate_argnames_set, graph),
         in_shardings=in_shardings,
         out_shardings=jit_out_shardings,
         static_argnums=static_argnums,
@@ -506,11 +549,28 @@ class TreeJitWrapped(tp.Generic[P, R]):
         inline=inline,
     )
 
+  def _maybe_to_tree(self, args, kwargs):
+    if self.graph:
+      args, kwargs = extract.to_tree2(
+          (args, kwargs),
+          prefix=(self.in_shardings, None)
+          if self.in_shardings is not None
+          else None,
+          check_aliasing=self.in_shardings is not None,
+      )
+    return args, kwargs
+
+  def _maybe_from_tree(self, out):
+    if self.graph:
+      out = extract.from_tree2(out)
+    return out
+
   def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+    args, kwargs = self._maybe_to_tree(args, kwargs)
     out, updates = self.jitted_fn(*self.partial_args, *args, **kwargs)
     extract.apply_variable_updates(
         ((*self.partial_args, *args), kwargs), updates)
-    return out
+    return self._maybe_from_tree(out)
 
   def __get__(self, obj, objtype=None):
     if obj is None:
@@ -518,21 +578,20 @@ class TreeJitWrapped(tp.Generic[P, R]):
     return functools.partial(self, obj)
 
   def eval_shape(self, *args, **kwargs):
+    args, kwargs = self._maybe_to_tree(args, kwargs)
     out, updates = self.jitted_fn.eval_shape(
         *self.partial_args, *args, **kwargs)
-    extract.apply_variable_updates(
-        ((*self.partial_args, *args), kwargs), updates)
-    return out
+    return self._maybe_from_tree(out)
 
-  def trace(self, *args, **kwargs) -> TreeTraced:
+  def trace(self, *args, **kwargs):
+    args, kwargs = self._maybe_to_tree(args, kwargs)
     traced = self.jitted_fn.trace(*self.partial_args, *args, **kwargs)
-    return TreeTraced(traced, self)
+    return SimpleTraced(traced, self)
 
-  def lower(self, *args, **kwargs) -> TreeLowered:
+  def lower(self, *args, **kwargs):
+    args, kwargs = self._maybe_to_tree(args, kwargs)
     lowered = self.jitted_fn.lower(*self.partial_args, *args, **kwargs)
-    return TreeLowered(lowered, self)
-
-
+    return SimpleLowered(lowered, self)
 def jit_partial(
     fun: tp.Callable[..., R],
     *partial_args: tp.Any,
@@ -545,7 +604,8 @@ def jit_partial(
     backend: tp.Optional[str] = None,
     inline: bool = False,
     graph: bool | None = None,
-) -> TreeJitWrapped[..., R]:
+    graph_updates: bool | None = None,
+) -> SimpleJitWrapped[..., R]:
   """JIT-compile ``fun`` with pre-flattened partial arguments.
 
   Similar to ``nnx.cached_partial`` but designed for tree-mode
@@ -594,20 +654,21 @@ def jit_partial(
     device: Optional device to run on.
     backend: Optional backend to use.
     inline: If ``True``, inline the function.
-    graph: If ``False``, uses tree-mode. If ``None``, uses the
-      ``nnx_graph_mode`` config value. Graph-mode (``True``) is
-      not supported.
+    graph: If ``None``, uses the ``nnx_graph_mode`` config value.
+    graph_updates: If ``None``, uses the ``nnx_graph_updates`` config
+      value. Cannot be set together with ``graph``.
 
   Returns:
-    A ``TreeJitWrapped`` callable expecting the remaining (runtime)
+    A callable expecting the remaining (runtime)
     arguments.
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if graph:
-    raise NotImplementedError(
-      'graph-mode is not supported for nnx.jit_partial. '
-      'Set graph=False or use the nnx_graph_mode config.'
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if graph_updates and graph:
+    raise ValueError(
+      '`graph_updates` not supported by `jit_partial`'
     )
   if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_shardings)):
     raise ValueError(
@@ -621,12 +682,14 @@ def jit_partial(
     )
 
   is_variable = lambda x: isinstance(x, variablelib.Variable)
+  ref_index = graphlib.RefMap() if graph else None
   flat_partial_args = tuple(
-    _flatten_to_partial_state(arg) for arg in partial_args
+    _flatten_to_partial_state(arg, ref_index=ref_index)
+    for arg in partial_args
   )
 
   jit_in_shardings: tp.Any = None
-  if in_shardings is not None and isinstance(in_shardings, (tuple, list)):
+  if in_shardings is not None and isinstance(in_shardings, (tuple, list)) and not graph:
     num_partial = len(partial_args)
     partial_shardings = in_shardings[:num_partial]
     runtime_shardings = in_shardings[num_partial:]
@@ -647,7 +710,7 @@ def jit_partial(
   else:
     jit_in_shardings = in_shardings
 
-  return TreeJitWrapped(
+  return SimpleJitWrapped(
     fun,
     in_shardings=jit_in_shardings,
     out_shardings=out_shardings,
@@ -658,6 +721,7 @@ def jit_partial(
     backend=backend,
     inline=inline,
     partial_args=flat_partial_args,
+    graph=graph,
   )
 
 
@@ -1061,9 +1125,9 @@ class Traced(Stage):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class TreeCompiled(Stage):
+class SimpleCompiled(Stage):
   compiled: jax.stages.Compiled
-  jit_wrapped: TreeJitWrapped
+  jit_wrapped: SimpleJitWrapped
 
   @property
   def _inner_obj(self):
@@ -1078,9 +1142,10 @@ class TreeCompiled(Stage):
     raise NotImplementedError
 
   def __call__(self, *args, **kwargs):
+    args, kwargs = self.jit_wrapped._maybe_to_tree(args, kwargs)
     out, updates = self.compiled(*args, **kwargs)
     extract.apply_variable_updates((args, kwargs), updates)
-    return out
+    return self.jit_wrapped._maybe_from_tree(out)
 
   @property
   def out_tree(self) -> jax.tree_util.PyTreeDef:
@@ -1112,9 +1177,9 @@ class TreeCompiled(Stage):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class TreeLowered(Stage):
+class SimpleLowered(Stage):
   lowered: jax.stages.Lowered
-  jit_wrapped: TreeJitWrapped
+  jit_wrapped: SimpleJitWrapped
 
   @property
   def _inner_obj(self):
@@ -1130,9 +1195,9 @@ class TreeLowered(Stage):
 
   def compile(
     self, compiler_options: jax.stages.CompilerOptions | None = None
-  ) -> TreeCompiled:
+  ) -> SimpleCompiled:
     compiled = self.lowered.compile(compiler_options)
-    return TreeCompiled(compiled, self.jit_wrapped)
+    return SimpleCompiled(compiled, self.jit_wrapped)
 
   def as_text(
     self, dialect: str | None = None, *, debug_info: bool = False
@@ -1147,9 +1212,9 @@ class TreeLowered(Stage):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class TreeTraced(Stage):
+class SimpleTraced(Stage):
   traced: jax.stages.Traced
-  jit_wrapped: TreeJitWrapped
+  jit_wrapped: SimpleJitWrapped
 
   @property
   def _inner_obj(self):
@@ -1161,9 +1226,9 @@ class TreeTraced(Stage):
 
   def lower(
     self, *, lowering_platforms: tuple[str, ...] | None = None
-  ) -> TreeLowered:
+  ) -> SimpleLowered:
     lowered = self.traced.lower(lowering_platforms=lowering_platforms)
-    return TreeLowered(lowered, self.jit_wrapped)
+    return SimpleLowered(lowered, self.jit_wrapped)
 # -------------------------------
 # shard_map
 # -------------------------------

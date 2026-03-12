@@ -939,11 +939,13 @@ class TestGraphUtils(parameterized.TestCase):
     out = nnx.merge(graphdef, state)
     self.assertIs(out, state)
 
-  @parameterized.parameters(True, False)
-  def test_jit_variable(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_jit_variable(self, graph, graph_updates):
     v = nnx.Param(1)
 
-    @nnx.graph.jit(graph=graph)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def f(v):
       v[...] += 1
 
@@ -952,8 +954,8 @@ class TestGraphUtils(parameterized.TestCase):
     np.testing.assert_allclose(v[...], 2)
 
   def test_jit_pytree_of_variables(self):
-    v1 = nnx.Param(1)
-    v2 = nnx.Param(2)
+    v1 = nnx.Param(jnp.array(1))
+    v2 = nnx.Param(jnp.array(2))
     vs = [v1, v1, v2]
 
     @nnx.graph.jit
@@ -985,8 +987,10 @@ class TestGraphUtils(parameterized.TestCase):
     increment_var(var, foo)
     self.assertEqual(foo.var[...], 2)
 
-  @parameterized.parameters(True, False)
-  def test_variables_example(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_variables_example(self, graph, graph_updates):
     def stateful_linear_init(din: int, dout: int, rngs: nnx.Rngs):
       w = nnx.Param(jax.random.normal(rngs(), (din, dout)))
       b = nnx.Param(jnp.zeros((dout,)))
@@ -996,7 +1000,7 @@ class TestGraphUtils(parameterized.TestCase):
     rngs = nnx.Rngs(0)
     w, b, count = stateful_linear_init(2, 3, rngs=rngs)
 
-    @nnx.graph.jit(graph=graph)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def stateful_linear(w, b, count, x):
       count[...] += 1
       return x @ w + b[None]
