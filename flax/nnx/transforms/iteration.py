@@ -171,8 +171,9 @@ def _vmap_split_fn(ctx: graphlib.SplitContext, path, prefix, x):
 
 
 @dataclasses.dataclass(eq=False)
-class TreeVmapFn:
+class SimpleVmapFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -180,7 +181,11 @@ class TreeVmapFn:
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_no_aliases(*updates, out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
@@ -246,6 +251,7 @@ def vmap(
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -262,6 +268,7 @@ def vmap(
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> F:
   ...
 
@@ -277,6 +284,7 @@ def vmap(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
 
@@ -301,6 +309,9 @@ def vmap(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support ``StateAxes`` or shared ``Variable`` references.
+    graph_updates: If ``True``, uses graph-mode with full support for
+      dynamic graph updates. If ``False`` or ``None``, uses the simpler
+      tree-mode update mechanism.
 
   Returns:
     Batched/vectorized version of ``f`` with arguments that correspond to
@@ -365,6 +376,8 @@ def vmap(
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if f is Missing:
     return functools.partial(
         vmap,
@@ -375,14 +388,14 @@ def vmap(
         spmd_axis_name=spmd_axis_name,
         transform_metadata=transform_metadata,
         graph=graph,
+        graph_updates=graph_updates,
     )  # type: ignore[return-value]
 
-  # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('vmap')
 
-  if not graph:
+  if not graph or not graph_updates:
     if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
       raise ValueError(
         '`in_axes` cannot contain `StateAxes` objects '
@@ -397,7 +410,7 @@ def vmap(
       )
 
     vmapped_fn = jax.vmap(
-      TreeVmapFn(f_unbound),
+      SimpleVmapFn(f_unbound, graph=graph),
       in_axes=in_axes,
       out_axes=(out_axes, (in_axes, 0)),
       axis_name=axis_name,
@@ -406,12 +419,22 @@ def vmap(
     )
 
     @functools.wraps(f_unbound)
-    def tree_vmap_wrapper(*args, **kwargs):
+    def simple_vmap_wrapper(*args, **kwargs):
+      if graph:
+        args, kwargs = extract.to_tree2(
+            (args, kwargs),
+            prefix=(in_axes, None)
+            if in_axes is not None
+            else None,
+            check_aliasing=in_axes is not None,
+        )
       out, updates = vmapped_fn(*args, **kwargs)
       extract.apply_variable_updates((args, kwargs), updates)
+      if graph:
+        out = extract.from_tree2(out)
       return out
 
-    return tree_vmap_wrapper  # type: ignore[return-value]
+    return simple_vmap_wrapper  # type: ignore[return-value]
 
 
   jax_in_axes = jax.tree.map(

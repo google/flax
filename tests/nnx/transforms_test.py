@@ -3207,8 +3207,11 @@ class TestRemat(absltest.TestCase):
     assert model.count[...] == 1
 
 
-class TestVmap(absltest.TestCase):
-  def test_tree_mode_vmap_basic(self):
+class TestVmap(parameterized.TestCase):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_basic(self, graph, graph_updates):
     class LinearEnsemble(nnx.Module):
       def __init__(self, num, *, rngs):
         self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
@@ -3216,14 +3219,17 @@ class TestVmap(absltest.TestCase):
     model = LinearEnsemble(5, rngs=nnx.Rngs(0))
     x = jnp.ones((2,))
 
-    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=False)
+    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return x @ model.w
 
     y = forward(model, x)
     assert y.shape == (5, 3)
 
-  def test_tree_mode_vmap_stateful(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_stateful(self, graph, graph_updates):
     class Counter(nnx.Variable):
       pass
 
@@ -3239,7 +3245,7 @@ class TestVmap(absltest.TestCase):
 
     model = Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=False)
+    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -3248,12 +3254,15 @@ class TestVmap(absltest.TestCase):
     assert y.shape == (5, 3)
     assert model.count[...] == 1
 
-  def test_tree_mode_vmap_variables(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_variables(self, graph, graph_updates):
     rngs = nnx.Rngs(0)
     w = nnx.Param(jax.random.normal(rngs(), (5, 2, 3)))
     b = nnx.Param(jax.random.normal(rngs(), (5, 3)))
 
-    @nnx.vmap(in_axes=(0, 0, 1), out_axes=1, graph=False)
+    @nnx.vmap(in_axes=(0, 0, 1), out_axes=1, graph=graph, graph_updates=graph_updates)
     def forward(w, b, x):
       return x @ w + b
 
@@ -3261,7 +3270,10 @@ class TestVmap(absltest.TestCase):
     y = forward(w, b, x)
     assert y.shape == (3, 5)
 
-  def test_tree_mode_vmap_ensemble_forward(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_ensemble_forward(self, graph, graph_updates):
     class Linear(nnx.Module):
       def __init__(self, din, dout, *, rngs):
         key = rngs.params()
@@ -3271,7 +3283,7 @@ class TestVmap(absltest.TestCase):
       def __call__(self, x):
         return x @ self.w + self.b[None]
 
-    @nnx.vmap(in_axes=0, out_axes=0, graph=False)
+    @nnx.vmap(in_axes=0, out_axes=0, graph=graph, graph_updates=graph_updates)
     def create_ensemble(keys):
       return Linear(2, 3, rngs=nnx.Rngs(keys))
 
@@ -3281,7 +3293,7 @@ class TestVmap(absltest.TestCase):
     assert ensemble.w.shape == (5, 2, 3)
     assert ensemble.b.shape == (5, 3)
 
-    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=False)
+    @nnx.vmap(in_axes=(0, None), out_axes=0, graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -3289,10 +3301,13 @@ class TestVmap(absltest.TestCase):
     y = forward(ensemble, x)
     assert y.shape == (5, 1, 3)
 
-  def test_tree_mode_vmap_replicate(self):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_vmap_replicate(self, graph, graph_updates):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=False)
+    @nnx.vmap(in_axes=(None, 0), out_axes=0, graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -4120,8 +4135,10 @@ class TestCond(parameterized.TestCase):
     collatz(x)
     self.assertEqual(x[...], 4)
 
-  @parameterized.parameters(True, False)
-  def test_cond_and_vmap(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_cond_and_vmap(self, graph, graph_updates):
     class Env(nnx.Pytree):
       def __init__(self):
         self.index = nnx.Variable(jnp.arange(8))
@@ -4130,7 +4147,7 @@ class TestCond(parameterized.TestCase):
     env = Env()
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.vmap(in_axes=(0, None), out_axes=None, graph=graph)
+    @nnx.vmap(in_axes=(0, None), out_axes=None, graph=graph, graph_updates=graph_updates)
     def f(env: Env, model: nnx.Linear):
       self.assertEqual(env.index.shape, ())
 
