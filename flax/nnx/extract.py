@@ -15,6 +15,7 @@
 import abc
 import functools
 import typing as tp
+from collections import namedtuple
 
 import jax
 
@@ -478,36 +479,9 @@ def updates_and_snapshot(args: A) -> tuple[A, A]:
   return updates, snapshot
 
 
-class _InputsAndOutputs(tp.NamedTuple):
-  args: tuple
-  kwargs: dict | None
-  output: tp.Any
-
-
-@tp.overload
-def check_no_aliases(args: tuple[tp.Any, ...], output: tp.Any) -> None:
-  ...
-
-
-@tp.overload
-def check_no_aliases(
-    args: tuple[tp.Any, ...], kwargs: dict[str, tp.Any], output: tp.Any
-) -> None:
-  ...
-
-
-def check_no_aliases(*positional_args):
-  if len(positional_args) == 2:
-    args, output = positional_args  # pytype: disable=bad-unpacking
-    kwargs = None
-  elif len(positional_args) == 3:
-    args, kwargs, output = positional_args  # pytype: disable=bad-unpacking
-  else:
-    raise TypeError(
-      f'check_no_aliases expects 2 or 3 arguments, got {len(positional_args)}'
-    )
-
-  container = _InputsAndOutputs(args=args, kwargs=kwargs, output=output)
+def check_no_aliases(**kwargs):
+  Attrs = namedtuple('Attrs', kwargs.keys())
+  container = Attrs(**kwargs)
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   seen: dict[int, jax.tree_util.KeyPath] = {}
   for path, leaf in jax.tree.leaves_with_path(

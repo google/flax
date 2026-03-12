@@ -466,7 +466,7 @@ class SimpleJitFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_shardings)
-    extract.check_no_aliases(args_updates, kwargs_updates, out)
+    extract.check_no_aliases(args=args_updates, kwargs=kwargs_updates, out=out)
     donated_arg = lambda path, *_: path[0] in self.donate_argnums
     args_updates = extract.mask_variable_updates(
         args_updates, args_snapshot, keep_fn=donated_arg)
@@ -1255,7 +1255,7 @@ class SimpleShardMapFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_specs)
-    extract.check_no_aliases(updates, out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 

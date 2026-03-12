@@ -74,7 +74,7 @@ class TreeGradFn:
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(*updates, out)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
 
     if self.has_aux:
@@ -488,7 +488,7 @@ class TreeVjpFn:
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
     out = self.f(*args)
-    extract.check_no_aliases(updates, out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
       primals_out, aux = out
@@ -630,7 +630,7 @@ class TreeJvpFn:
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
     out = self.f(*args)
-    extract.check_no_aliases(updates, out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
       primals_out, aux = out
@@ -781,7 +781,7 @@ class TreeCustomVjpFn:
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
     out = self.f(*args)
-    extract.check_no_aliases(updates, out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -797,7 +797,7 @@ class TreeFwdFn:
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
     out, residual = self.fwd(*args)
-    extract.check_no_aliases(updates, out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return (out, updates), residual
 
@@ -1346,7 +1346,7 @@ class TreeRematFn:
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(*updates, out)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 

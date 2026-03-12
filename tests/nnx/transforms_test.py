@@ -2304,9 +2304,10 @@ class TestScan(parameterized.TestCase):
     y = stack_forward(w, b, x)
     assert y.shape == (1, 3)
 
-  @parameterized.parameters(True, False)
-
-  def test_variables_as_carries_in_scan(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_variables_as_carries_in_scan(self, graph, graph_updates):
     w = nnx.Param(jax.random.normal(jax.random.key(0), (3, 3)))
     b = nnx.Param(jnp.zeros((3,)))
     count = nnx.BatchStat(0)
@@ -2314,7 +2315,10 @@ class TestScan(parameterized.TestCase):
     def block_forward(w, b, x):
       return nnx.gelu(x @ w + b[None])
 
-    @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0), graph=graph)
+    @nnx.scan(
+      in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0),
+      graph=graph, graph_updates=graph_updates,
+    )
     def stack_forward(params, x):
       w, b, count = params
       y = block_forward(w, b, x)
@@ -2491,10 +2495,13 @@ class TestScan(parameterized.TestCase):
       )
       def loop(a, b): ...
 
-  def test_tree_mode_scan_stateful(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_scan_stateful(self, graph, graph_updates):
     count = nnx.Variable(jnp.array(0))
 
-    @nnx.scan(graph=False)
+    @nnx.scan(graph=graph, graph_updates=graph_updates)
     def f(count, x):
       count[...] += 1
       return count, x + count[...]
@@ -2506,10 +2513,13 @@ class TestScan(parameterized.TestCase):
     self.assertEqual(count[...], 5)
     np.testing.assert_allclose(ys, jnp.array([1, 3, 5, 7, 9]))
 
-  def test_tree_mode_scan_carry_identity_error(self):
+  @parameterized.parameters(
+    (True, False), (False, False),
+  )
+  def test_scan_carry_identity_error(self, graph, graph_updates):
     count = nnx.Variable(jnp.array(0))
 
-    @nnx.scan(graph=False)
+    @nnx.scan(graph=graph, graph_updates=graph_updates)
     def f(count, x):
       new_count = nnx.Variable(count[...] + 1)
       return new_count, x

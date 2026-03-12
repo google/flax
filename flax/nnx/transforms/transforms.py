@@ -265,7 +265,7 @@ class TreeEvalShapeFn:
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(*updates, out)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(
       updates, snapshot, keep_fn=lambda *_: False
     )
@@ -351,7 +351,7 @@ class TreeCheckifyFn:
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
     out = self.f(*args)
-    extract.check_no_aliases(updates, out)
+    extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -444,7 +444,7 @@ class TreeCondFn:
   def __call__(self, *args):
     updates, _snapshot = extract.updates_and_snapshot(args)
     out = self.f(*args)
-    extract.check_no_aliases(updates, out)
+    extract.check_no_aliases(args=updates, out=out)
     return out, updates
 
 

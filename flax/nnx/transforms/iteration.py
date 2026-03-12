@@ -186,7 +186,7 @@ class SimpleVmapFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(*updates, out)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -202,7 +202,7 @@ class TreePmapFn:
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(*updates, out)
+    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -1262,8 +1262,9 @@ class ScanFn:
 
 
 @dataclasses.dataclass(eq=False)
-class TreeScanFn:
+class SimpleScanFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1273,12 +1274,20 @@ class TreeScanFn:
     carry_updates, _ = extract.updates_and_snapshot(carry)
     x_updates, x_snapshot = extract.updates_and_snapshot(x)
 
+    if self.graph:
+      carry = extract.from_tree2(carry)
+      x = extract.from_tree2(x)
+
     out = self.f(carry, x)
     carry_out, y = out
 
+    if self.graph:
+      carry_out = extract.to_tree2(carry_out)
+      y = extract.to_tree2(y)
+
     extract.check_same_variables(carry_updates, carry_out, 'scan')
 
-    extract.check_no_aliases(x_updates, y)
+    extract.check_no_aliases(carry=carry_out, x=x_updates, out=y)
     x_updates = extract.mask_variable_updates(x_updates, x_snapshot)
 
     return carry_out, (y, x_updates)
@@ -1297,6 +1306,7 @@ def scan(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -1315,6 +1325,7 @@ def scan(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F:
   ...
 
@@ -1332,6 +1343,7 @@ def scan(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """A Flax NNX transformation of `jax.lax.scan`_.
 
@@ -1422,6 +1434,9 @@ def scan(
     out_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
       the kind of output args. See ``in_axes`` for details. Note that If ``in_axes``
       contains :class:`flax.nnx.Carry` then ``out_axes`` must also contain :class:`flax.nnx.Carry`.
+    graph_updates: If ``True``, uses graph-mode with full support for
+      dynamic graph updates. If ``False`` or ``None``, uses the simpler
+      tree-mode update mechanism.
 
   .. _jax.lax.scan: https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>
   """
@@ -1436,6 +1451,7 @@ def scan(
         out_axes=out_axes,
         transform_metadata=transform_metadata,
         graph=graph,
+        graph_updates=graph_updates,
     )  # type: ignore[return-value]
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -1444,7 +1460,9 @@ def scan(
 
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
     if in_axes != (Carry, 0):
       raise ValueError(
         'tree-mode scan only supports `in_axes=(Carry, 0)`, '
@@ -1456,13 +1474,16 @@ def scan(
         f'got {out_axes=}'
       )
 
-    tree_scan_fn = TreeScanFn(f_unbound)
+    simple_scan_fn = SimpleScanFn(f_unbound, graph=graph)
 
     @functools.wraps(f)
-    def tree_scan_wrapper(carry_in, x):
-
+    def simple_scan_wrapper(carry_in, x):
+      if graph:
+        carry_in = extract.to_tree2(carry_in)
+        x = extract.to_tree2(x)
+      extract.check_no_aliases(carry=carry_in, x=x)
       carry_out, (y, updates) = jax.lax.scan(
-        tree_scan_fn,
+        simple_scan_fn,
         carry_in,
         x,
         length=length,
@@ -1472,12 +1493,15 @@ def scan(
       )
 
       extract.apply_variable_updates(x, updates)
-
       carry_out = extract.update_carry_variables(carry_in, carry_out)
+
+      if graph:
+        carry_out = extract.from_tree2(carry_out)
+        y = extract.from_tree2(y)
 
       return carry_out, y
 
-    return tree_scan_wrapper  # type: ignore[return-value]
+    return simple_scan_wrapper  # type: ignore[return-value]
 
   _check_out_axes(out_axes)
 
