@@ -1011,8 +1011,10 @@ class TestShardMap(parameterized.TestCase):
 
     self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
 
-  @parameterized.parameters(True, False)
-  def test_basic_shardmap_variables(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_basic_shardmap_variables(self, graph, graph_updates):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('a',))
@@ -1025,7 +1027,10 @@ class TestShardMap(parameterized.TestCase):
 
     self.assertNotIsInstance(w.sharding, jax.sharding.NamedSharding)
 
-    @nnx.shard_map(mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None, graph=graph)
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P(None, 'a'), P(), P()), out_specs=None,
+      graph=graph, graph_updates=graph_updates,
+    )
     def f(w, b, count):
       count[...] += 1
       self.assertEqual(w.shape, (16, 32 // n_devices))
@@ -1033,7 +1038,7 @@ class TestShardMap(parameterized.TestCase):
 
     f(w, b, count)
 
-    if graph:
+    if graph and graph_updates:
       self.assertIsInstance(w.sharding, jax.sharding.NamedSharding)
       self.assertIsInstance(b.sharding, jax.sharding.NamedSharding)
     self.assertEqual(count[...], 1)
@@ -1068,8 +1073,10 @@ class TestShardMap(parameterized.TestCase):
     self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
     self.assertIsInstance(m.bias.sharding, jax.sharding.NamedSharding)
 
-  @parameterized.parameters(True, False)
-  def test_simple_data_parallel(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_simple_data_parallel(self, graph, graph_updates):
     P = jax.sharding.PartitionSpec
     n_devices = jax.local_device_count()
 
@@ -1086,7 +1093,8 @@ class TestShardMap(parameterized.TestCase):
     x = jnp.ones((32, 2))
 
     @nnx.shard_map(
-      mesh=mesh, in_specs=(P(None), P('data')), out_specs=P('data'), graph=graph
+      mesh=mesh, in_specs=(P(None), P('data')), out_specs=P('data'),
+      graph=graph, graph_updates=graph_updates,
     )
     def f(m, x):
       self.assertEqual(x.shape, (32 // n_devices, 2))
@@ -1096,8 +1104,9 @@ class TestShardMap(parameterized.TestCase):
 
     self.assertEqual(y.shape, (32, 3))
     self.assertIsInstance(y.sharding, jax.sharding.NamedSharding)
-    self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
-    self.assertIsInstance(m.bias.sharding, jax.sharding.NamedSharding)
+    if graph and graph_updates:
+      self.assertIsInstance(m.kernel.sharding, jax.sharding.NamedSharding)
+      self.assertIsInstance(m.bias.sharding, jax.sharding.NamedSharding)
 
   def test_simple_tensor_parallel(self):
     P = jax.sharding.PartitionSpec
@@ -1134,8 +1143,10 @@ class TestShardMap(parameterized.TestCase):
 
     y = f(m, x)
 
-  @parameterized.parameters(True, False)
-  def test_shardmap_with_out_sharding(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_shardmap_with_sharding_names(self, graph, graph_updates):
     n_devices = jax.local_device_count()
     P = jax.sharding.PartitionSpec
     mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
@@ -1150,7 +1161,7 @@ class TestShardMap(parameterized.TestCase):
 
     @nnx.shard_map(
       mesh=mesh, in_specs=(P('data', None), P(None)), out_specs=P('data', None),
-      graph=graph,
+      graph=graph, graph_updates=graph_updates,
     )
     def f(w, b):
       self.assertEqual(w.shape, (8 // n_devices, 4))
@@ -1161,8 +1172,10 @@ class TestShardMap(parameterized.TestCase):
     self.assertEqual(y.shape, (8, 4))
     self.assertIsInstance(y.sharding, jax.sharding.NamedSharding)
 
-  @parameterized.parameters(True, False)
-  def test_shardmap_out_sharding_mutation(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_shardmap_sharding_names_mutation(self, graph, graph_updates):
     n_devices = jax.local_device_count()
     P = jax.sharding.PartitionSpec
     mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
@@ -1173,7 +1186,7 @@ class TestShardMap(parameterized.TestCase):
 
     @nnx.shard_map(
       mesh=mesh, in_specs=(P('data', None), P()), out_specs=P('data', None),
-      graph=graph,
+      graph=graph, graph_updates=graph_updates,
     )
     def f(w, count):
       count[...] += 1
@@ -1184,6 +1197,58 @@ class TestShardMap(parameterized.TestCase):
     self.assertEqual(count[...], 1)
     self.assertEqual(y.shape, (8, 4))
     np.testing.assert_allclose(w[...], jnp.zeros((8, 4)))
+
+  def test_shardmap_shared_variable(self):
+    P = jax.sharding.PartitionSpec
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
+
+    v = nnx.Param(jnp.array(1.0))
+
+    class Container(nnx.Module):
+      def __init__(self, v):
+        self.v = v
+
+    c1 = Container(v)
+    c2 = Container(v)
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P(), P(), P()), out_specs=P(),
+      graph=True, graph_updates=True,
+    )
+    def f(c1, c2, x):
+      c1.v[...] += x
+      return c1.v[...] + c2.v[...]
+
+    y = f(c1, c2, jnp.array(1.0))
+    np.testing.assert_allclose(y, 4.0)
+    np.testing.assert_allclose(v[...], 2.0)
+
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_shardmap_module_variable_update(self, graph, graph_updates):
+    P = jax.sharding.PartitionSpec
+    mesh = jax.sharding.Mesh(jax.local_devices(), ('data',))
+
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.count = nnx.Variable(jnp.array(0))
+
+    m = Foo()
+
+    @nnx.shard_map(
+      mesh=mesh, in_specs=(P(), P()), out_specs=P(),
+      graph=graph, graph_updates=graph_updates,
+    )
+    def f(m, x):
+      m.count[...] += 1
+      return x * 2
+
+    y = f(m, jnp.array(3.0))
+    np.testing.assert_allclose(y, 6.0)
+    self.assertEqual(m.count[...], 1)
+    y = f(m, jnp.array(3.0))
+    self.assertEqual(m.count[...], 2)
 
 
 class TestGrad(parameterized.TestCase):

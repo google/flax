@@ -1239,8 +1239,10 @@ class SimpleTraced(Stage):
 
 
 @dataclasses.dataclass(eq=False)
-class TreeShardMapFn:
+class SimpleShardMapFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
+  out_specs: tp.Any
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1248,7 +1250,11 @@ class TreeShardMapFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out = self.f(*args)
+    if self.graph:
+      out = extract.to_tree2(out, prefix=self.out_specs)
     extract.check_no_aliases(updates, out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
@@ -1296,6 +1302,7 @@ def shard_map(
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> F:
   ...
 
@@ -1309,6 +1316,7 @@ def shard_map(
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -1322,6 +1330,7 @@ def shard_map(
     axis_names: tp.AbstractSet[AxisName] = frozenset(),
     check_vma: bool = True,
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """
   Lifted version of
@@ -1471,6 +1480,9 @@ def shard_map(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support ``StateSharding`` or shared ``Variable`` references.
+    graph_updates: If ``True``, uses graph-mode with support for
+      propagating graph updates and allows prefix filters (StateSharding) in
+      ``in_specs`` and ``out_specs``.
 
   Returns:
     A callable that applies the input function ``f`` across data sharded according to
@@ -1478,6 +1490,8 @@ def shard_map(
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if f is Missing:
     return functools.partial(
         shard_map,
@@ -1487,6 +1501,7 @@ def shard_map(
         axis_names=axis_names,
         check_vma=check_vma,
         graph=graph,
+        graph_updates=graph_updates,
     )  # type: ignore[return-value]
   assert not isinstance(f, type)
 
@@ -1494,7 +1509,7 @@ def shard_map(
   if was_bound:
     _raise_bound_method_error('shard_map')
 
-  if not graph:
+  if not graph or not graph_updates:
     if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_specs)):
       raise ValueError(
         '`in_specs` cannot contain `StateSharding` objects '
@@ -1506,8 +1521,8 @@ def shard_map(
         'when `graph=False`'
       )
 
-    tree_shard_map_fn = jax.shard_map(
-        TreeShardMapFn(f_unbound),
+    shard_map_fn = jax.shard_map(
+        SimpleShardMapFn(f_unbound, graph=graph, out_specs=out_specs),
         mesh=mesh,
         in_specs=in_specs,
         out_specs=(out_specs, in_specs),
@@ -1516,13 +1531,21 @@ def shard_map(
     )
 
     @functools.wraps(f)
-    def tree_shard_map_wrapper(*args, **kwargs):
-      out, updates = tree_shard_map_fn(*args, **kwargs)
+    def shard_map_wrapper(*args, **kwargs):
+      if graph:
+        args = extract.to_tree2(
+            args,
+            prefix=in_specs,
+            check_aliasing=in_specs is not None,
+        )
+      out, updates = shard_map_fn(*args, **kwargs)
       extract.apply_variable_updates(args, updates)
+      if graph:
+        out = extract.from_tree2(out)
       return out
 
-    tree_shard_map_wrapper.inner = tree_shard_map_fn  # type: ignore
-    return tree_shard_map_wrapper  # type: ignore
+    shard_map_wrapper.inner = shard_map_fn  # type: ignore
+    return shard_map_wrapper  # type: ignore
 
   kwarg_specs = PartitionSpec()
   jax_in_specs = jax.tree.map(
@@ -1546,7 +1569,7 @@ def shard_map(
     out_specs,
   )
 
-  @functools.wraps(f)
+  @functools.wraps(f)  # type: ignore[no-redef]
   def shard_map_wrapper(*args, **kwargs):
     with graphlib.update_context(shard_map_wrapper):
       pure_args, pure_kwargs = extract.to_tree(
