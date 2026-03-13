@@ -192,8 +192,9 @@ class SimpleVmapFn:
 
 
 @dataclasses.dataclass(eq=False)
-class TreePmapFn:
+class SimplePmapFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -201,7 +202,11 @@ class TreePmapFn:
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
@@ -528,6 +533,7 @@ def pmap(
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
 
@@ -548,6 +554,7 @@ def pmap(
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
+    graph_updates: bool | None = None,
 ) -> F:
   ...
 
@@ -567,89 +574,75 @@ def pmap(
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
-  """Reference-aware version of `jax.vmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__.
+  """Reference-aware version of `jax.pmap <https://jax.readthedocs.io/en/latest/_autosummary/jax.pmap.html>`__.
 
   Args:
-    f: Function to be mapped over additional axes.
-    in_axes: An integer, None, or sequence of values specifying which input
-      array axes to map over (see `jax.vmap
-      <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__). In
-      addition to integers and None, :class:`StateAxes`  can be used to control
-      how graph nodes like Modules are vectorized by specifying the axes to be
-      applied to substates of the graph node given a `Filter
-      <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
-    out_axes: An integer, None, or pytree indicating where the mapped axis
-      should appear in the output (see `jax.vmap
-      <https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html>`__).
+    f: Function to be mapped over argument axes. Its arguments and return
+      value should be arrays, scalars, graph nodes, or (nested) standard
+      Python containers (tuple/list/dict) thereof. Positional arguments
+      indicated by ``static_broadcasted_argnums`` can be anything at all,
+      provided they are hashable and have an equality operation defined.
     axis_name: Optional, a hashable Python object used to identify the mapped
       axis so that parallel collectives can be applied.
-    axis_size: Optional, an integer indicating the size of the axis to be
-      mapped. If not provided, the mapped axis size is inferred from arguments.
+    in_axes: A non-negative integer, None, or nested Python container thereof
+      that specifies which axes of positional arguments to map over. Arguments
+      passed as keywords are always mapped over their leading axis (i.e. axis
+      index 0). In addition to integers and None, :class:`StateAxes` can be
+      used to control how graph nodes like Modules are vectorized by specifying
+      the axes to be applied to substates of the graph node given a `Filter
+      <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__.
+    out_axes: A non-negative integer, None, or nested Python container thereof
+      indicating where the mapped axis should appear in the output. All outputs
+      with a mapped axis must have a non-None ``out_axes`` specification.
+    static_broadcasted_argnums: An int or collection of ints specifying which
+      positional arguments to treat as static (compile-time constant).
+      Operations that only depend on static arguments will be constant-folded.
+      Calling the pmapped function with different values for these constants
+      will trigger recompilation. If the pmapped function is called with fewer
+      positional arguments than indicated by ``static_broadcasted_argnums`` then
+      an error is raised. Each of the static arguments will be broadcasted to
+      all devices. Arguments that are not arrays or containers thereof must be
+      marked as static. Defaults to ().
+      Static arguments must be hashable, meaning both ``__hash__`` and
+      ``__eq__`` are implemented, and should be immutable.
+    devices: This is an experimental feature and the API is likely to change.
+      Optional, a sequence of Devices to map over. (Available devices can be
+      retrieved via jax.devices()). Must be given identically for each process
+      in multi-process settings (and will therefore include devices across
+      processes). If specified, the size of the mapped axis must be equal to
+      the number of devices in the sequence local to the given process. Nested
+      ``pmap`` s with ``devices`` specified in either the inner or outer
+      ``pmap`` are not yet supported.
+    backend: This is an experimental feature and the API is likely to change.
+      Optional, a string representing the XLA backend. 'cpu', 'gpu', or 'tpu'.
+    axis_size: Optional; the size of the mapped axis.
+    donate_argnums: Specify which positional argument buffers are "donated" to
+      the computation. It is safe to donate argument buffers if you no longer
+      need them once the computation has finished. In some cases XLA can make
+      use of donated buffers to reduce the amount of memory needed to perform a
+      computation, for example recycling one of your input buffers to store a
+      result. You should not reuse buffers that you donate to a computation,
+      JAX will raise an error if you try to. Note that donate_argnums only
+      work for positional arguments, and keyword arguments will not be donated.
+    transform_metadata: Optional mapping of metadata for the transform.
+    graph: if True, use graph-mode (default). If False, use tree-mode.
+      If None, uses the value of ``nnx_graph_mode`` config.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``StateAxes``
+      is not supported.
 
   Returns:
-    Batched/vectorized version of ``f`` with arguments that correspond to
-    those of ``f``, but with extra array axes at positions indicated by
-    ``in_axes``, and a return value that corresponds to that of ``f``, but
-    with extra array axes at positions indicated by ``out_axes``.
-
-  Example::
-
-    >>> from flax import nnx
-    >>> from jax import random, numpy as jnp
-    ...
-    >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    >>> x = jnp.ones((5, 2))
-    ...
-    >>> @nnx.vmap(in_axes=(None, 0), out_axes=0)
-    ... def forward(model, x):
-    ...   return model(x)
-    ...
-    >>> y = forward(model, x)
-    >>> y.shape
-    (5, 3)
-
-  >>> class LinearEnsemble(nnx.Module):
-  ...   def __init__(self, num, rngs):
-  ...     self.w = nnx.Param(jax.random.uniform(rngs(), (num, 2, 3)))
-  ...
-  >>> model = LinearEnsemble(5, rngs=nnx.Rngs(0))
-  >>> x = jnp.ones((2,))
-  ...
-  >>> @nnx.vmap(in_axes=(0, None), out_axes=0)
-  ... def forward(model, x):
-  ...   return x @ model.w
-  ...
-  >>> y = forward(model, x)
-  >>> y.shape
-  (5, 3)
-
-  To control control how graph node substates are vectorized, ``StateAxes``
-  can be passed to ``in_axes`` and ``out_axes`` specifying the axes to be
-  applied to each substate given a filter. The following example shows how to
-  share the parameters between the ensemble members which keeping different
-  batch statistics and dropout random state::
-
-    >>> class Foo(nnx.Module):
-    ...   def __init__(self):
-    ...     self.a = nnx.Param(jnp.arange(4))
-    ...     self.b = nnx.BatchStat(jnp.arange(4))
-    ...
-    >>> state_axes = nnx.StateAxes({nnx.Param: 0, nnx.BatchStat: None})
-    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=0)
-    ... def mul(foo):
-    ...   return foo.a * foo.b
-    ...
-    >>> foo = Foo()
-    >>> y = mul(foo)
-    >>> y
-    Array([[0, 0, 0, 0],
-           [0, 1, 2, 3],
-           [0, 2, 4, 6],
-           [0, 3, 6, 9]], dtype=int32)
+    A parallelized version of ``f`` with arguments that correspond to those of
+    ``f`` but with extra array axes at positions indicated by ``in_axes`` and
+    with output that has an additional leading array axis (with the same size).
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if f is Missing:
     return functools.partial(
         pmap,
@@ -664,13 +657,14 @@ def pmap(
         global_arg_shapes=global_arg_shapes,
         transform_metadata=transform_metadata,
         graph=graph,
+        graph_updates=graph_updates,
     )  # type: ignore[return-value]
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
   if was_bound:
     _raise_bound_method_error('pmap')
 
-  if not graph:
+  if not graph or not graph_updates:
     if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
       raise ValueError(
         '`in_axes` cannot contain `StateAxes` objects '
@@ -685,7 +679,7 @@ def pmap(
       )
 
     pmapped_fn = jax.pmap(
-      TreePmapFn(f_unbound),
+      SimplePmapFn(f_unbound, graph=graph),
       axis_name=axis_name,
       in_axes=in_axes,
       out_axes=(out_axes, (in_axes, 0)),
@@ -698,12 +692,22 @@ def pmap(
     )
 
     @functools.wraps(f_unbound)
-    def tree_pmap_wrapper(*args, **kwargs):
+    def simple_pmap_wrapper(*args, **kwargs):
+      if graph:
+        args, kwargs = extract.to_tree2(
+            (args, kwargs),
+            prefix=(in_axes, None)
+            if in_axes is not None
+            else None,
+            check_aliasing=in_axes is not None,
+        )
       out, updates = pmapped_fn(*args, **kwargs)
       extract.apply_variable_updates((args, kwargs), updates)
+      if graph:
+        out = extract.from_tree2(out)
       return out
 
-    return tree_pmap_wrapper  # type: ignore[return-value]
+    return simple_pmap_wrapper  # type: ignore[return-value]
 
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)

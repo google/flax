@@ -63,9 +63,10 @@ class DiffState:
 
 
 @dataclasses.dataclass(eq=False)
-class TreeGradFn:
+class SimpleGradFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -73,7 +74,11 @@ class TreeGradFn:
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
 
@@ -132,11 +137,12 @@ def _grad_general(
     allow_int: bool,
     return_value: bool,
     graph: bool,
+    graph_updates: bool,
 ) -> tp.Callable[..., tp.Any]:
 
   transform = jax.value_and_grad if return_value else jax.grad
 
-  if not graph:
+  if not graph or not graph_updates:
     if any(isinstance(x, DiffState) for x in jax.tree.leaves(argnums)):
       raise ValueError(
         '`argnums` cannot contain `DiffState` objects '
@@ -145,7 +151,7 @@ def _grad_general(
       )
 
     gradded_fn = transform(
-        TreeGradFn(f, has_aux),
+        SimpleGradFn(f, has_aux, graph=graph),
         argnums=argnums,  # type: ignore[arg-type]
         has_aux=True,
         holomorphic=holomorphic,
@@ -153,21 +159,38 @@ def _grad_general(
     )
 
     def tree_grad_wrapper(*args, **kwargs):
+      if graph:
+        diff_argnums = (argnums,) if isinstance(argnums, int) else argnums
+        args_prefix = tuple(
+          i in diff_argnums for i in range(len(args))
+        )
+        args, kwargs = extract.to_tree2(
+          (args, kwargs), prefix=(args_prefix, False),
+        )
+
       fn_out = gradded_fn(*args, **kwargs)
 
       if return_value:
         if has_aux:
           (loss, (updates, aux)), grads = fn_out
+          if graph:
+            grads, aux = extract.from_tree2((grads, aux))
           result = (loss, aux), grads
         else:
           (loss, updates), grads = fn_out
+          if graph:
+            grads = extract.from_tree2(grads)
           result = loss, grads
       else:
         if has_aux:
           grads, (updates, aux) = fn_out
+          if graph:
+            grads, aux = extract.from_tree2((grads, aux))
           result = grads, aux
         else:
           grads, updates = fn_out
+          if graph:
+            grads = extract.from_tree2(grads)
           result = grads
 
       extract.apply_variable_updates((args, kwargs), updates)
@@ -275,6 +298,7 @@ def grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 @tp.overload
 def grad(
@@ -285,6 +309,7 @@ def grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 def grad(
   f: tp.Callable[..., tp.Any] | Missing = MISSING,
@@ -295,6 +320,7 @@ def grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> (
   tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
@@ -372,9 +398,15 @@ def grad(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support ``DiffState`` or shared ``Variable`` references.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``DiffState``
+      is not supported.
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if reduce_axes:
     raise NotImplementedError('reduce_axes argument to grad is deprecated')
   del reduce_axes
@@ -387,6 +419,7 @@ def grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
       graph=graph,
+      graph_updates=graph_updates,
     )
   # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -402,6 +435,7 @@ def grad(
     allow_int,
     return_value=False,
     graph=graph,
+    graph_updates=graph_updates,
   )
 
 
@@ -415,6 +449,7 @@ def value_and_grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 @tp.overload
 def value_and_grad(
@@ -425,6 +460,7 @@ def value_and_grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 def value_and_grad(
   f: tp.Callable[..., tp.Any] | type[Missing] = Missing,
@@ -435,12 +471,55 @@ def value_and_grad(
   allow_int: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> (
   tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
+  """Object-aware version of ``jax.value_and_grad``.
+
+  Like :func:`grad`, but returns both the value and the gradient of ``f``.
+
+  Args:
+    f: Function to be differentiated. Its arguments at positions specified by
+      ``argnums`` should be arrays, scalars, graph nodes or standard Python
+      containers. Argument arrays in the positions specified by ``argnums`` must
+      be of inexact (i.e., floating-point or complex) type. It should return a
+      scalar (which includes arrays with shape ``()`` but not arrays with shape
+      ``(1,)`` etc.)
+    argnums: Optional, integer or sequence of integers. Specifies which
+      positional argument(s) to differentiate with respect to (default 0).
+    has_aux: Optional, bool. Indicates whether ``f`` returns a pair where the
+      first element is considered the output of the mathematical function to be
+      differentiated and the second element is auxiliary data. Default False.
+    holomorphic: Optional, bool. Indicates whether ``f`` is promised to be
+      holomorphic. If True, inputs and outputs must be complex. Default False.
+    allow_int: Optional, bool. Whether to allow differentiating with
+      respect to integer valued inputs. The gradient of an integer input will
+      have a trivial vector-space dtype (float0). Default False.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol. Tree-mode does
+      not support ``DiffState`` or shared ``Variable`` references.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``DiffState``
+      is not supported.
+
+  Returns:
+    A function with the same arguments as ``f`` that evaluates both ``f``
+    and the gradient of ``f`` and returns them as a pair (a two-element
+    tuple). If ``argnums`` is an integer then the gradient has the same shape
+    and type as the positional argument indicated by that integer. If argnums is
+    a sequence of integers, the gradient is a tuple of values with the same
+    shapes and types as the corresponding arguments. If ``has_aux`` is True
+    then a tuple of ((value, auxiliary_data), gradient) is returned.
+  """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if reduce_axes:
     raise NotImplementedError(
         'reduce_axes argument to value_and_grad is deprecated')
@@ -454,6 +533,7 @@ def value_and_grad(
       holomorphic=holomorphic,
       allow_int=allow_int,
       graph=graph,
+      graph_updates=graph_updates,
     )
   # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -469,6 +549,7 @@ def value_and_grad(
     allow_int,
     return_value=True,
     graph=graph,
+    graph_updates=graph_updates,
   )
 
 # -----------------------------------------------
