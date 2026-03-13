@@ -4403,19 +4403,24 @@ class TestWhileLoop(parameterized.TestCase):
     g_accum = jax.tree.map(jnp.zeros_like, nnx.state(model))
     nnx.graph.fori_loop(0, 2, immut_fn, g_accum)
 
-  @parameterized.parameters(True, False)
-  def test_fori_loop_grad_accum(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_fori_loop_grad_accum(self, graph, graph_updates):
     accum = nnx.Variable(jnp.zeros((10, 10)))
 
     def accum_fn(i, accum):
       accum[...] += 1
       return accum
 
-    accum = nnx.fori_loop(0, 3, accum_fn, accum, graph=graph)
+    accum = nnx.fori_loop(0, 3, accum_fn, accum,
+                          graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(accum[...], jnp.full((10, 10), 3.0))
 
-  @parameterized.parameters(True, False)
-  def test_fori_loop_basic(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_fori_loop_basic(self, graph, graph_updates):
     def fwd_fn(i, input):
       m, x = input
       m.kernel[...] = jnp.identity(10) * i
@@ -4424,7 +4429,8 @@ class TestWhileLoop(parameterized.TestCase):
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
     x = jax.random.normal(jax.random.key(0), (10,))
 
-    _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x), graph=graph)
+    _, y = nnx.fori_loop(2, 4, fwd_fn, (module, x),
+                         graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(y, x * 2 * 3)
 
   def test_fori_loop_with_sharing(self):
@@ -4534,8 +4540,10 @@ class TestWhileLoop(parameterized.TestCase):
     y = f(module, x)
     np.testing.assert_array_equal(y, x * 8)
 
-  @parameterized.parameters(True, False)
-  def test_tree_mode_fori_loop_stateful(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_tree_mode_fori_loop_stateful(self, graph, graph_updates):
     class Counter(nnx.Module):
       def __init__(self):
         self.count = nnx.Variable(jnp.array(0))
@@ -4551,8 +4559,9 @@ class TestWhileLoop(parameterized.TestCase):
       x = module(x)
       return counter, module, x
 
-    counter, module, y = nnx.graph.fori_loop(
-      0, 3, body_fn, (counter, module, x), graph=graph,
+    counter, module, y = nnx.fori_loop(
+      0, 3, body_fn, (counter, module, x),
+      graph=graph, graph_updates=graph_updates,
     )
     np.testing.assert_array_equal(counter.count[...], 3)
     np.testing.assert_array_equal(y, x * 8)

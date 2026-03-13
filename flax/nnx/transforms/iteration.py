@@ -1838,8 +1838,9 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
 
 
 @dataclasses.dataclass(eq=False)
-class TreeForiLoopBodyFn:
+class SimpleForiLoopBodyFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1847,7 +1848,11 @@ class TreeForiLoopBodyFn:
   @extract.treemap_copy_args
   def __call__(self, i, val):
     val_variables, _ = extract.updates_and_snapshot(val)
+    if self.graph:
+      val = extract.from_tree2(val)
     out = self.f(i, val)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_same_variables(val_variables, out, 'fori_loop')
     return out
 
@@ -1873,7 +1878,8 @@ def fori_loop(lower: int, upper: int,
               init_val: T,
               *,
               unroll: int | bool | None = None,
-              graph: bool | None = None) -> T:
+              graph: bool | None = None,
+              graph_updates: bool | None = None) -> T:
   """A Flax NNX transformation of `jax.lax.fori_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.fori_loop.html>`_.
 
   Caution: for the NNX internal reference tracing mechanism to work, you cannot
@@ -1910,6 +1916,9 @@ def fori_loop(lower: int, upper: int,
       This argument is only applicable if the loop bounds are statically known.
     graph: if True, use graph-mode (default). If False, use tree-mode.
       If None, uses the value of ``nnx_graph_mode`` config.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
 
   Returns:
     A loop value from the final iteration, of type ``T``.
@@ -1917,14 +1926,23 @@ def fori_loop(lower: int, upper: int,
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    simple_body_fn = SimpleForiLoopBodyFn(body_fun, graph=graph)
+
+    if graph:
+      init_val = extract.to_tree2(init_val)
     val_out = jax.lax.fori_loop(
       lower, upper,
-      TreeForiLoopBodyFn(body_fun),
+      simple_body_fn,
       init_val,
       unroll=unroll,
     )
-    return extract.update_carry_variables(init_val, val_out)
+    val_out = extract.update_carry_variables(init_val, val_out)
+    if graph:
+      val_out = extract.from_tree2(val_out)
+    return val_out
 
   pure_init_val = extract.to_tree(init_val, ctxtag='fori_loop')
   body = ForiLoopBodyFn(body_fun)
