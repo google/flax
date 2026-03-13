@@ -36,8 +36,8 @@ class TestIntegration(parameterized.TestCase):
 
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dmid, rngs=rngs)
-        self.bn = nnx.BatchNorm(dmid, rngs=rngs)
-        self.dropout = nnx.Dropout(0.2, rngs=rngs)
+        self.bn = nnx.BatchNorm(dmid, use_running_average=False, rngs=rngs)
+        self.dropout = nnx.Dropout(0.2, deterministic=False, rngs=rngs)
         self.linear_out = nnx.Linear(dmid, dout, rngs=rngs)
 
       def __call__(self, x):
@@ -177,7 +177,7 @@ class TestIntegration(parameterized.TestCase):
     new_model = nnx.graph.view(model, use_running_average=False)
 
     for _i in range(3):
-      train_step(model, x, y)
+      train_step(new_model, x, y)
 
     assert new_model.block1.linear is new_model.block2.linear
     assert new_model.block1.linear.bias is not None
@@ -468,8 +468,8 @@ class TestIntegration(parameterized.TestCase):
     class Model(nnx.Module):
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dmid, rngs=rngs)
-        self.bn = nnx.BatchNorm(dmid, rngs=rngs)
-        self.dropout = nnx.Dropout(0.2, rngs=rngs)
+        self.bn = nnx.BatchNorm(dmid, use_running_average=False, rngs=rngs)
+        self.dropout = nnx.Dropout(0.2, deterministic=False, rngs=rngs)
         self.linear_out = nnx.Linear(dmid, dout, rngs=rngs)
 
       def __call__(self, x):

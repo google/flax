@@ -436,8 +436,8 @@ NNX Modules are `Pytree`s that have two additional methods for traking intermedi
 class Block(nnx.Module):
   def __init__(self, din: int, dout: int, rngs: nnx.Rngs):
     self.linear = nnx.Linear(din, dout, rngs=rngs)
-    self.bn = nnx.BatchNorm(dout, rngs=rngs)
-    self.dropout = nnx.Dropout(0.1, rngs=rngs)
+    self.bn = nnx.BatchNorm(dout, use_running_average=False, rngs=rngs)
+    self.dropout = nnx.Dropout(0.1, deterministic=False, rngs=rngs)
 
   def __call__(self, x):
     y = nnx.relu(self.dropout(self.bn(self.linear(x))))

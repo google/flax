@@ -3011,7 +3011,7 @@ class TestScan(parameterized.TestCase):
         self.linear = nnx.Linear(
           hidden_size + input_size, hidden_size, rngs=rngs
         )
-        self.drop = nnx.Dropout(0.1, rngs=rngs)
+        self.drop = nnx.Dropout(0.1, deterministic=False, rngs=rngs)
         self.hidden_size = hidden_size
 
       def __call__(self, carry, x) -> tuple[jax.Array, jax.Array]:
@@ -3533,7 +3533,7 @@ class TestVmap(parameterized.TestCase):
     class Block(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
-        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, use_running_average=False, rngs=rngs)
         self.dropout = nnx.Dropout(0.1, deterministic=False, rngs=rngs)
 
       def __call__(self, x: jax.Array) -> jax.Array:
@@ -3567,7 +3567,7 @@ class TestVmap(parameterized.TestCase):
     class Block(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
-        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, use_running_average=False, rngs=rngs)
         self.dropout = nnx.Dropout(0.1, deterministic=False, rngs=rngs)
 
       def __call__(self, x: jax.Array) -> jax.Array:
@@ -3607,7 +3607,7 @@ class TestVmap(parameterized.TestCase):
     class Block(nnx.Module):
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(2, 3, rngs=rngs)
-        self.bn = nnx.BatchNorm(3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, use_running_average=False, rngs=rngs)
         self.dropout = nnx.Dropout(0.1, deterministic=False, rngs=rngs)
 
       def __call__(self, x: jax.Array) -> jax.Array:
@@ -3848,8 +3848,8 @@ class TestVmap(parameterized.TestCase):
     class Model(nnx.Module):
       def __init__(self, din, dout, *, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
-        self.dropout = nnx.Dropout(0.5, rngs=rngs)
-        self.bn = nnx.BatchNorm(dout, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+        self.bn = nnx.BatchNorm(dout, use_running_average=False, rngs=rngs)
 
       def __call__(self, x):
         return nnx.relu(self.dropout(self.bn(self.linear(x))))

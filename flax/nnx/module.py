@@ -444,12 +444,12 @@ def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool =
     >>> class Block(nnx.Module):
     ...   def __init__(self, din, dout, *, rngs: nnx.Rngs):
     ...     self.linear = nnx.Linear(din, dout, rngs=rngs)
-    ...     self.dropout = nnx.Dropout(0.5, deterministic=False)
-    ...     self.batch_norm = nnx.BatchNorm(10, use_running_average=False, rngs=rngs)
+    ...     self.dropout = nnx.Dropout(0.5)
+    ...     self.batch_norm = nnx.BatchNorm(10, rngs=rngs)
     ...
     >>> block = Block(2, 5, rngs=nnx.Rngs(0))
     >>> block.dropout.deterministic, block.batch_norm.use_running_average
-    (False, False)
+    (None, None)
     >>> new_block = nnx.view(block, deterministic=True, use_running_average=True)
     >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
     (True, True)
@@ -459,7 +459,7 @@ def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool =
     >>> new_block = nnx.view(block, only=nnx.Dropout, deterministic=True)
     >>> # Only the dropout will be modified
     >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
-    (True, False)
+    (True, None)
 
   Args:
     node: the object to create a copy of.
