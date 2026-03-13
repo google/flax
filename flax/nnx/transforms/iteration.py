@@ -309,9 +309,10 @@ def vmap(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support ``StateAxes`` or shared ``Variable`` references.
-    graph_updates: If ``True``, uses graph-mode with full support for
-      dynamic graph updates. If ``False`` or ``None``, uses the simpler
-      tree-mode update mechanism.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``StateAxes``
+      is not supported.
 
   Returns:
     Batched/vectorized version of ``f`` with arguments that correspond to
@@ -1434,9 +1435,10 @@ def scan(
     out_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
       the kind of output args. See ``in_axes`` for details. Note that If ``in_axes``
       contains :class:`flax.nnx.Carry` then ``out_axes`` must also contain :class:`flax.nnx.Carry`.
-    graph_updates: If ``True``, uses graph-mode with full support for
-      dynamic graph updates. If ``False`` or ``None``, uses the simpler
-      tree-mode update mechanism.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using ``StateAxes``
+      is not supported.
 
   .. _jax.lax.scan: https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>
   """
@@ -1639,8 +1641,9 @@ def scan(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeWhileLoopBodyFn:
+class SimpleWhileLoopBodyFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1648,9 +1651,27 @@ class TreeWhileLoopBodyFn:
   @extract.treemap_copy_args
   def __call__(self, val):
     val_variables, _ = extract.updates_and_snapshot(val)
+    if self.graph:
+      val = extract.from_tree2(val)
     out = self.f(val)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_same_variables(val_variables, out, 'while_loop')
     return out
+
+
+@dataclasses.dataclass(eq=False)
+class SimpleWhileLoopCondFn:
+  f: tp.Callable[..., tp.Any]
+  graph: bool
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f)
+
+  def __call__(self, val):
+    if self.graph:
+      val = extract.from_tree2(val)
+    return self.f(val)
 
 
 @dataclasses.dataclass(eq=False)
@@ -1751,7 +1772,8 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
                body_fun: tp.Callable[[T], T],
                init_val: T,
                *,
-               graph: bool | None = None) -> T:
+               graph: bool | None = None,
+               graph_updates: bool | None = None) -> T:
   """A Flax NNX transformation of `jax.lax.while_loop <https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.while_loop.html>`_.
 
   Caution: for the NNX internal reference tracing mechanism to work, you cannot
@@ -1781,22 +1803,29 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
     init_val: The initial input for ``cond_fun`` and ``body_fun``. Must be of type ``T``.
     graph: if True, use graph-mode (default). If False, use tree-mode.
       If None, uses the value of ``nnx_graph_mode`` config.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
 
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
-    val_out = jax.lax.while_loop(
-      cond_fun,
-      TreeWhileLoopBodyFn(body_fun),
-      init_val,
-    )
-    return extract.update_carry_variables(init_val, val_out)
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    simple_body_fn = SimpleWhileLoopBodyFn(body_fun, graph=graph)
+    simple_cond_fn = SimpleWhileLoopCondFn(cond_fun, graph=graph)
+
+    if graph:
+      init_val = extract.to_tree2(init_val)
+    val_out = jax.lax.while_loop(simple_cond_fn, simple_body_fn, init_val)
+    val_out = extract.update_carry_variables(init_val, val_out)
+    if graph:
+      val_out = extract.from_tree2(val_out)
+    return val_out
 
   pure_init_val = extract.to_tree(init_val, ctxtag='while_loop')
 
-  # Adding the expected reference mapping to `pure_init_val` to match
-  # `body_fun`'s output pytree structure, to make JAX while_loop happy.
   pure_init_val = _add_fake_index_mapping(pure_init_val)
 
   pure_out = jax.lax.while_loop(

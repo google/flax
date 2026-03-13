@@ -4237,8 +4237,10 @@ class TestSwitch(parameterized.TestCase):
 
 
 class TestWhileLoop(parameterized.TestCase):
-  @parameterized.parameters(True, False)
-  def test_basic(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_basic(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -4248,12 +4250,15 @@ class TestWhileLoop(parameterized.TestCase):
     module.kernel[...] = jnp.identity(10) * 2
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    _, y, _ = nnx.graph.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0),
+      graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(y, x * 8)
 
-  @parameterized.parameters(True, False)
-  def test_multiple_objects(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_multiple_objects(self, graph, graph_updates):
     def fwd_fn(input):
       m1, (w2,), x, c = input
       y = m1(x) @ w2
@@ -4264,12 +4269,15 @@ class TestWhileLoop(parameterized.TestCase):
     w2 = nnx.Variable(jnp.identity(10) * 0.5)
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    _, _, y, _ = nnx.graph.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (m1, (w2,), x, 3.0), graph=graph)
+    _, _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (m1, (w2,), x, 3.0),
+      graph=graph, graph_updates=graph_updates)
     np.testing.assert_allclose(y, x)
 
-  @parameterized.parameters(True, False)
-  def test_nested_module(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_nested_module(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -4280,8 +4288,9 @@ class TestWhileLoop(parameterized.TestCase):
     module = nnx.Sequential(module)
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    _, y, _ = nnx.graph.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0),
+      graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(y, x * 8)
 
   def test_shared_module(self):
@@ -4298,7 +4307,7 @@ class TestWhileLoop(parameterized.TestCase):
       return m, y, c - 1.0
 
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
-    _, y, _ = nnx.graph.while_loop(
+    _, y, _ = nnx.while_loop(
       lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0))
     self.assertLen(jax.tree.leaves(nnx.graph.state(module)), 2)  # only m1 params
     np.testing.assert_array_equal(
@@ -4311,8 +4320,10 @@ class TestWhileLoop(parameterized.TestCase):
     )
     np.testing.assert_array_equal(y, jnp.zeros((10,)))
 
-  @parameterized.parameters(True, False)
-  def test_value_changed(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_value_changed(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       m.kernel[...] = jnp.zeros_like(m.kernel)
@@ -4322,16 +4333,19 @@ class TestWhileLoop(parameterized.TestCase):
     module = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
-    _, y, _ = nnx.graph.while_loop(
-      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
+    _, y, _ = nnx.while_loop(
+      lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0),
+      graph=graph, graph_updates=graph_updates)
     np.testing.assert_array_equal(
       module.kernel[...],
       jnp.zeros((10, 10)),
     )
     np.testing.assert_array_equal(y, jnp.zeros((10,)))
 
-  @parameterized.parameters(True, False)
-  def test_ref_changed(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_ref_changed(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       y = m(x)
@@ -4342,11 +4356,14 @@ class TestWhileLoop(parameterized.TestCase):
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     with self.assertRaises(ValueError):
-      _, y, _ = nnx.graph.while_loop(
-        lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0), graph=graph)
+      _, y, _ = nnx.while_loop(
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 2.0),
+        graph=graph, graph_updates=graph_updates)
 
-  @parameterized.parameters(True, False)
-  def test_structure_changed(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_structure_changed(self, graph, graph_updates):
     def fwd_fn(input):
       m, x, c = input
       m = nnx.Linear(10, 10, use_bias=False, rngs=nnx.Rngs(1))
@@ -4358,8 +4375,9 @@ class TestWhileLoop(parameterized.TestCase):
     x = 1e1 * jax.random.normal(jax.random.key(0), (10,))
 
     with self.assertRaises((ValueError, TypeError)):
-      _, y, _ = nnx.graph.while_loop(
-        lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0), graph=graph)
+      _, y, _ = nnx.while_loop(
+        lambda input: input[-1] > 0, fwd_fn, (module, x, 3.0),
+        graph=graph, graph_updates=graph_updates)
 
   def test_repeated_object(self):
     m = nnx.Linear(10, 10, rngs=nnx.Rngs(0))
@@ -4368,7 +4386,7 @@ class TestWhileLoop(parameterized.TestCase):
       count, m, _ = val
       return count + 1, m, m
 
-    count, m, _ = nnx.graph.while_loop(
+    count, m, _ = nnx.while_loop(
       lambda val: val[0] < 2,
       body_fn,
       (0, m, m),
@@ -4443,8 +4461,10 @@ class TestWhileLoop(parameterized.TestCase):
       d.a.params[...], np.full((10,), 10, dtype=int)
     )
 
-  @parameterized.parameters(True, False)
-  def test_loops_multiple_modules(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_loops_multiple_modules(self, graph, graph_updates):
     class Foo(nnx.Module):
       def __init__(self):
         self.param = nnx.Param(jnp.zeros((1,)))
@@ -4457,12 +4477,14 @@ class TestWhileLoop(parameterized.TestCase):
     fori_loop_fn = lambda i, inputs: loop_fn(inputs)
     a = Foo()
     b = Foo()
-    nnx.graph.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2),
-                   graph=graph)
+    nnx.while_loop(lambda input: input[-1] > 0, while_loop_fn, (a, b, 2),
+                   graph=graph, graph_updates=graph_updates)
     nnx.fori_loop(0, 2, fori_loop_fn, (a, b), graph=graph)
 
-  @parameterized.parameters(True, False)
-  def test_tree_mode_while_loop_stateful(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_tree_mode_while_loop_stateful(self, graph, graph_updates):
     class Counter(nnx.Module):
       def __init__(self):
         self.count = nnx.Variable(jnp.array(0))
@@ -4478,11 +4500,12 @@ class TestWhileLoop(parameterized.TestCase):
       x = module(x)
       return counter, module, x, i - 1
 
-    counter, module, y, _ = nnx.graph.while_loop(
+    counter, module, y, _ = nnx.while_loop(
       lambda val: val[-1] > 0,
       body_fn,
       (counter, module, x, 3),
       graph=graph,
+      graph_updates=graph_updates,
     )
     np.testing.assert_array_equal(counter.count[...], 3)
     np.testing.assert_array_equal(y, x * 8)
@@ -4500,7 +4523,7 @@ class TestWhileLoop(parameterized.TestCase):
       def body_fn(val):
         m, x, c = val
         return m, m(x), c - 1.0
-      _, y, _ = nnx.graph.while_loop(
+      _, y, _ = nnx.while_loop(
         lambda val: val[-1] > 0,
         body_fn,
         (module, x, 3.0),

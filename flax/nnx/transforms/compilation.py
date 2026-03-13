@@ -655,8 +655,10 @@ def jit_partial(
     backend: Optional backend to use.
     inline: If ``True``, inline the function.
     graph: If ``None``, uses the ``nnx_graph_mode`` config value.
-    graph_updates: If ``None``, uses the ``nnx_graph_updates`` config
-      value. Cannot be set together with ``graph``.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using
+      ``StateSharding`` is not supported.
 
   Returns:
     A callable expecting the remaining (runtime)
@@ -1480,9 +1482,10 @@ def shard_map(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support ``StateSharding`` or shared ``Variable`` references.
-    graph_updates: If ``True``, uses graph-mode with support for
-      propagating graph updates and allows prefix filters (StateSharding) in
-      ``in_specs`` and ``out_specs``.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. When ``False``, using
+      ``StateSharding`` is not supported.
 
   Returns:
     A callable that applies the input function ``f`` across data sharded according to
