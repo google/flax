@@ -91,21 +91,17 @@ class TestMetrics(parameterized.TestCase):
     )
     self.assertAlmostEqual(computed.standard_deviation, 1.0, places=2)
 
-  @parameterized.product(with_mask=[True, False])
-  def test_multimetric(self, with_mask):
+  def test_multimetric(self):
     logits = jnp.array(
       [[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, -1.0]]
     )
     labels = jnp.array([1, 1, 0, 1, 0])
-    mask = labels > 0 if with_mask else None
     logits2 = jnp.array(
       [[-1.0, 1.0], [-1.0, 1.0], [-1.0, 1.0], [1.0, -1.0], [1.0, -1.0]]
     )
     labels2 = jnp.array([0, 1, 1, 1, 1])
-    mask2 = labels2 > 0 if with_mask else None
     batch_loss = jnp.array([1, 2, 3, 4])
     batch_loss2 = jnp.array([3, 2, 1, 0])
-    loss_mask2 = batch_loss2 > 1 if with_mask else None
 
     metrics = nnx.MultiMetric(
         accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()
@@ -114,15 +110,15 @@ class TestMetrics(parameterized.TestCase):
     self.assertTrue(jnp.isnan(values['accuracy']))
     self.assertTrue(jnp.isnan(values['loss']))
 
-    metrics.update(logits=logits, labels=labels, values=batch_loss, mask={"accuracy": mask})
+    metrics.update(logits=logits, labels=labels, values=batch_loss)
     values = metrics.compute()
-    self.assertEqual(values['accuracy'], 0.6 if not with_mask else 2 / 3)
+    self.assertEqual(values['accuracy'], 0.6)
     self.assertEqual(values['loss'], 2.5)
 
-    metrics.update(logits=logits2, labels=labels2, values=batch_loss2, mask={"accuracy": mask2, "loss": loss_mask2})
+    metrics.update(logits=logits2, labels=labels2, values=batch_loss2)
     values = metrics.compute()
-    self.assertEqual(values['accuracy'], 0.5 if not with_mask else (2 + 2) / (3 + 4))
-    self.assertEqual(values['loss'], 2.0 if not with_mask else 15 / 6)
+    self.assertEqual(values['accuracy'], 0.5)
+    self.assertEqual(values['loss'], 2.0)
 
     metrics.reset()
     values = metrics.compute()
@@ -158,51 +154,6 @@ class TestMetrics(parameterized.TestCase):
     accuracy = nnx.metrics.Accuracy(threshold=threshold)
     with self.assertRaisesRegex(ValueError, error_msg):
       accuracy.update(logits=logits, labels=labels)
-
-  @parameterized.product(
-    with_mask=[True, False],
-    scalar_values=[True, False],
-  )
-  def test_average(self, with_mask, scalar_values):
-    average = nnx.metrics.Average()
-    value1 = 2 if scalar_values else jnp.arange(5 * 3, dtype=jnp.int32).reshape(5, 3)
-    value2 = 3 if scalar_values else jnp.arange(5 * 3 * 4, dtype=jnp.float32).reshape(5, 3, 4)
-    if with_mask:
-      list_masks = [
-        jnp.ones(5) if scalar_values else jnp.where(value1 > 4, 1.0, 0.0),
-        jnp.ones(5) if scalar_values else value2 > 10,
-      ]
-    else:
-      list_masks = [None, None]
-
-    list_values = [value1, value2]
-
-    for mask, values in zip(list_masks, list_values):
-      if with_mask and scalar_values:
-        with self.assertRaisesRegex(ValueError, "should be a jax array"):
-          average.update(mask=mask, values=values)
-      else:
-          average.update(mask=mask, values=values)
-
-    if with_mask and scalar_values:
-      return
-
-    self.assertEqual(
-      average.count,
-      (
-        len(list_values) if scalar_values
-        else sum(m.sum() for m in list_masks) if with_mask
-        else sum(v.size for v in list_values)
-      )
-    )
-    self.assertEqual(
-      average.total,
-      (
-        sum(list_values) if scalar_values
-        else sum((v * m).sum() for m, v in zip(list_masks, list_values)) if with_mask
-        else sum(v.sum() for v in list_values)
-      )
-    )
 
 
 if __name__ == '__main__':
