@@ -34,10 +34,11 @@ from flax.nnx import (
   graphlib,
   reprlib,
   tracers,
-  visualization,
+  visualization
 )
 from flax import config
 from flax.nnx.variablelib import Variable
+from flax.nnx import filterlib
 from flax.typing import MISSING, Missing, SizeBytes
 
 BUILDING_DOCS = 'FLAX_DOC_BUILD' in os.environ
@@ -112,6 +113,18 @@ def data(value: tp.Any = MISSING, /, **kwargs) -> tp.Any:
   metadata['static'] = False
   return dataclasses.field(**kwargs, metadata=metadata)  # type: ignore[return-value]
 
+def prefix(pytree, filter_map):
+  preds = [(filterlib.to_predicate(k), v) for k, v in filter_map.items()]
+
+  def lookup(path, value):
+    for (pred,obj) in preds:
+      if pred(path, value):
+        return obj
+    return None
+
+  return jax.tree.map_with_path(lookup, pytree,
+    is_leaf=lambda p, v: lookup(p, v) is not None,
+    is_leaf_takes_path=True)
 
 def register_data_type(type_: T, /) -> T:
   """Registers a type as pytree data type recognized by Object.
