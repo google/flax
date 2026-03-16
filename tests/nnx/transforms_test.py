@@ -1744,7 +1744,7 @@ class TestCustomVJP(parameterized.TestCase):
       z: int
 
     @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
-    @nnx.remat(graph=graph)
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def f(m: Foo):
       m.z += 1
       return jnp.sin(m.x) * m.y  # type: ignore
@@ -2069,7 +2069,7 @@ class TestCustomVJP(parameterized.TestCase):
       y: nnx.Param[jax.Array]
 
     @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
-    @nnx.remat(graph=graph)
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def f(m: Foo):
       return jnp.sin(m.x) * m.y
 
@@ -3221,14 +3221,18 @@ class TestScan(parameterized.TestCase):
     )
 
 
-class TestRemat(absltest.TestCase):
-  def test_remat_basic(self):
+class TestRemat(parameterized.TestCase):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_remat_basic(self, graph, graph_updates):
     class RematLinear(nnx.Module):
-      @nnx.remat(static_argnums=(1, 2))
       def __init__(self, din: int, dout: int, rngs: nnx.Rngs):
         self.linear = nnx.Linear(din, dout, rngs=rngs)
 
-      @nnx.remat
+      @nnx.remat(graph=graph, graph_updates=graph_updates)
       def __call__(self, x: jax.Array) -> jax.Array:
         return self.linear(x)
 
@@ -3238,18 +3242,26 @@ class TestRemat(absltest.TestCase):
       y = module(x)
       return jnp.sum(y)
 
-    loss, grads = nnx.value_and_grad(loss_fn)(module, jnp.ones((1, 2)))
+    grad_type = nnx.State if graph and graph_updates else RematLinear
+    loss, grads = nnx.value_and_grad(
+      loss_fn, graph=graph, graph_updates=graph_updates,
+    )(module, jnp.ones((1, 2)))
 
     assert loss.shape == ()
-    assert isinstance(grads, nnx.State)
+    assert isinstance(grads, grad_type)
 
-  def test_remat_variables(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_remat_variables(self, graph, graph_updates):
     rngs = nnx.Rngs(0)
     w = nnx.Param(jax.random.normal(rngs(), (2, 3)))
     b = nnx.Param(jax.random.normal(rngs(), (3,)))
     count = nnx.BatchStat(jnp.array(0))
 
-    @nnx.remat
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def linear(w, b, count, x):
       count[...] += 1
       return x @ w + b[None]
@@ -3258,7 +3270,9 @@ class TestRemat(absltest.TestCase):
       return jnp.sum(linear(w, b, count, x))
 
     x = jnp.ones((1, 2))
-    loss, grads = nnx.value_and_grad(loss_fn, argnums=(0, 1))(w, b, count, x)
+    loss, grads = nnx.value_and_grad(
+      loss_fn, argnums=(0, 1), graph=graph, graph_updates=graph_updates,
+    )(w, b, count, x)
 
     assert loss.shape == ()
     assert isinstance(grads, tuple)
@@ -3288,10 +3302,14 @@ class TestRemat(absltest.TestCase):
     y, _ = m(jnp.ones((1, 3)))
     assert y.shape == (1, 3)
 
-  def test_tree_mode_remat_basic(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_remat_basic(self, graph, graph_updates):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.remat(graph=False)
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 
@@ -3299,11 +3317,17 @@ class TestRemat(absltest.TestCase):
       y = forward(model, x)
       return jnp.sum(y)
 
-    grads = nnx.grad(loss_fn, graph=False)(model, jnp.ones((1, 2)))
+    grads = nnx.grad(
+      loss_fn, graph=graph, graph_updates=graph_updates,
+    )(model, jnp.ones((1, 2)))
     assert grads.kernel.shape == (2, 3)
     assert grads.bias.shape == (3,)
 
-  def test_tree_mode_remat_stateful(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_remat_stateful(self, graph, graph_updates):
     class Counter(nnx.Variable):
       pass
 
@@ -3320,7 +3344,7 @@ class TestRemat(absltest.TestCase):
 
     model = Linear(2, 3, rngs=nnx.Rngs(0))
 
-    @nnx.remat(graph=False)
+    @nnx.remat(graph=graph, graph_updates=graph_updates)
     def forward(model, x):
       return model(x)
 

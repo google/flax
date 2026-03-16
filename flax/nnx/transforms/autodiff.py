@@ -1459,8 +1459,9 @@ def custom_vjp(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeRematFn:
+class SimpleRematFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1468,7 +1469,11 @@ class TreeRematFn:
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
@@ -1480,6 +1485,7 @@ def remat(
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]: ...
 @tp.overload
 def remat(
@@ -1489,6 +1495,7 @@ def remat(
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F: ...
 def remat(
   f: F | Missing = MISSING,
@@ -1497,6 +1504,7 @@ def remat(
   static_argnums: int | tuple[int, ...] = (),
   policy: tp.Callable[..., bool] | None = None,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> F | tp.Callable[[F], F]:
   """A 'lifted' version of the
   `jax.checkpoint <https://jax.readthedocs.io/en/latest/_autosummary/jax.checkpoint.html>`__
@@ -1525,9 +1533,14 @@ def remat(
       If ``False``, uses tree-mode which treats Modules as regular JAX
       pytrees, avoiding the overhead of the graph protocol. Tree-mode does
       not support shared ``Variable`` references.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
   if isinstance(f, Missing):
     return functools.partial(
       remat,
@@ -1535,29 +1548,33 @@ def remat(
       static_argnums=static_argnums,
       policy=policy,
       graph=graph,
+      graph_updates=graph_updates,
     )  # type: ignore[return-value]
 
-  # Detect bound nnx.Module methods and raise error.
   f_unbound, _, was_bound = _resolve_bound_callable(f)
 
   if was_bound:
     _raise_bound_method_error('remat')
 
-  if not graph:
+  if not graph or not graph_updates:
     checkpointed_fn = jax.checkpoint(
-      TreeRematFn(f_unbound),
+      SimpleRematFn(f_unbound, graph=graph),
       prevent_cse=prevent_cse,
       static_argnums=static_argnums,
       policy=policy,
     )
 
     @functools.wraps(f_unbound)
-    def tree_remat_wrapper(*args, **kwargs):
+    def simple_remat_wrapper(*args, **kwargs):
+      if graph:
+        args, kwargs = extract.to_tree2((args, kwargs))
       out, updates = checkpointed_fn(*args, **kwargs)
+      if graph:
+        out = extract.from_tree2(out)
       extract.apply_variable_updates((args, kwargs), updates)
       return out
 
-    return tree_remat_wrapper  # type: ignore[return-value]
+    return simple_remat_wrapper  # type: ignore[return-value]
 
   # Unbound function path: preserve the concise composition used in NNX.
   return resolve_kwargs()(  # type: ignore[return-value]
