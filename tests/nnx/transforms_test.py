@@ -2159,7 +2159,11 @@ class TestCustomVJP(parameterized.TestCase):
 
 class TestVjpJvp(parameterized.TestCase):
 
-  def test_vjp_basic(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_basic(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2170,7 +2174,9 @@ class TestVjpJvp(parameterized.TestCase):
     m = Foo(w=nnx.Param(jnp.array([1.0, 2.0, 3.0])))
     x = jnp.array([4.0, 5.0, 6.0])
 
-    primals_out, vjp_fn = nnx.vjp(f, m, x, graph=False)
+    primals_out, vjp_fn = nnx.vjp(
+      f, m, x, graph=graph, graph_updates=graph_updates,
+    )
 
     np.testing.assert_allclose(primals_out, 1.0 * 4.0 + 2.0 * 5.0 + 3.0 * 6.0)
 
@@ -2179,7 +2185,11 @@ class TestVjpJvp(parameterized.TestCase):
     np.testing.assert_allclose(m_grad.w[...], x)
     np.testing.assert_allclose(x_grad, m.w[...])
 
-  def test_vjp_has_aux(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_has_aux(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2191,12 +2201,18 @@ class TestVjpJvp(parameterized.TestCase):
     m = Foo(w=nnx.Param(jnp.array([1.0, 2.0])))
     x = jnp.array([3.0, 4.0])
 
-    primals_out, vjp_fn, aux = nnx.vjp(f, m, x, has_aux=True, graph=False)
+    primals_out, vjp_fn, aux = nnx.vjp(
+      f, m, x, has_aux=True, graph=graph, graph_updates=graph_updates,
+    )
 
     np.testing.assert_allclose(primals_out, 1.0 * 3.0 + 2.0 * 4.0)
     np.testing.assert_allclose(aux['input'], x)
 
-  def test_vjp_state_propagation(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_state_propagation(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2213,10 +2229,16 @@ class TestVjpJvp(parameterized.TestCase):
     x = jnp.array([3.0, 4.0])
 
     self.assertEqual(m.count[...], 0)
-    primals_out, vjp_fn = nnx.vjp(f, m, x, graph=False)
+    primals_out, vjp_fn = nnx.vjp(
+      f, m, x, graph=graph, graph_updates=graph_updates,
+    )
     self.assertEqual(m.count[...], 1)
 
-  def test_vjp_matches_jax(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_matches_jax(self, graph, graph_updates):
     def f(w, x):
       return jnp.sum(w * x)
 
@@ -2226,19 +2248,25 @@ class TestVjpJvp(parameterized.TestCase):
     jax_primals, jax_vjp_fn = jax.vjp(f, w, x)
     jax_grads = jax_vjp_fn(jnp.ones_like(jax_primals))
 
-    nnx_primals, nnx_vjp_fn = nnx.vjp(f, w, x, graph=False)
+    nnx_primals, nnx_vjp_fn = nnx.vjp(
+      f, w, x, graph=graph, graph_updates=graph_updates,
+    )
     nnx_grads = nnx_vjp_fn(jnp.ones_like(nnx_primals))
 
     np.testing.assert_allclose(nnx_primals, jax_primals)
     for ng, jg in zip(nnx_grads, jax_grads):
       np.testing.assert_allclose(ng, jg)
 
-  def test_vjp_decorator(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_vjp_decorator(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
 
-    @nnx.vjp(graph=False)
+    @nnx.vjp(graph=graph, graph_updates=graph_updates)
     def f(m: Foo, x):
       return jnp.sum(m.w * x)
 
@@ -2250,7 +2278,11 @@ class TestVjpJvp(parameterized.TestCase):
     m_grad, x_grad = vjp_fn(jnp.ones_like(primals_out))
     np.testing.assert_allclose(m_grad.w[...], x)
 
-  def test_jvp_basic(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_basic(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2265,14 +2297,19 @@ class TestVjpJvp(parameterized.TestCase):
     x_tangent = jnp.ones_like(x)
 
     primals_out, tangent_out = nnx.jvp(
-      f, (m, x), (m_tangent, x_tangent), graph=False
+      f, (m, x), (m_tangent, x_tangent),
+      graph=graph, graph_updates=graph_updates,
     )
 
     np.testing.assert_allclose(primals_out, 1.0 * 4.0 + 2.0 * 5.0 + 3.0 * 6.0)
     expected_tangent = jnp.sum(jnp.ones(3) * x + m.w[...] * jnp.ones(3))
     np.testing.assert_allclose(tangent_out, expected_tangent)
 
-  def test_jvp_has_aux(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_has_aux(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2288,13 +2325,18 @@ class TestVjpJvp(parameterized.TestCase):
     x_tangent = jnp.ones_like(x)
 
     primals_out, tangent_out, aux = nnx.jvp(
-      f, (m, x), (m_tangent, x_tangent), has_aux=True, graph=False
+      f, (m, x), (m_tangent, x_tangent), has_aux=True,
+      graph=graph, graph_updates=graph_updates,
     )
 
     np.testing.assert_allclose(primals_out, 11.0)
     np.testing.assert_allclose(aux['input'], x)
 
-  def test_jvp_state_propagation(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_state_propagation(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
@@ -2315,11 +2357,16 @@ class TestVjpJvp(parameterized.TestCase):
 
     self.assertEqual(m.count[...], 0.0)
     primals_out, tangent_out = nnx.jvp(
-      f, (m, x), (m_tangent, x_tangent), graph=False
+      f, (m, x), (m_tangent, x_tangent),
+      graph=graph, graph_updates=graph_updates,
     )
     self.assertEqual(m.count[...], 1.0)
 
-  def test_jvp_matches_jax(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_matches_jax(self, graph, graph_updates):
     def f(w, x):
       return jnp.sum(w * x)
 
@@ -2331,18 +2378,23 @@ class TestVjpJvp(parameterized.TestCase):
 
     jax_primals, jax_tangents = jax.jvp(f, (w, x), (w_tangent, x_tangent))
     nnx_primals, nnx_tangents = nnx.jvp(
-      f, (w, x), (w_tangent, x_tangent), graph=False
+      f, (w, x), (w_tangent, x_tangent),
+      graph=graph, graph_updates=graph_updates,
     )
 
     np.testing.assert_allclose(nnx_primals, jax_primals)
     np.testing.assert_allclose(nnx_tangents, jax_tangents)
 
-  def test_jvp_decorator(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_jvp_decorator(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       w: nnx.Param[jax.Array]
 
-    @nnx.jvp(graph=False)
+    @nnx.jvp(graph=graph, graph_updates=graph_updates)
     def f(m: Foo, x):
       return jnp.sum(m.w * x)
 

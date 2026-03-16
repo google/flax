@@ -558,9 +558,10 @@ def value_and_grad(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeVjpFn:
+class SimpleVjpFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -568,7 +569,11 @@ class TreeVjpFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out = self.f(*args)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
@@ -585,6 +590,7 @@ def vjp(
   has_aux: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tuple[tp.Any, tp.Callable] | tuple[tp.Any, tp.Callable, tp.Any]: ...
 @tp.overload
 def vjp(
@@ -592,6 +598,7 @@ def vjp(
   has_aux: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 def vjp(
   f: tp.Callable[..., tp.Any] | Missing = MISSING,
@@ -599,13 +606,13 @@ def vjp(
   has_aux: bool = False,
   reduce_axes: tp.Sequence[AxisName] = (),
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> (
   tuple[tp.Any, tp.Callable]
   | tuple[tp.Any, tp.Callable, tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
   """Stateful version of ``jax.vjp`` that propagates NNX Variable updates.
-  Only tree-mode is supported (``graph=False``).
 
   Example::
 
@@ -638,8 +645,13 @@ def vjp(
       first element is considered the output of the mathematical function to be
       differentiated and the second element is auxiliary data. Default False.
     reduce_axes: Deprecated, do not use.
-    graph: If False, use tree-mode. If None, use the ``nnx_graph_mode``
-      config value.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
 
   Returns:
     If ``has_aux`` is False, returns a ``(primals_out, vjp_fn)`` pair.
@@ -649,10 +661,12 @@ def vjp(
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if graph and graph_updates:
     raise NotImplementedError(
-      'graph-mode is not supported for nnx.vjp. '
-      'Set graph=False or use the nnx_graph_mode config.'
+      'graph-mode with graph_updates is not supported for nnx.vjp. '
+      'Set graph=False or graph_updates=False.'
     )
   if reduce_axes:
     raise NotImplementedError('reduce_axes argument to vjp is deprecated')
@@ -663,6 +677,7 @@ def vjp(
       vjp,
       has_aux=has_aux,
       graph=graph,
+      graph_updates=graph_updates,
     )
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -675,10 +690,13 @@ def vjp(
       f,
       has_aux=has_aux,
       graph=graph,
+      graph_updates=graph_updates,
     )
 
+  if graph:
+    primals = extract.to_tree2(primals)
   primals_out, vjp_fn, aux = jax.vjp(
-    TreeVjpFn(f_unbound, has_aux=has_aux),
+    SimpleVjpFn(f_unbound, has_aux=has_aux, graph=graph),
     *primals,
     has_aux=True,
   )
@@ -687,6 +705,11 @@ def vjp(
   else:
     updates = aux
     user_aux = None
+  if graph:
+    primals_out = extract.from_tree2(primals_out)
+    raw_vjp_fn = vjp_fn
+    def vjp_fn(g):
+      return extract.from_tree2(raw_vjp_fn(g))
   extract.apply_variable_updates(primals, updates)
   if has_aux:
     return primals_out, vjp_fn, user_aux
@@ -700,9 +723,10 @@ def vjp(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeJvpFn:
+class SimpleJvpFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -710,7 +734,11 @@ class TreeJvpFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out = self.f(*args)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
@@ -728,12 +756,14 @@ def jvp(
   *,
   has_aux: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tuple[tp.Any, ...]: ...
 @tp.overload
 def jvp(
   *,
   has_aux: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 @tp.overload
 def jvp(
@@ -741,6 +771,7 @@ def jvp(
   *,
   has_aux: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 def jvp(
   f: tp.Callable[..., tp.Any] | Missing = MISSING,
@@ -749,13 +780,13 @@ def jvp(
   *,
   has_aux: bool = False,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> (
   tuple[tp.Any, ...]
   | tp.Callable[..., tp.Any]
   | tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]
 ):
   """Stateful version of ``jax.jvp`` that propagates NNX Variable updates.
-  Only tree-mode is supported (``graph=False``).
 
   Example::
 
@@ -792,8 +823,13 @@ def jvp(
     has_aux: Optional, bool. Indicates whether ``f`` returns a pair where the
       first element is considered the output of the mathematical function to be
       differentiated and the second element is auxiliary data. Default False.
-    graph: If False, use tree-mode. If None, use the ``nnx_graph_mode``
-      config value.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
 
   Returns:
     If ``has_aux`` is False, returns ``(primals_out, tangent_out)``.
@@ -801,10 +837,12 @@ def jvp(
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if graph and graph_updates:
     raise NotImplementedError(
-      'graph-mode is not supported for nnx.jvp. '
-      'Set graph=False or use the nnx_graph_mode config.'
+      'graph-mode with graph_updates is not supported for nnx.jvp. '
+      'Set graph=False or graph_updates=False.'
     )
 
   if isinstance(f, Missing):
@@ -812,6 +850,7 @@ def jvp(
       jvp,
       has_aux=has_aux,
       graph=graph,
+      graph_updates=graph_updates,
     )
 
   f_unbound, _, was_bound = _resolve_bound_callable(f)
@@ -824,21 +863,28 @@ def jvp(
       f,
       has_aux=has_aux,
       graph=graph,
+      graph_updates=graph_updates,
     )
 
+  if graph:
+    primals = extract.to_tree2(primals)
+    tangents = extract.to_tree2(tangents)
   if has_aux:
     (primals_out, updates), (tangent_out, _updates_tangent), aux = jax.jvp(
-      TreeJvpFn(f_unbound, has_aux=True),
+      SimpleJvpFn(f_unbound, has_aux=True, graph=graph),
       primals,
       tangents,
       has_aux=True,
     )
   else:
     (primals_out, updates), (tangent_out, _updates_tangent) = jax.jvp(
-      TreeJvpFn(f_unbound, has_aux=False),
+      SimpleJvpFn(f_unbound, has_aux=False, graph=graph),
       primals,
       tangents,
     )
+  if graph:
+    primals_out = extract.from_tree2(primals_out)
+    tangent_out = extract.from_tree2(tangent_out)
   extract.apply_variable_updates(primals, updates)
   if has_aux:
     return primals_out, tangent_out, aux
