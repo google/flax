@@ -202,7 +202,7 @@ class TestJIT(parameterized.TestCase):
     (True, True), (True, False), (False, False),
   )
   def test_jit_custom_vjp(self, graph_mode, graph_updates):
-    @nnx.custom_vjp
+    @nnx.custom_vjp(graph=graph_mode, graph_updates=graph_updates)
     def f(x, y):
       return jnp.sin(x) * y
 
@@ -1603,11 +1603,16 @@ class TestGrad(parameterized.TestCase):
 
 
 class TestCustomVJP(parameterized.TestCase):
-  def test_basic_call(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_basic_call(self, graph, graph_updates):
     m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     m2 = nnx.Linear(1, 1, rngs=nnx.Rngs(1))
 
-    @nnx.custom_vjp
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
     def f(m1: nnx.Linear, m2: nnx.Linear):
       y = m1.kernel * m2.kernel
       m1.kernel[...] = jnp.array(-1.0)
@@ -1629,14 +1634,19 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(m1.kernel[...], -1.0)
     self.assertEqual(y.shape, (1, 1))
 
-  def test_jax_example(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_jax_example(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.custom_vjp
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
     def f(m: Foo):
       m.z += 1
       return jnp.sin(m.x) * m.y  # type: ignore
@@ -1647,27 +1657,38 @@ class TestCustomVJP(parameterized.TestCase):
       return y, res
 
     def f_bwd(res, g):
-      (m_g,), out_g = g
       cos_x, sin_x, m = res
-
-      self.assertIsInstance(m_g, nnx.State)
-      self.assertEqual(out_g.shape, ())
-      self.assertIsInstance(m, Foo)
-
-      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g['x'][...] = cos_x * out_g * m.y
-      m_g['y'][...] = sin_x * out_g
-      return (m_g,)
+      if graph and graph_updates:
+        (m_g,), out_g = g
+        self.assertIsInstance(m_g, nnx.State)
+        m_g['x'][...] = cos_x * out_g * m.y
+        m_g['y'][...] = sin_x * out_g
+        return (m_g,)
+      else:
+        out_g = g
+        m_g = jax.tree.map(lambda x: x, m)
+        m_g.x[...] = cos_x * out_g * m.y
+        m_g.y[...] = sin_x * out_g
+        return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
-    grad: nnx.State = nnx.grad(f, argnums=nnx.DiffState(0, ...))(m)
-
-    np.testing.assert_allclose(grad['x'][...], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'][...], jnp.sin(1.0))  # type: ignore
-    self.assertEqual(m.z, 1)
+    if graph and graph_updates:
+      grads = nnx.grad(f, argnums=nnx.DiffState(0, ...))(m)
+      self.assertIsInstance(grads, nnx.State)
+    else:
+      grads = nnx.grad(
+        f, graph=graph, graph_updates=graph_updates,
+      )(m)
+      self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))  # type: ignore
+    if graph and graph_updates:
+      self.assertEqual(m.z, 1)
+    else:
+      self.assertEqual(m.z, 0)
 
   def test_diff_state(self):
     @dataclasses.dataclass
@@ -1710,15 +1731,20 @@ class TestCustomVJP(parameterized.TestCase):
     np.testing.assert_allclose(grad['x'][...], jnp.cos(1.0) * 2.0)  # type: ignore
     self.assertEqual(m.z, 1)
 
-  def test_jax_example_with_remat(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_jax_example_with_remat(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.custom_vjp
-    @nnx.remat
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
+    @nnx.remat(graph=graph)
     def f(m: Foo):
       m.z += 1
       return jnp.sin(m.x) * m.y  # type: ignore
@@ -1729,31 +1755,42 @@ class TestCustomVJP(parameterized.TestCase):
       return y, res
 
     def f_bwd(res, g):
-      (m_g,), out_g = g
       cos_x, sin_x, m = res
-
-      self.assertIsInstance(m_g, nnx.State)
-      self.assertEqual(out_g.shape, ())
-      self.assertIsInstance(m, Foo)
-
-      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g['x'][...] = cos_x * out_g * m.y
-      m_g['y'][...] = sin_x * out_g
-      return (m_g,)
+      if graph and graph_updates:
+        (m_g,), out_g = g
+        self.assertIsInstance(m_g, nnx.State)
+        m_g['x'][...] = cos_x * out_g * m.y
+        m_g['y'][...] = sin_x * out_g
+        return (m_g,)
+      else:
+        out_g = g
+        m_g = jax.tree.map(lambda x: x, m)
+        m_g.x[...] = cos_x * out_g * m.y
+        m_g.y[...] = sin_x * out_g
+        return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)), 0)
 
-    @nnx.jit
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def loss_fn(m):
       return f(m)
 
-    grad: nnx.State = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
-
-    np.testing.assert_allclose(grad['x'][...], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'][...], jnp.sin(1.0))  # type: ignore
-    self.assertEqual(m.z, 1)
+    if graph and graph_updates:
+      grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
+      self.assertIsInstance(grads, nnx.State)
+    else:
+      grads = nnx.grad(
+        loss_fn, graph=graph, graph_updates=graph_updates,
+      )(m)
+      self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))  # type: ignore
+    if graph and graph_updates:
+      self.assertEqual(m.z, 1)
+    else:
+      self.assertEqual(m.z, 0)
 
   def test_two_args(self):
     @dataclasses.dataclass
@@ -1808,14 +1845,21 @@ class TestCustomVJP(parameterized.TestCase):
     np.testing.assert_allclose(m2_grad['x'][...], 4.0)  # type: ignore
     np.testing.assert_allclose(m2_grad['y'][...], 3.0)  # type: ignore
 
-  def test_non_diff_args(self):
+  @parameterized.parameters(
+    (True, True),
+    (True, False),
+    (False, False),
+  )
+  def test_non_diff_args(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
       z: int
 
-    @nnx.custom_vjp(nondiff_argnums=(0, 2))
+    @nnx.custom_vjp(
+      nondiff_argnums=(0, 2), graph=graph, graph_updates=graph_updates,
+    )
     def f(a, m: Foo, b):
       self.assertEqual(a, 1)
       self.assertEqual(b, 2)
@@ -1830,19 +1874,21 @@ class TestCustomVJP(parameterized.TestCase):
       return y, res
 
     def f_bwd(a, b, res, g):
-      (m_g,), out_g = g
       cos_x, sin_x, m = res
-
       self.assertEqual(a, 1)
       self.assertEqual(b, 2)
-      self.assertIsInstance(m_g, nnx.State)
-      self.assertEqual(out_g.shape, ())
-      self.assertIsInstance(m, Foo)
-
-      # m_g = nnx.State({'x': cos_x * out_g * m.y, 'y': sin_x * out_g})
-      m_g['x'][...] = cos_x * out_g * m.y
-      m_g['y'][...] = sin_x * out_g
-      return (m_g,)
+      if graph and graph_updates:
+        (m_g,), out_g = g
+        self.assertIsInstance(m_g, nnx.State)
+        m_g['x'][...] = cos_x * out_g * m.y
+        m_g['y'][...] = sin_x * out_g
+        return (m_g,)
+      else:
+        out_g = g
+        m_g = jax.tree.map(lambda x: x, m)
+        m_g.x[...] = cos_x * out_g * m.y
+        m_g.y[...] = sin_x * out_g
+        return (m_g,)
 
     f.defvjp(f_fwd, f_bwd)
 
@@ -1853,11 +1899,20 @@ class TestCustomVJP(parameterized.TestCase):
       b = 2
       return f(a, m, b)
 
-    grad: nnx.State = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
-
-    np.testing.assert_allclose(grad['x'][...], jnp.cos(1.0) * 2.0)  # type: ignore
-    np.testing.assert_allclose(grad['y'][...], jnp.sin(1.0))  # type: ignore
-    self.assertEqual(m.z, 1)
+    if graph and graph_updates:
+      grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, ...))(m)
+      self.assertIsInstance(grads, nnx.State)
+    else:
+      grads = nnx.grad(
+        loss_fn, graph=graph, graph_updates=graph_updates,
+      )(m)
+      self.assertIsInstance(grads, Foo)
+    np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)  # type: ignore
+    np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))  # type: ignore
+    if graph and graph_updates:
+      self.assertEqual(m.z, 1)
+    else:
+      self.assertEqual(m.z, 0)
 
   def test_docs_example(self):
     import jax.numpy as jnp
@@ -1938,11 +1993,15 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(grad.shape, (10,))
     self.assertEqual(mod.n[...], 1)
 
-  def test_tree_mode_basic_call(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_basic_call(self, graph, graph_updates):
     m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     m2 = nnx.Linear(1, 1, rngs=nnx.Rngs(1))
 
-    @nnx.custom_vjp(graph=False)
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
     def f(m1: nnx.Linear, m2: nnx.Linear):
       y = m1.kernel * m2.kernel
       m1.kernel[...] = jnp.array(-1.0)
@@ -1963,13 +2022,17 @@ class TestCustomVJP(parameterized.TestCase):
     self.assertEqual(m1.kernel[...], -1.0)
     self.assertEqual(y.shape, (1, 1))
 
-  def test_tree_mode_jax_example(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_jax_example(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
 
-    @nnx.custom_vjp(graph=False)
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
     def f(m: Foo):
       return jnp.sin(m.x) * m.y
 
@@ -1989,20 +2052,24 @@ class TestCustomVJP(parameterized.TestCase):
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
 
-    grads = nnx.grad(f, graph=False)(m)
+    grads = nnx.grad(f, graph=graph, graph_updates=graph_updates)(m)
 
     self.assertIsInstance(grads, Foo)
     np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
     np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))
 
-  def test_tree_mode_with_remat(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_with_remat(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
 
-    @nnx.custom_vjp(graph=False)
-    @nnx.remat(graph=False)
+    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
+    @nnx.remat(graph=graph)
     def f(m: Foo):
       return jnp.sin(m.x) * m.y
 
@@ -2022,23 +2089,28 @@ class TestCustomVJP(parameterized.TestCase):
 
     m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
 
-    @nnx.jit(graph=False)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def loss_fn(m):
       return f(m)
 
-    grads = nnx.grad(loss_fn, graph=False)(m)
+    grads = nnx.grad(loss_fn, graph=graph, graph_updates=graph_updates)(m)
 
     self.assertIsInstance(grads, Foo)
     np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
     np.testing.assert_allclose(grads.y[...], jnp.sin(1.0))
 
-  def test_tree_mode_non_diff_args(self):
+  @parameterized.parameters(
+    (True, False),
+    (False, False),
+  )
+  def test_tree_mode_non_diff_args(self, graph, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       x: nnx.Param[jax.Array]
       y: nnx.Param[jax.Array]
 
-    @nnx.custom_vjp(nondiff_argnums=(0, 2), graph=False)
+    @nnx.custom_vjp(nondiff_argnums=(0, 2), graph=graph,
+                    graph_updates=graph_updates)
     def f(a, m: Foo, b):
       self.assertEqual(a, 1)
       self.assertEqual(b, 2)
@@ -2069,7 +2141,7 @@ class TestCustomVJP(parameterized.TestCase):
       b = 2
       return f(a, m, b)
 
-    grads = nnx.grad(loss_fn, graph=False)(m)
+    grads = nnx.grad(loss_fn, graph=graph, graph_updates=graph_updates)(m)
 
     self.assertIsInstance(grads, Foo)
     np.testing.assert_allclose(grads.x[...], jnp.cos(1.0) * 2.0)
