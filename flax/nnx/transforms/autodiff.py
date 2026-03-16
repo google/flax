@@ -173,24 +173,20 @@ def _grad_general(
       if return_value:
         if has_aux:
           (loss, (updates, aux)), grads = fn_out
-          if graph:
-            grads, aux = extract.from_tree2((grads, aux))
+          if graph: grads, aux = extract.from_tree2((grads, aux))
           result = (loss, aux), grads
         else:
           (loss, updates), grads = fn_out
-          if graph:
-            grads = extract.from_tree2(grads)
+          if graph: grads = extract.from_tree2(grads)
           result = loss, grads
       else:
         if has_aux:
           grads, (updates, aux) = fn_out
-          if graph:
-            grads, aux = extract.from_tree2((grads, aux))
+          if graph: grads, aux = extract.from_tree2((grads, aux))
           result = grads, aux
         else:
           grads, updates = fn_out
-          if graph:
-            grads = extract.from_tree2(grads)
+          if graph: grads = extract.from_tree2(grads)
           result = grads
 
       extract.apply_variable_updates((args, kwargs), updates)
@@ -1452,6 +1448,38 @@ def custom_vjp(
   Note that ``grad`` cannot calculate gradients for states that don't have a tangent
   defined by ``custom_vjp``, in the example above we reuse the same ``x_attribute``
   filter to keep ``custom_vjp`` and ``grad`` in sync.
+
+  **graph_updates behavior**
+
+  When ``graph_updates=True`` and ``graph=True``, the ``bwd`` function
+  receives gradients as ``(input_updates_g, out_g)`` where ``input_updates_g`` is a
+  tuple of ``nnx.State`` objects (one per Module argument) representing the gradient
+  of the updated state. Non-Module arguments appear as ``None``. The ``bwd`` function
+  must return tangents with the same structure, using ``State`` objects for Module terms.
+  In this mode, state mutations inside ``f`` are propagated to the inputs.
+
+  When ``graph_updates=False`` or ``graph=False``, the behavior is closer to
+  ``jax.custom_vjp``: the ``bwd`` function receives ``out_g`` directly, and
+  tangents for Module arguments are Module instances (or clones) with gradient
+  values set on their fields. State mutations inside ``f`` are **not** propagated.
+  This mode does not support ``DiffState`` in ``nondiff_argnums``.
+
+  Example with ``graph_updates=False``::
+
+    >>> @nnx.custom_vjp(graph_updates=False)
+    ... def f(m: Foo):
+    ...   return jnp.sin(m.x) * m.y
+    ...
+    >>> def f_fwd(m: Foo):
+    ...   return f(m), (jnp.cos(m.x), jnp.sin(m.x), m)
+    ...
+    >>> def f_bwd(res, g):
+    ...   cos_x, sin_x, m = res
+    ...   out_g = g  # just the output gradient, no input_updates_g
+    ...   m_g = nnx.clone(m)
+    ...   m_g.x[...] = cos_x * out_g * m.y
+    ...   m_g.y[...] = sin_x * out_g
+    ...   return (m_g,)
 
   Args:
     fun: Callable base function.

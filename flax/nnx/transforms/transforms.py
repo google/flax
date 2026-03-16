@@ -255,27 +255,29 @@ def _to_variable(node):
 
 
 @dataclasses.dataclass(eq=False)
-class TreeEvalShapeFn:
+class SimpleEvalShapeFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
-    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
-    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
-    updates = extract.mask_variable_updates(
-      updates, snapshot, keep_fn=lambda *_: False
-    )
-    return out, updates
+    if self.graph:
+      out = extract.to_tree2(out)
+    extract.check_no_aliases(args=args, kwargs=kwargs, out=out)
+    return out
 
 
 def eval_shape(
   f: tp.Callable[..., A],
   *args: tp.Any,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
   **kwargs: tp.Any,
 ) -> A:
   """A \"lifted\" version of `jax.eval_shape <https://jax.readthedocs.io/en/latest/_autosummary/jax.eval_shape.html#jax.eval_shape>`_
@@ -291,8 +293,13 @@ def eval_shape(
   Args:
     f: the function to evaluate.
     *args: positional arguments to ``f``.
-    graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``nnx_graph_mode`` config.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
     **kwargs: keyword arguments to ``f``.
 """
   f_call, _, was_bound = _resolve_bound_callable(f)
@@ -302,11 +309,17 @@ def eval_shape(
 
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
-    out, updates = jax.eval_shape(
-      TreeEvalShapeFn(f_call), *args, **kwargs
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    if graph:
+      args, kwargs = extract.to_tree2((args, kwargs))
+    extract.check_no_aliases(args=args, kwargs=kwargs)
+    out = jax.eval_shape(
+      SimpleEvalShapeFn(f_call, graph=graph), *args, **kwargs
     )
-    extract.apply_variable_updates((args, kwargs), updates)
+    if graph:
+      out = extract.from_tree2(out)
     return out
 
   args, kwargs = extract.to_tree((args, kwargs))
@@ -341,8 +354,9 @@ class CheckifyFn:
 
 
 @dataclasses.dataclass(eq=False)
-class TreeCheckifyFn:
+class SimpleCheckifyFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -350,7 +364,11 @@ class TreeCheckifyFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out = self.f(*args)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_no_aliases(args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
@@ -359,6 +377,7 @@ def checkify(
   f: tp.Callable[..., checkify_lib.Out],
   errors: frozenset[type[checkify_lib.JaxException]] = checkify_lib.user_checks,  # type: ignore
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> tp.Callable[..., tuple[checkify_lib.Error, checkify_lib.Out]]:
   """Reference-aware version of `jax.experimental.checkify
   <https://flax.readthedocs.io/en/latest/nnx_basics.html#the-flax-functional-api>`_.
@@ -389,8 +408,13 @@ def checkify(
   Args:
     f: the function to checkify.
     errors: the set of error checks to enable.
-    graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``nnx_graph_mode`` config.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
   """
   f_call, _, was_bound = _resolve_bound_callable(f)
 
@@ -399,16 +423,24 @@ def checkify(
 
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
-    checkify_fn = checkify_lib.checkify(TreeCheckifyFn(f_call), errors)
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    checkify_fn = checkify_lib.checkify(
+      SimpleCheckifyFn(f_call, graph=graph), errors,
+    )
 
     @functools.wraps(f)
-    def tree_wrapper(*args):
+    def simple_wrapper(*args):
+      if graph:
+        args = extract.to_tree2(args)
       error, (out, updates) = checkify_fn(*args)
+      if graph:
+        out = extract.from_tree2(out)
       extract.apply_variable_updates(args, updates)
       return error, out
 
-    return tree_wrapper  # type: ignore
+    return simple_wrapper  # type: ignore
 
   checkify_fn = checkify_lib.checkify(CheckifyFn(f_call), errors)
   @functools.wraps(f)
@@ -434,8 +466,9 @@ def checkify(
 
 
 @dataclasses.dataclass(eq=False)
-class TreeCondFn:
+class SimpleCondFn:
   f: tp.Callable[..., tp.Any]
+  graph: bool
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -443,7 +476,11 @@ class TreeCondFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, _snapshot = extract.updates_and_snapshot(args)
+    if self.graph:
+      args = extract.from_tree2(args)
     out = self.f(*args)
+    if self.graph:
+      out = extract.to_tree2(out)
     extract.check_no_aliases(args=updates, out=out)
     return out, updates
 
@@ -454,6 +491,7 @@ def cond(
   false_fun: tp.Callable[..., A],
   *operands,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> A:
   """Conditionally apply ``true_fun`` or ``false_fun``.
 
@@ -466,18 +504,29 @@ def cond(
     true_fun: function to apply if ``pred`` is True.
     false_fun: function to apply if ``pred`` is False.
     *operands: operands passed to whichever branch is selected.
-    graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``nnx_graph_mode`` config.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    if graph:
+      operands = extract.to_tree2(operands)
     out, updates = jax.lax.cond(
       pred,
-      TreeCondFn(true_fun),
-      TreeCondFn(false_fun),
+      SimpleCondFn(true_fun, graph=graph),
+      SimpleCondFn(false_fun, graph=graph),
       *operands,
     )
+    if graph:
+      out = extract.from_tree2(out)
     extract.apply_variable_updates(operands, updates)
     return out
 
@@ -498,6 +547,7 @@ def switch(
   branches: tp.Sequence[tp.Callable[..., A]],
   *operands,
   graph: bool | None = None,
+  graph_updates: bool | None = None,
 ) -> A:
   """Select and apply one of ``branches`` based on ``index``.
 
@@ -508,17 +558,28 @@ def switch(
     index: integer scalar indicating which branch to apply.
     branches: sequence of functions to select from.
     *operands: operands passed to the selected branch.
-    graph: if True, use graph-mode (default). If False, use tree-mode.
-      If None, uses the value of ``nnx_graph_mode`` config.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``.
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
-  if not graph:
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if not graph or not graph_updates:
+    if graph:
+      operands = extract.to_tree2(operands)
     out, updates = jax.lax.switch(
       index,
-      [TreeCondFn(f) for f in branches],
+      [SimpleCondFn(f, graph=graph) for f in branches],
       *operands,
     )
+    if graph:
+      out = extract.from_tree2(out)
     extract.apply_variable_updates(operands, updates)
     return out
 
