@@ -431,7 +431,7 @@ def checkify(
     )
 
     @functools.wraps(f)
-    def simple_wrapper(*args):
+    def simple_checkify_wrapper(*args):
       if graph:
         args = extract.to_tree2(args)
       error, (out, updates) = checkify_fn(*args)
@@ -440,12 +440,12 @@ def checkify(
       extract.apply_variable_updates(args, updates)
       return error, out
 
-    return simple_wrapper  # type: ignore
+    return simple_checkify_wrapper  # type: ignore
 
   checkify_fn = checkify_lib.checkify(CheckifyFn(f_call), errors)
   @functools.wraps(f)
   @graphlib.update_context('checkify')
-  def jit_wrapper(*args, **kwargs):
+  def checkify_wrapper(*args, **kwargs):
     pure_args, pure_kwargs = extract.to_tree(
       (args, kwargs),
       ctxtag='checkify',
@@ -462,7 +462,7 @@ def checkify(
 
     return error, out
 
-  return jit_wrapper  # type: ignore
+  return checkify_wrapper  # type: ignore
 
 
 @dataclasses.dataclass(eq=False)

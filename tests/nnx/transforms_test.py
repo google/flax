@@ -1667,7 +1667,6 @@ class TestCustomVJP(parameterized.TestCase):
     @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
     def f(m1: nnx.Linear, m2: nnx.Linear):
       y = m1.kernel * m2.kernel
-      m1.kernel[...] = jnp.array(-1.0)
       return y
 
     def f_fwd(m1, m2):
@@ -1683,7 +1682,39 @@ class TestCustomVJP(parameterized.TestCase):
 
     y = f(m1, m2)
 
-    self.assertEqual(m1.kernel[...], -1.0)
+    self.assertEqual(y.shape, (1, 1))
+
+  @parameterized.parameters(
+    (True,),
+    (False,),
+  )
+  def test_basic_call_with_state(self, graph):
+    m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
+    m2 = nnx.Linear(1, 1, rngs=nnx.Rngs(1))
+    state = nnx.BatchStat(jnp.array(0.0))
+
+    @nnx.custom_vjp(
+      nondiff_argnums=(2,), graph=graph, graph_updates=False,
+    )
+    def f(m1: nnx.Linear, m2: nnx.Linear, state):
+      y = m1.kernel * m2.kernel
+      state[...] = jnp.array(-1.0)
+      return y
+
+    def f_fwd(m1, m2, state):
+      y = f(m1, m2, state)
+      return y, (m1, m2)
+
+    def f_bwd(state, res, g):
+      inputs_g, out_g = g
+      m1, m2 = res
+      return inputs_g
+
+    f.defvjp(f_fwd, f_bwd)
+
+    y = f(m1, m2, state)
+
+    self.assertEqual(state[...], -1.0)
     self.assertEqual(y.shape, (1, 1))
 
   @parameterized.parameters(
@@ -2052,26 +2083,29 @@ class TestCustomVJP(parameterized.TestCase):
   def test_tree_mode_basic_call(self, graph, graph_updates):
     m1 = nnx.Linear(1, 1, rngs=nnx.Rngs(0))
     m2 = nnx.Linear(1, 1, rngs=nnx.Rngs(1))
+    state = nnx.BatchStat(jnp.array(0.0))
 
-    @nnx.custom_vjp(graph=graph, graph_updates=graph_updates)
-    def f(m1: nnx.Linear, m2: nnx.Linear):
+    @nnx.custom_vjp(
+      nondiff_argnums=(2,), graph=graph, graph_updates=graph_updates,
+    )
+    def f(m1: nnx.Linear, m2: nnx.Linear, state):
       y = m1.kernel * m2.kernel
-      m1.kernel[...] = jnp.array(-1.0)
+      state[...] = jnp.array(-1.0)
       return y
 
-    def f_fwd(m1, m2):
-      y = f(m1, m2)
+    def f_fwd(m1, m2, state):
+      y = f(m1, m2, state)
       return y, (m1, m2)
 
-    def f_bwd(res, g):
+    def f_bwd(state, res, g):
       m1, m2 = res
       return g, g
 
     f.defvjp(f_fwd, f_bwd)
 
-    y = f(m1, m2)
+    y = f(m1, m2, state)
 
-    self.assertEqual(m1.kernel[...], -1.0)
+    self.assertEqual(state[...], -1.0)
     self.assertEqual(y.shape, (1, 1))
 
   @parameterized.parameters(
@@ -2234,6 +2268,36 @@ class TestCustomVJP(parameterized.TestCase):
 
     with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
       f(v, v)
+
+
+  def test_custom_vjp_diff_arg_mutation_error(self):
+    @nnx.custom_vjp(graph=True, graph_updates=False)
+    def f(m):
+      m.x[...] += 1
+      return m.x[...] * m.y[...]
+
+    def f_fwd(m):
+      return f(m), (m,)
+
+    def f_bwd(res, g):
+      (m,) = res
+      m_g = nnx.clone(m)
+      m_g.x[...] = g * m.y[...]
+      m_g.y[...] = g * m.x[...]
+      return (m_g,)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    @dataclasses.dataclass
+    class Foo(nnx.Module):
+      x: nnx.Param[jax.Array]
+      y: nnx.Param[jax.Array]
+
+    m = Foo(nnx.Param(jnp.array(1.0)), nnx.Param(jnp.array(2.0)))
+    with self.assertRaisesRegex(
+      ValueError, 'Variables in differentiable argument'
+    ):
+      f(m)
 
 
 class TestVjpJvp(parameterized.TestCase):

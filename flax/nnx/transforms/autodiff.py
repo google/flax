@@ -983,6 +983,28 @@ class SimpleCustomVjp(tp.Generic[A]):
       )
       args = extract.to_tree2(args, prefix=prefix)
     (out, updates) = self.custom_vjp_fn(*args)
+    # check that differentiable arguments were not mutated
+    diff_argnums = tuple(
+      i for i in range(len(args)) if i not in self.nondiff_argnums
+    )
+    is_var = lambda x: isinstance(x, variablelib.Variable)
+    for i in diff_argnums:
+      changed = [
+        jax.tree_util.keystr(path)
+        for path, leaf in jax.tree.leaves_with_path(
+          updates[i], is_leaf=is_var
+        )
+        if leaf is not None
+      ]
+      if changed:
+        paths_str = '\n  '.join(changed)
+        raise ValueError(
+          f'Variables in differentiable argument {i} were mutated inside '
+          f'custom_vjp at:\n\n  {paths_str}\n\nThis is not supported when '
+          f'graph_updates=False because the gradient for the Variable '
+          f'updates would be silently dropped. Move the Variable mutation '
+          f'to a non-differentiable argument, or use graph_updates=True.'
+        )
     if self.graph:
       out = extract.from_tree2(out)
     extract.apply_variable_updates(args, updates)
@@ -1461,8 +1483,10 @@ def custom_vjp(
   When ``graph_updates=False`` or ``graph=False``, the behavior is closer to
   ``jax.custom_vjp``: the ``bwd`` function receives ``out_g`` directly, and
   tangents for Module arguments are Module instances (or clones) with gradient
-  values set on their fields. State mutations inside ``f`` are **not** propagated.
-  This mode does not support ``DiffState`` in ``nondiff_argnums``.
+  values set on their fields. This mode does not support ``DiffState`` in
+  ``nondiff_argnums``. Additionally, Variables in differentiable arguments cannot
+  not be mutated inside ``f``. If mutations are needed, pass the
+  relevant Variables through a non-differentiable argument instead.
 
   Example with ``graph_updates=False``::
 
@@ -1475,10 +1499,9 @@ def custom_vjp(
     ...
     >>> def f_bwd(res, g):
     ...   cos_x, sin_x, m = res
-    ...   out_g = g  # just the output gradient, no input_updates_g
     ...   m_g = nnx.clone(m)
-    ...   m_g.x[...] = cos_x * out_g * m.y
-    ...   m_g.y[...] = sin_x * out_g
+    ...   m_g.x[...] = cos_x * g * m.y
+    ...   m_g.y[...] = sin_x * g
     ...   return (m_g,)
 
   Args:
