@@ -28,8 +28,7 @@ from flax.nnx import graphlib, variablelib
 
 A = tp.TypeVar('A')
 Index = int
-KeyEntry = tp.TypeVar('KeyEntry', bound=tp.Hashable)
-KeyPath = tuple[KeyEntry, ...]
+KeyPath = tuple[tp.Hashable, ...]
 Prefix = tp.Any
 Leaf = tp.Any
 
@@ -187,6 +186,22 @@ def broadcast_prefix(
     or (prefix_is_leaf is not None and prefix_is_leaf(x)),
   )
   return result
+
+
+def broadcast_prefix2(
+  prefix_tree: tp.Any,
+  full_tree: tp.Any,
+  is_leaf: tp.Callable[[tp.Any], bool] | None = None,
+) -> tuple[list[KeyPath], list[tp.Any]]:
+  paths: list[KeyPath] = []
+  leaves: list[tp.Any] = []
+  num_leaves = lambda t: jax.tree_util.tree_structure(t).num_leaves
+  def add_leaves(path, x, subtree):
+    n = num_leaves(subtree)
+    paths.extend([path] * n)
+    leaves.extend([x] * n)
+  jax.tree.map_with_path(add_leaves, prefix_tree, full_tree, is_leaf=is_leaf)
+  return paths, leaves
 
 
 class GraphDefState(struct.PyTreeNode):
@@ -461,19 +476,29 @@ def clear_non_graph_nodes(tree):
     or graphlib.is_graph_node(x),
   )
 
+class Mask(tp.NamedTuple):
+  pass
+
+def mask_at(t: tuple, index: int | None) -> tuple:
+  if index is None:
+    return t
+  return tuple(
+    Mask() if i == index else x
+    for i, x in enumerate(t)
+  )
 
 def updates_and_snapshot(args: A) -> tuple[A, A]:
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   leaves, treedef = jax.tree.flatten(args, is_leaf=is_leaf)
-  updates_leaves: list[variablelib.Variable | None] = []
-  snapshot_leaves: list[variablelib.Variable | None] = []
+  updates_leaves: list[variablelib.Variable | Mask] = []
+  snapshot_leaves: list[variablelib.Variable | Mask] = []
   for leaf in leaves:
     if isinstance(leaf, variablelib.Variable):
       updates_leaves.append(leaf)
       snapshot_leaves.append(leaf.copy())
     else:
-      updates_leaves.append(None)
-      snapshot_leaves.append(None)
+      updates_leaves.append(Mask())
+      snapshot_leaves.append(Mask())
   updates = jax.tree.unflatten(treedef, updates_leaves)
   snapshot = jax.tree.unflatten(treedef, snapshot_leaves)
   return updates, snapshot
@@ -501,7 +526,7 @@ def check_no_aliases(**kwargs):
     seen[var_id] = path
 
 
-def _variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
+def variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
   post_leaves, post_td = jax.tree.flatten(post)
   pre_leaves, pre_td = jax.tree.flatten(pre)
   return post_td != pre_td or any(  # type: ignore[operator]
@@ -519,19 +544,15 @@ def mask_variable_updates(
     keep_fn: MaskFn | None = None,
 ) -> A:
   if keep_fn is None:
-    keep_fn = lambda _, cur, snap: False
+    keep_fn = lambda _, cur, snap: variable_changed(cur, snap)
 
-  def _mask_updates(jax_path, current, snapshot):
-    path = graphlib.jax_to_nnx_path(jax_path)
+  def _mask_updates(path, current, snapshot):
     if isinstance(current, variablelib.Variable):
-      # no updates for hijax or ref variables
       if current.hijax or current.ref:
-        return None
-      if keep_fn(path, current, snapshot) or _variable_changed(
-          current, snapshot
-      ):
+        return Mask()
+      if keep_fn(path, current, snapshot):
         return current
-    return None
+    return Mask()
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   return jax.tree.map_with_path(
       _mask_updates, current_tree, snapshot_tree, is_leaf=is_leaf
@@ -539,7 +560,7 @@ def mask_variable_updates(
 
 
 def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
-  is_leaf = lambda x: isinstance(x, variablelib.Variable) or x is None
+  is_leaf = lambda x: isinstance(x, variablelib.Variable) or isinstance(x, Mask)
   args_leaves, treedef = jax.tree.flatten_with_path(args_tree, is_leaf=is_leaf)
   updates_leaves = treedef.flatten_up_to(updates_tree)
   seen: dict[int, jax.tree_util.KeyPath] = {}
@@ -555,7 +576,7 @@ def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
         'tree-mode jit does not support shared Variable references.'
       )
     seen[var_id] = path
-    if update is not None:
+    if isinstance(update, variablelib.Variable):
       variable.update_from_state(update)
 
 
@@ -574,7 +595,7 @@ def check_same_variables(inputs, outputs, transform_name: str = ''):
         f'{transform_name} Variable identity must be preserved '
         'across iterations.'
       )
-  is_leaf = lambda x: x is None or isinstance(x, variablelib.Variable)
+  is_leaf = lambda x: isinstance(x, (Mask, variablelib.Variable))
   jax.tree.map(
     _check, inputs, outputs,
     is_leaf=is_leaf,

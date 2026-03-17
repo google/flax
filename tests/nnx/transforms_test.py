@@ -22,6 +22,7 @@ import typing as tp
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
+from flax.nnx.transforms.iteration import pure_jax_fancy_scan
 from flax.nnx.transforms import general
 import jax
 from jax.experimental import checkify, mesh_utils
@@ -2584,7 +2585,8 @@ class TestScan(parameterized.TestCase):
     assert y.shape == (5, 1, 3)
     assert out is None
 
-  def test_variables_in_scan(self):
+  @parameterized.parameters(True, False)
+  def test_variables_in_scan(self, graph_updates):
     def block_init(din, dout, rngs):
       w = nnx.Param(jax.random.normal(rngs.params(), (din, dout)))
       b = nnx.Param(jnp.zeros((dout,)))
@@ -2594,7 +2596,7 @@ class TestScan(parameterized.TestCase):
       return nnx.gelu(x @ w + b[None])
 
     @nnx.split_rngs(splits=5)
-    @nnx.scan(in_axes=0, out_axes=0, length=5)
+    @nnx.scan(in_axes=0, out_axes=0, length=5, graph_updates=graph_updates)
     def create_block(rngs: nnx.Rngs):
       return block_init(3, 3, rngs)
 
@@ -2603,7 +2605,10 @@ class TestScan(parameterized.TestCase):
     assert w.shape == (5, 3, 3)
     assert b.shape == (5, 3)
 
-    @nnx.scan(in_axes=(0, 0, nnx.Carry), out_axes=nnx.Carry)
+    @nnx.scan(
+      in_axes=(0, 0, nnx.Carry), out_axes=nnx.Carry,
+      graph_updates=graph_updates,
+    )
     def stack_forward(w, b, x):
       return block_forward(w, b, x)
 
@@ -2668,21 +2673,25 @@ class TestScan(parameterized.TestCase):
 
     assert y.shape == (5, 1, 3)
 
-  def test_all_carry(self):
+  @parameterized.parameters(True, False)
+  def test_all_carry(self, graph_updates):
     @dataclasses.dataclass
     class Foo(nnx.Module):
       n: nnx.BatchStat[int]
 
     foo = Foo(n=nnx.BatchStat(0))
 
-    @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3)
+    @nnx.scan(
+      in_axes=nnx.Carry, out_axes=nnx.Carry, length=3,
+      graph_updates=graph_updates,
+    )
     def loop(foo: Foo):
       foo.n[...] += 1
       return foo
 
     foo2 = loop(foo)
 
-    self.assertIs(foo2, foo)
+    self.assertIs(foo2.n, foo.n)
     self.assertEqual(foo.n[...], 3)
 
   def test_all_carry_one_argument_error(self):
@@ -2721,7 +2730,8 @@ class TestScan(parameterized.TestCase):
     ):
       loop(foo, xs)
 
-  def test_all_scan(self):
+  @parameterized.parameters(True, False)
+  def test_all_scan(self, graph_updates):
     class Foo(nnx.Module):
       def __init__(self, n: nnx.BatchStat[jax.Array]):
         self.n = n
@@ -2729,7 +2739,7 @@ class TestScan(parameterized.TestCase):
     xs = jnp.arange(3)
     foo = Foo(n=nnx.BatchStat(jnp.arange(3)))
 
-    @nnx.scan(in_axes=0, out_axes=0)
+    @nnx.scan(in_axes=0, out_axes=0, graph_updates=graph_updates)
     def loop(foo: Foo, x):
       x = x + 1
       foo.n[...] += 1
@@ -2837,28 +2847,28 @@ class TestScan(parameterized.TestCase):
     ):
       f(count, jnp.arange(3))
 
-  def test_tree_mode_non_default_axes_error(self):
-    with self.assertRaisesRegex(
-      ValueError,
-      'tree-mode scan only supports',
-    ):
-      @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3, graph=False)
-      def loop(x):
-        return x
+  def test_tree_mode_custom_axes(self):
+    @nnx.scan(in_axes=nnx.Carry, out_axes=nnx.Carry, length=3, graph=False)
+    def loop(x):
+      return x
 
-  def test_only_carry(self):
+    result = loop(jnp.array(1.0))
+    np.testing.assert_allclose(result, jnp.array(1.0))
+
+  @parameterized.parameters(True, False)
+  def test_only_carry(self, graph_updates):
     class Foo(nnx.Module):
       def __init__(self):
         self.c = nnx.BatchStat(jnp.array(0))
 
-    @nnx.scan(in_axes=(nnx.Carry,), length=5)
+    @nnx.scan(in_axes=(nnx.Carry,), length=5, graph_updates=graph_updates)
     def loop(foo: Foo) -> tuple[Foo, jax.Array]:
       foo.c[...] += 1
       return foo, foo.c[...]
 
     foo = Foo()
     foo2, cs = loop(foo)
-    self.assertIs(foo2, foo)
+    self.assertIs(foo2.c, foo.c)
     np.testing.assert_allclose(cs, jnp.arange(1, 6))
 
   def test_out_axes(self):
@@ -3414,6 +3424,55 @@ class TestScan(parameterized.TestCase):
     np.testing.assert_array_equal(
       intermediates['data2'][0], 11.0 + jnp.arange(num_steps)
     )
+
+  def test_broadcast_variable_mutation_rejected(self):
+    v = nnx.Variable(jnp.array(1.0))
+
+    @nnx.scan(
+      in_axes=(None, nnx.Carry, 0), graph=False, graph_updates=False,
+    )
+    def fn(v, carry, x):
+      v[...] = v[...] + 1.0
+      return carry + x, carry
+
+    with self.assertRaisesRegex(ValueError, 'Broadcast.*mutated'):
+      fn(v, jnp.array(0.0), jnp.arange(3.0))
+
+  def test_broadcast_out_axes_rejected(self):
+    @nnx.scan(
+      in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, None),
+      graph=False, graph_updates=False,
+    )
+    def fn(carry, x):
+      return carry + x, jnp.zeros(3)
+
+    with self.assertRaisesRegex(ValueError, 'broadcast'):
+      fn(jnp.array(0.0), jnp.arange(3.0))
+
+  def test_scan_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(0.0))
+
+    @nnx.scan(
+      in_axes=(nnx.Carry, 0),
+      out_axes=(nnx.Carry, 0),
+      graph=True,
+      graph_updates=False,
+    )
+    def f(carry, x):
+      return carry, x[...]
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      f(v, v)
+
+  def test_scan_input_output_aliasing(self):
+    v = nnx.Param(jnp.arange(5))
+
+    @nnx.scan(in_axes=0, out_axes=0, graph=True, graph_updates=False)
+    def f(carry):
+      return carry
+
+    with self.assertRaisesRegex(ValueError, 'same instance'):
+      f(v)
 
 
 class TestRemat(parameterized.TestCase):
@@ -5423,6 +5482,172 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     assert module.dropout.rngs.count[0] == 2
     assert not jnp.allclose(y, y2)
+
+
+class TestPureJaxFancyScan(absltest.TestCase):
+
+  def test_carry_and_scan(self):
+    def cumsum(carry, x):
+      carry = carry + x
+      return carry, carry
+
+    final_carry, ys = pure_jax_fancy_scan(
+        cumsum, jnp.array(0.0), jnp.arange(5.0),
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 10.0)
+    np.testing.assert_allclose(ys, jnp.array([0., 1., 3., 6., 10.]))
+
+  def test_carry_only_output(self):
+    def sum_fn(carry, x):
+      return carry + x
+
+    result = pure_jax_fancy_scan(
+        sum_fn, jnp.array(0.0), jnp.arange(5.0),
+        in_axes=(nnx.Carry, 0), out_axes=nnx.Carry,
+    )
+    np.testing.assert_allclose(result, 10.0)
+
+  def test_broadcast_args(self):
+    def scale_cumsum(carry, scale, x):
+      carry = carry + x * scale
+      return carry, carry
+
+    final_carry, _ = pure_jax_fancy_scan(
+        scale_cumsum, jnp.array(0.0), jnp.array(2.0), jnp.arange(5.0),
+        in_axes=(nnx.Carry, None, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 20.0)
+
+  def test_pytree_carry(self):
+    def dict_scan(carry, x):
+      carry = {'a': carry['a'] + x['a'], 'b': carry['b'] + x['b']}
+      return carry, carry
+
+    xs = {'a': jnp.arange(3.0), 'b': jnp.ones(3)}
+    init = {'a': jnp.array(0.0), 'b': jnp.array(0.0)}
+    final_carry, _ = pure_jax_fancy_scan(
+        dict_scan, init, xs,
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry['a'], 3.0)
+    np.testing.assert_allclose(final_carry['b'], 3.0)
+
+  def test_no_carry_all_scanned(self):
+    def double(x):
+      return (x * 2,)
+
+    (ys,) = pure_jax_fancy_scan(
+        double, jnp.arange(5.0),
+        in_axes=(0,), out_axes=(0,),
+    )
+    np.testing.assert_allclose(ys, jnp.arange(5.0) * 2)
+
+  def test_reverse(self):
+    def cumsum(carry, x):
+      carry = carry + x
+      return carry, carry
+
+    final_carry, _ = pure_jax_fancy_scan(
+        cumsum, jnp.array(0.0), jnp.arange(5.0),
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0), reverse=True,
+    )
+    np.testing.assert_allclose(final_carry, 10.0)
+
+  def test_pytree_prefix_in_axes(self):
+    def fn(carry, x):
+      carry = carry + x['a'] + x['b']
+      return carry, carry
+
+    xs = {'a': jnp.arange(3.0), 'b': jnp.array(1.0)}
+    final_carry, _ = pure_jax_fancy_scan(
+        fn, jnp.array(0.0), xs,
+        in_axes=(nnx.Carry, {'a': 0, 'b': None}), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 6.0)
+
+  def test_nested_carry_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda x: x,
+          {'a': jnp.array(1.0)},
+          in_axes=({'a': nnx.Carry},), out_axes=nnx.Carry,
+      )
+
+  def test_broadcast_out_axes_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda c, x: (c, x),
+          jnp.array(0.0), jnp.arange(3.0),
+          in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, None),
+      )
+
+  def test_none_broadcast_input(self):
+    def fn(carry, _unused, x):
+      carry = carry + x
+      return carry, carry
+
+    final_carry, _ = pure_jax_fancy_scan(
+        fn, jnp.array(0.0), None, jnp.arange(3.0),
+        in_axes=(nnx.Carry, None, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 3.0)
+
+  def test_none_nested_in_arg(self):
+    def fn(carry, x):
+      carry = carry + x['a']
+      return carry, carry
+
+    xs = {'a': jnp.arange(3.0), 'b': None}
+    final_carry, _ = pure_jax_fancy_scan(
+        fn, jnp.array(0.0), xs,
+        in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, 3.0)
+
+  def test_nested_carry_in_out_axes_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda c, x: (c, x),
+          jnp.array(0.0), jnp.arange(3.0),
+          in_axes=(nnx.Carry, 0), out_axes=({'a': nnx.Carry},),
+      )
+
+  def test_carry_in_in_axes_only_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda c, x: (c + x,),
+          jnp.array(0.0), jnp.arange(3.0),
+          in_axes=(nnx.Carry, 0), out_axes=(0,),
+      )
+
+  def test_carry_in_out_axes_only_rejected(self):
+    with self.assertRaises(ValueError):
+      pure_jax_fancy_scan(
+          lambda x: x,
+          jnp.arange(3.0),
+          in_axes=(0,), out_axes=nnx.Carry,
+      )
+
+  def test_non_tuple_carry_only(self):
+    def f(carry):
+      return carry + 1.0
+
+    result = pure_jax_fancy_scan(
+        f, jnp.array(0.0),
+        in_axes=nnx.Carry, out_axes=nnx.Carry, length=5,
+    )
+    np.testing.assert_allclose(result, 5.0)
+
+  def test_non_tuple_scan_only(self):
+    def f(x):
+      return x * 2
+
+    ys = pure_jax_fancy_scan(
+        f, jnp.arange(5.0),
+        in_axes=0, out_axes=0,
+    )
+    np.testing.assert_allclose(ys, jnp.arange(5.0) * 2)
 
 
 if __name__ == '__main__':
