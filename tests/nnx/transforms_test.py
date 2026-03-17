@@ -939,6 +939,22 @@ class TestTreeJIT(parameterized.TestCase):
     np.testing.assert_allclose(y, 4.0)
     np.testing.assert_allclose(v[...], 2.0)
 
+  def test_jit_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+    P = jax.sharding.PartitionSpec
+
+    @nnx.jit(
+      in_shardings=(P(), P('x')),
+      graph=True, graph_updates=False,
+    )
+    def f(a, b):
+      return a[...] + b[...]
+
+    mesh = jax.sharding.Mesh(jax.devices(), ('x',))
+    with mesh:
+      with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+        f(v, v)
+
 
 class TestEvalShape(parameterized.TestCase):
   @parameterized.parameters(
@@ -1283,6 +1299,23 @@ class TestShardMap(parameterized.TestCase):
     self.assertEqual(m.count[...], 1)
     y = f(m, jnp.array(3.0))
     self.assertEqual(m.count[...], 2)
+
+  def test_shard_map_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+    P = jax.sharding.PartitionSpec
+    mesh = jax.sharding.Mesh(jax.devices(), ('x',))
+
+    @nnx.shard_map(
+      mesh=mesh,
+      in_specs=(P(), P('x')),
+      out_specs=P(),
+      graph=True, graph_updates=False,
+    )
+    def f(a, b):
+      return a[...] + b[...]
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      f(v, v)
 
 
 class TestGrad(parameterized.TestCase):
@@ -2174,6 +2207,33 @@ class TestCustomVJP(parameterized.TestCase):
       r'`nondiff_argnums` cannot contain `DiffState` objects',
     ):
       nnx.custom_vjp(lambda m: m, nondiff_argnums=(diff_state,), graph=False)
+
+  def test_grad_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    def f(v_diff, v_nondiff):
+      return v_diff[...] + v_nondiff[...]
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      nnx.grad(f, argnums=0, graph=True, graph_updates=False)(v, v)
+
+  def test_custom_vjp_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.array(1.0))
+
+    @nnx.custom_vjp(nondiff_argnums=(1,), graph=True, graph_updates=False)
+    def f(v_diff, v_nondiff):
+      return v_diff[...] + v_nondiff[...]
+
+    def f_fwd(v_diff, v_nondiff):
+      return f(v_diff, v_nondiff), ()
+
+    def f_bwd(v_nondiff, res, g):
+      return (nnx.clone(v_nondiff),)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      f(v, v)
 
 
 class TestVjpJvp(parameterized.TestCase):
@@ -4157,6 +4217,17 @@ class TestVmap(parameterized.TestCase):
     self.assertEqual(model.bn.mean.shape, (3, 5))
     self.assertEqual(model.bn.var.shape, (5, 3))
     self.assertEqual(model.bn.bias.shape, (3,))
+
+
+  def test_vmap_inconsistent_aliasing(self):
+    v = nnx.Param(jnp.arange(3.0))
+
+    @nnx.vmap(in_axes=(0, None), graph=True, graph_updates=False)
+    def f(v_mapped, v_broadcast):
+      return v_mapped[...] + v_broadcast[...]
+
+    with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
+      f(v, v)
 
 
 class TestPmap(parameterized.TestCase):
