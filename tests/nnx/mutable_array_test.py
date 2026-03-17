@@ -1193,6 +1193,23 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     jax.lax.scan(body, None, None, length=5)
     np.testing.assert_allclose(v[...], 8.0)
 
+  def test_hijax_variable_in_jit_graph_updates_false(self):
+    v = nnx.Variable(jnp.array(1.0), hijax=True)
+
+    @nnx.jit(graph=True, graph_updates=False)
+    def f(v, v2):
+      self.assertIs(v, v2)
+      v[...] += 1.0
+      return v[...] * 2
+
+    y = f(v, v)
+    np.testing.assert_allclose(v[...], 2.0)
+    np.testing.assert_allclose(y, 4.0)
+
+    y = f(v, v)
+    np.testing.assert_allclose(v[...], 3.0)
+    np.testing.assert_allclose(y, 6.0)
+
 
 if __name__ == '__main__':
   absltest.main()

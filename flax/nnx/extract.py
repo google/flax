@@ -523,10 +523,14 @@ def mask_variable_updates(
 
   def _mask_updates(jax_path, current, snapshot):
     path = graphlib.jax_to_nnx_path(jax_path)
-    if isinstance(current, variablelib.Variable) and (
-        keep_fn(path, current, snapshot) or _variable_changed(current, snapshot)
-    ):
-      return current
+    if isinstance(current, variablelib.Variable):
+      # no updates for hijax or ref variables
+      if current.hijax or current.ref:
+        return None
+      if keep_fn(path, current, snapshot) or _variable_changed(
+          current, snapshot
+      ):
+        return current
     return None
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   return jax.tree.map_with_path(
