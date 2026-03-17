@@ -216,6 +216,24 @@ class TestRngs(parameterized.TestCase):
     nnx.restore_rngs(backups)
     self.assertNotEqual(rngs.params.key, new_key)
 
+  def test_prefix(self):
+    class Model(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.linear = nnx.Linear(20, 10, rngs=rngs)
+        self.drop = nnx.Dropout(0.1, rngs=rngs)
+
+    with nnx.graphlib.set_graph_updates(False):
+      with nnx.graphlib.set_graph_mode(False):
+        rngs = nnx.Rngs(0, dropout=jax.random.key(1))
+        rngs = rngs.split({f'dropout': 5})
+        prefix = nnx.prefix(rngs, {'dropout': 0})
+        model = nnx.vmap(Model, in_axes=(prefix,))(rngs)
+        assert model.drop.rngs.key[...].shape == (5,)
+        assert model.drop.rngs.count[...].shape == (5,)
+        bias = model.linear.bias[...]
+        assert all(jnp.allclose(x,y) for (x,y) in zip(bias, bias[1:]))
+
+
   def test_random_helpers(self):
     rngs = nnx.Rngs(0, params=1)
 
