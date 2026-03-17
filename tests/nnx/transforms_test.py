@@ -2800,12 +2800,11 @@ class TestScan(parameterized.TestCase):
 
     x = jnp.ones((1, 3))
     a = jnp.ones((5, 1, 3))
-    y, out = module(x, a)
+    (y, out), intermediates = nnx.capture(module, nnx.Intermediate)(x, a)
 
     assert y.shape == (1, 3)
     assert out is None
 
-    intermediates = nnx.pop(module, nnx.Intermediate)
     assert intermediates['data'][0].shape == (5, 1, 3)
 
   def test_in_axes_broadcast(self):
@@ -3247,8 +3246,7 @@ class TestScan(parameterized.TestCase):
     num_steps = 5
     model = Model(num_steps=num_steps)
     carry = CarryAsPytree(data=jnp.array(0.0))
-    carry_final = model(carry, method=Model._step)
-    intermediates = nnx.pop(model, nnx.Intermediate)
+    carry_final, intermediates = nnx.capture(model, nnx.Intermediate)(carry, method=Model._step)
     self.assertEqual(carry_final.data, num_steps)
     np.testing.assert_array_equal(
       intermediates['data'][0], 1.0 + jnp.arange(num_steps)
@@ -3260,8 +3258,7 @@ class TestScan(parameterized.TestCase):
       CarryAsPytree(data=jnp.array(10.0))
     )
 
-    carry_final = model(carry, method=Model._step2)
-    intermediates = nnx.pop(model, nnx.Intermediate)
+    carry_final, intermediates = nnx.capture(model, nnx.Intermediate)(carry, method=Model._step2)
 
     self.assertEqual(carry_final[0].data, num_steps)
     self.assertEqual(carry_final[2].data, 10 + num_steps)

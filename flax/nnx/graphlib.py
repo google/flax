@@ -2570,7 +2570,7 @@ def pop(
     ...     self.linear2 = nnx.Linear(3, 4, rngs=rngs)
     ...   def __call__(self, x):
     ...     x = self.linear1(x)
-    ...     self.sow(nnx.Intermediate, 'i', x)
+    ...     self.i = nnx.Intermediate(x)
     ...     x = self.linear2(x)
     ...     return x
 
@@ -2581,7 +2581,7 @@ def pop(
     >>> assert hasattr(model, 'i')
 
     >>> intermediates = nnx.pop(model, nnx.Intermediate)
-    >>> assert intermediates['i'][0].shape == (1, 3)
+    >>> assert intermediates['i'].shape == (1, 3)
     >>> assert not hasattr(model, 'i')
 
   Args:
