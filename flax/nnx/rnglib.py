@@ -474,13 +474,16 @@ class Rngs(Pytree):
     for name, stream in self.items():
       for predicate, num_splits in split_predicates.items():
         if predicate((), stream):
-          if num_splits is None:
-            keys[name] = stream
-          else:
+          if num_splits is not None:
             keys[name] = stream.split(num_splits)
+          else:
+            # Fork to create a new stream without splitting the key, avoiding shared state.
+            keys[name] = stream.fork()
           break
-        else:
-          keys[name] = stream
+      else:
+        # If no predicate matches, fork the stream to avoid sharing state.
+        # This is consistent with the previous `fork` behavior.
+        keys[name] = stream.fork()
 
     return Rngs(**keys)
 
