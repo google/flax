@@ -214,6 +214,7 @@ from . import traversals as traversals
 from . import graphlib as graphlib
 # import last to prevent potential import cycles
 from . import graph as graph
+from . import compat as compat
 
 import typing as _tp
 
