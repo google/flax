@@ -269,7 +269,7 @@ class SimpleEvalShapeFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(args=args, kwargs=kwargs, out=out)
+    extract.check_no_aliases('eval_shape', args=args, kwargs=kwargs, out=out)
     return out
 
 
@@ -314,7 +314,7 @@ def eval_shape(
   if not graph or not graph_updates:
     if graph:
       args, kwargs = extract.to_tree2((args, kwargs))
-    extract.check_no_aliases(args=args, kwargs=kwargs)
+    extract.check_no_aliases('eval_shape', args=args, kwargs=kwargs)
     out = jax.eval_shape(
       SimpleEvalShapeFn(f_call, graph=graph), *args, **kwargs
     )
@@ -369,7 +369,7 @@ class SimpleCheckifyFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(args=updates, out=out)
+    extract.check_no_aliases('checkify', args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -437,7 +437,7 @@ def checkify(
       error, (out, updates) = checkify_fn(*args)
       if graph:
         out = extract.from_tree2(out)
-      extract.apply_variable_updates(args, updates)
+      extract.apply_variable_updates(args, updates, fn_name='checkify')
       return error, out
 
     return simple_checkify_wrapper  # type: ignore
@@ -481,7 +481,7 @@ class SimpleCondFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(args=updates, out=out)
+    extract.check_no_aliases('switch', args=updates, out=out)
     return out, updates
 
 
@@ -527,7 +527,7 @@ def cond(
     )
     if graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(operands, updates)
+    extract.apply_variable_updates(operands, updates, fn_name='cond')
     return out
 
   @general.split_inputs(ctxtag='cond')
@@ -580,7 +580,7 @@ def switch(
     )
     if graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(operands, updates)
+    extract.apply_variable_updates(operands, updates, fn_name='switch')
     return out
 
   @general.split_inputs(ctxtag='switch')

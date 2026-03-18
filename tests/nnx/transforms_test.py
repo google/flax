@@ -32,7 +32,6 @@ import optax
 from flax import errors
 
 
-
 class TestJIT(parameterized.TestCase):
   def test_jit(self):
     m = nnx.Dict(a=nnx.Param(1))
@@ -617,7 +616,7 @@ class TestTreeJIT(parameterized.TestCase):
     def f(v):
       return v
 
-    with self.assertRaisesRegex(ValueError, 'same instance'):
+    with self.assertRaisesRegex(ValueError, 'does not support returning input Variables as outputs'):
       f(v)
 
   def test_tree_jit_no_shared_variable_refs(self):
@@ -625,10 +624,11 @@ class TestTreeJIT(parameterized.TestCase):
 
     @nnx.jit(graph=False)
     def f(v1, v2):
-      v1[...] += 1
-      return None
+      pass
 
-    with self.assertRaisesRegex(ValueError, 'already seen'):
+    with self.assertRaisesRegex(
+        ValueError, 'found at paths'
+    ):
       f(v, v)
 
   def test_tree_jit_new_variable_output_ok(self):
@@ -3471,7 +3471,7 @@ class TestScan(parameterized.TestCase):
     def f(carry):
       return carry
 
-    with self.assertRaisesRegex(ValueError, 'same instance'):
+    with self.assertRaisesRegex(ValueError, 'does not support returning input Variables as outputs'):
       f(v)
 
 

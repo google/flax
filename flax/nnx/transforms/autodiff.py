@@ -79,7 +79,7 @@ class SimpleGradFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
+    extract.check_no_aliases('grad', args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
 
     if self.has_aux:
@@ -189,7 +189,7 @@ def _grad_general(
           if graph: grads = extract.from_tree2(grads)
           result = grads
 
-      extract.apply_variable_updates((args, kwargs), updates)
+      extract.apply_variable_updates((args, kwargs), updates, fn_name='grad')
       return result
 
     return tree_grad_wrapper
@@ -570,7 +570,7 @@ class SimpleVjpFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(args=updates, out=out)
+    extract.check_no_aliases('vjp', args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
       primals_out, aux = out
@@ -706,7 +706,7 @@ def vjp(
     raw_vjp_fn = vjp_fn
     def vjp_fn(g):
       return extract.from_tree2(raw_vjp_fn(g))
-  extract.apply_variable_updates(primals, updates)
+  extract.apply_variable_updates(primals, updates, fn_name='vjp')
   if has_aux:
     return primals_out, vjp_fn, user_aux
   else:
@@ -735,7 +735,7 @@ class SimpleJvpFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(args=updates, out=out)
+    extract.check_no_aliases('jvp', args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
       primals_out, aux = out
@@ -881,7 +881,7 @@ def jvp(
   if graph:
     primals_out = extract.from_tree2(primals_out)
     tangent_out = extract.from_tree2(tangent_out)
-  extract.apply_variable_updates(primals, updates)
+  extract.apply_variable_updates(primals, updates, fn_name='jvp')
   if has_aux:
     return primals_out, tangent_out, aux
   else:
@@ -909,7 +909,7 @@ class SimpleCustomVjpFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(args=updates, out=out)
+    extract.check_no_aliases('custom_vjp', args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -931,7 +931,7 @@ class SimpleFwdFn:
     if self.graph:
       out = extract.to_tree2(out)
       residual = extract.to_tree2(residual)
-    extract.check_no_aliases(args=updates, out=out)
+    extract.check_no_aliases('custom_vjp', args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return (out, updates), residual
 
@@ -1007,7 +1007,7 @@ class SimpleCustomVjp(tp.Generic[A]):
         )
     if self.graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(args, updates)
+    extract.apply_variable_updates(args, updates, fn_name='custom_vjp')
     return out
 
   def defvjp(
@@ -1567,7 +1567,7 @@ class SimpleRematFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
+    extract.check_no_aliases('remat', args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -1664,7 +1664,7 @@ def remat(
       out, updates = checkpointed_fn(*args, **kwargs)
       if graph:
         out = extract.from_tree2(out)
-      extract.apply_variable_updates((args, kwargs), updates)
+      extract.apply_variable_updates((args, kwargs), updates, fn_name='remat')
       return out
 
     return simple_remat_wrapper  # type: ignore[return-value]

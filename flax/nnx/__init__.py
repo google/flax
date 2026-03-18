@@ -78,6 +78,8 @@ from .graphlib import pure as pure
 from .graphlib import cached_partial as cached_partial
 from .graphlib import flatten as flatten
 from .graphlib import unflatten as unflatten
+from .graphlib import set_graph_mode as set_graph_mode
+from .graphlib import set_graph_updates as set_graph_updates
 from .nn import initializers as initializers
 from .nn.activations import celu as celu
 from .nn.activations import elu as elu

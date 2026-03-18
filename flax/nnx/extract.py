@@ -335,6 +335,17 @@ def to_tree2(
   prefix: tp.Any = Missing,
   check_aliasing: bool = True,
 ) -> tp.Any:
+  """to_tree2 has two main tasks:
+
+  1. Convert all graph nodes to NodeStates (a tree representation).
+  2. Check all Variables are aliased consistently given the prefix tree,
+    e.g. vmap's in/out_axes arguments.
+
+  Each NodeState contains the `GraphDef` and State for each object, these
+  are generated using `graphlib.flatten`. `extract.broadcast_prefix` is used
+  to calculate the prefix for each node, `check_consistent_aliasing2` traverses
+  the nodes subgraph and checks for Variable aliasing.
+  """
   ref_index: graphlib.RefMap = graphlib.RefMap()
 
   def _to_node_states(leaf):
@@ -343,8 +354,8 @@ def to_tree2(
     graphdef, flat_state = graphlib.flatten(
       leaf, ref_index=ref_index, graph=True
     )
-    states = graphlib._to_nested_state(graphdef, (flat_state,))
-    return NodeStates.from_split(graphdef, *states)
+    (state,) = graphlib._to_nested_state(graphdef, (flat_state,))
+    return NodeStates.from_split(graphdef, state)
 
   is_leaf = lambda x: (
     isinstance(x, variablelib.Variable) or graphlib.is_graph_node(x)
@@ -503,8 +514,8 @@ def updates_and_snapshot(args: A) -> tuple[A, A]:
   return updates, snapshot
 
 
-def check_no_aliases(**kwargs):
-  Attrs = namedtuple('Attrs', kwargs.keys())
+def check_no_aliases(fn_name: str, /, **kwargs):
+  Attrs = namedtuple('Attrs', kwargs.keys())  # type: ignore[misc]
   container = Attrs(**kwargs)
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   seen: dict[int, jax.tree_util.KeyPath] = {}
@@ -518,9 +529,11 @@ def check_no_aliases(**kwargs):
       path_str = jax.tree_util.keystr(path)
       seen_path_str = jax.tree_util.keystr(seen[var_id])
       raise ValueError(
-        f'Variable at {path_str} is the same instance as at '
-        f'{seen_path_str}. tree-mode transforms do not support '
-        f'returning input Variables as outputs.'
+        f'Duplicate {leaf}\nfound at paths:\n\n'
+        f'  - {seen_path_str}\n'
+        f'  - {path_str}\n\n'
+        f'nnx.{fn_name} with graph_updates=False does not support '
+        'returning input Variables as outputs.'
       )
     seen[var_id] = path
 
@@ -558,7 +571,9 @@ def mask_variable_updates(
   )
 
 
-def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
+def apply_variable_updates(
+  args_tree: A, updates_tree: A, *, fn_name: str,
+) -> None:
   is_leaf = lambda x: isinstance(x, variablelib.Variable) or isinstance(x, Mask)
   args_leaves, treedef = jax.tree.flatten_with_path(args_tree, is_leaf=is_leaf)
   updates_leaves = treedef.flatten_up_to(updates_tree)
@@ -571,8 +586,11 @@ def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
       path_str = jax.tree_util.keystr(path)
       seen_path_str = jax.tree_util.keystr(seen[var_id])
       raise ValueError(
-        f'Variable at {path_str} was already seen at {seen_path_str}. '
-        'tree-mode jit does not support shared Variable references.'
+        f'Duplicate {variable}\nfound at paths:\n\n'
+        f'  - {seen_path_str}\n'
+        f'  - {path_str}\n\n'
+        f'Tree mode (graph=False) does not support shared references. '
+        + graphlib._tree_mode_suggestion(fn_name)
       )
     seen[var_id] = path
     if isinstance(update, variablelib.Variable):

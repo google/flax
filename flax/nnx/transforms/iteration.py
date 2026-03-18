@@ -139,7 +139,7 @@ def transform_metadata(
     _apply_axis_fn(args, in_axes, metadata, spmd.add_axis)
     _apply_axis_fn(out, out_axes, metadata, spmd.add_axis)
     updates = extract.mask_variable_updates(updates, snapshot)
-    extract.apply_variable_updates(in_args, updates)
+    extract.apply_variable_updates(in_args, updates, fn_name='transform_metadata')
     if graph:
       out = extract.from_tree2(out)
     return out
@@ -275,7 +275,7 @@ class SimpleVmapFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_axes)
-    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
+    extract.check_no_aliases('vmap', args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -297,7 +297,7 @@ class SimplePmapFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_axes)
-    extract.check_no_aliases(args=updates[0], kwargs=updates[1], out=out)
+    extract.check_no_aliases('pmap', args=updates[0], kwargs=updates[1], out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -525,7 +525,7 @@ def vmap(
             check_aliasing=in_axes is not None,
         )
       out, updates = vmapped_fn(*args, **kwargs)
-      extract.apply_variable_updates((args, kwargs), updates)
+      extract.apply_variable_updates((args, kwargs), updates, fn_name='vmap')
       if graph:
         out = extract.from_tree2(out)
       return out
@@ -792,7 +792,7 @@ def pmap(
             check_aliasing=in_axes is not None,
         )
       out, updates = pmapped_fn(*args, **kwargs)
-      extract.apply_variable_updates((args, kwargs), updates)
+      extract.apply_variable_updates((args, kwargs), updates, fn_name='pmap')
       if graph:
         out = extract.from_tree2(out)
       return out
@@ -1417,7 +1417,7 @@ class SimpleScanFn:
         )
       return changed
 
-    extract.check_no_aliases(args=masked_carry_updates, out=out)
+    extract.check_no_aliases('scan', args=masked_carry_updates, out=out)
     masked_carry_updates = extract.mask_variable_updates(
       masked_carry_updates, masked_carry_snapshot, keep_fn=keep_fn,
     )
@@ -1687,7 +1687,7 @@ def _simple_scan(
       out, updates = result
 
     masked_args = extract.mask_at(args, carry_arg_index)
-    extract.apply_variable_updates(masked_args, updates)
+    extract.apply_variable_updates(masked_args, updates, fn_name='scan')
 
     if carry_arg_index is not None:
       carry_in = args[carry_arg_index]

@@ -1244,6 +1244,14 @@ class TestGraphUtils(parameterized.TestCase):
     )
     hash(nnx.graphdef(net))
 
+  @nnx.set_graph_mode(False)
+  def test_split_graph_error(self):
+    v = nnx.Variable(jnp.array(1.0))
+    with self.assertRaisesRegex(
+      ValueError, 'found at paths'
+    ):
+      graphdef, state = nnx.split((v, v))
+
 class SimpleModule(nnx.Module):
   pass
 
@@ -1481,7 +1489,7 @@ class TestTreeFlatten(parameterized.TestCase):
     root.b = var
 
     with self.assertRaisesRegex(
-      ValueError, 'Shared references are not supported with graph=False'
+      ValueError, 'found at paths'
     ):
       list(nnx.iter_graph(root, graph=False))
 
@@ -1491,7 +1499,7 @@ class TestTreeFlatten(parameterized.TestCase):
     a.append(b)
 
     with self.assertRaisesRegex(
-      ValueError, 'Cycles are not supported with graph=False'
+      ValueError, 'found at paths'
     ):
       list(nnx.iter_graph(a, graph=False))
 
@@ -1586,7 +1594,7 @@ class TestTreeFlatten(parameterized.TestCase):
     g = [v, v]
 
     with self.assertRaisesRegex(
-      ValueError, 'Shared references are not supported with graph=False'
+      ValueError, 'found at paths'
     ):
       nnx.recursive_map(lambda path, node: node, g, graph=False)
 
@@ -1596,9 +1604,53 @@ class TestTreeFlatten(parameterized.TestCase):
     a.append(b)
 
     with self.assertRaisesRegex(
-      ValueError, 'Cycles are not supported with graph=False'
+      ValueError, 'found at paths'
     ):
       nnx.recursive_map(lambda path, node: node, a, graph=False)
+
+  def test_check_valid_pytree_flatten(self):
+    class NotAPytree(nnx.Pytree, pytree=False):
+      def __init__(self):
+        self.x = 1
+
+    node = [NotAPytree()]
+    with self.assertRaisesRegex(
+      ValueError, "pytree=False.*Found at path"
+    ):
+      nnx.graphlib.flatten(node, graph=False)
+
+  def test_check_valid_pytree_iter_graph(self):
+    class NotAPytree(nnx.Pytree, pytree=False):
+      def __init__(self):
+        self.x = 1
+
+    node = nnx.List([NotAPytree()])
+    with self.assertRaisesRegex(
+      ValueError, "pytree=False.*Found at path"
+    ):
+      list(nnx.iter_graph(node, graph=False))
+
+  def test_check_valid_pytree_iter_children(self):
+    class NotAPytree(nnx.Pytree, pytree=False):
+      def __init__(self):
+        self.x = 1
+
+    node = NotAPytree()
+    with self.assertRaisesRegex(
+      ValueError, "pytree=False"
+    ):
+      list(nnx.iter_children(node, graph=False))
+
+  def test_check_valid_pytree_recursive_map(self):
+    class NotAPytree(nnx.Pytree, pytree=False):
+      def __init__(self):
+        self.x = 1
+
+    node = nnx.List([NotAPytree()])
+    with self.assertRaisesRegex(
+      ValueError, "pytree=False.*Found at path"
+    ):
+      nnx.recursive_map(lambda path, node: node, node, graph=False)
 
 
 if __name__ == '__main__':

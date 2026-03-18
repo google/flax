@@ -466,7 +466,7 @@ class SimpleJitFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_shardings)
-    extract.check_no_aliases(args=args_updates, kwargs=kwargs_updates, out=out)
+    extract.check_no_aliases('jit', args=args_updates, kwargs=kwargs_updates, out=out)
     def donated_arg(jax_path, c, s):
       path = graphlib.jax_to_nnx_path(jax_path)
       return path[0] in self.donate_argnums or extract.variable_changed(c, s)
@@ -573,7 +573,7 @@ class SimpleJitWrapped(tp.Generic[P, R]):
     args, kwargs = self._maybe_to_tree(args, kwargs)
     out, updates = self.jitted_fn(*self.partial_args, *args, **kwargs)
     extract.apply_variable_updates(
-        ((*self.partial_args, *args), kwargs), updates)
+        ((*self.partial_args, *args), kwargs), updates, fn_name='jit')
     return self._maybe_from_tree(out)
 
   def __get__(self, obj, objtype=None):
@@ -1150,7 +1150,7 @@ class SimpleCompiled(Stage):
   def __call__(self, *args, **kwargs):
     args, kwargs = self.jit_wrapped._maybe_to_tree(args, kwargs)
     out, updates = self.compiled(*args, **kwargs)
-    extract.apply_variable_updates((args, kwargs), updates)
+    extract.apply_variable_updates((args, kwargs), updates, fn_name='jit')
     return self.jit_wrapped._maybe_from_tree(out)
 
   @property
@@ -1261,7 +1261,7 @@ class SimpleShardMapFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_specs)
-    extract.check_no_aliases(args=updates, out=out)
+    extract.check_no_aliases('shard_map', args=updates, out=out)
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -1546,7 +1546,7 @@ def shard_map(
             check_aliasing=in_specs is not None,
         )
       out, updates = shard_map_fn(*args, **kwargs)
-      extract.apply_variable_updates(args, updates)
+      extract.apply_variable_updates(args, updates, fn_name='shard_map')
       if graph:
         out = extract.from_tree2(out)
       return out
