@@ -1471,24 +1471,18 @@ def custom_vjp(
   defined by ``custom_vjp``, in the example above we reuse the same ``x_attribute``
   filter to keep ``custom_vjp`` and ``grad`` in sync.
 
-  **graph_updates behavior**
-
-  When ``graph_updates=True`` and ``graph=True``, the ``bwd`` function
-  receives gradients as ``(input_updates_g, out_g)`` where ``input_updates_g`` is a
-  tuple of ``nnx.State`` objects (one per Module argument) representing the gradient
-  of the updated state. Non-Module arguments appear as ``None``. The ``bwd`` function
-  must return tangents with the same structure, using ``State`` objects for Module terms.
-  In this mode, state mutations inside ``f`` are propagated to the inputs.
+  **graph_updates=False**
 
   When ``graph_updates=False`` or ``graph=False``, the behavior is closer to
   ``jax.custom_vjp``: the ``bwd`` function receives ``out_g`` directly, and
-  tangents for Module arguments are Module instances (or clones) with gradient
-  values set on their fields. This mode does not support ``DiffState`` in
-  ``nondiff_argnums``. Additionally, Variables in differentiable arguments cannot
-  not be mutated inside ``f``. If mutations are needed, pass the
-  relevant Variables through a non-differentiable argument instead.
+  tangent types are the same as the input types, this means the tangent for a
+  Module is a Module instance with gradient values set on its attributes.
+  This mode does not support ``DiffState`` in ``nondiff_argnums``. Additionally,
+  Variables in differentiable arguments cannot be mutated inside ``f``. If
+  mutations are needed, pass the relevant Variables through a non-differentiable
+  argument instead.
 
-  Example with ``graph_updates=False``::
+  Example::
 
     >>> @nnx.custom_vjp(graph_updates=False)
     ... def f(m: Foo):
@@ -1503,6 +1497,8 @@ def custom_vjp(
     ...   m_g.x[...] = cos_x * g * m.y
     ...   m_g.y[...] = sin_x * g
     ...   return (m_g,)
+    ...
+    >>> f.defvjp(f_fwd, f_bwd)
 
   Args:
     fun: Callable base function.
