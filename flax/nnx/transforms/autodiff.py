@@ -147,7 +147,7 @@ def _grad_general(
       raise ValueError(
         '`argnums` cannot contain `DiffState` objects '
         'when `graph=False`. '
-        + graphlib._tree_mode_suggestion('grad')
+        + graphlib._tree_mode_suggestion_transform('grad')
       )
 
     gradded_fn = transform(
@@ -1539,7 +1539,7 @@ def custom_vjp(
       raise ValueError(
         '`nondiff_argnums` cannot contain `DiffState` objects '
         'when `graph=False`. '
-        + graphlib._tree_mode_suggestion('custom_vjp')
+        + graphlib._tree_mode_suggestion_transform('custom_vjp')
       )
     return SimpleCustomVjp(fun_unbound, nondiff_argnums, graph=graph)  # type: ignore[arg-type]
 

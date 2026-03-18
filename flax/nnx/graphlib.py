@@ -49,12 +49,23 @@ KeyT = tp.TypeVar('KeyT', bound=Key)
 
 Index = int
 
-def _tree_mode_suggestion(fn_name: str) -> str:
+def _tree_mode_suggestion_api(fn_name: str) -> str:
   return (
     f'Consider the following options:\n\n'
     '1. Remove the duplicates and guarantee a tree structure.\n'
     f'2. Enable graph mode by passing graph=True to {fn_name} e.g.\n\n'
     f'  nnx.{fn_name}(..., graph=True)\n\n'
+    f'3. Use nnx.compat.{fn_name} instead e.g.\n\n'
+    f'  nnx.compat.{fn_name}(...)'
+  )
+
+def _tree_mode_suggestion_transform(fn_name: str) -> str:
+  return (
+    f'Consider the following options:\n\n'
+    '1. Remove the duplicates.\n'
+    f'2. Enable graph mode and graph updates by passing graph=True and '
+    f'graph_updates=True to {fn_name} e.g.\n\n'
+    f'  nnx.{fn_name}(..., graph=True, graph_updates=True)\n\n'
     f'3. Use nnx.compat.{fn_name} instead e.g.\n\n'
     f'  nnx.compat.{fn_name}(...)'
   )
@@ -76,7 +87,7 @@ def _check_valid_pytree(
     msg += (
       f"Pytree subclasses with pytree=False are not registered as "
       f"JAX pytrees and cannot be used in tree-mode. "
-      + _tree_mode_suggestion(fn_name)
+      + _tree_mode_suggestion_api(fn_name)
     )
     raise ValueError(msg)
 
@@ -681,7 +692,7 @@ def _tree_flatten(
           f'  - {seen_variables[var_id]}\n'
           f'  - {str_path}\n\n'
           'Tree mode (graph=False) does not support shared references. '
-          + _tree_mode_suggestion('split')
+          + _tree_mode_suggestion_api('split')
         )
       seen_variables[var_id] = str_path
       return True
@@ -694,7 +705,7 @@ def _tree_flatten(
           f'  - {seen_refs[ref_id]}\n'
           f'  - {str_path}\n\n'
           'Tree mode (graph=False) does not support shared references. '
-          + _tree_mode_suggestion('split')
+          + _tree_mode_suggestion_api('split')
         )
       seen_refs[ref_id] = str_path
     _check_valid_pytree(x, 'flatten', jax.tree_util.keystr(path))
@@ -2975,7 +2986,7 @@ def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
             f'  - {seen_refs[obj_id]}\n'
             f'  - {str_path}\n\n'
             'Tree mode (graph=False) does not support shared references. '
-            + _tree_mode_suggestion('iter_graph')
+            + _tree_mode_suggestion_api('iter_graph')
           )
         seen_refs[obj_id] = str_path
       yield path, current
@@ -2989,7 +3000,7 @@ def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
         f'  - {in_progress[obj_id]}\n'
         f'  - {str_path}\n\n'
         'Cycles are not supported with graph=False. '
-        + _tree_mode_suggestion('iter_graph')
+        + _tree_mode_suggestion_api('iter_graph')
       )
     in_progress[obj_id] = str_path
 
@@ -3183,7 +3194,7 @@ def _recursive_map_tree(
             f'  - {seen_refs[obj_id]}\n'
             f'  - {str_path}\n\n'
             'Tree mode (graph=False) does not support shared references. '
-            + _tree_mode_suggestion('recursive_map')
+            + _tree_mode_suggestion_api('recursive_map')
           )
         seen_refs[obj_id] = str_path
       return f(path, current)
@@ -3196,7 +3207,7 @@ def _recursive_map_tree(
         f'  - {in_progress[obj_id]}\n'
         f'  - {str_path}\n\n'
         'Cycles are not supported with graph=False. '
-        + _tree_mode_suggestion('recursive_map')
+        + _tree_mode_suggestion_api('recursive_map')
       )
     in_progress[obj_id] = str_path
 

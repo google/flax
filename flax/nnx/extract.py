@@ -533,7 +533,16 @@ def check_no_aliases(fn_name: str, /, **kwargs):
         f'  - {seen_path_str}\n'
         f'  - {path_str}\n\n'
         f'nnx.{fn_name} with graph_updates=False does not support '
-        'returning input Variables as outputs.'
+        'returning input Variables as outputs. '
+        f'Consider the following options:\n\n'
+        f'1. Remove the duplicate Variables.\n'
+        f'2. Create new Variables via nnx.clone() and use those instead.\n'
+        f'3. Enable graph mode and graph updates by passing graph=True and '
+        f'graph_updates=True to {fn_name}\n\n'
+        f'  nnx.{fn_name}(..., graph=True, graph_updates=True)\n\n'
+        f'4. Use nnx.compat.{fn_name} (sets graph and graph_updates to True '
+        f'automatically)\n\n'
+        f'  nnx.compat.{fn_name}(...)'
       )
     seen[var_id] = path
 
@@ -590,7 +599,7 @@ def apply_variable_updates(
         f'  - {seen_path_str}\n'
         f'  - {path_str}\n\n'
         f'Tree mode (graph=False) does not support shared references. '
-        + graphlib._tree_mode_suggestion(fn_name)
+        + graphlib._tree_mode_suggestion_transform(fn_name)
       )
     seen[var_id] = path
     if isinstance(update, variablelib.Variable):

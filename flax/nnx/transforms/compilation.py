@@ -368,13 +368,13 @@ def jit(
       raise ValueError(
         '`in_shardings` cannot contain `StateSharding` objects '
         'when `graph=False`. '
-        + graphlib._tree_mode_suggestion('jit')
+        + graphlib._tree_mode_suggestion_transform('jit')
       )
     if any(isinstance(x, StateSharding) for x in jax.tree.leaves(out_shardings)):
       raise ValueError(
         '`out_shardings` cannot contain `StateSharding` objects '
         'when `graph=False`. '
-        + graphlib._tree_mode_suggestion('jit')
+        + graphlib._tree_mode_suggestion_transform('jit')
       )
 
   wrapped_cls: tp.Any
