@@ -192,6 +192,30 @@ class TestSPMD(parameterized.TestCase):
     self.assertEqual(badds, [(0, 'layers'), (0, 'layers')])
     self.assertEqual(bremoves, [(0, 'layers')])
 
+  def test_transform_metadata_decorator(self):
+    v = nnx.Param(
+      jnp.array(0),
+      out_sharding=('din', 'dout'),
+      eager_sharding=False,
+    )
+
+    @nnx.transform_metadata(in_axes=0, out_axes=1, partition='din')
+    def f(v):
+      v[...] += 1
+      self.assertEqual(v.out_sharding, ('dout',))
+      v2 = nnx.Param(
+        jnp.array(10),
+        out_sharding=('dmid', 'dout'),
+        eager_sharding=False,
+      )
+      return v2
+
+    v2 = f(v)
+    self.assertEqual(v.out_sharding, ('din', 'dout'))
+    self.assertEqual(v[...], 1)
+    self.assertEqual(v2.out_sharding, ('dmid', 'din', 'dout'))
+    self.assertEqual(v2[...], 10)
+
 
   @parameterized.product(use_eager_sharding=[True, False])
   def test_eager_sharding_context(self, use_eager_sharding):

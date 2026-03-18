@@ -69,7 +69,12 @@ def remove_axis(
 
   def remove_field(fields, index, value):
     iterable = list(fields)
-    assert iterable.pop(index) == value
+    removed = iterable.pop(index)
+    if removed != value:
+      raise ValueError(
+        f'Expected to remove {value!r} at index {index} from '
+        f'{fields!r}, but found {removed!r}.'
+      )
     return tuple(iterable)
 
   def _remove_axis(x: tp.Any):

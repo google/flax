@@ -60,6 +60,94 @@ class Carry:
 
 
 # -------------------------------
+# transform_metadata
+# -------------------------------
+def _apply_axis_fn(
+    tree: tp.Any,
+    axes: tp.Any,
+    metadata: tp.Mapping[str, tp.Any],
+    axis_fn: tp.Callable[..., tp.Any],
+) -> None:
+  is_leaf = lambda x: x is None or isinstance(x, variablelib.Variable)
+  _, per_leaf_axes = extract.broadcast_prefix2(axes, tree, is_leaf=is_leaf)
+  leaves = jax.tree_util.tree_leaves(tree, is_leaf=is_leaf)
+  for leaf, axis in zip(leaves, per_leaf_axes):
+    if isinstance(axis, int) and isinstance(leaf, variablelib.Variable):
+      axis_fn(leaf, axis, metadata)
+
+
+@tp.overload
+def transform_metadata(
+    *,
+    in_axes: tp.Any = 0,
+    out_axes: tp.Any = 0,
+    partition: str,
+    graph: bool | None = None,
+) -> tp.Callable[[F], F]:
+  ...
+
+
+@tp.overload
+def transform_metadata(
+    f: F,
+    *,
+    in_axes: tp.Any = 0,
+    out_axes: tp.Any = 0,
+    graph: bool | None = None,
+    partition: str,
+) -> F:
+  ...
+
+
+def transform_metadata(
+    f: F | type[Missing] = Missing,
+    *,
+    in_axes: tp.Any = 0,
+    out_axes: tp.Any = 0,
+    graph: bool | None = None,
+    partition: str,
+) -> F | tp.Callable[[F], F]:
+  if f is Missing:
+    return functools.partial(
+        transform_metadata,
+        in_axes=in_axes,
+        out_axes=out_axes,
+        partition=partition,
+        graph=graph,
+    )  # type: ignore[return-value]
+
+  if graph is None:
+    graph = graphlib.set_graph_mode.current_value()
+
+  metadata: tp.Mapping[str, tp.Any] = {
+      spmd.PARTITION_NAME: partition,
+  }
+
+  @functools.wraps(f)
+  def wrapper(*in_args, **in_kwargs):
+    in_args = resolve_kwargs(f, in_args, in_kwargs)
+    if graph:
+      in_args = extract.to_tree2(in_args, prefix=in_axes)
+    args = graphlib.clone(in_args, graph=graph)
+    _apply_axis_fn(args, in_axes, metadata, spmd.remove_axis)
+    updates, snapshot = extract.updates_and_snapshot(args)
+    if graph:
+      args = extract.from_tree2(args)
+    out = f(*args)
+    if graph:
+      out = extract.to_tree2(out, prefix=out_axes)
+    _apply_axis_fn(args, in_axes, metadata, spmd.add_axis)
+    _apply_axis_fn(out, out_axes, metadata, spmd.add_axis)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    extract.apply_variable_updates(in_args, updates)
+    if graph:
+      out = extract.from_tree2(out)
+    return out
+
+  return wrapper  # type: ignore[return-value]
+
+
+# -------------------------------
 # vmap
 # -------------------------------
 

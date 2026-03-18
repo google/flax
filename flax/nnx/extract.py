@@ -187,7 +187,6 @@ def broadcast_prefix(
   )
   return result
 
-
 def broadcast_prefix2(
   prefix_tree: tp.Any,
   full_tree: tp.Any,

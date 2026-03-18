@@ -193,6 +193,7 @@ from .transforms.transforms import checkify as checkify
 from .transforms.iteration import while_loop as while_loop
 from .transforms.iteration import fori_loop as fori_loop
 from .transforms.iteration import StateAxes as StateAxes
+from .transforms.iteration import transform_metadata as transform_metadata
 from .variablelib import A as A
 from .variablelib import BatchStat as BatchStat
 from .variablelib import Cache as Cache
