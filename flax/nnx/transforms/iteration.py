@@ -128,6 +128,7 @@ def transform_metadata(
     in_args = resolve_kwargs(f, in_args, in_kwargs)
     if graph:
       in_args = extract.to_tree2(in_args, prefix=in_axes)
+    extract.check_no_aliases('transform_metadata', args=in_args)
     args = graphlib.clone(in_args, graph=graph)
     _apply_axis_fn(args, in_axes, metadata, spmd.remove_axis)
     updates, snapshot = extract.updates_and_snapshot(args)
@@ -136,10 +137,11 @@ def transform_metadata(
     out = f(*args)
     if graph:
       out = extract.to_tree2(out, prefix=out_axes)
+    extract.check_no_aliases('transform_metadata', args=updates, out=out)
     _apply_axis_fn(args, in_axes, metadata, spmd.add_axis)
     _apply_axis_fn(out, out_axes, metadata, spmd.add_axis)
     updates = extract.mask_variable_updates(updates, snapshot)
-    extract.apply_variable_updates(in_args, updates, fn_name='transform_metadata')
+    extract.apply_variable_updates(in_args, updates)
     if graph:
       out = extract.from_tree2(out)
     return out
@@ -524,8 +526,9 @@ def vmap(
             else None,
             check_aliasing=in_axes is not None,
         )
+      extract.check_no_aliases('vmap', args=args, kwargs=kwargs)
       out, updates = vmapped_fn(*args, **kwargs)
-      extract.apply_variable_updates((args, kwargs), updates, fn_name='vmap')
+      extract.apply_variable_updates((args, kwargs), updates)
       if graph:
         out = extract.from_tree2(out)
       return out
@@ -791,8 +794,9 @@ def pmap(
             else None,
             check_aliasing=in_axes is not None,
         )
+      extract.check_no_aliases('pmap', args=args, kwargs=kwargs)
       out, updates = pmapped_fn(*args, **kwargs)
-      extract.apply_variable_updates((args, kwargs), updates, fn_name='pmap')
+      extract.apply_variable_updates((args, kwargs), updates)
       if graph:
         out = extract.from_tree2(out)
       return out
@@ -1668,6 +1672,8 @@ def _simple_scan(
     if graph:
       args = extract.to_tree2(args, prefix=in_axes)
 
+    extract.check_no_aliases('scan', args=args)
+
     result = pure_jax_fancy_scan(
       simple_scan_fn,
       *args,
@@ -1687,7 +1693,7 @@ def _simple_scan(
       out, updates = result
 
     masked_args = extract.mask_at(args, carry_arg_index)
-    extract.apply_variable_updates(masked_args, updates, fn_name='scan')
+    extract.apply_variable_updates(masked_args, updates)
 
     if carry_arg_index is not None:
       carry_in = args[carry_arg_index]

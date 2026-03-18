@@ -571,9 +571,10 @@ class SimpleJitWrapped(tp.Generic[P, R]):
 
   def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
     args, kwargs = self._maybe_to_tree(args, kwargs)
+    extract.check_no_aliases('jit', args=args, kwargs=kwargs)
     out, updates = self.jitted_fn(*self.partial_args, *args, **kwargs)
     extract.apply_variable_updates(
-        ((*self.partial_args, *args), kwargs), updates, fn_name='jit')
+        ((*self.partial_args, *args), kwargs), updates)
     return self._maybe_from_tree(out)
 
   def __get__(self, obj, objtype=None):
@@ -1149,8 +1150,9 @@ class SimpleCompiled(Stage):
 
   def __call__(self, *args, **kwargs):
     args, kwargs = self.jit_wrapped._maybe_to_tree(args, kwargs)
+    extract.check_no_aliases('jit', args=args, kwargs=kwargs)
     out, updates = self.compiled(*args, **kwargs)
-    extract.apply_variable_updates((args, kwargs), updates, fn_name='jit')
+    extract.apply_variable_updates((args, kwargs), updates)
     return self.jit_wrapped._maybe_from_tree(out)
 
   @property
@@ -1545,8 +1547,9 @@ def shard_map(
             prefix=in_specs,
             check_aliasing=in_specs is not None,
         )
+      extract.check_no_aliases('shard_map', args=args)
       out, updates = shard_map_fn(*args, **kwargs)
-      extract.apply_variable_updates(args, updates, fn_name='shard_map')
+      extract.apply_variable_updates(args, updates)
       if graph:
         out = extract.from_tree2(out)
       return out

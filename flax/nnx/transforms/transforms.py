@@ -434,10 +434,11 @@ def checkify(
     def simple_checkify_wrapper(*args):
       if graph:
         args = extract.to_tree2(args)
+      extract.check_no_aliases('checkify', args=args)
       error, (out, updates) = checkify_fn(*args)
       if graph:
         out = extract.from_tree2(out)
-      extract.apply_variable_updates(args, updates, fn_name='checkify')
+      extract.apply_variable_updates(args, updates)
       return error, out
 
     return simple_checkify_wrapper  # type: ignore
@@ -519,6 +520,7 @@ def cond(
   if not graph or not graph_updates:
     if graph:
       operands = extract.to_tree2(operands)
+    extract.check_no_aliases('cond', operands=operands)
     out, updates = jax.lax.cond(
       pred,
       SimpleCondFn(true_fun, graph=graph),
@@ -527,7 +529,7 @@ def cond(
     )
     if graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(operands, updates, fn_name='cond')
+    extract.apply_variable_updates(operands, updates)
     return out
 
   @general.split_inputs(ctxtag='cond')
@@ -573,6 +575,7 @@ def switch(
   if not graph or not graph_updates:
     if graph:
       operands = extract.to_tree2(operands)
+    extract.check_no_aliases('switch', operands=operands)
     out, updates = jax.lax.switch(
       index,
       [SimpleCondFn(f, graph=graph) for f in branches],
@@ -580,7 +583,7 @@ def switch(
     )
     if graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(operands, updates, fn_name='switch')
+    extract.apply_variable_updates(operands, updates)
     return out
 
   @general.split_inputs(ctxtag='switch')

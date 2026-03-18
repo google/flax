@@ -580,29 +580,14 @@ def mask_variable_updates(
   )
 
 
-def apply_variable_updates(
-  args_tree: A, updates_tree: A, *, fn_name: str,
-) -> None:
+def apply_variable_updates(args_tree: A, updates_tree: A):
   is_leaf = lambda x: isinstance(x, variablelib.Variable) or isinstance(x, Mask)
-  args_leaves, treedef = jax.tree.flatten_with_path(args_tree, is_leaf=is_leaf)
+  args_leaves = jax.tree.leaves(args_tree, is_leaf=is_leaf)
+  _, treedef = jax.tree.flatten(args_tree, is_leaf=is_leaf)
   updates_leaves = treedef.flatten_up_to(updates_tree)
-  seen: dict[int, jax.tree_util.KeyPath] = {}
-  for (path, variable), update in zip(args_leaves, updates_leaves):
-    if not isinstance(variable, variablelib.Variable):
-      continue
-    var_id = id(variable)
-    if var_id in seen:
-      path_str = jax.tree_util.keystr(path)
-      seen_path_str = jax.tree_util.keystr(seen[var_id])
-      raise ValueError(
-        f'Duplicate {variable}\nfound at paths:\n\n'
-        f'  - {seen_path_str}\n'
-        f'  - {path_str}\n\n'
-        f'Tree mode (graph=False) does not support shared references. '
-        + graphlib._tree_mode_suggestion_transform(fn_name)
-      )
-    seen[var_id] = path
+  for variable, update in zip(args_leaves, updates_leaves, strict=True):
     if isinstance(update, variablelib.Variable):
+      assert isinstance(variable, variablelib.Variable)
       variable.update_from_state(update)
 
 

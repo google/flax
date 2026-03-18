@@ -1,7 +1,7 @@
 # Tree Mode NNX
 
-Mar 4, 2026,  
-Cristian Garcia, Flax Team 
+Mar 4, 2026
+Cristian Garcia, Samuel Anklesaria, Flax Team
 
 ## Motivation
 
@@ -67,6 +67,7 @@ These new transforms are highly simplified compared to current transforms, they 
 ```py
 def transform_wrapper(*args):
   if graph: args = to_tree(args)
+  check_no_aliases(args=args)
   
   @jax_transform
   def transformed_f(*args):
@@ -122,6 +123,7 @@ Code that relies on prefix filters such as StateAxes, StateSharding, and DiffSta
 ```py
 # previous code
 state_axes = nnx.StateAxes({some_filter: 0, ...: None})
+
 @nnx.vmap(in_axis=state_axes, graph=True, graph_updates=True)
 def f(model):
   ...
@@ -184,7 +186,7 @@ def loss_fn(model: Foo):
 grads: Foo = nnx.grad(loss_fn)(model)
 ```
 
-### nnx.custom\_vjp
+### nnx.custom_vjp
 
 Previously `nnx.custom_vjp` did two particular things:
 
@@ -242,12 +244,13 @@ Previously NNX transforms like `vmap` and `scan` had a `transform_metadata` meta
 @nnx.vmap(in_axes=0, out_axes=0, transform_metadata={nnx.PARTITION_NAME: 'din'})
 class create_stack(rngs):  # 'din' added to out_sharding metadata
   return nnx.Variable(rngs.uniform((16,)), out_sharding=('dout',))
+
 v_stack = create_stack(nnx.Rngs(0))
 assert v_stack.shape == (8, 16)
 assert v_stack.out_shardings == ('din', 'dout')
 ```
 
-The new simplified NNX transform implementations don’t support this argument. However, to keep supporting the behavior, a new `nnx.transform_metadata` transform is introduced that can be inserted to get back the same results.
+The new simplified NNX transform implementations don’t support this argument. However, to keep supporting the behavior, a new `nnx.transform_metadata` transform is introduced that can be inserted to get back the same results. TODO: mention it works on `jax.vmap`.
 
 ```py
 # new code
@@ -256,9 +259,82 @@ The new simplified NNX transform implementations don’t support this argument. 
 @nnx.transform_metadata(in_axes=0, out_axes=0, partition='din')
 class create_stack(rngs):  # 'din' added to out_sharding metadata
   return nnx.Variable(rngs.uniform((16,)), out_sharding=('dout',))
+
 v_stack = create_stack(nnx.Rngs(0))
 assert v_stack.shape == (8, 16)
 assert v_stack.out_shardings == ('din', 'dout')
 ```
 
 `transform_metada` accepts `in_axes` and `out_axes`, these should match the values passed to the corresponding transform.
+
+### Module.sow
+
+Previously, `Module.sow` used graph updates to capture intermediate values during computations and propagate them outside, it was used in conjunction with `nnx.pop` to log and extract intermediates:
+
+```py
+# old code
+class Foo(nnx.Module):
+  def __call__(self, x):
+    self.sow(nnx.Intermediate, "y_mean", jnp.mean(x))
+    return x
+
+model = Foo()
+result = model(x)
+intermediates = nnx.pop(model, nnx.Intermediate) # extract intermediate values
+```
+
+To achieve the same without graph updates we’ve added a new `nnx.capture` API which allows for a similar workflow.
+
+```py
+# New Code
+class Foo(nnx.Module):
+  def __call__(self, x):
+    self.sow(nnx.Intermediate, "y_mean", jnp.mean(x))
+    return x
+
+model = Foo()
+result, intermediates = nnx.capture(model, nnx.Intermediate)(x)
+```
+
+In general, `nnx.capture` takes a function or Module to be transformed, a `nnx.Variable` subclass to collect, and an optional `init` argument to initialize the collected state, which will be stored within `nnx.Variable` objects. `nnx.capture` creates a `__captures__: tuple[Variable, ...]` attribute on each `Module` instance, each Variable in `__captures__` contains a dictionary which `sow` and `perturb` populate.
+
+### Module.perturb
+
+Similarly, `Module.perturb` was previously used to extract the gradients of intermediate values. This was done in two steps: initializing a perturbation state by running a module once, and then passing the perturbation state as a differentiable target to `grad`.
+
+```py
+class Model(nnx.Module):
+  def __call__(self, x):
+    x = self.perturb('grad_of_x', x)
+    ...
+    return y
+
+# old code
+@nnx.jit
+def train_step(model, optimizer, x, y):
+  model(x) # Initialize perturbation state
+  def loss_fn(model):
+    y_pred = model(x)
+    return jnp.mean((y_pred - y) ** 2)
+  diff_state = nnx.DiffState(0, (nnx.Param, nnx.Perturbation))
+  grads = nnx.grad(loss_fn, argnums=diff_state)(model)
+  grads, interm_grads = nnx.state(grads, nnx.Param, nnx.Perturbation)
+  optimizer.update(model, grads)
+  nnx.pop(model, nnx.Perturbation) # clean up perturbations
+  return interm_grads
+```
+
+Similar pattern can be used with  `nnx.capture` during both perturbation initialization and when running the forward pass to insert the differentiable perturbations state. In this version explicitly pass the `perturbs` state as a separate argument and use `argnums` to specify that both arguments are differentiable:
+
+```py
+# new code
+@nnx.jit
+def train_step(model, optimizer, x, y):
+  _, perturbs = nnx.capture(model, nnx.Perturbation)(x) # init perturbations
+  def loss_fn(model, perturbs):
+    y_pred = nnx.capture(model, init=perturbs)(x)
+    return jnp.mean((y_pred - y) ** 2)
+  grads, interm_grads = nnx.grad(loss_fn, argnums=(0, 1))(model, perturbs)
+  optimizer.update(model, grads)
+  return interm_grads
+```

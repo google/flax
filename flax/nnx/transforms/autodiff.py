@@ -168,6 +168,8 @@ def _grad_general(
           (args, kwargs), prefix=(args_prefix, False),
         )
 
+      extract.check_no_aliases('grad', args=args, kwargs=kwargs)
+
       fn_out = gradded_fn(*args, **kwargs)
 
       if return_value:
@@ -189,7 +191,7 @@ def _grad_general(
           if graph: grads = extract.from_tree2(grads)
           result = grads
 
-      extract.apply_variable_updates((args, kwargs), updates, fn_name='grad')
+      extract.apply_variable_updates((args, kwargs), updates)
       return result
 
     return tree_grad_wrapper
@@ -691,6 +693,7 @@ def vjp(
 
   if graph:
     primals = extract.to_tree2(primals)
+  extract.check_no_aliases('vjp', primals=primals)
   primals_out, vjp_fn, aux = jax.vjp(
     SimpleVjpFn(f_unbound, has_aux=has_aux, graph=graph),
     *primals,
@@ -706,7 +709,7 @@ def vjp(
     raw_vjp_fn = vjp_fn
     def vjp_fn(g):
       return extract.from_tree2(raw_vjp_fn(g))
-  extract.apply_variable_updates(primals, updates, fn_name='vjp')
+  extract.apply_variable_updates(primals, updates)
   if has_aux:
     return primals_out, vjp_fn, user_aux
   else:
@@ -865,6 +868,8 @@ def jvp(
   if graph:
     primals = extract.to_tree2(primals)
     tangents = extract.to_tree2(tangents)
+  extract.check_no_aliases('jvp', primals=primals)
+  extract.check_no_aliases('jvp', tangents=tangents)
   if has_aux:
     (primals_out, updates), (tangent_out, _updates_tangent), aux = jax.jvp(
       SimpleJvpFn(f_unbound, has_aux=True, graph=graph),
@@ -881,7 +886,7 @@ def jvp(
   if graph:
     primals_out = extract.from_tree2(primals_out)
     tangent_out = extract.from_tree2(tangent_out)
-  extract.apply_variable_updates(primals, updates, fn_name='jvp')
+  extract.apply_variable_updates(primals, updates)
   if has_aux:
     return primals_out, tangent_out, aux
   else:
@@ -982,6 +987,7 @@ class SimpleCustomVjp(tp.Generic[A]):
         i not in self.nondiff_argnums for i in range(len(args))
       )
       args = extract.to_tree2(args, prefix=prefix)
+    extract.check_no_aliases('custom_vjp', args=args)
     (out, updates) = self.custom_vjp_fn(*args)
     # check that differentiable arguments were not mutated
     diff_argnums = tuple(
@@ -1007,7 +1013,7 @@ class SimpleCustomVjp(tp.Generic[A]):
         )
     if self.graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(args, updates, fn_name='custom_vjp')
+    extract.apply_variable_updates(args, updates)
     return out
 
   def defvjp(
@@ -1661,10 +1667,11 @@ def remat(
     def simple_remat_wrapper(*args, **kwargs):
       if graph:
         args, kwargs = extract.to_tree2((args, kwargs))
+      extract.check_no_aliases('remat', args=args, kwargs=kwargs)
       out, updates = checkpointed_fn(*args, **kwargs)
       if graph:
         out = extract.from_tree2(out)
-      extract.apply_variable_updates((args, kwargs), updates, fn_name='remat')
+      extract.apply_variable_updates((args, kwargs), updates)
       return out
 
     return simple_remat_wrapper  # type: ignore[return-value]
