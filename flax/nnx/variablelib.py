@@ -1661,10 +1661,6 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
   def set_value(self, value: A, *, index: tp.Any = MISSING):
     value = jax.tree.map(lambda x: x, value)  # make a copy
-    if isinstance(value, Variable):
-      raise ValueError(
-        'Cannot set value to a Variable, use `copy_from` method instead'
-      )
     if 'on_set_value' in self._var_metadata:
       value = self._var_metadata['on_set_value'](self, value)
     # update _raw_value
@@ -1734,6 +1730,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       value = jax.new_ref(value)
       new_metadata['ref'] = True
 
+    value = jax.tree.map(lambda x: x, value)  # make a copy
     obj = self.from_metadata(value, new_metadata)
     return obj
 
@@ -2145,7 +2142,8 @@ class Cache(Variable[A]):
 
 class Intermediate(Variable[A]):
   """:class:`Variable` type that is typically used for
-  :func:`Module.sow`::
+  :func:`Module.sow`. Use :func:`nnx.capture` to retrieve
+  the sowed values::
 
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
@@ -2162,8 +2160,8 @@ class Intermediate(Variable[A]):
     >>> model = Model(rngs=nnx.Rngs(0))
 
     >>> x = jnp.ones((1, 2))
-    >>> y = model(x)
-    >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Intermediate))
+    >>> y, intms = nnx.capture(model, nnx.Intermediate)(x)
+    >>> jax.tree.map(jnp.shape, intms)
     State({
       'i': Intermediate(
         value=((1, 3),)
@@ -2176,7 +2174,8 @@ class Intermediate(Variable[A]):
 
 class Perturbation(Intermediate[A]):
   """:class:`Variable` type that is typically used for
-  :func:`Module.perturb`::
+  :func:`Module.perturb`. Use :func:`nnx.capture` to retrieve
+  the perturbation values::
 
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
@@ -2193,8 +2192,8 @@ class Perturbation(Intermediate[A]):
     >>> model = Model(rngs=nnx.Rngs(0))
 
     >>> x = jnp.ones((1, 2))
-    >>> y = model(x)
-    >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Perturbation))
+    >>> y, perturbations = nnx.capture(model, nnx.Perturbation)(x)
+    >>> jax.tree.map(jnp.shape, perturbations)
     State({
       'i': Perturbation(
         value=(1, 3)

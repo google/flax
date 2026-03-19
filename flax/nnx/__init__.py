@@ -49,6 +49,7 @@ from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
 from .module import Module as Module
+from .module import capture as capture
 from .module import view as view
 from .module import view_info as view_info
 from .module import with_attributes as with_attributes
