@@ -72,7 +72,9 @@ def _apply_axis_fn(
   _, per_leaf_axes = extract.broadcast_prefix2(axes, tree, is_leaf=is_leaf)
   leaves = jax.tree_util.tree_leaves(tree, is_leaf=is_leaf)
   for leaf, axis in zip(leaves, per_leaf_axes):
-    if isinstance(axis, int) and isinstance(leaf, variablelib.Variable):
+    if (axis is None or isinstance(axis, int)) and isinstance(
+        leaf, variablelib.Variable
+    ):
       axis_fn(leaf, axis, metadata)
 
 

@@ -716,24 +716,45 @@ class TestTreeJIT(parameterized.TestCase):
     out = f(donated, not_donated)
     np.testing.assert_allclose(out, 3.0)
 
-  @parameterized.parameters(
-    (True, False), (False, False),
-  )
-  def test_jit_partial_basic(self, graph_mode, graph_updates):
+  @parameterized.parameters(True, False)
+  def test_jit_partial_basic(self, graph_mode):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
     def f(m, x):
       return m(x)
 
-    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=graph_updates)
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=False)
     x = jnp.ones((1, 2))
     y = f_jit(x)
     self.assertEqual(y.shape, (1, 3))
 
-  @parameterized.parameters(
-    (True, False), (False, False),
-  )
-  def test_jit_partial_variable_update(self, graph_mode, graph_updates):
+  @parameterized.parameters(True, False)
+  def test_jit_partial_lower_compile(self, graph_mode):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.count = nnx.Variable(jnp.array(0))
+        self.w = nnx.Param(jnp.ones((2, 3)))
+
+    m = Foo()
+
+    def f(m, x):
+      m.count[...] += 1
+      return x @ m.w[...]
+
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=False)
+    compiled = f_jit.lower(jnp.ones((1, 2))).compile()
+
+    x = jnp.ones((1, 2))
+    y = compiled(x)
+    self.assertEqual(y.shape, (1, 3))
+    np.testing.assert_allclose(y, jnp.ones((1, 3)) * 2)
+    self.assertEqual(m.count[...], 1)
+
+    y = compiled(x)
+    self.assertEqual(m.count[...], 2)
+
+  @parameterized.parameters(True, False)
+  def test_jit_partial_variable_update(self, graph_mode):
     class Foo(nnx.Module):
       def __init__(self):
         self.count = nnx.Variable(jnp.array(0))
@@ -744,32 +765,28 @@ class TestTreeJIT(parameterized.TestCase):
       m.count[...] += 1
       return x * 2
 
-    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=graph_updates)
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=False)
     y = f_jit(jnp.array(3.0))
     np.testing.assert_allclose(y, 6.0)
     self.assertEqual(m.count[...], 1)
     y = f_jit(jnp.array(3.0))
     self.assertEqual(m.count[...], 2)
 
-  @parameterized.parameters(
-    (True, False), (False, False),
-  )
-  def test_jit_partial_multiple_args(self, graph_mode, graph_updates):
+  @parameterized.parameters(True, False)
+  def test_jit_partial_multiple_args(self, graph_mode):
     m1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     m2 = nnx.Linear(3, 4, rngs=nnx.Rngs(1))
 
     def f(m1, m2, x):
       return m2(m1(x))
 
-    f_jit = nnx.jit_partial(f, m1, m2, graph=graph_mode, graph_updates=graph_updates)
+    f_jit = nnx.jit_partial(f, m1, m2, graph=graph_mode, graph_updates=False)
     x = jnp.ones((1, 2))
     y = f_jit(x)
     self.assertEqual(y.shape, (1, 4))
 
-  @parameterized.parameters(
-    (True, False), (False, False),
-  )
-  def test_jit_partial_no_retrace(self, graph_mode, graph_updates):
+  @parameterized.parameters(True, False)
+  def test_jit_partial_no_retrace(self, graph_mode):
     n = 0
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
@@ -778,17 +795,15 @@ class TestTreeJIT(parameterized.TestCase):
       n += 1
       return m(x)
 
-    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=graph_updates)
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=False)
     x = jnp.ones((1, 2))
     f_jit(x)
     self.assertEqual(n, 1)
     f_jit(x)
     self.assertEqual(n, 1)
 
-  @parameterized.parameters(
-    (True, False), (False, False),
-  )
-  def test_jit_partial_no_retrace_after_mutation(self, graph_mode, graph_updates):
+  @parameterized.parameters(True, False)
+  def test_jit_partial_no_retrace_after_mutation(self, graph_mode):
     n = 0
 
     class Foo(nnx.Module):
@@ -802,7 +817,7 @@ class TestTreeJIT(parameterized.TestCase):
       n += 1
       return x @ m.w[...]
 
-    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=graph_updates)
+    f_jit = nnx.jit_partial(f, m, graph=graph_mode, graph_updates=False)
     x = jnp.ones((1, 2))
     f_jit(x)
     self.assertEqual(n, 1)
@@ -811,18 +826,14 @@ class TestTreeJIT(parameterized.TestCase):
     self.assertEqual(n, 1)
     np.testing.assert_allclose(y, jnp.zeros((1, 3)))
 
-  @parameterized.parameters(
-    (True, False), (False, False),
-  )
-  def test_jit_partial_no_partial_args(self, graph_mode, graph_updates):
-    f_partial = nnx.jit_partial(lambda x: x * 2, graph=graph_mode, graph_updates=graph_updates)
+  @parameterized.parameters(True, False)
+  def test_jit_partial_no_partial_args(self, graph_mode):
+    f_partial = nnx.jit_partial(lambda x: x * 2, graph=graph_mode, graph_updates=False)
     y = f_partial(jnp.array(3.0))
     np.testing.assert_allclose(y, 6.0)
 
-  @parameterized.parameters(
-    (False, False),
-  )
-  def test_jit_partial_in_shardings_none_broadcast(self, graph_mode, graph_updates):
+  @parameterized.parameters((False,))
+  def test_jit_partial_in_shardings_none_broadcast(self, graph_mode):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
@@ -832,15 +843,13 @@ class TestTreeJIT(parameterized.TestCase):
     def f(m, x):
       return m(x)
 
-    f_jit = nnx.jit_partial(f, m, in_shardings=(None, None), graph=graph_mode, graph_updates=graph_updates)
+    f_jit = nnx.jit_partial(f, m, in_shardings=(None, None), graph=graph_mode, graph_updates=False)
     x = jnp.ones((n_devices, 4))
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 3))
 
-  @parameterized.parameters(
-    (False, False),
-  )
-  def test_jit_partial_in_shardings_named(self, graph_mode, graph_updates):
+  @parameterized.parameters((False,))
+  def test_jit_partial_in_shardings_named(self, graph_mode):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
@@ -854,15 +863,14 @@ class TestTreeJIT(parameterized.TestCase):
     x_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
     v_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
     f_jit = nnx.jit_partial(
-        f, v, in_shardings=(v_sharding, x_sharding), graph=graph_mode, graph_updates=graph_updates)
+        f, v, in_shardings=(v_sharding, x_sharding), graph=graph_mode,
+        graph_updates=False)
     x = jnp.ones((n_devices, 4))
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 4))
 
-  @parameterized.parameters(
-    (False, False),
-  )
-  def test_jit_partial_mixed_shardings(self, graph_mode, graph_updates):
+  @parameterized.parameters((False,))
+  def test_jit_partial_mixed_shardings(self, graph_mode):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
@@ -876,15 +884,14 @@ class TestTreeJIT(parameterized.TestCase):
 
     x_sharding = jax.sharding.NamedSharding(mesh, PS('data'))
     f_jit = nnx.jit_partial(
-        f, m1, m2, in_shardings=(None, None, x_sharding), graph=graph_mode, graph_updates=graph_updates)
+        f, m1, m2, in_shardings=(None, None, x_sharding), graph=graph_mode,
+        graph_updates=False)
     x = jnp.ones((n_devices, 4))
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 2))
 
-  @parameterized.parameters(
-    (True, False), (False, False),
-  )
-  def test_jit_partial_in_shardings_non_tuple(self, graph_mode, graph_updates):
+  @parameterized.parameters(True, False)
+  def test_jit_partial_in_shardings_non_tuple(self, graph_mode):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
     mesh = jax.sharding.Mesh(devices, ('data',))
@@ -896,15 +903,13 @@ class TestTreeJIT(parameterized.TestCase):
       return m(x)
 
     sharding = jax.sharding.NamedSharding(mesh, PS())
-    f_jit = nnx.jit_partial(f, m, in_shardings=sharding, graph=graph_mode, graph_updates=graph_updates)
+    f_jit = nnx.jit_partial(f, m, in_shardings=sharding, graph=graph_mode, graph_updates=False)
     x = jnp.ones((n_devices, 4))
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 3))
 
-  @parameterized.parameters(
-    (True, False), (False, False),
-  )
-  def test_jit_partial_train_step(self, graph_mode, graph_updates):
+  @parameterized.parameters(True, False)
+  def test_jit_partial_train_step(self, graph_mode):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=nnx.Param)
 
@@ -915,7 +920,7 @@ class TestTreeJIT(parameterized.TestCase):
       optimizer.update(model, grads)
       return loss
 
-    train_step_fn = nnx.jit_partial(train_step, model, optimizer, graph=graph_mode, graph_updates=graph_updates)
+    train_step_fn = nnx.jit_partial(train_step, model, optimizer, graph=graph_mode, graph_updates=False)
     for _ in range(2):
       x, y = jnp.ones((10, 2)), jnp.ones((10, 3))
       loss = train_step_fn(x, y)
