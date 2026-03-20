@@ -122,10 +122,31 @@ class TestHelpers(absltest.TestCase):
 
     del d['a']
     self.assertEqual(len(d), 2)
-    with self.assertRaises(AttributeError):
+    with self.assertRaises(KeyError):
       _ = d['a']
 
     self.assertSetEqual(set(d), {'b', 'c'})
+
+  def test_dict_setdefault(self):
+    d = nnx.Dict({'a': 1, 'b': 2})
+    self.assertEqual(d.setdefault('a', 10), 1)
+    self.assertEqual(d['a'], 1)
+
+    self.assertEqual(d.setdefault('c', 3), 3)
+    self.assertEqual(d['c'], 3)
+    self.assertEqual(len(d), 3)
+
+  def test_dict_contains(self):
+    d = nnx.Dict({'a': 1, 'b': 2})
+    self.assertIn('a', d)
+    self.assertIn('b', d)
+    self.assertNotIn('c', d)
+
+    d['c'] = 3
+    self.assertIn('c', d)
+
+    del d['a']
+    self.assertNotIn('a', d)
 
   def test_list_mutable_sequence(self):
     l = nnx.List([1, 2, 3])
