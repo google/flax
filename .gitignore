@@ -12,6 +12,7 @@ build/
 /.devcontainer
 docs*/**/_autosummary
 docs*/_build
+docs*/_collections
 docs*/**/tmp
 flaxlib_src/build
 flaxlib_src/builddir
