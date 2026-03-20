@@ -13,6 +13,7 @@ jupytext:
 Flax NNX uses the stateful `nnx.Rngs` class to simplify Jax's handling of random states. For example, the code below uses a `nnx.Rngs` object to define a simple linear model with dropout:
 
 ```{code-cell} ipython3
+import jax
 from flax import nnx
 
 class Model(nnx.Module):
@@ -56,7 +57,7 @@ To create an `nnx.Rngs` object you can simply pass an integer seed or `jax.rando
 Here's an example:
 
 ```{code-cell} ipython3
-rngs = nnx.Rngs(params=0, dropout=random.key(1))
+rngs = nnx.Rngs(params=0, dropout=jax.random.key(1))
 nnx.display(rngs)
 ```
 
@@ -149,11 +150,11 @@ z1 = rngs.normal((2, 3))                 # generates key from rngs.default
 z2 = rngs.params.bernoulli(0.5, (10,)) # generates key from rngs.params
 ```
 
-## Forking random state
+## Split random state
 
 +++
 
-Say you want to train a model that uses dropout on a batch of data. You don't want to use the same random state for every dropout mask in your batch.  Instead, you want to fork the random state into separate pieces for each layer. This can be accomplished with the `fork` method, as shown below.
+Say you want to train a model that uses dropout on a batch of data. You don't want to use the same random state for every dropout mask in your batch.  Instead, you want to split the random state into separate pieces for each layer. This can be accomplished with the `split` method, as shown below.
 
 ```{code-cell} ipython3
 class Model(nnx.Module):
@@ -177,15 +178,15 @@ def model_forward(model, x, rngs):
 
 ```{code-cell} ipython3
 dropout_rngs = nnx.Rngs(1)
-forked_rngs = dropout_rngs.fork(split=5)
-(dropout_rngs, forked_rngs)
+split_rngs = dropout_rngs.split(5)
+(dropout_rngs, split_rngs)
 ```
 
 ```{code-cell} ipython3
-model_forward(model, jnp.ones((5, 20)), forked_rngs).shape
+model_forward(model, jnp.ones((5, 20)), split_rngs).shape
 ```
 
-The output of `rng.fork` is another `Rng` with keys and counts that have an expanded shape. In the example above, the `RngKey` and `RngCount` of `dropout_rngs` have shape `()`, but in `forked_rngs` they have shape `(5,)`.
+The output of `rng.split` is another `Rng` with keys and counts that have an expanded shape. In the example above, the `RngKey` and `RngCount` of `dropout_rngs` have shape `()`, but in `split_rngs` they have shape `(5,)`.
 
 +++
 
@@ -256,24 +257,25 @@ assert not jnp.allclose(y1, y2) # different
 assert jnp.allclose(y1, y3)     # same
 ```
 
-## Forking implicit random state
+## Splitting implicit random state
 
-We saw above how to use `rng.fork` when passing explicit random state through [Flax NNX transforms](https://flax.readthedocs.io/en/latest/guides/transforms.html) like `nnx.vmap` or `nnx.pmap`. The decorator `nnx.fork_rngs` allows this for implicit random state. Consider the example below, which generates a batch of samples from the nondeterministic model we defined above.
+We saw above how to use `rng.split` when passing explicit random state through [Flax NNX transforms](https://flax.readthedocs.io/en/latest/guides/transforms.html) like `nnx.vmap` or `nnx.pmap`. We can do the same for implicit random state using `nnx.split_rngs`. Consider the example below, which generates a batch of samples from the nondeterministic model we defined above.
 
 ```{code-cell} ipython3
-rng_axes = nnx.StateAxes({'dropout': 0, ...: None})
-
-@nnx.fork_rngs(split={'dropout': 5})
-@nnx.vmap(in_axes=(rng_axes, None), out_axes=0)
+@nnx.split_rngs(splits=5, only='dropout')
 def sample_from_model(model, x):
-    return model(x)
+    graphdef, dropout, others = nnx.split(model, 'dropout', ...)
+    @nnx.vmap(in_axes=(0, None), out_axes=0)
+    def f(dropout, others):
+        model = nnx.merge(graphdef, dropout, others)
+        return model(x)
+    return f(dropout, others)
 
 print(sample_from_model(model, x).shape)
 ```
 
-Here `sample_from_model` is modified by two decorators:
-- The function we get from the `nnx.vmap` decorator expects that the random state of the `model` argument has already been split into 5 pieces. It runs the model once for each random key.
-- The function we get from the `nnx.fork_rngs` decorator splits the random state of its `model` argument into five pieces before passing it on to the inner function.
+The call to the decorator `split_rngs` makes `sample_from_model` split the rngs of the `model` argument before the function body is applied. 
+Within the function body, we need to separate out the dropout RNG state from other implicit state so that we can `vmap` its axes alone. To do this, we `nnx.split` the model, using "dropout" as our filter. Finally, we can vmap the inner function on these split model components.
 
 +++
 
@@ -303,7 +305,7 @@ class RNNCell(nnx.Module):
   def __call__(self, h, x) -> tuple[jax.Array, jax.Array]:
     h = self.drop(h) # Recurrent dropout.
     y = nnx.relu(self.linear(jnp.concatenate([h, x], axis=-1)))
-    self.count.value += 1
+    self.count[...] = self.count[...] + 1
     return y, y
 
   def initial_state(self, batch_size: int):
@@ -319,21 +321,21 @@ Next, use `nnx.scan` over an `unroll` function to implement the `rnn_forward` op
 ```{code-cell} ipython3
 @nnx.jit
 def rnn_forward(cell: RNNCell, x: jax.Array):
-  h = cell.initial_state(batch_size=x.shape[0])
-
-  # Broadcast the 'recurrent_dropout' PRNG state to have the same mask on every step.
-  state_axes = nnx.StateAxes({'recurrent_dropout': None, ...: nnx.Carry})
-  @nnx.scan(in_axes=(state_axes, nnx.Carry, 1), out_axes=(nnx.Carry, 1))
-  def unroll(cell: RNNCell, h, x) -> tuple[jax.Array, jax.Array]:
-    h, y = cell(h, x)
-    return h, y
-
-  h, y = unroll(cell, h, x)
-  return y
+    h = cell.initial_state(batch_size=x.shape[0])
+    graphdef, rngs, state = nnx.split(cell, 'recurrent_dropout', ...)
+    # Broadcast the 'recurrent_dropout' PRNG state to have the same mask on every step.
+    @nnx.scan(in_axes=(None, nnx.Carry, 1), out_axes=(nnx.Carry, 1))
+    def unroll(rngs, mutable, x) -> tuple[jax.Array, jax.Array]:
+        state, h = mutable
+        cell = nnx.merge(graphdef, rngs, state)
+        h, y = cell(h, x)
+        return (state, h), y
+    _, y = unroll(rngs, (state, h), x)
+    return y
 
 x = jnp.ones((4, 20, 8))
 y = rnn_forward(cell, x)
 
 print(f'{y.shape = }')
-print(f'{cell.count.value = }')
+print(f'{cell.count[...] = }')
 ```
