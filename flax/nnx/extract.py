@@ -112,6 +112,7 @@ def check_consistent_aliasing2(
   prefix: tp.Any,
   /,
   *,
+  base_path: tuple[tp.Any, ...] = (),
   node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] | None = None,
 ):
   if node_prefixes is None:
@@ -120,16 +121,8 @@ def check_consistent_aliasing2(
   node_id_to_variable: dict[int, tp.Any] = {}
 
   for path, value in graphlib.iter_graph(node, graph=True):
+    path = base_path + path
     if graphlib.is_graph_node(value) or isinstance(value, graphlib.Variable):
-      if isinstance(value, Pytree):
-        value._check_valid_context(
-          lambda: f'Trying to extract graph node from different trace level, got {value!r}'
-        )
-      if isinstance(value, graphlib.Variable):
-        if not value._can_update:
-          raise ValueError(
-            f'Cannot extract graph node from different trace level, got {value!r}'
-          )
       value_id = id(value)
       node_id_to_variable[value_id] = value
       if value_id in node_prefixes:
@@ -382,17 +375,18 @@ def to_tree2(
     prefix_is_leaf=lambda x: x is None or is_leaf(x),
     tree_is_leaf=is_leaf,
   )
-  leaves, treedef = jax.tree_util.tree_flatten(tree, is_leaf=is_leaf)
+  leaf_paths, treedef = jax.tree_util.tree_flatten_with_path(tree, is_leaf=is_leaf)
 
-  assert len(leaves) == len(leaf_prefixes)
+  assert len(leaf_paths) == len(leaf_prefixes)
   leaves_out = []
   node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] = {}
 
-  for leaf, leaf_prefix in zip(leaves, leaf_prefixes):
+  for (keypath, leaf), leaf_prefix in zip(leaf_paths, leaf_prefixes):
     if is_leaf(leaf):
       if check_aliasing:
+        base_path = graphlib.jax_to_nnx_path(keypath)
         check_consistent_aliasing2(
-          leaf, leaf_prefix, node_prefixes=node_prefixes
+          leaf, leaf_prefix, base_path=base_path, node_prefixes=node_prefixes
         )
       leaves_out.append(_to_node_states(leaf))
     else:
