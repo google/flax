@@ -452,12 +452,12 @@ class SimpleJitFn:
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_shardings)
     extract.check_no_aliases('jit', args=args_updates, kwargs=kwargs_updates, out=out)
-    def donated_arg(jax_path, c, s):
+    def donated_arg(jax_path, prefix, c, s):
       path = graphlib.jax_to_nnx_path(jax_path)
       return path[0] in self.donate_argnums or extract.variable_changed(c, s)
     args_updates = extract.mask_variable_updates(
         args_updates, args_snapshot, keep_fn=donated_arg)
-    def donated_kwarg(jax_path, c, s):
+    def donated_kwarg(jax_path, prefix, c, s):
       path = graphlib.jax_to_nnx_path(jax_path)
       return path[0] in self.donate_argnames or extract.variable_changed(c, s)
     kwargs_updates = extract.mask_variable_updates(

@@ -202,6 +202,18 @@ def broadcast_prefix2(
   jax.tree.map_with_path(add_leaves, prefix_tree, full_tree, is_leaf=is_leaf)
   return paths, leaves
 
+def broadcast_prefix_map(
+  f: tp.Callable[..., tp.Any],
+  prefix_tree: tp.Any,
+  full_tree: tp.Any,
+  *rest: tp.Any,
+  is_leaf: tp.Callable[[tp.Any], bool] | None = None,
+) -> tp.Any:
+  paths, prefix_leaves = broadcast_prefix2(prefix_tree, full_tree, is_leaf=is_leaf)
+  leaves, treedef = jax.tree_util.tree_flatten(full_tree, is_leaf=is_leaf)
+  full_prefix_tree = treedef.unflatten(prefix_leaves)
+  return jax.tree.map_with_path(f, full_prefix_tree, full_tree, *rest, is_leaf=is_leaf)
+
 
 class GraphDefState(struct.PyTreeNode):
   graphdef: graphlib.GraphDef[tp.Any] = struct.field(pytree_node=False)
@@ -497,6 +509,12 @@ def mask_at(t: tuple, index: int | None) -> tuple:
     for i, x in enumerate(t)
   )
 
+def replace_at(t: tuple, index: int, value: tp.Any) -> tuple:
+  return tuple(
+    value if i == index else x
+    for i, x in enumerate(t)
+  )
+
 def updates_and_snapshot(args: A) -> tuple[A, A]:
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   leaves, treedef = jax.tree.flatten(args, is_leaf=is_leaf)
@@ -554,29 +572,35 @@ def variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> b
     a is not b for a, b in zip(post_leaves, pre_leaves)
   )
 
-MaskFn = tp.Callable[
-    [PathParts, variablelib.Variable, variablelib.Variable], bool
+KeepFn = tp.Callable[
+    [PathParts, tp.Any, variablelib.Variable, variablelib.Variable], bool
 ]
 
 def mask_variable_updates(
     current_tree: A,
     snapshot_tree: A,
     *,
-    keep_fn: MaskFn | None = None,
+    prefix: tp.Any = Missing,
+    keep_fn: KeepFn | None = None,
 ) -> A:
   if keep_fn is None:
-    keep_fn = lambda _, cur, snap: variable_changed(cur, snap)
+    keep_fn = lambda _, _pfx, cur, snap: variable_changed(cur, snap)
 
-  def _mask_updates(path, current, snapshot):
+  def _mask_updates(path, prefix_leaf, current, snapshot):
     if isinstance(current, variablelib.Variable):
       if current.hijax or current.ref:
         return Mask()
-      if keep_fn(path, current, snapshot):
+      if keep_fn(path, prefix_leaf, current, snapshot):
         return current
     return Mask()
-  is_leaf = lambda x: isinstance(x, variablelib.Variable)
-  return jax.tree.map_with_path(
-      _mask_updates, current_tree, snapshot_tree, is_leaf=is_leaf
+  is_leaf = lambda x: isinstance(x, variablelib.Variable) or x is None
+  if prefix is Missing:
+    return jax.tree.map_with_path(
+        lambda path, cur, snap: _mask_updates(path, None, cur, snap),
+        current_tree, snapshot_tree, is_leaf=is_leaf,
+    )
+  return broadcast_prefix_map(
+      _mask_updates, prefix, current_tree, snapshot_tree, is_leaf=is_leaf,
   )
 
 

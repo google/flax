@@ -1240,9 +1240,7 @@ class ScanFn:
       pure_args = (pure_carry_arg,)
     elif isinstance(self.input_carry_argnum, int):
       assert pure_args[self.input_carry_argnum] is None
-      _pure_args = list(pure_args)
-      _pure_args[self.input_carry_argnum] = pure_carry_arg
-      pure_args = tuple(_pure_args)
+      pure_args = extract.replace_at(pure_args, self.input_carry_argnum, pure_carry_arg)
     else:
       assert self.input_carry_argnum is None
       assert pure_carry_arg is None
@@ -1283,9 +1281,7 @@ class ScanFn:
     elif isinstance(self.output_carry_argnum, int):
       assert isinstance(out, tuple)
       carry_arg_out = out[self.output_carry_argnum]
-      _out = list(out)
-      _out[self.output_carry_argnum] = None
-      out = tuple(_out)
+      out = extract.replace_at(out, self.output_carry_argnum, None)
     else:
       assert self.output_carry_argnum is None
       carry_arg_out = None
@@ -1300,9 +1296,7 @@ class ScanFn:
     if self.input_carry_argnum == 'all':
       args_out = (carry_arg_out,)
     elif isinstance(self.input_carry_argnum, int):
-      _args_out = list(args_out)
-      _args_out[self.input_carry_argnum] = carry_arg_out
-      args_out = tuple(_args_out)
+      args_out = extract.replace_at(args_out, self.input_carry_argnum, carry_arg_out)
     else:
       assert self.input_carry_argnum is None
       assert carry_arg_out is None
@@ -1335,9 +1329,7 @@ class ScanFn:
       pure_args_out = ()
     elif isinstance(self.input_carry_argnum, int):
       pure_carry_arg_out = pure_args_out[self.input_carry_argnum]
-      _pure_args_out = list(pure_args_out)
-      _pure_args_out[self.input_carry_argnum] = None
-      pure_args_out = tuple(_pure_args_out)
+      pure_args_out = extract.replace_at(pure_args_out, self.input_carry_argnum, None)
     else:
       assert self.input_carry_argnum is None
       pure_carry_arg_out = None
@@ -1372,6 +1364,8 @@ class SimpleScanFn:
   @extract.treemap_copy_args
   def __call__(self, *args):
     updates, snapshot = extract.updates_and_snapshot(args)
+    updates = extract.mask_at(updates, self.carry_arg_index)
+    snapshot = extract.mask_at(snapshot, self.carry_arg_index)
     if self.carry_arg_index is not None:
       carry_in = args[self.carry_arg_index]
     else:
@@ -1388,28 +1382,9 @@ class SimpleScanFn:
       carry_out = out[self.carry_out_index] if self.out_is_tuple else out
       extract.check_same_variables(carry_in, carry_out, 'scan')
 
-    # Mask variable updates for non-carry args: identify broadcast (None axis)
-    # Variables and drop their updates since they should not change across
-    # scan iterations.
-    masked_carry_updates = extract.mask_at(updates, self.carry_arg_index)
-    masked_carry_snapshot = extract.mask_at(snapshot, self.carry_arg_index)
-    if isinstance(self.in_axes, tuple):
-      masked_carry_in_axes = extract.mask_at(self.in_axes, self.carry_arg_index)
-    else:
-      masked_carry_in_axes = self.in_axes
-    is_leaf = lambda x: isinstance(x, variablelib.Variable) or x is None
-    _, per_leaf_axes = extract.broadcast_prefix2(
-      masked_carry_in_axes, masked_carry_updates, is_leaf=is_leaf,
-    )
-    broadcast_var_ids = set()
-    carry_leaves = jax.tree.leaves(masked_carry_updates, is_leaf=is_leaf)
-    for axis, leaf in zip(per_leaf_axes, carry_leaves, strict=True):
-      if axis is None and isinstance(leaf, variablelib.Variable):
-        broadcast_var_ids.add(id(leaf))
-
-    def keep_fn(path, cur, snap):
+    def keep_fn(path, prefix, cur, snap):
       changed = extract.variable_changed(cur, snap)
-      if id(cur) in broadcast_var_ids and changed:
+      if prefix is None and changed:
         raise ValueError(
             f'Broadcast (None axis) Variable at {jax.tree_util.keystr(path)} '
             'was mutated during scan. Only Carry and scanned Variables can be '
@@ -1417,13 +1392,13 @@ class SimpleScanFn:
         )
       return changed
 
-    extract.check_no_aliases('scan', args=masked_carry_updates, out=out)
-    masked_carry_updates = extract.mask_variable_updates(
-      masked_carry_updates, masked_carry_snapshot, keep_fn=keep_fn,
+    extract.check_no_aliases('scan', args=updates, out=out)
+    updates = extract.mask_variable_updates(
+      updates, snapshot, prefix=self.in_axes, keep_fn=keep_fn,
     )
     if self.out_is_tuple:
-      return (*out, masked_carry_updates)
-    return (out, masked_carry_updates)
+      return (*out, updates)
+    return (out, updates)
 
 
 @tp.overload
@@ -1698,9 +1673,7 @@ def _simple_scan(
       )
       extract.update_carry_variables(carry_in, carry_out)
       if out_is_tuple:
-        out_list = list(out)
-        out_list[carry_out_index] = carry_in
-        out = tuple(out_list)
+        out = extract.replace_at(out, carry_out_index, carry_in)
       else:
         out = carry_in
 
@@ -1766,9 +1739,7 @@ def _graph_updates_scan(
     )
     if isinstance(input_carry_argnum, int):
       pure_carry_arg = pure_args[input_carry_argnum]
-      _pure_args = list(pure_args)
-      _pure_args[input_carry_argnum] = None
-      pure_args = tuple(_pure_args)
+      pure_args = extract.replace_at(pure_args, input_carry_argnum, None)
     elif input_carry_argnum == 'all':
       pure_carry_arg = pure_args[0]
       pure_args = ()
@@ -1803,9 +1774,7 @@ def _graph_updates_scan(
     if input_carry_argnum == 'all':
       pure_args_out = (pure_carry_arg_out,)
     elif isinstance(input_carry_argnum, int):
-      _pure_args_out = list(pure_args_out)
-      _pure_args_out[input_carry_argnum] = pure_carry_arg_out
-      pure_args_out = tuple(_pure_args_out)
+      pure_args_out = extract.replace_at(pure_args_out, input_carry_argnum, pure_carry_arg_out)
     else:
       assert input_carry_argnum is None
       assert pure_carry_arg_out is None
@@ -1833,9 +1802,7 @@ def _graph_updates_scan(
     if output_carry_argnum == 'all':
       out = carry_arg
     elif isinstance(output_carry_argnum, int):
-      _out = list(out)
-      _out[output_carry_argnum] = carry_arg
-      out = tuple(_out)
+      out = extract.replace_at(out, output_carry_argnum, carry_arg)
     else:
       assert output_carry_argnum is None
       assert carry_arg is None
