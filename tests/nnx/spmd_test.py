@@ -283,8 +283,8 @@ class TestSPMD(parameterized.TestCase):
       replicated_array = jnp.arange(8).reshape(2, 4).astype(jnp.float32)
       sharded_array = reshard(replicated_array, P("X", None))
       layers = [
-        nnx.Dropout(rate=0.5, rngs=nnx.Rngs(0)),
-        nnx.Dropout(rate=0.5, broadcast_dims=(1,), rngs=nnx.Rngs(0)),
+        nnx.Dropout(rate=0.5, deterministic=False, rngs=nnx.Rngs(0)),
+        nnx.Dropout(rate=0.5, deterministic=False, broadcast_dims=(1,), rngs=nnx.Rngs(0)),
       ]
       for layer in layers:
         assert 'float32[2@X,4]' in str(jax.typeof(layer(sharded_array)))

@@ -153,8 +153,8 @@ print("mutable =", v_ref)
 class Block(nnx.Module):
   def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
     self.linear = Linear(din, dmid, rngs=rngs)
-    self.bn = nnx.BatchNorm(dmid, rngs=rngs)
-    self.dropout = nnx.Dropout(0.1, rngs=rngs)
+    self.bn = nnx.BatchNorm(dmid, use_running_average=False, rngs=rngs)
+    self.dropout = nnx.Dropout(0.1, deterministic=False, rngs=rngs)
     self.linear_out = Linear(dmid, dout, rngs=rngs)
 
   def __call__(self, x):
