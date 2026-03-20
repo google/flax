@@ -26,8 +26,21 @@ from flax import errors, nnx
 import jax
 import jax.numpy as jnp
 import numpy as np
+import flax
 
 A = TypeVar('A')
+
+from contextlib import contextmanager
+
+@contextmanager
+def set_graph_mode(mode):
+  old_mode = flax.config._read('nnx_graph_mode')
+  try:
+    flax.config.update('nnx_graph_mode', mode)
+    yield
+  finally:
+    flax.config.update('nnx_graph_mode', old_mode)
+
 
 class PytreeTest(absltest.TestCase):
   def test_pytree(self):
@@ -169,6 +182,196 @@ class PytreeTest(absltest.TestCase):
         'Found data in value of type',
     ):
       foo = Foo()
+
+class TestCapture(parameterized.TestCase):
+
+  def test_vmap(self):
+
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), dim))
+
+      def __call__(self, x):
+        x = self.perturb('grad_of_x', x)
+        y = jnp.dot(x, self.w)
+        self.sow(nnx.Intermediate, 'y', y)
+        return y
+
+      def pre_run(self, x):
+        graphdef, intms, params = nnx.split(model, nnx.Intermediate, nnx.Param)
+        def run(intms, params, x):
+          return nnx.merge(graphdef, intms, params)(x)
+        nnx.vmap(run, in_axes=(0, None, 0))(intms, params, x)
+
+    @nnx.jit
+    def train_step(model, perturbations, x):
+      def loss_grad(model, perturbations, x):
+        def loss(model, perturbations, x):
+          loss, interms = nnx.capture(model, nnx.Intermediate, init=perturbations)(x)
+          return loss, interms
+        (grads, perturb_grads), sowed = nnx.grad(loss, argnums=(0, 1), has_aux=True)(model, perturbations, x)
+        return grads, nnx.merge_state(perturb_grads, sowed)
+      return nnx.vmap(loss_grad, in_axes=(None, 0, 0))(model, perturbations,x)
+
+    model, x = Foo(4), jnp.ones((3, 4))
+
+    pre_run_capture = nnx.capture(model.pre_run, nnx.Perturbation)
+    _, perturbations = pre_run_capture(x)
+    _, intermediates = train_step(model, perturbations, x)
+    np.testing.assert_allclose(intermediates['grad_of_x'].get_value(),
+      jnp.broadcast_to(model.w.get_value()[None, :], (3, 4)))
+    self.assertEqual(intermediates['y'].get_value()[0].shape, (3,))
+
+
+  @parameterized.parameters(True, False)
+  def test_fwd_bwd(self, graph_mode):
+    with set_graph_mode(graph_mode):
+
+        class Foo(nnx.Module):
+          @nnx.jit
+          def __call__(self, x):
+            x = self.perturb('grad_of_x', x)
+            y = 3 * x
+            self.sow(nnx.Intermediate, 'y', y)
+            return y
+
+        model = Foo()
+
+        @nnx.jit
+        def train_step(model, perturbations, x):
+          def loss(model, perturbations, x):
+            loss, interms = nnx.capture(model, nnx.Intermediate, init=perturbations)(x)
+            return loss, interms
+          (grads, perturb_grads), sowed = nnx.grad(loss, argnums=(0, 1), has_aux=True)(model, perturbations, x)
+          return grads, nnx.merge_state(perturb_grads, sowed)
+
+        x = 1.0
+
+        forward = nnx.capture(model, nnx.Perturbation)
+        _, perturbations = forward(x)
+        grads, intermediates = train_step(model, perturbations, x)
+        self.assertEqual(intermediates['grad_of_x'], 3)
+        self.assertEqual(intermediates['y'][0], 3)
+
+  @parameterized.parameters(True, False)
+  def test_nested_modules(self, graph_mode):
+    with set_graph_mode(graph_mode):
+
+      class Foo(nnx.Module):
+        def __call__(self, x):
+          x = self.perturb('grad_of_x', x)
+          y = 3 * x
+          self.sow(nnx.Intermediate, 'y', y)
+          return y
+      class Bar(nnx.Module):
+        def __init__(self):
+          self.foos = nnx.data([Foo() for _ in range(3)])
+        def __call__(self, x):
+          for block in self.foos:
+            x = block(x)
+          return x
+
+      model = Bar()
+
+      @nnx.jit
+      def train_step(model, perturbations, x):
+        def loss(model, perturbations, x):
+          loss, interms = nnx.capture(model, nnx.Intermediate, init=perturbations)(x)
+          return loss, interms
+        (grads, perturb_grads), sowed = nnx.grad(loss, argnums=(0, 1), has_aux=True)(model, perturbations, x)
+        return grads, nnx.merge_state(perturb_grads, sowed)
+
+      x = 1.0
+
+      forward = nnx.capture(model, nnx.Perturbation)
+      _, perturbations = forward(x)
+      _, intermediates = train_step(model, perturbations, x)
+      for i in range(3):
+        self.assertEqual(intermediates['foos'][i]['grad_of_x'], 3**(3-i))
+        self.assertEqual(intermediates['foos'][i]['y'][0], 3**(i+1))
+
+  def test_method_outputs_single_module(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
+      def __call__(self, x):
+        return x @ self.w
+      def helper(self, x):
+        return jnp.sin(x)
+      def run(self, x):
+        y = self(x)
+        z = self.helper(y)
+        return (y, z)
+
+    model = Foo(8)
+    x = jnp.ones((4, 8))
+
+    run_with_capture = nnx.capture(
+      model.run,
+      nnx.Intermediate, method_outputs=nnx.Intermediate
+    )
+    (y, z), intms = run_with_capture(x)
+
+    self.assertIn('__call__', intms)
+    self.assertIn('helper', intms)
+    np.testing.assert_allclose(intms['__call__'][0], y)
+    np.testing.assert_allclose(intms['helper'][0], z)
+
+  def test_method_outputs_nested_modules(self):
+    class Inner(nnx.Module):
+      def __init__(self, dim, rngs):
+        self.w = nnx.Param(jax.random.normal(rngs.params(), (dim, dim)))
+      def __call__(self, x):
+        return x @ self.w
+      def process(self, x):
+        return jnp.sin(x)
+
+    class Outer(nnx.Module):
+      def __init__(self, rngs):
+        self.inner1 = Inner(8, rngs)
+        self.inner2 = Inner(8, rngs)
+      def __call__(self, x):
+        x = self.inner1(x)
+        x = self.inner2.process(x)
+        return x
+
+    model = Outer(nnx.Rngs(0))
+    x = jnp.ones((4, 8))
+
+    forward = nnx.capture(
+      model,
+      nnx.Intermediate, method_outputs=nnx.Intermediate
+    )
+    y, intms = forward(x)
+
+    self.assertIn('__call__', intms)
+    self.assertIn('inner1', intms)
+    self.assertIn('process', intms['inner2'])
+    self.assertEqual(intms['inner1']['__call__'][0].shape, (4, 8))
+    self.assertEqual(intms['inner2']['process'][0].shape, (4, 8))
+
+  def test_method_outputs_mixed_with_sow(self):
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), (dim, dim)))
+      def __call__(self, x):
+        x = x @ self.w
+        self.sow(nnx.Intermediate, 'intermediate', x)
+        return jnp.sin(x)
+
+    model = Foo(8)
+    x = jnp.ones((4, 8))
+
+    forward = nnx.capture(
+      model,
+      nnx.Intermediate, method_outputs=nnx.Intermediate
+    )
+    y, intms = forward(x)
+
+    self.assertIn('__call__', intms)
+    self.assertIn('intermediate', intms)
+    np.testing.assert_allclose(intms['__call__'][0], y)
+    np.testing.assert_allclose(jnp.sin(intms['intermediate'][0]), y)
 
 class SowMod(nnx.Module):
     def __init__(self, rngs: nnx.Rngs):
@@ -371,28 +574,6 @@ class TestModule(parameterized.TestCase):
     assert m.b.c.get_value() == m2.b.c.get_value()
     assert m.b.d.get_value() == m2.b.d.get_value()
 
-  def test_sow_basic(self):
-    class Foo(nnx.Module):
-      def __call__(self, x):
-        y = x + 1
-        self.sow(nnx.Intermediate, 'y', y)
-        return y
-
-    m = Foo()
-    y1 = m(2)
-    y2 = m(10)
-
-    assert y1 == 3
-    assert y2 == 11
-    assert m.y.get_value() == (3, 11)
-
-    intermediates = nnx.pop(m, nnx.Intermediate)
-
-    assert isinstance(intermediates['y'], nnx.Intermediate)
-    assert intermediates['y'].get_value() == (3, 11)
-
-    assert not hasattr(m, 'y')
-
   def test_sow_existing_non_variable_field(self):
     class Foo(nnx.Module):
       def __init__(self) -> None:
@@ -426,8 +607,7 @@ class TestModule(parameterized.TestCase):
   def test_sow_pop(self):
     x = jnp.ones((2, 4))
     model = SowMod(nnx.Rngs(42))
-    out = model(x)
-    intermediates = nnx.pop(model, nnx.Intermediate)
+    out, intermediates = nnx.capture(model, nnx.Intermediate)(x)
     attr_names = set(model._pytree__nodes)
     assert 'my_summary' not in attr_names
 
@@ -437,51 +617,11 @@ class TestModule(parameterized.TestCase):
 
     @nnx.jit
     def train_step(model, x):
-      out = model(x)
-      intermediates = nnx.pop(model, nnx.Intermediate)
+      out, intermediates = nnx.capture(model, nnx.Intermediate)(x)
       return out, intermediates
 
     train_step_fn = nnx.cached_partial(train_step, model)
     train_step_fn(x)
-
-  def test_perturb_basic(self):
-    class Foo(nnx.Module):
-      def __init__(self, rngs):
-        self.linear = nnx.Linear(10, 10, rngs=rngs)
-
-      def __call__(self, x):
-        x = self.linear(x)
-        x = self.perturb('before_multiply', x)
-        x = 4 * x
-        x = self.perturb('after_multiply', x)
-        return x
-
-    model = Foo(rngs=nnx.Rngs(0))
-    # Perturbations are not created in init time. It needs some sample input.
-    self.assertFalse(hasattr(model, 'before_multiply'))
-    self.assertFalse(hasattr(model, 'after_multiply'))
-
-    x = jax.random.uniform(jax.random.key(1), shape=(10,))
-    y = jax.random.uniform(jax.random.key(2), shape=(10,))
-    model(x)
-    np.testing.assert_array_equal(model.before_multiply, jnp.zeros_like(x))
-    np.testing.assert_array_equal(model.after_multiply, jnp.zeros_like(x))
-
-    take_gradient_filter = nnx.Any(nnx.Param, nnx.Perturbation)
-    @nnx.grad(argnums=nnx.DiffState(argnum=0, filter=take_gradient_filter))
-    def grad_loss(model, inputs, targets):
-      preds = model(inputs)
-      return jnp.square(preds - targets).mean()
-    intm_grads = grad_loss(model, x, y)
-
-    # Gradient should not be zero
-    self.assertFalse(
-      jnp.array_equal(intm_grads.before_multiply[...], jnp.zeros_like(x))
-    )
-    # activation * 4 so reverse gradient also * 4
-    np.testing.assert_allclose(
-      intm_grads.after_multiply[...] * 4, intm_grads.before_multiply[...]
-    )
 
   def test_update_static_state_submodules(self):
     class Bar(nnx.Module):
@@ -949,7 +1089,6 @@ class TestModule(parameterized.TestCase):
     obj = Block(rngs=nnx.Rngs(0))
     info_str = nnx.view_info(obj, graph=graph)
     self.assertEqual(f"{obj.__class__.__qualname__}:\n  arg1: bool | None = None\n    The first argument.\n  arg2: int | None = None\n    The second argument.\n    This has two lines.", info_str)
-
 
 class TestModuleDataclass(absltest.TestCase):
   def test_basic(self):

@@ -76,8 +76,7 @@ class TestMultiHeadAttention(parameterized.TestCase):
     )
     module.set_attributes(decode=False)
 
-    _ = module(x, True)
-    intermediates = nnx.pop(module, nnx.Intermediate)
+    _, intermediates = nnx.capture(module, nnx.Intermediate)(x, True)
     assert intermediates['attention_layers'][0]['attention_weights'][
       0
     ].shape == (4, 8, 6, 6)
@@ -86,8 +85,7 @@ class TestMultiHeadAttention(parameterized.TestCase):
       0
     ].shape == (4, 8, 6, 6)
 
-    _ = module(x)
-    intermediates = nnx.pop(module, nnx.Intermediate)
+    _, intermediates = nnx.capture(module, nnx.Intermediate)(x)
     assert not intermediates  # empty
 
   def test_autoregressive_decode_with_x64(self):
@@ -194,15 +192,18 @@ class TestMultiHeadAttention(parameterized.TestCase):
       pass
 
     # nnx path with padding mask and is_causal = True (internally combines them)
-    attn_manual = nnx.dot_product_attention(
-      query=q,
-      key=k,
-      value=v,
-      mask=padding_mask,
-      is_causal=True,
-      deterministic=True,
-      module=DummyModule(),
-    )
+    dummy = DummyModule()
+    def _run(m):
+      return nnx.dot_product_attention(
+        query=q,
+        key=k,
+        value=v,
+        mask=padding_mask,
+        is_causal=True,
+        deterministic=True,
+        module=m,
+      )
+    attn_manual, _ = nnx.capture(_run, nnx.Intermediate)(dummy)
 
     np.testing.assert_allclose(attn_jax, attn_manual, atol=1e-6)
 
@@ -375,10 +376,9 @@ class TestGQADotProductAttention(parameterized.TestCase):
     jax_out = jax.nn.dot_product_attention(query, key, value)
 
     # NNX should handle broadcasting internally
-    nnx_out = nnx.dot_product_attention(
-      query, key, value,
-      module=dummy_module
-    )
+    def _run(m):
+      return nnx.dot_product_attention(query, key, value, module=m)
+    nnx_out, _ = nnx.capture(_run, nnx.Intermediate)(dummy_module)
 
     np.testing.assert_allclose(nnx_out, jax_out, atol=1e-3, rtol=1e-3)
 

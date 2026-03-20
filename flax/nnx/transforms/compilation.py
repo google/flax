@@ -377,6 +377,12 @@ def jit(
         + graphlib._tree_mode_suggestion_transform('jit')
       )
 
+  if graph and not graph_updates:
+    if in_shardings is not None:
+      extract.check_prefix(in_shardings, 'in_shardings', 'jit')
+    if out_shardings is not None:
+      extract.check_prefix(out_shardings, 'out_shardings', 'jit')
+
   wrapped_cls: tp.Any
   if graph and graph_updates:
     wrapped_cls = JitWrapped
@@ -428,15 +434,6 @@ def _flatten_to_partial_state(
   return PartialState(treedef=treedef, leaves=leaves)
 
 
-def _unflatten_partial_state(
-    state: PartialState,
-    index_ref: graphlib.IndexMap | None,
-) -> tp.Any:
-  if index_ref is not None:
-    return graphlib.unflatten(
-        state.treedef, state.leaves, index_ref=index_ref,
-        copy_variables=False)
-  return jax.tree.unflatten(state.treedef, state.leaves)
 
 
 @dataclasses.dataclass(eq=False)
@@ -455,24 +452,18 @@ class SimpleJitFn:
     updates, snapshot = extract.updates_and_snapshot((args, kwargs))
     args_updates, kwargs_updates = updates
     args_snapshot, kwargs_snapshot = snapshot
-    index_ref = graphlib.IndexMap() if self.graph else None
-    args = tuple(
-      _unflatten_partial_state(a, index_ref=index_ref)
-      if isinstance(a, PartialState) else a
-      for a in args
-    )
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_shardings)
     extract.check_no_aliases('jit', args=args_updates, kwargs=kwargs_updates, out=out)
-    def donated_arg(jax_path, c, s):
+    def donated_arg(jax_path, prefix, c, s):
       path = graphlib.jax_to_nnx_path(jax_path)
       return path[0] in self.donate_argnums or extract.variable_changed(c, s)
     args_updates = extract.mask_variable_updates(
         args_updates, args_snapshot, keep_fn=donated_arg)
-    def donated_kwarg(jax_path, c, s):
+    def donated_kwarg(jax_path, prefix, c, s):
       path = graphlib.jax_to_nnx_path(jax_path)
       return path[0] in self.donate_argnames or extract.variable_changed(c, s)
     kwargs_updates = extract.mask_variable_updates(
@@ -570,11 +561,12 @@ class SimpleJitWrapped(tp.Generic[P, R]):
     return out
 
   def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+    args = (*self.partial_args, *args)  # type: ignore[assignment]
     args, kwargs = self._maybe_to_tree(args, kwargs)
-    extract.check_no_aliases('jit', args=args, kwargs=kwargs)
-    out, updates = self.jitted_fn(*self.partial_args, *args, **kwargs)
-    extract.apply_variable_updates(
-        ((*self.partial_args, *args), kwargs), updates)
+    if not self.graph:  # skip check for graph mode
+      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
+    out, updates = self.jitted_fn(*args, **kwargs)
+    extract.apply_variable_updates((args, kwargs), updates)
     return self._maybe_from_tree(out)
 
   def __get__(self, obj, objtype=None):
@@ -583,19 +575,27 @@ class SimpleJitWrapped(tp.Generic[P, R]):
     return functools.partial(self, obj)
 
   def eval_shape(self, *args, **kwargs):
+    args = (*self.partial_args, *args)
     args, kwargs = self._maybe_to_tree(args, kwargs)
-    out, updates = self.jitted_fn.eval_shape(
-        *self.partial_args, *args, **kwargs)
+    if not self.graph:
+      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
+    out, updates = self.jitted_fn.eval_shape(*args, **kwargs)
     return self._maybe_from_tree(out)
 
   def trace(self, *args, **kwargs):
+    args = (*self.partial_args, *args)
     args, kwargs = self._maybe_to_tree(args, kwargs)
-    traced = self.jitted_fn.trace(*self.partial_args, *args, **kwargs)
+    if not self.graph:
+      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
+    traced = self.jitted_fn.trace(*args, **kwargs)
     return SimpleTraced(traced, self)
 
   def lower(self, *args, **kwargs):
+    args = (*self.partial_args, *args)
     args, kwargs = self._maybe_to_tree(args, kwargs)
-    lowered = self.jitted_fn.lower(*self.partial_args, *args, **kwargs)
+    if not self.graph:
+      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
+    lowered = self.jitted_fn.lower(*args, **kwargs)
     return SimpleLowered(lowered, self)
 def jit_partial(
     fun: tp.Callable[..., R],
@@ -717,8 +717,24 @@ def jit_partial(
   else:
     jit_in_shardings = in_shardings
 
+  @functools.wraps(fun)
+  def wrapped_fun(*args, **kwargs):
+    index_ref = graphlib.IndexMap() if graph else None
+    def _unflatten(arg):
+      if not isinstance(arg, PartialState):
+        return arg
+      elif graph:
+        return graphlib.unflatten(
+            arg.treedef, arg.leaves, index_ref=index_ref,
+            copy_variables=False,
+        )
+      else:
+        return jax.tree.unflatten(arg.treedef, arg.leaves)
+    args = (_unflatten(a) for a in args)
+    return fun(*args, **kwargs)
+
   return SimpleJitWrapped(
-    fun,
+    wrapped_fun,
     in_shardings=jit_in_shardings,
     out_shardings=out_shardings,
     donate_argnums=donate_argnums,
@@ -1149,8 +1165,10 @@ class SimpleCompiled(Stage):
     raise NotImplementedError
 
   def __call__(self, *args, **kwargs):
+    args = (*self.jit_wrapped.partial_args, *args)
     args, kwargs = self.jit_wrapped._maybe_to_tree(args, kwargs)
-    extract.check_no_aliases('jit', args=args, kwargs=kwargs)
+    if not self.jit_wrapped.graph:
+      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
     out, updates = self.compiled(*args, **kwargs)
     extract.apply_variable_updates((args, kwargs), updates)
     return self.jit_wrapped._maybe_from_tree(out)
@@ -1529,6 +1547,9 @@ def shard_map(
         '`out_specs` cannot contain `StateSharding` objects '
         'when `graph=False`'
       )
+    if graph:
+      extract.check_prefix(in_specs, 'in_specs', 'shard_map')
+      extract.check_prefix(out_specs, 'out_specs', 'shard_map')
 
     shard_map_fn = jax.shard_map(
         SimpleShardMapFn(f_unbound, graph=graph, out_specs=out_specs),

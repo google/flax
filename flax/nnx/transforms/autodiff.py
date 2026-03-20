@@ -902,6 +902,7 @@ def jvp(
 class SimpleCustomVjpFn:
   f: tp.Callable[..., tp.Any]
   graph: bool
+  nondiff_argnums: tuple[int, ...]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -915,7 +916,25 @@ class SimpleCustomVjpFn:
     if self.graph:
       out = extract.to_tree2(out)
     extract.check_no_aliases('custom_vjp', args=updates, out=out)
-    updates = extract.mask_variable_updates(updates, snapshot)
+    diff_prefix = tuple(
+      i not in self.nondiff_argnums for i in range(len(args))
+    )
+    def keep_fn(path, diff_arg, cur, snap):
+      assert isinstance(diff_arg, bool)
+      changed = extract.variable_changed(cur, snap)
+      if diff_arg and changed:
+        raise ValueError(
+          f'Variables in differentiable argument were mutated inside '
+          f'custom_vjp at {jax.tree_util.keystr(path)}.\n'
+          f'This is not supported when '
+          f'graph_updates=False because the gradient for the Variable '
+          f'updates would be silently dropped. Move the Variable mutation '
+          f'to a non-differentiable argument, or use graph_updates=True.'
+        )
+      return changed
+    updates = extract.mask_variable_updates(
+      updates, snapshot, prefix=diff_prefix, keep_fn=keep_fn,
+    )
     return out, updates
 
 
@@ -973,7 +992,7 @@ class SimpleCustomVjp(tp.Generic[A]):
     self.nondiff_argnums = nondiff_argnums
     self.graph = graph
     self.custom_vjp_fn = jax.custom_vjp(
-      fun=SimpleCustomVjpFn(fun, graph=graph),
+      fun=SimpleCustomVjpFn(fun, graph=graph, nondiff_argnums=nondiff_argnums),
       nondiff_argnums=nondiff_argnums,
     )
 
@@ -989,28 +1008,6 @@ class SimpleCustomVjp(tp.Generic[A]):
       args = extract.to_tree2(args, prefix=prefix)
     extract.check_no_aliases('custom_vjp', args=args)
     (out, updates) = self.custom_vjp_fn(*args)
-    # check that differentiable arguments were not mutated
-    diff_argnums = tuple(
-      i for i in range(len(args)) if i not in self.nondiff_argnums
-    )
-    is_var = lambda x: isinstance(x, variablelib.Variable)
-    for i in diff_argnums:
-      changed = [
-        jax.tree_util.keystr(path)
-        for path, leaf in jax.tree.leaves_with_path(
-          updates[i], is_leaf=is_var
-        )
-        if leaf is not None
-      ]
-      if changed:
-        paths_str = '\n  '.join(changed)
-        raise ValueError(
-          f'Variables in differentiable argument {i} were mutated inside '
-          f'custom_vjp at:\n\n  {paths_str}\n\nThis is not supported when '
-          f'graph_updates=False because the gradient for the Variable '
-          f'updates would be silently dropped. Move the Variable mutation '
-          f'to a non-differentiable argument, or use graph_updates=True.'
-        )
     if self.graph:
       out = extract.from_tree2(out)
     extract.apply_variable_updates(args, updates)
@@ -1690,4 +1687,3 @@ def remat(
       ),
     )
   )
-
