@@ -565,6 +565,22 @@ def check_no_aliases(fn_name: str, /, **kwargs):
     seen[var_id] = path
 
 
+def check_prefix(prefix: tp.Any, prefix_name: str, fn_name: str):
+  def _check(path, leaf):
+    if graphlib.is_graph_node(leaf) or isinstance(leaf, variablelib.Variable):
+      raise ValueError(
+        f'Found graph node or Variable of type {type(leaf).__name__} '
+        f'at path {jax.tree_util.keystr(path)} in `{prefix_name}` '
+        f'for nnx.{fn_name}. Graph nodes and Variables are not allowed '
+        f'as prefixes when graph=True and graph_updates=False'
+      )
+  jax.tree.map_with_path(
+    _check, prefix,
+    is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    or graphlib.is_graph_node(x),
+  )
+
+
 def variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
   post_leaves, post_td = jax.tree.flatten(post)
   pre_leaves, pre_td = jax.tree.flatten(pre)

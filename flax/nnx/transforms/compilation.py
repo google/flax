@@ -377,6 +377,12 @@ def jit(
         + graphlib._tree_mode_suggestion_transform('jit')
       )
 
+  if graph and not graph_updates:
+    if in_shardings is not None:
+      extract.check_prefix(in_shardings, 'in_shardings', 'jit')
+    if out_shardings is not None:
+      extract.check_prefix(out_shardings, 'out_shardings', 'jit')
+
   wrapped_cls: tp.Any
   if graph and graph_updates:
     wrapped_cls = JitWrapped
@@ -1541,6 +1547,9 @@ def shard_map(
         '`out_specs` cannot contain `StateSharding` objects '
         'when `graph=False`'
       )
+    if graph:
+      extract.check_prefix(in_specs, 'in_specs', 'shard_map')
+      extract.check_prefix(out_specs, 'out_specs', 'shard_map')
 
     shard_map_fn = jax.shard_map(
         SimpleShardMapFn(f_unbound, graph=graph, out_specs=out_specs),

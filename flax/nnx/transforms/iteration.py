@@ -124,6 +124,9 @@ def transform_metadata(
   metadata: tp.Mapping[str, tp.Any] = {
       spmd.PARTITION_NAME: partition,
   }
+  if graph:
+    extract.check_prefix(in_axes, 'in_axes', 'transform_metadata')
+    extract.check_prefix(out_axes, 'out_axes', 'transform_metadata')
 
   @functools.wraps(f)
   def wrapper(*in_args, **in_kwargs):
@@ -508,6 +511,9 @@ def vmap(
         'when `graph=False`. '
         + graphlib._tree_mode_suggestion_transform('vmap')
       )
+    if graph:
+      extract.check_prefix(in_axes, 'in_axes', 'vmap')
+      extract.check_prefix(out_axes, 'out_axes', 'vmap')
 
     vmapped_fn = jax.vmap(
       SimpleVmapFn(f_unbound, graph=graph, out_axes=out_axes),
@@ -768,6 +774,9 @@ def pmap(
         'when `graph=False`. '
         + graphlib._tree_mode_suggestion_transform('pmap')
       )
+    if graph:
+      extract.check_prefix(in_axes, 'in_axes', 'pmap')
+      extract.check_prefix(out_axes, 'out_axes', 'pmap')
 
     pmapped_fn = jax.pmap(
       SimplePmapFn(f_unbound, graph=graph, out_axes=out_axes),
@@ -1604,6 +1613,9 @@ def _simple_scan(
       'when `graph=False`. '
       + graphlib._tree_mode_suggestion_transform('scan')
     )
+  if graph:
+    extract.check_prefix(in_axes, 'in_axes', 'scan')
+    extract.check_prefix(out_axes, 'out_axes', 'scan')
 
   out_is_tuple = isinstance(out_axes, tuple)
   if in_axes is Carry:
