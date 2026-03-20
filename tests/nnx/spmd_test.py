@@ -457,6 +457,73 @@ class TestSPMD(parameterized.TestCase):
       v_format = nnx.Variable(value, out_sharding=Format(Layout(major_to_minor=(1, 0)), ns))
       self.assertEqual(v_format.sharding, ns)
 
+  def test_get_abstract_with_abstract_mesh(self):
+    mesh = jax.make_mesh(
+        (2, 2),
+        ('a', 'b'),
+        axis_types=(jax.sharding.AxisType.Auto,) * 2,
+    )
+    with jax.set_mesh(mesh):
+      abs_model = nnx.eval_shape(
+          lambda: nnx.Linear(
+              4,
+              8,
+              rngs=nnx.Rngs(0),
+              kernel_metadata={'out_sharding': ('a', 'b')},
+          )
+      )
+      abs_model = nnx.abstract_with_sharding(abs_model)
+
+    self.assertIsInstance(abs_model.kernel, nnx.Param)
+    self.assertEqual(abs_model.kernel.sharding.spec, P('a', 'b'))
+    self.assertEqual(
+        abs_model.kernel.sharding.mesh.axis_names,
+        mesh.axis_names,
+    )
+
+  def test_get_abstract_with_per_variable_mesh(self):
+    mesh1 = jax.make_mesh(
+        (2, 2),
+        ('a', 'b'),
+        axis_types=(jax.sharding.AxisType.Auto,) * 2,
+    )
+    mesh2 = jax.make_mesh(
+        (1, 4),
+        ('c', 'd'),
+        axis_types=(jax.sharding.AxisType.Auto,) * 2,
+    )
+
+    class Model(nnx.Module):
+      def __init__(self):
+        self.p1 = nnx.Linear(
+            4,
+            8,
+            rngs=nnx.Rngs(0),
+            kernel_metadata={'out_sharding': ('a', 'b'), 'mesh': mesh1},
+        )
+        self.p2 = nnx.Linear(
+            4,
+            8,
+            rngs=nnx.Rngs(0),
+            kernel_metadata={'out_sharding': ('c', 'd'), 'mesh': mesh2},
+        )
+
+    abs_model = nnx.eval_shape(lambda: Model())
+    abs_model = nnx.abstract_with_sharding(abs_model)
+
+    self.assertEqual(abs_model.p1.kernel.sharding.spec, P('a', 'b'))
+    self.assertEqual(abs_model.p1.kernel.sharding.mesh, mesh1)
+    self.assertEqual(abs_model.p2.kernel.sharding.spec, P('c', 'd'))
+    self.assertEqual(abs_model.p2.kernel.sharding.mesh, mesh2)
+
+  def test_get_abstract_no_sharding_metadata(self):
+    abs_model = nnx.eval_shape(lambda: nnx.Linear(4, 8, rngs=nnx.Rngs(0)))
+    abs_model = nnx.abstract_with_sharding(abs_model)
+
+    self.assertIsInstance(abs_model.kernel, nnx.Param)
+    self.assertIsNone(
+        getattr(abs_model.kernel.get_value(), 'sharding', None)
+    )
 
 def has_sharding_spec(array):
     sharding = array.sharding

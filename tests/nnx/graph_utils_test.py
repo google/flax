@@ -1652,7 +1652,53 @@ class TestTreeFlatten(parameterized.TestCase):
     ):
       nnx.recursive_map(lambda path, node: node, node, graph=False)
 
+  @parameterized.parameters(True, False)
+  def test_map(self, graph):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    new_model = nnx.map(lambda path, x: jnp.zeros_like(x), model, graph=graph)
+
+    self.assertTrue(hasattr(new_model, 'kernel'))
+    self.assertTrue(hasattr(new_model, 'bias'))
+    np.testing.assert_array_equal(new_model.kernel, jnp.zeros((2, 3)))
+    np.testing.assert_array_equal(new_model.bias, jnp.zeros((3,)))
+
+  def test_map_with_path(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    paths_seen = []
+
+    def record_path(path, x):
+      paths_seen.append(path)
+      return x
+
+    nnx.map(record_path, model)
+    self.assertLen(paths_seen, 2)
+    path_last_parts = sorted(p[-1] for p in paths_seen)
+    self.assertEqual(path_last_parts, ['bias', 'kernel'])
+
+  def test_map_nested(self):
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+    model = Model(rngs=nnx.Rngs(0))
+    new_model = nnx.map(lambda path, x: jnp.ones_like(x), model)
+
+    self.assertTrue(hasattr(new_model, 'linear'))
+    np.testing.assert_array_equal(new_model.linear.kernel, jnp.ones((2, 3)))
+    np.testing.assert_array_equal(new_model.linear.bias, jnp.ones((3,)))
+
+  def test_map_replace(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    new_model = nnx.map(
+      lambda path, v: v.replace(jnp.zeros_like(v)), model
+    )
+
+    self.assertTrue(hasattr(new_model, 'kernel'))
+    self.assertTrue(hasattr(new_model, 'bias'))
+    self.assertIsInstance(new_model.kernel, nnx.Param)
+    np.testing.assert_array_equal(new_model.kernel[...], jnp.zeros((2, 3)))
+    np.testing.assert_array_equal(new_model.bias[...], jnp.zeros((3,)))
+
 
 if __name__ == '__main__':
   absltest.main()
-

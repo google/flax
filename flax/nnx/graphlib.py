@@ -19,6 +19,7 @@ import dataclasses
 import functools
 import threading
 import typing as tp
+import builtins
 
 import jax.core
 
@@ -2526,6 +2527,48 @@ def state(
 variables = state
 
 
+def map(
+  f: tp.Callable[[tuple, tp.Any], tp.Any],
+  node: A,
+  /,
+  *,
+  graph: bool | None = None,
+) -> A:
+  """Map a function over the state of a graph node.
+
+  ``map`` extracts the state from ``node`` using :func:`split`, applies ``f``
+  to every ``(path, value)`` pair using :func:`map_state`, and returns a
+  new node with the mapped values merged back into the original structure.
+  Note that the leaves in the state are :class:`Variable` objects, so ``f``
+  should handle them accordingly.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax.numpy as jnp
+
+    >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    >>> new_model = nnx.map(lambda path, v: v.replace(jnp.zeros_like(v)), model)
+    >>> assert jnp.all(new_model.kernel[...] == 0)
+    >>> assert jnp.all(new_model.bias[...] == 0)
+
+  Args:
+    f: A callable ``(path, value) -> new_value`` applied to each leaf in the
+      state. ``path`` is a tuple of path parts and ``value`` is the
+      corresponding leaf (typically a :class:`Variable`).
+    node: A graph node object.
+    graph: If ``True``, uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
+  Returns:
+    A :class:`State` with the mapped values.
+  """
+  graphdef, state = split(node, graph=graph)
+  state = statelib.map_state(f, state)
+  return merge(graphdef, state)
+
+
 def graphdef(
   node: tp.Any, /, *, graph: bool | None = None,
 ) -> GraphDef[tp.Any]:
@@ -2695,7 +2738,7 @@ def vars_as(
     duplicates_strs = '\n  ---'
     for node_duplicates in all_duplicates:
       for path in node_duplicates:
-        path_str = '/'.join(map(str, path))
+        path_str = '/'.join(builtins.map(str, path))
         duplicates_strs += f'\n  {path_str}'
       duplicates_strs += '\n  ---'
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
@@ -2976,10 +3019,10 @@ def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
       continue
 
     if not is_pytree_node(current, check_graph_registry=False):
-      _check_valid_pytree(current, 'iter_graph', '/'.join(map(str, path)))
+      _check_valid_pytree(current, 'iter_graph', '/'.join(builtins.map(str, path)))
       if isinstance(current, Variable) or variablelib.is_array_ref(current):
         obj_id = id(current)
-        str_path = '/'.join(map(str, path))
+        str_path = '/'.join(builtins.map(str, path))
         if obj_id in seen_refs:
           raise ValueError(
             f'Duplicate {current}\nfound at paths:\n\n'
@@ -2993,7 +3036,7 @@ def _iter_tree(node: tp.Any, /) -> tp.Iterator[tuple[PathParts, tp.Any]]:
       continue
 
     obj_id = id(current)
-    str_path = '/'.join(map(str, path))
+    str_path = '/'.join(builtins.map(str, path))
     if obj_id in in_progress:
       raise ValueError(
         f'Cycle detected for {type(current).__name__}\nfound at paths:\n\n'
@@ -3146,7 +3189,7 @@ def _recursive_map_graph(
   if node_id in visited:
     if node_id in results:
       return results[node_id]
-    path_str = '/'.join(map(str, path))
+    path_str = '/'.join(builtins.map(str, path))
     raise ValueError(
         f"Found cycle in the graph at path '{path_str}'. Node of type"
         f' {type(node)} has already been visited but has not been returned yet.'
@@ -3184,10 +3227,10 @@ def _recursive_map_tree(
 
   def _recurse(path: PathParts, current: tp.Any) -> tp.Any:
     if not is_pytree_node(current, check_graph_registry=False):
-      _check_valid_pytree(current, 'recursive_map', '/'.join(map(str, path)))
+      _check_valid_pytree(current, 'recursive_map', '/'.join(builtins.map(str, path)))
       if isinstance(current, Variable) or is_array_ref(current):
         obj_id = id(current)
-        str_path = '/'.join(map(str, path))
+        str_path = '/'.join(builtins.map(str, path))
         if obj_id in seen_refs:
           raise ValueError(
             f'Duplicate {current}\nfound at paths:\n\n'
@@ -3200,7 +3243,7 @@ def _recursive_map_tree(
       return f(path, current)
 
     obj_id = id(current)
-    str_path = '/'.join(map(str, path))
+    str_path = '/'.join(builtins.map(str, path))
     if obj_id in in_progress:
       raise ValueError(
         f'Cycle detected for {type(current).__name__}\nfound at paths:\n\n'

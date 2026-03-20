@@ -67,6 +67,7 @@ from .graphlib import graphdef as graphdef
 from .graphlib import iter_graph as iter_graph
 from .graphlib import recursive_map as recursive_map
 from .graphlib import find_duplicates as find_duplicates
+from .graphlib import map as map
 from .graphlib import call as call
 from .graphlib import set_metadata as set_metadata
 from .graphlib import SplitContext as SplitContext
@@ -151,6 +152,7 @@ from .spmd import get_partition_spec as get_partition_spec
 from .spmd import get_named_sharding as get_named_sharding
 from .spmd import with_partitioning as with_partitioning
 from .spmd import get_abstract_model as get_abstract_model
+from .spmd import abstract_with_sharding as abstract_with_sharding
 from .statelib import FlatState as FlatState
 from .statelib import State as State
 from .statelib import to_flat_state as to_flat_state
