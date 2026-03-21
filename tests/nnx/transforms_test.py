@@ -5537,12 +5537,9 @@ class TestPureJaxFancyScan(absltest.TestCase):
 
   def test_no_carry_all_scanned(self):
     def double(x):
-      return (x * 2,)
+      return x * 2
 
-    (ys,) = pure_jax_fancy_scan(
-        double, jnp.arange(5.0),
-        in_axes=(0,), out_axes=(0,),
-    )
+    ys = pure_jax_fancy_scan(double, jnp.arange(5.0), in_axes=0, out_axes=0)
     np.testing.assert_allclose(ys, jnp.arange(5.0) * 2)
 
   def test_reverse(self):
@@ -5650,6 +5647,60 @@ class TestPureJaxFancyScan(absltest.TestCase):
         in_axes=0, out_axes=0,
     )
     np.testing.assert_allclose(ys, jnp.arange(5.0) * 2)
+
+  def test_scan_axis_1(self):
+    def cumsum(carry, x):
+      carry = carry + x
+      return carry, carry
+
+    x = jnp.arange(10.0).reshape((2, 5))
+    final_carry, ys = pure_jax_fancy_scan(
+        cumsum, jnp.zeros(2), x,
+        in_axes=(nnx.Carry, 1), out_axes=(nnx.Carry, 1),
+    )
+    np.testing.assert_allclose(final_carry, jnp.array([10.0, 35.0]))
+    expected_ys = jnp.array([
+        [0., 1., 3., 6., 10.],
+        [5., 11., 18., 26., 35.]
+    ])
+    np.testing.assert_allclose(ys, expected_ys)
+
+  def test_scan_axis_negative_1(self):
+    def cumsum(carry, x):
+      carry = carry + x
+      return carry, carry
+
+    x = jnp.arange(10.0).reshape((2, 5))
+    final_carry, ys = pure_jax_fancy_scan(
+        cumsum, jnp.zeros(2), x,
+        in_axes=(nnx.Carry, -1), out_axes=(nnx.Carry, -1),
+    )
+    np.testing.assert_allclose(final_carry, jnp.array([10.0, 35.0]))
+    expected_ys = jnp.array([
+        [0., 1., 3., 6., 10.],
+        [5., 11., 18., 26., 35.]
+    ])
+    np.testing.assert_allclose(ys, expected_ys)
+
+  def test_scan_different_in_out_axes(self):
+    def cumsum(carry, x):
+      carry = carry + x
+      return carry, carry
+
+    x = jnp.arange(10.0).reshape((2, 5))
+    final_carry, ys = pure_jax_fancy_scan(
+        cumsum, jnp.zeros(2), x,
+        in_axes=(nnx.Carry, 1), out_axes=(nnx.Carry, 0),
+    )
+    np.testing.assert_allclose(final_carry, jnp.array([10.0, 35.0]))
+    expected_ys = jnp.array([
+        [0., 5.],
+        [1., 11.],
+        [3., 18.],
+        [6., 26.],
+        [10., 35.]
+    ])
+    np.testing.assert_allclose(ys, expected_ys)
 
 
 if __name__ == '__main__':

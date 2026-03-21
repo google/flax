@@ -69,13 +69,11 @@ def _apply_axis_fn(
     axis_fn: tp.Callable[..., tp.Any],
 ) -> None:
   is_leaf = lambda x: x is None or isinstance(x, variablelib.Variable)
-  _, per_leaf_axes = extract.broadcast_prefix2(axes, tree, is_leaf=is_leaf)
-  leaves = jax.tree_util.tree_leaves(tree, is_leaf=is_leaf)
-  for leaf, axis in zip(leaves, per_leaf_axes):
-    if (axis is None or isinstance(axis, int)) and isinstance(
-        leaf, variablelib.Variable
-    ):
+  def apply_fn(path, axis, leaf):
+    if isinstance(axis, int) and isinstance(leaf, variablelib.Variable):
       axis_fn(leaf, axis, metadata)
+
+  extract.broadcast_prefix_map(apply_fn, axes, tree, is_leaf=is_leaf)
 
 
 @tp.overload
@@ -83,7 +81,7 @@ def transform_metadata(
     *,
     in_axes: tp.Any = 0,
     out_axes: tp.Any = 0,
-    partition: str,
+    partition: str | None,
     graph: bool | None = None,
 ) -> tp.Callable[[F], F]:
   ...
@@ -96,7 +94,7 @@ def transform_metadata(
     in_axes: tp.Any = 0,
     out_axes: tp.Any = 0,
     graph: bool | None = None,
-    partition: str,
+    partition: str | None,
 ) -> F:
   ...
 
@@ -106,8 +104,8 @@ def transform_metadata(
     *,
     in_axes: tp.Any = 0,
     out_axes: tp.Any = 0,
+    partition: str | None,
     graph: bool | None = None,
-    partition: str,
 ) -> F | tp.Callable[[F], F]:
   if f is Missing:
     return functools.partial(

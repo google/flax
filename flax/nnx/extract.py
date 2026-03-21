@@ -517,7 +517,14 @@ def updates_and_snapshot(args: A) -> tuple[A, A]:
   for leaf in leaves:
     if isinstance(leaf, variablelib.Variable):
       updates_leaves.append(leaf)
-      snapshot_leaves.append(leaf.copy())
+      # don't snapshot hijax or ref Variables as their updates are automatically
+      # masked out in mask_variable_updates. However, the leaf is kept in the
+      # updates to check for aliasing. This avoids a copy operation which has
+      # significance for ref Variables.
+      if leaf.hijax or leaf.ref:
+        snapshot_leaves.append(Mask())
+      else:
+        snapshot_leaves.append(leaf.copy())
     else:
       updates_leaves.append(Mask())
       snapshot_leaves.append(Mask())
@@ -597,6 +604,10 @@ def mask_variable_updates(
     keep_fn = lambda _, _pfx, cur, snap: variable_changed(cur, snap)
 
   def _mask_updates(path, prefix_leaf, current, snapshot):
+    if current is None:
+      # None leaves should remain None, they only appear here because
+      # is_leaf catches None values for the prefix
+      return None
     if isinstance(current, variablelib.Variable):
       if current.hijax or current.ref:
         return Mask()
@@ -610,7 +621,7 @@ def mask_variable_updates(
         current_tree, snapshot_tree, is_leaf=is_leaf,
     )
   return broadcast_prefix_map(
-      _mask_updates, prefix, current_tree, snapshot_tree, is_leaf=is_leaf,
+      _mask_updates, prefix, current_tree, snapshot_tree, is_leaf=is_leaf
   )
 
 
