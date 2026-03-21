@@ -409,10 +409,10 @@ class TestSPMD(parameterized.TestCase):
 
     abs_model = nnx.eval_shape(lambda: Model())
     assert isinstance(abs_model.p1.kernel.sharding, jax.sharding.NamedSharding)
-    assert abs_model.p1.kernel.sharding.mesh.axis_names == mesh1.axis_names
+    assert abs_model.p1.kernel.sharding.mesh is mesh1
     assert abs_model.p1.kernel.sharding.spec == jax.P("a", "b")
     assert isinstance(abs_model.p2.kernel.sharding, jax.sharding.NamedSharding)
-    assert abs_model.p2.kernel.sharding.mesh.axis_names == mesh2.axis_names
+    assert abs_model.p2.kernel.sharding.mesh is mesh2
     assert abs_model.p2.kernel.sharding.spec == jax.P("c", "d")
 
   def test_eval_shape_with_sharding1(self):
@@ -424,7 +424,7 @@ class TestSPMD(parameterized.TestCase):
     with jax.set_mesh(mesh):
         abs_model = nnx.eval_shape(lambda: Model())
     assert isinstance(abs_model.linear.kernel.sharding, jax.sharding.NamedSharding)
-    assert abs_model.linear.kernel.sharding.mesh.axis_names == mesh.axis_names
+    assert abs_model.linear.kernel.sharding.mesh is mesh
     assert abs_model.linear.kernel.sharding.spec == jax.P("a", "b")
 
   @parameterized.product(axis_type_name=['auto', 'explicit'])
