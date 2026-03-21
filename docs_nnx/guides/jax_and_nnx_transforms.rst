@@ -11,7 +11,7 @@ First, let's set up imports and generate some dummy data:
 
 .. testcode:: Flax NNX, JAX
 
-  from flax import nnx
+  import nnx
   import jax
 
   x = jax.random.normal(jax.random.key(0), (1, 2))

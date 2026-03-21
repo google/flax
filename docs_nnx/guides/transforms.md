@@ -29,7 +29,7 @@ Flax NNX objects, they allow Python's reference semantics to be preserved for th
 ```{code-cell} ipython3
 import jax
 from jax import numpy as jnp, random
-from flax import nnx
+import nnx
 ```
 
 Throughout this guide, `nnx.vmap` is used as a case study to demonstrate how Flax NNX transforms work. However, the principles
