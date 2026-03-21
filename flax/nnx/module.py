@@ -766,6 +766,7 @@ def iter_modules(
       yield path, value
 
 iter_children = graphlib.iter_children
+iter_module_children = graphlib.iter_module_children
 
 P = tp.ParamSpec("P")
 R = tp.TypeVar("R")
