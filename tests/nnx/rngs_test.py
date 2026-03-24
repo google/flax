@@ -221,6 +221,8 @@ class TestRngs(parameterized.TestCase):
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(20, 10, rngs=rngs)
         self.drop = nnx.Dropout(0.1, rngs=rngs)
+      def __call__(self, x):
+        return self.drop(self.linear(x))
 
     with nnx.graphlib.set_graph_updates(False):
       with nnx.graphlib.set_graph_mode(False):
@@ -232,6 +234,10 @@ class TestRngs(parameterized.TestCase):
         assert model.drop.rngs.count[...].shape == (5,)
         bias = model.linear.bias[...]
         assert all(jnp.allclose(x,y) for (x,y) in zip(bias, bias[1:]))
+
+        # This is the same as just using 0 as the model in_axes
+        prefix2 = nnx.prefix(model, {nnx.Variable: 0})
+        nnx.vmap(Model.__call__, in_axes=(prefix2,None))(model, jnp.ones(20))
 
 
   def test_random_helpers(self):
