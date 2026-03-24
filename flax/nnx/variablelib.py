@@ -1703,13 +1703,13 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       and any(self._raw_value.sharding.spec)
     ):
       if 'out_sharding' in self._var_metadata and self._var_metadata['out_sharding'] is not None:
-        assert self._var_metadata['out_sharding'] == self._raw_value.sharding.spec, \
-          "Mismatched out_sharding: Flax metadata {} does not match exlicit sharding time {}".format(
-            self._var_metadata['out_sharding'], self._raw_value.sharding.spec)
+        if self._var_metadata['out_sharding'] != self._raw_value.sharding.spec:
+          raise ValueError("Mismatched out_sharding: Flax metadata {} does not match explicit sharding time {}".format(
+            self._var_metadata['out_sharding'], self._raw_value.sharding.spec))
       if 'mesh' in self._var_metadata and self._var_metadata['mesh'] is not None:
-        assert self._var_metadata['mesh'] == self._raw_value.sharding.mesh, \
-          "Mismatched meshes: Flax metadata {} does not match explicit sharding type {}".format(
-            self._var_metadata['mesh'], self._raw_value.sharding.mesh)
+        if self._var_metadata['mesh'] != self._raw_value.sharding.mesh:
+          raise ValueError("Mismatched meshes: Flax metadata {} does not match explicit sharding type {}".format(
+            self._var_metadata['mesh'], self._raw_value.sharding.mesh))
       self._var_metadata['out_sharding'] = self._raw_value.sharding.spec
       self._var_metadata['mesh'] = self._raw_value.sharding.mesh
 
