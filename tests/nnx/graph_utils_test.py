@@ -73,7 +73,7 @@ class TestGraphUtils(parameterized.TestCase):
     a = nnx.Dict(a=1, b=nnx.Param(2))
     g = nnx.List([a, 3, a, nnx.Param(4)])
 
-    graphdef, state = nnx.graph.split(g)
+    graphdef, state = nnx.split(g)
     g = nnx.merge(graphdef, state)
 
     assert g[0] is g[2]
@@ -112,7 +112,7 @@ class TestGraphUtils(parameterized.TestCase):
     a = nnx.Dict(a=1, b=nnx.Param(2))
     g = nnx.List([a, 3, a, nnx.Param(4)])
 
-    graphdef, state = nnx.graph.split(g)
+    graphdef, state = nnx.split(g)
     pure_state = nnx.to_pure_dict(state)
 
     g = nnx.merge(graphdef, pure_state)
@@ -123,7 +123,7 @@ class TestGraphUtils(parameterized.TestCase):
     a = {'a': 1, 'b': nnx.Param(2)}
     g = [a, 3, a, nnx.Param(4)]
 
-    graphdef, state = nnx.graph.split(g)
+    graphdef, state = nnx.split(g)
     g = nnx.merge(graphdef, state)
 
     assert g[0] is not g[2]
@@ -132,7 +132,7 @@ class TestGraphUtils(parameterized.TestCase):
     a = nnx.Dict({'a': 1, 'b': nnx.Param(2)})
     g = nnx.List([a, 3, a, nnx.Param(4)])
 
-    graphdef, state = nnx.graph.split(g)
+    graphdef, state = nnx.split(g)
 
     with self.assertRaisesRegex(ValueError, 'Incorrect number of leaves'):
       nnx.graphlib.unflatten(graphdef, nnx.State({}))
@@ -154,7 +154,7 @@ class TestGraphUtils(parameterized.TestCase):
     a = {'a': 1, 'b': nnx.Param(jnp.array(2))}
     g = [a, 3, a, nnx.Param(jnp.array(4))]
 
-    graphdef, state = nnx.graph.split(g)
+    graphdef, state = nnx.split(g)
 
     state[0]['b'][...] = 3
     nnx.update(g, state)
@@ -166,7 +166,7 @@ class TestGraphUtils(parameterized.TestCase):
     a = {'a': 1, 'b': nnx.Param(jnp.array(2))}
     g = [a, 3, a, nnx.Param(jnp.array(4))]
 
-    graphdef, state = nnx.graph.split(g)
+    graphdef, state = nnx.split(g)
     pure_state = nnx.to_pure_dict(state)
 
     pure_state[0]['b'] = jnp.array(3)
@@ -183,7 +183,7 @@ class TestGraphUtils(parameterized.TestCase):
       nnx.BatchNorm(2, rngs=rngs),
     ]
 
-    graphdef, state = nnx.graph.split(ls, graph=graph)
+    graphdef, state = nnx.split(ls, graph=graph)
 
     assert state[0]['kernel'].shape == (2, 2)
     assert state[0]['bias'].shape == (2,)
@@ -196,7 +196,7 @@ class TestGraphUtils(parameterized.TestCase):
     v = nnx.Param(1)
     g = [v, v]
 
-    graphdef, state = nnx.graph.split(g)
+    graphdef, state = nnx.split(g)
 
     assert len(nnx.to_flat_state(state)) == 1
 
@@ -214,7 +214,7 @@ class TestGraphUtils(parameterized.TestCase):
         self.baz.kernel = self.bar.kernel
 
     node = Foo(rngs=nnx.Rngs(0))
-    graphdef, state = nnx.graph.split(node)
+    graphdef, state = nnx.split(node)
 
     assert len(nnx.to_flat_state(state)) == 3  # 2 bias + 1 kernel
 
@@ -247,7 +247,7 @@ class TestGraphUtils(parameterized.TestCase):
         return self.linear_out(x)
 
     model = Encoder(rngs=nnx.Rngs(0))
-    graphdef, state = nnx.graph.split(model)
+    graphdef, state = nnx.split(model)
 
     assert len(nnx.to_flat_state(state)) == 1
 
@@ -262,7 +262,7 @@ class TestGraphUtils(parameterized.TestCase):
         self.a = nnx.Param(jnp.array(1))
 
     m = Foo()
-    graphdef, state = nnx.graph.split(m)
+    graphdef, state = nnx.split(m)
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(state['a'], nnx.Param)
@@ -284,7 +284,7 @@ class TestGraphUtils(parameterized.TestCase):
         self.b = p
 
     m = Foo()
-    graphdef, state = nnx.graph.split(m)
+    graphdef, state = nnx.split(m)
 
     assert isinstance(m.a, nnx.Param)
     assert isinstance(m.b, nnx.Param)
@@ -338,7 +338,7 @@ class TestGraphUtils(parameterized.TestCase):
 
     m = Foo()
 
-    graphdef, state = nnx.graph.split(m)
+    graphdef, state = nnx.split(m)
 
     assert 'tree' in state
     assert 'a' in state['tree']
@@ -476,7 +476,7 @@ class TestGraphUtils(parameterized.TestCase):
         self.count[...] += 1
         return 1
 
-    graph_state = nnx.graph.split(Counter())
+    graph_state = nnx.split(Counter())
 
     @jax.jit
     def update(graph_state: nnx.PureState[Counter]):
@@ -493,7 +493,7 @@ class TestGraphUtils(parameterized.TestCase):
 
   def test_stateful_linear(self):
     linear = StatefulLinear(3, 2, nnx.Rngs(0))
-    linear_state = nnx.graph.split(linear)
+    linear_state = nnx.split(linear)
 
     @jax.jit
     def forward(x, pure_linear: nnx.PureState[StatefulLinear]):
@@ -514,7 +514,7 @@ class TestGraphUtils(parameterized.TestCase):
       a=StatefulLinear(3, 2, rngs),
       b=StatefulLinear(2, 1, rngs),
     )
-    node_state = nnx.graph.split(nodes)
+    node_state = nnx.split(nodes)
     _, node_state = nnx.call(node_state)['b'].increment()
 
     nodes = nnx.merge(*node_state)
@@ -528,7 +528,7 @@ class TestGraphUtils(parameterized.TestCase):
     class Foo(nnx.Module):
       def __call__(self):
         test.assertTrue(self._pytree__state.initializing)
-        self = nnx.merge(*nnx.graph.split(self))
+        self = nnx.merge(*nnx.split(self))
         test.assertTrue(self._pytree__state.initializing)
 
     module = Foo()
@@ -541,8 +541,8 @@ class TestGraphUtils(parameterized.TestCase):
         self.rngs = rngs
 
       def __call__(self, x):
-        @nnx.graph.split_rngs(splits=5)
-        @nnx.graph.vmap(in_axes=(0, None), axis_size=5)
+        @nnx.split_rngs(splits=5)
+        @nnx.vmap(in_axes=(0, None), axis_size=5)
         def vmap_fn(inner, x):
           return inner(x)
 
@@ -773,7 +773,7 @@ class TestGraphUtils(parameterized.TestCase):
         self.static = nnx.static(static)
 
     tree = Foo(1, 2)
-    state = nnx.graph.state(tree)
+    state = nnx.state(tree)
 
     self.assertIn('data', state)
     self.assertIsInstance(state['data'], int)
@@ -835,7 +835,7 @@ class TestGraphUtils(parameterized.TestCase):
         y = 0
 
         self.assertIs(args[0], args[2]['b'])
-        for path, m in nnx.graph.iter_graph(args):
+        for path, m in nnx.iter_graph(args):
           if isinstance(m, Foo):
             self.assertEqual(m.a.shape, ())
             self.assertEqual(m.b.shape, ())
@@ -866,7 +866,7 @@ class TestGraphUtils(parameterized.TestCase):
   @parameterized.parameters(True, False)
   def test_split_variable(self, graph):
     v = nnx.Param(1)
-    graphdef, state = nnx.graph.split(v, graph=graph)
+    graphdef, state = nnx.split(v, graph=graph)
 
     expected_type = nnx.graphlib.VariableDef if graph else nnx.graphlib.TreeNodeDef
     self.assertIsInstance(graphdef.nodes[0], expected_type)
@@ -878,7 +878,7 @@ class TestGraphUtils(parameterized.TestCase):
   @parameterized.parameters(True, False)
   def test_split_filter_variable(self, graph):
     v = nnx.Param(1)
-    graphdef, batch_stats, params, rest = nnx.graph.split(
+    graphdef, batch_stats, params, rest = nnx.split(
       v, nnx.BatchStat, nnx.Param, ..., graph=graph
     )
 
@@ -896,7 +896,7 @@ class TestGraphUtils(parameterized.TestCase):
   @parameterized.parameters(True, False)
   def test_split_update_variable(self, graph):
     v = nnx.Param(jnp.array(1))
-    graphdef, state = nnx.graph.split(v, graph=graph)
+    graphdef, state = nnx.split(v, graph=graph)
 
     expected_type = nnx.graphlib.VariableDef if graph else nnx.graphlib.TreeNodeDef
     self.assertIsInstance(graphdef.nodes[0], expected_type)
@@ -910,7 +910,7 @@ class TestGraphUtils(parameterized.TestCase):
   @parameterized.parameters(True, False)
   def test_split_update_filter_variable(self, graph):
     v = nnx.Param(jnp.array(1))
-    graphdef, batch_stats, params, rest = nnx.graph.split(
+    graphdef, batch_stats, params, rest = nnx.split(
       v, nnx.BatchStat, nnx.Param, ..., graph=graph
     )
 
@@ -939,11 +939,13 @@ class TestGraphUtils(parameterized.TestCase):
     out = nnx.merge(graphdef, state)
     self.assertIs(out, state)
 
-  @parameterized.parameters(True, False)
-  def test_jit_variable(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_jit_variable(self, graph, graph_updates):
     v = nnx.Param(1)
 
-    @nnx.graph.jit(graph=graph)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def f(v):
       v[...] += 1
 
@@ -952,11 +954,11 @@ class TestGraphUtils(parameterized.TestCase):
     np.testing.assert_allclose(v[...], 2)
 
   def test_jit_pytree_of_variables(self):
-    v1 = nnx.Param(1)
-    v2 = nnx.Param(2)
+    v1 = nnx.Param(jnp.array(1))
+    v2 = nnx.Param(jnp.array(2))
     vs = [v1, v1, v2]
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(vs):
       self.assertIs(vs[0], vs[1])
       self.assertIsNot(vs[0], vs[2])
@@ -977,7 +979,7 @@ class TestGraphUtils(parameterized.TestCase):
     var = nnx.Param(1)
     foo = Foo(var)
 
-    @nnx.graph.jit
+    @nnx.jit
     def increment_var(var, foo):
       self.assertIs(var, foo.var)
       var[...] += 1
@@ -985,8 +987,10 @@ class TestGraphUtils(parameterized.TestCase):
     increment_var(var, foo)
     self.assertEqual(foo.var[...], 2)
 
-  @parameterized.parameters(True, False)
-  def test_variables_example(self, graph):
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_variables_example(self, graph, graph_updates):
     def stateful_linear_init(din: int, dout: int, rngs: nnx.Rngs):
       w = nnx.Param(jax.random.normal(rngs(), (din, dout)))
       b = nnx.Param(jnp.zeros((dout,)))
@@ -996,7 +1000,7 @@ class TestGraphUtils(parameterized.TestCase):
     rngs = nnx.Rngs(0)
     w, b, count = stateful_linear_init(2, 3, rngs=rngs)
 
-    @nnx.graph.jit(graph=graph)
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
     def stateful_linear(w, b, count, x):
       count[...] += 1
       return x @ w + b[None]
@@ -1018,7 +1022,7 @@ class TestGraphUtils(parameterized.TestCase):
 
     m = Foo()
 
-    graphdef, state = nnx.graph.split(m, graph=graph)
+    graphdef, state = nnx.split(m, graph=graph)
 
     self.assertLen(state, 1)
     self.assertIsInstance(state['a'], jax.Array)
@@ -1037,7 +1041,7 @@ class TestGraphUtils(parameterized.TestCase):
 
     m = Foo()
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m):
       m.a += 1
       self.assertEqual(m.b, 'yes')
@@ -1120,7 +1124,7 @@ class TestGraphUtils(parameterized.TestCase):
     root.f = var0
     root.g = arr1
 
-    nodes = [node for _, node in nnx.graph.iter_graph(root)]
+    nodes = [node for _, node in nnx.iter_graph(root)]
     count = lambda e: sum(node is e for node in nodes)
 
     # All internal nodes must be visited exactly once.
@@ -1146,16 +1150,16 @@ class TestGraphUtils(parameterized.TestCase):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=nnx.Param)
 
-    @nnx.graph.jit
+    @nnx.jit
     def train_step(model, optimizer, x, y):
       def loss_fn(model):
         return jnp.mean((model(x) - y) ** 2)
 
-      loss, grads = nnx.graph.value_and_grad(loss_fn)(model)
+      loss, grads = nnx.value_and_grad(loss_fn)(model)
       optimizer.update(model, grads)
       return loss
 
-    cached_train_step = nnx.graph.cached_partial(train_step, model, optimizer)
+    cached_train_step = nnx.cached_partial(train_step, model, optimizer)
 
     for step in range(2):
       x, y = jnp.ones((10, 2)), jnp.ones((10, 3))
@@ -1170,7 +1174,7 @@ class TestGraphUtils(parameterized.TestCase):
         self.c = self.a  # shared Module
 
     model = SharedModules(nnx.Rngs(0))
-    duplicates = nnx.graph.find_duplicates(model)
+    duplicates = nnx.find_duplicates(model)
 
     self.assertLen(duplicates, 1)
     self.assertEqual(duplicates[0], [('a',), ('c',)])
@@ -1192,7 +1196,7 @@ class TestGraphUtils(parameterized.TestCase):
         node.d += 1
       return node
 
-    bar2 = nnx.graph.recursive_map(inc_d, bar)
+    bar2 = nnx.recursive_map(inc_d, bar)
     self.assertIs(bar2[0], bar2[2])
     self.assertEqual(bar2[0].d, 11)
     self.assertEqual(bar2[1].d, 21)
@@ -1215,7 +1219,7 @@ class TestGraphUtils(parameterized.TestCase):
         node = Foo(-node.d)
       return node
 
-    bar2 = nnx.graph.recursive_map(swap, bar)
+    bar2 = nnx.recursive_map(swap, bar)
     self.assertIs(bar2[0], bar2[2])
     self.assertEqual(bar2[0].d, -10)
     self.assertEqual(bar2[1].d, -20)
@@ -1231,7 +1235,7 @@ class TestGraphUtils(parameterized.TestCase):
         return nnx.LoRA(node.in_features, 2, node.out_features, base_module=node, rngs=rngs)
       return node
 
-    self.assertEqual(len(nnx.graph.recursive_map(add_rank2_lora, model, graph=graph).layers), 3)
+    self.assertEqual(len(nnx.recursive_map(add_rank2_lora, model, graph=graph).layers), 3)
 
   def test_graphdef_hash_with_sequential(self):
     rngs = nnx.Rngs(0)
@@ -1239,6 +1243,14 @@ class TestGraphUtils(parameterized.TestCase):
         nnx.Linear(2, 1, rngs=rngs),
     )
     hash(nnx.graphdef(net))
+
+  @nnx.set_graph_mode(False)
+  def test_split_graph_error(self):
+    v = nnx.Variable(jnp.array(1.0))
+    with self.assertRaisesRegex(
+      ValueError, 'found at paths'
+    ):
+      graphdef, state = nnx.split((v, v))
 
 class SimpleModule(nnx.Module):
   pass
@@ -1291,7 +1303,7 @@ class TestTreeFlatten(parameterized.TestCase):
     b = {'a': 5, 'b': nnx.Param(jnp.array(6))}
     g = [a, 3, b, nnx.Param(jnp.array(4))]
 
-    graphdef, state = nnx.graph.split(g, graph=False)
+    graphdef, state = nnx.split(g, graph=False)
     g2 = nnx.merge(graphdef, state)
 
     self.assertIsInstance(g2, list)
@@ -1304,7 +1316,7 @@ class TestTreeFlatten(parameterized.TestCase):
   def test_tree_split_merge_module(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    graphdef, state = nnx.graph.split(m, graph=False)
+    graphdef, state = nnx.split(m, graph=False)
     self.assertIsInstance(graphdef.nodes[0], nnx.graphlib.TreeNodeDef)
 
     m2 = nnx.merge(graphdef, state)
@@ -1317,21 +1329,21 @@ class TestTreeFlatten(parameterized.TestCase):
     g = [v, v]
 
     with self.assertRaises(ValueError):
-      nnx.graph.split(g, graph=False)
+      nnx.split(g, graph=False)
 
   def test_tree_shared_refs_raises(self):
     ref = jax.new_ref(jnp.array(1.0))
     g = [ref, ref]
 
     with self.assertRaises(ValueError):
-      nnx.graph.split(g, graph=False)
+      nnx.split(g, graph=False)
 
   def test_tree_shared_variables_state_raises(self):
     v = nnx.Param(jnp.array(1))
     g = [v, v]
 
     with self.assertRaises(ValueError):
-      nnx.graph.state(g, graph=False)
+      nnx.state(g, graph=False)
 
   def test_tree_shared_variables_graphdef_raises(self):
     v = nnx.Param(jnp.array(1))
@@ -1349,7 +1361,7 @@ class TestTreeFlatten(parameterized.TestCase):
 
   def test_tree_flatten_unflatten_ordering(self):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
-    graphdef, state = nnx.graph.split(m, graph=False)
+    graphdef, state = nnx.split(m, graph=False)
 
     tree_nodedef = graphdef.nodes[0]
     self.assertIsInstance(tree_nodedef, nnx.graphlib.TreeNodeDef)
@@ -1362,14 +1374,14 @@ class TestTreeFlatten(parameterized.TestCase):
 
   def test_tree_flatten_dict(self):
     g = {'z': nnx.Param(jnp.array(1)), 'a': jnp.array(2)}
-    graphdef, state = nnx.graph.split(g, graph=False)
+    graphdef, state = nnx.split(g, graph=False)
     g2 = nnx.merge(graphdef, state)
     self.assertEqual(g2['z'][...], 1)
     np.testing.assert_array_equal(g2['a'], jnp.array(2))
 
   def test_tree_flatten_tuple(self):
     g = (nnx.Param(jnp.array(1)), jnp.array(2), 3)
-    graphdef, state = nnx.graph.split(g, graph=False)
+    graphdef, state = nnx.split(g, graph=False)
     g2 = nnx.merge(graphdef, state)
     self.assertIsInstance(g2, tuple)
     self.assertEqual(g2[0][...], 1)
@@ -1464,7 +1476,7 @@ class TestTreeFlatten(parameterized.TestCase):
     root.x = child
     root.y = jnp.ones(2)
 
-    node_ids = [id(node) for _, node in nnx.graph.iter_graph(root, graph=graph)]
+    node_ids = [id(node) for _, node in nnx.iter_graph(root, graph=graph)]
     self.assertIn(id(var0), node_ids)
     self.assertIn(id(var1), node_ids)
     self.assertIn(id(child), node_ids)
@@ -1477,9 +1489,9 @@ class TestTreeFlatten(parameterized.TestCase):
     root.b = var
 
     with self.assertRaisesRegex(
-      ValueError, 'Shared references are not supported with graph=False'
+      ValueError, 'found at paths'
     ):
-      list(nnx.graph.iter_graph(root, graph=False))
+      list(nnx.iter_graph(root, graph=False))
 
   def test_iter_graph_tree_mode_cycle_raises(self):
     a = nnx.List([1])
@@ -1487,15 +1499,15 @@ class TestTreeFlatten(parameterized.TestCase):
     a.append(b)
 
     with self.assertRaisesRegex(
-      ValueError, 'Cycles are not supported with graph=False'
+      ValueError, 'found at paths'
     ):
-      list(nnx.graph.iter_graph(a, graph=False))
+      list(nnx.iter_graph(a, graph=False))
 
   @parameterized.parameters(True, False)
   def test_iter_modules(self, graph):
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
 
-    modules = list(nnx.graph.iter_modules(model, graph=graph))
+    modules = list(nnx.iter_modules(model, graph=graph))
     self.assertLen(modules, 1)
     path, m = modules[0]
     self.assertEqual(path, ())
@@ -1509,7 +1521,7 @@ class TestTreeFlatten(parameterized.TestCase):
         self.dropout = nnx.Dropout(0.5)
 
     model = Block(nnx.Rngs(0))
-    modules = list(nnx.graph.iter_modules(model, graph=graph))
+    modules = list(nnx.iter_modules(model, graph=graph))
     module_types = [type(m).__name__ for _, m in modules]
     self.assertIn('Block', module_types)
     self.assertIn('Linear', module_types)
@@ -1533,7 +1545,7 @@ class TestTreeFlatten(parameterized.TestCase):
         node.d += 1
       return node
 
-    bar2 = nnx.graph.recursive_map(inc_d, bar, graph=False)
+    bar2 = nnx.recursive_map(inc_d, bar, graph=False)
     self.assertEqual(bar2[0].d, 11)
     self.assertEqual(bar2[1].d, 21)
     self.assertEqual(n, 2)
@@ -1555,7 +1567,7 @@ class TestTreeFlatten(parameterized.TestCase):
         node = Foo(-node.d)
       return node
 
-    bar2 = nnx.graph.recursive_map(swap, bar, graph=False)
+    bar2 = nnx.recursive_map(swap, bar, graph=False)
     self.assertEqual(bar2[0].d, -10)
     self.assertEqual(bar2[1].d, -20)
     self.assertEqual(n, 2)
@@ -1574,7 +1586,7 @@ class TestTreeFlatten(parameterized.TestCase):
         )
       return node
 
-    result = nnx.graph.recursive_map(add_rank2_lora, model, graph=False)
+    result = nnx.recursive_map(add_rank2_lora, model, graph=False)
     self.assertLen(result.layers, 3)
 
   def test_recursive_map_tree_mode_shared_variable_raises(self):
@@ -1582,9 +1594,9 @@ class TestTreeFlatten(parameterized.TestCase):
     g = [v, v]
 
     with self.assertRaisesRegex(
-      ValueError, 'Shared references are not supported with graph=False'
+      ValueError, 'found at paths'
     ):
-      nnx.graph.recursive_map(lambda path, node: node, g, graph=False)
+      nnx.recursive_map(lambda path, node: node, g, graph=False)
 
   def test_recursive_map_tree_mode_cycle_raises(self):
     a = nnx.List([1])
@@ -1592,11 +1604,101 @@ class TestTreeFlatten(parameterized.TestCase):
     a.append(b)
 
     with self.assertRaisesRegex(
-      ValueError, 'Cycles are not supported with graph=False'
+      ValueError, 'found at paths'
     ):
-      nnx.graph.recursive_map(lambda path, node: node, a, graph=False)
+      nnx.recursive_map(lambda path, node: node, a, graph=False)
+
+  def test_check_valid_pytree_flatten(self):
+    class NotAPytree(nnx.Pytree, pytree=False):
+      def __init__(self):
+        self.x = 1
+
+    node = [NotAPytree()]
+    with self.assertRaisesRegex(
+      ValueError, "pytree=False.*Found at path"
+    ):
+      nnx.graphlib.flatten(node, graph=False)
+
+  def test_check_valid_pytree_iter_graph(self):
+    class NotAPytree(nnx.Pytree, pytree=False):
+      def __init__(self):
+        self.x = 1
+
+    node = nnx.List([NotAPytree()])
+    with self.assertRaisesRegex(
+      ValueError, "pytree=False.*Found at path"
+    ):
+      list(nnx.iter_graph(node, graph=False))
+
+  def test_check_valid_pytree_iter_children(self):
+    class NotAPytree(nnx.Pytree, pytree=False):
+      def __init__(self):
+        self.x = 1
+
+    node = NotAPytree()
+    with self.assertRaisesRegex(
+      ValueError, "pytree=False"
+    ):
+      list(nnx.iter_children(node, graph=False))
+
+  def test_check_valid_pytree_recursive_map(self):
+    class NotAPytree(nnx.Pytree, pytree=False):
+      def __init__(self):
+        self.x = 1
+
+    node = nnx.List([NotAPytree()])
+    with self.assertRaisesRegex(
+      ValueError, "pytree=False.*Found at path"
+    ):
+      nnx.recursive_map(lambda path, node: node, node, graph=False)
+
+  @parameterized.parameters(True, False)
+  def test_map(self, graph):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    new_model = nnx.map(lambda path, x: jnp.zeros_like(x), model, graph=graph)
+
+    self.assertTrue(hasattr(new_model, 'kernel'))
+    self.assertTrue(hasattr(new_model, 'bias'))
+    np.testing.assert_array_equal(new_model.kernel, jnp.zeros((2, 3)))
+    np.testing.assert_array_equal(new_model.bias, jnp.zeros((3,)))
+
+  def test_map_with_path(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    paths_seen = []
+
+    def record_path(path, x):
+      paths_seen.append(path)
+      return x
+
+    nnx.map(record_path, model)
+    self.assertLen(paths_seen, 2)
+    path_last_parts = sorted(p[-1] for p in paths_seen)
+    self.assertEqual(path_last_parts, ['bias', 'kernel'])
+
+  def test_map_nested(self):
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+    model = Model(rngs=nnx.Rngs(0))
+    new_model = nnx.map(lambda path, x: jnp.ones_like(x), model)
+
+    self.assertTrue(hasattr(new_model, 'linear'))
+    np.testing.assert_array_equal(new_model.linear.kernel, jnp.ones((2, 3)))
+    np.testing.assert_array_equal(new_model.linear.bias, jnp.ones((3,)))
+
+  def test_map_replace(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    new_model = nnx.map(
+      lambda path, v: v.replace(jnp.zeros_like(v)), model
+    )
+
+    self.assertTrue(hasattr(new_model, 'kernel'))
+    self.assertTrue(hasattr(new_model, 'bias'))
+    self.assertIsInstance(new_model.kernel, nnx.Param)
+    np.testing.assert_array_equal(new_model.kernel[...], jnp.zeros((2, 3)))
+    np.testing.assert_array_equal(new_model.bias[...], jnp.zeros((3,)))
 
 
 if __name__ == '__main__':
   absltest.main()
-

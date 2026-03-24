@@ -208,6 +208,29 @@ class TestVariable(parameterized.TestCase):
     x = v[None]
     self.assertEqual(x.shape, (1, 3))
 
+  def test_set_metadata_out_sharding(self):
+    v = nnx.Variable(jnp.array(1.0))
+
+    v.set_metadata(out_sharding=jax.sharding.PartitionSpec(None))
+    self.assertEqual(
+      v.get_metadata('out_sharding'), jax.sharding.PartitionSpec(None)
+    )
+
+    v.set_metadata('out_sharding', jax.sharding.PartitionSpec('x'))
+    self.assertEqual(
+      v.get_metadata('out_sharding'), jax.sharding.PartitionSpec('x')
+    )
+
+    v.set_metadata({
+      'out_sharding': jax.sharding.PartitionSpec('y'),
+      'hijax': False,
+      'ref': False,
+      'eager_sharding': True,
+    })
+    self.assertEqual(
+      v.get_metadata('out_sharding'), jax.sharding.PartitionSpec('y')
+    )
+
 
 if __name__ == '__main__':
   absltest.main()

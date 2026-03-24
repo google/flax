@@ -15,6 +15,7 @@
 import abc
 import functools
 import typing as tp
+from collections import namedtuple
 
 import jax
 
@@ -27,8 +28,7 @@ from flax.nnx import graphlib, variablelib
 
 A = tp.TypeVar('A')
 Index = int
-KeyEntry = tp.TypeVar('KeyEntry', bound=tp.Hashable)
-KeyPath = tuple[KeyEntry, ...]
+KeyPath = tuple[tp.Hashable, ...]
 Prefix = tp.Any
 Leaf = tp.Any
 
@@ -106,6 +106,52 @@ def check_consistent_aliasing(
       + '\n'.join(node_msgs)
     )
 
+
+def check_consistent_aliasing2(
+  node: tp.Any,
+  prefix: tp.Any,
+  /,
+  *,
+  base_path: tuple[tp.Any, ...] = (),
+  node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] | None = None,
+):
+  if node_prefixes is None:
+    node_prefixes = {}
+
+  node_id_to_variable: dict[int, tp.Any] = {}
+
+  for path, value in graphlib.iter_graph(node, graph=True):
+    path = base_path + path
+    if graphlib.is_graph_node(value) or isinstance(value, graphlib.Variable):
+      value_id = id(value)
+      node_id_to_variable[value_id] = value
+      if value_id in node_prefixes:
+        node_prefixes[value_id].append((path, prefix))
+      else:
+        node_prefixes[value_id] = [(path, prefix)]
+
+  node_msgs = []
+  for node_id, paths_prefixes in node_prefixes.items():
+    unique_prefixes = {p for _, p in paths_prefixes}
+    if len(unique_prefixes) > 1:
+      path_prefix_repr = '\n'.join(
+        f'  {"/".join(map(str,path)) if path else "<root>"}: {p}'
+        for path, p in paths_prefixes
+      )
+      if node_id in node_id_to_variable:
+        variable = node_id_to_variable[node_id]
+        node_type_name = type(variable).__name__
+      else:
+        node_type_name = f'Node ID: {node_id}'
+
+      node_msgs.append(f'Node: {node_type_name}\n{path_prefix_repr}')
+
+  if node_msgs:
+    raise ValueError(
+      'Inconsistent aliasing detected. The following nodes have different prefixes:\n'
+      + '\n'.join(node_msgs)
+    )
+
 # -----------------------------
 # to_tree/from_tree
 # -----------------------------
@@ -133,6 +179,33 @@ def broadcast_prefix(
     or (prefix_is_leaf is not None and prefix_is_leaf(x)),
   )
   return result
+
+def broadcast_prefix2(
+  prefix_tree: tp.Any,
+  full_tree: tp.Any,
+  is_leaf: tp.Callable[[tp.Any], bool] | None = None,
+) -> tuple[list[KeyPath], list[tp.Any]]:
+  paths: list[KeyPath] = []
+  leaves: list[tp.Any] = []
+  num_leaves = lambda t: jax.tree_util.tree_structure(t).num_leaves
+  def add_leaves(path, x, subtree):
+    n = num_leaves(subtree)
+    paths.extend([path] * n)
+    leaves.extend([x] * n)
+  jax.tree.map_with_path(add_leaves, prefix_tree, full_tree, is_leaf=is_leaf)
+  return paths, leaves
+
+def broadcast_prefix_map(
+  f: tp.Callable[..., tp.Any],
+  prefix_tree: tp.Any,
+  full_tree: tp.Any,
+  *rest: tp.Any,
+  is_leaf: tp.Callable[[tp.Any], bool] | None = None,
+) -> tp.Any:
+  paths, prefix_leaves = broadcast_prefix2(prefix_tree, full_tree, is_leaf=is_leaf)
+  leaves, treedef = jax.tree_util.tree_flatten(full_tree, is_leaf=is_leaf)
+  full_prefix_tree = treedef.unflatten(prefix_leaves)
+  return jax.tree.map_with_path(f, full_prefix_tree, full_tree, *rest, is_leaf=is_leaf)
 
 
 class GraphDefState(struct.PyTreeNode):
@@ -260,6 +333,90 @@ def to_tree(
   return pytree_out
 
 
+def to_tree2(
+  tree,
+  /,
+  *,
+  prefix: tp.Any = Missing,
+  check_aliasing: bool = True,
+) -> tp.Any:
+  """to_tree2 has two main tasks:
+
+  1. Convert all graph nodes to NodeStates (a tree representation).
+  2. Check all Variables are aliased consistently given the prefix tree,
+    e.g. vmap's in/out_axes arguments.
+
+  Each NodeState contains the `GraphDef` and State for each object, these
+  are generated using `graphlib.flatten`. `extract.broadcast_prefix` is used
+  to calculate the prefix for each node, `check_consistent_aliasing2` traverses
+  the nodes subgraph and checks for Variable aliasing.
+  """
+  ref_index: graphlib.RefMap = graphlib.RefMap()
+
+  def _to_node_states(leaf):
+    if not (graphlib.is_graph_node(leaf) or isinstance(leaf, variablelib.Variable)):
+      return leaf
+    graphdef, flat_state = graphlib.flatten(
+      leaf, ref_index=ref_index, graph=True
+    )
+    (state,) = graphlib._to_nested_state(graphdef, (flat_state,))
+    return NodeStates.from_split(graphdef, state)
+
+  is_leaf = lambda x: (
+    isinstance(x, variablelib.Variable) or graphlib.is_graph_node(x)
+  )
+
+  if prefix is Missing or prefix is None:
+    return jax.tree.map(_to_node_states, tree, is_leaf=is_leaf)
+
+  leaf_prefixes = broadcast_prefix(
+    prefix,
+    tree,
+    prefix_is_leaf=lambda x: x is None or is_leaf(x),
+    tree_is_leaf=is_leaf,
+  )
+  leaf_paths, treedef = jax.tree_util.tree_flatten_with_path(tree, is_leaf=is_leaf)
+
+  assert len(leaf_paths) == len(leaf_prefixes)
+  leaves_out = []
+  node_prefixes: dict[int, list[tuple[PathParts, tp.Any]]] = {}
+
+  for (keypath, leaf), leaf_prefix in zip(leaf_paths, leaf_prefixes):
+    if is_leaf(leaf):
+      if check_aliasing:
+        base_path = graphlib.jax_to_nnx_path(keypath)
+        check_consistent_aliasing2(
+          leaf, leaf_prefix, base_path=base_path, node_prefixes=node_prefixes
+        )
+      leaves_out.append(_to_node_states(leaf))
+    else:
+      leaves_out.append(leaf)
+
+  return jax.tree.unflatten(treedef, leaves_out)
+
+
+def from_tree2(tree: tp.Any, /) -> tp.Any:
+  index_ref = graphlib.IndexMap()
+
+  def _from_node_states(x):
+    if not isinstance(x, NodeStates):
+      return x
+    state = graphlib._merge_to_flat_state(x.states)
+    return graphlib.unflatten(
+      x.graphdef, state, index_ref=index_ref,
+    )
+
+  return jax.tree.map(
+    _from_node_states,
+    tree,
+    is_leaf=lambda x: (
+      isinstance(x, NodeStates)
+      or graphlib.is_graph_node(x)
+      or isinstance(x, variablelib.Variable)
+    ),
+  )
+
+
 def merge_tree_node(
   ctx: graphlib.MergeContext, path: KeyPath, prefix: Prefix, leaf: Leaf
 ) -> tp.Any:
@@ -335,54 +492,50 @@ def clear_non_graph_nodes(tree):
     or graphlib.is_graph_node(x),
   )
 
+class Mask(tp.NamedTuple):
+  pass
+
+def mask_at(t: tuple, index: int | None) -> tuple:
+  if index is None:
+    return t
+  return tuple(
+    Mask() if i == index else x
+    for i, x in enumerate(t)
+  )
+
+def replace_at(t: tuple, index: int, value: tp.Any) -> tuple:
+  return tuple(
+    value if i == index else x
+    for i, x in enumerate(t)
+  )
 
 def updates_and_snapshot(args: A) -> tuple[A, A]:
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   leaves, treedef = jax.tree.flatten(args, is_leaf=is_leaf)
-  updates_leaves: list[variablelib.Variable | None] = []
-  snapshot_leaves: list[variablelib.Variable | None] = []
+  updates_leaves: list[variablelib.Variable | Mask] = []
+  snapshot_leaves: list[variablelib.Variable | Mask] = []
   for leaf in leaves:
     if isinstance(leaf, variablelib.Variable):
       updates_leaves.append(leaf)
-      snapshot_leaves.append(leaf.copy())
+      # don't snapshot hijax or ref Variables as their updates are automatically
+      # masked out in mask_variable_updates. However, the leaf is kept in the
+      # updates to check for aliasing. This avoids a copy operation which has
+      # significance for ref Variables.
+      if leaf.hijax or leaf.ref:
+        snapshot_leaves.append(Mask())
+      else:
+        snapshot_leaves.append(leaf.copy())
     else:
-      updates_leaves.append(None)
-      snapshot_leaves.append(None)
+      updates_leaves.append(Mask())
+      snapshot_leaves.append(Mask())
   updates = jax.tree.unflatten(treedef, updates_leaves)
   snapshot = jax.tree.unflatten(treedef, snapshot_leaves)
   return updates, snapshot
 
 
-class _InputsAndOutputs(tp.NamedTuple):
-  args: tuple
-  kwargs: dict | None
-  output: tp.Any
-
-
-@tp.overload
-def check_no_aliases(args: tuple[tp.Any, ...], output: tp.Any) -> None:
-  ...
-
-
-@tp.overload
-def check_no_aliases(
-    args: tuple[tp.Any, ...], kwargs: dict[str, tp.Any], output: tp.Any
-) -> None:
-  ...
-
-
-def check_no_aliases(*positional_args):
-  if len(positional_args) == 2:
-    args, output = positional_args  # pytype: disable=bad-unpacking
-    kwargs = None
-  elif len(positional_args) == 3:
-    args, kwargs, output = positional_args  # pytype: disable=bad-unpacking
-  else:
-    raise TypeError(
-      f'check_no_aliases expects 2 or 3 arguments, got {len(positional_args)}'
-    )
-
-  container = _InputsAndOutputs(args=args, kwargs=kwargs, output=output)
+def check_no_aliases(fn_name: str, /, **kwargs):
+  Attrs = namedtuple('Attrs', kwargs.keys())  # type: ignore[misc]
+  container = Attrs(**kwargs)
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   seen: dict[int, jax.tree_util.KeyPath] = {}
   for path, leaf in jax.tree.leaves_with_path(
@@ -395,64 +548,91 @@ def check_no_aliases(*positional_args):
       path_str = jax.tree_util.keystr(path)
       seen_path_str = jax.tree_util.keystr(seen[var_id])
       raise ValueError(
-        f'Variable at {path_str} is the same instance as at '
-        f'{seen_path_str}. tree-mode transforms do not support '
-        f'returning input Variables as outputs.'
+        f'Duplicate {leaf}\nfound at paths:\n\n'
+        f'  - {seen_path_str}\n'
+        f'  - {path_str}\n\n'
+        f'nnx.{fn_name} with graph_updates=False does not support '
+        'returning input Variables as outputs. '
+        f'Consider the following options:\n\n'
+        f'1. Remove the duplicate Variables.\n'
+        f'2. Create new Variables via nnx.clone() and use those instead.\n'
+        f'3. Enable graph mode and graph updates by passing graph=True and '
+        f'graph_updates=True to {fn_name}\n\n'
+        f'  nnx.{fn_name}(..., graph=True, graph_updates=True)\n\n'
+        f'4. Use nnx.compat.{fn_name} (sets graph and graph_updates to True '
+        f'automatically)\n\n'
+        f'  nnx.compat.{fn_name}(...)'
       )
     seen[var_id] = path
 
 
-def _variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
+def check_prefix(prefix: tp.Any, prefix_name: str, fn_name: str):
+  def _check(path, leaf):
+    if graphlib.is_graph_node(leaf) or isinstance(leaf, variablelib.Variable):
+      raise ValueError(
+        f'Found graph node or Variable of type {type(leaf).__name__} '
+        f'at path {jax.tree_util.keystr(path)} in `{prefix_name}` '
+        f'for nnx.{fn_name}. Graph nodes and Variables are not allowed '
+        f'as prefixes when graph=True and graph_updates=False'
+      )
+  jax.tree.map_with_path(
+    _check, prefix,
+    is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    or graphlib.is_graph_node(x),
+  )
+
+
+def variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
   post_leaves, post_td = jax.tree.flatten(post)
   pre_leaves, pre_td = jax.tree.flatten(pre)
   return post_td != pre_td or any(  # type: ignore[operator]
     a is not b for a, b in zip(post_leaves, pre_leaves)
   )
 
-MaskFn = tp.Callable[
-    [PathParts, variablelib.Variable, variablelib.Variable], bool
+KeepFn = tp.Callable[
+    [PathParts, tp.Any, variablelib.Variable, variablelib.Variable], bool
 ]
 
 def mask_variable_updates(
     current_tree: A,
     snapshot_tree: A,
     *,
-    keep_fn: MaskFn | None = None,
+    prefix: tp.Any = Missing,
+    keep_fn: KeepFn | None = None,
 ) -> A:
   if keep_fn is None:
-    keep_fn = lambda _, cur, snap: False
+    keep_fn = lambda _, _pfx, cur, snap: variable_changed(cur, snap)
 
-  def _mask_updates(jax_path, current, snapshot):
-    path = graphlib.jax_to_nnx_path(jax_path)
-    if isinstance(current, variablelib.Variable) and (
-        keep_fn(path, current, snapshot) or _variable_changed(current, snapshot)
-    ):
-      return current
-    return None
-  is_leaf = lambda x: isinstance(x, variablelib.Variable)
-  return jax.tree.map_with_path(
-      _mask_updates, current_tree, snapshot_tree, is_leaf=is_leaf
+  def _mask_updates(path, prefix_leaf, current, snapshot):
+    if current is None:
+      # None leaves should remain None, they only appear here because
+      # is_leaf catches None values for the prefix
+      return None
+    if isinstance(current, variablelib.Variable):
+      if current.hijax or current.ref:
+        return Mask()
+      if keep_fn(path, prefix_leaf, current, snapshot):
+        return current
+    return Mask()
+  is_leaf = lambda x: isinstance(x, variablelib.Variable) or x is None
+  if prefix is Missing:
+    return jax.tree.map_with_path(
+        lambda path, cur, snap: _mask_updates(path, None, cur, snap),
+        current_tree, snapshot_tree, is_leaf=is_leaf,
+    )
+  return broadcast_prefix_map(
+      _mask_updates, prefix, current_tree, snapshot_tree, is_leaf=is_leaf
   )
 
 
-def apply_variable_updates(args_tree: A, updates_tree: A) -> None:
-  is_leaf = lambda x: isinstance(x, variablelib.Variable) or x is None
-  args_leaves, treedef = jax.tree.flatten_with_path(args_tree, is_leaf=is_leaf)
+def apply_variable_updates(args_tree: A, updates_tree: A):
+  is_leaf = lambda x: isinstance(x, variablelib.Variable) or isinstance(x, Mask)
+  args_leaves = jax.tree.leaves(args_tree, is_leaf=is_leaf)
+  _, treedef = jax.tree.flatten(args_tree, is_leaf=is_leaf)
   updates_leaves = treedef.flatten_up_to(updates_tree)
-  seen: dict[int, jax.tree_util.KeyPath] = {}
-  for (path, variable), update in zip(args_leaves, updates_leaves):
-    if not isinstance(variable, variablelib.Variable):
-      continue
-    var_id = id(variable)
-    if var_id in seen:
-      path_str = jax.tree_util.keystr(path)
-      seen_path_str = jax.tree_util.keystr(seen[var_id])
-      raise ValueError(
-        f'Variable at {path_str} was already seen at {seen_path_str}. '
-        'tree-mode jit does not support shared Variable references.'
-      )
-    seen[var_id] = path
-    if update is not None:
+  for variable, update in zip(args_leaves, updates_leaves, strict=True):
+    if isinstance(update, variablelib.Variable):
+      assert isinstance(variable, variablelib.Variable)
       variable.update_from_state(update)
 
 
@@ -471,7 +651,7 @@ def check_same_variables(inputs, outputs, transform_name: str = ''):
         f'{transform_name} Variable identity must be preserved '
         'across iterations.'
       )
-  is_leaf = lambda x: x is None or isinstance(x, variablelib.Variable)
+  is_leaf = lambda x: isinstance(x, (Mask, variablelib.Variable))
   jax.tree.map(
     _check, inputs, outputs,
     is_leaf=is_leaf,

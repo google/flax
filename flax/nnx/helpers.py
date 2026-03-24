@@ -63,7 +63,10 @@ class Dict(reprlib.MappingReprMixin, Module, tp.MutableMapping[str, A]):
       setattr(self, name, value)
 
   def __getitem__(self, key) -> A:
-    return getattr(self, key)
+    try:
+      return getattr(self, key)
+    except AttributeError as e:
+      raise KeyError(key) from e
 
   def __setitem__(self, key, value):
     setattr(self, key, value)
@@ -81,7 +84,10 @@ class Dict(reprlib.MappingReprMixin, Module, tp.MutableMapping[str, A]):
     return id(self)
 
   def __delitem__(self, key: str) -> None:
-    delattr(self, key)
+    try:
+      delattr(self, key)
+    except AttributeError as e:
+      raise KeyError(key) from e
 
   if tp.TYPE_CHECKING:
     def __getattr__(self, key: str) -> A:

@@ -99,22 +99,32 @@ class Average(Metric):
     self.total[...] = jnp.array(0, dtype=jnp.float32)
     self.count[...] = jnp.array(0, dtype=jnp.int32)
 
-  def update(self, **kwargs) -> None:
+  def update(self, mask: jax.Array | None = None, **kwargs) -> None:
     """In-place update this ``Metric``. This method will use the value from
     ``kwargs[self.argname]`` to update the metric, where ``self.argname`` is
     defined on construction.
 
     Args:
+      mask: optional mask to ignore the values from the computation.
+        We use `values * mask` rule and mask shape should be broadcastable
+        to the shape of values array.
       **kwargs: the key-word arguments that contains a ``self.argname``
         entry that maps to the value we want to use to update this metric.
     """
     if self.argname not in kwargs:
       raise TypeError(f"Expected keyword argument '{self.argname}'")
     values: tp.Union[int, float, jax.Array] = kwargs[self.argname]
-    self.total[...] += (
-      values if isinstance(values, (int, float)) else values.sum()
-    )
-    self.count[...] += 1 if isinstance(values, (int, float)) else values.size
+    if mask is not None and isinstance(values, (int, float)):
+      raise ValueError(f"If mask is provided, {self.argname} should be a jax array")
+    if isinstance(values, (int, float)):
+      self.total[...] += values
+      self.count[...] += 1
+    elif mask is None:
+      self.total[...] += values.sum()
+      self.count[...] += values.size
+    else:
+      self.total[...] += (values * mask.astype(values.dtype)).sum()
+      self.count[...] += mask.sum().astype(self.count.dtype)
 
   def compute(self) -> jax.Array:
     """Compute and return the average."""
@@ -264,7 +274,9 @@ class Accuracy(Average):
     self.threshold = threshold
     super().__init__(*args, **kwargs)
 
-  def update(self, *, logits: jax.Array, labels: jax.Array, **_) -> None:  # type: ignore[override]
+  def update(  # type: ignore[override]
+      self, *, logits: jax.Array, labels: jax.Array, mask: jax.Array | None = None, **_
+  ) -> None:
     """In-place update this ``Metric``.
 
     Args:
@@ -273,6 +285,9 @@ class Accuracy(Average):
         dimension), before comparing them to the labels. For binary
         classification, these values are compared to the labels directly.
       labels: the ground truth integer labels.
+      mask: optional mask to ignore the logits and labels values from the computation.
+        We use `array * mask` rule and mask shape should be broadcastable
+        to the shape of labels array.
     """
     if self.threshold is not None:  # Binary classification case
       if logits.ndim != labels.ndim:
@@ -292,11 +307,11 @@ class Accuracy(Average):
       raise ValueError(f'Expected labels.dtype==jnp.int32, got {labels.dtype}')
 
     if self.threshold is not None:  # Binary classification case
-      super().update(values=((logits >= self.threshold) == (labels > 0)))
+      super().update(values=((logits >= self.threshold) == (labels > 0)), mask=mask)
       return
 
     # Multi-class classification case
-    super().update(values=(logits.argmax(axis=-1) == labels))
+    super().update(values=(logits.argmax(axis=-1) == labels), mask=mask)
 
 
 class MultiMetric(Metric):
@@ -404,12 +419,19 @@ class MultiMetric(Metric):
 
     Args:
       **updates: the key-word arguments that will be passed to the underlying ``Metric``'s
-        ``update`` method.
+        ``update`` method. It can contain ``mask`` argument as mask to be passed to the underlying metrics.
+        ``mask`` can be a ``jax.Array` and it will be passed to all the metrics. ``mask`` can be a dictionary
+        with metric name as keys and ``jax.Array`` as values, e.g ``{metric_name1: metric_mask1, ...}``
     """
     # TODO: should we give the option of updating only some of the metrics and not all? e.g. if for some kwargs==None, don't do update
     # TODO: should we raise an error if a kwarg is passed into **updates that has no match with any underlying metric? e.g. user typo
+    mask = updates.pop("mask", None)
     for metric_name in self._metric_names:
-      getattr(self, metric_name).update(**updates)
+      metric_mask_kwarg = {}
+      metric_mask = mask.get(metric_name, None) if isinstance(mask, dict) else mask
+      if metric_mask is not None:
+        metric_mask_kwarg = {"mask": metric_mask}
+      getattr(self, metric_name).update(**(updates | metric_mask_kwarg))
 
   def compute(self) -> dict[str, tp.Any]:
     """Compute and return the value of all underlying ``Metric``'s. This method

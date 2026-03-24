@@ -76,8 +76,7 @@ class TestMultiHeadAttention(parameterized.TestCase):
     )
     module.set_attributes(decode=False)
 
-    _ = module(x, True)
-    intermediates = nnx.pop(module, nnx.Intermediate)
+    _, intermediates = nnx.capture(module, nnx.Intermediate)(x, True)
     assert intermediates['attention_layers'][0]['attention_weights'][
       0
     ].shape == (4, 8, 6, 6)
@@ -86,8 +85,7 @@ class TestMultiHeadAttention(parameterized.TestCase):
       0
     ].shape == (4, 8, 6, 6)
 
-    _ = module(x)
-    intermediates = nnx.pop(module, nnx.Intermediate)
+    _, intermediates = nnx.capture(module, nnx.Intermediate)(x)
     assert not intermediates  # empty
 
   def test_autoregressive_decode_with_x64(self):
@@ -194,15 +192,18 @@ class TestMultiHeadAttention(parameterized.TestCase):
       pass
 
     # nnx path with padding mask and is_causal = True (internally combines them)
-    attn_manual = nnx.dot_product_attention(
-      query=q,
-      key=k,
-      value=v,
-      mask=padding_mask,
-      is_causal=True,
-      deterministic=True,
-      module=DummyModule(),
-    )
+    dummy = DummyModule()
+    def _run(m):
+      return nnx.dot_product_attention(
+        query=q,
+        key=k,
+        value=v,
+        mask=padding_mask,
+        is_causal=True,
+        deterministic=True,
+        module=m,
+      )
+    attn_manual, _ = nnx.capture(_run, nnx.Intermediate)(dummy)
 
     np.testing.assert_allclose(attn_jax, attn_manual, atol=1e-6)
 
@@ -324,6 +325,37 @@ class TestGQADotProductAttention(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, "must be a multiple"):
         nnx.dot_product_attention(query, key, value)
 
+  def test_gqa_multihead_attention(self):
+    in_feat = 128
+    n_heads = 32
+    n_kv_heads = 8
+    qkv_feat = 2048
+    head_dim = qkv_feat // n_heads
+
+    model = nnx.MultiHeadAttention(
+      num_heads=n_heads,
+      in_features=in_feat,
+      qkv_features=qkv_feat,
+      num_kv_heads=n_kv_heads,
+      rngs=nnx.Rngs(0),
+    )
+
+    assert model.query.kernel.shape == (in_feat, n_heads, head_dim)
+    assert model.key.kernel.shape == (in_feat, n_kv_heads, head_dim)
+    assert model.value.kernel.shape == (in_feat, n_kv_heads, head_dim)
+
+    x = jnp.ones((1, 10, in_feat))
+    y = model(x, decode=False)
+    assert y.shape == (1, 10, in_feat)
+
+    model.init_cache((1, 10, in_feat))
+    assert model.cached_key.shape == (1, 10, n_kv_heads, head_dim)
+
+    x_token = jnp.ones((1, 1, in_feat))
+    y_token = model(x_token, decode=True)
+    assert y_token.shape == (1, 1, in_feat)
+    assert model.cache_index == 1
+
   def test_gqa_parity_with_jax(self):
     class DummyModule(nnx.Module):
       pass
@@ -344,10 +376,9 @@ class TestGQADotProductAttention(parameterized.TestCase):
     jax_out = jax.nn.dot_product_attention(query, key, value)
 
     # NNX should handle broadcasting internally
-    nnx_out = nnx.dot_product_attention(
-      query, key, value,
-      module=dummy_module
-    )
+    def _run(m):
+      return nnx.dot_product_attention(query, key, value, module=m)
+    nnx_out, _ = nnx.capture(_run, nnx.Intermediate)(dummy_module)
 
     np.testing.assert_allclose(nnx_out, jax_out, atol=1e-3, rtol=1e-3)
 

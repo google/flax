@@ -1105,6 +1105,23 @@ class AbstractVariable(tp.Generic[A], hjx.MutableHiType):
 # --------------------------------------------
 
 
+def _remap_sharding_metadata(metadata: dict[str, tp.Any]) -> None:
+  if 'sharding' in metadata:
+    warnings.warn(
+      "'sharding' is deprecated, use 'out_sharding' instead.",
+      DeprecationWarning,
+      stacklevel=3,
+    )
+    metadata['out_sharding'] = metadata.pop('sharding')
+  if 'sharding_names' in metadata:
+    warnings.warn(
+      "'sharding_names' is deprecated, use 'out_sharding' instead.",
+      DeprecationWarning,
+      stacklevel=3,
+    )
+    metadata['out_sharding'] = metadata.pop('sharding_names')
+
+
 def _variable_operator(name: str) -> tp.Callable[[Variable[A], tp.Any], A]:
   def variable_operator_method(self, other):
     value = self.get_value()
@@ -1322,10 +1339,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
     if hasattr(var_t, 'on_remove_axis') and 'on_remove_axis' not in metadata:
       metadata['on_remove_axis'] = var_t.on_remove_axis
 
-    if 'sharding' in metadata:
-      metadata['out_sharding'] = metadata.pop('sharding')
-    if 'sharding_names' in metadata:
-      metadata['out_sharding'] = metadata.pop('sharding_names')
+    _remap_sharding_metadata(metadata)
 
     # run create_value hooks
     if 'on_create_value' in metadata:
@@ -1469,6 +1483,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       )
     if len(args) == 1:
       metadata = dict(args[0])
+      _remap_sharding_metadata(metadata)
       if 'hijax' not in metadata:
         metadata['hijax'] = self.hijax
       if metadata['hijax'] != self.hijax:
@@ -1493,6 +1508,20 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       self._var_metadata = metadata
     elif len(args) == 2:
       name, value = args
+      if name == 'sharding_names':
+        warnings.warn(
+          "'sharding_names' is deprecated, use 'out_sharding' instead.",
+          DeprecationWarning,
+          stacklevel=2,
+        )
+        name = 'out_sharding'
+      elif name == 'sharding':
+        warnings.warn(
+          "'sharding' is deprecated, use 'out_sharding' instead.",
+          DeprecationWarning,
+          stacklevel=2,
+        )
+        name = 'out_sharding'
       if name == 'hijax' and value != self.hijax:
         raise ValueError(
           f'Cannot change `hijax` metadata, expected {self.hijax}, got {value}'
@@ -1503,6 +1532,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
         )
       self._var_metadata[name] = value
     elif kwargs:
+      _remap_sharding_metadata(kwargs)
       if 'hijax' in kwargs and kwargs['hijax'] != self.hijax:
         raise ValueError(
           f'Cannot change `hijax` metadata, expected {self.hijax}, '
@@ -1636,10 +1666,6 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
   def set_value(self, value: A, *, index: tp.Any = MISSING):
     value = jax.tree.map(lambda x: x, value)  # make a copy
-    if isinstance(value, Variable):
-      raise ValueError(
-        'Cannot set value to a Variable, use `copy_from` method instead'
-      )
     if 'on_set_value' in self._var_metadata:
       value = self._var_metadata['on_set_value'](self, value)
     # update _raw_value
@@ -1725,6 +1751,7 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
       value = jax.new_ref(value)
       new_metadata['ref'] = True
 
+    value = jax.tree.map(lambda x: x, value)  # make a copy
     obj = self.from_metadata(value, new_metadata)
     return obj
 
@@ -2136,7 +2163,8 @@ class Cache(Variable[A]):
 
 class Intermediate(Variable[A]):
   """:class:`Variable` type that is typically used for
-  :func:`Module.sow`::
+  :func:`Module.sow`. Use :func:`nnx.capture` to retrieve
+  the sowed values::
 
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
@@ -2153,8 +2181,8 @@ class Intermediate(Variable[A]):
     >>> model = Model(rngs=nnx.Rngs(0))
 
     >>> x = jnp.ones((1, 2))
-    >>> y = model(x)
-    >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Intermediate))
+    >>> y, intms = nnx.capture(model, nnx.Intermediate)(x)
+    >>> jax.tree.map(jnp.shape, intms)
     State({
       'i': Intermediate(
         value=((1, 3),)
@@ -2167,7 +2195,8 @@ class Intermediate(Variable[A]):
 
 class Perturbation(Intermediate[A]):
   """:class:`Variable` type that is typically used for
-  :func:`Module.perturb`::
+  :func:`Module.perturb`. Use :func:`nnx.capture` to retrieve
+  the perturbation values::
 
     >>> from flax import nnx
     >>> import jax, jax.numpy as jnp
@@ -2184,8 +2213,8 @@ class Perturbation(Intermediate[A]):
     >>> model = Model(rngs=nnx.Rngs(0))
 
     >>> x = jnp.ones((1, 2))
-    >>> y = model(x)
-    >>> jax.tree.map(jnp.shape, nnx.state(model, nnx.Perturbation))
+    >>> y, perturbations = nnx.capture(model, nnx.Perturbation)(x)
+    >>> jax.tree.map(jnp.shape, perturbations)
     State({
       'i': Perturbation(
         value=(1, 3)

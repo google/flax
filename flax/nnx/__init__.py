@@ -49,6 +49,7 @@ from .helpers import Sequential as Sequential
 from .helpers import TrainState as TrainState
 from .module import M as M
 from .module import Module as Module
+from .module import capture as capture
 from .module import view as view
 from .module import view_info as view_info
 from .module import with_attributes as with_attributes
@@ -66,6 +67,7 @@ from .graphlib import graphdef as graphdef
 from .graphlib import iter_graph as iter_graph
 from .graphlib import recursive_map as recursive_map
 from .graphlib import find_duplicates as find_duplicates
+from .graphlib import map as map
 from .graphlib import call as call
 from .graphlib import set_metadata as set_metadata
 from .graphlib import SplitContext as SplitContext
@@ -78,6 +80,8 @@ from .graphlib import pure as pure
 from .graphlib import cached_partial as cached_partial
 from .graphlib import flatten as flatten
 from .graphlib import unflatten as unflatten
+from .graphlib import set_graph_mode as set_graph_mode
+from .graphlib import set_graph_updates as set_graph_updates
 from .nn import initializers as initializers
 from .nn.activations import celu as celu
 from .nn.activations import elu as elu
@@ -148,6 +152,7 @@ from .spmd import get_partition_spec as get_partition_spec
 from .spmd import get_named_sharding as get_named_sharding
 from .spmd import with_partitioning as with_partitioning
 from .spmd import get_abstract_model as get_abstract_model
+from .spmd import abstract_with_sharding as abstract_with_sharding
 from .statelib import FlatState as FlatState
 from .statelib import State as State
 from .statelib import to_flat_state as to_flat_state
@@ -193,6 +198,7 @@ from .transforms.transforms import checkify as checkify
 from .transforms.iteration import while_loop as while_loop
 from .transforms.iteration import fori_loop as fori_loop
 from .transforms.iteration import StateAxes as StateAxes
+from .transforms.iteration import transform_metadata as transform_metadata
 from .variablelib import A as A
 from .variablelib import BatchStat as BatchStat
 from .variablelib import Cache as Cache
@@ -214,6 +220,7 @@ from . import traversals as traversals
 from . import graphlib as graphlib
 # import last to prevent potential import cycles
 from . import graph as graph
+from . import compat as compat
 
 import typing as _tp
 

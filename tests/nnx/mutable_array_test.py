@@ -116,7 +116,7 @@ class TestPytree(absltest.TestCase):
 class TestVariableRefMode(absltest.TestCase):
   def test_split_mutable_array(self):
     m = jax.new_ref(1)
-    graphdef, state = nnx.graph.split(m)
+    graphdef, state = nnx.split(m)
 
     self.assertIs(m, state)
 
@@ -447,7 +447,7 @@ class TestVariableRefMode(absltest.TestCase):
     m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), ref=True)
     m_out1 = None
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m2):
       nonlocal m_out1
       m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), ref=True)
@@ -466,7 +466,7 @@ class TestVariableRefMode(absltest.TestCase):
 
     m1 = Foo(a=jax.new_ref(1))
 
-    @nnx.graph.jit
+    @nnx.jit
     def f(m2: Foo):
       m2.a[...] += 1
       return m2
@@ -638,11 +638,11 @@ class TestOptimizer(absltest.TestCase):
 
     @jax.jit
     def train_step(model, optimizer, x, y):
-      graphdef, params, nondiff = nnx.graph.split(model, wrt, ...)
+      graphdef, params, nondiff = nnx.split(model, wrt, ...)
 
       def loss_fn(params):
         model = nnx.merge(graphdef, params, nondiff)
-        return jnp.mean((model(x) - y) ** 2), nnx.graph.state(model, nnx.Not(wrt))
+        return jnp.mean((model(x) - y) ** 2), nnx.state(model, nnx.Not(wrt))
 
       (loss, updates), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
       nnx.update(model, updates)
@@ -676,7 +676,7 @@ class TestOptimizer(absltest.TestCase):
 
     @jax.jit
     def train_step(model, optimizer, x, y):
-      graphdef, params, nondiff = nnx.graph.split(model, wrt, ...)
+      graphdef, params, nondiff = nnx.split(model, wrt, ...)
 
       def loss_fn(params):
         model = nnx.merge(graphdef, params, nondiff)
@@ -1192,6 +1192,23 @@ class HijaxTransformCoverageTest(absltest.TestCase):
 
     jax.lax.scan(body, None, None, length=5)
     np.testing.assert_allclose(v[...], 8.0)
+
+  def test_hijax_variable_in_jit_graph_updates_false(self):
+    v = nnx.Variable(jnp.array(1.0), hijax=True)
+
+    @nnx.jit(graph=True, graph_updates=False)
+    def f(v, v2):
+      self.assertIs(v, v2)
+      v[...] += 1.0
+      return v[...] * 2
+
+    y = f(v, v)
+    np.testing.assert_allclose(v[...], 2.0)
+    np.testing.assert_allclose(y, 4.0)
+
+    y = f(v, v)
+    np.testing.assert_allclose(v[...], 3.0)
+    np.testing.assert_allclose(y, 6.0)
 
 
 if __name__ == '__main__':
