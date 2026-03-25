@@ -1088,6 +1088,7 @@ def unflatten(  # type: ignore[invalid-annotation]
   index_ref: IndexMap | None = None,
   outer_index_outer_ref: IndexMap | None = None,
   copy_variables: bool = False,
+  auto_create_variables: bool = True,
 ) -> Node:
   """Unflattens a graphdef into a node with the given state.
 
@@ -1149,6 +1150,7 @@ def unflatten(  # type: ignore[invalid-annotation]
       index_ref,
       outer_index_outer_ref,
       copy_variables,
+      auto_create_variables
     )
 
     try:
@@ -1170,6 +1172,7 @@ def _graph_unflatten(
   index_ref: IndexMap,
   outer_index_outer_ref: IndexMap | None,
   copy_variables: bool,
+  auto_create_variables: bool
 ) -> Node:
   """Recursive helper for graph_unflatten.
 
@@ -1264,7 +1267,7 @@ def _graph_unflatten(
         variable.set_raw_value(value)
     else:  # variabledef.index not in index_ref_cache
       # variable reference does not exist outside, create a new one
-      if isinstance(value, Variable):
+      if isinstance(value, Variable) or not auto_create_variables:
         variable = value
       else:
         variable = variabledef.type.from_metadata(
@@ -1313,6 +1316,7 @@ def _graph_unflatten(
             index_ref,
             outer_index_outer_ref,
             copy_variables,
+            auto_create_variables
           )
         else:
           raise RuntimeError(f'Unknown node definition: {node_def!r}')
@@ -2358,6 +2362,7 @@ def merge(  # type: ignore[invalid-annotation]
   /,
   *states: tp.Any,
   copy: bool = False,
+  auto_create_variables: bool = True,
 ) -> A:
   """The inverse of :func:`flax.nnx.split`.
 
@@ -2409,7 +2414,7 @@ def merge(  # type: ignore[invalid-annotation]
     _state = state
   else:
     _state = _merge_to_flat_state((state, *states))
-  node = unflatten(graphdef, _state, copy_variables=copy)
+  node = unflatten(graphdef, _state, copy_variables=copy, auto_create_variables=auto_create_variables)
   return node
 
 
@@ -2533,6 +2538,7 @@ def map(
   /,
   *,
   graph: bool | None = None,
+  auto_create_variables: bool = True,
 ) -> A:
   """Map a function over the state of a graph node.
 
@@ -2566,7 +2572,7 @@ def map(
   """
   graphdef, state = split(node, graph=graph)
   state = statelib.map_state(f, state)
-  return merge(graphdef, state)
+  return merge(graphdef, state, auto_create_variables=auto_create_variables)
 
 
 def graphdef(
