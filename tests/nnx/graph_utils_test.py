@@ -1699,6 +1699,14 @@ class TestTreeFlatten(parameterized.TestCase):
     np.testing.assert_array_equal(new_model.kernel[...], jnp.zeros((2, 3)))
     np.testing.assert_array_equal(new_model.bias[...], jnp.zeros((3,)))
 
+  def test_map_auto_create_variables_false(self):
+    rngs = nnx.Rngs(0)
+    new_rngs = nnx.map(
+      lambda path, x: 0, rngs, auto_create_variables=False
+    )
+    self.assertNotIsInstance(new_rngs.default.count, nnx.Variable)
+    self.assertEqual(new_rngs.default.count, 0)
+
 
 if __name__ == '__main__':
   absltest.main()
