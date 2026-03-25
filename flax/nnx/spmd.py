@@ -182,7 +182,7 @@ def get_abstract_model(init_fn, mesh, *, graph: bool | None = None):
   return gdef, abs_state
 
 
-def abstract_with_sharding(
+def as_abstract(
     tree: A, graph: bool | None = None
 ) -> A:
   """Add sharding information to abstract Variables.

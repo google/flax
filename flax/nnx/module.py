@@ -437,7 +437,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       raise_if_not_found=False,
     )
 
-def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool = True, graph: bool | None = None, **kwargs) -> A:
+def with_modules(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool = True, graph: bool | None = None, **kwargs) -> A:
   """Creates a new node with static attributes updated according to ``**kwargs``.
 
   The new node contains references to jax arrays in the original node. If a

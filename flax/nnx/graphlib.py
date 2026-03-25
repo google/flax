@@ -33,6 +33,7 @@ from flax.nnx.proxy_caller import (
 )
 from flax.nnx.statelib import FlatState, State, map_state
 from flax.nnx.variablelib import Variable, is_array_ref, V
+import flax.nnx.graphlib as graphlib
 from flax.typing import BaseConfigContext, HashableMapping, Key, PathParts, is_key_like
 import jax
 import numpy as np
@@ -2705,7 +2706,7 @@ def clone(node: Node, variables: bool = True, *, graph: bool | None = None) -> N
   return merge(graphdef, state, copy=variables)
 
 
-def vars_as(
+def with_vars(
   node: A,
   /,
   *,
@@ -2714,6 +2715,7 @@ def vars_as(
   mutable: bool | None = None,
   only: filterlib.Filter = ...,
   allow_duplicates: bool = False,
+  graph: bool | None = False,
 ) -> A:
   """ """
   new_attrs: dict[str, bool] = {}
@@ -2743,20 +2745,18 @@ def vars_as(
       duplicates_strs += '\n  ---'
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
-  def _to_refs(jax_path, x):
-    if predicate(jax_to_nnx_path(jax_path), x):
+  def _to_refs(path, x):
+    if predicate(path, x):
       assert isinstance(x, Variable)
       variable = x.copy(**new_attrs)
       return variable
     return x
 
-  node = jax.tree.map_with_path(
-    _to_refs, node, is_leaf=lambda x: isinstance(x, Variable)
-  )
+  node = graphlib.map(_to_refs, node, graph=graph)
   return node
 
 
-def pure(tree: A) -> A:
+def as_pure(tree: A) -> A:
   """Returns a new tree with all ``Variable`` objects replaced with inner values.
 
   This can be used to remove Variable metadata when its is not needed for tasks like
@@ -2795,7 +2795,7 @@ def pure(tree: A) -> A:
 
   def _pure_fn(x):
     if isinstance(x, Variable):
-      return pure(x.get_raw_value())
+      return as_pure(x.get_raw_value())
     elif variablelib.is_array_ref(x):
       return x[...]
     return x

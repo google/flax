@@ -9,7 +9,7 @@ jupytext:
 ---
 
 # Model Views
-This guide covers how to use the `nnx.view` function. This function is useful for handling state in layers like `Dropout` and `BatchNorm`, which behave differently in training and evaluation. Similar to `.view` for numpy arrays, `nnx.view` allows you to set modes of the model while still sharing the same data. For a quick intro to how this function works, refer to the following example:
+This guide covers how to use NNX "Views", which are useful for handling state in layers like `Dropout` and `BatchNorm` which behave differently in training and evaluation. Similar to `.view` for numpy arrays, NNX views allow you to modify static attributes of the model while still sharing the same data. For a quick intro, consider the following example showcasing `nnx.with_modules`, an NNX View that overwrites module attributes.
 
 ```{code-cell}
 from flax import nnx
@@ -21,8 +21,8 @@ model = nnx.Sequential(
 )
 
 # set train and eval modes
-train_model = nnx.view(model, deterministic=False, use_running_average=False)
-eval_model = nnx.view(model, deterministic=True, use_running_average=True)
+train_model = nnx.with_modules(model, deterministic=False, use_running_average=False)
+eval_model = nnx.with_modules(model, deterministic=True, use_running_average=True)
 
 # Can see deterministic is different between train_model and eval_model
 assert train_model.layers[2].deterministic == False
@@ -31,7 +31,7 @@ assert eval_model.layers[2].deterministic == True
 # Weights are shared between the models
 assert train_model.layers[0].kernel is eval_model.layers[0].kernel
 
-# Print information about kwargs for nnx.view with nnx.view_info
+# Print information about kwargs for nnx.with_modules with nnx.view_info
 print(nnx.view_info(model))
 ```
 
@@ -85,8 +85,8 @@ From the model display, we can see that `Dropout` has `deterministic == False`, 
 This is where `nnx.view` comes in. This function updates the modes for each submodule of a neural network based on the kwargs passed into the function. The underlying model weights are then shared between different views. We set up a training and evaluation version of the model below.
 
 ```{code-cell}
-train_model = nnx.view(model, deterministic=False)
-eval_model = nnx.view(model, deterministic=True)
+train_model = nnx.with_modules(model, deterministic=False)
+eval_model = nnx.with_modules(model, deterministic=True)
 
 # weights are references to the same data
 assert train_model.lin1.kernel is eval_model.lin1.kernel
@@ -128,8 +128,8 @@ Now we create `train_model` and `eval_model` views up front. During the training
 ```{code-cell}
 model = MyModel(in_dim, hidden_dim, out_dim, 0.1, rngs=rngs)
 optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
-train_model = nnx.view(model, deterministic=False)  # training view
-eval_model = nnx.view(model, deterministic=True)  # eval view
+train_model = nnx.with_modules(model, deterministic=False)  # training view
+eval_model = nnx.with_modules(model, deterministic=True)  # eval view
 
 eval_results = []
 for epoch in range(total_epochs):
@@ -201,7 +201,7 @@ class PrintLayer(nnx.Module):
 
 
 model = PrintLayer()
-model_print = nnx.view(model, msg='Hello, World!')
+model_print = nnx.with_modules(model, msg='Hello, World!')
 
 model() # nothing printed
 model_print() # prints "Hello, World!"

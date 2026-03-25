@@ -496,7 +496,7 @@ class TestSPMD(parameterized.TestCase):
               kernel_metadata={'out_sharding': ('a', 'b')},
           )
       )
-      abs_model = nnx.abstract_with_sharding(abs_model)
+      abs_model = nnx.as_abstract(abs_model)
 
     self.assertIsInstance(abs_model.kernel, nnx.Param)
     self.assertEqual(abs_model.kernel.sharding.spec, P('a', 'b'))
@@ -533,7 +533,7 @@ class TestSPMD(parameterized.TestCase):
         )
 
     abs_model = nnx.eval_shape(lambda: Model())
-    abs_model = nnx.abstract_with_sharding(abs_model)
+    abs_model = nnx.as_abstract(abs_model)
 
     self.assertEqual(abs_model.p1.kernel.sharding.spec, P('a', 'b'))
     self.assertEqual(abs_model.p1.kernel.sharding.mesh, mesh1)
@@ -542,7 +542,7 @@ class TestSPMD(parameterized.TestCase):
 
   def test_get_abstract_no_sharding_metadata(self):
     abs_model = nnx.eval_shape(lambda: nnx.Linear(4, 8, rngs=nnx.Rngs(0)))
-    abs_model = nnx.abstract_with_sharding(abs_model)
+    abs_model = nnx.as_abstract(abs_model)
 
     self.assertIsInstance(abs_model.kernel, nnx.Param)
     self.assertIsNone(
