@@ -177,7 +177,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       setattr(self, name, variable_type(reduced_value))
     warnings.warn(
         """Using 'Module.sow()' outside of 'nnx.capture()' is deprecated; see
-        https://flax.readthedocs.io/en/stable/capturing_intermediates.html for more information.
+        https://flax.readthedocs.io/en/latest/guides/extracting_intermediates.html for more information.
         """,
         DeprecationWarning,
         stacklevel=2,
@@ -270,7 +270,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       setattr(self, name, variable_type(old_value))
     warnings.warn("""
       Using 'Module.perturb()' outside of 'nnx.capture()' is deprecated; see
-      https://flax.readthedocs.io/en/stable/capturing_intermediates.html for more information.
+      https://flax.readthedocs.io/en/latest/guides/extracting_intermediates.html for more information.
       """,
       DeprecationWarning,
       stacklevel=2)
