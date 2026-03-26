@@ -5224,6 +5224,35 @@ class TestCheckify(parameterized.TestCase):
     np.testing.assert_allclose(out, 1)
 
 
+class TestMakeJaxpr(parameterized.TestCase):
+
+  def test_make_jaxpr_graph_updates_error(self):
+    m = nnx.Dict(a=nnx.Param(jnp.array(1)))
+
+    def f(m):
+      return m['a'][...]
+
+    with self.assertRaisesRegex(
+      ValueError, 'nnx.make_jaxpr does not support graph_updates=True.'
+    ):
+      nnx.make_jaxpr(f, graph=True, graph_updates=True)(m)
+
+  @parameterized.parameters(True, False)
+  def test_make_jaxpr_with_variable_update(self, graph):
+    class Counter(nnx.Module):
+      def __init__(self):
+        self.count = nnx.Variable(jnp.array(0))
+
+      def __call__(self):
+        self.count[...] += 1
+        return self.count[...]
+
+    m = Counter()
+    jaxpr = nnx.make_jaxpr(lambda m: m(), graph=graph, graph_updates=False)(m)
+    self.assertIsNotNone(jaxpr)
+    self.assertEqual(m.count[...], 0)
+
+
 class TestBoundMethodTransforms(parameterized.TestCase):
   def test_remat_with_bound_method_raises(self):
     class M(nnx.Module):

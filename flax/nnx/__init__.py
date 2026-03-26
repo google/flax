@@ -195,6 +195,7 @@ from .transforms.transforms import eval_shape as eval_shape
 from .transforms.transforms import cond as cond
 from .transforms.transforms import switch as switch
 from .transforms.transforms import checkify as checkify
+from .transforms.transforms import make_jaxpr as make_jaxpr
 from .transforms.iteration import while_loop as while_loop
 from .transforms.iteration import fori_loop as fori_loop
 from .transforms.iteration import StateAxes as StateAxes

@@ -467,6 +467,101 @@ def checkify(
 
 
 @dataclasses.dataclass(eq=False)
+class SimpleMakeJaxprFn:
+  f: tp.Callable[..., tp.Any]
+  graph: bool
+
+  def __post_init__(self):
+    functools.update_wrapper(self, self.f, updated=())
+
+  @extract.treemap_copy_args
+  def __call__(self, *args, **kwargs):
+    if self.graph:
+      args, kwargs = extract.from_tree2((args, kwargs))
+    out = self.f(*args, **kwargs)
+    if self.graph:
+      out = extract.to_tree2(out)
+    extract.check_no_aliases('make_jaxpr', args=args, kwargs=kwargs, out=out)
+    return out
+
+
+@tp.overload
+def make_jaxpr(
+  f: tp.Callable[..., A],
+  *,
+  graph: bool | None = None,
+  graph_updates: bool | None = None,
+  static_argnums: int | tp.Sequence[int] = (),
+) -> tp.Callable[..., tp.Any]: ...
+
+@tp.overload
+def make_jaxpr(
+  *,
+  graph: bool | None = None,
+  graph_updates: bool | None = None,
+  static_argnums: int | tp.Sequence[int] = (),
+) -> tp.Callable[[F], tp.Callable[..., tp.Any]]: ...
+
+def make_jaxpr(
+  f: tp.Callable[..., A] | Missing = MISSING,
+  *,
+  graph: bool | None = None,
+  graph_updates: bool | None = None,
+  static_argnums: int | tp.Sequence[int] = (),
+) -> tp.Callable[..., tp.Any] | tp.Callable[[F], tp.Callable[..., tp.Any]]:
+  """A "lifted" version of `jax.make_jaxpr <https://jax.readthedocs.io/en/latest/jaxpr.html>`_
+    that can handle `flax.nnx.Module <https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/module.html#flax.nnx.Module>`_
+    / graph nodes as arguments.
+
+  Args:
+    f: the function to be transformed into a Jaxpr.
+    graph: If ``True`` (default), uses graph-mode which supports the full
+      NNX feature set including shared references and reference semantics.
+      If ``False``, uses tree-mode which treats Modules as regular JAX
+      pytrees, avoiding the overhead of the graph protocol.
+    graph_updates: If ``True``, propagates updates on graph structure
+      that happen inside the transform to the input graphs, has no
+      effect when ``graph=False``. ``nnx.make_jaxpr`` raises an error
+      if ``graph_updates=True``.
+    static_argnums: Optional, int or sequence of ints. Specifies which
+      positional argument(s) to treat as static (compile-time constant).
+  """
+  if isinstance(f, Missing):
+    return functools.partial(
+      make_jaxpr,
+      graph=graph,
+      graph_updates=graph_updates,
+      static_argnums=static_argnums,
+    )
+
+  if graph_updates is None:
+    graph_updates = graphlib.set_graph_updates.current_value()
+  if graph_updates:
+    raise ValueError('nnx.make_jaxpr does not support graph_updates=True.')
+
+  f_call, _, was_bound = _resolve_bound_callable(f)
+  if was_bound:
+    _raise_bound_method_error('make_jaxpr')
+  if graph is None:
+    graph = graphlib.set_graph_mode.current_value()
+
+  jaxpr_maker = jax.make_jaxpr(
+    SimpleMakeJaxprFn(f_call, graph=graph),
+    static_argnums=static_argnums,
+  )
+
+  @functools.wraps(f)
+  def jaxpr_wrapper(*args, **kwargs):
+    if graph:
+      args, kwargs = extract.to_tree2((args, kwargs))
+    extract.check_no_aliases('make_jaxpr', args=args, kwargs=kwargs)
+    jaxpr = jaxpr_maker(*args, **kwargs)
+    return jaxpr
+
+  return jaxpr_wrapper
+
+
+@dataclasses.dataclass(eq=False)
 class SimpleCondFn:
   f: tp.Callable[..., tp.Any]
   graph: bool
