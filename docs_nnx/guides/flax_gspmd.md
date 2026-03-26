@@ -33,6 +33,8 @@ import flax
 from flax import nnx
 
 # Ignore this if you are already running on a TPU or GPU
+nnx.set_graph_mode(False)
+nnx.set_graph_updates(False)
 if not jax._src.xla_bridge.backends_are_initialized():
   jax.config.update('jax_num_cpu_devices', 8)
 print(f'You have 8 “fake” JAX devices now: {jax.devices()}')
@@ -50,7 +52,6 @@ auto_mesh = jax.make_mesh((2, 4), ('data', 'model'))
 > Compatibility Note: This guide covers the [eager sharding feature](https://flax.readthedocs.io/en/latest/flip/4844-var-eager-sharding.html) that greatly simplifies creating sharded model. If your project already used Flax GSPMD API on version `flax<0.12`, you might have turned the feature off to keep your code working. Users can toggle this feature using the `nnx.use_eager_sharding` function.
 
 ```{code-cell} ipython3
-nnx.use_eager_sharding(True)
 assert nnx.using_eager_sharding()
 ```
 
@@ -64,7 +65,7 @@ with nnx.use_eager_sharding(False):
 You can also enable eager sharding on a per-variable basis by passing `eager_sharding=False` during variable initialization. The mesh can also be passed this way.
 
 ```{code-cell} ipython3
-nnx.Param(jnp.ones(4,4), out_sharding=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
+nnx.Param(jnp.ones((4, 4)), out_sharding=(None, 'model'), eager_sharding=True, mesh=auto_mesh)
 ```
 
 ## Shard a single-array model
@@ -141,15 +142,14 @@ Make note of the following:
 ```{code-cell} ipython3
 class DotReluDot(nnx.Module):
   def __init__(self, depth: int, rngs: nnx.Rngs):
-    init_fn = nnx.initializers.lecun_normal()
     self.dot1 = nnx.Linear(
       depth, depth,
-      kernel_init=nnx.with_partitioning(init_fn, (None, 'model')),
+      kernel_metadata={'out_sharding': (None, 'model')},
       use_bias=False,  # or use `bias_init` to give it annotation too
       rngs=rngs)
     self.w2 = nnx.Param(
-      init_fn(rngs.params(), (depth, depth)),  # RNG key and shape for W2 creation
-      sharding=('model', None),
+      rngs.params.lecun_normal()((depth, depth)),  # RNG key and shape for W2 creation
+      out_sharding=('model', None),
     )
 
   def __call__(self, x: jax.Array):
@@ -163,7 +163,8 @@ class MultiDotReluDot(nnx.Module):
   def __init__(self, depth: int, num_layers: int, rngs: nnx.Rngs):
     # Annotate the additional axis with sharding=None, meaning it will be
     # replicated across all devices.
-    @nnx.vmap(transform_metadata={nnx.PARTITION_NAME: None})
+    @nnx.vmap
+    @nnx.transform_metadata(partition=None)
     def create_sublayers(r):
       return DotReluDot(depth, r)
     self.layers = create_sublayers(rngs.fork(split=num_layers))
@@ -186,7 +187,7 @@ def train_step(model, optimizer, x, y):
 
   loss, grads = jax.value_and_grad(loss_fn)(model)
   optimizer.update(model, grads)
-  return model, loss
+  return model, optimizer, loss
 
 
 with jax.set_mesh(auto_mesh):
@@ -195,11 +196,12 @@ with jax.set_mesh(auto_mesh):
   label = jax.device_put(rngs.normal((8, 1024)), P('data', None))
   # Model and optimizer
   model = MultiDotReluDot(1024, 2, rngs=nnx.Rngs(0))
+  print(model)
   optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
   # The loop
   for i in range(5):
-    model, loss = train_step(model, optimizer, input, label)
+    model, optimizer, loss = train_step(model, optimizer, input, label)
     print(loss)    # Model (over-)fitting to the labels quickly.
 ```
 
@@ -234,8 +236,9 @@ checkpointer = ocp.StandardCheckpointer()
 checkpointer.save(path / 'checkpoint_name', sharded_state)
 
 # Load a sharded state from the checkpoint.
-graphdef, abs_state = nnx.get_abstract_model(
+abs_model = nnx.eval_shape(
   lambda: MultiDotReluDot(1024, 2, rngs=nnx.Rngs(0)), auto_mesh)
+graphdef, abs_state = nnx.split(abs_model)
 restored_state = checkpointer.restore(path / 'checkpoint_name',
                                       target=abs_state)
 restored_model = nnx.merge(graphdef, abs_state)
