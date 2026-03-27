@@ -16,6 +16,7 @@ import typing as tp
 
 import flax.core.spmd as core_spmd
 from flax.nnx import variablelib, graphlib
+from flax.nnx.deprecations import deprecated
 from flax.nnx.transforms.transforms import eval_shape
 from flax.typing import (
   Sharding,
@@ -182,7 +183,7 @@ def get_abstract_model(init_fn, mesh, *, graph: bool | None = None):
   return gdef, abs_state
 
 
-def abstract_with_sharding(
+def as_abstract(
     tree: A, graph: bool | None = None
 ) -> A:
   """Add sharding information to abstract Variables.
@@ -238,3 +239,5 @@ def abstract_with_sharding(
       return abs_var
     return x
   return graphlib.map(add_sharding, tree, graph=graph)
+
+abstract_with_sharding = deprecated(as_abstract)

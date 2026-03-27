@@ -50,7 +50,7 @@ from .helpers import TrainState as TrainState
 from .module import M as M
 from .module import Module as Module
 from .module import capture as capture
-from .module import view as view
+from .module import with_modules as with_modules, view as view
 from .module import view_info as view_info
 from .module import with_attributes as with_attributes
 from .module import iter_children as iter_children, iter_modules as iter_modules
@@ -75,8 +75,8 @@ from .graphlib import split_context as split_context
 from .graphlib import MergeContext as MergeContext
 from .graphlib import merge_context as merge_context
 from .graphlib import variables as variables
-from .graphlib import vars_as as vars_as
-from .graphlib import pure as pure
+from .graphlib import with_vars as with_vars, vars_as as vars_as
+from .graphlib import as_pure as as_pure, pure as pure
 from .graphlib import cached_partial as cached_partial
 from .graphlib import flatten as flatten
 from .graphlib import unflatten as unflatten
@@ -152,7 +152,7 @@ from .spmd import get_partition_spec as get_partition_spec
 from .spmd import get_named_sharding as get_named_sharding
 from .spmd import with_partitioning as with_partitioning
 from .spmd import get_abstract_model as get_abstract_model
-from .spmd import abstract_with_sharding as abstract_with_sharding
+from .spmd import as_abstract as as_abstract, abstract_with_sharding as abstract_with_sharding
 from .statelib import FlatState as FlatState
 from .statelib import State as State
 from .statelib import to_flat_state as to_flat_state

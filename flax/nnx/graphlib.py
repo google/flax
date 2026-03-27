@@ -26,6 +26,7 @@ import jax.core
 from flax import config
 from flax.nnx import filterlib, reprlib, traversals, variablelib
 from flax.nnx import statelib
+from flax.nnx.deprecations import deprecated
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -33,6 +34,7 @@ from flax.nnx.proxy_caller import (
 )
 from flax.nnx.statelib import FlatState, State, map_state
 from flax.nnx.variablelib import Variable, is_array_ref, V
+import flax.nnx.graphlib as graphlib
 from flax.typing import BaseConfigContext, HashableMapping, Key, PathParts, is_key_like
 import jax
 import numpy as np
@@ -1088,6 +1090,7 @@ def unflatten(  # type: ignore[invalid-annotation]
   index_ref: IndexMap | None = None,
   outer_index_outer_ref: IndexMap | None = None,
   copy_variables: bool = False,
+  auto_create_variables: bool = True,
 ) -> Node:
   """Unflattens a graphdef into a node with the given state.
 
@@ -1149,6 +1152,7 @@ def unflatten(  # type: ignore[invalid-annotation]
       index_ref,
       outer_index_outer_ref,
       copy_variables,
+      auto_create_variables
     )
 
     try:
@@ -1170,6 +1174,7 @@ def _graph_unflatten(
   index_ref: IndexMap,
   outer_index_outer_ref: IndexMap | None,
   copy_variables: bool,
+  auto_create_variables: bool
 ) -> Node:
   """Recursive helper for graph_unflatten.
 
@@ -1264,7 +1269,7 @@ def _graph_unflatten(
         variable.set_raw_value(value)
     else:  # variabledef.index not in index_ref_cache
       # variable reference does not exist outside, create a new one
-      if isinstance(value, Variable):
+      if isinstance(value, Variable) or not auto_create_variables:
         variable = value
       else:
         variable = variabledef.type.from_metadata(
@@ -1313,6 +1318,7 @@ def _graph_unflatten(
             index_ref,
             outer_index_outer_ref,
             copy_variables,
+            auto_create_variables
           )
         else:
           raise RuntimeError(f'Unknown node definition: {node_def!r}')
@@ -2358,6 +2364,7 @@ def merge(  # type: ignore[invalid-annotation]
   /,
   *states: tp.Any,
   copy: bool = False,
+  auto_create_variables: bool = True,
 ) -> A:
   """The inverse of :func:`flax.nnx.split`.
 
@@ -2409,7 +2416,7 @@ def merge(  # type: ignore[invalid-annotation]
     _state = state
   else:
     _state = _merge_to_flat_state((state, *states))
-  node = unflatten(graphdef, _state, copy_variables=copy)
+  node = unflatten(graphdef, _state, copy_variables=copy, auto_create_variables=auto_create_variables)
   return node
 
 
@@ -2533,6 +2540,7 @@ def map(
   /,
   *,
   graph: bool | None = None,
+  auto_create_variables: bool = True,
 ) -> A:
   """Map a function over the state of a graph node.
 
@@ -2565,8 +2573,11 @@ def map(
     A :class:`State` with the mapped values.
   """
   graphdef, state = split(node, graph=graph)
-  state = statelib.map_state(f, state)
-  return merge(graphdef, state)
+  if isinstance(state, statelib.State):
+    state = statelib.map_state(f, state)
+  else:
+    state = f((), state)
+  return merge(graphdef, state, auto_create_variables=auto_create_variables)
 
 
 def graphdef(
@@ -2705,7 +2716,7 @@ def clone(node: Node, variables: bool = True, *, graph: bool | None = None) -> N
   return merge(graphdef, state, copy=variables)
 
 
-def vars_as(
+def with_vars(
   node: A,
   /,
   *,
@@ -2714,6 +2725,7 @@ def vars_as(
   mutable: bool | None = None,
   only: filterlib.Filter = ...,
   allow_duplicates: bool = False,
+  graph: bool | None = False,
 ) -> A:
   """ """
   new_attrs: dict[str, bool] = {}
@@ -2743,20 +2755,19 @@ def vars_as(
       duplicates_strs += '\n  ---'
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
-  def _to_refs(jax_path, x):
-    if predicate(jax_to_nnx_path(jax_path), x):
+  def _to_refs(path, x):
+    if predicate(path, x):
       assert isinstance(x, Variable)
       variable = x.copy(**new_attrs)
       return variable
     return x
 
-  node = jax.tree.map_with_path(
-    _to_refs, node, is_leaf=lambda x: isinstance(x, Variable)
-  )
+  node = graphlib.map(_to_refs, node, graph=graph)
   return node
 
+vars_as = deprecated(with_vars)
 
-def pure(tree: A) -> A:
+def as_pure(tree: A) -> A:
   """Returns a new tree with all ``Variable`` objects replaced with inner values.
 
   This can be used to remove Variable metadata when its is not needed for tasks like
@@ -2793,19 +2804,16 @@ def pure(tree: A) -> A:
     inner values.
   """
 
-  def _pure_fn(x):
+  def _pure_fn(_, x):
     if isinstance(x, Variable):
-      return pure(x.get_raw_value())
+      return x.get_raw_value()
     elif variablelib.is_array_ref(x):
       return x[...]
     return x
 
-  return jax.tree.map(
-    _pure_fn,
-    tree,
-    is_leaf=lambda x: isinstance(x, Variable),
-  )
+  return map(_pure_fn, tree, auto_create_variables=False)
 
+pure = deprecated(as_pure)
 
 def call(
   graphdef_state: tuple[GraphDef[A], GraphState], /

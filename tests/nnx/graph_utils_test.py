@@ -1252,6 +1252,38 @@ class TestGraphUtils(parameterized.TestCase):
     ):
       graphdef, state = nnx.split((v, v))
 
+  def test_as_pure_replaces_variables_with_values(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    pure_model = nnx.as_pure(model)
+    self.assertNotIsInstance(pure_model.kernel, nnx.Variable)
+    self.assertNotIsInstance(pure_model.bias, nnx.Variable)
+    self.assertIsInstance(pure_model.kernel, jax.Array)
+    self.assertIsInstance(pure_model.bias, jax.Array)
+    _, state = nnx.split(model)
+    pure_state = nnx.as_pure(state)
+    self.assertNotIsInstance(pure_state['kernel'], nnx.Variable)
+    self.assertNotIsInstance(pure_state['bias'], nnx.Variable)
+    self.assertIsInstance(pure_state['kernel'], jax.Array)
+    self.assertIsInstance(pure_state['bias'], jax.Array)
+
+  def test_as_pure_preserves_non_variable_leaves(self):
+    tree = {'a': jnp.array(1.0), 'b': nnx.Param(jnp.array(2.0)), 'c': 42}
+
+    pure = nnx.as_pure(tree)
+
+    np.testing.assert_array_equal(pure['a'], jnp.array(1.0))
+    np.testing.assert_array_equal(pure['b'], jnp.array(2.0))
+    self.assertEqual(pure['c'], 42)
+
+  def test_as_pure_nested_variables(self):
+    # Variable wrapping another Variable — inner value should be unwrapped
+    inner = nnx.Param(jnp.array(3.0))
+    outer = nnx.Param(inner)
+
+    pure = nnx.as_pure(outer)
+
+    np.testing.assert_array_equal(pure, jnp.array(3.0))
+
 class SimpleModule(nnx.Module):
   pass
 
@@ -1698,6 +1730,14 @@ class TestTreeFlatten(parameterized.TestCase):
     self.assertIsInstance(new_model.kernel, nnx.Param)
     np.testing.assert_array_equal(new_model.kernel[...], jnp.zeros((2, 3)))
     np.testing.assert_array_equal(new_model.bias[...], jnp.zeros((3,)))
+
+  def test_map_auto_create_variables_false(self):
+    rngs = nnx.Rngs(0)
+    new_rngs = nnx.map(
+      lambda path, x: 0, rngs, auto_create_variables=False
+    )
+    self.assertNotIsInstance(new_rngs.default.count, nnx.Variable)
+    self.assertEqual(new_rngs.default.count, 0)
 
 
 if __name__ == '__main__':

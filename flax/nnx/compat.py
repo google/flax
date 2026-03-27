@@ -39,7 +39,7 @@ iter_graph = functools.partial(_graphlib.iter_graph, graph=True)
 recursive_map = functools.partial(_graphlib.recursive_map, graph=True)
 
 # module
-view = functools.partial(_module.view, graph=True)
+view = functools.partial(_module.with_modules, graph=True)
 view_info = functools.partial(_module.view_info, graph=True)
 iter_modules = functools.partial(_module.iter_modules, graph=True)
 iter_children = functools.partial(_module.iter_children, graph=True)  # type: ignore[has-type]
