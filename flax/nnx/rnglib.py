@@ -725,7 +725,7 @@ class SplitBackups(struct.PyTreeNode, tp.Iterable[StreamBackup]):
   def __exit__(self, *args):
     restore_rngs(self)
 
-def with_rngs(tree, split=None, fork=None, graph=False):
+def with_rngs(tree, split=None, fork=None, only=True, graph=False):
   """Returns a copy of ``tree`` with ``RngStream`` objects replaced according to
   ``split`` and ``fork`` rules.
 
@@ -796,13 +796,14 @@ def with_rngs(tree, split=None, fork=None, graph=False):
     split = {...: split}
   split_predicates = {filterlib.to_predicate(k): v for k, v in split.items()}
   fork_predicate = filterlib.to_predicate(fork)
+  only_predicate = filterlib.to_predicate(only)
 
   def f(path, val):
     if isinstance(val, RngStream):
       for predicate, num_splits in split_predicates.items():
-        if predicate(path, val):
+        if predicate(path, val) and only_predicate(path, val):
           return val.split(num_splits)
-      if fork_predicate(path, val):
+      if fork_predicate(path, val) and only_predicate(path, val):
         return val.fork()
     return val
 
