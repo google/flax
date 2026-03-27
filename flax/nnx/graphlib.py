@@ -26,6 +26,7 @@ import jax.core
 from flax import config
 from flax.nnx import filterlib, reprlib, traversals, variablelib
 from flax.nnx import statelib
+from flax.nnx.deprecations import deprecated
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -2761,6 +2762,7 @@ def with_vars(
   node = graphlib.map(_to_refs, node, graph=graph)
   return node
 
+vars_as = deprecated(with_vars)
 
 def as_pure(tree: A) -> A:
   """Returns a new tree with all ``Variable`` objects replaced with inner values.
@@ -2808,6 +2810,7 @@ def as_pure(tree: A) -> A:
 
   return map(_pure_fn, tree, auto_create_variables=False)
 
+pure = deprecated(as_pure)
 
 def call(
   graphdef_state: tuple[GraphDef[A], GraphState], /

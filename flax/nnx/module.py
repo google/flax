@@ -29,6 +29,7 @@ from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
 from flax.nnx.graphlib import GraphState
 from flax.nnx.statelib import split_state, State
+from flax.nnx.deprecations import deprecated
 import functools as ft
 from flax.typing import Key, Path, PathParts
 from collections.abc import MutableMapping
@@ -514,6 +515,8 @@ def with_modules(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found
     raise ValueError(f"Unused keys found in nnx.view: {sorted(remaining)}")
 
   return out
+
+view = deprecated(with_modules)
 
 def with_attributes(
   node: A,
