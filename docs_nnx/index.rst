@@ -193,7 +193,6 @@ Learn more
    key_concepts
    guides_basic
    guides_advanced
-   Models (Bonsai) <https://github.com/jax-ml/bonsai>
    Post-training (Tunix) <https://tunix.readthedocs.io/en/latest/index.html>
    hijax/index
    migrating/index
