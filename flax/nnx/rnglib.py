@@ -433,6 +433,8 @@ class Rngs(Pytree):
     return self._get_stream(name, KeyError)
 
   def __getattr__(self, name: str):
+    if name.startswith('__') and name.endswith('__'):
+      raise AttributeError(name)
     return self._get_stream(name, AttributeError)
 
   def __call__(self):
