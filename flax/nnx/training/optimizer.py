@@ -25,7 +25,7 @@ from flax.nnx import filterlib
 from flax.nnx.pytreelib import Pytree
 from flax.nnx.variablelib import Variable
 
-M = tp.TypeVar('M', bound=nnx.Module)
+M = tp.TypeVar('M')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
 class OptState(Variable):
