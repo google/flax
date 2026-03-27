@@ -490,6 +490,7 @@ class TestBridgeModule(absltest.TestCase):
         return forward(self, x)
 
     model = Top()
+    model = nnx.graph.merge(*nnx.graph.split(model))
     x = jnp.ones((4, 32))
     params = model.init(jax.random.key(0), x)['params']
     self.assertSameElements(['zzz'], params.keys())
