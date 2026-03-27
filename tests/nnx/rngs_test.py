@@ -14,6 +14,7 @@
 
 from functools import partial
 from typing import Any
+import re
 
 import jax
 import jax.numpy as jnp
@@ -238,6 +239,95 @@ class TestRngs(parameterized.TestCase):
       jax.random.fold_in(jax.random.key(1), 1), (2, 3)
     )
     np.testing.assert_allclose(x_nnx, x_jax)
+
+class TestWithRngs(parameterized.TestCase):
+  def test_split_int_splits_all_streams(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    new_rngs = nnx.with_rngs(rngs, split=4)
+
+    self.assertEqual(new_rngs.params.key.shape, (4,))
+    self.assertEqual(new_rngs['dropout'].key.shape, (4,))
+
+  def test_split_tuple_splits_all_streams(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    new_rngs = nnx.with_rngs(rngs, split=(2, 3))
+
+    self.assertEqual(new_rngs.params.key.shape, (2, 3))
+    self.assertEqual(new_rngs['dropout'].key.shape, (2, 3))
+
+  def test_fork_forks_all_streams(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    original_params_key = rngs.params.key[...]
+    original_dropout_key = rngs['dropout'].key[...]
+
+    new_rngs = nnx.with_rngs(rngs, fork=...)
+
+    # Forked keys are scalar and differ from originals
+    self.assertEqual(new_rngs.params.key.shape, ())
+    self.assertEqual(new_rngs['dropout'].key.shape, ())
+    self.assertFalse(jnp.array_equal(new_rngs.params.key[...], original_params_key))
+    self.assertFalse(jnp.array_equal(new_rngs['dropout'].key[...], original_dropout_key))
+
+  def test_split_mapping_applies_per_filter(self):
+    rngs = nnx.Rngs(params=0, dropout=1, noise=2)
+    new_rngs = nnx.with_rngs(rngs, split={'params': 4, ...: (2, 3)})
+
+    self.assertEqual(new_rngs.params.key.shape, (4,))
+    self.assertEqual(new_rngs['dropout'].key.shape, (2, 3))
+    self.assertEqual(new_rngs.noise.key.shape, (2, 3))
+
+  def test_split_mapping_first_matching_filter_wins(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    # 'params' filter comes before '...' so it should match first
+    new_rngs = nnx.with_rngs(rngs, split={'params': 4, ...: 8})
+
+    self.assertEqual(new_rngs.params.key.shape, (4,))
+    self.assertEqual(new_rngs['dropout'].key.shape, (8,))
+
+  def test_split_some_fork_rest(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    new_rngs = nnx.with_rngs(rngs, split={'params': 4}, fork=...)
+
+    self.assertEqual(new_rngs.params.key.shape, (4,))
+    # dropout not matched by split → forked (scalar)
+    self.assertEqual(new_rngs['dropout'].key.shape, ())
+
+  def test_original_base_key_not_replaced(self):
+    # nnx.with_rngs advances the original stream's counter (consuming one step to
+    # derive the new keys) but does not replace the original's base key.
+    rngs = nnx.Rngs(params=0, dropout=1)
+    original_key_var = rngs.params.key
+
+    nnx.with_rngs(rngs, split=4)
+
+    self.assertIs(rngs.params.key, original_key_var)
+    self.assertEqual(rngs.params.key.shape, ())
+
+  def test_unmatched_streams_returned_unchanged(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    # Only fork 'params'; 'dropout' matches neither split nor fork
+    new_rngs = nnx.with_rngs(rngs, fork='params')
+
+    self.assertIsNot(new_rngs['dropout'], rngs['dropout'])  # new tree, but...
+    self.assertTrue(jnp.array_equal(new_rngs['dropout'].key[...], rngs['dropout'].key[...]))
+    self.assertEqual(new_rngs['dropout'].key.shape, ())
+
+  def test_split_and_fork_same_stream_raises(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    with self.assertRaisesRegex(ValueError, re.compile(r"multiple rules")):
+      nnx.with_rngs(rngs, split={'params': 4}, fork='params')
+
+  def test_works_on_plain_pytree(self):
+    params_stream = nnx.RngStream(0, tag='params')
+    dropout_stream = nnx.RngStream(1, tag='dropout')
+    tree = {'a': params_stream, 'b': dropout_stream}
+
+    new_tree = nnx.with_rngs(tree, split=4)
+
+    self.assertEqual(new_tree['a'].key.shape, (4,))
+    self.assertEqual(new_tree['b'].key.shape, (4,))
+    # Originals unchanged
+    self.assertEqual(params_stream.key.shape, ())
 
 if __name__ == '__main__':
   absltest.main()
