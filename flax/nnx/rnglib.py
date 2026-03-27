@@ -725,6 +725,88 @@ class SplitBackups(struct.PyTreeNode, tp.Iterable[StreamBackup]):
   def __exit__(self, *args):
     restore_rngs(self)
 
+def with_rngs(tree, split=None, fork=None, graph=False):
+  """Returns a copy of ``tree`` with ``RngStream`` objects replaced according to
+  ``split`` and ``fork`` rules.
+
+  ``split`` controls which streams are **split** — after splitting, each call
+  to the stream produces one key from an array of pre-generated keys rather
+  than a single key.  ``fork`` controls which of the remaining streams are
+  **forked** — each call to a forked stream produces a unique key derived from
+  the parent counter.  Streams that match neither rule are returned unchanged.
+
+  Args:
+    tree: A pytree that may contain ``RngStream`` objects (e.g. an ``Rngs``
+      instance, a module, or any nested structure).
+    split: Specifies which streams to split and into what shape.  Can be:
+
+      * An ``int`` or ``tuple[int, ...]`` — split *all* streams into this
+        shape, equivalent to ``{...: split}``.
+      * A :class:`~flax.nnx.filterlib.Filter`-keyed mapping where each value
+        is an ``int`` or ``tuple[int, ...]``.  The first matching filter wins.
+
+    fork: A :class:`~flax.nnx.filterlib.Filter` selecting which streams not
+      already handled by ``split`` should be forked.  Pass ``...`` to fork all
+      remaining streams.
+    graph: If ``True``, uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
+
+  Returns:
+    A new tree of the same structure as ``tree`` with ``RngStream`` objects
+    replaced by split or forked copies as specified.
+
+  Example — split all streams::
+
+    >>> from flax import nnx
+    ...
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> new_rngs = nnx.with_rngs(rngs, split=4)
+    >>> new_rngs.params.key.shape
+    (4,)
+    >>> new_rngs.dropout.key.shape
+    (4,)
+
+  Example — split some streams, fork the rest::
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> new_rngs = nnx.with_rngs(rngs, split={'params': 4}, fork=...)
+    >>> new_rngs.params.key.shape
+    (4,)
+    >>> new_rngs.dropout.key.shape   # forked: scalar key, advanced counter
+    ()
+
+  Example — per-filter split shapes::
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1, noise=2)
+    >>> new_rngs = nnx.with_rngs(rngs, split={
+    ...   'params': 4,    # split params into 4 keys
+    ...   ...: (2, 4),    # split anything else into 2×4 keys
+    ... })
+    >>> new_rngs.params.key.shape
+    (4,)
+    >>> new_rngs.noise.key.shape
+    (2, 4)
+
+  """
+  if split is None:
+    split = {}
+  elif isinstance(split, (int, tuple)):
+    split = {...: split}
+  split_predicates = {filterlib.to_predicate(k): v for k, v in split.items()}
+  fork_predicate = filterlib.to_predicate(fork)
+
+  def f(path, val):
+    if isinstance(val, RngStream):
+      for predicate, num_splits in split_predicates.items():
+        if predicate(path, val):
+          return val.split(num_splits)
+      if fork_predicate(path, val):
+        return val.fork()
+    return val
+
+  return graphlib.recursive_map(f, tree, graph=graph)
 
 @tp.overload
 def split_rngs(

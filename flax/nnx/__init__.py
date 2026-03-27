@@ -146,6 +146,7 @@ from .rnglib import RngCount as RngCount
 from .rnglib import fork_rngs as fork_rngs
 from .rnglib import reseed as reseed
 from .rnglib import split_rngs as split_rngs
+from .rnglib import with_rngs as with_rngs
 from .rnglib import restore_rngs as restore_rngs
 from .spmd import PARTITION_NAME as PARTITION_NAME
 from .spmd import get_partition_spec as get_partition_spec
