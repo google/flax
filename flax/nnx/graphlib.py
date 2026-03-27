@@ -2799,18 +2799,14 @@ def as_pure(tree: A) -> A:
     inner values.
   """
 
-  def _pure_fn(x):
+  def _pure_fn(_, x):
     if isinstance(x, Variable):
-      return as_pure(x.get_raw_value())
+      return x.get_raw_value()
     elif variablelib.is_array_ref(x):
       return x[...]
     return x
 
-  return jax.tree.map(
-    _pure_fn,
-    tree,
-    is_leaf=lambda x: isinstance(x, Variable),
-  )
+  return map(_pure_fn, tree, auto_create_variables=False)
 
 
 def call(
