@@ -2573,7 +2573,10 @@ def map(
     A :class:`State` with the mapped values.
   """
   graphdef, state = split(node, graph=graph)
-  state = statelib.map_state(f, state)
+  if isinstance(state, statelib.State):
+    state = statelib.map_state(f, state)
+  else:
+    state = f((), state)
   return merge(graphdef, state, auto_create_variables=auto_create_variables)
 
 
