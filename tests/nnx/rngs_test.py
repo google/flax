@@ -14,6 +14,7 @@
 
 from functools import partial
 from typing import Any
+import re
 
 import jax
 import jax.numpy as jnp
@@ -310,6 +311,11 @@ class TestWithRngs(parameterized.TestCase):
     self.assertIsNot(new_rngs['dropout'], rngs['dropout'])  # new tree, but...
     self.assertTrue(jnp.array_equal(new_rngs['dropout'].key[...], rngs['dropout'].key[...]))
     self.assertEqual(new_rngs['dropout'].key.shape, ())
+
+  def test_split_and_fork_same_stream_raises(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    with self.assertRaisesRegex(ValueError, re.compile(r"multiple rules")):
+      nnx.with_rngs(rngs, split={'params': 4}, fork='params')
 
   def test_works_on_plain_pytree(self):
     params_stream = nnx.RngStream(0, tag='params')

@@ -794,16 +794,33 @@ def with_rngs(tree, split=None, fork=None, only=True, graph=False):
     split = {}
   elif isinstance(split, (int, tuple)):
     split = {...: split}
-  split_predicates = {filterlib.to_predicate(k): v for k, v in split.items()}
-  fork_predicate = filterlib.to_predicate(fork)
+  if isinstance(fork, str) or not isinstance(fork, tp.Sequence):
+    fork = [fork]
+  split_predicates = [(k, filterlib.to_predicate(k), v) for k, v in split.items()]
+  fork_predicates = [(p, filterlib.to_predicate(p)) for p in fork]
   only_predicate = filterlib.to_predicate(only)
 
   def f(path, val):
-    if isinstance(val, RngStream):
-      for predicate, num_splits in split_predicates.items():
-        if predicate(path, val) and only_predicate(path, val):
-          return val.split(num_splits)
-      if fork_predicate(path, val) and only_predicate(path, val):
+    if isinstance(val, RngStream) and only_predicate(path, val):
+      results = {}
+      for (filter, predicate, num_splits) in split_predicates:
+        if predicate(path, val):
+          results['split'] = (filter, num_splits)
+          break
+      for (filter, predicate) in fork_predicates:
+        if predicate(path, val):
+          results['fork'] = (filter,)
+          break
+      if len(results) > 1:
+        fork_filter = results['fork'][0]
+        if fork_filter not in (..., True):
+          rule_descriptions = '\n'.join(f'  - {rule} matches filter {info[0]!r}' for rule, info in results.items())
+          raise ValueError(
+            f"RngStream at path {path} matches multiple rules:\n{rule_descriptions}"
+          )
+      if 'split' in results:
+        return val.split(results['split'][1])
+      if 'fork' in results:
         return val.fork()
     return val
 
