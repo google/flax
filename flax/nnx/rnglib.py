@@ -438,7 +438,7 @@ class Rngs(Pytree):
 
   def split(self, k: tp.Mapping[filterlib.Filter, int | tuple[int, ...]] | int | tuple[int, ...]):
     """
-    Splits the keys of the newly created ``Rngs`` object.
+    Splits the keys of a ``Rngs`` object.
 
     Example::
       >>> from flax import nnx
