@@ -203,6 +203,21 @@ class TestLSTMCell(absltest.TestCase):
     for c_nnx, c_linen in zip(new_carry_nnx, new_carry_linen):
       np.testing.assert_allclose(c_nnx, c_linen, atol=1e-5)
 
+  def test_preferred_element_type(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.LSTMCell(
+      in_features=4,
+      hidden_features=4,
+      preferred_element_type=jnp.float16,
+      rngs=rngs,
+    )
+    carry = model.initialize_carry((1, 4), rngs=rngs)
+    x = jnp.ones((1, 4), dtype=jnp.float32)
+    (new_c, new_h), out = model(carry, x)
+    self.assertEqual(out.shape, (1, 4))
+    self.assertEqual(model.preferred_element_type, jnp.float16)
+    self.assertEqual(model.ii.preferred_element_type, jnp.float16)
+
 
 class TestRNN(absltest.TestCase):
   def test_rnn_with_lstm_cell(self):
@@ -640,6 +655,23 @@ class TestRNN(absltest.TestCase):
 
     self.assertEqual(y.shape, (8, 1))
     self.assertEqual(model.lstm.cell.recurrent_dropout.rngs.count[...], 1)
+
+
+class TestGRUCell(absltest.TestCase):
+  def test_preferred_element_type(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.GRUCell(
+      in_features=4,
+      hidden_features=4,
+      preferred_element_type=jnp.float16,
+      rngs=rngs,
+    )
+    carry = model.initialize_carry((1, 4), rngs=rngs)
+    x = jnp.ones((1, 4), dtype=jnp.float32)
+    new_h, out = model(carry, x)
+    self.assertEqual(out.shape, (1, 4))
+    self.assertEqual(model.preferred_element_type, jnp.float16)
+    self.assertEqual(model.dense_i.preferred_element_type, jnp.float16)
 
 
 if __name__ == '__main__':
