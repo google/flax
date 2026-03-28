@@ -11,7 +11,7 @@ This means a **basic understanding on JAX helps you to use Flax well**. You woul
 import jax
 import jax.numpy as jnp
 import flax
-from flax import nnx
+import nnx
 from functools import partial
 
 # For simulating multi-device environment

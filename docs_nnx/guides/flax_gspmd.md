@@ -30,7 +30,7 @@ from jax import numpy as jnp
 from jax.sharding import PartitionSpec as P, NamedSharding, AxisType
 import optax
 import flax
-from flax import nnx
+import nnx
 
 # Ignore this if you are already running on a TPU or GPU
 if not jax._src.xla_bridge.backends_are_initialized():
