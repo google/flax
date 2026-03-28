@@ -43,6 +43,7 @@ from .pytreelib import register_data_type as register_data_type
 from .pytreelib import is_data as is_data
 from .pytreelib import has_data as has_data
 from .pytreelib import check_pytree as check_pytree
+from .pytreelib import prefix
 from .helpers import Dict as Dict
 from .helpers import List as List
 from .helpers import Sequential as Sequential
