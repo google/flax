@@ -26,6 +26,7 @@ import jax.core
 from flax import config
 from flax.nnx import filterlib, reprlib, traversals, variablelib
 from flax.nnx import statelib
+from flax.nnx.deprecations import deprecated
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -2579,7 +2580,10 @@ def map(
     A :class:`State` with the mapped values.
   """
   graphdef, state = split(node, graph=graph)
-  state = statelib.map_state(f, state)
+  if isinstance(state, statelib.State):
+    state = statelib.map_state(f, state)
+  else:
+    state = f((), state)
   return merge(graphdef, state, auto_create_variables=auto_create_variables)
 
 
@@ -2719,7 +2723,7 @@ def clone(node: Node, variables: bool = True, *, graph: bool | None = None) -> N
   return merge(graphdef, state, copy=variables)
 
 
-def vars_as(
+def with_vars(
   node: A,
   /,
   *,
@@ -2757,18 +2761,17 @@ def vars_as(
       duplicates_strs += '\n  ---'
     raise ValueError(f'Found duplicate at paths:{duplicates_strs}')
 
-  def _to_refs(jax_path, x):
-    if predicate(jax_to_nnx_path(jax_path), x):
+  def _to_refs(path, x):
+    if predicate(path, x):
       assert isinstance(x, Variable)
       variable = x.copy(**new_attrs)
       return variable
     return x
 
-  node = jax.tree.map_with_path(
-    _to_refs, node, is_leaf=lambda x: isinstance(x, Variable)
-  )
+  node = map(_to_refs, node, auto_create_variables=False)
   return node
 
+vars_as = deprecated(with_vars)
 
 def pure(tree: A) -> A:
   """Returns a new tree with all ``Variable`` objects replaced with inner values.

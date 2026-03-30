@@ -75,6 +75,7 @@ from .graphlib import split_context as split_context
 from .graphlib import MergeContext as MergeContext
 from .graphlib import merge_context as merge_context
 from .graphlib import variables as variables
+from .graphlib import with_vars as with_vars
 from .graphlib import vars_as as vars_as
 from .graphlib import pure as pure
 from .graphlib import cached_partial as cached_partial
