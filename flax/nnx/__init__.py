@@ -53,7 +53,7 @@ from .module import capture as capture
 from .module import view as view
 from .module import view_info as view_info
 from .module import with_attributes as with_attributes
-from .module import iter_children as iter_children, iter_modules as iter_modules
+from .module import iter_children as iter_children, iter_modules as iter_modules, iter_module_children as iter_module_children
 from .graphlib import merge as merge
 from .graphlib import UpdateContext as UpdateContext
 from .graphlib import update_context as update_context
