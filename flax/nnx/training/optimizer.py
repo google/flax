@@ -118,7 +118,7 @@ class Optimizer(Pytree, tp.Generic[M]):
     >>> loss_fn(model)
     Array(2.3359997, dtype=float32)
     >>> grads = nnx.grad(loss_fn)(model)
-    >>> optimizer.update(model, grads)
+    >>> _ = optimizer.update(model, grads)
     >>> loss_fn(model)
     Array(2.310461, dtype=float32)
 
@@ -193,7 +193,7 @@ class Optimizer(Pytree, tp.Generic[M]):
       >>> grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, nnx.Param))(
       ...   model, jnp.ones((1, 2)), jnp.ones((1, 3))
       ... )
-      >>> optimizer.update(model, grads)
+      >>> _ = optimizer.update(model, grads)
 
     Note that internally this function calls ``.tx.update()`` followed by a call
     to ``optax.apply_updates()`` to update ``params`` and ``opt_state``.
