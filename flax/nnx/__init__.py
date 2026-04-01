@@ -153,6 +153,7 @@ from .spmd import get_partition_spec as get_partition_spec
 from .spmd import get_named_sharding as get_named_sharding
 from .spmd import with_partitioning as with_partitioning
 from .spmd import get_abstract_model as get_abstract_model
+from .spmd import as_abstract as as_abstract
 from .spmd import abstract_with_sharding as abstract_with_sharding
 from .statelib import FlatState as FlatState
 from .statelib import State as State
