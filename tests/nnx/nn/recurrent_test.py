@@ -585,7 +585,6 @@ class TestRNN(absltest.TestCase):
           in_features=in_features,
           hidden_features=hidden_features,
           rngs=rngs,
-          keep_rngs=True,
           **kwargs,
         )
         self.recurrent_dropout = nnx.Dropout(

@@ -140,6 +140,9 @@ class LSTMCell(RNNCellBase):
     self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
+      warnings.warn(
+          "keep_rngs argument is deprecated. Please use rngs argument in __call__ instead "
+      )
       self.rngs = rngs.carry.fork()
     else:
       self.rngs = nnx.data(None)
@@ -329,6 +332,9 @@ class OptimizedLSTMCell(RNNCellBase):
     self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
+      warnings.warn(
+          "keep_rngs argument is deprecated. Please use rngs argument in __call__ instead "
+      )
       self.rngs = rngs.carry.fork()
     else:
       self.rngs = nnx.data(None)
@@ -493,6 +499,9 @@ class SimpleCell(RNNCellBase):
     self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
+      warnings.warn(
+        "keep_rngs argument is deprecated. Please use rngs argument in __call__ instead"
+      )
       self.rngs = rngs.carry.fork()
     else:
       self.rngs = nnx.data(None)
@@ -650,6 +659,9 @@ class GRUCell(RNNCellBase):
     self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
+      warnings.warn(
+        "keep_rngs argument is deprecated. Please use rngs argument in __call__ instead "
+      )
       self.rngs = rngs.carry.fork()
     else:
       self.rngs = nnx.data(None)
