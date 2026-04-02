@@ -26,6 +26,7 @@ import jax.core
 from flax import config
 from flax.nnx import filterlib, reprlib, traversals, variablelib
 from flax.nnx import statelib
+from flax.nnx.deprecations import deprecated
 from flax.nnx.proxy_caller import (
   ApplyCaller,
   CallableProxy,
@@ -2764,7 +2765,7 @@ def vars_as(
   return node
 
 
-def pure(tree: A) -> A:
+def as_pure(tree: A) -> A:
   """Returns a new tree with all ``Variable`` objects replaced with inner values.
 
   This can be used to remove Variable metadata when its is not needed for tasks like
@@ -2787,7 +2788,7 @@ def pure(tree: A) -> A:
         value=(2, 3)
       )
     })
-    >>> pure_state = nnx.pure(state)
+    >>> pure_state = nnx.as_pure(state)
     >>> jax.tree.map(jnp.shape, pure_state)
     State({
       'bias': (3,),
@@ -2803,7 +2804,7 @@ def pure(tree: A) -> A:
 
   def _pure_fn(x):
     if isinstance(x, Variable):
-      return pure(x.get_raw_value())
+      return as_pure(x.get_raw_value())
     elif variablelib.is_array_ref(x):
       return x[...]
     return x
@@ -2814,6 +2815,7 @@ def pure(tree: A) -> A:
     is_leaf=lambda x: isinstance(x, Variable),
   )
 
+pure = deprecated(as_pure)
 
 def call(
   graphdef_state: tuple[GraphDef[A], GraphState], /
