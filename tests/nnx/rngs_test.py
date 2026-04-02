@@ -212,10 +212,14 @@ class TestRngs(parameterized.TestCase):
   @parameterized.parameters(True, False)
   def test_fork_rngs(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
-    backups = nnx.fork_rngs(rngs, graph=graph)
-    new_key = rngs.params.key.copy()
-    nnx.restore_rngs(backups)
-    self.assertNotEqual(rngs.params.key, new_key)
+    if graph:
+      backups = nnx.fork_rngs(rngs, graph=graph)
+      new_key = rngs.params.key[...]
+      nnx.restore_rngs(backups)
+      self.assertNotEqual(rngs.params.key[...], new_key)
+    else:
+      new_rngs = nnx.fork_rngs(rngs, graph=graph)
+      self.assertNotEqual(new_rngs.params.key[...], rngs.params.key[...])
 
   def test_random_helpers(self):
     rngs = nnx.Rngs(0, params=1)
@@ -230,98 +234,130 @@ class TestRngs(parameterized.TestCase):
 
     x_nnx = rngs.lecun_normal()((2, 3))
     x_jax = jax.nn.initializers.lecun_normal()(
-      jax.random.fold_in(jax.random.key(0), 1), (2, 3)
+        jax.random.fold_in(jax.random.key(0), 1), (2, 3)
     )
     np.testing.assert_allclose(x_nnx, x_jax)
 
     x_nnx = rngs.params.lecun_uniform()((2, 3))
     x_jax = jax.nn.initializers.lecun_uniform()(
-      jax.random.fold_in(jax.random.key(1), 1), (2, 3)
+        jax.random.fold_in(jax.random.key(1), 1), (2, 3)
     )
     np.testing.assert_allclose(x_nnx, x_jax)
 
-  def test_split_int_splits_all_streams(self):
+  @parameterized.parameters(True, False)
+  def test_split_int_splits_all_streams(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
-    new_rngs = nnx.with_rngs(rngs, split=4)
+    new_rngs = nnx.with_rngs(rngs, split=4, graph=graph, graph_updates=False)
 
     self.assertEqual(new_rngs.params.key.shape, (4,))
     self.assertEqual(new_rngs['dropout'].key.shape, (4,))
 
-  def test_split_tuple_splits_all_streams(self):
+  @parameterized.parameters(True, False)
+  def test_split_tuple_splits_all_streams(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
-    new_rngs = nnx.with_rngs(rngs, split=(2, 3))
+    new_rngs = nnx.with_rngs(
+        rngs, split=(2, 3), graph=graph, graph_updates=False
+    )
 
     self.assertEqual(new_rngs.params.key.shape, (2, 3))
     self.assertEqual(new_rngs['dropout'].key.shape, (2, 3))
 
-  def test_fork_forks_all_streams(self):
+  @parameterized.parameters(True, False)
+  def test_fork_forks_all_streams(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
     original_params_key = rngs.params.key[...]
     original_dropout_key = rngs['dropout'].key[...]
 
-    new_rngs = nnx.with_rngs(rngs, fork=...)
+    new_rngs = nnx.with_rngs(rngs, fork=..., graph=graph, graph_updates=False)
 
     # Forked keys are scalar and differ from originals
     self.assertEqual(new_rngs.params.key.shape, ())
     self.assertEqual(new_rngs['dropout'].key.shape, ())
-    self.assertFalse(jnp.array_equal(new_rngs.params.key[...], original_params_key))
-    self.assertFalse(jnp.array_equal(new_rngs['dropout'].key[...], original_dropout_key))
+    self.assertFalse(
+        jnp.array_equal(new_rngs.params.key[...], original_params_key)
+    )
+    self.assertFalse(
+        jnp.array_equal(new_rngs['dropout'].key[...], original_dropout_key)
+    )
 
-  def test_split_mapping_applies_per_filter(self):
+  @parameterized.parameters(True, False)
+  def test_split_mapping_applies_per_filter(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1, noise=2)
-    new_rngs = nnx.with_rngs(rngs, split={'params': 4, ...: (2, 3)})
+    new_rngs = nnx.with_rngs(
+        rngs, split={'params': 4, ...: (2, 3)}, graph=graph, graph_updates=False
+    )
 
     self.assertEqual(new_rngs.params.key.shape, (4,))
     self.assertEqual(new_rngs['dropout'].key.shape, (2, 3))
     self.assertEqual(new_rngs.noise.key.shape, (2, 3))
 
-  def test_split_mapping_first_matching_filter_wins(self):
+  @parameterized.parameters(True, False)
+  def test_split_mapping_first_matching_filter_wins(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
     # 'params' filter comes before '...' so it should match first
-    new_rngs = nnx.with_rngs(rngs, split={'params': 4, ...: 8})
+    new_rngs = nnx.with_rngs(
+        rngs, split={'params': 4, ...: 8}, graph=graph, graph_updates=False
+    )
 
     self.assertEqual(new_rngs.params.key.shape, (4,))
     self.assertEqual(new_rngs['dropout'].key.shape, (8,))
 
-  def test_split_some_fork_rest(self):
+  @parameterized.parameters(True, False)
+  def test_split_some_fork_rest(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
-    new_rngs = nnx.with_rngs(rngs, split={'params': 4}, fork=...)
+    new_rngs = nnx.with_rngs(
+        rngs, split={'params': 4}, fork=..., graph=graph, graph_updates=False
+    )
 
     self.assertEqual(new_rngs.params.key.shape, (4,))
     # dropout not matched by split → forked (scalar)
     self.assertEqual(new_rngs['dropout'].key.shape, ())
 
-  def test_original_base_key_not_replaced(self):
+  @parameterized.parameters(True, False)
+  def test_original_base_key_not_replaced(self, graph):
     # nnx.with_rngs advances the original stream's counter (consuming one step to
     # derive the new keys) but does not replace the original's base key.
     rngs = nnx.Rngs(params=0, dropout=1)
     original_key_var = rngs.params.key
 
-    nnx.with_rngs(rngs, split=4)
+    nnx.with_rngs(rngs, split=4, graph=graph, graph_updates=False)
 
     self.assertIs(rngs.params.key, original_key_var)
     self.assertEqual(rngs.params.key.shape, ())
 
-  def test_unmatched_streams_returned_unchanged(self):
+  @parameterized.parameters(True, False)
+  def test_unmatched_streams_returned_unchanged(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
     # Only fork 'params'; 'dropout' matches neither split nor fork
-    new_rngs = nnx.with_rngs(rngs, fork='params')
+    new_rngs = nnx.with_rngs(
+        rngs, fork='params', graph=graph, graph_updates=False
+    )
 
     self.assertIsNot(new_rngs['dropout'], rngs['dropout'])  # new tree, but...
-    self.assertTrue(jnp.array_equal(new_rngs['dropout'].key[...], rngs['dropout'].key[...]))
+    self.assertTrue(
+        jnp.array_equal(new_rngs['dropout'].key[...], rngs['dropout'].key[...])
+    )
     self.assertEqual(new_rngs['dropout'].key.shape, ())
 
-  def test_split_and_fork_same_stream_raises(self):
+  @parameterized.parameters(True, False)
+  def test_split_and_fork_same_stream_raises(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
-    with self.assertRaisesRegex(ValueError, re.compile(r"multiple rules")):
-      nnx.with_rngs(rngs, split={'params': 4}, fork='params')
+    with self.assertRaisesRegex(ValueError, re.compile(r'multiple rules')):
+      nnx.with_rngs(
+          rngs,
+          split={'params': 4},
+          fork='params',
+          graph=graph,
+          graph_updates=False,
+      )
 
-  def test_works_on_plain_pytree(self):
+  @parameterized.parameters(True, False)
+  def test_works_on_plain_pytree(self, graph):
     params_stream = nnx.RngStream(0, tag='params')
     dropout_stream = nnx.RngStream(1, tag='dropout')
     tree = {'a': params_stream, 'b': dropout_stream}
 
-    new_tree = nnx.with_rngs(tree, split=4)
+    new_tree = nnx.with_rngs(tree, split=4, graph=graph, graph_updates=False)
 
     self.assertEqual(new_tree['a'].key.shape, (4,))
     self.assertEqual(new_tree['b'].key.shape, (4,))
@@ -353,6 +389,36 @@ class TestRngs(parameterized.TestCase):
     broadcasted_rngs_mapped = rngs.broadcast({'params': 5, 'dropout': None})
     self.assertEqual(broadcasted_rngs_mapped.params.key.shape, (5,))
     self.assertEqual(broadcasted_rngs_mapped.dropout.key.shape, ())
+
+  @parameterized.parameters(True, False)
+  def test_with_rngs_decorator(self, graph):
+    rngs = nnx.Rngs(params=0, dropout=1)
+
+    @nnx.with_rngs(split=4, graph=graph, graph_updates=False)
+    def f(r):
+      return r.params.key.shape, r['dropout'].key.shape
+
+    params_shape, dropout_shape = f(rngs)
+    self.assertEqual(params_shape, (4,))
+    self.assertEqual(dropout_shape, (4,))
+
+  @parameterized.parameters(True, False)
+  def test_with_rngs_broadcast(self, graph):
+    rngs = nnx.Rngs(params=0, dropout=1)
+
+    # Test int broadcast
+    new_rngs = nnx.with_rngs(
+        rngs, broadcast=5, graph=graph, graph_updates=False
+    )
+    self.assertEqual(new_rngs.params.key.shape, (5,))
+    self.assertEqual(new_rngs.dropout.key.shape, (5,))
+
+    # Test mapping broadcast
+    new_rngs_mapped = nnx.with_rngs(
+        rngs, broadcast={'params': 5}, graph=graph, graph_updates=False
+    )
+    self.assertEqual(new_rngs_mapped.params.key.shape, (5,))
+    self.assertEqual(new_rngs_mapped['dropout'].key.shape, ())
 
 
 if __name__ == '__main__':

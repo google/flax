@@ -11,3 +11,4 @@ rnglib
 .. autofunction:: split_rngs
 .. autofunction:: fork_rngs
 .. autofunction:: reseed
+.. autofunction:: with_rngs

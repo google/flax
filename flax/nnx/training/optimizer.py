@@ -23,7 +23,7 @@ import optax
 from flax import nnx
 from flax.nnx import filterlib
 from flax.nnx.pytreelib import Pytree
-from flax.nnx.variablelib import Variable
+from flax.nnx.variablelib import Param, Variable
 
 M = tp.TypeVar('M', bound=nnx.Module)
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
@@ -229,7 +229,7 @@ class ModelAndOptimizer(Optimizer[M]):
   Use :class:`Optimizer` instead.
   """
 
-  def __init__(self, model: M, tx: optax.GradientTransformation, *, wrt: filterlib.Filter = nnx.Param):
+  def __init__(self, model: M, tx: optax.GradientTransformation, *, wrt: filterlib.Filter = Param):
     super().__init__(model, tx, wrt=wrt)
     self.model = model
 
