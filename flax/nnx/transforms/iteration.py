@@ -123,9 +123,8 @@ def transform_metadata(
   metadata: tp.Mapping[str, tp.Any] = {
       spmd.PARTITION_NAME: partition,
   }
-  if graph:
-    extract.check_prefix(in_axes, 'in_axes', 'transform_metadata')
-    extract.check_prefix(out_axes, 'out_axes', 'transform_metadata')
+  extract.check_prefix(in_axes, 'in_axes', 'transform_metadata', graph, True)
+  extract.check_prefix(out_axes, 'out_axes', 'transform_metadata', graph, True)
 
   @functools.wraps(f)
   def wrapper(*in_args, **in_kwargs):
@@ -511,22 +510,10 @@ def vmap(
   if was_bound:
     _raise_bound_method_error('vmap')
 
-  if not graph or not graph_updates:
-    if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
-      raise ValueError(
-        '`in_axes` cannot contain `StateAxes` objects '
-        'when `graph=False`. '
-        + graphlib._tree_mode_suggestion_transform('vmap')
-      )
-    if any(isinstance(x, StateAxes) for x in jax.tree.leaves(out_axes)):
-      raise ValueError(
-        '`out_axes` cannot contain `StateAxes` objects '
-        'when `graph=False`. '
-        + graphlib._tree_mode_suggestion_transform('vmap')
-      )
-    if graph:
-      extract.check_prefix(in_axes, 'in_axes', 'vmap')
-      extract.check_prefix(out_axes, 'out_axes', 'vmap')
+  extract.check_prefix(in_axes, 'in_axes', 'vmap', graph, graph_updates)
+  extract.check_prefix(out_axes, 'out_axes', 'vmap', graph, graph_updates)
+
+  if not (graph and graph_updates):
 
     vmapped_fn = jax.vmap(
       SimpleVmapFn(f_unbound, graph=graph, out_axes=out_axes),
@@ -774,22 +761,10 @@ def pmap(
   if was_bound:
     _raise_bound_method_error('pmap')
 
-  if not graph or not graph_updates:
-    if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
-      raise ValueError(
-        '`in_axes` cannot contain `StateAxes` objects '
-        'when `graph=False`. '
-        + graphlib._tree_mode_suggestion_transform('pmap')
-      )
-    if any(isinstance(x, StateAxes) for x in jax.tree.leaves(out_axes)):
-      raise ValueError(
-        '`out_axes` cannot contain `StateAxes` objects '
-        'when `graph=False`. '
-        + graphlib._tree_mode_suggestion_transform('pmap')
-      )
-    if graph:
-      extract.check_prefix(in_axes, 'in_axes', 'pmap')
-      extract.check_prefix(out_axes, 'out_axes', 'pmap')
+  extract.check_prefix(in_axes, 'in_axes', 'pmap', graph, graph_updates)
+  extract.check_prefix(out_axes, 'out_axes', 'pmap', graph, graph_updates)
+
+  if not (graph and graph_updates):
 
     pmapped_fn = jax.pmap(
       SimplePmapFn(f_unbound, graph=graph, out_axes=out_axes),
@@ -1648,6 +1623,11 @@ def scan(
     graph = graphlib.set_graph_mode.current_value()
   if graph_updates is None:
     graph_updates = graphlib.set_graph_updates.current_value()
+
+  extract.check_prefix(in_axes, 'in_axes', 'scan', graph, graph_updates)
+  extract.check_prefix(out_axes, 'out_axes', 'scan', graph, graph_updates)  
+  _check_out_axes(out_axes)
+
   if not graph or not graph_updates:
     return _simple_scan(
       f, f_unbound, graph=graph,
@@ -1680,24 +1660,6 @@ def _simple_scan(
   graph, in_axes, out_axes,
   length, reverse, unroll, _split_transpose,
 ):
-  # TODO: do this inside check_prefix
-  if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
-    raise ValueError(
-      '`in_axes` cannot contain `StateAxes` objects '
-      'when `graph=False`. '
-      + graphlib._tree_mode_suggestion_transform('scan')
-    )
-  if any(isinstance(x, StateAxes) for x in jax.tree.leaves(out_axes)):
-    raise ValueError(
-      '`out_axes` cannot contain `StateAxes` objects '
-      'when `graph=False`. '
-      + graphlib._tree_mode_suggestion_transform('scan')
-    )
-  _check_out_axes(out_axes)
-  if graph:
-    extract.check_prefix(in_axes, 'in_axes', 'scan')
-    extract.check_prefix(out_axes, 'out_axes', 'scan')
-
   _validate_scan_axes(in_axes, out_axes)
 
   out_is_tuple = isinstance(out_axes, tuple)
@@ -1811,8 +1773,6 @@ def _graph_updates_scan(
   length, reverse, unroll, _split_transpose,
   transform_metadata,
 ):
-  _check_out_axes(out_axes)
-
   input_carry_argnum = _get_carry_argnum(in_axes, is_in_axes=True)
   output_carry_argnum = _get_carry_argnum(out_axes, is_in_axes=False)
 
