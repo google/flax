@@ -124,8 +124,8 @@ class RngStream(Pytree):
     return key
 
   def split(self, k: int | tuple[int, ...]):
-      key = random.split(self(), k)
-      return type(self)(key, tag=self.tag)
+    key = random.split(self(), k)
+    return type(self)(key, tag=self.tag)
 
   def fork(self, *, split: int | tuple[int, ...] | None = None):
     if split is not None:
@@ -138,6 +138,26 @@ class RngStream(Pytree):
     if split is not None:
       key = random.split(key, split)
     return type(self)(key, tag=self.tag)
+
+  def broadcast(self, k: int | tuple[int, ...]):
+    """Broadcasts the RNG stream to a new shape.
+
+    This method generates a new key from the stream and broadcasts it to the specified
+    shape ``k`` prepended to the key's shape. It returns a new ``RngStream`` instance
+    with this broadcasted key.
+
+    Args:
+      k: The shape to broadcast to. If an integer is provided, it is treated as a
+        single-element tuple ``(k,)``.
+    """
+    key = self()
+    shape: tuple[int, ...]
+    if isinstance(k, int):
+      shape = (k,)
+    else:
+      shape = k
+    replicated_key = jnp.broadcast_to(key, shape + key.shape)
+    return type(self)(replicated_key, tag=self.tag)
 
   # ----------------------------------------------------------
   # random functions
@@ -481,6 +501,65 @@ class Rngs(Pytree):
           break
         else:
           keys[name] = stream
+
+    return Rngs(**keys)
+
+  def broadcast(
+      self,
+      k: (
+          int
+          | tuple[int, ...]
+          | None
+          | tp.Mapping[filterlib.Filter, int | tuple[int, ...] | None]
+      ),
+  ):
+    """Broadcasts the keys of the newly created ``Rngs`` object.
+
+    This method generates a new key for each selected stream and broadcasts it
+    to the specified shape ``k``. It returns a new ``Rngs`` object containing
+    these broadcasted streams.
+
+    Example::
+      >>> from flax import nnx
+      ...
+      >>> rngs = nnx.Rngs(0).broadcast(5)
+      ...
+      >>> assert rngs.default.key.shape == (5,)
+      >>> assert rngs.default.key[0] == rngs.default.key[4]
+
+    ``broadcast`` also accepts a mapping of
+    `Filters
+    <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
+    to broadcast sizes or None to control which streams are broadcasted and how
+    they are broadcasted::
+
+      >>> rngs = nnx.Rngs(params=1, dropout=2, noise=3).broadcast({
+      ...  'params': 5,      # broadcast params into 5 keys
+      ...  'dropout': None,  # don't broadcast dropout
+      ...  ...: (2, 5),      # broadcast anything else into 2x5 keys
+      ... })
+      ...
+      >>> assert rngs.params.key.shape == (5,)
+      >>> assert rngs.dropout.key.shape == ()
+      >>> assert rngs.noise.key.shape == (2, 5)
+    """
+    if isinstance(k, int) or k is None:
+      k = {...: k}
+    elif isinstance(k, tuple):
+      k = {...: k}
+
+    broadcast_predicates = {filterlib.to_predicate(k): v for k, v in k.items()}
+    keys: dict[str, RngStream] = {}
+    for name, stream in self.items():
+      for predicate, num_broadcasts in broadcast_predicates.items():
+        if predicate((), stream):
+          if num_broadcasts is None:
+            keys[name] = stream
+          else:
+            keys[name] = stream.broadcast(num_broadcasts)
+          break
+      else:
+        keys[name] = stream
 
     return Rngs(**keys)
 

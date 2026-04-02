@@ -240,7 +240,6 @@ class TestRngs(parameterized.TestCase):
     )
     np.testing.assert_allclose(x_nnx, x_jax)
 
-class TestWithRngs(parameterized.TestCase):
   def test_split_int_splits_all_streams(self):
     rngs = nnx.Rngs(params=0, dropout=1)
     new_rngs = nnx.with_rngs(rngs, split=4)
@@ -328,6 +327,33 @@ class TestWithRngs(parameterized.TestCase):
     self.assertEqual(new_tree['b'].key.shape, (4,))
     # Originals unchanged
     self.assertEqual(params_stream.key.shape, ())
+
+  def test_rng_stream_broadcast(self):
+    rng_stream = nnx.RngStream(jax.random.key(0), tag='params')
+
+    # Test int broadcast
+    broadcasted_stream = rng_stream.broadcast(5)
+    self.assertEqual(broadcasted_stream.key.shape, (5,))
+    self.assertEqual(broadcasted_stream.count.shape, (5,))
+
+    # Test tuple broadcast
+    broadcasted_stream_tuple = rng_stream.broadcast((2, 3))
+    self.assertEqual(broadcasted_stream_tuple.key.shape, (2, 3))
+    self.assertEqual(broadcasted_stream_tuple.count.shape, (2, 3))
+
+  def test_rngs_broadcast(self):
+    rngs = nnx.Rngs(params=1, dropout=2)
+
+    # Test int broadcast
+    broadcasted_rngs = rngs.broadcast(5)
+    self.assertEqual(broadcasted_rngs.params.key.shape, (5,))
+    self.assertEqual(broadcasted_rngs.dropout.key.shape, (5,))
+
+    # Test mapping broadcast
+    broadcasted_rngs_mapped = rngs.broadcast({'params': 5, 'dropout': None})
+    self.assertEqual(broadcasted_rngs_mapped.params.key.shape, (5,))
+    self.assertEqual(broadcasted_rngs_mapped.dropout.key.shape, ())
+
 
 if __name__ == '__main__':
   absltest.main()
