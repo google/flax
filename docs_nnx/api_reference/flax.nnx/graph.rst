@@ -9,6 +9,7 @@ graph
 .. autofunction:: merge
 .. autofunction:: update
 .. autofunction:: pop
+.. autofunction:: prefix
 .. autofunction:: state
 .. autofunction:: variables
 .. autofunction:: graph

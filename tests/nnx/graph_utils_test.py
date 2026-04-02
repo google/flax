@@ -1699,6 +1699,221 @@ class TestTreeFlatten(parameterized.TestCase):
     np.testing.assert_array_equal(new_model.kernel[...], jnp.zeros((2, 3)))
     np.testing.assert_array_equal(new_model.bias[...], jnp.zeros((3,)))
 
+  def test_prefix_basic_tree_mode(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    result = nnx.prefix(model, {nnx.Param: 0}, graph=False)
+
+    self.assertEqual(result.kernel, 0)
+    self.assertEqual(result.bias, 0)
+
+  def test_prefix_basic_graph_mode(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    result = nnx.prefix(model, {nnx.Param: 0}, graph=True)
+
+    self.assertIsInstance(result, nnx.extract.TreeState)
+    self.assertEqual(result.state['kernel'], 0)
+    self.assertEqual(result.state['bias'], 0)
+
+  def test_prefix_multiple_filters_tree_mode(self):
+    class Foo(nnx.Module):
+
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+
+    model = Foo(nnx.Rngs(0))
+    result = nnx.prefix(
+        model, {nnx.Param: 'params', nnx.BatchStat: 'batch_stats'}, graph=False
+    )
+
+    self.assertEqual(result.linear.kernel, 'params')
+    self.assertEqual(result.linear.bias, 'params')
+    self.assertEqual(result.bn.mean, 'batch_stats')
+    self.assertEqual(result.bn.var, 'batch_stats')
+
+  def test_prefix_multiple_filters_graph_mode(self):
+    class Foo(nnx.Module):
+
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+
+    model = Foo(nnx.Rngs(0))
+    result = nnx.prefix(
+        model, {nnx.Param: 'params', nnx.BatchStat: 'batch_stats'}, graph=True
+    )
+
+    self.assertIsInstance(result, nnx.extract.TreeState)
+    self.assertEqual(result.state['linear']['kernel'], 'params')
+    self.assertEqual(result.state['linear']['bias'], 'params')
+    self.assertEqual(result.state['bn']['mean'], 'batch_stats')
+    self.assertEqual(result.state['bn']['var'], 'batch_stats')
+
+  def test_prefix_ellipsis_catch_all(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    result = nnx.prefix(model, {...: 'all'}, graph=False)
+
+    self.assertEqual(result.kernel, 'all')
+    self.assertEqual(result.bias, 'all')
+
+  def test_prefix_no_match_raises(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    with self.assertRaisesRegex(ValueError, 'No filter matched'):
+      nnx.prefix(model, {nnx.BatchStat: 0}, graph=False)
+
+  def test_prefix_callable_tree_mode(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    result = nnx.prefix(model, lambda path, leaf: 0, graph=False)
+
+    self.assertEqual(result.kernel, 0)
+    self.assertEqual(result.bias, 0)
+
+  def test_prefix_callable_graph_mode(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    result = nnx.prefix(model, lambda path, leaf: 0, graph=True)
+
+    self.assertIsInstance(result, nnx.extract.TreeState)
+    self.assertEqual(result.state['kernel'], 0)
+    self.assertEqual(result.state['bias'], 0)
+
+  def test_prefix_callable_per_type_tree_mode(self):
+    class Foo(nnx.Module):
+
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+        self.bn = nnx.BatchNorm(3, rngs=rngs)
+
+    model = Foo(nnx.Rngs(0))
+
+    def prefix_fn(_path, leaf):
+      if isinstance(leaf, nnx.BatchStat):
+        return 'batch_stats'
+      return 'params'
+
+    result = nnx.prefix(model, prefix_fn, graph=False)
+
+    self.assertEqual(result.linear.kernel, 'params')
+    self.assertEqual(result.linear.bias, 'params')
+    self.assertEqual(result.bn.mean, 'batch_stats')
+    self.assertEqual(result.bn.var, 'batch_stats')
+
+  @parameterized.parameters(True, False)
+  def test_prefix_with_vmap(self, graph):
+    class Foo(nnx.Module):
+
+      def __init__(self, rngs: nnx.Rngs):
+        self.w = nnx.Param(rngs.normal((4, 2, 3)))
+
+    model = Foo(rngs=nnx.Rngs(0))
+    x = jnp.ones((2,))
+
+    model_axes = nnx.prefix(model, {nnx.Param: 0}, graph=graph)
+
+    @nnx.vmap(
+        in_axes=(model_axes, None), out_axes=0, graph=graph, graph_updates=False
+    )
+    def forward(model, x):
+      return x @ model.w
+
+    y = forward(model, x)
+    self.assertEqual(y.shape, (4, 3))
+
+  @parameterized.parameters(True, False)
+  def test_prefix_with_vmap_var_only(self, graph):
+    rngs = nnx.Rngs(0)
+    v = nnx.Param(rngs.normal((4, 2, 3)))
+    x = jnp.ones((2,))
+
+    v_axes = nnx.prefix(v, {nnx.Param: 0}, graph=graph)
+
+    @nnx.vmap(
+        in_axes=(v_axes, None), out_axes=0, graph=graph, graph_updates=False
+    )
+    def forward(v, x):
+      return x @ v
+
+    y = forward(v, x)
+    self.assertEqual(y.shape, (4, 3))
+
+  def test_prefix_with_jax_vmap(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.w = nnx.Param(rngs.normal((4, 2, 3)))
+
+    model = Foo(rngs=nnx.Rngs(0))
+    x = jnp.ones((2,))
+
+    model_axes = nnx.prefix(model, {nnx.Param: 0}, graph=False)
+
+    @partial(jax.vmap, in_axes=(model_axes, None), out_axes=0)
+    def forward(model, x):
+      return x @ model.w
+
+    y = forward(model, x)
+    self.assertEqual(y.shape, (4, 3))
+
+  def test_prefix_with_vmap_aliased_args(self):
+    class Foo(nnx.Module):
+
+      def __init__(self, rngs: nnx.Rngs):
+        self.w = nnx.Param(rngs.normal((4, 2, 3)))
+
+    model = Foo(rngs=nnx.Rngs(0))
+    x = jnp.ones((2,))
+
+    ma1, ma2 = nnx.prefix((model, model), {nnx.Param: 0}, graph=True)
+
+    @nnx.vmap(
+        in_axes=(ma1, ma2, None),
+        out_axes=0,
+        graph=True,
+        graph_updates=False,
+    )
+    def forward(model_a, model_b, x):
+      assert model_a is model_b
+      return x @ model_a.w + x @ model_b.w
+
+    y = forward(model, model, x)
+    self.assertEqual(y.shape, (4, 3))
+
+  def test_prefix_with_vmap_aliased_variables(self):
+    @nnx.dataclass
+    class Foo(nnx.Module):
+      a: nnx.Variable
+      b: nnx.Variable
+
+    @nnx.dataclass
+    class Bar(nnx.Module):
+      c: nnx.Variable
+      d: nnx.Variable
+
+    v = nnx.Param(jnp.ones((4, 2, 3)))
+    foo = Foo(a=nnx.Param(jnp.ones((4, 2, 3))), b=v)
+    bar = Bar(c=v, d=nnx.Param(jnp.ones((2, 4, 3))))
+
+    from_foo = lambda p, x: p[-1] in ('a', 'b')
+    from_bar = lambda p, x: p[-1] in ('c', 'd')
+
+    ma1, ma2 = nnx.prefix((foo, bar), {from_foo: 0, from_bar: 1}, graph=True)
+
+    @nnx.vmap(
+        in_axes=(ma1, ma2, None),
+        out_axes=0,
+        graph=True,
+        graph_updates=False,
+    )
+    def forward(foo, bar, x):
+      assert foo.b is bar.c
+      return x @ foo.a + x @ foo.b + x @ bar.c + x @ bar.d
+
+    x = jnp.ones((2,))
+    with self.assertRaisesRegex(
+        ValueError,
+        'Inconsistent aliasing detected. The following nodes have different'
+        ' prefixes',
+    ):
+      y = forward(foo, bar, x)
+
 
 if __name__ == '__main__':
   absltest.main()
