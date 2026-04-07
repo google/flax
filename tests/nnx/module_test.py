@@ -854,13 +854,13 @@ class TestModule(parameterized.TestCase):
     assert block.dropout.deterministic == False
     assert block.batch_norm.use_running_average == False
 
-    new_block = nnx.view(block, deterministic=True, use_running_average=True, graph=graph)
+    new_block = nnx.with_modules(block, deterministic=True, use_running_average=True, graph=graph)
     assert new_block.dropout.deterministic == True
     assert new_block.batch_norm.use_running_average == True
     assert new_block.linear.kernel is block.linear.kernel
 
     block = Block(2, 5, rngs=nnx.Rngs(0))
-    new_block = nnx.view(block, only=nnx.Dropout, deterministic=True, graph=graph)
+    new_block = nnx.with_modules(block, only=nnx.Dropout, deterministic=True, graph=graph)
     assert new_block.dropout.deterministic == True
     assert new_block.batch_norm.use_running_average == False
 
@@ -948,10 +948,10 @@ class TestModule(parameterized.TestCase):
     with self.assertRaisesRegex(
         ValueError,
         (
-            "Unused keys found in nnx.view: \\['unknown'\\]"
+            "Unused keys found in nnx.with_modules: \\['unknown'\\]"
         ),
     ):
-      nnx.view(block, deterministic=True, use_running_average=True, unknown=True, graph=graph)
+      nnx.with_modules(block, deterministic=True, use_running_average=True, unknown=True, graph=graph)
 
   def test_cloud_pickle(self):
     import platform

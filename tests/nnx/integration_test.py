@@ -45,10 +45,10 @@ class TestIntegration(parameterized.TestCase):
         return self.linear_out(x)
 
     model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
-    train_model = nnx.view(
+    train_model = nnx.with_modules(
         model, deterministic=False, use_running_average=False
     )
-    eval_model = nnx.view(
+    eval_model = nnx.with_modules(
         model, deterministic=True, use_running_average=True
     )
     optimizer = nnx.Optimizer(train_model, optax.adam(1e-3), wrt=nnx.Param)
@@ -174,7 +174,7 @@ class TestIntegration(parameterized.TestCase):
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
-    new_model = nnx.view(model, use_running_average=False)
+    new_model = nnx.with_modules(model, use_running_average=False)
 
     for _i in range(3):
       train_step(model, x, y)
@@ -267,7 +267,7 @@ class TestIntegration(parameterized.TestCase):
     @jax.jit
     def train_step(state: nnx.State, graphdef: nnx.GraphDef[Model], x, y):
       model = nnx.merge(graphdef, state)
-      new_model = nnx.view(model, use_running_average=False, graph=True)
+      new_model = nnx.with_modules(model, use_running_average=False, graph=True)
 
       @nnx.grad
       def loss_fn(model: Model):

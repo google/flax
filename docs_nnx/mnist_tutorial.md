@@ -173,7 +173,7 @@ In the code above, the [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_ref
 
 ## 6. Train and evaluate the model
 
-Now, you can train the CNN model. Before the training loop, we use [`nnx.view`](https://flax.readthedocs.io/en/latest/guides/view.html) to create a `train_model` (with dropout enabled and batch norm in training mode) and an `eval_model` (with dropout disabled and batch norm using running statistics). These views share the same underlying weights, so updates during training are automatically reflected during evaluation.
+Now, you can train the CNN model. Before the training loop, we use [`nnx.with_modules`](https://flax.readthedocs.io/en/latest/guides/view.html) to create a `train_model` (with dropout enabled and batch norm in training mode) and an `eval_model` (with dropout disabled and batch norm using running statistics). These views share the same underlying weights, so updates during training are automatically reflected during evaluation.
 
 ```{code-cell} ipython3
 from IPython.display import clear_output
@@ -187,8 +187,8 @@ metrics_history = {
 }
 
 rngs = nnx.Rngs(0)
-train_model = nnx.view(model, deterministic=False, use_running_average=False)
-eval_model = nnx.view(model, deterministic=True, use_running_average=True)
+train_model = nnx.with_modules(model, deterministic=False, use_running_average=False)
+eval_model = nnx.with_modules(model, deterministic=True, use_running_average=True)
 
 for step, batch in enumerate(train_ds.as_numpy_iterator()):
   # Run the optimization for one step and make a stateful update to the following:
@@ -227,7 +227,7 @@ for step, batch in enumerate(train_ds.as_numpy_iterator()):
 
 ## 7. Perform inference on the test set
 
-Create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. Since we already have `eval_model` (an `nnx.view` with `deterministic=True` and `use_running_average=True`), we can use it directly for inference. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
+Create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. Since we already have `eval_model` (using `nnx.with_modules` with `deterministic=True` and `use_running_average=True`), we can use it directly for inference. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
 
 ```{code-cell} ipython3
 @nnx.jit
