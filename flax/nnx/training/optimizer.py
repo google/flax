@@ -207,10 +207,10 @@ class Optimizer(Pytree, tp.Generic[M]):
       The updates PyTree containing the parameter updates applied to the model.
       This matches the structure of the model parameters filtered by ``wrt``.
     """
-    param_arrays = nnx.pure(nnx.state(model, self.wrt))
-    grad_arrays = nnx.pure(nnx.state(grads, self.wrt))
-    opt_state_arrays = nnx.pure(self.opt_state)
-    kwargs_arrays = nnx.pure(kwargs)
+    param_arrays = nnx.as_pure(nnx.state(model, self.wrt))
+    grad_arrays = nnx.as_pure(nnx.state(grads, self.wrt))
+    opt_state_arrays = nnx.as_pure(self.opt_state)
+    kwargs_arrays = nnx.as_pure(kwargs)
 
     updates, new_opt_state = self.tx.update(
       grad_arrays, opt_state_arrays, param_arrays, **kwargs_arrays

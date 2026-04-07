@@ -347,7 +347,7 @@ class TestOptimizer(parameterized.TestCase):
     self.assertIsNotNone(updates)
 
     # Verify updates structure matches params structure
-    params = nnx.pure(nnx.state(model, nnx.Param))
+    params = nnx.as_pure(nnx.state(model, nnx.Param))
 
     def check_structure(path, update_val, param_val):
       self.assertEqual(update_val.shape, param_val.shape)
@@ -362,7 +362,7 @@ class TestOptimizer(parameterized.TestCase):
     optimizer = nnx.Optimizer(model, optax.sgd(1.0), wrt=nnx.Param)
 
     # Get initial params as pure arrays
-    initial_params = nnx.pure(nnx.state(model, nnx.Param))
+    initial_params = nnx.as_pure(nnx.state(model, nnx.Param))
 
     def loss_fn(model):
       params = nnx.state(model)
@@ -375,7 +375,7 @@ class TestOptimizer(parameterized.TestCase):
     updates = optimizer.update(model, grads)
 
     # Get new params as pure arrays
-    new_params = nnx.pure(nnx.state(model, nnx.Param))
+    new_params = nnx.as_pure(nnx.state(model, nnx.Param))
 
     # Verify: new_params = initial_params + updates (within optax.apply_updates)
     def check_update(old, update, new):
@@ -403,7 +403,7 @@ class TestOptimizer(parameterized.TestCase):
     self.assertIsNotNone(updates)
 
     # Verify updates has the expected structure
-    params = nnx.pure(nnx.state(model, nnx.Param))
+    params = nnx.as_pure(nnx.state(model, nnx.Param))
     def check_structure(path, update_val, param_val):
       self.assertEqual(update_val.shape, param_val.shape)
 

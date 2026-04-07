@@ -76,6 +76,7 @@ from .graphlib import MergeContext as MergeContext
 from .graphlib import merge_context as merge_context
 from .graphlib import variables as variables
 from .graphlib import vars_as as vars_as
+from .graphlib import as_pure as as_pure
 from .graphlib import pure as pure
 from .graphlib import cached_partial as cached_partial
 from .graphlib import flatten as flatten
