@@ -10,7 +10,7 @@ jupytext:
 
 # NNX Demo
 
-```{code-cell}
+```{code-cell} ipython3
 import jax
 from jax import numpy as jnp
 from flax import nnx
@@ -18,7 +18,7 @@ from flax import nnx
 
 ### [1] NNX is Pythonic
 
-```{code-cell}
+```{code-cell} ipython3
 :outputId: d8ef66d5-6866-4d5c-94c2-d22512bfe718
 
 
@@ -56,7 +56,7 @@ print(f'{model = }'[:500] + '\n...')
 
 Because NNX Modules contain their own state, they are very easily to inspect:
 
-```{code-cell}
+```{code-cell} ipython3
 :outputId: 10a46b0f-2993-4677-c26d-36a4ddf33449
 
 print(f'{model.count = }')
@@ -66,7 +66,7 @@ print(f'{model.blocks[0].linear.kernel = }')
 
 ### [2] Model Surgery is Intuitive
 
-```{code-cell}
+```{code-cell} ipython3
 :outputId: e6f86be8-3537-4c48-f471-316ee0fb6c45
 
 # Module sharing
@@ -83,7 +83,7 @@ print(f'{y.shape = }')
 
 ### [3] Interacting with JAX is easy
 
-```{code-cell}
+```{code-cell} ipython3
 :outputId: 9a3f378b-739e-4f45-9968-574651200ede
 
 graphdef, state = model.split()
@@ -95,7 +95,7 @@ print(f'{state = }'[:500] + '\n...')
 print(f'\n{graphdefefefefefef = }'[:300] + '\n...')
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 :outputId: 0007d357-152a-449e-bcb9-b1b5a91d2d8d
 
 graphdef, state = model.split()
@@ -116,7 +116,7 @@ print(f'{y.shape = }')
 print(f'{model.count.value = }')
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 params, batch_stats, counts, graphdef = model.split(nnx.Param, nnx.BatchStat, Count)
 
 @jax.jit
@@ -135,7 +135,7 @@ print(f'{y.shape = }')
 print(f'{model.count = }')
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 class Parent(nnx.Module):
     def __init__(self, model: MLP):
         self.model = model
@@ -163,6 +163,6 @@ print(f'{y.shape = }')
 print(f'{parent.model.count.value = }')
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 
 ```
