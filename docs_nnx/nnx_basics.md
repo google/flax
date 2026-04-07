@@ -14,13 +14,13 @@ Flax NNX is a new simplified API that is designed to make it easier to create, i
 
 To begin, install Flax with `pip` and import necessary dependencies:
 
-```{code-cell} ipython3
+```{code-cell}
 :tags: [skip-execution]
 
 # ! pip install -U flax
 ```
 
-```{code-cell} ipython3
+```{code-cell}
 from flax import nnx
 import jax
 import jax.numpy as jnp
@@ -32,7 +32,7 @@ The main difference between the Flax `Module` and other Module systems in [Flax 
 
 Let's begin by creating a Linear `Module`. As shown next, dynamic state is usually stored in `Param`s, and static state (all types not handled by NNX) such as integers or strings are stored directly. Attributes of type `jax.Array` and `numpy.ndarray` are also treated as dynamic states, although storing them inside Variables, such as Param, is preferred. Also the `Rngs` object can be used to get new unique keys based on a root PRNG key passed to the constructor.
 
-```{code-cell} ipython3
+```{code-cell}
 class Linear(nnx.Module):
   def __init__(self, din: int, dout: int, *, rngs: nnx.Rngs):
     self.w = nnx.Param(rngs.params.uniform((din, dout)))
@@ -48,7 +48,7 @@ Also note that the inner values of `Variable`s can be accessed using the `value`
 To initialize a Flax `Module`, you just call the constructor, and all the parameters of a Module are usually created eagerly. Since Modules hold their own state methods, you can call them directly without the need for a separate apply method.
 This can be very convenient for debugging, allowing you to directly inspect the entire structure of the model.
 
-```{code-cell} ipython3
+```{code-cell}
 model = Linear(2, 5, rngs=nnx.Rngs(params=0))
 y = model(x=jnp.ones((1, 2)))
 
@@ -65,7 +65,7 @@ The above visualization by `nnx.display` is generated using the awesome
 
 Implementing layers, such as `BatchNorm`, requires performing state updates during a forward pass. In Flax NNX, you just need to create a `Variable` and update its `.value` during the forward pass.
 
-```{code-cell} ipython3
+```{code-cell}
 class Count(nnx.Variable): pass
 
 class Counter(nnx.Module):
@@ -92,12 +92,12 @@ Flax `Module`s can be used to compose other Modules in a nested structure. These
 
 The example below shows how to define a simple `MLP` by subclassing `Module`. The model consists of two `Linear` layers, a `Dropout` layer, and a `BatchNorm` layer. Note that we need to pass the `__call__` method the RNG state that we want the `Dropout` layer to use.
 
-```{code-cell} ipython3
+```{code-cell}
 class MLP(nnx.Module):
   def __init__(self, din: int, dmid: int, dout: int, *, rngs: nnx.Rngs):
     self.linear1 = Linear(din, dmid, rngs=rngs)
-    self.dropout = nnx.Dropout(rate=0.1)
-    self.bn = nnx.BatchNorm(dmid, rngs=rngs)
+    self.dropout = nnx.Dropout(rate=0.1, deterministic=False)
+    self.bn = nnx.BatchNorm(dmid, use_running_average=False, rngs=rngs)
     self.linear2 = Linear(dmid, dout, rngs=rngs)
 
   def __call__(self, x: jax.Array, rngs: nnx.Rngs):
@@ -117,7 +117,7 @@ Flax `Module`s are mutable by default. This means that their structure can be ch
 
 The following example shows how to replace the `Linear` layers in the `MLP` model from the previous example with `LoraLinear` layers:
 
-```{code-cell} ipython3
+```{code-cell}
 class LoraParam(nnx.Param): pass
 
 class LoraLinear(nnx.Module):
@@ -149,7 +149,7 @@ One of the main features of Flax Transforms is the preservation of reference sem
 
 In the following example, you define a `train_step` function that takes a `MLP` model, an `Optimizer`, and a batch of data, and returns the loss for that step. The loss and the gradients are computed using the `nnx.value_and_grad` transform over the `loss_fn`. The gradients are passed to the optimizer's `update` method to update the model's parameters.
 
-```{code-cell} ipython3
+```{code-cell}
 import optax
 
 # An MLP containing 2 custom `Linear` layers, 1 `nnx.Dropout` layer, 1 `nnx.BatchNorm` layer.
@@ -193,7 +193,7 @@ In the code below notice the following:
 4. `State` updates for `BatchNorm` layers are automatically propagated by nnx.scan.
 5. The `rngs` object is split into separate streams for each layer using the `fork` method.
 
-```{code-cell} ipython3
+```{code-cell}
 @nnx.vmap(in_axes=0, out_axes=0)
 def create_model(rngs):
   return MLP(10, 32, 10, rngs=rngs)
@@ -207,7 +207,7 @@ param_rngs = nnx.Rngs(0).fork(split=5)
 model = create_model(param_rngs)
 ```
 
-```{code-cell} ipython3
+```{code-cell}
 x = jnp.ones((3, 10))
 dropout_rngs = nnx.Rngs(1).fork(split=5)
 y = forward(model, dropout_rngs, x)
@@ -229,7 +229,7 @@ Below is an example of `StatefulLinear` `Module` that uses the Functional API. I
 - Some `Param` Variables; and
 - A custom `Count` Variable type, which is used to track the integer scalar state that increases on every forward pass.
 
-```{code-cell} ipython3
+```{code-cell}
 class Count(nnx.Variable): pass
 
 class StatefulLinear(nnx.Module):
@@ -255,7 +255,7 @@ A Flax `Module` can be decomposed into `State` and `GraphDef` using the `nnx.spl
 - `State` is a `Mapping` from strings to `Variable`s or nested  `State`s.
 - `GraphDef` contains all the static information needed to reconstruct a `Module` graph, it is analogous to [JAX's `PyTreeDef`](https://jax.readthedocs.io/en/latest/pytrees.html#internal-pytree-handling).
 
-```{code-cell} ipython3
+```{code-cell}
 graphdef, state = nnx.split(model)
 
 nnx.display(graphdef, state)
@@ -269,7 +269,7 @@ Flax's `nnx.merge` is the reverse of `nnx.split`. It takes the `GraphDef` + `Sta
 - `nnx.update` can update an object in place with the content of a given `State`.
 - This pattern is used to propagate the state from a transform back to the source object outside.
 
-```{code-cell} ipython3
+```{code-cell}
 print(f'{model.count.value = }')
 
 # 1. Use `nnx.split` to create a pytree representation of the `nnx.Module`.
@@ -311,7 +311,7 @@ To address this, the Flax NNX API has `nnx.split`, which allows you to pass one 
 
 The example below shows the most common `Filter`s:
 
-```{code-cell} ipython3
+```{code-cell}
 # Use `nnx.Variable` type `Filter`s to split into multiple `nnx.State`s.
 graphdef, params, counts = nnx.split(model, nnx.Param, Count)
 
@@ -322,7 +322,7 @@ nnx.display(params, counts)
 
 As expected, the `nnx.merge` and `nnx.update` methods naturally consume multiple `State`s:
 
-```{code-cell} ipython3
+```{code-cell}
 # Merge multiple `State`s
 model = nnx.merge(graphdef, params, counts)
 # Update with multiple `State`s

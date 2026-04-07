@@ -10,7 +10,7 @@ jupytext:
 
 # NNX Demo
 
-```{code-cell} ipython3
+```{code-cell}
 import jax
 from jax import numpy as jnp
 from flax import nnx
@@ -18,14 +18,14 @@ from flax import nnx
 
 ### [1] NNX is Pythonic
 
-```{code-cell} ipython3
+```{code-cell}
 :outputId: d8ef66d5-6866-4d5c-94c2-d22512bfe718
 
 
 class Block(nnx.Module):
   def __init__(self, din, dout, *, rngs):
     self.linear = nnx.Linear(din, dout, rngs=rngs)
-    self.bn = nnx.BatchNorm(dout, rngs=rngs)
+    self.bn = nnx.BatchNorm(dout, use_running_average=False, rngs=rngs)
 
   def __call__(self, x):
     return nnx.relu(self.bn(self.linear(x)))
@@ -56,7 +56,7 @@ print(f'{model = }'[:500] + '\n...')
 
 Because NNX Modules contain their own state, they are very easily to inspect:
 
-```{code-cell} ipython3
+```{code-cell}
 :outputId: 10a46b0f-2993-4677-c26d-36a4ddf33449
 
 print(f'{model.count = }')
@@ -66,7 +66,7 @@ print(f'{model.blocks[0].linear.kernel = }')
 
 ### [2] Model Surgery is Intuitive
 
-```{code-cell} ipython3
+```{code-cell}
 :outputId: e6f86be8-3537-4c48-f471-316ee0fb6c45
 
 # Module sharing
@@ -83,7 +83,7 @@ print(f'{y.shape = }')
 
 ### [3] Interacting with JAX is easy
 
-```{code-cell} ipython3
+```{code-cell}
 :outputId: 9a3f378b-739e-4f45-9968-574651200ede
 
 graphdef, state = model.split()
@@ -95,7 +95,7 @@ print(f'{state = }'[:500] + '\n...')
 print(f'\n{graphdefefefefefef = }'[:300] + '\n...')
 ```
 
-```{code-cell} ipython3
+```{code-cell}
 :outputId: 0007d357-152a-449e-bcb9-b1b5a91d2d8d
 
 graphdef, state = model.split()
@@ -116,7 +116,7 @@ print(f'{y.shape = }')
 print(f'{model.count.value = }')
 ```
 
-```{code-cell} ipython3
+```{code-cell}
 params, batch_stats, counts, graphdef = model.split(nnx.Param, nnx.BatchStat, Count)
 
 @jax.jit
@@ -135,7 +135,7 @@ print(f'{y.shape = }')
 print(f'{model.count = }')
 ```
 
-```{code-cell} ipython3
+```{code-cell}
 class Parent(nnx.Module):
     def __init__(self, model: MLP):
         self.model = model
@@ -163,6 +163,6 @@ print(f'{y.shape = }')
 print(f'{parent.model.count.value = }')
 ```
 
-```{code-cell} ipython3
+```{code-cell}
 
 ```

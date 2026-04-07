@@ -18,7 +18,7 @@ from flax import nnx
 class Model(nnx.Module):
   def __init__(self, *, rngs: nnx.Rngs):
     self.linear = nnx.Linear(20, 10, rngs=rngs)
-    self.drop = nnx.Dropout(0.1)
+    self.drop = nnx.Dropout(0.1, deterministic=False)
 
   def __call__(self, x, *, rngs):
     return nnx.relu(self.drop(self.linear(x), rngs=rngs))
@@ -90,7 +90,7 @@ Specifically, this will use the RngSteam `rngs.params` for weight initialization
 The `nnx.Dropout` module also requires a random state, but it requires this state at *call* time rather than initialization. Once again, we can pass it random state using the `rngs` keyword argument.
 
 ```{code-cell} ipython3
-dropout = nnx.Dropout(0.5)
+dropout = nnx.Dropout(0.5, deterministic=False)
 ```
 
 ```{code-cell} ipython3
@@ -159,7 +159,7 @@ Say you want to train a model that uses dropout on a batch of data. You don't wa
 class Model(nnx.Module):
   def __init__(self, rngs: nnx.Rngs):
     self.linear = nnx.Linear(20, 10, rngs=rngs)
-    self.drop = nnx.Dropout(0.1)
+    self.drop = nnx.Dropout(0.1, deterministic=False)
 
   def __call__(self, x, rngs):
     return nnx.relu(self.drop(self.linear(x), rngs=rngs))
@@ -199,7 +199,7 @@ So far, we have looked at passing random state directly to each Module when it g
 class Model(nnx.Module):
   def __init__(self, rngs: nnx.Rngs):
     self.linear = nnx.Linear(20, 10, rngs=rngs)
-    self.drop = nnx.Dropout(0.1, rngs=rngs)
+    self.drop = nnx.Dropout(0.1, deterministic=False, rngs=rngs)
 
   def __call__(self, x):
     return nnx.relu(self.drop(self.linear(x)))
@@ -296,7 +296,7 @@ class Count(nnx.Variable): pass
 class RNNCell(nnx.Module):
   def __init__(self, din, dout, rngs):
     self.linear = nnx.Linear(dout + din, dout, rngs=rngs)
-    self.drop = nnx.Dropout(0.1, rngs=rngs, rng_collection='recurrent_dropout')
+    self.drop = nnx.Dropout(0.1, deterministic=False, rngs=rngs, rng_collection='recurrent_dropout')
     self.dout = dout
     self.count = Count(jnp.array(0, jnp.uint32))
 
