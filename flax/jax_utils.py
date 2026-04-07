@@ -31,18 +31,27 @@ def _pmap_device_order():
   return jax.local_devices()
 
 
-def replicate(tree, devices=None):
+def replicate(tree, devices=None, axis_name='_device_put_sharded'):
   """Replicates arrays to multiple devices.
 
   Args:
     tree: a pytree containing the arrays that should be replicated.
     devices: the devices the data is replicated to
       (default: same order as expected by ``jax.pmap()``).
+    axis_name: the axis name to use for the replication.
   Returns:
     A new pytree containing the replicated arrays.
   """
   devices = devices or _pmap_device_order()
-  return jax.device_put_replicated(tree, devices)
+  mesh = jax.sharding.Mesh(np.array(devices), (axis_name,))
+  sharding = jax.NamedSharding(mesh, jax.P(axis_name))
+
+  def _replicate(x):
+    if isinstance(x, jax.Array):
+      return jax.device_put(jnp.stack([x] * len(devices)), sharding)
+    return jax.device_put(np.stack([x] * len(devices)), sharding)
+
+  return jax.tree_util.tree_map(_replicate, tree)
 
 
 def unreplicate(tree):
@@ -120,7 +129,8 @@ def _parse_spec(spec):
     return jax.ShapeDtypeStruct(spec, jnp.float32)
 
 
-def prefetch_to_device(iterator, size, devices=None):
+def prefetch_to_device(
+    iterator, size, devices=None, axis_name='_device_put_sharded'):
   """Shard and prefetch batches on device.
 
   This utility takes an iterator and returns a new iterator which fills an on
@@ -129,7 +139,8 @@ def prefetch_to_device(iterator, size, devices=None):
 
   This utility is mostly useful for GPUs, for TPUs and CPUs it should not be
   necessary -- the TPU & CPU memory allocators (normally) don't pick a memory
-  location that isn't free yet so they don't block. Instead those allocators OOM.
+  location that isn't free yet so they don't block. Instead those allocators
+  OOM.
 
   Args:
     iterator: an iterator that yields a pytree of ndarrays where the first
@@ -145,6 +156,8 @@ def prefetch_to_device(iterator, size, devices=None):
 
       Defaults to the order of devices expected by ``jax.pmap``.
 
+    axis_name: the axis name to use for the prefetch.
+
   Yields:
     The original items from the iterator where each ndarray is now sharded to
     the specified devices.
@@ -153,7 +166,11 @@ def prefetch_to_device(iterator, size, devices=None):
   devices = _pmap_device_order() if devices is None else devices
 
   def _prefetch(xs):
-    return jax.device_put_sharded(list(xs), devices)
+    mesh = jax.sharding.Mesh(np.array(devices), (axis_name,))
+    sharding = jax.NamedSharding(mesh, jax.P(axis_name))
+    if isinstance(xs, jax.Array):
+      return jax.device_put(jnp.stack(list(xs)), sharding)
+    return jax.device_put(np.stack(list(xs)), sharding)
 
   def enqueue(n):  # Enqueues *up to* `n` elements from the iterator.
     for data in itertools.islice(iterator, n):
