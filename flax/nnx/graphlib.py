@@ -143,7 +143,6 @@ LeafType = tp.Union[
   ArrayRefOutput,
   NoUpdate,
 ]
-GraphState = State[Key, LeafType]
 GraphFlatState = FlatState[LeafType]
 
 
@@ -657,14 +656,14 @@ class GraphDef(tp.Generic[Node]):
 
   # TODO(cgarciae): remove this method
   def apply(
-    self, state: GraphState, *states: GraphState,
+    self, state: State, *states: State,
     graph: bool | None = None,
-  ) -> ApplyCaller[tuple[GraphDef[Node], GraphState]]:
+  ) -> ApplyCaller[tuple[GraphDef[Node], State]]:
     accessor = DelayedAccessor()
 
     def _apply(
       accessor: DelayedAccessor, *args, **kwargs
-    ) -> tuple[tp.Any, tuple[GraphDef[Node], GraphState]]:
+    ) -> tuple[tp.Any, tuple[GraphDef[Node], State]]:
       module = merge(self, state, *states)
       fn = accessor(module)
       out = fn(*args, **kwargs)
@@ -679,7 +678,7 @@ class GraphDef(tp.Generic[Node]):
     return CallableProxy(_apply, accessor)  # type: ignore
 
 
-PureState = tuple[GraphDef[Node], GraphState]
+PureState = tuple[GraphDef[Node], State]
 
 
 def _tree_flatten(
@@ -1365,7 +1364,7 @@ def _graph_unflatten(
 def graph_pop(
   node: tp.Any,
   filters: tuple[filterlib.Filter, ...],
-) -> tuple[GraphState, ...]:
+) -> tuple[State, ...]:
   id_to_index: dict[int, Index] = {}
   path_parts: PathParts = ()
   predicates = tuple(filterlib.to_predicate(filter) for filter in filters)
@@ -1693,12 +1692,12 @@ class SplitContext:
   is_inner: bool | None
 
   @tp.overload
-  def split(self, graph_node: A, /) -> tuple[GraphDef[A], GraphState]: ...  # type: ignore[invalid-annotation]
+  def split(self, graph_node: A, /) -> tuple[GraphDef[A], State]: ...  # type: ignore[invalid-annotation]
 
   @tp.overload
   def split(  # type: ignore[invalid-annotation]
     self, graph_node: A, first: filterlib.Filter, /
-  ) -> tuple[GraphDef[A], GraphState]: ...
+  ) -> tuple[GraphDef[A], State]: ...
 
   @tp.overload
   def split(
@@ -1708,11 +1707,11 @@ class SplitContext:
     second: filterlib.Filter,
     /,
     *filters: filterlib.Filter,
-  ) -> tuple[GraphDef[A], GraphState, tpe.Unpack[tuple[GraphState, ...]]]: ...  # type: ignore[not-supported-yet]
+  ) -> tuple[GraphDef[A], State, tpe.Unpack[tuple[State, ...]]]: ...  # type: ignore[not-supported-yet]
 
   def split(
     self, node: A, *filters: filterlib.Filter
-  ) -> tuple[GraphDef[A], tpe.Unpack[tuple[GraphState, ...]]]:  # type: ignore[not-supported-yet]
+  ) -> tuple[GraphDef[A], tpe.Unpack[tuple[State, ...]]]:  # type: ignore[not-supported-yet]
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
     )
@@ -1872,9 +1871,9 @@ class MergeContext:
   def merge(  # type: ignore[invalid-annotation]
     self,
     graphdef: GraphDef[A],
-    state: GraphState,
+    state: State,
     /,
-    *states: GraphState,
+    *states: State,
   ) -> A:
     ctx = (
       current_update_context(self.ctxtag) if self.ctxtag is not None else None
@@ -2232,11 +2231,11 @@ def _split_state(
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
   graph_node: A, /, *, graph: bool | None = None,
-) -> tuple[GraphDef[A], GraphState]: ...
+) -> tuple[GraphDef[A], State]: ...
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
   graph_node: A, first: filterlib.Filter, /, *, graph: bool | None = None,
-) -> tuple[GraphDef[A], GraphState]: ...
+) -> tuple[GraphDef[A], State]: ...
 @tp.overload
 def split(  # type: ignore[invalid-annotation]
   graph_node: A,
@@ -2247,15 +2246,15 @@ def split(  # type: ignore[invalid-annotation]
   graph: bool | None = None,
 ) -> tuple[
   GraphDef[A],
-  GraphState,
-  tpe.Unpack[tuple[GraphState, ...]],
+  State,
+  tpe.Unpack[tuple[State, ...]],
 ]: ...
 def split(  # type: ignore[invalid-annotation]
   node: A, *filters: filterlib.Filter, graph: bool | None = None,
 ) -> tuple[
   GraphDef[A],
-  GraphState,
-  tpe.Unpack[tuple[GraphState, ...]],
+  State,
+  tpe.Unpack[tuple[State, ...]],
 ]:
   """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
   a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef
@@ -2467,9 +2466,9 @@ def update(node, state: tp.Any, /, *states: tp.Any) -> None:
 
 
 @tp.overload
-def state(node, /, *, graph: bool | None = None) -> GraphState: ...
+def state(node, /, *, graph: bool | None = None) -> State: ...
 @tp.overload
-def state(node, first: filterlib.Filter, /, *, graph: bool | None = None) -> GraphState: ...
+def state(node, first: filterlib.Filter, /, *, graph: bool | None = None) -> State: ...
 @tp.overload
 def state(
   node,
@@ -2478,12 +2477,12 @@ def state(
   /,
   *filters: filterlib.Filter,
   graph: bool | None = None,
-) -> tuple[GraphState, ...]: ...
+) -> tuple[State, ...]: ...
 def state(
   node,
   *filters: filterlib.Filter,
   graph: bool | None = None,
-) -> tp.Union[GraphState, tuple[GraphState, ...]]:
+) -> tp.Union[State, tuple[State, ...]]:
   """Similar to :func:`split` but only returns the :class:`State`'s indicated by the filters.
 
   Example usage::
@@ -2522,7 +2521,7 @@ def state(
   _, flat_state = flatten(node, graph=graph)
   state = flat_state.to_nested_state()
 
-  states: GraphState | tuple[GraphState, ...]
+  states: State | tuple[State, ...]
   if len(filters) == 0:
     states = state  # type: ignore[assignment]
   elif len(filters) == 1:
@@ -2611,7 +2610,7 @@ def pop(
   node,
   filter: filterlib.Filter,
   /,
-) -> GraphState: ...
+) -> State: ...
 
 
 @tp.overload
@@ -2621,12 +2620,12 @@ def pop(
   filter2: filterlib.Filter,
   /,
   *filters: filterlib.Filter,
-) -> tuple[GraphState, ...]: ...
+) -> tuple[State, ...]: ...
 
 
 def pop(
   node, *filters: filterlib.Filter
-) -> tp.Union[GraphState, tuple[GraphState, ...]]:
+) -> tp.Union[State, tuple[State, ...]]:
   """Pop one or more :class:`Variable` types from the graph node.
 
   Example usage::
@@ -2818,8 +2817,8 @@ def as_pure(tree: A) -> A:
 pure = deprecated(as_pure)
 
 def call(
-  graphdef_state: tuple[GraphDef[A], GraphState], /
-) -> ApplyCaller[tuple[GraphDef[A], GraphState]]:
+  graphdef_state: tuple[GraphDef[A], State], /
+) -> ApplyCaller[tuple[GraphDef[A], State]]:
   """Calls a method underlying graph node defined by a (GraphDef, State) pair.
 
   ``call`` takes a ``(GraphDef, State)`` pair and creates a proxy object that can be
