@@ -3054,7 +3054,7 @@ class TestScan(parameterized.TestCase):
         return x, None
 
     module = MLP(rngs=nnx.Rngs(0))
-    new_module = nnx.view(module, deterministic=False, use_running_average=False)
+    new_module = nnx.with_modules(module, deterministic=False, use_running_average=False)
 
     assert new_module.linear.kernel.shape == (5, 3, 3)
     assert new_module.linear.bias.shape == (5, 3)
@@ -3120,7 +3120,7 @@ class TestScan(parameterized.TestCase):
         return x, None
 
     module = MLP(rngs=nnx.Rngs(params=0, dropout=1))
-    new_module = nnx.view(module, deterministic=False, use_running_average=False)
+    new_module = nnx.with_modules(module, deterministic=False, use_running_average=False)
 
     assert new_module.linear.kernel.shape == (5, 3, 3)
     assert new_module.linear.bias.shape == (5, 3)
@@ -3188,7 +3188,7 @@ class TestScan(parameterized.TestCase):
         return x, None
 
     module = Block(rngs=nnx.Rngs(0))
-    new_module = nnx.view(module, deterministic=False, use_running_average=False)
+    new_module = nnx.with_modules(module, deterministic=False, use_running_average=False)
 
     assert new_module.d == 3
     assert new_module.linear.kernel.shape == (5, 3, 3)

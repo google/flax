@@ -26,6 +26,7 @@ from flax.nnx import (
   pytreelib,
 )
 from flax.nnx import variablelib as variableslib
+from flax.nnx.deprecations import deprecated
 from flax.nnx.pytreelib import Pytree, PytreeMeta
 from flax.nnx.graphlib import GraphState
 from flax.nnx.statelib import split_state, State
@@ -437,7 +438,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       raise_if_not_found=False,
     )
 
-def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool = True, graph: bool | None = None, **kwargs) -> A:
+def with_modules(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool = True, graph: bool | None = None, **kwargs) -> A:
   """Creates a new node with static attributes updated according to ``**kwargs``.
 
   The new node contains references to jax arrays in the original node. If a
@@ -457,13 +458,13 @@ def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool =
     >>> block = Block(2, 5, rngs=nnx.Rngs(0))
     >>> block.dropout.deterministic, block.batch_norm.use_running_average
     (False, False)
-    >>> new_block = nnx.view(block, deterministic=True, use_running_average=True)
+    >>> new_block = nnx.with_modules(block, deterministic=True, use_running_average=True)
     >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
     (True, True)
 
   ``Filter``'s can be used to set the attributes of specific Modules::
     >>> block = Block(2, 5, rngs=nnx.Rngs(0))
-    >>> new_block = nnx.view(block, only=nnx.Dropout, deterministic=True)
+    >>> new_block = nnx.with_modules(block, only=nnx.Dropout, deterministic=True)
     >>> # Only the dropout will be modified
     >>> new_block.dropout.deterministic, new_block.batch_norm.use_running_average
     (True, False)
@@ -511,9 +512,11 @@ def view(node: A, /, *, only: filterlib.Filter = ..., raise_if_not_found: bool =
   out = graphlib.recursive_map(_set_mode_fn, node, graph=graph)
 
   if raise_if_not_found and remaining:
-    raise ValueError(f"Unused keys found in nnx.view: {sorted(remaining)}")
+    raise ValueError(f"Unused keys found in nnx.with_modules: {sorted(remaining)}")
 
   return out
+
+view = deprecated(with_modules)
 
 def with_attributes(
   node: A,

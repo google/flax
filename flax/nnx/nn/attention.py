@@ -785,7 +785,7 @@ class MultiHeadAttention(Module):
       batch_size: int | Shape | None = None,
       max_length: int | None = None,
   ):
-    """Class method used by ``nnx.view``.
+    """Class method used by ``nnx.with_modules``.
 
     Args:
       train: if True, the module is set to training mode.

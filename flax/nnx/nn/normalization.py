@@ -415,7 +415,7 @@ class BatchNorm(Module):
       self,
       use_running_average: bool | None = None,
   ):
-    """Class method used by ``nnx.view``.
+    """Class method used by ``nnx.with_modules``.
 
     Args:
       use_running_average: if True, the stored batch statistics will be
