@@ -79,7 +79,7 @@ def remove_axis(
 
   def _remove_axis(x: tp.Any):
     if isinstance(x, variablelib.Variable):
-      if hasattr(x, 'out_sharding') and x.out_sharding is not None:
+      if hasattr(x, 'out_sharding'):
         x.set_metadata(
           out_sharding=remove_field(x.out_sharding, index, axis_name)
         )
@@ -180,7 +180,6 @@ def get_abstract_model(init_fn, mesh, *, graph: bool | None = None):
       abs_state, get_named_sharding(abs_state, mesh)
     )
   return gdef, abs_state
-
 
 def abstract_with_sharding(
     tree: A, graph: bool | None = None
