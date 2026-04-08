@@ -10,7 +10,7 @@ jupytext:
 
 # Hijax
 
-```{code-cell}
+```{code-cell} ipython3
 from flax import nnx
 import jax
 import jax.numpy as jnp
@@ -19,7 +19,7 @@ import optax
 current_mode = nnx.var_defaults().hijax # ignore: only needed for testing
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 nnx.var_defaults(hijax=True)
 
 rngs = nnx.Rngs(0)
@@ -44,7 +44,7 @@ for _ in range(3):
 
 State propagation:
 
-```{code-cell}
+```{code-cell} ipython3
 v = nnx.Variable(jnp.array(0), hijax=True)
 
 @jax.jit
@@ -54,14 +54,14 @@ def inc(v):
 print(v[...]); inc(v); print(v[...])
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 v = nnx.Variable(jnp.array(0), hijax=True)
 print(jax.make_jaxpr(inc)(v))
 ```
 
 Pytree values:
 
-```{code-cell}
+```{code-cell} ipython3
 v = nnx.Variable({'a': jnp.array(0), 'b': jnp.array(2)}, hijax=True)
 
 @jax.jit
@@ -74,7 +74,7 @@ print(v); inc_and_double(v); print(v)
 
 Dynamic state structure:
 
-```{code-cell}
+```{code-cell} ipython3
 rngs = nnx.Rngs(0)
 x = rngs.uniform((4, 5))
 w = rngs.normal((5, 3))
@@ -91,7 +91,7 @@ y = linear(x, w, metrics)
 print("After:", metrics)
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 # set default Variable mode for the rest of the guide
 nnx.var_defaults(hijax=True)
 
@@ -102,7 +102,7 @@ print(variable)
 
 ### Mutability
 
-```{code-cell}
+```{code-cell} ipython3
 class Linear(nnx.Module):
   def __init__(self, in_features, out_features, rngs: nnx.Rngs):
     self.kernel = nnx.Param(rngs.normal((in_features, out_features)))
@@ -116,7 +116,7 @@ print(f"{nnx.vars_as(model, mutable=False) = !s}")
 print(f"{nnx.vars_as(model, mutable=True) = !s}")
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 v = nnx.Variable(jnp.array(0))
 v_immut = nnx.vars_as(v, mutable=False)
 assert not v_immut.mutable
@@ -129,7 +129,7 @@ except Exception as e:
 
 ### Ref support
 
-```{code-cell}
+```{code-cell} ipython3
 v = nnx.Variable(jnp.array(0))
 v_ref = nnx.vars_as(v, ref=True)
 assert v_ref.ref
@@ -137,7 +137,7 @@ print(v_ref)
 print(v_ref.get_raw_value())
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 v_immut = nnx.vars_as(v_ref, mutable=False)
 assert not v_immut.ref
 print("immutable =", v_immut)
@@ -149,7 +149,7 @@ print("mutable =", v_ref)
 
 ### Examples
 
-```{code-cell}
+```{code-cell} ipython3
 class Block(nnx.Module):
   def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
     self.linear = Linear(din, dmid, rngs=rngs)
@@ -164,7 +164,7 @@ class Block(nnx.Module):
 
 #### Training Loop
 
-```{code-cell}
+```{code-cell} ipython3
 # hijax Variables by default
 model = Block(2, 64, 3, rngs=nnx.Rngs(0))
 optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
@@ -188,7 +188,7 @@ for _ in range(3):
 
 #### Scan Over Layers
 
-```{code-cell}
+```{code-cell} ipython3
 # TODO: does not work with hijax yet
 # @jax.vmap
 # def create_stack(rngs):
@@ -212,7 +212,7 @@ for _ in range(3):
 
 #### Mutable Outputs
 
-```{code-cell}
+```{code-cell} ipython3
 @jax.jit
 def create_model(rngs):
   return Block(2, 64, 3, rngs=rngs)
@@ -223,7 +223,7 @@ except Exception as e:
   print(f"Error:", e)
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 @jax.jit
 def create_model(rngs):
   return nnx.vars_as((Block(2, 64, 3, rngs=rngs)), hijax=False)
@@ -235,7 +235,7 @@ print("model.linear =", model.linear)
 
 #### Reference Sharing (aliasing)
 
-```{code-cell}
+```{code-cell} ipython3
 # NOTE: doesn't currently fail on the jax side
 def get_error(f, *args):
   try:
@@ -252,7 +252,7 @@ def f(a, b):
 print(get_error(f, x, x))
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 # NOTE: doesn't currently fail on the jax side
 class HasShared(nnx.Pytree):
   def __init__(self):
@@ -269,14 +269,14 @@ print(get_error(g, has_shared))
 print(has_shared)  # updates don't propagate
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 print("Duplicates found:")
 if (all_duplicates := nnx.find_duplicates(has_shared)):
   for duplicates in all_duplicates:
     print("-", duplicates)
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 @jax.jit
 def h(graphdef, state):
   has_shared = nnx.merge(graphdef, state)
@@ -287,7 +287,7 @@ h(graphdef, state)
 print(has_shared)
 ```
 
-```{code-cell}
+```{code-cell} ipython3
 # clean up for CI tests
 _ = nnx.var_defaults(hijax=current_mode)
 ```
