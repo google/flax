@@ -21,6 +21,8 @@ This script trains a Gemma transformer on the LM1B dataset.
 # pytype: disable=attribute-error
 import contextlib
 import dataclasses
+import time
+from functools import partial
 from pathlib import Path
 import time
 
@@ -145,7 +147,8 @@ def jax_train_step(
     train_metrics: nnx.Metric,
     label_smoothing: float = 0.0,
     pad_id: int = 0,
-) -> tuple[nnx.Module, nnx.Optimizer, nnx.Rngs, nnx.Metric]:
+    with_capture: bool = False,
+) -> tuple[nnx.State, nnx.State | None]:
   """Perform a single training step."""
   # X_position and X_segmentation are needed only when using "packed examples"
   # where multiple sequences are packed into the same example with this
@@ -174,23 +177,32 @@ def jax_train_step(
   def loss_fn(params, rngs):
     """loss function used for training."""
     module = nnx.merge(graphdef, params, nondiff)
+    if with_capture:
+      module = nnx.capture(module, nnx.Intermediate)
 
-    logits, _ = module(
+    output = module(
         inputs,
         positions=inputs_positions,
         attention_mask=attention_mask,
         cache=None,
         rngs=rngs,
     )
+    # output is (preds, cache) if with_capture=False
+    # and is ((preds, cache), intermediates) if with_capture=True
+    if with_capture:
+      (logits, _), intermediates = output
+    else:
+      logits, _ = output
+      intermediates = None
 
     loss_per_sample = compute_weighted_cross_entropy(
         logits, targets, weights, label_smoothing
     )
     mean_loss = loss_per_sample.mean()
-    return mean_loss, (loss_per_sample, logits)
+    return mean_loss, (loss_per_sample, logits, intermediates)
 
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, (loss_per_sample, logits)), grads = grad_fn(params, rngs.fork())
+  (_, (loss_per_sample, logits, intermediates)), grads = grad_fn(params, rngs.fork())
   optimizer.update(model, grads)
 
   # Apply pad mask on logits and targets for metrics computation
@@ -200,7 +212,7 @@ def jax_train_step(
       labels=targets,
       mask={"accuracy": input_mask},
   )
-  return nnx.state((model, optimizer, rngs, train_metrics))
+  return nnx.state((model, optimizer, rngs, train_metrics)), intermediates
 
 
 def nnx_train_step(
@@ -211,7 +223,8 @@ def nnx_train_step(
     train_metrics: nnx.Metric,
     label_smoothing: float = 0.0,
     pad_id: int = 0,
-) -> None:
+    with_capture: bool = False,
+) -> nnx.State | None:
   """Perform a single training step."""
   # X_position and X_segmentation are needed only when using "packed examples"
   # where multiple sequences are packed into the same example with this
@@ -237,23 +250,32 @@ def nnx_train_step(
 
   def loss_fn(model, rngs):
     """loss function used for training."""
+    if with_capture:
+      model = nnx.capture(model, nnx.Intermediate)
 
-    logits, _ = model(
+    output = model(
         inputs,
         positions=inputs_positions,
         attention_mask=attention_mask,
         cache=None,
         rngs=rngs,
     )
+    # output is (preds, cache) if with_capture=False
+    # and is ((preds, cache), intermediates) if with_capture=True
+    if with_capture:
+      (logits, _), intermediates = output
+    else:
+      logits, _ = output
+      intermediates = None
 
     loss_per_sample = compute_weighted_cross_entropy(
         logits, targets, weights, label_smoothing
     )
     mean_loss = loss_per_sample.mean()
-    return mean_loss, (loss_per_sample, logits)
+    return mean_loss, (loss_per_sample, logits, intermediates)
 
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
-  (_, (loss_per_sample, logits)), grads = grad_fn(model, rngs.fork())
+  (_, (loss_per_sample, logits, intermediates)), grads = grad_fn(model, rngs.fork())
   optimizer.update(model, grads)
 
   # Apply pad mask on logits and targets for metrics computation
@@ -263,6 +285,7 @@ def nnx_train_step(
       labels=targets,
       mask={"accuracy": input_mask},
   )
+  return intermediates
 
 
 def eval_step(
@@ -351,6 +374,34 @@ def inspect_sharding(x):
     logging.debug(f" - Device {key.id}: {value}")
 
 
+def _filter_intermediates(x):
+  # assume single host so we skip allgather from all hosts
+  # by converting to np we remove all shardings
+  if jnp.isdtype(x, "real floating"):
+    x = x.astype(jnp.float32)
+  x = np.asarray(x)
+  x = x[0, 0, ...].reshape(-1)
+  if len(x) < 10:
+    return x
+  if np.isdtype(x.dtype, "integral"):
+    return x.min().item(), x.max().item()
+  # Mask -inf for attn masks
+  x = x[x > -1e10]
+  if len(x) > 0:
+    return x.min().item(), x.mean().item(), x.max().item()
+  return x
+
+
+def display_intermediates(intermediates, placeholder=None):
+  if placeholder is not None:
+    placeholder = jax.tree.map(lambda p: _filter_intermediates(p), placeholder)
+    placeholder = nnx.to_flat_state(placeholder)
+    for k, v in placeholder:
+      logging.info(f"{k}, stats: {v.get_value()[0]}")
+
+  return intermediates
+
+
 def train_and_evaluate(
     config: TrainConfig, workdir: str, chpt_bucket: str | None = None
 ):
@@ -431,7 +482,11 @@ def train_and_evaluate(
   rngs = nnx.Rngs(params=config.seed, dropout=config.seed)
 
   with jax.set_mesh(mesh):
-    model = transformer_lib.Transformer(model_config, rngs=rngs)
+    model = transformer_lib.Transformer(
+        model_config,
+        rngs=rngs,
+        sow_config=sow_lib.SowConfig(**config.sow_config),
+    )
     optimizer = nnx.Optimizer(
         model,
         tx=optax.adamw(
@@ -525,13 +580,12 @@ def train_and_evaluate(
       accuracy=nnx.metrics.Accuracy(),
   )
 
-  jit_fn = (
-      nnx.jit if config.use_nnx_transforms in ("all", "jit-only") else jax.jit
-  )
+  nnx_train_step_ = partial(nnx_train_step, with_capture=config.sow_config is not None)
+  jax_train_step_ = partial(jax_train_step, with_capture=config.sow_config is not None)
+
+  jit_fn = nnx.jit if config.use_nnx_transforms in ("all", "jit-only") else jax.jit
   jit_train_step = jit_fn(
-      nnx_train_step
-      if config.use_nnx_transforms in ("all", "grad-only")
-      else jax_train_step,
+      nnx_train_step_ if config.use_nnx_transforms in ("all", "grad-only") else jax_train_step_,
       static_argnames=("label_smoothing", "pad_id"),
       donate_argnames=("model", "optimizer"),
   )
@@ -548,6 +602,7 @@ def train_and_evaluate(
   # Main Train Loop
   # ---------------------------------------------------------------------------
   logging.info('Starting training loop.')
+  prev_intermediates = None   # for async display of intermediates
   hooks = []
   report_progress = periodic_actions.ReportProgress(
       num_train_steps=config.num_train_steps, writer=writer
@@ -573,7 +628,7 @@ def train_and_evaluate(
           batch = next(train_iter)
 
         with report_progress.timed('train_step'):
-          updates = jit_train_step(
+          output = jit_train_step(
               model,
               optimizer,
               rngs,
@@ -582,8 +637,12 @@ def train_and_evaluate(
               0.0,  # label_smoothing
               encoder.pad_id(),  # pad_id
           )
-          if updates is not None:
+
+          if isinstance(output, tuple):
+            updates, intermediates = output
             nnx.update((model, optimizer, rngs, train_metrics), updates)
+          else:
+            intermediates = output
 
       # Quick indication that training is happening.
       if step < 20:
@@ -596,6 +655,10 @@ def train_and_evaluate(
         )
       for h in hooks:
         h(step)
+
+      # Display intermediates every 100 iters
+      if step % 100 == 0:
+        prev_intermediates = display_intermediates(intermediates, prev_intermediates)
 
       # Periodic metric handling.
       if (step > 0 and step % config.eval_every_steps == 0) or is_last_step:
