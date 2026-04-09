@@ -183,7 +183,7 @@ class Sampler:
         )
 
       def check_shape_dtype(x, y):
-        return jnp.shape(x) == jnp.shape(y) and jnp.dtype(x) == jnp.dtype(y)
+        return x.shape == y.shape and x.dtype == y.dtype
 
       if not all(
           jax.tree_util.tree_leaves(
