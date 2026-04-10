@@ -125,9 +125,10 @@ class TrainState(struct.PyTreeNode):
   def create(cls, *, apply_fn, params, tx, **kwargs):
     """Creates a new instance with ``step=0`` and initialized ``opt_state``."""
     # We exclude OWG params when present because they do not need opt states.
-    params_with_opt = (
-      params['params'] if OVERWRITE_WITH_GRADIENT in params else params
-    )
+    if not isinstance(params, jax.Array) and OVERWRITE_WITH_GRADIENT in params:
+      params_with_opt = params['params']
+    else:
+      params_with_opt = params
     opt_state = tx.init(params_with_opt)
     return cls(
       step=0,
