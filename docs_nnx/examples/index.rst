@@ -16,6 +16,7 @@ Example notebooks guide you through applying Flax models to a variety of differe
 
    ./gemma
    ./digits_diffusion_model
+   ./minigpt
 
 
 Example Projects
