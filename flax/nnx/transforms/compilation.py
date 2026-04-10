@@ -367,25 +367,14 @@ def jit(
   if was_bound:
     _raise_bound_method_error('jit')
 
-  if not graph:
-    if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_shardings)):
-      raise ValueError(
-        '`in_shardings` cannot contain `StateSharding` objects '
-        'when `graph=False`. '
-        + graphlib._tree_mode_suggestion_transform('jit')
-      )
-    if any(isinstance(x, StateSharding) for x in jax.tree.leaves(out_shardings)):
-      raise ValueError(
-        '`out_shardings` cannot contain `StateSharding` objects '
-        'when `graph=False`. '
-        + graphlib._tree_mode_suggestion_transform('jit')
-      )
-
-  if graph and not graph_updates:
-    if in_shardings is not None:
-      extract.check_prefix(in_shardings, 'in_shardings', 'jit')
-    if out_shardings is not None:
-      extract.check_prefix(out_shardings, 'out_shardings', 'jit')
+  if in_shardings is not None:
+    extract.check_prefix(
+      in_shardings, 'in_shardings', 'jit', graph, graph_updates
+    )
+  if out_shardings is not None:
+    extract.check_prefix(
+      out_shardings, 'out_shardings', 'jit', graph, graph_updates
+    )
 
   wrapped_cls: tp.Any
   if graph and graph_updates:
@@ -1546,20 +1535,14 @@ def shard_map(
   if was_bound:
     _raise_bound_method_error('shard_map')
 
-  if not graph or not graph_updates:
-    if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_specs)):
-      raise ValueError(
-        '`in_specs` cannot contain `StateSharding` objects '
-        'when `graph=False`'
-      )
-    if any(isinstance(x, StateSharding) for x in jax.tree.leaves(out_specs)):
-      raise ValueError(
-        '`out_specs` cannot contain `StateSharding` objects '
-        'when `graph=False`'
-      )
-    if graph:
-      extract.check_prefix(in_specs, 'in_specs', 'shard_map')
-      extract.check_prefix(out_specs, 'out_specs', 'shard_map')
+  extract.check_prefix(
+    in_specs, 'in_specs', 'shard_map', graph, graph_updates
+  )
+  extract.check_prefix(
+    out_specs, 'out_specs', 'shard_map', graph, graph_updates
+  )
+
+  if not (graph and graph_updates):
 
     shard_map_fn = jax.shard_map(
         SimpleShardMapFn(f_unbound, graph=graph, out_specs=out_specs),

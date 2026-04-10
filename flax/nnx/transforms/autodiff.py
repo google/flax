@@ -57,9 +57,13 @@ AxisName = tp.Hashable
 
 
 @dataclasses.dataclass(frozen=True)
-class DiffState:
+class DiffState(extract.PrefixMapping):
   argnum: int
   filter: filterlib.Filter
+
+  def map_prefix(self, path, variable):
+    predicate = filterlib.to_predicate(self.filter)
+    return predicate(path, variable)
 
 
 @dataclasses.dataclass(eq=False)
@@ -148,13 +152,9 @@ def _grad_general(
 
   transform = jax.value_and_grad if return_value else jax.grad
 
+  extract.check_prefix(argnums, 'argnums', 'grad', graph, graph_updates)
+
   if not graph or not graph_updates:
-    if any(isinstance(x, DiffState) for x in jax.tree.leaves(argnums)):
-      raise ValueError(
-        '`argnums` cannot contain `DiffState` objects '
-        'when `graph=False`. '
-        + graphlib._tree_mode_suggestion_transform('grad')
-      )
 
     gradded_fn = transform(
         SimpleGradFn(f, has_aux, graph=graph),
@@ -1552,13 +1552,11 @@ def custom_vjp(
   if was_bound:
     _raise_bound_method_error('custom_vjp')
 
+  extract.check_prefix(
+    nondiff_argnums, 'nondiff_argnums', 'custom_vjp', graph, graph_updates
+  )
+
   if not graph or not graph_updates:
-    if any(isinstance(x, DiffState) for x in nondiff_argnums):
-      raise ValueError(
-        '`nondiff_argnums` cannot contain `DiffState` objects '
-        'when `graph=False`. '
-        + graphlib._tree_mode_suggestion_transform('custom_vjp')
-      )
     return SimpleCustomVjp(fun_unbound, nondiff_argnums, graph=graph)  # type: ignore[arg-type]
 
   return CustomVjp(fun_unbound, nondiff_argnums)
