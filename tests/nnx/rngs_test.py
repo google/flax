@@ -193,11 +193,16 @@ class TestRngs(parameterized.TestCase):
 
     np.testing.assert_allclose(y1, y2)
 
-  @parameterized.parameters(True, False)
-  def test_split_rngs(self, graph):
+  @parameterized.product(
+      graph=[True, False],
+      graph_updates=[True, False],
+  )
+  def test_split_rngs(self, graph: bool, graph_updates: bool):
     rngs = nnx.Rngs(params=0, dropout=1)
-    result = nnx.split_rngs(rngs, splits=5, graph=graph)
-    if graph:
+    result = nnx.split_rngs(
+        rngs, splits=5, graph=graph, graph_updates=graph_updates
+    )
+    if graph and graph_updates:
       self.assertEqual(rngs.params.key.shape, (5,))
       self.assertEqual(rngs['dropout'].key.shape, (5,))
       nnx.restore_rngs(result)
@@ -209,17 +214,43 @@ class TestRngs(parameterized.TestCase):
       self.assertEqual(result.params.key.shape, (5,))
       self.assertEqual(result['dropout'].key.shape, (5,))
 
-  @parameterized.parameters(True, False)
-  def test_fork_rngs(self, graph):
+  @parameterized.product(
+      graph=[True, False],
+      graph_updates=[True, False],
+  )
+  def test_fork_rngs(self, graph: bool, graph_updates: bool):
     rngs = nnx.Rngs(params=0, dropout=1)
-    if graph:
-      backups = nnx.fork_rngs(rngs, graph=graph)
-      new_key = rngs.params.key[...]
-      nnx.restore_rngs(backups)
-      self.assertNotEqual(rngs.params.key[...], new_key)
+    original_key = rngs.params.key[...].copy()
+
+    result = nnx.fork_rngs(rngs, graph=graph, graph_updates=graph_updates)
+
+    # jax.random.key_data is needed because np.allclose raises a TypeError
+    # when implicitly converting PRNGKey dtypes to NumPy arrays.
+    def _get_data(x):
+      arr = (
+          x[...]
+          if hasattr(x, '__getitem__') and not isinstance(x, jax.Array)
+          else x
+      )
+      return jax.random.key_data(arr)
+
+    if graph and graph_updates:
+      self.assertFalse(
+          np.allclose(_get_data(rngs.params.key[...]), _get_data(original_key))
+      )
+      nnx.restore_rngs(result)
+      np.testing.assert_allclose(
+          _get_data(rngs.params.key[...]), _get_data(original_key)
+      )
     else:
-      new_rngs = nnx.fork_rngs(rngs, graph=graph)
-      self.assertNotEqual(new_rngs.params.key[...], rngs.params.key[...])
+      np.testing.assert_allclose(
+          _get_data(rngs.params.key[...]), _get_data(original_key)
+      )
+      self.assertFalse(
+          np.allclose(
+              _get_data(result.params.key[...]), _get_data(original_key)
+          )
+      )
 
   def test_random_helpers(self):
     rngs = nnx.Rngs(0, params=1)

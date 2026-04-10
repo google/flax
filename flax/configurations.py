@@ -306,5 +306,8 @@ nnx_graph_mode = bool_flag(
 nnx_graph_updates = bool_flag(
   name='nnx_graph_updates',
   default=True,
-  help='Whether graph-mode uses dynamic (True) or simple (False) graph traversal.',
+  help=(
+      'Whether graph-mode uses dynamic (True) or simple (False) graph'
+      ' traversal.'
+  ),
 )

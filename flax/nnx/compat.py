@@ -37,6 +37,7 @@ graphdef = functools.partial(_graphlib.graphdef, graph=True)
 flatten = functools.partial(_graphlib.flatten, graph=True)
 iter_graph = functools.partial(_graphlib.iter_graph, graph=True)
 recursive_map = functools.partial(_graphlib.recursive_map, graph=True)
+cached_partial = functools.partial(_graphlib.cached_partial, graph=True, graph_updates=True)
 
 # module
 view = functools.partial(_module.view, graph=True)
@@ -45,8 +46,8 @@ iter_modules = functools.partial(_module.iter_modules, graph=True)
 iter_children = functools.partial(_module.iter_children, graph=True)  # type: ignore[has-type]
 
 # rnglib
-split_rngs = functools.partial(_rnglib.split_rngs, graph=True)
-fork_rngs = functools.partial(_rnglib.fork_rngs, graph=True)
+split_rngs = functools.partial(_rnglib.split_rngs, graph=True, graph_updates=True)
+fork_rngs = functools.partial(_rnglib.fork_rngs, graph=True, graph_updates=True)
 reseed = functools.partial(_rnglib.reseed, graph=True)
 backup_keys = functools.partial(_rnglib.backup_keys, graph=True)
 

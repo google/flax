@@ -152,10 +152,11 @@ class TestSPMD(parameterized.TestCase):
     kadds, kremoves, badds, bremoves = [], [], [], []
     class MLP(nnx.Module):
 
-      @nnx.split_rngs(splits=5)
+      @nnx.split_rngs(splits=5, graph=True, graph_updates=True)
       @nnx.vmap(
           in_axes=(0, 0),
           transform_metadata={nnx.PARTITION_NAME: 'layers', 'nickname': 'nick'},
+          graph=True, graph_updates=True,
       )
       def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(
@@ -178,7 +179,8 @@ class TestSPMD(parameterized.TestCase):
 
       @nnx.scan(
           in_axes=(0, nnx.Carry),
-          transform_metadata={nnx.PARTITION_NAME: 'layers'}
+          transform_metadata={nnx.PARTITION_NAME: 'layers'},
+          graph=True, graph_updates=True,
       )
       def __call__(self, x: jax.Array):
         x = self.linear(x)
@@ -396,7 +398,7 @@ class TestSPMD(parameterized.TestCase):
         ('batch', 'model'),
         axis_types=(jax.sharding.AxisType.Auto,) * len(('batch', 'model')),
     )
-    gdef, abs_state = nnx.get_abstract_model(lambda: Foo(nnx.Rngs(0)), mesh)
+    gdef, abs_state = nnx.compat.get_abstract_model(lambda: Foo(nnx.Rngs(0)), mesh)
     assert len(jax.tree.leaves(abs_state)) == 1
     assert jax.tree.leaves(abs_state)[0].sharding.is_equivalent_to(
       NamedSharding(mesh, P(None, 'model')), ndim=2)
@@ -453,7 +455,7 @@ class TestSPMD(parameterized.TestCase):
             self.p1 = nnx.Linear(16, 16, rngs=nnx.Rngs(0), kernel_metadata={"out_sharding": ("a", "b"), "mesh": mesh1})
             self.p2 = nnx.Linear(16, 16, rngs=nnx.Rngs(0), kernel_metadata={"out_sharding": ("c", "d"), "mesh": mesh2})
 
-    abs_model = nnx.eval_shape(lambda: Model())
+    abs_model = nnx.abstract_with_sharding(nnx.eval_shape(lambda: Model()))
     assert isinstance(abs_model.p1.kernel.sharding, jax.sharding.NamedSharding)
     assert abs_model.p1.kernel.sharding.mesh.axis_names == mesh1.axis_names
     assert abs_model.p1.kernel.sharding.spec == jax.P("a", "b")
@@ -468,7 +470,7 @@ class TestSPMD(parameterized.TestCase):
 
     mesh = jax.make_mesh((2, 2), ("a", "b"), (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto))
     with jax.set_mesh(mesh):
-        abs_model = nnx.eval_shape(lambda: Model())
+        abs_model = nnx.abstract_with_sharding(nnx.eval_shape(lambda: Model()))
     assert isinstance(abs_model.linear.kernel.sharding, jax.sharding.NamedSharding)
     assert abs_model.linear.kernel.sharding.mesh.axis_names == mesh.axis_names
     assert abs_model.linear.kernel.sharding.spec == jax.P("a", "b")

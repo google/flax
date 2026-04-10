@@ -68,12 +68,13 @@ def _apply_axis_fn(
     metadata: tp.Mapping[str, tp.Any],
     axis_fn: tp.Callable[..., tp.Any],
 ) -> None:
-  is_leaf = lambda x: x is None or isinstance(x, variablelib.Variable)
+  prefix_leaf = lambda x: x is None
+  is_leaf = lambda x: isinstance(x, variablelib.Variable)
   def apply_fn(path, axis, leaf):
     if isinstance(axis, int) and isinstance(leaf, variablelib.Variable):
       axis_fn(leaf, axis, metadata)
 
-  extract.broadcast_prefix_map(apply_fn, axes, tree, is_leaf=is_leaf)
+  extract.broadcast_prefix_map(apply_fn, axes, tree, is_leaf=is_leaf, prefix_leaf=prefix_leaf)
 
 
 @tp.overload
@@ -140,7 +141,9 @@ def transform_metadata(
     out = f(*args)
     if graph:
       out = extract.to_tree2(out, prefix=out_axes)
-    extract.check_no_aliases('transform_metadata', args=updates, out=out)
+    extract.check_no_aliases(
+        'transform_metadata', args=updates, out=out, check_can_update=['out']
+    )
     _apply_axis_fn(args, in_axes, metadata, spmd.add_axis)
     _apply_axis_fn(out, out_axes, metadata, spmd.add_axis)
     updates = extract.mask_variable_updates(updates, snapshot)
@@ -280,7 +283,13 @@ class SimpleVmapFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_axes)
-    extract.check_no_aliases('vmap', args=updates[0], kwargs=updates[1], out=out)
+    extract.check_no_aliases(
+        'vmap',
+        args=updates[0],
+        kwargs=updates[1],
+        out=out,
+        check_can_update=['out'],
+    )
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -302,7 +311,13 @@ class SimplePmapFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_axes)
-    extract.check_no_aliases('pmap', args=updates[0], kwargs=updates[1], out=out)
+    extract.check_no_aliases(
+        'pmap',
+        args=updates[0],
+        kwargs=updates[1],
+        out=out,
+        check_can_update=['out'],
+    )
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
@@ -907,6 +922,48 @@ def _check_out_axes(out_axes):
             f'Got StateAxes({{{filter}: Carry}}) at: out_axes'
             f'{jax.tree_util.keystr(key)}'
           )
+
+
+def _validate_scan_axes(in_axes, out_axes):
+  is_axis_leaf = lambda x: x is None or x is Carry
+
+  in_carry_count = 0
+  for path, leaf in jax.tree_util.tree_leaves_with_path(
+      in_axes, is_leaf=is_axis_leaf
+  ):
+    if leaf is Carry:
+      in_carry_count += 1
+      if len(path) > 1:
+        raise ValueError(
+            'Carry must be a top-level argument, it cannot be nested. '
+            f'Found Carry inside in_axes at path {jax.tree_util.keystr(path)}'
+        )
+  if in_carry_count > 1:
+    raise ValueError('Found multiple Carry definitions in in_axes')
+
+  out_carry_count = 0
+  for path, leaf in jax.tree_util.tree_leaves_with_path(
+      out_axes, is_leaf=is_axis_leaf
+  ):
+    if leaf is Carry:
+      out_carry_count += 1
+      if len(path) > 1:
+        raise ValueError(
+            'Carry must be a top-level argument, it cannot be nested. '
+            f'Found Carry inside out_axes at path {jax.tree_util.keystr(path)}'
+        )
+  if out_carry_count > 1:
+    raise ValueError('Found multiple Carry definitions in out_axes')
+
+  in_has_carry = in_carry_count > 0
+  out_has_carry = out_carry_count > 0
+  if in_has_carry != out_has_carry:
+    raise ValueError(
+        'If one of in_axes or out_axes has Carry, the other must also '
+        f'have Carry. Got {in_axes=}, {out_axes=}'
+    )
+
+
 def _check_carry_same_references(carry_arg, carry_arg_out):
   def check_carry_same_references(key_path, arg, out):
     if (
@@ -1369,43 +1426,56 @@ class SimpleScanFn:
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
-  def __call__(self, *args):
-    updates, snapshot = extract.updates_and_snapshot(args)
-    updates = extract.mask_at(updates, self.carry_arg_index)
-    snapshot = extract.mask_at(snapshot, self.carry_arg_index)
-    if self.carry_arg_index is not None:
-      carry_in = args[self.carry_arg_index]
-    else:
-      carry_in = None
+  def __call__(self, full_carry: tp.Any, x_args: tp.Any):
+    carry, broadcasts = full_carry
+    updates, snapshot = extract.updates_and_snapshot(x_args)
+    x_args = extract.insert(
+        x_args,
+        broadcasts,
+        is_leaf=lambda x: isinstance(x, variablelib.Variable),
+    )
+
     if self.graph:
-      args = extract.from_tree2(args)
+      x_args = extract.from_tree2(x_args)
+      carry = extract.from_tree2(carry)
+
+    # Reconstruct full args
+    if self.carry_arg_index is not None:
+      args = extract.insert_at(x_args, self.carry_arg_index, carry)
+    else:
+      args = x_args
 
     out = self.f(*args)
 
     if self.graph:
-      out = extract.to_tree2(out, prefix=self.out_axes)
+      # check consistent aliasing, temporarily convert `out` to tree
+      # to check aliasing, but the real tree convertion is done later
+      check_out = extract.to_tree2(out, prefix=self.out_axes)
+    else:
+      check_out = out
 
-    if self.carry_out_index is not None:
-      carry_out = out[self.carry_out_index] if self.out_is_tuple else out
-      extract.check_same_variables(carry_in, carry_out, 'scan')
-
-    def keep_fn(path, prefix, cur, snap):
-      changed = extract.variable_changed(cur, snap)
-      if prefix is None and changed:
-        raise ValueError(
-            f'Broadcast (None axis) Variable at {jax.tree_util.keystr(path)} '
-            'was mutated during scan. Only Carry and scanned Variables can be '
-            'updated.'
-        )
-      return changed
-
-    extract.check_no_aliases('scan', args=updates, out=out)
-    updates = extract.mask_variable_updates(
-      updates, snapshot, prefix=self.in_axes, keep_fn=keep_fn,
+    extract.check_no_aliases(
+        'scan', args=updates, out=check_out, check_can_update=['out']
     )
-    if self.out_is_tuple:
-      return (*out, updates)
-    return (out, updates)
+    updates = extract.mask_variable_updates(updates, snapshot)
+    if self.carry_arg_index is not None:  # has carry
+      if self.out_is_tuple:
+        carry_out, ys = extract.slice_at(out, self.carry_out_index)
+      else:
+        carry_out = out
+        ys = None
+      extract.check_same_variables(carry, carry_out, 'scan')
+    else:
+      ys = out
+      carry_out = None
+
+    if self.graph:
+      # convert the carry to tree separately to ensure a consistent
+      # graph structure for the carry in and carry out
+      carry_out = extract.to_tree2(carry_out)
+      ys = extract.to_tree2(ys)
+
+    return (carry_out, broadcasts), (ys, updates)
 
 
 @tp.overload
@@ -1594,11 +1664,23 @@ def scan(
     transform_metadata=transform_metadata,
   )
 
+def _move_axis(move_fn, axes, tree):
+  def move_axis_leaf(path, ax, leaf):
+    assert isinstance(ax, int)
+    if ax != 0:
+      return move_fn(ax, leaf)
+    return leaf
+
+  return extract.broadcast_prefix_map(
+      move_axis_leaf, axes, tree, prefix_leaf=lambda x: x is None
+  )
+
 def _simple_scan(
   f, f_unbound, *,
   graph, in_axes, out_axes,
   length, reverse, unroll, _split_transpose,
 ):
+  # TODO: do this inside check_prefix
   if any(isinstance(x, StateAxes) for x in jax.tree.leaves(in_axes)):
     raise ValueError(
       '`in_axes` cannot contain `StateAxes` objects '
@@ -1611,84 +1693,112 @@ def _simple_scan(
       'when `graph=False`. '
       + graphlib._tree_mode_suggestion_transform('scan')
     )
+  _check_out_axes(out_axes)
   if graph:
     extract.check_prefix(in_axes, 'in_axes', 'scan')
     extract.check_prefix(out_axes, 'out_axes', 'scan')
 
+  _validate_scan_axes(in_axes, out_axes)
+
   out_is_tuple = isinstance(out_axes, tuple)
+  was_carry = in_axes is Carry
   if in_axes is Carry:
     in_axes = (Carry,)
   if isinstance(in_axes, tuple):
-    carry_arg_index = next(
-      (i for i, ax in enumerate(in_axes) if ax is Carry), None
-    )
-    updates_out_axes = extract.mask_at(in_axes, carry_arg_index)
+    carry_arg_index = extract.find(in_axes, Carry)
+    _, sliced_in_axes = extract.slice_at(in_axes, carry_arg_index)
   else:
     carry_arg_index = None
-    updates_out_axes = in_axes
+    sliced_in_axes = in_axes
 
   if isinstance(out_axes, tuple):
-    carry_out_index = next(
-      (i for i, ax in enumerate(out_axes) if ax is Carry), None
-    )
+    carry_out_index = extract.find(out_axes, Carry)
+    _, sliced_out_axes = extract.slice_at(out_axes, carry_out_index)
   else:
     carry_out_index = None
+    sliced_out_axes = out_axes
 
   simple_scan_fn = SimpleScanFn(
-    f_unbound, graph=graph,
-    in_axes=in_axes, out_axes=out_axes,
-    out_is_tuple=out_is_tuple,
-    carry_arg_index=carry_arg_index,
-    carry_out_index=carry_out_index,
+      f_unbound, graph=graph,
+      in_axes=in_axes, out_axes=out_axes,
+      out_is_tuple=out_is_tuple,
+      carry_arg_index=carry_arg_index,
+      carry_out_index=carry_out_index,
   )
-
-  if out_is_tuple:
-    augmented_out_axes = (*out_axes, updates_out_axes)
-  else:
-    augmented_out_axes = (out_axes, updates_out_axes)
 
   @functools.wraps(f)
   def simple_scan_wrapper(*args):
     args = resolve_kwargs(f, args, {})
+    if was_carry and len(args) != 1:
+      raise ValueError(
+          'When in_axes=Carry, the function must take exactly one argument, '
+          f'got {len(args)} arguments.'
+      )
     if graph:
-      args = extract.to_tree2(args, prefix=in_axes)
+      # check consistent aliasing, temporarily convert args to tree
+      # to check aliasing, but the real tree convertion is done later
+      check_args = extract.to_tree2(args, prefix=in_axes)
+    else:
+      check_args = args
 
-    extract.check_no_aliases('scan', args=args)
+    extract.check_no_aliases('scan', args=check_args)
+    carry, x_args = extract.slice_at(args, carry_arg_index)
 
-    result = pure_jax_fancy_scan(
-      simple_scan_fn,
-      *args,
-      length=length,
-      reverse=reverse,
-      unroll=unroll,
-      _split_transpose=_split_transpose,
-      in_axes=in_axes,
-      out_axes=augmented_out_axes,
+    if graph:
+      # convert the carry to tree separately to ensure a consistent
+      # graph structure for the carry in and carry out
+      carry = extract.to_tree2(carry)
+      x_args = extract.to_tree2(x_args)
+
+    def extract_broadcasts(path, prefix_leaf, leaf):
+      return leaf is not None and (
+          prefix_leaf is None
+          or (
+              isinstance(prefix_leaf, variablelib.Variable)
+              and prefix_leaf.get_value() is None
+          )
+      )
+    x_args, broadcasts = extract.extract(
+        extract_broadcasts, sliced_in_axes, x_args,
+        is_leaf=lambda x: x is None or isinstance(x, variablelib.Variable),
     )
 
-    if out_is_tuple:
-      n = len(out_axes)
-      out = result[:n]
-      updates = result[n]
-    else:
-      out, updates = result
+    x_args_transposed = _move_axis(
+        lambda ax, leaf: jnp.moveaxis(leaf, ax, 0),
+        sliced_in_axes, x_args,
+    )
 
-    masked_args = extract.mask_at(args, carry_arg_index)
-    extract.apply_variable_updates(masked_args, updates)
+    (carry_out, final_broadcasts), (ys, updates) = jax.lax.scan(
+        simple_scan_fn,
+        (carry, broadcasts),
+        x_args_transposed,
+        length=length,
+        reverse=reverse,
+        unroll=unroll,
+        _split_transpose=_split_transpose,
+    )
 
-    if carry_arg_index is not None:
-      carry_in = args[carry_arg_index]
-      carry_out = (
-        out[carry_out_index] if out_is_tuple else out
-      )
-      extract.update_carry_variables(carry_in, carry_out)
-      if out_is_tuple:
-        out = extract.replace_at(out, carry_out_index, carry_in)
-      else:
-        out = carry_in
+    ys, updates = _move_axis(
+        lambda ax, leaf: jnp.moveaxis(leaf, 0, ax),
+        (sliced_out_axes, sliced_in_axes),
+        (ys, updates),
+    )
+
+    extract.apply_variable_updates(x_args, updates)
+    extract.apply_variable_updates(broadcasts, final_broadcasts)
+    carry = extract.update_carry_variables(carry, carry_out)
 
     if graph:
-      out = extract.from_tree2(out)
+      ys = extract.from_tree2(ys)
+      carry = extract.from_tree2(carry)
+
+    if carry_arg_index is not None:
+      if out_is_tuple:
+        out = extract.insert_at(ys, carry_out_index, carry)
+      else:
+        out = carry
+    else:
+      out = ys
 
     return out
 
@@ -1820,174 +1930,6 @@ def _graph_updates_scan(
     return out
 
   return scan_wrapper
-
-
-def pure_jax_fancy_scan(
-  f,
-  *args,
-  length: int | None = None,
-  reverse: bool = False,
-  unroll: int | bool = 1,
-  _split_transpose: bool = False,
-  in_axes: tp.Any = (Carry, 0),
-  out_axes: tp.Any = (Carry, 0),
-):
-  if in_axes is Carry:
-    in_axes = (Carry,)
-  is_axis_leaf = lambda x: x is None or x is Carry
-
-  if isinstance(in_axes, tuple):
-    for i, ax in enumerate(in_axes):
-      if ax is Carry or ax is None or isinstance(ax, int):
-        continue
-      for leaf in jax.tree.leaves(ax, is_leaf=is_axis_leaf):
-        if leaf is Carry:
-          raise ValueError(
-            'Carry must be a top-level argument, it cannot be nested. '
-            f'Found Carry inside in_axes[{i}]={ax}'
-          )
-
-  if isinstance(out_axes, tuple):
-    for i, ax in enumerate(out_axes):
-      if ax is Carry or ax is None or isinstance(ax, int):
-        continue
-      for path, leaf in jax.tree_util.tree_leaves_with_path(
-        ax, is_leaf=is_axis_leaf,
-      ):
-        if leaf is Carry:
-          raise ValueError(
-            'Carry must be a top-level argument, it cannot be nested. '
-            f'Found Carry at out_axes[{i}]{jax.tree_util.keystr(path)}'
-          )
-
-  in_has_carry = in_axes is Carry or (
-    isinstance(in_axes, tuple) and Carry in in_axes
-  )
-  out_has_carry = out_axes is Carry or (
-    isinstance(out_axes, tuple) and Carry in out_axes
-  )
-  if in_has_carry != out_has_carry:
-    raise ValueError(
-      'If one of in_axes or out_axes has Carry, the other must also '
-      f'have Carry. Got {in_axes=}, {out_axes=}'
-    )
-
-
-  args_flat, args_treedef = jax.tree.flatten(args)
-  _, in_axes_flat = extract.broadcast_prefix2(
-    in_axes, args, is_leaf=is_axis_leaf,
-  )
-
-  carry_indices: list[int] = []
-  broadcast_indices: list[int] = []
-  scan_indices: list[int] = []
-  scan_in_axes: list[int] = []
-
-  carry_leaves: list[tp.Any] = []
-  broadcast_leaves: list[tp.Any] = []
-  scan_leaves: list[tp.Any] = []
-
-  for i, (leaf, ax) in enumerate(zip(args_flat, in_axes_flat, strict=True)):
-    if ax is Carry:
-      carry_indices.append(i)
-      carry_leaves.append(leaf)
-    elif ax is None:
-      broadcast_indices.append(i)
-      broadcast_leaves.append(leaf)
-    elif isinstance(ax, int):
-      scan_indices.append(i)
-      scan_in_axes.append(ax)
-      if ax != 0:
-        leaf = jnp.moveaxis(leaf, ax, 0)
-      scan_leaves.append(leaf)
-    else:
-      raise ValueError(f'Invalid in_axes leaf value: {ax}')
-
-  n_in = len(args_flat)
-  out_info: list[tuple[
-    jax.tree_util.PyTreeDef, list[int], list[int], list[int],
-  ]] = []
-
-  in_broadcast = jax.tree.map(lambda x: x, broadcast_leaves)
-
-  def body_fn(carry_state, scan_x):
-    flat = [None] * n_in
-    for idx, j in enumerate(carry_indices):
-      flat[j] = carry_state[idx]
-    for idx, j in enumerate(broadcast_indices):
-      flat[j] = in_broadcast[idx]
-    if scan_x is not None:
-      for idx, j in enumerate(scan_indices):
-        flat[j] = scan_x[idx]
-
-    reconstructed = args_treedef.unflatten(flat)
-    out = f(*reconstructed)
-
-    out_flat, out_treedef = jax.tree.flatten(out)
-    out_axes_paths, out_axes_flat = extract.broadcast_prefix2(
-      out_axes, out, is_leaf=is_axis_leaf,
-    )
-
-    if not out_info:
-      out_carry_idx = []
-      out_scan_idx = []
-      out_scan_axes = []
-      out_broadcast_idx = []
-      for j, oax in enumerate(out_axes_flat):
-        if oax is Carry:
-          out_carry_idx.append(j)
-        elif oax is None:
-          out_broadcast_idx.append(j)
-        elif isinstance(oax, int):
-          out_scan_idx.append(j)
-          out_scan_axes.append(oax)
-        else:
-          raise ValueError(f'Invalid out_axes leaf value: {oax}')
-      if out_broadcast_idx:
-        broadcast_paths = [
-          jax.tree_util.keystr(out_axes_paths[j]) for j in out_broadcast_idx
-        ]
-        broadcast_str = "\n\n  ".join(broadcast_paths)
-        raise ValueError(
-          'Scan does not support broadcast outputs (None axis). The following '
-          f'output leaves are broadcast:\n\n  {broadcast_str}\n'
-        )
-      out_info.append(
-        (out_treedef, out_carry_idx, out_scan_idx, out_scan_axes),
-      )
-
-    oci = out_info[0][1]
-    osi = out_info[0][2]
-    new_carry = [out_flat[j] for j in oci]
-    new_ys = [out_flat[j] for j in osi]
-
-    return new_carry, new_ys
-
-  final_carry, stacked_ys = jax.lax.scan(
-    body_fn,
-    carry_leaves,
-    scan_leaves if scan_leaves else None,
-    length=length,
-    reverse=reverse,
-    unroll=unroll,
-    _split_transpose=_split_transpose,
-  )
-
-  out_treedef, out_carry_idx, out_scan_idx, out_scan_axes = (
-    out_info[0]
-  )
-  n_out = out_treedef.num_leaves
-  out_flat: list[tp.Any] = [None] * n_out
-  for idx, j in enumerate(out_carry_idx):
-    out_flat[j] = final_carry[idx]
-  for idx, j in enumerate(out_scan_idx):
-    y = stacked_ys[idx]
-    ax = out_scan_axes[idx]
-    if ax != 0:
-      y = jnp.moveaxis(y, 0, ax)
-    out_flat[j] = y
-
-  return out_treedef.unflatten(out_flat)
 
 
 # -------------------------------

@@ -101,6 +101,8 @@ AuxData = tp.TypeVar('AuxData')
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, slots=True)
+
+
 class NoUpdate: ...
 
 
@@ -109,6 +111,8 @@ NO_UPDATE = NoUpdate()
 
 @jax.tree_util.register_static
 @dataclasses.dataclass(frozen=True, slots=True)
+
+
 class Repeated: ...
 
 
@@ -1577,7 +1581,12 @@ def static_cache(static_cache: tp.MutableMapping[tp.Any, StaticCache]):
       )
 
 
-def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args, graph: bool | None = None):
+def _cached_partial(
+    f: tp.Callable[..., tp.Any],
+    *cached_args,
+    graph: bool | None = None,
+    graph_updates: bool | None = None,
+):
   """Create a partial from a NNX transformed function alog with some cached input arguments
   and reduces the python overhead by caching the traversal of NNX graph nodes. This is useful
   for speed up function that are called repeatedly with the same subset of inputs e.g. a
@@ -1626,10 +1635,12 @@ def _cached_partial(f: tp.Callable[..., tp.Any], *cached_args, graph: bool | Non
   """
   if graph is None:
     graph = set_graph_mode.current_value()
-  if not graph:
+  if graph_updates is None:
+    graph_updates = set_graph_updates.current_value()
+
+  if not graph or not graph_updates:
     raise ValueError(
-      'cached_partial is a graph-mode-only API and does not support '
-      'tree-mode (graph=False).'
+      'cached_partial is a graph-mode-only API and requires graph_updates=True.'
     )
   cache: tp.MutableMapping[tp.Any, StaticCache] = PythonRefMap()  # type: ignore
   original_ref_index: RefMap = RefMap()

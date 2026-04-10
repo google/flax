@@ -79,7 +79,13 @@ class SimpleGradFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases('grad', args=updates[0], kwargs=updates[1], out=out)
+    extract.check_no_aliases(
+        'grad',
+        args=updates[0],
+        kwargs=updates[1],
+        out=out,
+        check_can_update=['out'],
+    )
     updates = extract.mask_variable_updates(updates, snapshot)
 
     if self.has_aux:
@@ -572,7 +578,9 @@ class SimpleVjpFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases('vjp', args=updates, out=out)
+    extract.check_no_aliases(
+        'vjp', args=updates, out=out, check_can_update=['out']
+    )
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
       primals_out, aux = out
@@ -738,7 +746,9 @@ class SimpleJvpFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases('jvp', args=updates, out=out)
+    extract.check_no_aliases(
+        'jvp', args=updates, out=out, check_can_update=['out']
+    )
     updates = extract.mask_variable_updates(updates, snapshot)
     if self.has_aux:
       primals_out, aux = out
@@ -915,7 +925,9 @@ class SimpleCustomVjpFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases('custom_vjp', args=updates, out=out)
+    extract.check_no_aliases(
+        'custom_vjp', args=updates, out=out, check_can_update=['out']
+    )
     diff_prefix = tuple(
       i not in self.nondiff_argnums for i in range(len(args))
     )
@@ -955,7 +967,9 @@ class SimpleFwdFn:
     if self.graph:
       out = extract.to_tree2(out)
       residual = extract.to_tree2(residual)
-    extract.check_no_aliases('custom_vjp', args=updates, out=out)
+    extract.check_no_aliases(
+        'custom_vjp', args=updates, out=out, check_can_update=['out']
+    )
     updates = extract.mask_variable_updates(updates, snapshot)
     return (out, updates), residual
 
@@ -974,6 +988,7 @@ class SimpleBwdFn:
     if self.graph:
       nondiff = extract.from_tree2(nondiff)
       residual = extract.from_tree2(residual)
+      out_g = extract.from_tree2(out_g)
     result = self.bwd(*nondiff, residual, out_g)
     if self.graph:
       result = extract.to_tree2(result)

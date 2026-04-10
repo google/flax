@@ -447,7 +447,7 @@ class TestVariableRefMode(absltest.TestCase):
     m1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), ref=True)
     m_out1 = None
 
-    @nnx.jit
+    @nnx.compat.jit
     def f(m2):
       nonlocal m_out1
       m_out1 = nnx.vars_as(nnx.Linear(1, 1, rngs=nnx.Rngs(0)), ref=True)
@@ -466,7 +466,7 @@ class TestVariableRefMode(absltest.TestCase):
 
     m1 = Foo(a=jax.new_ref(1))
 
-    @nnx.jit
+    @nnx.compat.jit
     def f(m2: Foo):
       m2.a[...] += 1
       return m2

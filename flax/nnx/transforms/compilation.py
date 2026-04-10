@@ -146,6 +146,8 @@ class JitFn:
 
 
 @tp.overload
+
+
 def jit(
   *,
   in_shardings: tp.Any = None,
@@ -162,6 +164,8 @@ def jit(
   graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]: ...
 @tp.overload
+
+
 def jit(
   fun: tp.Callable[P, R],
   *,
@@ -434,8 +438,6 @@ def _flatten_to_partial_state(
   return PartialState(treedef=treedef, leaves=leaves)
 
 
-
-
 @dataclasses.dataclass(eq=False)
 class SimpleJitFn:
   f: tp.Callable[..., tp.Any]
@@ -457,7 +459,13 @@ class SimpleJitFn:
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_shardings)
-    extract.check_no_aliases('jit', args=args_updates, kwargs=kwargs_updates, out=out)
+    extract.check_no_aliases(
+        'jit',
+        args=args_updates,
+        kwargs=kwargs_updates,
+        out=out,
+        check_can_update=['out'],
+    )
     def donated_arg(jax_path, prefix, c, s):
       path = graphlib.jax_to_nnx_path(jax_path)
       return path[0] in self.donate_argnums or extract.variable_changed(c, s)
@@ -1281,7 +1289,9 @@ class SimpleShardMapFn:
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_specs)
-    extract.check_no_aliases('shard_map', args=updates, out=out)
+    extract.check_no_aliases(
+        'shard_map', args=updates, out=out, check_can_update=['out']
+    )
     updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 

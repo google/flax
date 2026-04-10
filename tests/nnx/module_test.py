@@ -451,7 +451,7 @@ class TestModule(parameterized.TestCase):
     m1 = nnx.Dict(a=nnx.Param(1), b=nnx.Param(2))
     m2 = nnx.Dict(x=m1, y=m1, z=nnx.Param(3))
 
-    m3 = nnx.merge(*nnx.split(m2))
+    m3 = nnx.merge(*nnx.split(m2, graph=True))
 
     assert m3['x'] is m3['y']
     assert m3['x']['a'] is m3['y']['a']
@@ -465,7 +465,7 @@ class TestModule(parameterized.TestCase):
 
     m = Foo()
 
-    graphdef, state = nnx.split(m)
+    graphdef, state = nnx.split(m, graph=True)
     assert len(state) == 1
 
     m2 = nnx.merge(graphdef, state)
@@ -484,9 +484,9 @@ class TestModule(parameterized.TestCase):
       assert m['a'][0] is m['b']
       assert m['a'][1] is not m['b']
 
-      return nnx.split(m)
+      return nnx.split(m, graph=True)
 
-    graphdef, state = f(*nnx.split(m))
+    graphdef, state = f(*nnx.split(m, graph=True))
     m = nnx.merge(graphdef, state)
 
     assert m['a'][0] is m['b']
@@ -553,7 +553,7 @@ class TestModule(parameterized.TestCase):
       }
     )
 
-    graphdef, p = nnx.split(m)
+    graphdef, p = nnx.split(m, graph=True)
     assert len(nnx.to_flat_state(p)) == 2
     assert len(jax.tree_util.tree_leaves(p)) == 2
 
@@ -615,12 +615,12 @@ class TestModule(parameterized.TestCase):
     model = SowMod(nnx.Rngs(42))
     x = jnp.ones((2, 4))
 
-    @nnx.jit
+    @nnx.compat.jit
     def train_step(model, x):
       out, intermediates = nnx.capture(model, nnx.Intermediate)(x)
       return out, intermediates
 
-    train_step_fn = nnx.cached_partial(train_step, model)
+    train_step_fn = nnx.compat.cached_partial(train_step, model)
     train_step_fn(x)
 
   def test_update_static_state_submodules(self):
@@ -1247,7 +1247,7 @@ class TestModuleDef(parameterized.TestCase):
 
     foo = Foo(c=1.0, rngs=nnx.Rngs(0))
 
-    graphdef, state = nnx.split(foo)
+    graphdef, state = nnx.split(foo, graph=True)
 
     assert isinstance(graphdef.nodes[0], nnx.graphlib.NodeDef | nnx.graphlib.NodeRef)
     assert isinstance(state, nnx.State)

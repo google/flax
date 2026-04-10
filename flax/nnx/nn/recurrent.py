@@ -883,7 +883,7 @@ class RNN(Module):
     # we use split_rngs with splits=1 and squeeze=True to get unique rngs
     # every time RNN is called
     @nnx.split_rngs(splits=1, only=self.broadcast_rngs, squeeze=True)
-    @nnx.scan(
+    @nnx.compat.scan(
       in_axes=(state_axes, iteration.Carry, time_axis),
       out_axes=(iteration.Carry, (0, time_axis))
       if slice_carry

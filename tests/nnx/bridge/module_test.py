@@ -430,8 +430,8 @@ class TestBridgeModule(absltest.TestCase):
       dim: int
       num_layers: int
       def setup(self):
-        @nnx.split_rngs(splits=self.num_layers)
-        @nnx.vmap(
+        @nnx.compat.split_rngs(splits=self.num_layers)
+        @nnx.compat.vmap(
             in_axes=(nnx.StateAxes({nnx.RngState: 0, ...: None}),),
             axis_size=self.num_layers,
             transform_metadata={nnx.PARTITION_NAME: None},
@@ -442,8 +442,8 @@ class TestBridgeModule(absltest.TestCase):
         create_block(self)
 
       def __call__(self, x):
-        @nnx.split_rngs(splits=self.num_layers)
-        @nnx.scan(
+        @nnx.compat.split_rngs(splits=self.num_layers)
+        @nnx.compat.scan(
             in_axes=(0, nnx.Carry),
             out_axes=nnx.Carry,
             transform_metadata={nnx.PARTITION_NAME: None},
@@ -486,7 +486,7 @@ class TestBridgeModule(absltest.TestCase):
         return self.aaa(x)
 
       def __call__(self, x):
-        forward = nnx.remat(self.__class__.forward)
+        forward = nnx.compat.remat(self.__class__.forward)
         return forward(self, x)
 
     model = Top()
