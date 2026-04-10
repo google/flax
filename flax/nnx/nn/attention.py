@@ -585,6 +585,7 @@ class MultiHeadAttention(Module):
     rngs: rnglib.Rngs | rnglib.RngStream | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
+    is_causal=False
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -615,6 +616,8 @@ class MultiHeadAttention(Module):
       decode: whether to prepare and use an autoregressive cache. The ``decode``
         flag passed into the call method will take precedence over the ``decode``
         flag passed into the constructor.
+      is_causal: whether to overlay a causal attention mask. Passed as an argument to the
+        underlying attention funcion.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
@@ -739,6 +742,7 @@ class MultiHeadAttention(Module):
       dtype=self.dtype,
       precision=self.precision,
       module=self if sow_weights else None,
+      is_causal=is_causal
     )
     # back to the original inputs dimensions
     out = self.out(x)
