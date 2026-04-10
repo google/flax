@@ -16,8 +16,11 @@ Transformers
 - :octicon:`mark-github;0.9em` `Gemma <https://github.com/google/flax/tree/main/examples/gemma/>`__ :
   A family of open-weights Large Language Model (LLM) by Google DeepMind, based on Gemini research and technology.
 
--  :octicon:`mark-github;0.9em` `LM1B <https://github.com/google/flax/tree/main/examples/lm1b/>`__ :
-   Transformer encoder trained on the One Billion Word Benchmark.
+- :octicon:`mark-github;0.9em` `LM1B <https://github.com/google/flax/tree/main/examples/lm1b/>`__ :
+  Transformer encoder trained on the One Billion Word Benchmark.
+
+- :octicon:`mark-github;0.9em` `MiniGPT <https://github.com/google/flax/tree/main/examples/minigpt/>`__ :
+  Learn how to write a small language model from scratch with Jax.
 
 Toy examples
 ********************
