@@ -2358,8 +2358,8 @@ def variable_name_from_type(
   name = typ.__name__
   if name in VariableTypeCache:
     raise ValueError(
-      'Name {name} is already registered in the registry as {VariableTypeCache[name]}. '
-      'It cannot be linked with this type {typ}.'
+      f'Name {name} is already registered in the registry as {VariableTypeCache[name]}. '
+      f'It cannot be linked with this type {typ}.'
     )
   register_variable_name(name, typ)
   return name
