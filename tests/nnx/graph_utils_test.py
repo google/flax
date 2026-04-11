@@ -1914,6 +1914,14 @@ class TestTreeFlatten(parameterized.TestCase):
     ):
       y = forward(foo, bar, x)
 
+  def test_map_auto_create_variables_false(self):
+    rngs = nnx.Rngs(0)
+    new_rngs = nnx.map(
+      lambda path, x: 0, rngs, auto_create_variables=False
+    )
+    self.assertNotIsInstance(new_rngs.default.count, nnx.Variable)
+    self.assertEqual(new_rngs.default.count, 0)
+
 
 if __name__ == '__main__':
   absltest.main()
