@@ -27,7 +27,6 @@ from flax.nnx import (
 )
 from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
-from flax.nnx.graphlib import GraphState
 from flax.nnx.statelib import split_state, State
 import functools as ft
 from flax.typing import Key, Path, PathParts
@@ -37,7 +36,7 @@ import warnings
 A = tp.TypeVar('A')
 B = tp.TypeVar('B')
 M = tp.TypeVar('M', bound='Module')
-S = tp.TypeVar('S', bound=tp.Union[GraphState, tuple[GraphState, ...]])
+S = tp.TypeVar('S', bound=tp.Union[State, tuple[State, ...]])
 V = tp.TypeVar('V', bound=variableslib.Variable[tp.Any])
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
