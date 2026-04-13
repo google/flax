@@ -19,6 +19,10 @@ Transformers
 -  :octicon:`mark-github;0.9em` `LM1B <https://github.com/google/flax/tree/main/examples/lm1b/>`__ :
    Transformer encoder trained on the One Billion Word Benchmark.
 
+
+- :octicon:`mark-github;0.9em` `Diffusion Models  <https://github.com/google/flax/tree/main/examples/digits_diffusion_model/>`__ :
+     A simple example of an image diffusion model using a U-Net architecture.
+
 Toy examples
 ********************
 
