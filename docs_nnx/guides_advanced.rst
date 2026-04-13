@@ -10,3 +10,4 @@ Advanced Guides
    guides/bridge_guide
    guides/surgery
    guides/extracting_intermediates
+   guides/optimization_cookbook
