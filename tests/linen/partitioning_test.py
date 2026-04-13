@@ -61,15 +61,15 @@ class PartitioningTest(parameterized.TestCase):
         partitioning.logical_to_mesh_axes(
             ('foo', 'bad', 'bar', 'baz'), rules=rules
         ),
-        (None, None, unconstrained, unconstrained),
+        jax.sharding.PartitionSpec(None, None, unconstrained, unconstrained),
     )
 
   def test_logical_to_mesh_axes(self):
     axes_0 = ('foo', 'bar')
     # direct rule assignment
     self.assertEqual(
-      partitioning.logical_to_mesh_axes(axes_0, rules=AXIS_RULES_1),
-      ('data', 'model'),
+        partitioning.logical_to_mesh_axes(axes_0, rules=AXIS_RULES_1),
+        jax.sharding.PartitionSpec('data', 'model'),
     )
 
     # Repeated None and Unconstrained
@@ -77,17 +77,21 @@ class PartitioningTest(parameterized.TestCase):
     axes_repeated = ('foo', unconstrained, unconstrained, None, None)
     self.assertEqual(
         partitioning.logical_to_mesh_axes(axes_repeated, rules=AXIS_RULES_1),
-        ('data', unconstrained, unconstrained, None, None),
+        jax.sharding.PartitionSpec(
+            'data', unconstrained, unconstrained, None, None
+        ),
     )
     # axis rules context
     with partitioning.axis_rules(AXIS_RULES_1):
       self.assertEqual(
-        partitioning.logical_to_mesh_axes(axes_0), ('data', 'model')
+          partitioning.logical_to_mesh_axes(axes_0),
+          jax.sharding.PartitionSpec('data', 'model'),
       )
       # nested context
       with partitioning.axis_rules(AXIS_RULES_2):
         self.assertEqual(
-          partitioning.logical_to_mesh_axes(axes_0), ('model', None)
+            partitioning.logical_to_mesh_axes(axes_0),
+            jax.sharding.PartitionSpec('model', None),
         )
     # duplicated logical names
     with partitioning.axis_rules(AXIS_RULES_1):
@@ -98,20 +102,22 @@ class PartitioningTest(parameterized.TestCase):
     p_rules = (('foo', 'model'), ('bar', 'model'), ('baz', 'data'))
     with partitioning.axis_rules(p_rules):
       self.assertEqual(
-        partitioning.logical_to_mesh_axes(('foo', 'bar', 'baz')),
-        ('model', None, 'data'),
+          partitioning.logical_to_mesh_axes(('foo', 'bar', 'baz')),
+          jax.sharding.PartitionSpec('model', None, 'data'),
       )
       self.assertEqual(
-        partitioning.logical_to_mesh_axes(('bar', 'foo', 'baz')),
-        (None, 'model', 'data'),
+          partitioning.logical_to_mesh_axes(('bar', 'foo', 'baz')),
+          jax.sharding.PartitionSpec(None, 'model', 'data'),
       )
       self.assertEqual(
-        partitioning.logical_to_mesh_axes(('baz', 'bar', 'foo')),
-        ('data', None, 'model'),
+          partitioning.logical_to_mesh_axes(('baz', 'bar', 'foo')),
+          jax.sharding.PartitionSpec('data', None, 'model'),
       )
       self.assertEqual(
-        partitioning.logical_to_mesh_axes(('baz', 'bar', 'foo', 'unassigned')),
-        ('data', None, 'model', None),
+          partitioning.logical_to_mesh_axes(
+              ('baz', 'bar', 'foo', 'unassigned')
+          ),
+          jax.sharding.PartitionSpec('data', None, 'model', None),
       )
 
   @parameterized.parameters(
@@ -164,7 +170,7 @@ class PartitioningTest(parameterized.TestCase):
   def test_logical_to_mesh_axes_cases(self, rules, axes, expected):
     with partitioning.axis_rules(rules):
       result = partitioning.logical_to_mesh_axes(axes)
-    self.assertEqual(result, expected)
+    self.assertEqual(result, jax.sharding.PartitionSpec(*expected))
 
   @mock.patch('flax.linen.spmd._with_sharding_constraint')
   def test_with_sharding_constraint(self, wsc_fn):
