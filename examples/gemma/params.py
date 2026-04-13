@@ -52,7 +52,7 @@ def load_params(path: str) -> Params:
 def param_remapper(orig_params: Params) -> Params:
   """Remaps params to new module layout.
 
-  This is needed here because the model definition  does not have a separate
+  This is needed here because the model definition does not have a separate
   `mlp` module.
 
   Args:
@@ -69,6 +69,12 @@ def param_remapper(orig_params: Params) -> Params:
         new_params[layer_name] = {}
       if 'w' in v:
         new_params[layer_name][param] = v['w']
+    elif 'input_embedding' in v:
+      new_params[k] = {
+          k2.replace('input_embedding', 'embedding'): v2 for k2, v2 in v.items()
+      }
+    elif 'einsum' in k:
+      new_params[k] = {k2.replace('w', 'kernel'): v2 for k2, v2 in v.items()}
     else:
       new_params[k] = v
   return new_params

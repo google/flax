@@ -22,33 +22,10 @@ from typing import Any, Union
 from flax import nnx
 import jax
 import jax.numpy as jnp
-from jaxtyping import Array, ArrayLike  # pylint: disable=g-importing-member,g-multiple-import
+from jaxtyping import Array  # pylint: disable=g-importing-member,g-multiple-import
 
 
 Shape = Sequence[Union[int, Any]]
-
-
-class Einsum(nnx.Module):
-  """Einsum is a convenience module for parameterized tensor multiplication."""
-
-  def __init__(
-      self,
-      einsum_str: str,
-      shape: Shape,
-      *,
-      kernel_init: nnx.Initializer = nnx.initializers.normal(),
-      rngs: nnx.Rngs,
-      dtype: Any = jnp.float32,
-  ):
-    self.einsum_str = einsum_str
-    self.w = nnx.Param(kernel_init(rngs.params(), shape, dtype))
-
-  def __call__(self, x: ArrayLike) -> Array:
-    return jnp.einsum(self.einsum_str, x, self.w[...])
-
-  @property
-  def shape(self) -> Shape:
-    return self.w.shape
 
 
 class RMSNorm(nnx.Module):
@@ -59,18 +36,24 @@ class RMSNorm(nnx.Module):
       dim: int,
       *,
       scale_init: nnx.Initializer = nnx.initializers.zeros_init(),
+      scale_metadata: dict[str, Any] | None = None,
       rngs: nnx.Rngs,
       dtype: Any = jnp.float32,
+      weight_dtype: Any = jnp.float32,
   ):
-    self.scale = nnx.Param(scale_init(rngs.params(), dim, dtype))
+    self.dtype = dtype
+    self.weight_dtype = weight_dtype
+    scale_metadata = scale_metadata if scale_metadata else {}
+    self.scale = nnx.Param(
+        scale_init(rngs.params(), dim, weight_dtype), **scale_metadata
+    )
 
   def __call__(self, x: Array) -> Array:
-    dtype = self.scale.dtype
-    var = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
-    normed_inputs = jnp.asarray(x * jax.lax.rsqrt(var + 1e-06), dtype=dtype)
-    # normed_inputs is a rank-K tensor, K > 1 (K is typically 2 or 3). scale is
-    # a rank-1 tensor. To avoid implicit rank-promotion, reshape scale to
-    # a (1, ..., 1, D) tensor, so the rank of scale matches normed_inputs.
-    scale = jnp.expand_dims(self.scale, axis=range(len(x.shape) - 1))
-    normed_inputs = normed_inputs * (1 + scale)
+    x = jnp.asarray(x, jnp.float32)
+    mean2 = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
+    normed_inputs = jnp.asarray(
+        x * jax.lax.rsqrt(mean2 + 1e-06), dtype=self.dtype
+    )
+    scale = jnp.asarray(self.scale, self.dtype)
+    normed_inputs = normed_inputs * (1.0 + scale)
     return normed_inputs
