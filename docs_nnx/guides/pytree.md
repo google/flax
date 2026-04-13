@@ -430,7 +430,7 @@ NNX Modules are `Pytree`s that have two additional methods for traking intermedi
 +++
 
 ### sow
-`sow` receives a `Variable` type, a `name`, and a `value`, and stores it in the `Module` so it can be retrieved at a later time. As the following example shows, NNX APIs such as `nnx.state` or `nnx.pop` are a good way of retrieving the sowed state, however `pop` is recommended because it explicitly removes the temporary state from the Module.
+`sow` receives a `Variable` type, a `name`, and a `value`, and stores it in the `Module` so it can be retrieved at a later time. As the following example shows, the `nnx.capture` function allows you to retrieve the sowed state. See the [*Extracting Intermediate Values*](https://flax.readthedocs.io/en/latest/guides/extracting_intermediates.html) guide for more details.
 
 ```{code-cell} ipython3
 class Block(nnx.Module):
@@ -456,21 +456,18 @@ class MLP(nnx.Module):
 
 model = MLP(num_layers=3, dim=20, rngs=nnx.Rngs(0))
 x = jnp.ones((10, 20))
-y = model(x)
-intermediates = nnx.pop(model, nnx.Intermediate) # extract intermediate values
+_, intermediates = nnx.capture(model, nnx.Intermediate)(x)
 print(intermediates)
 ```
 
 ### perturb
-`perturb` is similar to `sow` but it aims to capture the gradient of a value, currently this is a two step process although it might be simplified in the future:
+`perturb` is similar to `sow` but it aims to capture the gradient of a value. This is a two step process:
 1. Initialize the pertubation state by running the model once.
 2. Pass the perturbation state as a differentiable target to `grad`.
 
 As an example lets create a simple model and use `perturb` to get the intermediate gradient `xgrad` for the variable `x`, and initialize the perturbations:
 
 ```{code-cell} ipython3
-import optax
-
 class Model(nnx.Module):
   def __init__(self, rngs):
     self.linear1 = nnx.Linear(2, 3, rngs=rngs)
@@ -483,31 +480,22 @@ class Model(nnx.Module):
 
 rngs = nnx.Rngs(0)
 model = Model(rngs)
-optimizer = nnx.Optimizer(model, tx=optax.sgd(1e-1), wrt=nnx.Param)
 x, y = rngs.uniform((1, 2)), rngs.uniform((1, 4))
-_ = model(x) # initialize perturbations
-print(f"{nnx.state(model, nnx.Perturbation) = !s}")
+_, perturbations = nnx.capture(model, nnx.Perturbation)(x) # initialize perturbations
+print(perturbations)
 ```
 
-Next we'll create a training step function that differentiates w.r.t. both the parameters of the model and the perturbations, the later will be the gradients for the intermediate values. `nnx.jit` and `nnx.value_and_grad` will be use to automatically propagate state updates. We'll return the `loss` function and the itermediate gradients.
+Next we'll differentiate a loss w.r.t. both the parameters of the model and the perturbations: the latter will be the gradients for the intermediate values.
 
 ```{code-cell} ipython3
-@nnx.jit
-def train_step(model, optimizer, x, y):
-  graphdef, params, perturbations = nnx.split(model, nnx.Param, nnx.Perturbation)
+@nnx.value_and_grad(argnums=(0, 1))
+def loss_grad(model, perturbations, x, y):
+    def loss_fn(model):
+        return jnp.mean((model(x) - y) ** 2)
+    return nnx.capture(loss_fn, init=perturbations)(model)
 
-  def loss_fn(params, perturbations):
-    model = nnx.merge(graphdef, params, perturbations)
-    return jnp.mean((model(x) - y) ** 2)
-
-  loss, (grads, iterm_grads) = nnx.value_and_grad(loss_fn, argnums=(0, 1))(params, perturbations)
-  optimizer.update(model, grads)
-
-  return loss, iterm_grads
-
-for step in range(2):
-  loss, iterm_grads = train_step(model, optimizer, x, y)
-  print(f"{step = }, {loss = }, {iterm_grads = !s}")
+loss, (weight_grads, interm_grads) = loss_grad(model, perturbations, x, y)
+interm_grads
 ```
 
 ## Object
