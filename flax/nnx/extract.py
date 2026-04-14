@@ -237,10 +237,10 @@ def broadcast_prefix_map(
 
 class GraphDefState(struct.PyTreeNode):
   graphdef: graphlib.GraphDef[tp.Any] = struct.field(pytree_node=False)
-  state: graphlib.GraphState = struct.field(pytree_node=True)
+  state: graphlib.State = struct.field(pytree_node=True)
 
 S = tp.TypeVar(
-  'S', bound=graphlib.GraphState | graphlib.GraphFlatState | list[tp.Any]
+  'S', bound=graphlib.State | graphlib.GraphFlatState | list[tp.Any]
 )
 
 class NodeStates(struct.PyTreeNode):

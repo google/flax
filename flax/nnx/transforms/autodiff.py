@@ -1078,7 +1078,7 @@ def _custom_vjp_split_fn(
   *,
   nondiff_states: list[extract.GraphDefState],
 ):
-  broadcast: graphlib.GraphState
+  broadcast: State
   if prefix is False:
     # pure non-differentiable arg, not supported
     raise TypeError(

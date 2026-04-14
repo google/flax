@@ -225,8 +225,8 @@ class StateAxes(extract.PrefixMapping, tp.Mapping):
 
 
 AxisFn = tp.Callable[
-  [graphlib.GraphState | variablelib.Variable, int, tp.Mapping],
-  graphlib.GraphState | variablelib.Variable,
+  [State | variablelib.Variable, int, tp.Mapping],
+  State | variablelib.Variable,
 ]
 
 
@@ -243,9 +243,9 @@ def _update_variable_sharding_metadata(
         state = axis_fn(state, node_states.metadata, transform_metadata)
         return node_states.replace(states=(state,))
       else:
-        states_out: list[graphlib.GraphState | variablelib.Variable] = []
+        states_out: list[State | variablelib.Variable] = []
         for state, axis in zip(node_states.states, node_states.metadata.axes):
-          assert isinstance(state, graphlib.State | variablelib.Variable)
+          assert isinstance(state, State | variablelib.Variable)
           if isinstance(axis, int):
             state = axis_fn(state, axis, transform_metadata)
           states_out.append(state)
