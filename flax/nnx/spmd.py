@@ -208,7 +208,7 @@ def as_abstract(
       abs_model = nnx.eval_shape(
         lambda: nnx.Linear(4, 8, rngs=nnx.Rngs(0),
           kernel_metadata={'out_sharding': ('a', 'b')}))
-      abs_model = nnx.abstract_with_sharding(abs_model)
+      abs_model = nnx.as_abstract(abs_model)
     assert abs_model.kernel.sharding.spec == jax.P('a', 'b')
 
   Args:

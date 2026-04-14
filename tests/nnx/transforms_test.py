@@ -58,6 +58,24 @@ class TestJIT(parameterized.TestCase):
     self.assertEqual(m.a, 2)
     self.assertEqual(out, 1.0)
 
+  def test_prefix_graph_node_error(self):
+    m = nnx.Dict(a=nnx.Param(1))
+
+    with self.assertRaisesRegex(
+      ValueError, 'Graph nodes are not allowed as prefixes'
+    ):
+      nnx.jit(lambda x: x, in_shardings=m, graph=True, graph_updates=True)
+
+  def test_prefix_mapping_tree_mode_error(self):
+    sharding = nnx.StateSharding({nnx.PathContains('a'): 1})
+
+    with self.assertRaisesRegex(
+      ValueError, 'cannot contain `StateSharding` objects'
+    ):
+      nnx.jit(
+        lambda x: x, in_shardings=sharding, graph=False, graph_updates=False
+      )
+
   def test_mutable_array_input_output(self):
     m = jax.new_ref(jnp.array(1.0))
 
@@ -1716,6 +1734,24 @@ class TestShardMap(parameterized.TestCase):
 
 
 class TestGrad(parameterized.TestCase):
+
+  def test_prefix_graph_node_error(self):
+    m = nnx.Dict(a=nnx.Param(1))
+
+    with self.assertRaisesRegex(
+      ValueError, 'Graph nodes are not allowed as prefixes'
+    ):
+      nnx.grad(lambda x: x, argnums=m, graph=True, graph_updates=True)
+
+  def test_prefix_mapping_tree_mode_error(self):
+    diff_state = nnx.DiffState(0, nnx.PathContains('a'))
+
+    with self.assertRaisesRegex(
+      ValueError, 'cannot contain `DiffState` objects'
+    ):
+      nnx.grad(
+        lambda x: x, argnums=diff_state, graph=False, graph_updates=False
+      )
 
   @parameterized.parameters(True, False)
   def test_grad(self, graph_updates: bool):
@@ -5219,6 +5255,24 @@ class TestVmap(parameterized.TestCase):
     y = forward(model, x)
     assert y.shape == (5, 3)
 
+  def test_prefix_graph_node_error(self):
+    m = nnx.Dict(a=nnx.Param(1))
+
+    with self.assertRaisesRegex(
+      ValueError, 'Graph nodes are not allowed as prefixes'
+    ):
+      nnx.vmap(lambda x: x, in_axes=m, graph=True, graph_updates=True)
+
+  def test_prefix_mapping_tree_mode_error(self):
+    axes = nnx.StateAxes({nnx.PathContains('a'): 0})
+
+    with self.assertRaisesRegex(
+      ValueError, 'cannot contain `StateAxes` objects'
+    ):
+      nnx.vmap(
+        lambda x: x, in_axes=axes, graph=False, graph_updates=False
+      )
+
   @parameterized.parameters(
     (True, True), (True, False), (False, False),
   )
@@ -6636,6 +6690,13 @@ class TestVmap(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, 'Inconsistent aliasing'):
       f(v, v)
 
+  def test_variable_prefix_error(self):
+    prefix = nnx.Variable(0)
+
+    with self.assertRaisesRegex(ValueError, 'Variables prefixes are not supported'):
+      @nnx.vmap(in_axes=(prefix,), graph=False)
+      def f(v):
+        ...
 
 class TestPmap(parameterized.TestCase):
   def test_basic_single(self):
