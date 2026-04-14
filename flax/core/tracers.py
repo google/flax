@@ -16,6 +16,7 @@
 
 import jax
 import jax.core
+from jax.extend import core as jex_core
 
 
 def current_trace():
@@ -27,7 +28,13 @@ def current_trace():
     else:
       return float('-inf')
 
-  return jax.core.get_opaque_trace_state(convention="flax")
+  try:
+    # JAX v0.10.0 and newer
+    get_opaque_trace_state = jex_core.get_opaque_trace_state
+  except AttributeError:
+    # JAX v0.9.2 and older
+    get_opaque_trace_state = jax.core.get_opaque_trace_state
+  return get_opaque_trace_state(convention="flax")
 
 def check_trace_level(base_level):
   # TODO(cgarciae): skipping for now as it breaks
