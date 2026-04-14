@@ -191,7 +191,7 @@ def as_abstract(
   When creating models with :func:`eval_shape`, Variables are abstract
   (backed by ``jax.ShapeDtypeStruct``) and may not carry sharding
   information, especially when using meshes with
-  :attr:`jax.sharding.AxisType.Auto` axes. ``abstract_with_sharding`` inspects each
+  :attr:`jax.sharding.AxisType.Auto` axes. ``as_abstract`` inspects each
   Variable in ``tree`` and, if it has ``out_sharding`` metadata but no
   sharding already set, attaches a :class:`jax.sharding.NamedSharding`
   derived from the Variable's ``out_sharding`` and either its ``mesh``
@@ -208,7 +208,7 @@ def as_abstract(
       abs_model = nnx.eval_shape(
         lambda: nnx.Linear(4, 8, rngs=nnx.Rngs(0),
           kernel_metadata={'out_sharding': ('a', 'b')}))
-      abs_model = nnx.abstract_with_sharding(abs_model)
+      abs_model = nnx.as_abstract(abs_model)
     assert abs_model.kernel.sharding.spec == jax.P('a', 'b')
 
   Args:
