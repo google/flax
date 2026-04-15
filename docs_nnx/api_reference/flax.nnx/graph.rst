@@ -7,6 +7,7 @@ graph
 
 .. autofunction:: split
 .. autofunction:: merge
+.. autofunction:: unpack
 .. autofunction:: update
 .. autofunction:: pop
 .. autofunction:: prefix

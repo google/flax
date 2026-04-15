@@ -59,6 +59,7 @@ from .graphlib import UpdateContext as UpdateContext
 from .graphlib import update_context as update_context
 from .graphlib import current_update_context as current_update_context
 from .graphlib import split as split
+from .graphlib import unpack as unpack
 from .graphlib import update as update
 from .graphlib import clone as clone
 from .graphlib import pop as pop

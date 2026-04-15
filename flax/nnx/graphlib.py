@@ -147,7 +147,6 @@ LeafType = tp.Union[
   ArrayRefOutput,
   NoUpdate,
 ]
-GraphState = State[Key, LeafType]
 GraphFlatState = FlatState[LeafType]
 
 
@@ -2365,7 +2364,7 @@ def _merge_to_flat_state(states: tp.Iterable[tp.Any]):
   flat_state: list[tuple[PathParts, tp.Any]] = []
 
   for state in states:
-    if isinstance(state, dict | State):
+    if isinstance(state, dict | State | GraphState):
       flat_state.extend(traversals.flatten_to_sequence(state))
     elif isinstance(state, FlatState):
       flat_state.extend(state)
@@ -2375,10 +2374,25 @@ def _merge_to_flat_state(states: tp.Iterable[tp.Any]):
   flat_state.sort()
   return [value for _, value in flat_state]
 
-
+@tp.overload
+def merge(
+  state: GraphState[A],
+  /,
+  *states: GraphState[A],
+  copy: bool = False,
+  recreate_variables: bool = True,
+) -> A: ...
+@tp.overload
 def merge(  # type: ignore[invalid-annotation]
   graphdef: GraphDef[A],
   state: tp.Any,
+  /,
+  *states: tp.Any,
+  copy: bool = False,
+  recreate_variables: bool = True,
+) -> A: ...
+def merge(  # type: ignore[invalid-annotation]
+  graphdef_or_graphstate: GraphDef[A] | GraphState[A],
   /,
   *states: tp.Any,
   copy: bool = False,
@@ -2421,19 +2435,33 @@ def merge(  # type: ignore[invalid-annotation]
   for more information.
 
   Args:
-    graphdef: A :class:`flax.nnx.GraphDef` object.
-    state: A :class:`flax.nnx.State` object.
-    *states: Additional :class:`flax.nnx.State` objects.
+    graphdef_or_graphstate: A :class:`flax.nnx.GraphDef` or :class:`flax.nnx.GraphState` object.
+    *states: Additional :class:`flax.nnx.State` or :class:`flax.nnx.GraphState` objects.
     copy: Whether to create new copies of the Variables in the states, defaults to ``False``.
   Returns:
     The merged :class:`flax.nnx.Module`.
   """
-  if isinstance(state, list):
-    if len(states) != 0:
+  if isinstance(graphdef_or_graphstate, GraphState):
+    graphdef = graphdef_or_graphstate._graphdef
+    all_states = (graphdef_or_graphstate, *states)
+    for graph_state in all_states:
+      if not isinstance(graph_state, GraphState):
+        raise ValueError(f'Expected GraphState object, got {type(graph_state)}')
+      if graph_state._graphdef != graphdef:
+        raise ValueError('GraphDef must be the same for all GraphState objects')
+  elif isinstance(graphdef_or_graphstate, GraphDef):
+    graphdef = graphdef_or_graphstate
+    all_states = states
+  else:
+    raise TypeError(f'Expected a GraphDef or GraphState object, got: {graphdef_or_graphstate!r}')
+  if len(all_states) == 0:
+    raise TypeError("merge() missing 1 required positional argument: 'state'")
+  if isinstance(state := all_states[0], list):
+    if len(all_states) != 1:
       raise ValueError(f'Only one state can be passed as a list.')
     _state = state
   else:
-    _state = _merge_to_flat_state((state, *states))
+    _state = _merge_to_flat_state(all_states)
   node = unflatten(graphdef, _state, copy_variables=copy, recreate_variables=recreate_variables)
   return node
 
@@ -2550,6 +2578,146 @@ def state(
 
 
 variables = state
+
+
+@dataclasses.dataclass(slots=True, repr=False)
+class GraphState(tp.MutableMapping, tp.Generic[A], reprlib.Representable):
+  _graphdef: GraphDef[A]
+  _state: State
+
+  def __post_init__(self):
+    if not isinstance(self._state, State):
+      raise ValueError(f'Expected a State object, got {type(self._state).__name__}')
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type=type(self))
+    yield reprlib.Attr('_graphdef', self._graphdef)
+    yield reprlib.Attr('_state', self._state)
+
+  def __getattr__(self, name):
+    return getattr(self._state, name)
+
+  def __setattr__(self, name, value):
+    if name in ('_state', '_graphdef'):
+      object.__setattr__(self, name, value)
+    else:
+      setattr(self._state, name, value)
+
+  def __getitem__(self, key):
+    return self._state[key]
+
+  def __setitem__(self, key, value):
+    self._state[key] = value
+
+  def __delitem__(self, key):
+    del self._state[key]
+
+  def __iter__(self):
+    return iter(self._state)
+
+  def __len__(self):
+    return len(self._state)
+
+  def __contains__(self, key):
+    return key in self._state
+
+
+def _graph_state_flatten_with_keys(x: GraphState):
+  children, static_keys = statelib._state_flatten_with_keys(x._state)
+  return children, (x._graphdef, static_keys)
+
+
+def _graph_state_unflatten(static_data, leaves):
+  graphdef, static_keys = static_data
+  state = statelib._state_unflatten(State, static_keys, leaves)
+  return GraphState(graphdef, state)
+
+
+def _graph_state_flatten(x: GraphState):
+  leaves, static_keys = statelib._state_flatten(x._state)
+  return leaves, (x._graphdef, static_keys)
+
+
+jax.tree_util.register_pytree_with_keys(
+  GraphState,
+  _graph_state_flatten_with_keys,
+  _graph_state_unflatten,
+  _graph_state_flatten,
+)
+
+
+@tp.overload
+def unpack(node: A, /, *, graph: bool | None = None) -> GraphState[A]:
+  ...
+@tp.overload
+def unpack(
+    node: A, filter: filterlib.Filter, /, *, graph: bool | None = None
+) -> GraphState[A]:
+  ...
+@tp.overload
+def unpack(
+    node: A,
+    filter1: filterlib.Filter,
+    filter2: filterlib.Filter,
+    /,
+    *filters: filterlib.Filter,
+    graph: bool | None = None,
+) -> tuple[GraphState[A], ...]: ...
+
+def unpack(
+    node: A, *filters: filterlib.Filter, graph: bool | None = None
+) -> GraphState[A] | tuple[GraphState[A], ...]:
+  """Unpacks the state of a graph node into one or more :class:`GraphState` objects.
+
+  ``unpack`` is similar to :func:`split` but instead of returning the
+  :class:`GraphDef` as a separate value, it bundles it together with each
+  :class:`State` into a :class:`GraphState` state. This avoids the need to carry
+  the ``GraphDef`` in a separate variable.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+    ...
+    >>> class Foo(nnx.Module):
+    ...   def __init__(self, rngs):
+    ...     self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+    ...     self.linear = nnx.Linear(2, 3, rngs=rngs)
+    ...
+    >>> node = Foo(nnx.Rngs(0))
+    ...
+    >>> state = nnx.unpack(node)
+    >>> new_node = nnx.merge(state)
+    >>> assert isinstance(new_node, Foo)
+
+    Filters can also be provided to unpack multiple states into separate
+    :class:`GraphState` groups::
+
+    >>> params, batch_stats = nnx.unpack(node, nnx.Param, nnx.BatchStat)
+    >>> new_node = nnx.merge(params, batch_stats)
+    >>> assert isinstance(new_node, Foo)
+
+  :class:`GraphState` instances can often be used as a drop-in replacement for
+  :class:`State` objects.
+
+  Args:
+    node: A graph node to unpack.
+    *filters: One or more filters to partition the state into mutually
+      exclusive groups. If a single filter (or none) is provided, a single
+      :class:`GraphState` is returned. If two or more filters are provided,
+      a tuple of :class:`GraphState` objects is returned.
+    graph: If ``True``, uses graph-mode which supports the full
+      NNX feature set including shared references. If ``False``, uses
+      tree-mode which treats Modules as regular JAX pytrees, avoiding
+      the overhead of the graph protocol.
+  Returns:
+    A single :class:`GraphState` if zero or one filter is passed, or a tuple
+    of :class:`GraphState` objects if two or more filters are passed.
+  """
+  graphdef, *states = split(node, *filters, graph=graph)
+  if len(states) == 1:
+    return GraphState(graphdef, states[0])  # type: ignore[bad-return-type]
+  return tuple(GraphState(graphdef, state) for state in states)  # type: ignore[bad-return-type]
 
 
 def map(

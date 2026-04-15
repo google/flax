@@ -22,6 +22,7 @@ import numpy as np
 from flax import linen, nnx, struct
 import jax
 import jax.numpy as jnp
+import optax
 
 
 class StatefulLinear(nnx.Module):
@@ -938,6 +939,15 @@ class TestGraphUtils(parameterized.TestCase):
 
     out = nnx.merge(graphdef, state)
     self.assertIs(out, state)
+
+  def test_merge_missing_state(self):
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    graphdef, _ = nnx.split(m)
+
+    with self.assertRaisesRegex(
+      TypeError, r"merge\(\) missing 1 required positional argument: 'state'"
+    ):
+      nnx.merge(graphdef)
 
   @parameterized.parameters(
     (True, True), (True, False), (False, False),
@@ -1922,6 +1932,222 @@ class TestTreeFlatten(parameterized.TestCase):
     self.assertNotIsInstance(new_rngs.default.count, nnx.Variable)
     self.assertEqual(new_rngs.default.count, 0)
 
+
+class TestUnpack(parameterized.TestCase):
+
+  @parameterized.parameters(True, False)
+  def test_unpack_no_filter(self, graph):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.unpack(model, graph=graph)
+
+    self.assertIsInstance(state, nnx.GraphState)
+    self.assertIsInstance(state._graphdef, nnx.GraphDef)
+    self.assertIsInstance(state._state, nnx.State)
+    self.assertIn('kernel', state)
+    self.assertIn('bias', state)
+
+  @parameterized.parameters(True, False)
+  def test_unpack_single_filter(self, graph):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.unpack(model, nnx.Param, graph=graph)
+
+    self.assertIsInstance(state, nnx.GraphState)
+    self.assertIn('kernel', state)
+    self.assertIn('bias', state)
+
+  @parameterized.parameters(True, False)
+  def test_unpack_multiple_filters(self, graph):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+    node = Foo(nnx.Rngs(0))
+    params, batch_stats = nnx.unpack(node, nnx.Param, nnx.BatchStat, graph=graph)
+
+    self.assertIsInstance(params, nnx.GraphState)
+    self.assertIsInstance(batch_stats, nnx.GraphState)
+    # Params should contain kernel, bias, scale, bias
+    self.assertIn('linear', params)
+    self.assertIn('batch_norm', params)
+    # Batch stats should contain mean and var
+    self.assertIn('batch_norm', batch_stats)
+    self.assertIn('mean', batch_stats['batch_norm'])
+    self.assertIn('var', batch_stats['batch_norm'])
+
+  @parameterized.parameters(True, False)
+  def test_unpack_merge_roundtrip_no_filter(self, graph):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    kernel_before = model.kernel[...]
+    bias_before = model.bias[...]
+
+    state = nnx.unpack(model, graph=graph)
+    new_model = nnx.merge(state)
+
+    self.assertIsInstance(new_model, nnx.Linear)
+    np.testing.assert_array_equal(new_model.kernel[...], kernel_before)
+    np.testing.assert_array_equal(new_model.bias[...], bias_before)
+
+  @parameterized.parameters(True, False)
+  def test_unpack_merge_roundtrip_multiple_filters(self, graph):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+    node = Foo(nnx.Rngs(0))
+    kernel_before = node.linear.kernel[...]
+
+    params, batch_stats = nnx.unpack(node, nnx.Param, nnx.BatchStat, graph=graph)
+    new_node = nnx.merge(params, batch_stats)
+
+    self.assertIsInstance(new_node, Foo)
+    self.assertIsInstance(new_node.linear, nnx.Linear)
+    self.assertIsInstance(new_node.batch_norm, nnx.BatchNorm)
+    np.testing.assert_array_equal(new_node.linear.kernel[...], kernel_before)
+
+  @parameterized.parameters(True, False)
+  def test_unpack_merge_roundtrip_with_rest(self, graph):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+    node = Foo(nnx.Rngs(0))
+    params, rest = nnx.unpack(node, nnx.Param, ..., graph=graph)
+    new_node = nnx.merge(params, rest)
+
+    self.assertIsInstance(new_node, Foo)
+    self.assertIsInstance(new_node.linear, nnx.Linear)
+    self.assertIsInstance(new_node.batch_norm, nnx.BatchNorm)
+
+  def test_unpack_state_is_pytree(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.unpack(model)
+
+    # GraphState should be treeable by JAX
+    leaves = jax.tree.leaves(state)
+    self.assertTrue(len(leaves) > 0)
+
+    # Should be able to map over it
+    mapped = jax.tree.map(lambda x: x, state)
+    self.assertIsInstance(mapped, nnx.GraphState)
+
+  def test_unpack_state_graphdefs_shared(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+    node = Foo(nnx.Rngs(0))
+    params, batch_stats = nnx.unpack(node, nnx.Param, nnx.BatchStat)
+
+    # Both GraphState objects should have the same graphdef
+    self.assertEqual(params._graphdef, batch_stats._graphdef)
+
+  def test_unpack_with_nnx_grad_and_optimizer(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.batch_norm = nnx.BatchNorm(2, rngs=rngs)
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+      def __call__(self, x):
+        return self.linear(self.batch_norm(x))
+
+    x = jnp.ones((5, 2))
+    y = jnp.ones((5, 3))
+    model = Foo(nnx.Rngs(0))
+    optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
+
+    params, rest = nnx.unpack(model, nnx.Param, ...)
+
+    def loss_fn(params, rest):
+      model = nnx.merge(params, rest)
+      return jnp.mean((model(x) - y) ** 2)
+
+    grads = nnx.grad(loss_fn, graph=False)(params, rest)
+    optimizer.update(model, grads)
+
+    self.assertIsInstance(grads, nnx.GraphState)
+    self.assertIsInstance(grads._state, nnx.State)
+    self.assertIn('linear', grads)
+    self.assertIn('kernel', grads['linear'])
+
+  def test_unpack_paths_match_state_paths(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.state(model)
+    unpacked = nnx.unpack(model)
+
+    state_entries, _ = jax.tree_util.tree_flatten_with_path(state)
+    unpacked_entries, _ = jax.tree_util.tree_flatten_with_path(unpacked)
+
+    self.assertEqual(len(state_entries), len(unpacked_entries))
+    for (sp, sl), (pp, pl) in zip(state_entries, unpacked_entries):
+      self.assertEqual(sp, pp)
+      if isinstance(sl, (jax.Array, np.ndarray)):
+        np.testing.assert_array_equal(sl, pl)
+      else:
+        self.assertEqual(sl, pl)
+
+  def test_merge_different_graphdefs_error(self):
+    model1 = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    model2 = nnx.BatchNorm(2, rngs=nnx.Rngs(0))
+    state1 = nnx.unpack(model1)
+    state2 = nnx.unpack(model2)
+
+    with self.assertRaisesRegex(ValueError, 'GraphDef must be the same'):
+      nnx.merge(state1, state2)
+
+  def test_merge_wrong_type_error(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    graph_state = nnx.unpack(model)
+    state = nnx.state(model)
+
+    with self.assertRaisesRegex(ValueError, 'Expected GraphState object'):
+      nnx.merge(graph_state, state)
+
+  def test_graph_state_mutation(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.unpack(model)
+
+    # Mutate the state
+    kernel_var = state['kernel']
+    state['kernel'] = kernel_var.replace(jnp.zeros_like(kernel_var))
+
+    new_model = nnx.merge(state)
+    self.assertIsInstance(new_model, nnx.Linear)
+    np.testing.assert_array_equal(new_model.kernel[...], jnp.zeros((2, 3)))
+
+  def test_graph_state_attribute_access(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 3, rngs=rngs)
+
+    node = Foo(nnx.Rngs(0))
+    state = nnx.unpack(node)
+
+    # Test __getattr__
+    self.assertIsInstance(state.linear, nnx.State)
+    self.assertIn('kernel', state.linear)
+
+    # Test __setattr__
+    state.linear.kernel = 0
+    new_node = nnx.merge(state)
+
+    self.assertEqual(new_node.linear.kernel, 0)
+
+  def test_graph_state_update(self):
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    state = nnx.unpack(model)
+
+    # mutate packed state
+    state['kernel'] = jnp.zeros((2, 3))
+    state['bias'] = jnp.zeros((3,))
+
+    nnx.update(model, state)
+
+    np.testing.assert_array_equal(model.kernel[...], jnp.zeros((2, 3)))
+    np.testing.assert_array_equal(model.bias[...], jnp.zeros((3,)))
 
 if __name__ == '__main__':
   absltest.main()
