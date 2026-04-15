@@ -120,7 +120,7 @@ class LoRA(Module):
       **b_metadata,
     )
 
-  def __call__(self, x: jax.Array):
+  def __call__(self, x: jax.Array, **kwargs: tp.Any):
     x, lora_a, lora_b = self.promote_dtype(
       (x, self.lora_a[...], self.lora_b[...]), dtype=self.dtype
     )
@@ -128,7 +128,7 @@ class LoRA(Module):
     if self.base_module is not None:
       if not callable(self.base_module):
         raise ValueError('`self.base_module` must be callable.')
-      out += self.base_module(x)
+      out += self.base_module(x, **kwargs)
     return out
 
 
