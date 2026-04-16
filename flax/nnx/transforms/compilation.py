@@ -1385,7 +1385,7 @@ def shard_map(
     jax.debug.visualize_array_sharding(y)
 
   Notice that here we simply used some ``PartitionSpec`` to define the spec
-  the the whole model and data. This works for simple cases but if we need
+  the whole model and data. This works for simple cases but if we need
   to assign different ``PartitionSpec`` to different parts of the model we
   need to use ``StateSharding`` and create some filters that allow us to target
   specific parts of the model. Here's an example of how to do tensor parallelism
