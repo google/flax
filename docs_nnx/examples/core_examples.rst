@@ -20,7 +20,7 @@ Transformers
    Transformer encoder trained on the One Billion Word Benchmark.
 
 
-- :octicon:`mark-github;0.9em` `Diffusion Models  <https://github.com/google/flax/tree/main/examples/digits_diffusion_model/>`__ :
+- :octicon:`mark-github;0.9em` `Diffusion Models  <https://github.com/google/flax/tree/main/examples/digits_diffusion_model.ipynb>`__ :
      A simple example of an image diffusion model using a U-Net architecture.
 
 Toy examples

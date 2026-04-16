@@ -12,7 +12,7 @@ jupyter:
 
 # Example: Train a diffusion model for image generation
 
-This example guides you through developing and training a simple [diffusion model](https://en.wikipedia.org/wiki/Diffusion_model) using a [U-Net architecture](https://en.wikipedia.org/wiki/U-Net) for image generation using Flax NNX. 
+This example guides you through developing and training a simple [diffusion model](https://en.wikipedia.org/wiki/Diffusion_model) using a [U-Net architecture](https://en.wikipedia.org/wiki/U-Net) for image generation using Flax NNX.
 
 
 In this tutorial, you'll learn how to:
@@ -72,7 +72,7 @@ plt.show()
 
 ## Building the U-Net
 
-In this example, we'll use a specific diffusion variant known as *flow matching*. A flow matching diffusion model is a neural network representing a velocity field that can transform Gaussian noise into a space of images. To get an image, we'll sample a starting value $x_0 \sim \mathcal{N}(0, 1)$, and then propagate it according the differential equation $\frac{dx}{dt} = f_\theta(x,t)$ where $f_\theta(x,t)$ applies the neural network with parameters $\theta$. We'll integrate the differential equation from $t=0$ starting at state $x_0$ up to $t=1$, producing image $x_1$. 
+In this example, we'll use a specific diffusion variant known as *flow matching*. A flow matching diffusion model is a neural network representing a velocity field that can transform Gaussian noise into a space of images. To get an image, we'll sample a starting value $x_0 \sim \mathcal{N}(0, 1)$, and then propagate it according the differential equation $\frac{dx}{dt} = f_\theta(x,t)$ where $f_\theta(x,t)$ applies the neural network with parameters $\theta$. We'll integrate the differential equation from $t=0$ starting at state $x_0$ up to $t=1$, producing image $x_1$.
 
 
 Our neural network will use a [U-Net architecture](https://en.wikipedia.org/wiki/U-Net) which consists of the following:
@@ -341,7 +341,7 @@ def train_step(model, data, rngs, optimizer):
 ## Visualizing Samples
 
 
-While training, we'll want to periodically visualize the image samples our diffusion model generates. To do this, we'll use the `diffrax` library for numerical integration. 
+While training, we'll want to periodically visualize the image samples our diffusion model generates. To do this, we'll use the `diffrax` library for numerical integration.
 
 ```python
 import diffrax as dfx
@@ -405,7 +405,7 @@ plt.show()
 
 ## Visualizing Reconstructions
 
-A well-trained flow matching model defines an invertible map between noise and images: integrating the learned velocity field forward takes noise to images, and integrating it *backward* (negating the field, running time from 1 to 0) takes images back to noise. We can use this to sanity-check the model — encoding real images to noise and decoding back should recover the originals faithfully. If this check fails, it would mean that our learned velocity field wasn't smooth enough for numerical integration to work properly. 
+A well-trained flow matching model defines an invertible map between noise and images: integrating the learned velocity field forward takes noise to images, and integrating it *backward* (negating the field, running time from 1 to 0) takes images back to noise. We can use this to sanity-check the model — encoding real images to noise and decoding back should recover the originals faithfully. If this check fails, it would mean that our learned velocity field wasn't smooth enough for numerical integration to work properly.
 
 ```python
 @nnx.jit
@@ -442,7 +442,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-As we hoped, encoding and decoding an image brings us back to the same place. The middle row supposedly representing Gaussian noise samples doesn't look exactly Gaussian: you can still make out the '2' lying in the background. This is a known property of flow matching diffusion models: the latent codes are just noisy versions of the original images. 
+As we hoped, encoding and decoding an image brings us back to the same place. The middle row supposedly representing Gaussian noise samples doesn't look exactly Gaussian: you can still make out the '2' lying in the background. This is a known property of flow matching diffusion models: the latent codes are just noisy versions of the original images.
 
 
 ## Summary
