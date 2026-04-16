@@ -112,7 +112,7 @@ class LinearGeneral(Module):
     (2, 4, 5)
     >>> layer.bias.shape
     (4, 5)
-    >>> # apply transformation on the the second and last axes
+    >>> # apply transformation on the second and last axes
     >>> layer = nnx.LinearGeneral((2, 3), (4, 5), axis=(1, -1), rngs=nnx.Rngs(0))
     >>> layer.kernel.shape
     (2, 3, 4, 5)
