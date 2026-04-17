@@ -32,6 +32,7 @@ import jax
 from jax._src.state.types import AbstractRef
 import jax.experimental
 from jax.experimental import hijax as hjx
+import jax.extend as jex
 import jax.tree_util as jtu
 import treescope  # type: ignore[import-untyped]
 
@@ -146,13 +147,15 @@ class VarDefaults(tp.Mapping[str, tp.Any]):
 
 
 @tp.overload
-def var_defaults() -> VarDefaults: ...
+def var_defaults() -> VarDefaults:
+  ...
 
 
 @tp.overload
 def var_defaults(
-  *, hijax: bool | None = None, ref: bool | None = None
-) -> VarDefaultsContext: ...
+    *, hijax: bool | None = None, ref: bool | None = None
+) -> VarDefaultsContext:
+  ...
 
 
 def var_defaults(
@@ -286,7 +289,9 @@ class VariableQDD:
     leaf_types = tuple(a.normalize() for a in self.leaf_avals)
     return VariableQDD(leaf_types, self.treedef, self.var_type)
 
-class VariableEffect(jax.core.Effect): ...
+
+class VariableEffect(jex.core.Effect):
+  ...
 
 
 variable_effect = VariableEffect()
@@ -2367,19 +2372,21 @@ def variable_name_from_type(
 
 @tp.overload
 def register_variable_name(
-  name: str,
-  typ: type[Variable[tp.Any]],
-  *,
-  overwrite: bool = False,
-) -> type[Variable[tp.Any]]: ...
+    name: str,
+    typ: type[Variable[tp.Any]],
+    *,
+    overwrite: bool = False,
+) -> type[Variable[tp.Any]]:
+  ...
 
 
 @tp.overload
 def register_variable_name(
-  name: str,
-  *,
-  overwrite: bool = False,
-) -> tp.Callable[[type[Variable[tp.Any]]], type[Variable[tp.Any]]]: ...
+    name: str,
+    *,
+    overwrite: bool = False,
+) -> tp.Callable[[type[Variable[tp.Any]]], type[Variable[tp.Any]]]:
+  ...
 
 
 def register_variable_name(
