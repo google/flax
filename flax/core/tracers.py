@@ -22,7 +22,7 @@ from jax.extend import core as jex_core
 def current_trace():
   """Returns the current JAX state tracer."""
   if jax.__version_info__ <= (0, 4, 33):
-    top = jax.core.find_top_trace(())
+    top = jex_core.find_top_trace(())
     if top:
       return top.level
     else:
