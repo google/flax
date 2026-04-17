@@ -13,23 +13,50 @@
 # limitations under the License.
 
 import jax
-from absl.testing import absltest
+from absl.testing import absltest, parameterized
 import numpy as np
 
 from flax import nnx
 from jax import numpy as jnp
 
 
-class TestLora(absltest.TestCase):
-  def test_basic(self):
-    module = nnx.LoRA(3, 2, 4, rngs=nnx.Rngs(0))
+class CustomLinear(nnx.Module):
+    def __init__(self, in_f, out_f):
+        self.kernel = nnx.Param(jnp.zeros((in_f, out_f)))
+    def __call__(self, x, w=None):
+        w = self.kernel.value if w is None else w
+        return x @ w
+
+
+class TestLora(parameterized.TestCase):
+
+  @parameterized.product(use_jit=[True, False], with_base_module_kwargs=[True, False])
+  def test_basic(self, use_jit, with_base_module_kwargs):
+    if with_base_module_kwargs:
+      base_module = CustomLinear(3, 4)
+      w = jnp.ones((3, 4))
+    else:
+      base_module = None
+      w = None
+
+    module = nnx.LoRA(3, 2, 4, rngs=nnx.Rngs(0), base_module=base_module)
     x = jax.random.normal(jax.random.key(0), (1, 3))
-    y = module(x)
+
+    def func(x, w):
+      return module(x, w=w)
+
+    if use_jit:
+      func = jax.jit(func)
+
+    y = func(x, w)
 
     assert y.shape == (1, 4)
     assert module.lora_a.shape == (3, 2)
     assert module.lora_b.shape == (2, 4)
-    np.testing.assert_allclose(y, x @ module.lora_a @ module.lora_b)
+    expected = x @ module.lora_a @ module.lora_b
+    if with_base_module_kwargs:
+      expected = expected + x @ w
+    np.testing.assert_allclose(y, expected)
 
   def test_lora_base_module(self):
     rngs = nnx.Rngs(0)
