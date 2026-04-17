@@ -29,6 +29,7 @@ from flax.core import spmd as core_spmd
 from flax.nnx import reprlib, tracers, visualization
 from flax.typing import BaseConfigContext, MISSING, Missing, SizeBytes
 import jax
+import jax.extend
 from jax._src.state.types import AbstractRef
 import jax.experimental
 from jax.experimental import hijax as hjx
@@ -286,7 +287,14 @@ class VariableQDD:
     leaf_types = tuple(a.normalize() for a in self.leaf_avals)
     return VariableQDD(leaf_types, self.treedef, self.var_type)
 
-class VariableEffect(jax.core.Effect): ...
+try:
+  # JAX v0.10.0 or newer
+  Effect = jax.extend.core.Effect
+except AttributeError:
+  # JAX v0.9.2 or older
+  Effect = jax.core.Effect
+
+class VariableEffect(Effect): ...
 
 
 variable_effect = VariableEffect()
