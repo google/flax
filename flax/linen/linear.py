@@ -76,7 +76,7 @@ class DenseGeneral(Module):
     >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
     >>> jax.tree_util.tree_map(jnp.shape, params)
     {'params': {'bias': (4, 5), 'kernel': (3, 4, 5)}}
-    >>> # apply transformation on the the second and last axes
+    >>> # apply transformation on the second and last axes
     >>> layer = nn.DenseGeneral(features=(4, 5), axis=(1, -1))
     >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3, 6, 7)))
     >>> jax.tree_util.tree_map(jnp.shape, params)
