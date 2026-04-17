@@ -109,6 +109,25 @@ class LSTMCell(RNNCellBase):
 
   where x is the input, h is the output of the previous time step, and c is
   the memory.
+
+  Args:
+    in_features: number of input features.
+    hidden_features: number of hidden features.
+    gate_fn: activation function for the gates (default: sigmoid).
+    activation_fn: activation function for the output (default: tanh).
+    kernel_init: initializer function for the weight matrix.
+    recurrent_kernel_init: initializer function for the recurrent weight matrix.
+    bias_init: initializer function for the bias.
+    dtype: the dtype of the computation (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    carry_init: optional carry initializer.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype.
+    keep_rngs: whether to store the input rngs as attribute.
+    rngs: rng key.
+    preferred_element_type: Optional parameter controls the data type output by
+      the dot product. This argument is passed to ``dot_general`` function.
+      See ``jax.lax.dot`` for details.
   """
 
   def __init__(
@@ -130,6 +149,7 @@ class LSTMCell(RNNCellBase):
     kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    preferred_element_type: Dtype | None = None,
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -137,6 +157,7 @@ class LSTMCell(RNNCellBase):
     self.activation_fn = activation_fn
     self.dtype = dtype
     self.param_dtype = param_dtype
+    self.preferred_element_type = preferred_element_type
     self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
@@ -157,6 +178,7 @@ class LSTMCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=kernel_metadata,
     )
@@ -171,6 +193,7 @@ class LSTMCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=recurrent_kernel_metadata,
       bias_metadata=bias_metadata,
@@ -301,6 +324,9 @@ class OptimizedLSTMCell(RNNCellBase):
           the kernels that transform the hidden state.
         bias_metadata: Optional metadata dictionary to set when initializing
           the bias of layers that transform the hidden state.
+        preferred_element_type: Optional parameter controls the data type output by
+          the dot product. This argument is passed to ``dot_general`` function.
+          See ``jax.lax.dot`` for details.
     """
 
   def __init__(
@@ -322,6 +348,7 @@ class OptimizedLSTMCell(RNNCellBase):
     kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    preferred_element_type: Dtype | None = None,
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -329,6 +356,7 @@ class OptimizedLSTMCell(RNNCellBase):
     self.activation_fn = activation_fn
     self.dtype = dtype
     self.param_dtype = param_dtype
+    self.preferred_element_type = preferred_element_type
     self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
@@ -348,6 +376,7 @@ class OptimizedLSTMCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=kernel_metadata,
     )
@@ -361,6 +390,7 @@ class OptimizedLSTMCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=recurrent_kernel_metadata,
       bias_metadata=bias_metadata,
@@ -468,6 +498,31 @@ class SimpleCell(RNNCellBase):
       \begin{array}{ll}
       h' = \tanh(W_i x + b_i + W_h h + h)
       \end{array}
+
+  Args:
+    in_features: number of input features.
+    hidden_features: number of hidden features.
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    carry_init: optional carry initializer.
+    residual: whether to add the input to the output (default: False).
+    activation_fn: activation function for the output (default: tanh).
+    kernel_init: initializer function for the weight matrix.
+    recurrent_kernel_init: initializer function for the recurrent weight matrix.
+    bias_init: initializer function for the bias.
+    promote_dtype: function to promote the dtype of the arrays to the desired
+      dtype.
+    keep_rngs: whether to store the input rngs as attribute.
+    rngs: rng key.
+    kernel_metadata: Optional metadata dictionary to set when initializing
+      the weight matrix.
+    recurrent_kernel_metadata: Optional metadata dictionary to set when initializing
+      the recurrent weight matrix.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    preferred_element_type: Optional parameter controls the data type output by
+      the dot product. This argument is passed to ``dot_general`` function.
+      See ``jax.lax.dot`` for details.
   """
 
   def __init__(
@@ -489,6 +544,7 @@ class SimpleCell(RNNCellBase):
     kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    preferred_element_type: Dtype | None = None,
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -496,6 +552,7 @@ class SimpleCell(RNNCellBase):
     self.param_dtype = param_dtype
     self.residual = residual
     self.activation_fn = activation_fn
+    self.preferred_element_type = preferred_element_type
     self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
@@ -516,6 +573,7 @@ class SimpleCell(RNNCellBase):
       param_dtype=self.param_dtype,
       kernel_init=recurrent_kernel_init,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=recurrent_kernel_metadata,
     )
@@ -528,6 +586,7 @@ class SimpleCell(RNNCellBase):
       kernel_init=kernel_init,
       bias_init=bias_init,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=kernel_metadata,
       bias_metadata=bias_metadata,
@@ -628,6 +687,9 @@ class GRUCell(RNNCellBase):
           the kernels that transform the hidden state.
         bias_metadata: Optional metadata dictionary to set when initializing
           the bias of layers that transform the input.
+        preferred_element_type: Optional parameter controls the data type output by
+          the dot product. This argument is passed to ``dot_general`` function.
+          See ``jax.lax.dot`` for details.
     """
 
   def __init__(
@@ -649,6 +711,7 @@ class GRUCell(RNNCellBase):
     kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     recurrent_kernel_metadata: Mapping[str, Any] = MappingProxyType({}),
     bias_metadata: Mapping[str, Any] = MappingProxyType({}),
+    preferred_element_type: Dtype | None = None,
   ):
     self.in_features = in_features
     self.hidden_features = hidden_features
@@ -656,6 +719,7 @@ class GRUCell(RNNCellBase):
     self.activation_fn = activation_fn
     self.dtype = dtype
     self.param_dtype = param_dtype
+    self.preferred_element_type = preferred_element_type
     self.promote_dtype = promote_dtype
     self.rngs: rnglib.RngStream | None
     if keep_rngs:
@@ -676,6 +740,7 @@ class GRUCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=kernel_metadata,
       bias_metadata=bias_metadata,
@@ -689,6 +754,7 @@ class GRUCell(RNNCellBase):
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
+      preferred_element_type=self.preferred_element_type,
       rngs=rngs,
       kernel_metadata=recurrent_kernel_metadata,
     )
