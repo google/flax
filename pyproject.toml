@@ -13,7 +13,7 @@ authors = [
 dependencies = [
     "numpy>=1.23.2",
     # keep in sync with jax-version in .github/workflows/build.yml
-    "jax>=0.8.1",
+    "jax>=0.10.0",
     "msgpack",
     "optax",
     "orbax-checkpoint",

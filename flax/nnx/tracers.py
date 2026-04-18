@@ -17,6 +17,7 @@
 
 import jax
 import jax.core
+import jax.extend
 import treescope  # type: ignore[import-not-found,import-untyped]
 
 from flax.nnx import reprlib
@@ -24,9 +25,7 @@ from flax.nnx import reprlib
 
 def current_jax_trace():
   """Returns the Jax tracing state."""
-  if jax.__version_info__ <= (0, 4, 33):
-    return jax.core.thread_local_state.trace_state.trace_stack.dynamic
-  return jax.core.get_opaque_trace_state(convention="nnx")
+  return jax.extend.core.get_opaque_trace_state(convention="nnx")
 
 
 class TraceState(reprlib.Representable):
