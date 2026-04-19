@@ -130,6 +130,7 @@ class Transformer(nnx.Module):
     )
     self.final_dropout = nnx.Dropout(config.dropout_rate, deterministic=False)
     self.final_logits_softcap = config.final_logit_softcap
+    self.config = config
     self.sow_config = sow_config
     self.shd_config = config.shd_config
 
@@ -213,59 +214,6 @@ class Transformer(nnx.Module):
         )
         for i in range(self.num_layers)
     }
-
-  def init_intermediates(
-      self,
-      batch_size: int,
-      buffer_size: int,
-      sow_config: sow_lib.SowConfig,
-      dtype: jnp.dtype = jnp.float32,
-  ) -> sow_lib.TransformerIntermediates:
-    """Initializes the intermediate activations that will be filled."""
-    intermediates = sow_lib.TransformerIntermediates()
-    residual_stream_dummy = jnp.zeros(
-        (batch_size, buffer_size, self.embed_dim),
-        dtype=dtype,
-    )
-    if sow_config.embeddings:
-      intermediates.embeddings = residual_stream_dummy
-    for layer in self.layers:
-      layer_intermediates = sow_lib.LayerIntermediates()
-      if sow_config.rs_after_attention:
-        layer_intermediates.rs_after_attention = residual_stream_dummy
-      if sow_config.rs_after_ffw:
-        layer_intermediates.rs_after_ffw = residual_stream_dummy
-      if sow_config.attn_logits_topk:
-        shape = (
-            batch_size,
-            buffer_size,
-            layer.attn.num_heads,
-            sow_config.attn_logits_topk,
-        )
-        layer_intermediates.attn_logits_topk_values = jnp.zeros(
-            shape,
-            dtype=dtype,
-        )
-        layer_intermediates.attn_logits_topk_indices = jnp.zeros(
-            shape,
-            dtype=jnp.int32,
-        )
-      if sow_config.mlp_hidden_topk:
-        shape = (
-            batch_size,
-            buffer_size,
-            sow_config.mlp_hidden_topk,
-        )
-        layer_intermediates.mlp_hidden_topk_values = jnp.zeros(
-            shape,
-            dtype=dtype,
-        )
-        layer_intermediates.mlp_hidden_topk_indices = jnp.zeros(
-            shape,
-            dtype=jnp.int32,
-        )
-      intermediates.layers.append(layer_intermediates)
-    return intermediates
 
 
 def make_causal_attn_mask(
