@@ -31,40 +31,32 @@ If `flax` is not installed in your Python environment, use `pip` to install the 
 
 ## 2. Load the MNIST dataset
 
-First, you need to load the MNIST dataset and then prepare the training and testing sets via Tensorflow Datasets (TFDS). You normalize image values, shuffle the data and divide it into batches, and prefetch samples to enhance performance.
+First, we need to load the MNIST dataset and prepare the training and testing sets using the Hugging Face [`datasets`](https://huggingface.co/docs/datasets) package. We'll normalize the image values and shuffle the training data. The `make_batches` helper converts the dataset into batches of NumPy arrays with a channel dimension added, dropping any incomplete final batch.
 
 ```{code-cell} ipython3
-import tensorflow_datasets as tfds  # TFDS to download MNIST.
-import tensorflow as tf  # TensorFlow / `tf.data` operations.
-
-tf.random.set_seed(0)  # Set the random seed for reproducibility.
+import numpy as np
+import matplotlib.pyplot as plt
+from datasets import load_dataset
 
 train_steps = 1200
 eval_every = 200
 batch_size = 32
 
-train_ds: tf.data.Dataset = tfds.load('mnist', split='train')
-test_ds: tf.data.Dataset = tfds.load('mnist', split='test')
+dataset = load_dataset('mnist')
+train_ds = dataset['train'].shuffle(seed=0)
+test_ds = dataset['test']
 
-train_ds = train_ds.map(
-  lambda sample: {
-    'image': tf.cast(sample['image'], tf.float32) / 255,
-    'label': sample['label'],
-  }
-)  # normalize train set
-test_ds = test_ds.map(
-  lambda sample: {
-    'image': tf.cast(sample['image'], tf.float32) / 255,
-    'label': sample['label'],
-  }
-)  # Normalize the test set.
-
-# Create a shuffled dataset by allocating a buffer size of 1024 to randomly draw elements from.
-train_ds = train_ds.repeat().shuffle(1024)
-# Group into batches of `batch_size` and skip incomplete batches, prefetch the next sample to improve latency.
-train_ds = train_ds.batch(batch_size, drop_remainder=True).take(train_steps).prefetch(1)
-# Group into batches of `batch_size` and skip incomplete batches, prefetch the next sample to improve latency.
-test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1)
+def make_batches(ds, batch_size):
+  """Yield batches of normalized (image, label) numpy arrays."""
+  for i in range(0, len(ds), batch_size):
+    batch = ds[i : i + batch_size]
+    if len(batch['label']) < batch_size:  # drop incomplete final batch
+      break
+    images = np.stack([
+      np.array(img, dtype=np.float32)[..., None] / 255.0
+      for img in batch['image']
+    ])
+    yield {'image': images, 'label': np.array(batch['label'])}
 ```
 
 ## 3. Define the model with Flax NNX
@@ -106,7 +98,7 @@ nnx.display(model)
 
 ### Run the model
 
-Let's put the CNN model to the test!  Here, you’ll perform a forward pass with arbitrary data and print the results.
+Let's put the CNN model to the test!  Here, we’ll perform a forward pass with arbitrary data and print the results.
 
 ```{code-cell} ipython3
 import jax.numpy as jnp  # JAX NumPy
@@ -117,7 +109,7 @@ y
 
 ## 4. Create the optimizer and define some metrics
 
-In Flax NNX, you need to create an `nnx.Optimizer` object to manage the model's parameters and apply gradients during training. `nnx.Optimizer` receives the model's reference, so that it can update its parameters, and an [Optax](https://optax.readthedocs.io/) optimizer to define the update rules. Additionally, you will define an `nnx.MultiMetric` object to keep track of the `Accuracy` and the `Average` loss.
+In Flax NNX, you need to create an `nnx.Optimizer` object to manage the model's parameters and apply gradients during training. `nnx.Optimizer` receives the model's reference, so that it can update its parameters, and an [Optax](https://optax.readthedocs.io/) optimizer to define the update rules. Additionally, we'll define an `nnx.MultiMetric` object to keep track of the `Accuracy` and the `Average` loss.
 
 ```{code-cell} ipython3
 import optax
@@ -170,83 +162,84 @@ In the code above, the [`nnx.jit`](https://flax.readthedocs.io/en/latest/api_ref
 
 > **Note:** The code shows how to perform several in-place updates to the model, the optimizer, the RNG streams, and the metrics, but _state updates_ were not explicitly returned. This is because Flax NNX transformations respect _reference semantics_ for Flax NNX objects, and will propagate the state updates of the objects passed as input arguments. This is a key feature of Flax NNX that allows for a more concise and readable code. You can learn more in [Why Flax NNX](https://flax.readthedocs.io/en/latest/why.html).
 
+## 6. Define test set inference functions
 
-## 6. Train and evaluate the model
-
-Now, you can train the CNN model. Before the training loop, we use [`nnx.view`](https://flax.readthedocs.io/en/latest/guides/view.html) to create a `train_model` (with dropout enabled and batch norm in training mode) and an `eval_model` (with dropout disabled and batch norm using running statistics). These views share the same underlying weights, so updates during training are automatically reflected during evaluation.
+We'll also create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. Before the training loop, we use [`nnx.view`](https://flax.readthedocs.io/en/latest/guides/view.html) to create a `train_model` (with dropout enabled and batch norm in training mode) and an `eval_model` (with dropout disabled and batch norm using running statistics). These views share the same underlying weights, so updates during training are automatically reflected during evaluation. We can use the `eval_model` for inference. This will enable us to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
 
 ```{code-cell} ipython3
-from IPython.display import clear_output
-import matplotlib.pyplot as plt
-
-metrics_history = {
-  'train_loss': [],
-  'train_accuracy': [],
-  'test_loss': [],
-  'test_accuracy': [],
-}
-
-rngs = nnx.Rngs(0)
 train_model = nnx.view(model, deterministic=False, use_running_average=False)
 eval_model = nnx.view(model, deterministic=True, use_running_average=True)
 
-for step, batch in enumerate(train_ds.as_numpy_iterator()):
+@nnx.jit
+def pred_step(model: CNN, batch):
+  logits = model(batch['image'], None)
+  return logits.argmax(axis=1)
+
+def plot_predictions(test_batch, pred):
+    fig, axs = plt.subplots(5, 5, figsize=(6, 6))
+    for i, ax in enumerate(axs.flatten()):
+      ax.imshow(test_batch['image'][i, ..., 0], cmap='binary')
+      # ax.set_title(f'label={pred[i]}')
+      color = 'green' if test_batch['label'][i] == pred[i] else 'red'
+      ax.text(0.05, 0.05, str(pred[i]), transform=ax.transAxes, color=color)
+      ax.axis('off')
+    return fig
+```
+
+## 7. Train and evaluate the model
+
+Now, we can train the CNN model. We'll also set up [TensorBoard](https://www.tensorflow.org/tensorboard) logging. TensorBoard is a visualization toolkit that displays interactive charts of metrics — like loss and accuracy — as training progresses, letting us monitor convergence and compare runs. We use the `tensorboardX` library, which provides a TensorBoard-compatible `SummaryWriter` interface without requiring TensorFlow as a dependency. Each call to `writer.add_scalar` records a scalar value (e.g. `train_loss`) at a given training step; TensorBoard reads these from the `runs/` directory and plots them in real time. We also use `writer.add_figure` to visualize the plots created with our `plot_predictions` function.
+
+```{code-cell} ipython3
+from tensorboardX import SummaryWriter
+import tensorboard
+writer = SummaryWriter()
+```
+
+You can open tensorboard in a separate browser window at `localhost:6006`, but there's also a Jupyter extension to view its progress from with a notebook
+
+```{code-cell} ipython3
+%load_ext tensorboard
+```
+
+```{code-cell} ipython3
+%tensorboard --logdir runs
+```
+
+![](./tensorboard_screenshot.png)
+
+```{code-cell} ipython3
+rngs = nnx.Rngs(0)
+
+for step, batch in enumerate(make_batches(train_ds, batch_size)):
+  if step >= train_steps:
+    break
   # Run the optimization for one step and make a stateful update to the following:
   # - The train state's model parameters
   # - The optimizer state
   # - The training loss and accuracy batch metrics
   train_step(train_model, optimizer, metrics, rngs, batch)
 
-  if step > 0 and (step % eval_every == 0 or step == train_steps - 1):  # One training epoch has passed.
+  if step > 0 and (step % eval_every == 0 or step == train_steps - 1):  # Evaluation period passed.
     # Log the training metrics.
     for metric, value in metrics.compute().items():  # Compute the metrics.
-      metrics_history[f'train_{metric}'].append(value)  # Record the metrics.
+      writer.add_scalar(f'train_{metric}', value, step) # Record the metrics.
     metrics.reset()  # Reset the metrics for the test set.
 
     # Compute the metrics on the test set after each training epoch.
-    for test_batch in test_ds.as_numpy_iterator():
+    for test_batch in make_batches(test_ds, batch_size):
       eval_step(eval_model, metrics, test_batch)
+
+    # Show predicted labels on a single test batch
+    pred = pred_step(eval_model, test_batch)
+    fig = plot_predictions(test_batch, pred)
+    writer.add_figure('inference', fig, step)
 
     # Log the test metrics.
     for metric, value in metrics.compute().items():
-      metrics_history[f'test_{metric}'].append(value)
+      writer.add_scalar(f'test_{metric}', value, step) # Record the metrics.
+
     metrics.reset()  # Reset the metrics for the next training epoch.
-
-    clear_output(wait=True)
-    # Plot loss and accuracy in subplots
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-    ax1.set_title('Loss')
-    ax2.set_title('Accuracy')
-    for dataset in ('train', 'test'):
-      ax1.plot(metrics_history[f'{dataset}_loss'], label=f'{dataset}_loss')
-      ax2.plot(metrics_history[f'{dataset}_accuracy'], label=f'{dataset}_accuracy')
-    ax1.legend()
-    ax2.legend()
-    plt.show()
-```
-
-## 7. Perform inference on the test set
-
-Create a `jit`-compiled model inference function (with `nnx.jit`) - `pred_step` - to generate predictions on the test set using the learned model parameters. Since we already have `eval_model` (an `nnx.view` with `deterministic=True` and `use_running_average=True`), we can use it directly for inference. This will enable you to visualize test images alongside their predicted labels for a qualitative assessment of model performance.
-
-```{code-cell} ipython3
-@nnx.jit
-def pred_step(model: CNN, batch):
-  logits = model(batch['image'], None)
-  return logits.argmax(axis=1)
-```
-
-We reuse the `eval_model` view created earlier so that `Dropout` is disabled and `BatchNorm` uses stored running stats during inference.
-
-```{code-cell} ipython3
-test_batch = test_ds.as_numpy_iterator().next()
-pred = pred_step(eval_model, test_batch)
-
-fig, axs = plt.subplots(5, 5, figsize=(12, 12))
-for i, ax in enumerate(axs.flatten()):
-  ax.imshow(test_batch['image'][i, ..., 0], cmap='gray')
-  ax.set_title(f'label={pred[i]}')
-  ax.axis('off')
 ```
 
 # 8. Export the model
@@ -254,7 +247,9 @@ for i, ax in enumerate(axs.flatten()):
 Flax models are great for research, but aren't meant to be deployed directly. Instead, high performance inference runtimes like LiteRT or TensorFlow Serving operate on a special [SavedModel](https://www.tensorflow.org/guide/saved_model) format. The [Orbax](https://orbax.readthedocs.io/en/latest/guides/export/orbax_export_101.html) library makes it easy to export Flax models to this format. First, we must create a `JaxModule` object wrapping a model and its prediction method.
 
 ```{code-cell} ipython3
+# !pip install -U "orbax-export[all]"
 from orbax.export import JaxModule, ExportManager, ServingConfig
+import tensorflow as tf
 ```
 
 ```{code-cell} ipython3
