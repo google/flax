@@ -16,21 +16,58 @@ import abc
 from collections import namedtuple
 import dataclasses
 import functools
+import inspect
 import typing as tp
 
 from flax import struct
 from flax import typing
-from flax.nnx import filterlib, graphlib, variablelib
+from flax.nnx import filterlib, graphlib, reprlib, variablelib
+from flax.nnx.statelib import State
 from flax.nnx.pytreelib import Pytree
 from flax.typing import Missing, PathParts
 import jax
 
 
 A = tp.TypeVar('A')
+B = tp.TypeVar('B')
+F = tp.TypeVar('F', bound=tp.Callable)
 Index = int
 KeyPath = tuple[tp.Hashable, ...]
 Prefix = tp.Any
 Leaf = tp.Any
+
+
+class OrderedDict(reprlib.MappingReprMixin, dict[A, B]):
+  pass
+
+
+def _ordered_dict_flatten_with_keys(d: OrderedDict):
+  children = [(jax.tree_util.DictKey(k), v) for k, v in d.items()]
+  return children, tuple(d.keys())
+
+jax.tree_util.register_pytree_with_keys(
+    OrderedDict,
+    _ordered_dict_flatten_with_keys,
+    lambda keys, values: OrderedDict(zip(keys, values)),
+)
+
+_labeled_tuples_cache: dict[tuple[str, ...], type[tp.Any]] = {}
+
+
+def labeled(**kwargs):
+  keys = tuple(kwargs.keys())
+  if keys not in _labeled_tuples_cache:
+    class LabeledTuple(namedtuple('LabeledTuple', keys)):
+      def keys(self):
+        return self._fields
+
+      def __getitem__(self, key):
+        if isinstance(key, str):
+          return getattr(self, key)
+        return super().__getitem__(key)
+
+    _labeled_tuples_cache[keys] = LabeledTuple
+  return _labeled_tuples_cache[keys](**kwargs)
 
 
 class PrefixMapping(abc.ABC):
@@ -237,10 +274,10 @@ def broadcast_prefix_map(
 
 class GraphDefState(struct.PyTreeNode):
   graphdef: graphlib.GraphDef[tp.Any] = struct.field(pytree_node=False)
-  state: graphlib.State = struct.field(pytree_node=True)
+  state: State = struct.field(pytree_node=True)
 
 S = tp.TypeVar(
-  'S', bound=graphlib.State | graphlib.GraphFlatState | list[tp.Any]
+  'S', bound=State | graphlib.GraphFlatState | list[tp.Any]
 )
 
 class NodeStates(struct.PyTreeNode):
@@ -457,7 +494,7 @@ def to_tree2(
   return jax.tree.unflatten(treedef, leaves_out)
 
 
-def from_tree2(tree: tp.Any, /) -> tp.Any:
+def from_tree2(tree: tp.Any, /, recreate_variables: bool = True) -> tp.Any:
   index_ref = graphlib.IndexMap()
 
   def _from_node_states(x):
@@ -466,6 +503,7 @@ def from_tree2(tree: tp.Any, /) -> tp.Any:
     state = graphlib._merge_to_flat_state((x.state,))
     return graphlib.unflatten(
       x.graphdef, state, index_ref=index_ref,
+      recreate_variables=recreate_variables,
     )
 
   return jax.tree.map(
@@ -557,13 +595,15 @@ def clear_non_graph_nodes(tree):
 class Mask(tp.NamedTuple):
   pass
 
-def mask_at(t: tuple, index: int | None) -> tuple:
-  if index is None:
-    return t
-  return tuple(
+def mask_at(t: tuple, index: int | None) -> tuple[tp.Any, tuple]:
+  if index is None or not isinstance(t, tuple):
+    return None, t
+  x = t[index]
+  new_t = tuple(
     Mask() if i == index else x
     for i, x in enumerate(t)
   )
+  return x, new_t
 
 def replace_at(t: tuple, index: int, value: tp.Any) -> tuple:
   return tuple(
@@ -578,15 +618,17 @@ def slice_at(t: tuple, index: int | None) -> tuple[tp.Any, tuple]:
   return t[index], t[:index] + t[index + 1 :]
 
 
-def insert_at(t: tuple, index: int | None, value: tp.Any) -> tuple:
+def replace_at(t: tuple, index: int | None, value: tp.Any) -> tuple:
   if index is None:
     return t
   xs = list(t)
-  xs.insert(index, value)
+  xs[index] = value
   return tuple(xs)
 
 
 def find(t: tuple, value: tp.Any) -> int | None:
+  if not isinstance(t, tuple):
+    return None
   return next((i for i, x in enumerate(t) if x == value), None)
 
 
@@ -602,69 +644,50 @@ def extract(
   tree: tp.Any,
   *,
   is_leaf: tp.Callable[[tp.Any], bool] | None = None,
+  prefix_leaf: tp.Callable[[tp.Any], bool] | None = None,
 ) -> tuple[tp.Any, list[tp.Any]]:
   extracted: list[tp.Any] = []
-  def _leaf_fn(path: jax.tree_util.KeyPath, prefix_leaf: tp.Any, leaf: tp.Any):
+  def _leaf_fn(path, prefix_leaf, leaf):
     if f(path, prefix_leaf, leaf):
       idx = len(extracted)
       extracted.append(leaf)
       return ExtractIndex(idx)
     return leaf
 
-  full_prefix = jax.tree.broadcast(prefix, tree, is_leaf=is_leaf)
-  new_tree = jax.tree.map_with_path(_leaf_fn, full_prefix, tree, is_leaf=is_leaf)
+  new_tree = broadcast_prefix_map(
+      _leaf_fn, prefix, tree, is_leaf=is_leaf, prefix_leaf=prefix_leaf
+  )
   return new_tree, extracted
 
 
-def insert(
-    tree: tp.Any,
-    extracted: list[tp.Any],
-    is_leaf: tp.Callable[[tp.Any], bool] | None = None,
-) -> tp.Any:
-  if is_leaf is None:
-    _is_leaf = lambda x: isinstance(x, ExtractIndex)
-  else:
-    _is_leaf = lambda x: isinstance(x, ExtractIndex) or is_leaf(x)
-
-  def _leaf_fn(leaf: tp.Any):
+def insert(tree: tp.Any, extracted: list[tp.Any]) -> tp.Any:
+  def _leaf_fn(leaf):
     if isinstance(leaf, ExtractIndex):
       return extracted[leaf.index]
     return leaf
 
-  return jax.tree.map(_leaf_fn, tree, is_leaf=_is_leaf)
+  return jax.tree.map(
+      _leaf_fn, tree, is_leaf=lambda x: isinstance(x, ExtractIndex)
+  )
 
-
-def updates_and_snapshot(args: A) -> tuple[A, A]:
+def snapshot(args: A) -> tuple[A, A]:
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
-  leaves, treedef = jax.tree.flatten(args, is_leaf=is_leaf)
-  updates_leaves: list[variablelib.Variable | Mask] = []
-  snapshot_leaves: list[variablelib.Variable | Mask] = []
-  for leaf in leaves:
-    if isinstance(leaf, variablelib.Variable):
-      updates_leaves.append(leaf)
-      # don't snapshot hijax or ref Variables as their updates are automatically
-      # masked out in mask_variable_updates. However, the leaf is kept in the
-      # updates to check for aliasing. This avoids a copy operation which has
-      # significance for ref Variables.
-      if leaf.hijax or leaf.ref:
-        snapshot_leaves.append(Mask())
-      else:
-        snapshot_leaves.append(leaf.copy())
-    else:
-      updates_leaves.append(Mask())
-      snapshot_leaves.append(Mask())
-  updates = jax.tree.unflatten(treedef, updates_leaves)
-  snapshot = jax.tree.unflatten(treedef, snapshot_leaves)
-  return updates, snapshot
+  current = jax.tree.map(lambda x: x, args, is_leaf=is_leaf)
+  snapshot = jax.tree.map(lambda x: x, args)
+  return current, snapshot
 
+def copy_var_structure(tree: A) -> A:
+  return jax.tree.map(
+      lambda x: x, tree, is_leaf=lambda x: isinstance(x, variablelib.Variable)
+  )
 
 def check_no_aliases(
-    fn_name: str, /, *, check_can_update: tp.Iterable[str] = (), **kwargs
-):
-  Attrs = namedtuple('Attrs', kwargs.keys())  # type: ignore[misc]
-  container = Attrs(**kwargs)
+    fn_name: str, /, *, check: tp.Iterable[str] = (), **kwargs
+) -> dict[jax.tree_util.KeyPath, variablelib.Variable]:
+  container = labeled(**kwargs)
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
   seen: dict[int, jax.tree_util.KeyPath] = {}
+  all_variables: dict[jax.tree_util.KeyPath, variablelib.Variable] = {}
   for path, leaf in jax.tree.leaves_with_path(container, is_leaf=is_leaf):
     if not isinstance(leaf, variablelib.Variable):
       continue
@@ -672,7 +695,7 @@ def check_no_aliases(
     assert isinstance(path[0], jax.tree_util.GetAttrKey)
     kwarg_name = path[0].name
 
-    if kwarg_name in check_can_update:
+    if kwarg_name in check:
       if not leaf._can_update:
         path_str = jax.tree_util.keystr(path)
         raise ValueError(
@@ -703,6 +726,8 @@ def check_no_aliases(
         f'  nnx.compat.{fn_name}(...)'
       )
     seen[var_id] = path
+    all_variables[path] = leaf
+  return all_variables
 
 
 def check_prefix(
@@ -711,8 +736,11 @@ def check_prefix(
   fn_name: str,
   graph: bool,
   graph_updates: bool,
+  none_leaf: bool = True,
 ):
-  def _check(path, leaf):
+  unique_prefixes = OrderedDict()
+
+  def _check_prefix(path, leaf):
     if isinstance(leaf, variablelib.Variable):
       raise ValueError(
         f'Found Variable of type {type(leaf).__name__} '
@@ -766,13 +794,22 @@ def check_prefix(
       raise ValueError(msg)
 
   jax.tree.map_with_path(
-    _check,
+    _check_prefix,
     prefix,
-    is_leaf=lambda x: isinstance(x, variablelib.Variable)
+    is_leaf=lambda x: x is None
+    or isinstance(x, variablelib.Variable)
     or graphlib.is_graph_node(x)
     or isinstance(x, PrefixMapping)
     or isinstance(x, TreeState),
   )
+
+  def _collect_prefix(_, leaf):
+    unique_prefixes[leaf] = leaf
+
+  jax.tree.map_with_path(
+      _collect_prefix, prefix, is_leaf=lambda x: x is None and none_leaf
+  )
+  return unique_prefixes
 
 
 def variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
@@ -786,48 +823,147 @@ KeepFn = tp.Callable[
     [PathParts, tp.Any, variablelib.Variable, variablelib.Variable], bool
 ]
 
-def mask_variable_updates(
+
+class Updates(
+    tp.Sequence[tuple[jax.tree_util.KeyPath, variablelib.Variable]],
+    reprlib.Representable,
+):
+  __slots__ = ('_keys', '_values')
+
+  _keys: list[jax.tree_util.KeyPath]
+  _values: list[variablelib.Variable]
+
+  def __init__(
+      self,
+      items: tp.Iterable[
+          tuple[jax.tree_util.KeyPath, variablelib.Variable]
+      ] = (),
+  ):
+    self._keys, self._values = [], []
+    for key, value in items:
+      self._keys.append(key)
+      self._values.append(value)
+
+  def append(self, key: jax.tree_util.KeyPath, value: variablelib.Variable):
+    self._keys.append(key)
+    self._values.append(value)
+
+  @property
+  def paths(self) -> tuple[jax.tree_util.KeyPath, ...]:
+    return self._keys
+
+  @property
+  def leaves(self) -> list[variablelib.Variable]:
+    return self._values
+
+  @tp.overload
+  def __getitem__(
+      self, key: int
+  ) -> tuple[jax.tree_util.KeyPath, variablelib.Variable]:
+    ...
+
+  @tp.overload
+  def __getitem__(self, key: tuple[tp.Hashable, ...]) -> variablelib.Variable:
+    ...
+
+  def __getitem__(
+      self, key: int | jax.tree_util.KeyPath
+  ):
+    if isinstance(key, int):
+      return self._keys[key], self._values[key]
+    idx = self._keys.index(key)
+    return self._values[idx]
+
+  def __len__(self):
+    return len(self._keys)
+
+  def __iter__(self):
+    return iter(zip(self._keys, self._values))
+
+  def __nnx_repr__(self):
+    yield reprlib.Object(type=type(self), kv_sep=': ', start='({', end='})')
+    for path, value in self:
+      yield reprlib.Attr(
+          jax.tree_util.keystr(path),
+          value,
+          use_raw_key=True,
+      )
+
+
+def _updates_flatten_with_keys(x: Updates):
+  key_children = [
+      (jax.tree_util.FlattenedIndexKey(i), v)
+      for i, v in enumerate(x._values)
+  ]
+  return key_children, x._keys
+
+
+def _updates_flatten(x: Updates):
+  return x._values, x._keys
+
+
+def _updates_unflatten(keys, values) -> Updates:
+  updates = object.__new__(Updates)
+  updates._keys = keys
+  updates._values = list(values)
+  return updates
+
+
+jax.tree_util.register_pytree_with_keys(
+    Updates,
+    _updates_flatten_with_keys,
+    _updates_unflatten,
+    flatten_func=_updates_flatten,
+)
+
+def get_updates(
     current_tree: A,
     snapshot_tree: A,
     *,
-    prefix: tp.Any = Missing,
+    prefix: tp.Any = None,
     keep_fn: KeepFn | None = None,
-) -> A:
+    known_prefixes: tp.Iterable[tp.Any] = (None,),
+):
   if keep_fn is None:
     keep_fn = lambda _, _pfx, cur, snap: variable_changed(cur, snap)
+
+  updates = OrderedDict((pfx, Updates()) for pfx in known_prefixes)
 
   def _mask_updates(path, prefix_leaf, current, snapshot):
     if isinstance(current, variablelib.Variable):
       if current.hijax or current.ref:
-        return Mask()
+        return
       if keep_fn(path, prefix_leaf, current, snapshot):
-        return current
-    return Mask()
+        updates[prefix_leaf].append(path, current)
+
   prefix_leaf = lambda x: x is None
   is_leaf = lambda x: isinstance(x, variablelib.Variable)
-  if prefix is Missing:
-    return jax.tree.map_with_path(
-        lambda path, cur, snap: _mask_updates(path, None, cur, snap),
-        current_tree, snapshot_tree, is_leaf=is_leaf
-    )
-  return broadcast_prefix_map(
+  broadcast_prefix_map(
       _mask_updates, prefix, current_tree, snapshot_tree, is_leaf=is_leaf,
       prefix_leaf=prefix_leaf,
   )
+  return updates
 
 
-def apply_variable_updates(args_tree: A, updates_tree: A):
-  is_leaf = lambda x: isinstance(x, variablelib.Variable) or isinstance(x, Mask)
-  args_leaves = jax.tree.leaves(args_tree, is_leaf=is_leaf)
-  _, treedef = jax.tree.flatten(args_tree, is_leaf=is_leaf)
-  updates_leaves = treedef.flatten_up_to(updates_tree)
-  for variable, update in zip(args_leaves, updates_leaves, strict=True):
-    if isinstance(update, variablelib.Variable):
-      assert isinstance(variable, variablelib.Variable)
-      variable.update_from_state(update)
+def apply_updates(
+    variables: dict[jax.tree_util.KeyPath, variablelib.Variable],
+    updates: OrderedDict[tp.Any, Updates],
+):
+  for _, flat_state in updates.items():
+    for path, update in flat_state:
+      if path in variables:
+        variable = variables[path]
+        assert isinstance(variable, variablelib.Variable)
+        variable.update_from_state(update)
+      else:
+        path_str = jax.tree_util.keystr(path)
+        raise RuntimeError(
+            f'Variable not found at path {path_str}. This is a bug in NNX, '
+            f'please report it. Variable: {update}'
+        )
 
 
-def treemap_copy_args(f):
+def treemap_copy_args(f: F) -> F:
   @functools.wraps(f)
   def wrapper(*args, **kwargs):
     args, kwargs = jax.tree.map(lambda x: x, (args, kwargs))
@@ -971,3 +1107,31 @@ def prefix(
     return prefix_fn(path, leaf)
 
   return jax.tree.map_with_path(_apply_prefix, node, is_leaf=is_leaf)
+
+def to_masked(tree, all_updates: OrderedDict[tp.Any, Updates]):
+  combined = OrderedDict()
+  for updates in all_updates.values():
+    combined.update(updates)
+  return jax.tree.map_with_path(
+      lambda path, _: combined.get(path, None), tree,
+      is_leaf=lambda x: x is None
+  )
+
+def filter_kwargs(f, **kwargs):
+  sig = inspect.signature(f)
+  has_var_keyword = any(
+      p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+  )
+  if has_var_keyword:
+    return kwargs
+  named_params = {
+      name
+      for name, p in sig.parameters.items()
+      if p.kind
+      in (
+          inspect.Parameter.POSITIONAL_OR_KEYWORD,
+          inspect.Parameter.KEYWORD_ONLY,
+      )
+  }
+  filtered_kwargs = {k: v for k, v in kwargs.items() if k in named_params}
+  return filtered_kwargs
