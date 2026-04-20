@@ -363,7 +363,7 @@ def eval_step(model, batch, eval_metrics):
     )
 ```
 
-Here, `nnx.MultiMetric` helps us keep track of general training statistics, while we make our own dictionaries to hold historical values
+Here, `nnx.MultiMetric` helps us keep track of general training statistics, while we make our own dictionaries to hold historical values.
 
 ```python
 eval_metrics = nnx.MultiMetric(
@@ -394,6 +394,16 @@ learning_rate = 1.5e-3
 num_epochs = 10
 ```
 
+Although we'll want full dropout randomization for training, we'll want to evalaute our model without dropout by setting the `deterministic=True` flags. We'll make two views of our model (`train_model` and `eval_model`): one with each flag setting.
+
+```python
+model = TransformerModel(sequence_length, vocab_size, embed_dim, latent_dim, num_heads, dropout_rate, rngs=rng)
+train_model = nnx.view(model, deterministic=False)
+eval_model = nnx.view(model, deterministic=True)
+
+optimizer = nnx.ModelAndOptimizer(model, optax.adamw(learning_rate))
+```
+
 ```python
 bar_format = "{desc}[{n_fmt}/{total_fmt}]{postfix} [{elapsed}<{remaining}]"
 train_total_steps = len(train_data) // batch_size
@@ -418,7 +428,7 @@ def evaluate_model(epoch):
 
     eval_metrics.reset()  # Reset the eval metrics
     for val_batch in val_loader:
-        eval_step(model, val_batch, eval_metrics)
+        eval_step(eval_model, val_batch, eval_metrics)
 
     for metric, value in eval_metrics.compute().items():
         eval_metrics_history[f'test_{metric}'].append(value)
@@ -426,14 +436,6 @@ def evaluate_model(epoch):
     print(f"[test] epoch: {epoch + 1}/{num_epochs}")
     print(f"- total loss: {eval_metrics_history['test_loss'][-1]:0.4f}")
     print(f"- Accuracy: {eval_metrics_history['test_accuracy'][-1]:0.4f}")
-```
-
-```python
-model = TransformerModel(sequence_length, vocab_size, embed_dim, latent_dim, num_heads, dropout_rate, rngs=rng)
-train_model = nnx.view(model, deterministic=False, use_running_average=False)
-eval_model = nnx.view(model, deterministic=True, use_running_average=True)
-
-optimizer = nnx.ModelAndOptimizer(model, optax.adamw(learning_rate))
 ```
 
 ## Start the Training!
