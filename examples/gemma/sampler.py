@@ -223,8 +223,8 @@ class Sampler:
     last_token = last_token.reshape((batch_size, 1))
 
     transformer = nnx.merge(graphdef, params)
-    transformer = nnx.capture(transformer, nnx.Intermediate)
-    (logits, cache), intermediates = transformer(
+    forward = nnx.capture(transformer, nnx.Intermediate)
+    (logits, cache), intermediates = forward(
         last_token,
         step_positions,
         sampler_state.cache,

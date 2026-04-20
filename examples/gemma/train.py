@@ -178,9 +178,10 @@ def jax_train_step(
     """loss function used for training."""
     module = nnx.merge(graphdef, params, nondiff)
     if with_capture:
-      module = nnx.capture(module, nnx.Intermediate)
-
-    output = module(
+      forward = nnx.capture(module, nnx.Intermediate)
+    else:
+      forward = module
+    output = forward(
         inputs,
         positions=inputs_positions,
         attention_mask=attention_mask,
@@ -251,9 +252,10 @@ def nnx_train_step(
   def loss_fn(model, rngs):
     """loss function used for training."""
     if with_capture:
-      model = nnx.capture(model, nnx.Intermediate)
-
-    output = model(
+      forward = nnx.capture(model, nnx.Intermediate)
+    else:
+      forward = model
+    output = forward(
         inputs,
         positions=inputs_positions,
         attention_mask=attention_mask,
