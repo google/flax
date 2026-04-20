@@ -21,18 +21,28 @@ We step through an encoder-decoder transformer in JAX and train a model for Engl
 # !pip install tiktoken grain flax optax
 ```
 
+Standard library and data handling imports:
+
 ```python
 import pathlib
 import random
 import string
 import re
 import numpy as np
+```
 
+JAX, Flax, and training framework imports:
+
+```python
 import jax.numpy as jnp
 import optax
 
 from flax import nnx
+```
 
+Tokenizer (`tiktoken`), data loader (`grain`), and progress bar (`tqdm`):
+
+```python
 import tiktoken
 import grain.python as grain
 import tqdm
@@ -91,7 +101,7 @@ print(f"{len(test_pairs)} test pairs")
 tokenizer = tiktoken.get_encoding("cl100k_base")
 ```
 
-We strip out punctuation to keep things simple and in line with the original tutorial - the `[` `]` are kept in so that our `[start]` and `[end]` formatting is preserved.
+We strip out punctuation to keep things simple and in line with the original tutorial - the `[` `]` are kept in so that our `[start]` and `[end]` formatting is preserved. We also record the vocabulary size from the tokenizer and fix the maximum sequence length for all inputs.
 
 ```python
 strip_chars = string.punctuation + "¿"
@@ -102,11 +112,15 @@ vocab_size = tokenizer.n_vocab
 sequence_length = 20
 ```
 
+`custom_standardization` lowercases a string and removes the punctuation characters defined above:
+
 ```python
 def custom_standardization(input_string):
     lowercase = input_string.lower()
     return re.sub(f"[{re.escape(strip_chars)}]", "", lowercase)
 ```
+
+`tokenize_and_pad` encodes a string into token IDs, truncates to `max_length` if needed, and zero-pads shorter sequences so every example is the same fixed length:
 
 ```python
 def tokenize_and_pad(text, tokenizer, max_length):
@@ -114,6 +128,11 @@ def tokenize_and_pad(text, tokenizer, max_length):
     padded = tokens + [0] * (max_length - len(tokens)) if len(tokens) < max_length else tokens ##assumes list-like - (https://github.com/openai/tiktoken/blob/main/tiktoken/core.py#L81 current tiktoken out)
     return padded
 ```
+
+`format_dataset` standardizes and tokenizes both the English and Spanish strings, then returns three arrays:
+- `encoder_inputs` — the full tokenized English sentence.
+- `decoder_inputs` — the Spanish sentence shifted right by one (all tokens except the last), used as the decoder prompt at each step.
+- `target_output` — the Spanish sentence shifted left by one (all tokens except the first), used as the prediction target.
 
 ```python
 def format_dataset(eng, spa, tokenizer, sequence_length):
@@ -127,6 +146,8 @@ def format_dataset(eng, spa, tokenizer, sequence_length):
             "target_output": spa[1:],
             }
 ```
+
+Apply the preprocessing to every split to produce the final in-memory datasets:
 
 ```python
 train_data = [format_dataset(eng, spa, tokenizer, sequence_length) for eng, spa in train_pairs]
@@ -148,7 +169,9 @@ The output should look something like
 
 ## Define Transformer components: Encoder, Decoder, Positional Embed
 
-In many ways this is very similar to the original source, with `ops` changing to `jnp` and `keras` or `layers` becoming `nnx`. Certain module-specific arguments come and go, like the rngs attached to most things in the updated version, and decode=False in the MultiHeadAttention call.
+In many ways this is very similar to the original source, with `ops` changing to `jnp` and `keras` or `layers` becoming `nnx`. Certain module-specific arguments come and go, like the rngs attached to most things in the updated version, and `decode=False` in the `MultiHeadAttention` call.
+
+`TransformerEncoder` implements a standard encoder block: self-attention over the input sequence followed by a two-layer feed-forward projection, with a residual connection and layer norm after each sub-layer.
 
 ```python
 class TransformerEncoder(nnx.Module):
@@ -177,8 +200,11 @@ class TransformerEncoder(nnx.Module):
         proj_input = self.layernorm_1(inputs + attention_output)
         proj_output = self.dense_proj(proj_input)
         return self.layernorm_2(proj_input + proj_output)
+```
 
+`PositionalEmbedding` combines two learned embedding tables: one maps token IDs to vectors, the other maps position indices (0, 1, 2, …) to vectors. Their sum gives each token both a semantic and a positional representation. `compute_mask` returns a boolean array that marks non-padding tokens (anything that is not token ID 0).
 
+```python
 class PositionalEmbedding(nnx.Module):
     def __init__(self, sequence_length: int, vocab_size: int, embed_dim: int, rngs: nnx.Rngs, **kwargs):
         self.token_embeddings = nnx.Embed(num_embeddings=vocab_size, features=embed_dim, rngs=rngs)
@@ -199,7 +225,15 @@ class PositionalEmbedding(nnx.Module):
             return None
         else:
             return jnp.not_equal(inputs, 0)
+```
 
+`TransformerDecoder` implements the decoder block with two attention layers:
+- `attention_1` is masked self-attention over the target sequence. A causal mask prevents each position from attending to future tokens, which is essential so the model can only use tokens it has already generated when predicting the next one.
+- `attention_2` is cross-attention where queries come from the decoder and keys/values come from the encoder output, letting the decoder attend to the full source sentence at every step.
+
+Each attention layer is followed by a residual connection, layer norm, and a shared feed-forward projection.
+
+```python
 class TransformerDecoder(nnx.Module):
     def __init__(self, embed_dim: int, latent_dim: int, num_heads: int, rngs: nnx.Rngs, **kwargs):
         self.embed_dim = embed_dim
@@ -241,7 +275,10 @@ class TransformerDecoder(nnx.Module):
         return self.layernorm_3(out_2 + proj_output)
 ```
 
-Here we finally use our earlier encoder, decoder, and positional embed classes to construct the Model that we'll train and later use for inference.
+`TransformerModel` wires all the components together into the full encoder-decoder architecture. The same `positional_embedding` layer is reused for both the source and target sequences. The forward pass:
+1. Embeds and positionally encodes the English (`encoder_inputs`) tokens and passes them through the encoder.
+2. Embeds and positionally encodes the Spanish (`decoder_inputs`) tokens, passes them through the decoder along with the encoder output, and applies dropout.
+3. Projects the decoder output to a distribution over the vocabulary with a final linear layer.
 
 ```python
 class TransformerModel(nnx.Module):
@@ -335,7 +372,9 @@ def compute_loss(logits, labels):
     return jnp.mean(loss)
 ```
 
-While in the original tutorial most of the model and training details happen inside keras, we make them explicit here in our step functions, which are later used in `train_one_epoch` and `eval_model`.
+While in the original tutorial most of the model and training details happen inside keras, we make them explicit here in our step functions, which are later used in `train_one_epoch` and `evaluate_model`.
+
+`train_step` runs a single forward pass, computes the loss, calculates gradients with `nnx.value_and_grad`, and applies them via the optimizer. It is JIT-compiled for performance.
 
 ```python
 @nnx.jit
@@ -349,7 +388,11 @@ def train_step(model, optimizer, batch):
     loss, grads = grad_fn(model, jnp.array(batch["encoder_inputs"]), jnp.array(batch["decoder_inputs"]), jnp.array(batch["target_output"]))
     optimizer.update(grads)
     return loss
+```
 
+`eval_step` runs a forward pass without updating weights and accumulates loss and accuracy into `eval_metrics`:
+
+```python
 @nnx.jit
 def eval_step(model, batch, eval_metrics):
     logits = model(jnp.array(batch["encoder_inputs"]), jnp.array(batch["decoder_inputs"]))
@@ -363,7 +406,7 @@ def eval_step(model, batch, eval_metrics):
     )
 ```
 
-Here, `nnx.MultiMetric` helps us keep track of general training statistics, while we make our own dictionaries to hold historical values.
+`nnx.MultiMetric` accumulates loss and accuracy across batches. Separate history dictionaries record per-epoch values for later plotting:
 
 ```python
 eval_metrics = nnx.MultiMetric(
@@ -381,6 +424,13 @@ eval_metrics_history = {
 }
 ```
 
+Key hyperparameters for the model and training run:
+- `embed_dim` — dimensionality of token and position embeddings.
+- `latent_dim` — width of the feed-forward projection inside each encoder/decoder block.
+- `num_heads` — number of attention heads.
+- `dropout_rate` — fraction of activations dropped during training.
+- `learning_rate` / `num_epochs` — AdamW step size and training duration.
+
 ```python
 ## Hyperparameters
 rng = nnx.Rngs(0)
@@ -394,7 +444,7 @@ learning_rate = 1.5e-3
 num_epochs = 10
 ```
 
-Although we'll want full dropout randomization for training, we'll want to evalaute our model without dropout by setting the `deterministic=True` flags. We'll make two views of our model (`train_model` and `eval_model`): one with each flag setting.
+Although we'll want full dropout randomization for training, we'll want to evaluate our model without dropout by setting the `deterministic=True` flag. We'll make two views of our model (`train_model` and `eval_model`): one with each flag setting. Both views share the same underlying parameters, so a weight update through `train_model` is immediately visible when running `eval_model`.
 
 ```python
 model = TransformerModel(sequence_length, vocab_size, embed_dim, latent_dim, num_heads, dropout_rate, rngs=rng)
@@ -403,6 +453,8 @@ eval_model = nnx.view(model, deterministic=True)
 
 optimizer = nnx.ModelAndOptimizer(model, optax.adamw(learning_rate))
 ```
+
+`train_one_epoch` iterates over all training batches, calls `train_step` on each, and logs the per-step loss. `evaluate_model` resets the accumulated metrics, runs `eval_step` over the entire validation set, then prints and records the epoch-level loss and accuracy:
 
 ```python
 bar_format = "{desc}[{n_fmt}/{total_fmt}]{postfix} [{elapsed}<{remaining}]"
