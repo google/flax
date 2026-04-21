@@ -1354,6 +1354,13 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
 
     _remap_sharding_metadata(metadata)
 
+    hook_keys = ['on_get_value', 'on_set_value', 'on_create_value', 'on_add_axis', 'on_remove_axis']
+    if any(k in metadata and metadata[k] for k in hook_keys):
+      warnings.warn(
+        'Variable hooks are deprecated. Create your own Variable type and '
+        'overload `get_value` and `set_value` instead.'
+      )
+
     # run create_value hooks
     if 'on_create_value' in metadata:
       hooks = metadata['on_create_value']
@@ -2259,6 +2266,12 @@ def with_metadata(
   ] = (),
   **metadata: tp.Any,
 ) -> F:
+  if on_set_value or on_get_value or on_create_value or on_add_axis or on_remove_axis:
+    warnings.warn(
+      'Variable hooks are deprecated in favor of users creating their own '
+      'Variable types and overloading `get_value` and `set_value` instead.'
+    )
+
   if on_set_value:
     if callable(on_set_value):
       on_set_value = (on_set_value,)
