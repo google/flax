@@ -125,6 +125,12 @@ class LSTMCell(RNNCellBase):
       dtype.
     keep_rngs: whether to store the input rngs as attribute.
     rngs: rng key.
+    kernel_metadata: Optional metadata dictionary to set when initializing
+      the weight matrix.
+    recurrent_kernel_metadata: Optional metadata dictionary to set when initializing
+      the recurrent weight matrix.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
     preferred_element_type: Optional parameter controls the data type output by
       the dot product. This argument is passed to ``dot_general`` function.
       See ``jax.lax.dot`` for details.
