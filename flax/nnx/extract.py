@@ -1137,3 +1137,8 @@ def filter_kwargs(f, **kwargs):
   }
   filtered_kwargs = {k: v for k, v in kwargs.items() if k in named_params}
   return filtered_kwargs
+
+def update_captures(captures: list[variablelib.Capture]):
+  for capture in captures:
+    variable, update = capture.ref.obj, capture.variable
+    variable.update_from_state(update)
