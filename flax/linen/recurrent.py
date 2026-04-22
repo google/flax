@@ -121,7 +121,7 @@ class LSTMCell(RNNCellBase):
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
 
-  features: int
+  features: int  # pyrefly: ignore [bad-class-definition]
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Initializer = default_kernel_init
@@ -199,7 +199,7 @@ class LSTMCell(RNNCellBase):
 class DenseParams(Module):
   """Dummy module for creating parameters matching ``flax.linen.Dense``."""
 
-  features: int
+  features: int  # pyrefly: ignore [bad-class-definition]
   use_bias: bool = True
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
@@ -268,7 +268,7 @@ class OptimizedLSTMCell(RNNCellBase):
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
 
-  features: int
+  features: int  # pyrefly: ignore [bad-class-definition]
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Initializer = default_kernel_init
@@ -432,7 +432,7 @@ class SimpleCell(RNNCellBase):
     residual: pre-activation residual connection (https://arxiv.org/abs/1801.06105).
   """
 
-  features: int
+  features: int  # pyrefly: ignore [bad-class-definition]
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Initializer = default_kernel_init
   recurrent_kernel_init: Initializer = initializers.orthogonal()
@@ -541,7 +541,7 @@ class GRUCell(RNNCellBase):
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
 
-  features: int
+  features: int  # pyrefly: ignore [bad-class-definition]
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Initializer = default_kernel_init
@@ -670,7 +670,7 @@ class MGUCell(RNNCellBase):
     reset_gate: flag for applying reset gating.
   """
 
-  features: int
+  features: int  # pyrefly: ignore [bad-class-definition]
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Initializer = default_kernel_init
@@ -801,8 +801,8 @@ class ConvLSTMCell(RNNCellBase):
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
 
-  features: int
-  kernel_size: Sequence[int]
+  features: int  # pyrefly: ignore [bad-class-definition]
+  kernel_size: Sequence[int]  # pyrefly: ignore [bad-class-definition]
   strides: Sequence[int] | None = None
   padding: str | Sequence[tuple[int, int]] = 'SAME'
   use_bias: bool = True
@@ -998,7 +998,7 @@ class RNN(Module):
       step. This argument is forwarded to ``nn.scan``.
   """
 
-  cell: RNNCellBase
+  cell: RNNCellBase  # pyrefly: ignore [bad-class-definition]
   time_major: bool = False
   return_carry: bool = False
   reverse: bool = False
@@ -1273,8 +1273,8 @@ class Bidirectional(Module):
     >>> out = layer.apply(variables, x)
   """
 
-  forward_rnn: RNNBase
-  backward_rnn: RNNBase
+  forward_rnn: RNNBase  # pyrefly: ignore [bad-class-definition]
+  backward_rnn: RNNBase  # pyrefly: ignore [bad-class-definition]
   merge_fn: Callable[[Array, Array], Array] = _concatenate
   time_major: bool = False
   return_carry: bool = False

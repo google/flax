@@ -48,10 +48,10 @@ class LayerIntermediates:
       try:
         if field.name.startswith('attn_'):
           step_value = getattr(
-              layer.attn, field.name.replace('attn_', '')
+              layer.attn, field.name.replace('attn_', '')  # pyrefly: ignore [missing-attribute]
           )[0]
         elif field.name.startswith('mlp_'):
-          step_value = getattr(layer.mlp, field.name.replace('mlp_', ''))[0]
+          step_value = getattr(layer.mlp, field.name.replace('mlp_', ''))[0]  # pyrefly: ignore [missing-attribute]
         else:
           step_value = getattr(layer, field.name)[0]
       except AttributeError as exc:
@@ -91,18 +91,18 @@ class TransformerIntermediates:
     if self.embeddings is not None:
       try:
         self.embeddings = self.embeddings.at[:, decoding_step + 1, ...].set(
-            transformer.embeddings[0][:, 0, ...]
+            transformer.embeddings[0][:, 0, ...]  # pyrefly: ignore [missing-attribute]
         )
       except AttributeError as exc:
         raise ValueError(
             'Embeddings are not in the step intermediates.'
         ) from exc
-    if len(self.layers) != len(transformer.layers):
+    if len(self.layers) != len(transformer.layers):  # pyrefly: ignore [missing-attribute]
       raise ValueError(
           'Number of layers in the transformer and intermediates do not match.'
       )
     for layer_intermediates, layer_module in zip(
-        self.layers, transformer.layers
+        self.layers, transformer.layers  # pyrefly: ignore [missing-attribute]
     ):
       layer_intermediates.merge(decoding_step, layer_module)
 

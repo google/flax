@@ -159,7 +159,7 @@ def normalize_batch_metrics(batch_metrics: Sequence[Metrics]) -> Metrics:
   # Here we sum the metrics that were already summed per batch.
   total_loss = np.sum([metrics.loss for metrics in batch_metrics])
   total_accuracy = np.sum([metrics.accuracy for metrics in batch_metrics])
-  total = np.sum([metrics.count for metrics in batch_metrics])
+  total = np.sum([metrics.count for metrics in batch_metrics])  # pyrefly: ignore [no-matching-overload]
   # Divide each metric by the total number of items in the data set.
   return Metrics(
       loss=total_loss.item() / total, accuracy=total_accuracy.item() / total

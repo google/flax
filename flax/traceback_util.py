@@ -23,7 +23,7 @@ from flax import config
 
 # Globals:
 # Whether to filter flax frames from traceback.
-_flax_filter_tracebacks = config.flax_filter_frames
+_flax_filter_tracebacks = config.flax_filter_frames  # pyrefly: ignore [missing-attribute]
 # Flax specific set of paths to exclude from tracebacks.
 _flax_exclusions = set()
 

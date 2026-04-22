@@ -31,7 +31,10 @@ from flax import version
 __version__: str = version.__version__
 del version
 
-# DO NOT REMOVE - Marker for internal deprecated API.
+try:
+  from flax.deprecated import nn  # pyrefly: ignore [missing-import]
+except ImportError:
+  pass
 
 # DO NOT REMOVE - Marker for internal logging.
 

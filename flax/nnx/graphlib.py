@@ -150,7 +150,7 @@ LeafType = tp.Union[
 GraphFlatState = FlatState[LeafType]
 
 
-def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[LeafType]:
+def is_node_leaf(x: tp.Any) -> tpe.TypeGuard[LeafType]:  # pyrefly: ignore [not-a-type, unsupported-operation]
   return isinstance(x, LeafType) or variablelib.is_array_ref(x)  # type: ignore[misc, arg-type]
 
 
@@ -1558,13 +1558,13 @@ GRAPH_CONTEXT = GraphContext()
 
 
 class set_graph_mode(BaseConfigContext):
-  get_default = classmethod(lambda cls: config.nnx_graph_mode)
-  get_stack = classmethod(lambda cls: GRAPH_CONTEXT.graph_mode_stack)
+  get_default = classmethod(lambda cls: config.nnx_graph_mode)  # pyrefly: ignore [bad-override]
+  get_stack = classmethod(lambda cls: GRAPH_CONTEXT.graph_mode_stack)  # pyrefly: ignore [bad-override]
 
 
 class set_graph_updates(BaseConfigContext):
-  get_default = classmethod(lambda cls: config.nnx_graph_updates)
-  get_stack = classmethod(lambda cls: GRAPH_CONTEXT.graph_updates_stack)
+  get_default = classmethod(lambda cls: config.nnx_graph_updates)  # pyrefly: ignore [bad-override]
+  get_stack = classmethod(lambda cls: GRAPH_CONTEXT.graph_updates_stack)  # pyrefly: ignore [bad-override]
 
 
 @contextlib.contextmanager
@@ -1715,7 +1715,7 @@ class SplitContext:
   ) -> tuple[GraphDef[A], State]: ...
 
   @tp.overload
-  def split(
+  def split(  # pyrefly: ignore [inconsistent-overload]
     self,
     graph_node: A,
     first: filterlib.Filter,
@@ -1776,7 +1776,7 @@ class SplitContext:
   ) -> tuple[
     GraphDef[A],
     FlatState[tp.Any],
-    tpe.Unpack[tuple[FlatState[tp.Any], ...]],
+    tpe.Unpack[tuple[FlatState[tp.Any], ...]],  # pyrefly: ignore [unsupported-operation]
   ]: ...
 
   def flatten(  # type: ignore[invalid-annotation]
@@ -1787,7 +1787,7 @@ class SplitContext:
   ) -> tuple[
     GraphDef[A],
     FlatState[tp.Any] | list[tp.Any],
-    tpe.Unpack[tuple[FlatState[tp.Any], ...]],
+    tpe.Unpack[tuple[FlatState[tp.Any], ...]],  # pyrefly: ignore [unsupported-operation]
   ]:
     if not with_paths and filters:
       raise ValueError('Cannot use filters with with_paths=False')
@@ -1857,7 +1857,7 @@ class SplitContext:
       flat_states = _split_state(flat_state, filters)
       return graphdef, *flat_states  # type: ignore[bad-return-type]
     else:
-      return graphdef, leaves
+      return graphdef, leaves  # pyrefly: ignore [bad-return]
 
 
 @contextlib.contextmanager
@@ -2233,7 +2233,7 @@ def current_update_context(tag: tp.Hashable) -> UpdateContext:
 def _split_state(
   state: FlatState[tp.Any],
   filters: tuple[filterlib.Filter, ...],
-) -> tuple[FlatState[tp.Any], tpe.Unpack[tuple[FlatState[tp.Any], ...]]]:
+) -> tuple[FlatState[tp.Any], tpe.Unpack[tuple[FlatState[tp.Any], ...]]]:  # pyrefly: ignore [unsupported-operation]
   if not filters:
     return (state,)  # type: ignore[bad-return-type]
   states = state.split(*filters)
@@ -2262,14 +2262,14 @@ def split(  # type: ignore[invalid-annotation]
 ) -> tuple[
   GraphDef[A],
   State,
-  tpe.Unpack[tuple[State, ...]],
+  tpe.Unpack[tuple[State, ...]],  # pyrefly: ignore [unsupported-operation]
 ]: ...
 def split(  # type: ignore[invalid-annotation]
   node: A, *filters: filterlib.Filter, graph: bool | None = None,
 ) -> tuple[
   GraphDef[A],
   State,
-  tpe.Unpack[tuple[State, ...]],
+  tpe.Unpack[tuple[State, ...]],  # pyrefly: ignore [unsupported-operation]
 ]:
   """Split a graph node into a :class:`GraphDef` and one or more :class:`State`s. State is
   a ``Mapping`` from strings or integers to ``Variables``, Arrays or nested States. GraphDef

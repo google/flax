@@ -45,7 +45,7 @@ class ModelTest(parameterized.TestCase):
     seq_len = 3
     embedding_size = 4
     hidden_size = 5
-    model = models.SimpleLSTM(5)
+    model = models.SimpleLSTM(5)  # pyrefly: ignore [bad-argument-type, missing-argument]
     rng = jax.random.key(0)
     inputs = np.random.RandomState(0).normal(
         size=[batch_size, seq_len, embedding_size]

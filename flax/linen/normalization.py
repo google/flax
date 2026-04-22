@@ -1057,7 +1057,7 @@ class SpectralNorm(Module):
       when performing spectral normalization.
   """
 
-  layer_instance: Module
+  layer_instance: Module  # pyrefly: ignore [bad-class-definition]
   n_steps: int = 1
   epsilon: float = 1e-12
   dtype: Dtype | None = None
@@ -1132,7 +1132,7 @@ class SpectralNorm(Module):
         value = jnp.reshape(value, (-1, value.shape[-1]))
 
     u_var_name = (
-      self.layer_instance.name
+      self.layer_instance.name  # pyrefly: ignore [unsupported-operation]
       + '/'
       + '/'.join(dict_key.key for dict_key in path[1:])
       + '/u'
@@ -1149,7 +1149,7 @@ class SpectralNorm(Module):
     )
     u0 = u_var.value
     sigma_var_name = (
-      self.layer_instance.name
+      self.layer_instance.name  # pyrefly: ignore [unsupported-operation]
       + '/'
       + '/'.join(dict_key.key for dict_key in path[1:])
       + '/sigma'
@@ -1166,7 +1166,7 @@ class SpectralNorm(Module):
       u0 = _l2_normalize(jnp.matmul(v0, value), eps=self.epsilon)
 
     u0 = jax.lax.stop_gradient(u0)
-    v0 = jax.lax.stop_gradient(v0)
+    v0 = jax.lax.stop_gradient(v0)  # pyrefly: ignore [unbound-name]
 
     sigma = jnp.matmul(jnp.matmul(v0, value), jnp.transpose(u0))[0, 0]
 
@@ -1297,7 +1297,7 @@ class WeightNorm(Module):
       By default, ``variable_filter={'kernel'}``.
   """
 
-  layer_instance: Module
+  layer_instance: Module  # pyrefly: ignore [bad-class-definition]
   epsilon: float = 1e-12
   dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
@@ -1348,7 +1348,7 @@ class WeightNorm(Module):
     """
     value = jnp.asarray(vs)
     str_path = (
-        self.layer_instance.name
+        self.layer_instance.name  # pyrefly: ignore [unsupported-operation]
         + '/'
         + jax.tree_util.keystr(path[1:], simple=True, separator='/')
     )

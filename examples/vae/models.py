@@ -22,14 +22,14 @@ import jax.numpy as jnp
 class Encoder(nn.Module):
   """VAE Encoder."""
 
-  latents: int
+  latents: int  # pyrefly: ignore [bad-class-definition]
 
   @nn.compact
   def __call__(self, x):
-    x = nn.Dense(500, name='fc1')(x)
+    x = nn.Dense(500, name='fc1')(x)  # pyrefly: ignore [bad-argument-type, missing-argument]
     x = nn.relu(x)
-    mean_x = nn.Dense(self.latents, name='fc2_mean')(x)
-    logvar_x = nn.Dense(self.latents, name='fc2_logvar')(x)
+    mean_x = nn.Dense(self.latents, name='fc2_mean')(x)  # pyrefly: ignore [bad-argument-type, missing-argument]
+    logvar_x = nn.Dense(self.latents, name='fc2_logvar')(x)  # pyrefly: ignore [bad-argument-type, missing-argument]
     return mean_x, logvar_x
 
 
@@ -38,9 +38,9 @@ class Decoder(nn.Module):
 
   @nn.compact
   def __call__(self, z):
-    z = nn.Dense(500, name='fc1')(z)
+    z = nn.Dense(500, name='fc1')(z)  # pyrefly: ignore [bad-argument-type, missing-argument]
     z = nn.relu(z)
-    z = nn.Dense(784, name='fc2')(z)
+    z = nn.Dense(784, name='fc2')(z)  # pyrefly: ignore [bad-argument-type, missing-argument]
     return z
 
 
@@ -50,7 +50,7 @@ class VAE(nn.Module):
   latents: int = 20
 
   def setup(self):
-    self.encoder = Encoder(self.latents)
+    self.encoder = Encoder(self.latents)  # pyrefly: ignore [bad-argument-type, missing-argument]
     self.decoder = Decoder()
 
   def __call__(self, x, z_rng):

@@ -577,7 +577,7 @@ class Cursor(Generic[A]):
     return s
 
   def __len__(self):
-    return len(self._obj)
+    return len(self._obj)  # pyrefly: ignore [bad-argument-type]
 
   def __iter__(self):
     if isinstance(self._obj, (tuple, list)):
@@ -622,7 +622,7 @@ class Cursor(Generic[A]):
     return divmod(self._obj, other)
 
   def __pow__(self, other):
-    return pow(self._obj, other)
+    return pow(self._obj, other)  # pyrefly: ignore [no-matching-overload]
 
   def __lshift__(self, other):
     return self._obj << other
@@ -682,19 +682,19 @@ class Cursor(Generic[A]):
     return other | self._obj
 
   def __neg__(self):
-    return -self._obj
+    return -self._obj  # pyrefly: ignore [unsupported-operation]
 
   def __pos__(self):
-    return +self._obj
+    return +self._obj  # pyrefly: ignore [unsupported-operation]
 
   def __abs__(self):
-    return abs(self._obj)
+    return abs(self._obj)  # pyrefly: ignore [bad-argument-type]
 
   def __invert__(self):
-    return ~self._obj
+    return ~self._obj  # pyrefly: ignore [unsupported-operation]
 
   def __round__(self, ndigits=None):
-    return round(self._obj, ndigits)
+    return round(self._obj, ndigits)  # pyrefly: ignore [no-matching-overload]
 
   def __lt__(self, other):
     return self._obj < other

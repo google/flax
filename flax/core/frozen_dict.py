@@ -152,7 +152,7 @@ class FrozenDict(Mapping[K, V]):
     """
     value = self[key]
     new_dict = dict(self._dict)
-    new_dict.pop(key)
+    new_dict.pop(key)  # pyrefly: ignore [bad-argument-type]
     new_self = type(self)(new_dict)
     return new_self, value
 

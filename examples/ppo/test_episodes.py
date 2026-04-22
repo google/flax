@@ -58,4 +58,4 @@ def policy_test(
       state = next_state
       if done:
         break
-  return total_reward
+  return total_reward  # pyrefly: ignore [unbound-name]

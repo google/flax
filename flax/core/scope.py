@@ -140,7 +140,7 @@ def _fold_in_static(
     return rng
   m = hashlib.sha1()
   for x in data:
-    if config.flax_fix_rng_separator:
+    if config.flax_fix_rng_separator:  # pyrefly: ignore [missing-attribute]
       # encode seperate to avoid collisions like for example: ("ab", "c") and ("a", "bc")
       m.update(b'\00')
     if isinstance(x, str):
@@ -521,14 +521,14 @@ class Scope:
     xs = {
       k: v for k, v in self._variables.items() if in_filter(self.mutable, k)
     }
-    if config.flax_return_frozendict:
+    if config.flax_return_frozendict:  # pyrefly: ignore [missing-attribute]
       return freeze(xs)
     return xs
 
   def variables(self) -> VariableDict | dict[str, Any]:
     """Returns an immutable copy of the variables belonging to this Scope."""
     self._populate_collections()
-    if config.flax_return_frozendict:
+    if config.flax_return_frozendict:  # pyrefly: ignore [missing-attribute]
       return freeze(self._variables)
     return self._variables
 
@@ -648,7 +648,7 @@ class Scope:
       debug_path=self.debug_path + (name,),
       flags=self.flags,
     )
-    scope.rng_counters = rng_counters
+    scope.rng_counters = rng_counters  # pyrefly: ignore [bad-assignment]
     return scope
 
   def child(

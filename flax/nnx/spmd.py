@@ -232,7 +232,7 @@ def as_abstract(
       else:
         mesh = jax.sharding.get_abstract_mesh()
       specs = get_var_pspec(x)
-      sharding = jax.sharding.NamedSharding(mesh, specs)
+      sharding = jax.sharding.NamedSharding(mesh, specs)  # pyrefly: ignore [bad-argument-type]
       abs_var = x.replace(
           jax.ShapeDtypeStruct(value.shape, value.dtype, sharding=sharding)
       )

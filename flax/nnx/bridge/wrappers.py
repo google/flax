@@ -171,7 +171,7 @@ class ToNNX(Module):
     maybe_method = getattr(type(self.to_nnx__module), name, None)
     if callable(maybe_method):
       method = partial(self.__call__, method=maybe_method)
-      method.__self__ = self
+      method.__self__ = self  # pyrefly: ignore [missing-attribute]
       return method
     return super().__getattribute__(name)
 
@@ -317,7 +317,7 @@ class ToLinen(linen.Module):
     A stateful NNX module that behaves the same as the wrapped Linen module.
   """
 
-  nnx_class: tp.Callable[..., Module]
+  nnx_class: tp.Callable[..., Module]  # pyrefly: ignore [bad-class-definition]
   args: tp.Sequence = ()
   kwargs: tp.Mapping[str, tp.Any] = FrozenDict({})
   skip_rng: bool = False
@@ -389,7 +389,7 @@ class ToLinen(linen.Module):
     maybe_method = getattr(self.nnx_class, name, None)
     if callable(maybe_method):
       method = partial(self.__call__, nnx_method=maybe_method)
-      method.__self__ = self
+      method.__self__ = self  # pyrefly: ignore [missing-attribute]
       return method
     return super().__getattribute__(name)
 
@@ -451,8 +451,8 @@ def to_linen(
     **kwargs,
 ):
   """Shortcut of `nnx.bridge.ToLinen` if user is not changing any of its default fields."""
-  return ToLinen(
-      nnx_class,
+  return ToLinen(  # pyrefly: ignore [missing-argument]
+      nnx_class,  # pyrefly: ignore [bad-argument-type]
       args=args,
       kwargs=FrozenDict(kwargs),
       metadata_fn=metadata_fn,
@@ -529,6 +529,6 @@ def to_linen_class(
             **linen_kwargs,
         )
 
-      cls.__init__ = __init__
+      cls.__init__ = __init__  # pyrefly: ignore [bad-assignment]
 
   return ToLinenPartial

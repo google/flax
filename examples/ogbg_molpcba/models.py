@@ -26,16 +26,16 @@ def add_graphs_tuples(
 ) -> jraph.GraphsTuple:
   """Adds the nodes, edges and global features from other_graphs to graphs."""
   return graphs._replace(
-      nodes=graphs.nodes + other_graphs.nodes,
-      edges=graphs.edges + other_graphs.edges,
-      globals=graphs.globals + other_graphs.globals,
+      nodes=graphs.nodes + other_graphs.nodes,  # pyrefly: ignore [unsupported-operation]
+      edges=graphs.edges + other_graphs.edges,  # pyrefly: ignore [unsupported-operation]
+      globals=graphs.globals + other_graphs.globals,  # pyrefly: ignore [unsupported-operation]
   )
 
 
 class MLP(nn.Module):
   """A multi-layer perceptron."""
 
-  feature_sizes: Sequence[int]
+  feature_sizes: Sequence[int]  # pyrefly: ignore [bad-class-definition]
   dropout_rate: float = 0
   deterministic: bool = True
   activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
@@ -55,10 +55,10 @@ class MLP(nn.Module):
 class GraphNet(nn.Module):
   """A complete Graph Network model defined with Jraph."""
 
-  latent_size: int
-  num_mlp_layers: int
-  message_passing_steps: int
-  output_globals_size: int
+  latent_size: int  # pyrefly: ignore [bad-class-definition]
+  num_mlp_layers: int  # pyrefly: ignore [bad-class-definition]
+  message_passing_steps: int  # pyrefly: ignore [bad-class-definition]
+  output_globals_size: int  # pyrefly: ignore [bad-class-definition]
   dropout_rate: float = 0
   skip_connections: bool = True
   use_edge_model: bool = True
@@ -69,9 +69,9 @@ class GraphNet(nn.Module):
   def __call__(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     # We will first linearly project the original features as 'embeddings'.
     embedder = jraph.GraphMapFeatures(
-        embed_node_fn=nn.Dense(self.latent_size),
-        embed_edge_fn=nn.Dense(self.latent_size),
-        embed_global_fn=nn.Dense(self.latent_size),
+        embed_node_fn=nn.Dense(self.latent_size),  # pyrefly: ignore [bad-argument-type, missing-argument]
+        embed_edge_fn=nn.Dense(self.latent_size),  # pyrefly: ignore [bad-argument-type, missing-argument]
+        embed_global_fn=nn.Dense(self.latent_size),  # pyrefly: ignore [bad-argument-type, missing-argument]
     )
     processed_graphs = embedder(graphs)
 
@@ -80,8 +80,8 @@ class GraphNet(nn.Module):
     for _ in range(self.message_passing_steps):
       if self.use_edge_model:
         update_edge_fn = jraph.concatenated_args(
-            MLP(
-                mlp_feature_sizes,
+            MLP(  # pyrefly: ignore [missing-argument]
+                mlp_feature_sizes,  # pyrefly: ignore [bad-argument-type]
                 dropout_rate=self.dropout_rate,
                 deterministic=self.deterministic,
             )
@@ -90,24 +90,24 @@ class GraphNet(nn.Module):
         update_edge_fn = None
 
       update_node_fn = jraph.concatenated_args(
-          MLP(
-              mlp_feature_sizes,
+          MLP(  # pyrefly: ignore [missing-argument]
+              mlp_feature_sizes,  # pyrefly: ignore [bad-argument-type]
               dropout_rate=self.dropout_rate,
               deterministic=self.deterministic,
           )
       )
       update_global_fn = jraph.concatenated_args(
-          MLP(
-              mlp_feature_sizes,
+          MLP(  # pyrefly: ignore [missing-argument]
+              mlp_feature_sizes,  # pyrefly: ignore [bad-argument-type]
               dropout_rate=self.dropout_rate,
               deterministic=self.deterministic,
           )
       )
 
       graph_net = jraph.GraphNetwork(
-          update_node_fn=update_node_fn,
-          update_edge_fn=update_edge_fn,
-          update_global_fn=update_global_fn,
+          update_node_fn=update_node_fn,  # pyrefly: ignore [bad-argument-type]
+          update_edge_fn=update_edge_fn,  # pyrefly: ignore [bad-argument-type]
+          update_global_fn=update_global_fn,  # pyrefly: ignore [bad-argument-type]
       )
 
       if self.skip_connections:
@@ -127,7 +127,7 @@ class GraphNet(nn.Module):
     # Since our graph-level predictions will be at globals, we will
     # decode to get the required output logits.
     decoder = jraph.GraphMapFeatures(
-        embed_global_fn=nn.Dense(self.output_globals_size)
+        embed_global_fn=nn.Dense(self.output_globals_size)  # pyrefly: ignore [bad-argument-type, missing-argument]
     )
     processed_graphs = decoder(processed_graphs)
 
@@ -137,10 +137,10 @@ class GraphNet(nn.Module):
 class GraphConvNet(nn.Module):
   """A Graph Convolution Network + Pooling model defined with Jraph."""
 
-  latent_size: int
-  num_mlp_layers: int
-  message_passing_steps: int
-  output_globals_size: int
+  latent_size: int  # pyrefly: ignore [bad-class-definition]
+  num_mlp_layers: int  # pyrefly: ignore [bad-class-definition]
+  message_passing_steps: int  # pyrefly: ignore [bad-class-definition]
+  output_globals_size: int  # pyrefly: ignore [bad-class-definition]
   dropout_rate: float = 0
   skip_connections: bool = True
   layer_norm: bool = True
@@ -148,7 +148,7 @@ class GraphConvNet(nn.Module):
   pooling_fn: Callable[
       [jnp.ndarray, jnp.ndarray, jnp.ndarray],  # pytype: disable=annotation-type-mismatch  # jax-ndarray
       jnp.ndarray,
-  ] = jraph.segment_mean
+  ] = jraph.segment_mean  # pyrefly: ignore [bad-assignment]
 
   def pool(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     """Pooling operation, taken from Jraph."""
@@ -172,21 +172,21 @@ class GraphConvNet(nn.Module):
   @nn.compact
   def __call__(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     # We will first linearly project the original node features as 'embeddings'.
-    embedder = jraph.GraphMapFeatures(embed_node_fn=nn.Dense(self.latent_size))
+    embedder = jraph.GraphMapFeatures(embed_node_fn=nn.Dense(self.latent_size))  # pyrefly: ignore [bad-argument-type, missing-argument]
     processed_graphs = embedder(graphs)
 
     # Now, we will apply the GCN once for each message-passing round.
     for _ in range(self.message_passing_steps):
       mlp_feature_sizes = [self.latent_size] * self.num_mlp_layers
       update_node_fn = jraph.concatenated_args(
-          MLP(
-              mlp_feature_sizes,
+          MLP(  # pyrefly: ignore [missing-argument]
+              mlp_feature_sizes,  # pyrefly: ignore [bad-argument-type]
               dropout_rate=self.dropout_rate,
               deterministic=self.deterministic,
           )
       )
       graph_conv = jraph.GraphConvolution(
-          update_node_fn=update_node_fn, add_self_edges=True
+          update_node_fn=update_node_fn, add_self_edges=True  # pyrefly: ignore [bad-argument-type]
       )
 
       if self.skip_connections:
@@ -206,7 +206,7 @@ class GraphConvNet(nn.Module):
 
     # Now, we decode this to get the required output logits.
     decoder = jraph.GraphMapFeatures(
-        embed_global_fn=nn.Dense(self.output_globals_size)
+        embed_global_fn=nn.Dense(self.output_globals_size)  # pyrefly: ignore [bad-argument-type, missing-argument]
     )
     processed_graphs = decoder(processed_graphs)
 

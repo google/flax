@@ -320,7 +320,7 @@ def module_class_lift_transform(
 
   # Handle partially initialized module class constructors.
   if isinstance(module_class, functools.partial) and issubclass(
-    module_class.func, Module
+    module_class.func, Module  # pyrefly: ignore [bad-argument-type]
   ):
     partial_object = module_class
     module_class = module_class.func
@@ -682,7 +682,7 @@ def module_class_lift_transform_cached(
 
   # Handle partially initialized module class constructors.
   if isinstance(module_class, functools.partial) and issubclass(
-    module_class.func, Module
+    module_class.func, Module  # pyrefly: ignore [bad-argument-type]
   ):
     partial_object = module_class
     module_class = module_class.func

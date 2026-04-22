@@ -60,7 +60,7 @@ class Dropout(Module):
     rng_collection: the rng collection name to use when requesting an rng key.
   """
 
-  rate: float
+  rate: float  # pyrefly: ignore [bad-class-definition]
   broadcast_dims: Sequence[int] = ()
   deterministic: bool | None = None
   rng_collection: str = 'dropout'

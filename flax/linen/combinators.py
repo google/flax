@@ -89,7 +89,7 @@ class Sequential(Module):
     ValueError: If layers is not a sequence.
   """
 
-  layers: Sequence[Callable[..., Any]]
+  layers: Sequence[Callable[..., Any]]  # pyrefly: ignore [bad-class-definition]
 
   def __post_init__(self):
     if not isinstance(self.layers, Sequence):

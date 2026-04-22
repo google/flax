@@ -91,13 +91,13 @@ def dot_product_attention(
   depth = query.shape[-1]
   n = key.ndim
   # batch_dims is  <bs, <non-attention dims>, num_heads>
-  batch_dims = tuple(np.delete(range(n), axis + (n - 1,)))
+  batch_dims = tuple(np.delete(range(n), axis + (n - 1,)))  # pyrefly: ignore [unsupported-operation]
   # q & k -> (bs, <non-attention dims>, num_heads, <attention dims>, channels)
-  qk_perm = batch_dims + axis + (n - 1,)
+  qk_perm = batch_dims + axis + (n - 1,)  # pyrefly: ignore [unsupported-operation]
   key = key.transpose(qk_perm)
   query = query.transpose(qk_perm)
   # v -> (bs, <non-attention dims>, num_heads, channels, <attention dims>)
-  v_perm = batch_dims + (n - 1,) + axis
+  v_perm = batch_dims + (n - 1,) + axis  # pyrefly: ignore [unsupported-operation]
   value = value.transpose(v_perm)
 
   query = query / jnp.sqrt(depth).astype(dtype)
@@ -114,7 +114,7 @@ def dot_product_attention(
     attn_weights = attn_weights + bias
 
   # normalize the attention weights
-  norm_dims = tuple(range(attn_weights.ndim - len(axis), attn_weights.ndim))
+  norm_dims = tuple(range(attn_weights.ndim - len(axis), attn_weights.ndim))  # pyrefly: ignore [bad-argument-type]
   attn_weights = lax.exp(
     attn_weights
     - jax.scipy.special.logsumexp(attn_weights, axis=norm_dims, keepdims=True)
@@ -128,7 +128,7 @@ def dot_product_attention(
     keep_prob = 1.0 - dropout_rate
     if broadcast_dropout:
       # dropout is broadcast across the batch+head+non-attention dimension
-      dropout_dims = attn_weights.shape[-(2 * len(axis)) :]
+      dropout_dims = attn_weights.shape[-(2 * len(axis)) :]  # pyrefly: ignore [bad-argument-type]
       dropout_shape = tuple([1] * len(batch_dims_t)) + dropout_dims
       keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
     else:
@@ -139,7 +139,7 @@ def dot_product_attention(
     attn_weights = attn_weights * multiplier
 
   # compute the new values given the attention weights
-  wv_contracting_dims = (norm_dims, range(value.ndim - len(axis), value.ndim))
+  wv_contracting_dims = (norm_dims, range(value.ndim - len(axis), value.ndim))  # pyrefly: ignore [bad-argument-type]
   y = lax.dot_general(
     attn_weights,
     value,
@@ -285,9 +285,9 @@ def multi_head_dot_product_attention(
             'and attention dims.'
           )
         return CacheEntry(
-          key=jnp.zeros(full_shape, dtype),
-          value=jnp.zeros(full_shape, dtype),
-          i=jnp.zeros((), jnp.uint32),
+          key=jnp.zeros(full_shape, dtype),  # pyrefly: ignore [bad-argument-type]
+          value=jnp.zeros(full_shape, dtype),  # pyrefly: ignore [bad-argument-type]
+          i=jnp.zeros((), jnp.uint32),  # pyrefly: ignore [bad-argument-type]
         )
 
       cache_entry = init_fn
@@ -333,7 +333,7 @@ def multi_head_dot_product_attention(
   mask_components = []
 
   if causal_mask:
-    if cache and isinstance(cache_entry, CacheEntry):
+    if cache and isinstance(cache_entry, CacheEntry):  # pyrefly: ignore [unbound-name]
       bias_pre_shape = (1,) * (key.ndim - 1)
       attn_shape = tuple(np.take(key.shape, attention_axis))
       attn_size = np.prod(attn_shape)

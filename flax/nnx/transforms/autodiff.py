@@ -168,7 +168,7 @@ def _grad_general(
       if graph:
         diff_argnums = (argnums,) if isinstance(argnums, int) else argnums
         args_prefix = tuple(
-          i in diff_argnums for i in range(len(args))
+          i in diff_argnums for i in range(len(args))  # pyrefly: ignore [not-iterable]
         )
         args, kwargs = extract.to_tree2(
           (args, kwargs), prefix=(args_prefix, False),
@@ -898,7 +898,7 @@ def jvp(
     tangent_out = extract.from_tree2(tangent_out)
   extract.apply_variable_updates(primals, updates)
   if has_aux:
-    return primals_out, tangent_out, aux
+    return primals_out, tangent_out, aux  # pyrefly: ignore [unbound-name]
   else:
     return primals_out, tangent_out
 

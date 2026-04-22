@@ -103,8 +103,8 @@ class SamplerTest(parameterized.TestCase):
         final_logit_softcap=None,
         attention_types=[modules.AttentionType.GLOBAL] * num_layers,
         attn_logits_soft_cap=None,
-        use_post_attn_norm=None,
-        use_post_ffw_norm=None,
+        use_post_attn_norm=None,  # pyrefly: ignore [bad-argument-type]
+        use_post_ffw_norm=None,  # pyrefly: ignore [bad-argument-type]
     )
     with jax.set_mesh(self.mesh):
       transformer = transformer_lib.Transformer(
@@ -153,8 +153,8 @@ class SamplerTest(parameterized.TestCase):
         final_logit_softcap=None,
         attention_types=[modules.AttentionType.GLOBAL] * num_layers,
         attn_logits_soft_cap=None,
-        use_post_attn_norm=None,
-        use_post_ffw_norm=None,
+        use_post_attn_norm=None,  # pyrefly: ignore [bad-argument-type]
+        use_post_ffw_norm=None,  # pyrefly: ignore [bad-argument-type]
     )
     with jax.set_mesh(self.mesh):
       transformer = transformer_lib.Transformer(
@@ -193,8 +193,8 @@ class SamplerTest(parameterized.TestCase):
           final_logit_softcap=None,
           attention_types=[modules.AttentionType.GLOBAL] * num_layers,
           attn_logits_soft_cap=None,
-          use_post_attn_norm=None,
-          use_post_ffw_norm=None,
+          use_post_attn_norm=None,  # pyrefly: ignore [bad-argument-type]
+          use_post_ffw_norm=None,  # pyrefly: ignore [bad-argument-type]
       )
     with jax.set_mesh(self.mesh):
       transformer = transformer_lib.Transformer(
@@ -234,8 +234,8 @@ class SamplerTest(parameterized.TestCase):
         head_dim=64,
         final_logit_softcap=None,
         attention_types=[],
-        use_post_attn_norm=None,
-        use_post_ffw_norm=None,
+        use_post_attn_norm=None,  # pyrefly: ignore [bad-argument-type]
+        use_post_ffw_norm=None,  # pyrefly: ignore [bad-argument-type]
     )
     with jax.set_mesh(self.mesh):
       transformer = transformer_lib.Transformer(
@@ -284,8 +284,8 @@ class SamplerTest(parameterized.TestCase):
         head_dim=64,
         final_logit_softcap=None,
         attention_types=[modules.AttentionType.GLOBAL] * num_layers,
-        use_post_attn_norm=None,
-        use_post_ffw_norm=None,
+        use_post_attn_norm=None,  # pyrefly: ignore [bad-argument-type]
+        use_post_ffw_norm=None,  # pyrefly: ignore [bad-argument-type]
     )
     with jax.set_mesh(self.mesh):
       transformer = transformer_lib.Transformer(
@@ -345,8 +345,8 @@ class SamplerTest(parameterized.TestCase):
         head_dim=64,
         final_logit_softcap=None,
         attention_types=[],
-        use_post_attn_norm=None,
-        use_post_ffw_norm=None,
+        use_post_attn_norm=None,  # pyrefly: ignore [bad-argument-type]
+        use_post_ffw_norm=None,  # pyrefly: ignore [bad-argument-type]
     )
     with jax.set_mesh(self.mesh):
       transformer = transformer_lib.Transformer(
@@ -387,8 +387,8 @@ class SamplerTest(parameterized.TestCase):
         head_dim=64,
         final_logit_softcap=None,
         attention_types=[],
-        use_post_attn_norm=None,
-        use_post_ffw_norm=None,
+        use_post_attn_norm=None,  # pyrefly: ignore [bad-argument-type]
+        use_post_ffw_norm=None,  # pyrefly: ignore [bad-argument-type]
     )
     with jax.set_mesh(self.mesh):
       transformer = transformer_lib.Transformer(
@@ -436,9 +436,9 @@ class SamplerTest(parameterized.TestCase):
         head_dim=64,
         final_logit_softcap=None,
         attention_types=[modules.AttentionType.GLOBAL] * num_layers,
-        use_post_attn_norm=None,
+        use_post_attn_norm=None,  # pyrefly: ignore [bad-argument-type]
         attn_logits_soft_cap=None,
-        use_post_ffw_norm=None,
+        use_post_ffw_norm=None,  # pyrefly: ignore [bad-argument-type]
     )
     sow_config = sow_lib.SowConfig(
         embeddings=True,
@@ -470,9 +470,9 @@ class SamplerTest(parameterized.TestCase):
           expected_shape=(2, length, config.embed_dim),
       )
       # Verify that the intermediates are different for two different steps.
-      self.assertNotAlmostEqual(
-          jnp.sum(intermediates.embeddings[:, 1, ...]),
-          jnp.sum(intermediates.embeddings[:, 2, ...]),
+      self.assertNotAlmostEqual(  # pyrefly: ignore [no-matching-overload]
+          jnp.sum(intermediates.embeddings[:, 1, ...]),  # pyrefly: ignore [unsupported-operation]
+          jnp.sum(intermediates.embeddings[:, 2, ...]),  # pyrefly: ignore [unsupported-operation]
       )
       # Verify that the intermediates are filled in for each layer.
       self.assertLen(intermediates.layers, config.num_layers)
@@ -560,7 +560,7 @@ class SamplerTest(parameterized.TestCase):
       self.skipTest('Skip the test as no Kaggle deps/creds')
 
     variant = url.split("/")[-1]
-    weights_dir = kagglehub.model_download(url)
+    weights_dir = kagglehub.model_download(url)  # pyrefly: ignore [unbound-name]
     ckpt_path = f"{weights_dir}/{variant}"
     vocab_path = f"{weights_dir}/tokenizer.model"
 

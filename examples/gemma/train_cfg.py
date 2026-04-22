@@ -124,4 +124,4 @@ class TrainConfig:
       axis_shapes[axis_shapes.index(-1)] = int(num_devices / (-count))
     else:
       assert count == num_devices
-    return tuple(axis_shapes)
+    return tuple(axis_shapes)  # pyrefly: ignore [bad-return]

@@ -84,4 +84,4 @@ def get_num_actions(game: str):
   actor-critic model.
   """
   env = gym.make(game)
-  return env.action_space.n
+  return env.action_space.n  # pyrefly: ignore [missing-attribute]

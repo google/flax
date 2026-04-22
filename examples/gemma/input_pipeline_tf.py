@@ -265,7 +265,7 @@ def _pack_with_tf_ops(
 
 def shift_target_left(x: Features, pad_id: int) -> Features:
   # Shift to the left and pad the target
-  targets = x['targets'][..., 1:]
+  targets = x['targets'][..., 1:]  # pyrefly: ignore [bad-index]
   targets = tf.pad(
       targets, [(0, 0), (0, 1)], 'constant', constant_values=pad_id
   )

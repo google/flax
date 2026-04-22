@@ -97,7 +97,7 @@ def get_datasets(
         n_graph=budget.n_graph,
     )
     dataset_split = tf.data.Dataset.from_generator(
-        batching_fn, output_signature=padded_graphs_spec
+        batching_fn, output_signature=padded_graphs_spec  # pyrefly: ignore [bad-argument-type]
     )
 
     # We cache the validation and test sets, since these are small.
@@ -121,14 +121,14 @@ def convert_to_graphs_tuple(
   edges = graph['edge_feat']
   edge_feature_dim = edges.shape[-1]
   labels = graph['labels']
-  senders = graph['edge_index'][:, 0]
-  receivers = graph['edge_index'][:, 1]
+  senders = graph['edge_index'][:, 0]  # pyrefly: ignore [bad-index]
+  receivers = graph['edge_index'][:, 1]  # pyrefly: ignore [bad-index]
 
   # Add a virtual node connected to all other nodes.
   # The feature vectors for the virtual node
   # and the new edges are set to all zeros.
   if add_virtual_node:
-    nodes = tf.concat([nodes, tf.zeros_like(nodes[0, None])], axis=0)
+    nodes = tf.concat([nodes, tf.zeros_like(nodes[0, None])], axis=0)  # pyrefly: ignore [bad-index]
     senders = tf.concat([senders, tf.range(num_nodes)], axis=0)
     receivers = tf.concat(
         [receivers, tf.fill((num_nodes,), num_nodes + 1)], axis=0
@@ -157,8 +157,8 @@ def convert_to_graphs_tuple(
   return jraph.GraphsTuple(
       n_node=tf.expand_dims(num_nodes, 0),
       n_edge=tf.expand_dims(num_edges, 0),
-      nodes=nodes,
-      edges=edges,
+      nodes=nodes,  # pyrefly: ignore [bad-argument-type]
+      edges=edges,  # pyrefly: ignore [bad-argument-type]
       senders=senders,
       receivers=receivers,
       globals=tf.expand_dims(labels, axis=0),

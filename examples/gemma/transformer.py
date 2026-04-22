@@ -63,10 +63,10 @@ def _assign_linen_params_to_nnx_state(
   if 'gate_proj' in mapped_path:
     if transpose_gating_einsum:
       val = jnp.swapaxes(val, 1, 2)
-    state[mapped_path].set_value(val[0])
-    state[mapped_path[:-2] + ('up_proj', 'kernel')].set_value(val[1])
+    state[mapped_path].set_value(val[0])  # pyrefly: ignore [bad-index]
+    state[mapped_path[:-2] + ('up_proj', 'kernel')].set_value(val[1])  # pyrefly: ignore [bad-index]
   else:
-    state[mapped_path].set_value(val)
+    state[mapped_path].set_value(val)  # pyrefly: ignore [bad-index]
   return state
 
 

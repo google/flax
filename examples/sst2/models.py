@@ -87,8 +87,8 @@ class WordDropout(nn.Module):
   value of dropped out items.
   """
 
-  dropout_rate: float
-  unk_idx: int
+  dropout_rate: float  # pyrefly: ignore [bad-class-definition]
+  unk_idx: int  # pyrefly: ignore [bad-class-definition]
   deterministic: bool | None = None
 
   @nn.compact
@@ -116,8 +116,8 @@ class Embedder(nn.Module):
     unk_idx: The index (integer) to use to replace inputs for word dropout.
   """
 
-  vocab_size: int
-  embedding_size: int
+  vocab_size: int  # pyrefly: ignore [bad-class-definition]
+  embedding_size: int  # pyrefly: ignore [bad-class-definition]
   embedding_init: Callable[..., Array] = nn.initializers.normal(stddev=0.1)
   frozen: bool = False
   dropout_rate: float = 0.0
@@ -135,7 +135,7 @@ class Embedder(nn.Module):
     )
     self.dropout_layer = nn.Dropout(rate=self.dropout_rate)
     self.word_dropout_layer = WordDropout(
-        dropout_rate=self.word_dropout_rate, unk_idx=self.unk_idx
+        dropout_rate=self.word_dropout_rate, unk_idx=self.unk_idx  # pyrefly: ignore [bad-argument-type]
     )
 
   def __call__(
@@ -167,7 +167,7 @@ class Embedder(nn.Module):
 class SimpleLSTM(nn.Module):
   """A simple unidirectional LSTM."""
 
-  hidden_size: int
+  hidden_size: int  # pyrefly: ignore [bad-class-definition]
 
   @functools.partial(
       nn.transforms.scan,
@@ -178,11 +178,11 @@ class SimpleLSTM(nn.Module):
   )
   @nn.compact
   def __call__(self, carry, x):
-    return nn.OptimizedLSTMCell(self.hidden_size)(carry, x)
+    return nn.OptimizedLSTMCell(self.hidden_size)(carry, x)  # pyrefly: ignore [bad-argument-type, missing-argument]
 
   def initialize_carry(self, input_shape):
     # Use fixed random key since default state init fn is just zeros.
-    return nn.OptimizedLSTMCell(self.hidden_size, parent=None).initialize_carry(
+    return nn.OptimizedLSTMCell(self.hidden_size, parent=None).initialize_carry(  # pyrefly: ignore [bad-argument-type, missing-argument]
         jax.random.key(0), input_shape
     )
 
@@ -190,11 +190,11 @@ class SimpleLSTM(nn.Module):
 class SimpleBiLSTM(nn.Module):
   """A simple bi-directional LSTM."""
 
-  hidden_size: int
+  hidden_size: int  # pyrefly: ignore [bad-class-definition]
 
   def setup(self):
-    self.forward_lstm = SimpleLSTM(self.hidden_size)
-    self.backward_lstm = SimpleLSTM(self.hidden_size)
+    self.forward_lstm = SimpleLSTM(self.hidden_size)  # pyrefly: ignore [bad-argument-type, missing-argument]
+    self.backward_lstm = SimpleLSTM(self.hidden_size)  # pyrefly: ignore [bad-argument-type, missing-argument]
 
   def __call__(self, embedded_inputs, lengths):
     # Forward LSTM.
@@ -228,16 +228,16 @@ class MLP(nn.Module):
     deterministic: Disables dropout if set to True.
   """
 
-  hidden_size: int
-  output_size: int
+  hidden_size: int  # pyrefly: ignore [bad-class-definition]
+  output_size: int  # pyrefly: ignore [bad-class-definition]
   activation: Callable[..., Any] = nn.tanh
   dropout_rate: float = 0.0
   output_bias: bool = False
   deterministic: bool | None = None
 
   def setup(self):
-    self.intermediate_layer = nn.Dense(self.hidden_size)
-    self.output_layer = nn.Dense(self.output_size, use_bias=self.output_bias)
+    self.intermediate_layer = nn.Dense(self.hidden_size)  # pyrefly: ignore [bad-argument-type, missing-argument]
+    self.output_layer = nn.Dense(self.output_size, use_bias=self.output_bias)  # pyrefly: ignore [bad-argument-type, missing-argument]
     self.dropout_layer = nn.Dropout(rate=self.dropout_rate)
 
   def __call__(self, inputs: Array, deterministic: bool | None = None):
@@ -277,7 +277,7 @@ class KeysOnlyMlpAttention(nn.Module):
     hidden_size: The hidden size of the MLP that computes the attention score.
   """
 
-  hidden_size: int
+  hidden_size: int  # pyrefly: ignore [bad-class-definition]
 
   @nn.compact
   def __call__(self, keys: Array, mask: Array) -> Array:
@@ -293,9 +293,9 @@ class KeysOnlyMlpAttention(nn.Module):
     Returns:
       The normalized attention scores. <float32>[batch_size, seq_length].
     """
-    hidden = nn.Dense(self.hidden_size, name='keys', use_bias=False)(keys)
+    hidden = nn.Dense(self.hidden_size, name='keys', use_bias=False)(keys)  # pyrefly: ignore [bad-argument-type, missing-argument]
     energy = nn.tanh(hidden)
-    scores = nn.Dense(1, name='energy', use_bias=False)(energy)
+    scores = nn.Dense(1, name='energy', use_bias=False)(energy)  # pyrefly: ignore [bad-argument-type, missing-argument]
     scores = scores.squeeze(-1)  # New shape: <float32>[batch_size, seq_len].
     scores = jnp.where(mask, scores, -jnp.inf)  # Using exp(-inf) = 0 below.
     scores = nn.softmax(scores, axis=-1)
@@ -317,8 +317,8 @@ class AttentionClassifier(nn.Module):
     deterministic: Disables dropout if True.
   """
 
-  hidden_size: int
-  output_size: int
+  hidden_size: int  # pyrefly: ignore [bad-class-definition]
+  output_size: int  # pyrefly: ignore [bad-class-definition]
   dropout_rate: float = 0.0
   deterministic: bool | None = None
 
@@ -376,13 +376,13 @@ class AttentionClassifier(nn.Module):
 class TextClassifier(nn.Module):
   """A Text Classification model."""
 
-  embedding_size: int
-  hidden_size: int
-  vocab_size: int
-  output_size: int
+  embedding_size: int  # pyrefly: ignore [bad-class-definition]
+  hidden_size: int  # pyrefly: ignore [bad-class-definition]
+  vocab_size: int  # pyrefly: ignore [bad-class-definition]
+  output_size: int  # pyrefly: ignore [bad-class-definition]
 
-  dropout_rate: float
-  word_dropout_rate: float
+  dropout_rate: float  # pyrefly: ignore [bad-class-definition]
+  word_dropout_rate: float  # pyrefly: ignore [bad-class-definition]
   unk_idx: int = 1
   deterministic: bool | None = None
 
