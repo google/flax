@@ -163,7 +163,7 @@ class AttentionTest(parameterized.TestCase):
     x = jnp.ones((batch_size, 1, features))
     cache, output = attn(x, jnp.array([[segment_pos]]), cache, attn_mask)
 
-    self.assertEqual(cache['k'].shape, expected_cache_shape)
+    self.assertEqual(cache['k'].shape, expected_cache_shape)  # pyrefly: ignore [unsupported-operation]
     self.assertEqual(output.shape, expected_output_shape)
 
   @parameterized.parameters(
@@ -313,7 +313,7 @@ class BlockTest(parameterized.TestCase):
       self.assertEqual(
           block.post_attention_norm is not None, use_post_attn_norm
       )
-      self.assertEqual(new_cache["k"].shape, expected_cache_shape)
+      self.assertEqual(new_cache["k"].shape, expected_cache_shape)  # pyrefly: ignore [unsupported-operation]
       self.assertEqual(outputs.shape, expected_output_shape)
 
   @parameterized.parameters(

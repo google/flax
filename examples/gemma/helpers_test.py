@@ -81,8 +81,8 @@ class ModuleFromLinenVariablesTest(parameterized.TestCase):
     rng_inputs, rng_params = jax.random.split(rng_key)
     inputs = jax.random.normal(rng_inputs, inputs_shape)
 
-    linen_mdl = nn.Sequential([
-        nn.Sequential([
+    linen_mdl = nn.Sequential([  # pyrefly: ignore [bad-argument-type, missing-argument]
+        nn.Sequential([  # pyrefly: ignore [bad-argument-type, missing-argument]
             nn.BatchNorm(use_running_average=False),
             nn.Dense(features=f, use_bias=b),
         ])
@@ -137,11 +137,11 @@ class ModuleFromLinenVariablesTest(parameterized.TestCase):
     np.testing.assert_array_equal(output, linen_output)
     for i in range(len(num_features)):
       np.testing.assert_array_equal(
-          mdl.layers[i].layers[0].mean[...],
+          mdl.layers[i].layers[0].mean[...],  # pyrefly: ignore [missing-attribute]
           linen_vars['batch_stats'][f'layers_{i}']['layers_0']['mean'],
       )
       np.testing.assert_array_equal(
-          mdl.layers[i].layers[0].var[...],
+          mdl.layers[i].layers[0].var[...],  # pyrefly: ignore [missing-attribute]
           linen_vars['batch_stats'][f'layers_{i}']['layers_0']['var'],
       )
 

@@ -127,7 +127,7 @@ def _load_sentencepiece_tokenizer(
     reverse: bool = False,
 ):
   """Load a tf-text SentencePiece tokenizer from given model filepath."""
-  with tf.io.gfile.GFile(model_path, 'rb') as model_fp:
+  with tf.io.gfile.GFile(model_path, 'rb') as model_fp:  # pyrefly: ignore [bad-context-manager]
     sp_model = model_fp.read()
   sp_tokenizer = tftxt.SentencepieceTokenizer(
       model=sp_model, add_bos=add_bos, add_eos=add_eos, reverse=reverse

@@ -119,7 +119,7 @@ def add_prefix_to_keys(result: dict[str, Any], prefix: str) -> dict[str, Any]:
 
 @flax.struct.dataclass
 class MeanAveragePrecision(
-    metrics.CollectingMetric.from_outputs(('labels', 'logits', 'mask'))
+    metrics.CollectingMetric.from_outputs(('labels', 'logits', 'mask'))  # pyrefly: ignore [invalid-inheritance]
 ):
   """Computes the mean average precision (mAP) over different tasks."""
 
@@ -154,15 +154,15 @@ class MeanAveragePrecision(
 
 @flax.struct.dataclass
 class EvalMetrics(metrics.Collection):
-  accuracy: metrics.Average.from_fun(predictions_match_labels)
-  loss: metrics.Average.from_output('loss')
+  accuracy: metrics.Average.from_fun(predictions_match_labels)  # pyrefly: ignore [invalid-annotation]
+  loss: metrics.Average.from_output('loss')  # pyrefly: ignore [invalid-annotation]
   mean_average_precision: MeanAveragePrecision
 
 
 @flax.struct.dataclass
 class TrainMetrics(metrics.Collection):
-  accuracy: metrics.Average.from_fun(predictions_match_labels)
-  loss: metrics.Average.from_output('loss')
+  accuracy: metrics.Average.from_fun(predictions_match_labels)  # pyrefly: ignore [invalid-annotation]
+  loss: metrics.Average.from_output('loss')  # pyrefly: ignore [invalid-annotation]
 
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
@@ -196,7 +196,7 @@ def get_valid_mask(
   graph_mask = jraph.get_graph_padding_mask(graphs)
 
   # Combine the mask over labels with the mask over graphs.
-  return labels_mask & graph_mask[:, None]
+  return labels_mask & graph_mask[:, None]  # pyrefly: ignore [bad-index, unsupported-operation]
 
 
 @jax.jit
@@ -253,10 +253,10 @@ def evaluate_step(
   logits = get_predicted_logits(state, graphs, rngs=None)
 
   # Get the mask for valid labels and graphs.
-  mask = get_valid_mask(labels, graphs)
+  mask = get_valid_mask(labels, graphs)  # pyrefly: ignore [bad-argument-type]
 
   # Compute the various metrics.
-  loss = binary_cross_entropy_with_mask(logits=logits, labels=labels, mask=mask)
+  loss = binary_cross_entropy_with_mask(logits=logits, labels=labels, mask=mask)  # pyrefly: ignore [bad-argument-type]
 
   return EvalMetrics.single_from_model_output(
       loss=loss, logits=logits, labels=labels, mask=mask

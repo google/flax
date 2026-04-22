@@ -182,7 +182,7 @@ def group_norm(
     num_groups = channels // group_size
 
   input_shape = x.shape
-  group_shape = x.shape[:-1] + (num_groups, x.shape[-1] // num_groups)
+  group_shape = x.shape[:-1] + (num_groups, x.shape[-1] // num_groups)  # pyrefly: ignore [unsupported-operation]
 
   x = x.reshape(group_shape)
 

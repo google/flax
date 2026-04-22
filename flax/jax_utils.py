@@ -240,15 +240,15 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
     unroll = (unroll,)
 
   # Pad unroll with ones so we start unrolling from the innermost loop
-  len_diff = len(axis) - len(unroll)
-  unroll = (1,) * len_diff + unroll
+  len_diff = len(axis) - len(unroll)  # pyrefly: ignore [bad-argument-type]
+  unroll = (1,) * len_diff + unroll  # pyrefly: ignore [unsupported-operation]
 
   def transpose_in(x):
-    perm = axis + tuple(np.delete(np.arange(x.ndim), axis))
+    perm = axis + tuple(np.delete(np.arange(x.ndim), axis))  # pyrefly: ignore [no-matching-overload, unsupported-operation]
     return x.transpose(perm)
 
   def transpose_out(x):
-    perm = axis + tuple(np.delete(np.arange(x.ndim), axis))
+    perm = axis + tuple(np.delete(np.arange(x.ndim), axis))  # pyrefly: ignore [no-matching-overload, unsupported-operation]
     return x.transpose(_invert_perm(perm))
 
   def body_wrapper(c, xs):
@@ -264,7 +264,7 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
     return c, ys
 
   xs = jax.tree_util.tree_map(transpose_in, xs)
-  c, ys = _scan_nd(body_wrapper, init, xs, n=len(axis), unroll=unroll)
+  c, ys = _scan_nd(body_wrapper, init, xs, n=len(axis), unroll=unroll)  # pyrefly: ignore [bad-argument-type]
   ys = jax.tree_util.tree_map(transpose_out, ys)
   return c, ys
 

@@ -99,8 +99,8 @@ def _train_sentencepiece(
   Returns:
     path to the trained sentencepiece vocabulary model.
   """
-  model_path = Path(model_path)
-  abs_model_path = model_path.expanduser().absolute().resolve()
+  model_path = Path(model_path)  # pyrefly: ignore [bad-assignment]
+  abs_model_path = model_path.expanduser().absolute().resolve()  # pyrefly: ignore [missing-attribute]
   fname, _ = _dump_chars_to_textfile(
       dataset, maxchars=maxchars, data_keys=data_keys
   )
@@ -207,7 +207,7 @@ def load_sentencepiece_processor_tftxt(vocab_path: str):
   import tensorflow as tf
   import tensorflow_text as tftxt
 
-  with tf.io.gfile.GFile(vocab_path, 'rb') as model_fp:
+  with tf.io.gfile.GFile(vocab_path, 'rb') as model_fp:  # pyrefly: ignore [bad-context-manager]
     sp_model = model_fp.read()
   sp_tokenizer = tftxt.SentencepieceTokenizer(
       model=sp_model, add_bos=False, add_eos=True, reverse=False

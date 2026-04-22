@@ -191,7 +191,7 @@ class _DynamicContext(threading.local):
   # 3.7
 
   def __init__(self):
-    self.module_stack: list['Module' | None] = [
+    self.module_stack: list['Module' | None] = [  # pyrefly: ignore [invalid-annotation]
       None,
     ]
     self.capture_stack = []
@@ -223,7 +223,7 @@ _unspecified_parent = _Sentinel()
 
 # Enable automatic named_call wrapping for labelling profile traces.
 # -----------------------------------------------------------------------------
-_use_named_call = config.flax_profile
+_use_named_call = config.flax_profile  # pyrefly: ignore [missing-attribute]
 
 
 def _derive_profiling_name(module, fn):
@@ -1230,11 +1230,11 @@ class Module(ModuleBase):
         )
         _context.call_info_stack[-1].calls.append(
           _CallInfo(
-            call_index,
+            call_index,  # pyrefly: ignore [unbound-name]
             self.path,
             self.clone(),
-            self.scope.rngs,
-            self.scope.mutable,
+            self.scope.rngs,  # pyrefly: ignore [missing-attribute]
+            self.scope.mutable,  # pyrefly: ignore [missing-attribute]
             fun.__name__,
             _args,
             _kwargs,
@@ -1245,11 +1245,11 @@ class Module(ModuleBase):
     finally:
       _context.module_stack.pop()
       if is_compact_method:
-        object.__setattr__(self, 'scope', self.scope.rewound())
+        object.__setattr__(self, 'scope', self.scope.rewound())  # pyrefly: ignore [missing-attribute]
       # setup or compact calls can be recurrent for example due to super calls
       # resetting the state would cause is compact/setup method
       # to be set to False prematurely.
-      if (is_compact_method or is_setup_method) and not is_recurrent:
+      if (is_compact_method or is_setup_method) and not is_recurrent:  # pyrefly: ignore [unbound-name]
         self._state.reset()
 
   def __setattr__(self, name: str, val: Any):
@@ -1434,9 +1434,9 @@ class Module(ModuleBase):
     cache = _caches.get(root, weakref.WeakValueDictionary())
     _caches[root] = cache
     queue = []
-    preserve_adopted_names = config.flax_preserve_adopted_names
+    preserve_adopted_names = config.flax_preserve_adopted_names  # pyrefly: ignore [missing-attribute]
     if hasattr(type(self), 'preserve_adopted_names'):
-      preserve_adopted_names = type(self).preserve_adopted_names
+      preserve_adopted_names = type(self).preserve_adopted_names  # pyrefly: ignore [missing-attribute]
 
     def adopt_attr_modules(cache, queue, suffix, subvalue):
       if isinstance(subvalue, Module):

@@ -215,7 +215,7 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
   create_init = '__init__' not in vars(cls) and kwargs.get('init', True)
 
   # Apply the dataclass transform.
-  transformed_cls: type[M] = dataclasses.dataclass(cls, **kwargs)
+  transformed_cls: type[M] = dataclasses.dataclass(cls, **kwargs)  # pyrefly: ignore [bad-assignment]
 
   # Restore the base classes' __dataclass_fields__.
   for _cls, fields in base_dataclass_fields.items():

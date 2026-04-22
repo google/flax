@@ -93,8 +93,8 @@ class AtariPreprocessing:
     # Stores temporary observations used for pooling over two successive
     # frames.
     self.screen_buffer = [
-        np.empty((obs_dims.shape[0], obs_dims.shape[1]), dtype=np.uint8),
-        np.empty((obs_dims.shape[0], obs_dims.shape[1]), dtype=np.uint8),
+        np.empty((obs_dims.shape[0], obs_dims.shape[1]), dtype=np.uint8),  # pyrefly: ignore [unsupported-operation]
+        np.empty((obs_dims.shape[0], obs_dims.shape[1]), dtype=np.uint8),  # pyrefly: ignore [unsupported-operation]
     ]
 
     self.game_over = False
@@ -132,7 +132,7 @@ class AtariPreprocessing:
       return
     # Other no-ops implementations actually always do at least 1 no-op. We
     # follow them.
-    no_ops = self.environment.np_random.randint(1, self.max_random_noops + 1)
+    no_ops = self.environment.np_random.randint(1, self.max_random_noops + 1)  # pyrefly: ignore [missing-attribute]
     for _ in range(no_ops):
       _, _, game_over, _, _ = self.environment.step(0)
       if game_over:
@@ -236,10 +236,10 @@ class AtariPreprocessing:
           out=self.screen_buffer[0],
       )
 
-    transformed_image = cv2.resize(
+    transformed_image = cv2.resize(  # pyrefly: ignore [missing-attribute]
         self.screen_buffer[0],
         (self.screen_size, self.screen_size),
-        interpolation=cv2.INTER_LINEAR,
+        interpolation=cv2.INTER_LINEAR,  # pyrefly: ignore [missing-attribute]
     )
     int_image = np.asarray(transformed_image, dtype=np.uint8)
     return np.expand_dims(int_image, axis=2)

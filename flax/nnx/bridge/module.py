@@ -52,7 +52,7 @@ class ModuleStackEntry:
 
 @dataclasses.dataclass
 class ModuleContext(threading.local):
-  module_stack: list[ModuleStackEntry | None] = dataclasses.field(
+  module_stack: list[ModuleStackEntry | None] = dataclasses.field(  # pyrefly: ignore [bad-assignment]
     default_factory=lambda: [None]
   )
 
@@ -164,7 +164,7 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
     elif parent_ctx.in_compact:
       name = _auto_submodule_name(parent_ctx, cls)
 
-  module = nnx_module.ModuleMeta.__call__(cls, *args, **kwargs)
+  module = nnx_module.ModuleMeta.__call__(cls, *args, **kwargs)  # pyrefly: ignore [bad-argument-type]
   module.scope = None
   module.attr_priorities = {}
 

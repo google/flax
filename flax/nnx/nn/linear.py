@@ -904,7 +904,7 @@ class Conv(Module):
       y += bias
 
     if num_batch_dimensions != 1:
-      output_shape = input_batch_shape + y.shape[1:]
+      output_shape = input_batch_shape + y.shape[1:]  # pyrefly: ignore [unbound-name]
       y = jnp.reshape(y, output_shape)
     return y
 
@@ -1203,7 +1203,7 @@ class ConvTranspose(Module):
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))  # type: ignore
 
     if num_batch_dimensions != 1:
-      output_shape = input_batch_shape + y.shape[1:]
+      output_shape = input_batch_shape + y.shape[1:]  # pyrefly: ignore [unbound-name]
       y = jnp.reshape(y, output_shape)
 
     return y

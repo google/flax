@@ -111,7 +111,7 @@ class fp8_meta_dtype(dtypes.extended): pass
 @dataclasses.dataclass(frozen=True)
 class fp8_meta_dtype_wrapper(dtypes.ExtendedDType):
   float_dtype: dtypes.DType
-  _rules: type = Fp8MetaTyRules
+  _rules: type = Fp8MetaTyRules  # pyrefly: ignore [bad-override]
   type: type = fp8_meta_dtype
 
   def __repr__(self) -> str:

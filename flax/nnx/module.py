@@ -670,9 +670,9 @@ def view_info(node: Module, /, *, only: filterlib.Filter = ..., graph: bool | No
   class_list = sorted(list(classes), key=lambda x: x.__qualname__)
   out_str = []
   for c in class_list:
-    out_str.append(f"{c.__qualname__}:")
-    sig = inspect.signature(c.set_view)
-    doc = inspect.getdoc(c.set_view)
+    out_str.append(f"{c.__qualname__}:")  # pyrefly: ignore [missing-attribute]
+    sig = inspect.signature(c.set_view)  # pyrefly: ignore [missing-attribute]
+    doc = inspect.getdoc(c.set_view)  # pyrefly: ignore [missing-attribute]
 
     # Parse docstring
     if isinstance(doc, str):
@@ -897,7 +897,7 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
         # Create the captures tuple
         captures_tuple = tuple(k(v) for (k,v) in initial_dicts.items())
-        m.__captures__ = pytreelib.data(captures_tuple)
+        m.__captures__ = pytreelib.data(captures_tuple)  # pyrefly: ignore [missing-attribute]
 
       # Wrap methods with capturing if required
       if method_outputs:
@@ -978,7 +978,7 @@ def _add_capturing(cls, variable_type):
             result = method(self, *args, **kwargs)
             self.sow(variable_type, name, result)
             return result
-          wrapper._does_capturing = True
+          wrapper._does_capturing = True  # pyrefly: ignore [missing-attribute]
           setattr(cls, name, wrapper)
         closure(name, method)
   return cls

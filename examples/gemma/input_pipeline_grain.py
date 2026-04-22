@@ -169,14 +169,14 @@ def preprocess_data(
     dataset = dataset.shuffle(seed=seed)
 
   dataset = dataset.repeat(num_epochs)
-  dataset = dataset.to_iter_dataset()
+  dataset = dataset.to_iter_dataset()  # pyrefly: ignore [bad-assignment]
 
   if pack_examples:
     length_struct = {k: max_length for k in ["inputs", "targets"]}
     # grain.experimental.FirstFitPackIterDataset implicitly assumes pad_id=0
     # as it inserts token sequences to a zero array
-    dataset = grain.experimental.FirstFitPackIterDataset(
-        dataset, length_struct=length_struct, num_packing_bins=30
+    dataset = grain.experimental.FirstFitPackIterDataset(  # pyrefly: ignore [bad-assignment]
+        dataset, length_struct=length_struct, num_packing_bins=30  # pyrefly: ignore [bad-argument-type]
     )
     rekey_dict = {
         "targets_segmentation": "targets_segment_ids",
@@ -188,7 +188,7 @@ def preprocess_data(
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
   else:  # simple (static-shape) padded batching
     dataset = padded_batch(
-        dataset,
+        dataset,  # pyrefly: ignore [bad-argument-type]
         batch_size,
         padded_size=max_length,
         padding_value=pad_id,
@@ -205,15 +205,15 @@ def preprocess_data(
 
   if prefetch_num_workers is None:
     performance_config = pick_performance_config(
-        ds=dataset,
+        ds=dataset,  # pyrefly: ignore [bad-argument-type]
         ram_budget_mb=1024,
-        max_workers=os.cpu_count() // 2,
+        max_workers=os.cpu_count() // 2,  # pyrefly: ignore [unsupported-operation]
         max_buffer_size=None,
     )
     mp_options = performance_config.multiprocessing_options
   else:
     mp_options = MultiprocessingOptions(num_workers=prefetch_num_workers)
-  dataset = dataset.mp_prefetch(mp_options)
+  dataset = dataset.mp_prefetch(mp_options)  # pyrefly: ignore [missing-attribute]
 
   # Move data to jax array
   if data_sharding is not None:

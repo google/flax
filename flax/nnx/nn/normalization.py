@@ -1041,7 +1041,7 @@ class WeightNorm(nnx.Module):
           f'Could not find the scale corresponding to the param {path} '
           'in scales dict. Parameters of the layer_instance should not change!'
         )
-      scale_value = self.scales[path]
+      scale_value = self.scales[path]  # pyrefly: ignore [unsupported-operation]
 
       if len(feature_axes) < param.ndim:
         broadcast_shape = [1] * param.ndim
@@ -1052,7 +1052,7 @@ class WeightNorm(nnx.Module):
 
     cast_args = [param]
     if self.use_scale:
-      cast_args.append(scale_value)
+      cast_args.append(scale_value)  # pyrefly: ignore [unbound-name]
 
     final_dtype = dtypes.canonicalize_dtype(*cast_args, dtype=self.dtype)
     param.set_value(jnp.asarray(value_bar, final_dtype))
@@ -1440,7 +1440,7 @@ class SpectralNorm(Module):
       u = _l2_normalize(jnp.matmul(v, param), eps=self.epsilon)
 
     u = lax.stop_gradient(u)
-    v = lax.stop_gradient(v)
+    v = lax.stop_gradient(v)  # pyrefly: ignore [unbound-name]
 
     sigma = jnp.matmul(jnp.matmul(v, param), u.T)[0, 0]
     param = param / jnp.where(sigma != 0, sigma, 1)

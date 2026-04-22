@@ -45,7 +45,7 @@ class RMSNorm(nnx.Module):
     self.weight_dtype = weight_dtype
     scale_metadata = scale_metadata if scale_metadata else {}
     self.scale = nnx.Param(
-        scale_init(rngs.params(), dim, weight_dtype), **scale_metadata
+        scale_init(rngs.params(), dim, weight_dtype), **scale_metadata  # pyrefly: ignore [bad-argument-type]
     )
 
   def __call__(self, x: Array) -> Array:

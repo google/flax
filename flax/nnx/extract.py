@@ -465,7 +465,7 @@ def from_tree2(tree: tp.Any, /) -> tp.Any:
       return x
     state = graphlib._merge_to_flat_state((x.state,))
     return graphlib.unflatten(
-      x.graphdef, state, index_ref=index_ref,
+      x.graphdef, state, index_ref=index_ref,  # pyrefly: ignore [bad-argument-type]
     )
 
   return jax.tree.map(

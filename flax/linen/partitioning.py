@@ -414,7 +414,7 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
 
 # pylint: disable=dangerous-default-value
 def scan_with_axes(
-    target: 'flax.linen.transforms.Target',
+    target: 'flax.linen.transforms.Target',  # pyrefly: ignore [invalid-type-var]
     variable_axes: Mapping[
         CollectionFilter, InOutScanAxis
     ] = {},
@@ -430,7 +430,7 @@ def scan_with_axes(
     axes_collections: tuple[str, ...] = ('params',),
     data_transform: Callable[..., Any] | None = None,
     methods=None,
-) -> 'flax.linen.transforms.Target':
+) -> 'flax.linen.transforms.Target':  # pyrefly: ignore [invalid-type-var]
   """Wrapped version of nn.scan that handles logical axis metadata."""
 
   # we broadcast the static metadata collections.
@@ -470,7 +470,7 @@ def scan_with_axes(
 
 # pylint: disable=dangerous-default-value
 def vmap_with_axes(
-    target: 'flax.linen.transforms.Target',
+    target: 'flax.linen.transforms.Target',  # pyrefly: ignore [invalid-type-var]
     variable_axes: Mapping[
         CollectionFilter, InOutAxis
     ],
@@ -482,7 +482,7 @@ def vmap_with_axes(
     partitioning_axis_names: Mapping[Any, str] = {},
     spmd_axis_name: str | None = None,
     methods=None,
-) -> 'flax.linen.transforms.Target':
+) -> 'flax.linen.transforms.Target':  # pyrefly: ignore [invalid-type-var]
   """Wrapped version of nn.vmap that handles logical axis metadata."""
 
   # tell normal vmap to broadcast axis metadata.

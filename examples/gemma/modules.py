@@ -269,7 +269,7 @@ class Attention(nnx.Module):
       )
       encoded = jnp.einsum('BTKGS,BSKH->BTKGH', probs, value_proj)
       encoded = encoded.reshape(
-        (batch_size, seq_size, self.num_heads, head_dim)
+        (batch_size, seq_size, self.num_heads, head_dim)  # pyrefly: ignore [unbound-name]
       )
     else:
       encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)
@@ -466,7 +466,7 @@ class Block(nnx.Module):
           weight_dtype=weight_dtype,
       )
     else:
-      self.post_attention_norm = None
+      self.post_attention_norm = None  # pyrefly: ignore [bad-assignment]
 
     self.pre_ffw_norm = layers.RMSNorm(
         embed_dim,
@@ -494,7 +494,7 @@ class Block(nnx.Module):
           weight_dtype=weight_dtype,
       )
     else:
-      self.post_ffw_norm = None
+      self.post_ffw_norm = None  # pyrefly: ignore [bad-assignment]
 
     self.dropout = nnx.Dropout(config.dropout_rate)
     self.sow_config = sow_config

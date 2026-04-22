@@ -160,7 +160,7 @@ def dataclass(
       if name not in state:
         raise ValueError(
           f'Missing field {name} in state dict while restoring'
-          f' an instance of {clz.__name__},'
+          f' an instance of {clz.__name__},'  # pyrefly: ignore [missing-attribute]
           f' at path {serialization.current_path()}'
         )
       value = getattr(x, name)
@@ -172,7 +172,7 @@ def dataclass(
       names = ','.join(state.keys())
       raise ValueError(
         f'Unknown field(s) "{names}" in state dict while'
-        f' restoring an instance of {clz.__name__}'
+        f' restoring an instance of {clz.__name__}'  # pyrefly: ignore [missing-attribute]
         f' at path {serialization.current_path()}'
       )
     return x.replace(**updates)

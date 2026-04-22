@@ -207,7 +207,7 @@ class TransformerTest(parameterized.TestCase):
       )
 
       self.assertEqual(outputs.shape, expected_outputs_shape)
-      self.assertEqual(cache['layer_0']['v'].shape, expected_cache_shape)
+      self.assertEqual(cache['layer_0']['v'].shape, expected_cache_shape)  # pyrefly: ignore [unsupported-operation]
 
   @parameterized.parameters(
       ('final_logit_softcap',),
@@ -245,10 +245,10 @@ class TransformerTest(parameterized.TestCase):
     soft_cap_args[soft_cap_arg] = soft_cap_val
 
     config_soft_cap = transformer_lib.TransformerConfig(
-        **(params | soft_cap_args)
+        **(params | soft_cap_args)  # pyrefly: ignore [bad-argument-type]
     )
     config_no_soft_cap = transformer_lib.TransformerConfig(
-        **(params | no_soft_cap_args)
+        **(params | no_soft_cap_args)  # pyrefly: ignore [bad-argument-type]
     )
 
     with jax.set_mesh(self.mesh):

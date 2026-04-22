@@ -481,7 +481,7 @@ class Sampler:
         top_p=top_p,
         seed=seed,
         dtype=dtype,
-        data_sharding=data_sharding,
+        data_sharding=data_sharding,  # pyrefly: ignore [bad-argument-type]
     )
 
     graphdef, state = nnx.split(self.transformer)

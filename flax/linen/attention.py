@@ -377,7 +377,7 @@ class MultiHeadDotProductAttention(Module):
       computing the product of the attention weights and the values.
   """
 
-  num_heads: int
+  num_heads: int  # pyrefly: ignore [bad-class-definition]
   dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   qkv_features: int | None = None

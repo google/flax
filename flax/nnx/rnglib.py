@@ -1209,7 +1209,7 @@ def split_rngs(
           ):
             return f(*args, **kwargs)
         else:
-          args, kwargs = split_rngs(
+          args, kwargs = split_rngs(  # pyrefly: ignore [no-matching-overload]
               (args, kwargs),
               splits=splits,
               only=only,

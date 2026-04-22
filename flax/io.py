@@ -101,7 +101,7 @@ def GFile(name, mode):  # pylint: disable=invalid-name
     else:
       return open(name, mode, encoding='utf-8')
   elif io_mode == BackendMode.TF:
-    return gfile.GFile(name, mode)
+    return gfile.GFile(name, mode)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -110,7 +110,7 @@ def listdir(path):
   if io_mode == BackendMode.DEFAULT:
     return os.listdir(path=path)
   elif io_mode == BackendMode.TF:
-    return gfile.listdir(path=path)
+    return gfile.listdir(path=path)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -119,7 +119,7 @@ def isdir(path):
   if io_mode == BackendMode.DEFAULT:
     return os.path.isdir(path)
   elif io_mode == BackendMode.TF:
-    return gfile.isdir(path)
+    return gfile.isdir(path)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -131,7 +131,7 @@ def copy(src, dst, overwrite=False):
     shutil.copy(src, dst)
     return
   elif io_mode == BackendMode.TF:
-    return gfile.copy(src, dst, overwrite=overwrite)
+    return gfile.copy(src, dst, overwrite=overwrite)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -142,7 +142,7 @@ def rename(src, dst, overwrite=False):
       raise errors.AlreadyExistsError(dst)
     return os.rename(src, dst)
   elif io_mode == BackendMode.TF:
-    return gfile.rename(src, dst, overwrite=overwrite)
+    return gfile.rename(src, dst, overwrite=overwrite)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -151,7 +151,7 @@ def exists(path):
   if io_mode == BackendMode.DEFAULT:
     return os.path.exists(path)
   elif io_mode == BackendMode.TF:
-    return gfile.exists(path)
+    return gfile.exists(path)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -160,7 +160,7 @@ def makedirs(path):
   if io_mode == BackendMode.DEFAULT:
     return os.makedirs(path, exist_ok=True)
   elif io_mode == BackendMode.TF:
-    return gfile.makedirs(path)
+    return gfile.makedirs(path)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -171,7 +171,7 @@ def glob(pattern):
       path.rstrip('/') for path in glob_module.glob(pattern, recursive=False)
     ]
   elif io_mode == BackendMode.TF:
-    return gfile.glob(pattern)
+    return gfile.glob(pattern)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -181,7 +181,7 @@ def remove(path):
   if io_mode == BackendMode.DEFAULT:
     return os.remove(path)
   elif io_mode == BackendMode.TF:
-    return gfile.remove(path)
+    return gfile.remove(path)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -191,7 +191,7 @@ def rmtree(path):
   if io_mode == BackendMode.DEFAULT:
     return shutil.rmtree(path)
   elif io_mode == BackendMode.TF:
-    return gfile.rmtree(path)
+    return gfile.rmtree(path)  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')
 
@@ -201,6 +201,6 @@ def getsize(path):
   if io_mode == BackendMode.DEFAULT:
     return os.path.getsize(path)
   elif io_mode == BackendMode.TF:
-    return gfile.stat(path).length
+    return gfile.stat(path).length  # pyrefly: ignore [missing-attribute]
   else:
     raise ValueError('Unknown IO Backend Mode.')

@@ -21,7 +21,7 @@ import jax.numpy as jnp
 class ActorCritic(nn.Module):
   """Class defining the actor-critic model."""
 
-  num_outputs: int
+  num_outputs: int  # pyrefly: ignore [bad-class-definition]
 
   @nn.compact
   def __call__(self, x):

@@ -100,7 +100,7 @@ class DenseGeneral(Module):
       promoted dtype.
   """
 
-  features: int | Sequence[int]
+  features: int | Sequence[int]  # pyrefly: ignore [bad-class-definition]
   axis: int | Sequence[int] = -1
   batch_dims: Sequence[int] = ()
   use_bias: bool = True
@@ -197,8 +197,8 @@ class DenseGeneral(Module):
     else:
       dot_general = lax.dot_general
     out = dot_general(
-      inputs,
-      kernel,
+      inputs,  # pyrefly: ignore [bad-argument-type]
+      kernel,  # pyrefly: ignore [bad-argument-type]
       ((axis, contract_ind), (batch_dims, batch_ind)),
       precision=self.precision,
     )
@@ -239,7 +239,7 @@ class Dense(Module):
       promoted dtype.
   """
 
-  features: int
+  features: int  # pyrefly: ignore [bad-class-definition]
   use_bias: bool = True
   dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
@@ -328,7 +328,7 @@ class Einsum(Module):
       promoted dtype.
   """
 
-  shape: Shape
+  shape: Shape  # pyrefly: ignore [bad-class-definition]
   einsum_str: str | None = None
   use_bias: bool = True
   dtype: Dtype | None = None
@@ -396,7 +396,7 @@ class Einsum(Module):
     )
 
     if bias is not None:
-      y += jnp.reshape(bias, broadcasted_bias_shape)
+      y += jnp.reshape(bias, broadcasted_bias_shape)  # pyrefly: ignore [unbound-name]
     return y
 
   def _get_bias_shape(self, einsum_str: str, lhs: Array, rhs: Array):
@@ -506,8 +506,8 @@ class _Conv(Module):
       promoted dtype.
   """
 
-  features: int
-  kernel_size: int | Sequence[int]
+  features: int  # pyrefly: ignore [bad-class-definition]
+  kernel_size: int | Sequence[int]  # pyrefly: ignore [bad-class-definition]
   strides: None | int | Sequence[int] = 1
   padding: PaddingLike = 'SAME'
   input_dilation: None | int | Sequence[int] = 1
@@ -678,7 +678,7 @@ class _Conv(Module):
         bias_shape = (self.features,)
       else:
         # One bias weight per output entry, unshared betwen pixels.
-        bias_shape = conv_output_shape[1:]
+        bias_shape = conv_output_shape[1:]  # pyrefly: ignore [unbound-name]
 
       bias = self.param('bias', self.bias_init, bias_shape, self.param_dtype)
     else:
@@ -726,7 +726,7 @@ class _Conv(Module):
       y += bias
 
     if num_batch_dimensions != 1:
-      output_shape = input_batch_shape + y.shape[1:]
+      output_shape = input_batch_shape + y.shape[1:]  # pyrefly: ignore [unbound-name]
       y = jnp.reshape(y, output_shape)
     return y
 
@@ -935,8 +935,8 @@ class ConvTranspose(Module):
       promoted dtype.
   """
 
-  features: int
-  kernel_size: int | Sequence[int]
+  features: int  # pyrefly: ignore [bad-class-definition]
+  kernel_size: int | Sequence[int]  # pyrefly: ignore [bad-class-definition]
   strides: Sequence[int] | None = None
   padding: PaddingLike = 'SAME'
   kernel_dilation: Sequence[int] | None = None
@@ -1096,7 +1096,7 @@ class ConvTranspose(Module):
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))  # type: ignore
 
     if num_batch_dimensions != 1:
-      output_shape = input_batch_shape + y.shape[1:]
+      output_shape = input_batch_shape + y.shape[1:]  # pyrefly: ignore [unbound-name]
       y = jnp.reshape(y, output_shape)
 
     return y
@@ -1155,8 +1155,8 @@ class Embed(Module):
       and return a tuple of arrays with the promoted dtype.
   """
 
-  num_embeddings: int
-  features: int
+  num_embeddings: int  # pyrefly: ignore [bad-class-definition]
+  features: int  # pyrefly: ignore [bad-class-definition]
   dtype: Dtype | None = None
   param_dtype: Dtype = jnp.float32
   embedding_init: Initializer = default_embed_init
