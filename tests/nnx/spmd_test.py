@@ -506,7 +506,9 @@ class TestSPMD(parameterized.TestCase):
     # Test with NamedSharding
     ns = NamedSharding(mesh, P('data', None))
     v_namedsharding = nnx.Variable(value, out_sharding=ns)
-    self.assertEqual(v_namedsharding.sharding, ns)
+    self.assertTrue(
+        v_namedsharding.sharding.is_equivalent_to(ns, v_namedsharding.ndim)
+    )
 
     # Test with Format
     if axis_type_name == 'auto':
