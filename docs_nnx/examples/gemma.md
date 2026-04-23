@@ -12,7 +12,7 @@ jupytext:
 
 This example shows how to use Flax NNX to load the [Gemma](https://ai.google.dev/gemma) open model files and use them to perform sampling/inference for generating text. You will use [Flax NNX `gemma` modules](https://github.com/google/flax/tree/main/examples/gemma) written with Flax and JAX for model parameter configuration and inference.
 
-> Gemma is a family of lightweight, state-of-the-art open models based on Google DeepMind’s [Gemini](https://deepmind.google/technologies/gemini/#introduction). Read more about [Gemma](https://blog.google/technology/developers/gemma-open-models/) and [Gemma 2](https://blog.google/technology/developers/google-gemma-2/).
+> Gemma is a family of lightweight, state-of-the-art open models based on Google DeepMind’s [Gemini](https://deepmind.google/technologies/gemini/#introduction). Read more about [Gemma](https://blog.google/technology/developers/gemma-open-models/), [Gemma 2](https://blog.google/technology/developers/google-gemma-2/) and [Gemma 3](https://blog.google/innovation-and-ai/technology/developers-tools/gemma-3/).
 
 You are recommended to use [Google Colab](https://colab.research.google.com/) with access to A100 GPU acceleration to run the code.
 
@@ -32,8 +32,8 @@ Install the necessary dependencies, including `kagglehub`.
 To use Gemma model, you'll need a [Kaggle](https://www.kaggle.com/models/google/gemma/) account and API key:
 
 1. To create an account, visit [Kaggle](https://www.kaggle.com/) and click on 'Register'.
-2. If/once you have an account, you need to sign in, go to your ['Settings'](https://www.kaggle.com/settings), and under 'API' click on 'Create New Token' to generate and download your Kaggle API key.
-3. In [Google Colab](https://colab.research.google.com/), under 'Secrets' add your Kaggle username and API key, storing the username as `KAGGLE_USERNAME` and the key as `KAGGLE_KEY`. If you are using a [Kaggle Notebook](https://www.kaggle.com/code) for free TPU or other hardware acceleration, it has a key storage feature under 'Add-ons' > 'Secrets', along with instructions for accessing stored keys.
+2. If/once you have an account, you need to sign in, go to your ['Settings'](https://www.kaggle.com/settings), and under 'API' click on 'Generate New Token' to generate a Kaggle API token (`KAGGLE_API_TOKEN`).
+3. In [Google Colab](https://colab.research.google.com/), under 'Secrets' add your Kaggle API token as `KAGGLE_API_TOKEN`. If you are using a [Kaggle Notebook](https://www.kaggle.com/code) for free TPU or other hardware acceleration, it has a key storage feature under 'Add-ons' > 'Secrets', along with instructions for accessing stored keys.
 
 Then run the cell below.
 
@@ -50,22 +50,21 @@ If everything went well, it should say `Kaggle credentials set. Kaggle credentia
 import os
 from google.colab import userdata # `userdata` is a Colab API.
 
-os.environ["KAGGLE_USERNAME"] = userdata.get('KAGGLE_USERNAME')
-os.environ["KAGGLE_KEY"] = userdata.get('KAGGLE_KEY')
-``` 
+os.environ["KAGGLE_API_TOKEN"] = userdata.get('KAGGLE_API_TOKEN')
+```
 
 Now, load the Gemma model you want to try. The code in the next cell utilizes [`kagglehub.model_download`](https://github.com/Kaggle/kagglehub/blob/8efe3e99477aa4f41885840de6903e61a49df4aa/src/kagglehub/models.py#L16) to download model files.
 
-**Note:** For larger models, such as `gemma 7b` and `gemma 7b-it` (instruct), you may require a hardware accelerator with plenty of memory, such as the NVIDIA A100.
+**Note:** For larger models, such as `gemma3 4b` and `gemma3 4b-it` (instruct), you may require a hardware accelerator with plenty of memory, such as the NVIDIA A100.
 
-**Note:** To avoid 403 error when downloading the model, you need to consent to the license for Gemma models on Kaggle. To do that, open https://www.kaggle.com/models/google/gemma/flax/ in the browser and click on "Download" button choosing any version of Gemma model. In the next window you will be proposed to agree with Gemma models usage license. Once, this step is done, you will be able to download the model using the code below.
+**Note:** To avoid 403 error when downloading the model, you need to consent to the license for Gemma models on Kaggle. To do that, open https://www.kaggle.com/models/google/gemma-3/flax/ in the browser and click on "Download" button choosing any version of Gemma model. In the next window you will be proposed to agree with Gemma models usage license. Once, this step is done, you will be able to download the model using the code below.
 
 ```{code-cell} ipython3
 from IPython.display import clear_output
 
-VARIANT = '2b-it' # @param ['2b', '2b-it', '7b', '7b-it'] {type:"string"}
-weights_dir = kagglehub.model_download(f'google/gemma/Flax/{VARIANT}')
-ckpt_path = f'{weights_dir}/{VARIANT}'
+VARIANT = '1b-it' # @param ['1b', '1b-it', '270m', '270m-it', '4b', '4b-it'] {type:"string"}
+weights_dir = kagglehub.model_download(f'google/gemma-3/flax/gemma3-{VARIANT}')
+ckpt_path = f'{weights_dir}/gemma3-{VARIANT}'
 vocab_path = f'{weights_dir}/tokenizer.model'
 ```
 
@@ -116,7 +115,7 @@ Then, use the Flax NNX [`gemma.transformer.TransformerConfig.from_params`](https
 **Note:** The vocabulary size is smaller than the number of input embeddings due to unused tokens in this release.
 
 ```{code-cell} ipython3
-transformer = transformer_lib.Transformer.from_params(params)
+transformer = transformer_lib.Transformer.from_params(params, )
 nnx.display(transformer)
 ```
 
@@ -158,3 +157,7 @@ for input_string, out_string in zip(input_batch, out_data.text):
 ```
 
 You should get a Python implementation of the bubble sort algorithm.
+
+## Going further
+
+If you would like to pretrain Gemma model on a dataset, we provide training and evaluation script in the repository examples: https://github.com/google/flax/tree/main/examples/gemma/
