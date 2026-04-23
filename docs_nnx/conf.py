@@ -171,7 +171,7 @@ doctest_global_setup = """
 import jax
 jax.config.update('jax_num_cpu_devices', 8)
 import jax.numpy as jnp
-from flax import nnx
+import nnx
 
 import logging as slog
 from absl import logging as alog

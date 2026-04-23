@@ -21,7 +21,7 @@ In this guide you will learn how to:
 In the following example [`nnx.Param`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.Param) and [`nnx.BatchStat`](https://flax.readthedocs.io/en/latest/api_reference/flax.nnx/variables.html#flax.nnx.BatchStat) are used as `Filter`s to split the model into two groups: one with the parameters and the other with the batch statistics:
 
 ```{code-cell} ipython3
-from flax import nnx
+import nnx
 
 class Foo(nnx.Module):
   def __init__(self):
