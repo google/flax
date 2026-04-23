@@ -530,7 +530,7 @@ class TestIntegration(parameterized.TestCase):
         return ((model(x) - y) ** 2).mean()  # call methods directly
 
       loss, grads = jax.value_and_grad(loss_fn)(
-        nnx.vars_as(params, hijax=False)
+        nnx.with_vars(params, hijax=False)
       )
       optimizer.update(model, grads)  # in-place updates
 

@@ -29,7 +29,7 @@ optimizer = nnx.Optimizer(model, optax.adamw(1e-2), wrt=nnx.Param)
 @jax.jit
 def train_step(x, y):
   loss_fn = lambda m: jnp.mean((m(x) - y) ** 2)
-  loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(model, mutable=False))  # tmp fix for jax.grad
+  loss, grads = jax.value_and_grad(loss_fn)(nnx.with_vars(model, mutable=False))  # tmp fix for jax.grad
   optimizer.update(model, grads)
   return loss
 
@@ -112,13 +112,13 @@ class Linear(nnx.Module):
 
 model = Linear(1, 3, rngs=nnx.Rngs(0))
 
-print(f"{nnx.vars_as(model, mutable=False) = !s}")
-print(f"{nnx.vars_as(model, mutable=True) = !s}")
+print(f"{nnx.with_vars(model, mutable=False) = !s}")
+print(f"{nnx.with_vars(model, mutable=True) = !s}")
 ```
 
 ```{code-cell} ipython3
 v = nnx.Variable(jnp.array(0))
-v_immut = nnx.vars_as(v, mutable=False)
+v_immut = nnx.with_vars(v, mutable=False)
 assert not v_immut.mutable
 
 try:
@@ -131,18 +131,18 @@ except Exception as e:
 
 ```{code-cell} ipython3
 v = nnx.Variable(jnp.array(0))
-v_ref = nnx.vars_as(v, ref=True)
+v_ref = nnx.with_vars(v, ref=True)
 assert v_ref.ref
 print(v_ref)
 print(v_ref.get_raw_value())
 ```
 
 ```{code-cell} ipython3
-v_immut = nnx.vars_as(v_ref, mutable=False)
+v_immut = nnx.with_vars(v_ref, mutable=False)
 assert not v_immut.ref
 print("immutable =", v_immut)
 
-v_ref = nnx.vars_as(v_immut, mutable=True)
+v_ref = nnx.with_vars(v_immut, mutable=True)
 assert v_ref.ref
 print("mutable =", v_ref)
 ```
@@ -176,7 +176,7 @@ def train_step(model, optimizer, x, y):
     model =  nnx.merge(graphdef, params, nondiff)
     return ((model(x) - y) ** 2).mean()
 
-  loss, grads = jax.value_and_grad(loss_fn)(nnx.vars_as(params, mutable=False))  # immutable for jax.grad
+  loss, grads = jax.value_and_grad(loss_fn)(nnx.with_vars(params, mutable=False))  # immutable for jax.grad
   optimizer.update(model, grads)
 
   return loss
@@ -226,9 +226,9 @@ except Exception as e:
 ```{code-cell} ipython3
 @jax.jit
 def create_model(rngs):
-  return nnx.vars_as((Block(2, 64, 3, rngs=rngs)), hijax=False)
+  return nnx.with_vars((Block(2, 64, 3, rngs=rngs)), hijax=False)
 
-model = nnx.vars_as(create_model(nnx.Rngs(0)), hijax=True)
+model = nnx.with_vars(create_model(nnx.Rngs(0)), hijax=True)
 
 print("model.linear =", model.linear)
 ```
