@@ -223,7 +223,8 @@ class Sampler:
     last_token = last_token.reshape((batch_size, 1))
 
     transformer = nnx.merge(graphdef, params)
-    logits, cache = transformer(
+    forward = nnx.capture(transformer, nnx.Intermediate)
+    (logits, cache), intermediates = forward(
         last_token,
         step_positions,
         sampler_state.cache,
@@ -267,7 +268,7 @@ class Sampler:
       logits_buffer = sampler_state.logits_buffer
 
     if sampler_state.intermediates is not None:
-      sampler_state.intermediates.merge(decoding_step, transformer)
+      sampler_state.intermediates.merge(decoding_step, intermediates)
 
     done = sampler_state.done | jnp.equal(
         token_buffer[:, decoding_step + 1], self.vocab.eos_id()
@@ -350,6 +351,18 @@ class Sampler:
     else:
       logits_buffer = None
 
+    intermediates = None
+    if self.transformer.sow_config.is_enabled():
+      intermediates = sow_lib.init_intermediates(
+          batch_size,
+          buffer_size,
+          self.transformer.embed_dim,
+          self.transformer.num_layers,
+          self.transformer.config.num_heads,
+          self.transformer.sow_config,
+          dtype=dtype
+      )
+
     return _SamplingState(
         decoding_step=0,
         num_input_tokens=num_input_tokens,
@@ -364,9 +377,7 @@ class Sampler:
         done=done,
         total_sampling_steps=total_sampling_steps,
         forbidden_token_ids=forbidden_token_ids,
-        intermediates=self.transformer.init_intermediates(
-            batch_size, buffer_size, self.transformer.sow_config, dtype=dtype
-        ),
+        intermediates=intermediates,
         temperature=temperature,
         top_p=top_p,
         seed=seed,
