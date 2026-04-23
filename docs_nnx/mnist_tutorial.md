@@ -199,11 +199,8 @@ writer = SummaryWriter()
 You can open tensorboard in a separate browser window at `localhost:6006`, but there's also a Jupyter extension to view its progress from with a notebook
 
 ```{code-cell} ipython3
-%load_ext tensorboard
-```
-
-```{code-cell} ipython3
-%tensorboard --logdir runs
+# %load_ext tensorboard
+# %tensorboard --logdir runs
 ```
 
 ![](./tensorboard_screenshot.png)
