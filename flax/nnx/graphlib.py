@@ -2483,7 +2483,7 @@ def update(node, state: tp.Any, /, *states: tp.Any) -> None:
     >>> prev_loss = loss_fn(model, x, y)
 
     >>> grads = nnx.grad(loss_fn)(model, x, y)
-    >>> new_state = jax.tree.map(lambda p, g: p - 0.1*g, nnx.state(model), grads)
+    >>> new_state = jax.tree.map(lambda p, g: p - 0.1*g, nnx.state(model), nnx.state(grads))
     >>> nnx.update(model, new_state)
     >>> assert loss_fn(model, x, y) < prev_loss
 
