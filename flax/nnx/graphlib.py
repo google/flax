@@ -1591,8 +1591,9 @@ def _cached_partial(
     graph_updates: bool | None = None,
 ):
   """Create a partial from a NNX transformed function alog with some cached input arguments
-  and reduces the python overhead by caching the traversal of NNX graph nodes. This is useful
-  for speed up function that are called repeatedly with the same subset of inputs e.g. a
+  and reduces the python overhead by caching the traversal of NNX graph nodes. This is a graph-mode
+  only API and requires graph_update=True. This is useful
+  to speed up functions that are called repeatedly with the same subset of inputs e.g. a
   ``train_step`` with a ``model`` and ``optimizer``::
 
     >>> from flax import nnx
@@ -1602,7 +1603,7 @@ def _cached_partial(
     >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     >>> optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=nnx.Param)
     ...
-    >>> @nnx.jit
+    >>> @nnx.jit(graph_updates=True)
     ... def train_step(model, optimizer, x, y):
     ...   def loss_fn(model):
     ...     return jnp.mean((model(x) - y) ** 2)
@@ -1611,8 +1612,8 @@ def _cached_partial(
     ...   optimizer.update(model, grads)
     ...   return loss
     ...
-    >>> cached_train_step = nnx.cached_partial(train_step, model, optimizer)
-    ...
+    >>> with nnx.set_graph_updates(True):
+    ...   cached_train_step = nnx.cached_partial(train_step, model, optimizer)
     >>> for step in range(total_steps:=2):
     ...   x, y = jnp.ones((10, 2)), jnp.ones((10, 3))
     ...   # loss = train_step(model, optimizer, x, y)
