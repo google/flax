@@ -353,6 +353,28 @@ class TestSPMD(parameterized.TestCase):
 
         assert 'float32[2@X,4]' in str(jax.typeof(func(sharded_array, nnx.Rngs(0))))
 
+  def test_out_sharding_mha(self):
+    mesh = jax.make_mesh((2, 2), ("fsdp", "tp"), axis_types=(AxisType.Explicit, AxisType.Explicit))
+    with jax.set_mesh(mesh):
+      replicated_array = jax.random.uniform(jax.random.key(0), (4, 5, 16), dtype=jnp.float32)
+      sharded_array = reshard(replicated_array, P("fsdp", None, "tp"))  # BTD
+      layer = nnx.MultiHeadAttention(
+        num_heads=4,
+        in_features=16,
+        qkv_features=8,
+        num_kv_heads=2,
+        kernel_metadata={"out_sharding": P("fsdp", "tp", None)},  # DNH from btd,dnh -> btnh
+        out_kernel_metadata={"out_sharding": P("tp", None, "fsdp")},  # NHD from btnh,nhd -> btd
+        rngs=nnx.Rngs(0),
+        decode=False,
+      )
+      output = layer(
+          sharded_array,
+          out_sharding=P("fsdp", None, "tp"),  # BTD
+          qkv_sharding=P("fsdp", None, "tp", None),  # BTNH
+      )
+      assert 'float32[4@fsdp,5,16@tp]' in str(jax.typeof(output))
+
   @parameterized.product(use_hijax=[True, False])
   def test_logical_rules(self, use_hijax):
     self.enter_context(nnx.var_defaults(hijax=use_hijax))
