@@ -344,7 +344,7 @@ def grad(
     >>> loss_fn = lambda m, x, y: jnp.mean((m(x) - y) ** 2)
     >>> grad_fn = nnx.grad(loss_fn)
     ...
-    >>> grads = grad_fn(m, x, y)
+    >>> grads = nnx.state(grad_fn(m, x, y))
     >>> jax.tree.map(jnp.shape, grads)
     State({
       'bias': Param(
@@ -356,25 +356,23 @@ def grad(
     })
 
   By default, NNX objects are differentiated with respect to all their ``nnx.Param``
-  Variables. You can specify which substates are differentiable by passing a ``DiffState``
-  object to the ``argnums`` argument. For example, if you want to differentiate only the
+  Variables. When these gradients are given to an ``nnx.Optimizer``, however, the optimizer
+  will only use a subset of them based on its `wrt` field. As the gradient calculations not
+  used by the ``nnx.Optimizer`` go unused, this unnecessary computation gets removed
+  when the training step is compiled. For example, if you want to optimize only the
   ``kernel`` attribute of the ``Linear`` class, you can use the ``PathContains`` filter::
 
+    >>> import optax
     >>> m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     ...
     >>> kernel_attribute = nnx.PathContains('kernel')
-    >>> diff_state = nnx.DiffState(0, kernel_attribute)
     ...
     >>> loss_fn = lambda m, x, y: jnp.mean((m(x) - y) ** 2)
-    >>> grad_fn = nnx.grad(loss_fn, argnums=diff_state)
+    >>> grad_fn = nnx.grad(loss_fn, argnums=0)
     ...
     >>> grads = grad_fn(m, x, y)
-    >>> jax.tree.map(jnp.shape, grads)
-    State({
-      'kernel': Param(
-        value=(2, 3)
-      )
-    })
+    >>> opt = nnx.Optimizer(m, optax.adam(1e-3), wrt=kernel_attribute)
+    >>> _ = opt.update(m, grads)
 
   For more information on how to create custom filters, see
   `Using Filters <https://flax.readthedocs.io/en/latest/guides/filters_guide.html>`__
@@ -1410,7 +1408,7 @@ def custom_vjp(
     ...     self.x = nnx.Param(x)
     ...     self.y = nnx.Param(y)
     ...
-    >>> @nnx.custom_vjp
+    >>> @nnx.custom_vjp(graph_updates=True)
     ... def f(m: Foo):
     ...   return jnp.sin(m.x) * m.y
     ...
@@ -1430,7 +1428,7 @@ def custom_vjp(
     >>> f.defvjp(f_fwd, f_bwd)
     ...
     >>> m = Foo(x=jnp.array(1.), y=jnp.array(2.))
-    >>> grads = nnx.grad(f)(m)
+    >>> grads = nnx.state(nnx.grad(f)(m))
     ...
     >>> jax.tree.map(jnp.shape, grads)
     State({
@@ -1454,7 +1452,7 @@ def custom_vjp(
     >>> x_attribute = nnx.PathContains('x')
     >>> diff_state = nnx.DiffState(0, x_attribute)
     ...
-    >>> @nnx.custom_vjp(nondiff_argnums=(diff_state,))
+    >>> @nnx.custom_vjp(nondiff_argnums=(diff_state,), graph_updates=True)
     ... def f(m: Foo):
     ...   return jnp.sin(m.x) * m.y  # type: ignore
 
@@ -1476,7 +1474,7 @@ def custom_vjp(
     >>> f.defvjp(f_fwd, f_bwd)
     ...
     >>> m = Foo(x=jnp.array(1.), y=jnp.array(2.))
-    >>> grad = nnx.grad(f, argnums=nnx.DiffState(0, x_attribute))(m)
+    >>> grad = nnx.grad(f, argnums=nnx.DiffState(0, x_attribute), graph_updates=True)(m)
     ...
     >>> jax.tree.map(jnp.shape, grad)
     State({
