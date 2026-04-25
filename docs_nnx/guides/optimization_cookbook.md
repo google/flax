@@ -46,75 +46,29 @@ y = rngs.normal((32, 8))
 
 # Exponential Moving Average
 
-Neural network see increased robustness when, rather than using only the weights available at the end of training, we use an exponential moving average of the weights produced throughout training. To modify the standard Flax training loop to accomodate calculating exponential moving averages, we can introduce a new `nnx.Variable` subclass for EMA Params, along with a function that converts all variables in a module to this subclass. 
+Neural networks see increased robustness when, rather than using only the weights available at the end of training, we use an exponential moving average of the weights produced throughout training. NNX provides `nnx.EMA` to make this easy. Simply create an `nnx.EMA` from your model and call `ema.update` after each optimizer step. The averaged parameters are stored in `ema.params`.
 
 ```python
-class EmaParam(nnx.Variable):
-  @classmethod
-  def from_variable(cls, var):
-    return cls.from_metadata(jnp.copy(var.get_value()), var.get_metadata())
-    
-def as_ema_params(node):
-  return jax.tree.map(
-    EmaParam.from_variable,
-    node,
-    is_leaf=lambda x: isinstance(x, nnx.Variable),
-  )
-```
-
-Now, we'll add a method to update the EMA params based on current model values. 
-
-```python
-class EMA(nnx.Pytree):
-  def __init__(self, params, decay: float, *, only: nnx.filterlib.Filter = ...):
-    self.decay = decay
-    self.filter = only
-    self.ema_params = nnx.data(as_ema_params(nnx.state(params, only)))
-
-  def update(self, new_params):
-    def _update(ema_param, new_param):
-      ema_param[...] = (
-        self.decay * ema_param[...] + (1.0 - self.decay) * new_param[...]
-      )
-    jax.tree.map(
-      _update,
-      self.ema_params,
-      nnx.state(new_params, self.filter),
-      is_leaf=lambda x: isinstance(x, nnx.Variable),
-    )
-```
-
-
-The training loop proceeds as normal, but calls `ema.update` after each optimizer step. 
-
-```python
-# initialization
 model = make_model(rngs)
-ema = EMA(model, decay=0.9)
-
-# simulate parameter update
-def double(param):
-  param[...] *= 2.0
-jax.tree.map(double, model, is_leaf=lambda x: isinstance(x, nnx.Variable))
-ema.update(model)
+optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
+ema = nnx.EMA(model, decay=0.9)
+ema_model = ema.apply_to(model)
 
 @nnx.jit
 def train_step(model, optimizer, ema, x, y):
   loss, grads = nnx.value_and_grad(loss_fn)(model, x, y)
   optimizer.update(model, grads)
   ema.update(model)
-  return loss
 
-optimizer = nnx.Optimizer(
-  model,
-  tx=optax.adam(1e-3),
-  wrt=nnx.Param,
-)
-losses = []
+@nnx.jit
+def eval_step(model, x, y):
+  return loss_fn(model, x, y)
+
 for _ in range(50):
-  loss = train_step(model, optimizer, ema, x, y)
-  losses.append(loss)
-plt.plot(losses);
+  train_step(model, optimizer, ema, x, y)
+
+loss = eval_step(ema_model, x, y)
+print(f"final eval loss: {loss}")
 ```
 
 # Low Rank Adaptation
@@ -129,23 +83,21 @@ def add_rank2_lora(path, node):
   return node
 
 base_model = make_model(rngs)
-lora_model = nnx.recursive_map(add_rank2_lora, base_model)
+model = nnx.recursive_map(add_rank2_lora, base_model)
 nnx.display(model)
 ```
 
+The training loop is the same as before, but we pass `wrt=nnx.LoRAParam` to the optimizer so that only the low-rank adaptation parameters are updated while the base model weights remain frozen.
 
 ```python
+optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.LoRAParam)
+
 @nnx.jit
 def train_step(model, optimizer, x, y):
   loss, grads = nnx.value_and_grad(loss_fn)(model, x, y)
   optimizer.update(model, grads)
   return loss
 
-optimizer = nnx.Optimizer(
-  model,
-  tx=optax.adam(1e-3),
-  wrt=nnx.LoRAParam,
-)
 
 losses = []
 for _ in range(50):
@@ -174,10 +126,7 @@ def train_step(model, optimizer, x, y):
     return loss
 
 model = make_model(rngs)
-optimizer = nnx.Optimizer(
-  model,
-  tx=optax.lbfgs(1e-3),
-  wrt=nnx.Param)
+optimizer = nnx.Optimizer(model, optax.lbfgs(1e-3), wrt=nnx.Param)
 
 losses = []
 for _ in range(50):
@@ -221,7 +170,8 @@ Gradient accumulation in Flax is easy: just use the `optax.MultiSteps` optimizer
 
 ```python
 model = make_model(rngs)
-optimizer = nnx.Optimizer(model, tx=optax.MultiSteps(optax.adam(1e-3), every_k_schedule=3), wrt=nnx.Param)
+tx = optax.MultiSteps(optax.adam(1e-3), every_k_schedule=3)
+optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
 
 @nnx.jit
 def train_step(model, optimizer, x, y):
@@ -276,3 +226,4 @@ But the model is not:
 ```python
 jax.typeof(model.layers[0].kernel[...])
 ```
+
