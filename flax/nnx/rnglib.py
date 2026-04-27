@@ -1142,9 +1142,12 @@ def split_rngs(
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
     ...
-    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
+    >>> in_axes = nnx.prefix(rngs, {'params': 0, ...: None}, graph=False)
     ...
-    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    >>> rngs2 = nnx.Rngs(params=0, dropout=1)
+    >>> out_axes = nnx.prefix(Model(rngs2), {nnx.Param: 0, ...: None}, graph=False)
+    ...
+    >>> @nnx.vmap(in_axes=(in_axes,), out_axes=out_axes, graph=False)
     ... def create_model(rngs):
     ...   return Model(rngs)
     ...
