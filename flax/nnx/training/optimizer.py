@@ -25,7 +25,7 @@ from flax.nnx import filterlib
 from flax.nnx.pytreelib import Pytree
 from flax.nnx.variablelib import Param, Variable
 
-M = tp.TypeVar('M', bound=nnx.Module)
+M = tp.TypeVar('M')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 
 class OptState(Variable):
@@ -91,7 +91,7 @@ def _check_wrt_arg_passed(f: F) -> F:
     return f(*args, wrt=wrt, **kwargs)
   return _check_wrt_wrapper  # type: ignore
 
-class Optimizer(Pytree, tp.Generic[M]):
+class Optimizer(tp.Generic[M], Pytree):
   """Simple train state for the common case with a single Optax optimizer.
 
   Example usage::
@@ -135,6 +135,7 @@ class Optimizer(Pytree, tp.Generic[M]):
     tx: optax.GradientTransformation,
     *,
     wrt: filterlib.Filter,  # type: ignore
+    graph: bool | None = None,
   ):
     """
     Instantiate the class and wrap the :class:`Module` and Optax gradient
@@ -150,11 +151,17 @@ class Optimizer(Pytree, tp.Generic[M]):
         ``wrt``  argument passed to the ``nnx.grad`` call that will generate the
         gradients that will be passed into the ``grads`` argument of the
         :func:`update` method. The filter should match the filter used in nnx.grad.
+      graph: If ``True``, uses graph-mode which supports the full NNX
+        feature set including shared references. If ``False``, uses
+        tree-mode which treats Modules as regular JAX pytrees, avoiding
+        the overhead of the graph protocol. If ``None`` (default), the
+        value is determined by the current ``nnx.set_graph_mode`` context.
     """
+    self.graph = graph
     self.step = OptState(jnp.array(0, dtype=jnp.uint32))
     self.tx = tx
     self.opt_state = nnx.data(
-      to_opt_state(tx.init(nnx.state(model, wrt)))
+      to_opt_state(tx.init(nnx.state(model, wrt, graph=graph)))
     )
     self.wrt = wrt
 
@@ -207,8 +214,8 @@ class Optimizer(Pytree, tp.Generic[M]):
       The updates PyTree containing the parameter updates applied to the model.
       This matches the structure of the model parameters filtered by ``wrt``.
     """
-    param_arrays = nnx.as_pure(nnx.state(model, self.wrt))
-    grad_arrays = nnx.as_pure(nnx.state(grads, self.wrt))
+    param_arrays = nnx.as_pure(nnx.state(model, self.wrt, graph=self.graph))
+    grad_arrays = nnx.as_pure(nnx.state(grads, self.wrt, graph=self.graph))
     opt_state_arrays = nnx.as_pure(self.opt_state)
     kwargs_arrays = nnx.as_pure(kwargs)
 
@@ -218,7 +225,7 @@ class Optimizer(Pytree, tp.Generic[M]):
     new_params = optax.apply_updates(param_arrays, updates)
 
     nnx.update(model, new_params)
-    nnx.update(self.opt_state, nnx.state(new_opt_state))
+    nnx.update(self.opt_state, nnx.state(new_opt_state, graph=self.graph))
     self.step[...] += 1
     return updates
 
