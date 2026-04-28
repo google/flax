@@ -643,9 +643,13 @@ class TestRNN(absltest.TestCase):
 
 
 class TestCellSharding(absltest.TestCase):
-  def test_out_sharding_signature(self):
+  def test_out_sharding(self):
+    """Test that out_sharding correctly applies sharding to cell outputs."""
     rngs = nnx.Rngs(0)
-    
+    devices = np.array(jax.devices())
+    mesh = jax.sharding.Mesh(devices, axis_names=('x',))
+    sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
+
     cell_types = [
       (nnx.SimpleCell, {'in_features': 4, 'hidden_features': 4}),
       (nnx.LSTMCell, {'in_features': 4, 'hidden_features': 4}),
@@ -658,9 +662,15 @@ class TestCellSharding(absltest.TestCase):
         model = cell_cls(**kwargs, rngs=rngs)
         carry = model.initialize_carry((1, 4), rngs=rngs)
         x = jnp.ones((1, 4))
-        # Just verify it accepts out_sharding=None without error
-        out = model(carry, x, out_sharding=None)
-        self.assertLen(out, 2)  # All cells return (new_carry, output) or equivalent structure
+
+        new_carry, y = model(carry, x, out_sharding=sharding)
+
+        # Verify the output has the expected sharding
+        self.assertTrue(
+            y.sharding.is_equivalent_to(sharding, ndim=y.ndim),
+            f'{cell_cls.__name__}: output sharding {y.sharding} is not '
+            f'equivalent to requested sharding {sharding}',
+        )
 
 
 if __name__ == '__main__':
