@@ -647,8 +647,10 @@ class TestCellSharding(absltest.TestCase):
     """Test that out_sharding correctly applies sharding to cell outputs."""
     rngs = nnx.Rngs(0)
     devices = np.array(jax.devices())
-    mesh = jax.sharding.Mesh(devices, axis_names=('x',))
-    sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
+    mesh = jax.sharding.Mesh(
+        devices, axis_names=('x',), axis_types=(jax.sharding.AxisType.Explicit,)
+    )
+    sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('x',))
 
     cell_types = [
       (nnx.SimpleCell, {'in_features': 4, 'hidden_features': 4}),
@@ -657,13 +659,15 @@ class TestCellSharding(absltest.TestCase):
       (nnx.GRUCell, {'in_features': 4, 'hidden_features': 4}),
     ]
 
+    batch_size = jax.device_count()
     for cell_cls, kwargs in cell_types:
       with self.subTest(cell_cls=cell_cls.__name__):
         model = cell_cls(**kwargs, rngs=rngs)
-        carry = model.initialize_carry((1, 4), rngs=rngs)
-        x = jnp.ones((1, 4))
+        carry = model.initialize_carry((batch_size, 4), rngs=rngs)
+        x = jnp.ones((batch_size, 4))
 
-        new_carry, y = model(carry, x, out_sharding=sharding)
+        with mesh:
+          new_carry, y = model(carry, x, out_sharding=sharding)
 
         # Verify the output has the expected sharding
         self.assertTrue(
