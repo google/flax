@@ -1108,28 +1108,35 @@ def split_rngs(
       ``False``, returns a new node with split rng states.
 
   Returns:
-    A SplitBackups iterable if ``node`` is provided, otherwise a
-    decorator that splits the rng states of the inputs to the
-    decorated function.
+    If ``node`` is provided and both ``graph=True`` and ``graph_updates=True``, splits the rng states of ``node``
+    and returns a ``SplitBackups`` iterable, allowing you to restore the previous state
+    with ``nnx.restore_rngs``.
+
+    If ``node`` is not provided, returns a decorator. The decorated function runs ``split_rngs`` on its first
+    argument before processing it.
+
+    If ``node`` is provided and ``graph_updates=False`, returns a copy of ``node`` with
+    forked rng states. The original node is left unmodified.
+
 
   Example::
 
     >>> from flax import nnx
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.split_rngs(rngs, splits=5)
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> result = nnx.split_rngs(rngs, splits=5, graph_updates=False)
+    >>> result.params.key.shape, result.dropout.key.shape
     ((5,), (5,))
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.split_rngs(rngs, splits=(2, 5))
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> result = nnx.split_rngs(rngs, splits=(2, 5), graph_updates=False)
+    >>> result.params.key.shape, result.dropout.key.shape
     ((2, 5), (2, 5))
 
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
-    >>> rngs.params.key.shape, rngs.dropout.key.shape
+    >>> result = nnx.split_rngs(rngs, splits=5, only='params', graph_updates=False)
+    >>> result.params.key.shape, result.dropout.key.shape
     ((5,), ())
 
   Once split, random state can be used with transforms like :func:`nnx.vmap`::
@@ -1140,17 +1147,32 @@ def split_rngs(
     ...     self.dropout = nnx.Dropout(0.5, rngs=rngs)
     ...
     >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> _ = nnx.split_rngs(rngs, splits=5, only='params')
+    >>> in_axes = nnx.prefix(rngs, {'params': 0, ...: None}, graph=False)
+    >>> out_axes = nnx.prefix(Model(rngs), {nnx.Param: 0, ...: None}, graph=False)
     ...
-    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
-    ...
-    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
+    >>> @nnx.vmap(in_axes=(in_axes,), out_axes=out_axes, graph=False)
     ... def create_model(rngs):
     ...   return Model(rngs)
     ...
-    >>> model = create_model(rngs)
+    >>> batch = nnx.split_rngs(rngs, splits=5, only='params', graph_updates=False)
+    >>> model = create_model(batch)
+    ...
     >>> model.dropout.rngs.key.shape
     ()
+
+  When ``split_rngs`` is not given a ``node`` argument, it acts as a decorator::
+
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> in_axes = nnx.prefix(rngs, {'params': 0, ...: None}, graph=False)
+    >>> out_axes = nnx.prefix(Model(rngs), {nnx.Param: 0, ...: None}, graph=False)
+    ...
+    >>> @nnx.split_rngs(splits=5, only='params')
+    ... @nnx.vmap(in_axes=(in_axes,), out_axes=out_axes, graph=False)
+    ... def auto_split_create_model(rngs):
+    ...   return Model(rngs)
+    ...
+    >>> rngs = nnx.Rngs(params=0, dropout=1)
+    >>> model = auto_split_create_model(rngs)
 
   ``split_rngs`` returns a SplitBackups object that can be used to restore the
   original unsplit rng states using :func:`nnx.restore_rngs`, this is useful
@@ -1158,8 +1180,7 @@ def split_rngs(
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     ...
-    >>> backups = nnx.split_rngs(rngs, splits=5, only='params')
-    >>> model = create_model(rngs)
+    >>> backups = nnx.split_rngs(rngs, splits=5, only='params', graph=True, graph_updates=True)
     >>> nnx.restore_rngs(backups)
     ...
     >>> model.dropout.rngs.key.shape
@@ -1170,23 +1191,12 @@ def split_rngs(
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     ...
-    >>> with nnx.split_rngs(rngs, splits=5, only='params'):
+    >>> with nnx.split_rngs(rngs, splits=5, only='params', graph=True, graph_updates=True):
     ...   model = create_model(rngs)
     ...
     >>> model.dropout.rngs.key.shape
     ()
 
-    >>> state_axes = nnx.StateAxes({(nnx.Param, 'params'): 0, ...: None})
-    ...
-    >>> @nnx.split_rngs(splits=5, only='params')
-    ... @nnx.vmap(in_axes=(state_axes,), out_axes=state_axes)
-    ... def create_model(rngs):
-    ...   return Model(rngs)
-    ...
-    >>> rngs = nnx.Rngs(params=0, dropout=1)
-    >>> model = create_model(rngs)
-    >>> model.dropout.rngs.key.shape
-    ()
   """
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
@@ -1401,11 +1411,19 @@ def fork_rngs(
       NNX feature set including shared references. If ``False``, uses
       tree-mode which treats Modules as regular JAX pytrees, avoiding
       the overhead of the graph protocol.
+    graph_updates: If ``True``, applies the forks in-place on the node. If
+      ``False``, returns a new node with split rng states.
 
   Returns:
-    A SplitBackups iterable if ``node`` is provided, otherwise a
-    decorator that forks the rng states of the inputs to the
-    decorated function.
+    If ``node`` is provided and both ``graph=True`` and ``graph_updates=True``, forks the rng states of ``node``
+    and returns a ``SplitBackups`` iterable, allowing you to restore the previous state
+    with ``nnx.restore_rngs``.
+
+    If ``node`` is not provided but ``graph=True`` and ``graph_updates=True``, returns a decorator that forks the rng
+    states of the inputs to the decorated function.
+
+    If ``node`` is provided and ``graph_updates=False`, returns a copy of ``node`` with
+    forked rng states. The original node is left unmodified.
 
   Example::
 
@@ -1414,13 +1432,13 @@ def fork_rngs(
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     >>> _ = nnx.fork_rngs(rngs)
 
-  ``fork_rngs`` returns a SplitBackups object that can be used to restore the
+  ``fork_rngs`` with ``graph_updates=True`` returns a SplitBackups object that can be used to restore the
   original unforked rng states using :func:`nnx.restore_rngs`, this is useful
   when you only want to fork the rng states temporarily::
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     ...
-    >>> backups = nnx.fork_rngs(rngs)
+    >>> backups = nnx.fork_rngs(rngs, graph=True, graph_updates=True)
     >>> model = nnx.Linear(2, 3, rngs=rngs)
     >>> nnx.restore_rngs(backups)
     ...
@@ -1430,7 +1448,7 @@ def fork_rngs(
 
     >>> rngs = nnx.Rngs(params=0, dropout=1)
     ...
-    >>> with nnx.fork_rngs(rngs):
+    >>> with nnx.fork_rngs(rngs, graph=True, graph_updates=True):
     ...   model = nnx.Linear(2, 3, rngs=rngs)
 
   """
