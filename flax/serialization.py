@@ -429,7 +429,7 @@ def msgpack_restore(encoded_pytree: bytes):
     and array leaves.
   """
   state_dict = msgpack.unpackb(
-    encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False
+    encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False, strict_map_key=False
   )
   return _unchunk_array_leaves_in_place(state_dict)
 
