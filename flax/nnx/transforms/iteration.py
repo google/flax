@@ -465,7 +465,7 @@ def vmap(
   >>> y.shape
   (5, 3)
 
-  To control control how graph node substates are vectorized, ``StateAxes``
+  To control control how graph node substates are vectorized, outputs of ``nnx.prefix``
   can be passed to ``in_axes`` and ``out_axes`` specifying the axes to be
   applied to each substate given a filter. The following example shows how to
   share the parameters between the ensemble members which keeping different
@@ -476,12 +476,12 @@ def vmap(
     ...     self.a = nnx.Param(jnp.arange(4))
     ...     self.b = nnx.BatchStat(jnp.arange(4))
     ...
-    >>> state_axes = nnx.StateAxes({nnx.Param: 0, nnx.BatchStat: None})
-    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=0)
+    >>> foo = Foo()
+    >>> state_axes = nnx.prefix(foo, {nnx.Param: 0, ...: None}, graph=False)
+    >>> @nnx.vmap(in_axes=(state_axes,), out_axes=0, graph=False)
     ... def mul(foo):
     ...   return foo.a * foo.b
     ...
-    >>> foo = Foo()
     >>> y = mul(foo)
     >>> y
     Array([[0, 0, 0, 0],

@@ -197,7 +197,7 @@ class Optimizer(tp.Generic[M], Pytree):
       ...
       >>> loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
       >>> optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
-      >>> grads = nnx.grad(loss_fn, argnums=nnx.DiffState(0, nnx.Param))(
+      >>> grads = nnx.grad(loss_fn, argnums=0)(
       ...   model, jnp.ones((1, 2)), jnp.ones((1, 3))
       ... )
       >>> _ = optimizer.update(model, grads)
