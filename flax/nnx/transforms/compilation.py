@@ -30,6 +30,7 @@ from flax.nnx import (
   statelib,
   variablelib,
 )
+from flax.nnx.extract import labeled
 from flax.nnx.transforms.transforms import (
   _resolve_bound_callable,
   _raise_bound_method_error,
@@ -148,6 +149,12 @@ class JitFn:
 @tp.overload
 
 
+
+
+
+
+
+
 def jit(
   *,
   in_shardings: tp.Any = None,
@@ -164,6 +171,12 @@ def jit(
   graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[P, R]], JitWrapped[P, R]]: ...
 @tp.overload
+
+
+
+
+
+
 
 
 def jit(
@@ -367,20 +380,24 @@ def jit(
   if was_bound:
     _raise_bound_method_error('jit')
 
-  if in_shardings is not None:
-    extract.check_prefix(
+  update_shardings = extract.check_prefix(
       in_shardings, 'in_shardings', 'jit', graph, graph_updates
-    )
-  if out_shardings is not None:
-    extract.check_prefix(
+  )
+  update_shardings[None] = None  # kwargs sharding
+  extract.check_prefix(
       out_shardings, 'out_shardings', 'jit', graph, graph_updates
-    )
+  )
 
   wrapped_cls: tp.Any
   if graph and graph_updates:
     wrapped_cls = JitWrapped
   else:
-    wrapped_cls = functools.partial(SimpleJitWrapped, graph=graph)
+    wrapped_cls = functools.partial(
+        SimpleJitWrapped,
+        partial_args=(),
+        graph=graph,
+        update_shardings=update_shardings,
+    )
   return wrapped_cls(
     fun_unbound,
     in_shardings=in_shardings,
@@ -430,42 +447,40 @@ def _flatten_to_partial_state(
 @dataclasses.dataclass(eq=False)
 class SimpleJitFn:
   f: tp.Callable[..., tp.Any]
+  in_shardings: tp.Any
   out_shardings: tp.Any
   donate_argnums: frozenset[int]
   donate_argnames: frozenset[str]
   graph: bool
+  update_shardings: tuple[tp.Any, ...]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
-    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
-    args_updates, kwargs_updates = updates
-    args_snapshot, kwargs_snapshot = snapshot
+    current, snapshot = extract.snapshot(
+        labeled(args=args, kwargs=kwargs)
+    )
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_shardings)
-    extract.check_no_aliases(
-        'jit',
-        args=args_updates,
-        kwargs=kwargs_updates,
-        out=out,
-        check_can_update=['out'],
+    extract.check_no_aliases('jit', **current, out=out, check=['out'])
+    def keep_fn(jax_path, prefix, c, s):
+      if extract.variable_changed(c, s):
+        return True
+      arg_type, arg_key, *_ = graphlib.jax_to_nnx_path(jax_path)
+      if arg_type == 'args':
+        return arg_key in self.donate_argnums
+      else:  # arg_type == 'kwargs':
+        return arg_key in self.donate_argnames
+    updates = extract.get_updates(
+        current, snapshot, prefix=labeled(args=self.in_shardings, kwargs=None),
+        known_prefixes=self.update_shardings, keep_fn=keep_fn
     )
-    def donated_arg(jax_path, prefix, c, s):
-      path = graphlib.jax_to_nnx_path(jax_path)
-      return path[0] in self.donate_argnums or extract.variable_changed(c, s)
-    args_updates = extract.mask_variable_updates(
-        args_updates, args_snapshot, keep_fn=donated_arg)
-    def donated_kwarg(jax_path, prefix, c, s):
-      path = graphlib.jax_to_nnx_path(jax_path)
-      return path[0] in self.donate_argnames or extract.variable_changed(c, s)
-    kwargs_updates = extract.mask_variable_updates(
-        kwargs_updates, kwargs_snapshot, keep_fn=donated_kwarg)
-    return out, (args_updates, kwargs_updates)
+    return out, updates
 
 
 class SimpleJitWrapped(tp.Generic[P, R]):
@@ -475,16 +490,17 @@ class SimpleJitWrapped(tp.Generic[P, R]):
       fun: tp.Callable[P, R],
       in_shardings: tp.Any,
       out_shardings: tp.Any,
-      static_argnums: int | tp.Sequence[int] | None = None,
-      static_argnames: str | tp.Iterable[str] | None = None,
-      donate_argnums: int | tp.Sequence[int] | None = None,
-      donate_argnames: str | tp.Iterable[str] | None = None,
-      keep_unused: bool = False,
-      device: tp.Optional[jax.Device] = None,
-      backend: tp.Optional[str] = None,
-      inline: bool = False,
-      partial_args: tuple[PartialState, ...] = (),
-      graph: bool = True,
+      static_argnums: int | tp.Sequence[int] | None,
+      static_argnames: str | tp.Iterable[str] | None,
+      donate_argnums: int | tp.Sequence[int] | None,
+      donate_argnames: str | tp.Iterable[str] | None,
+      keep_unused: bool,
+      device: tp.Optional[jax.Device],
+      backend: tp.Optional[str],
+      inline: bool,
+      partial_args: tuple[PartialState, ...],
+      graph: bool,
+      update_shardings: extract.OrderedDict,
   ):
     functools.update_wrapper(self, fun)
     self.fun: tp.Callable[P, R] = fun
@@ -492,32 +508,14 @@ class SimpleJitWrapped(tp.Generic[P, R]):
     self.partial_args = partial_args
     self.graph = graph
 
-    if in_shardings is not None and isinstance(in_shardings, (tuple, list)) and (
-        static_argnums or static_argnames
-    ):
-      resolved = _resolve_argnums(fun, static_argnums, static_argnames)
+    resolved = _resolve_argnums(fun, static_argnums, static_argnames)
+    if isinstance(in_shardings, (tuple, list)) and resolved:
       expanded = list(in_shardings)
       for i in sorted(resolved):
         expanded.insert(i, None)
       self.in_shardings = tuple(expanded)
     else:
       self.in_shardings = in_shardings
-
-    jit_out_shardings: tp.Any
-    if in_shardings is not None or out_shardings is not None:
-      if isinstance(in_shardings, (tuple, list)) and (
-          static_argnums or static_argnames
-      ):
-        resolved = _resolve_argnums(fun, static_argnums, static_argnames)
-        expanded = list(in_shardings)
-        for i in sorted(resolved):
-          expanded.insert(i, None)
-        out_in_shardings = tuple(expanded)
-      else:
-        out_in_shardings = in_shardings
-      jit_out_shardings = (out_shardings, (out_in_shardings, None))
-    else:
-      jit_out_shardings = None
 
     donate_argnums_set = frozenset(
         (donate_argnums,) if isinstance(donate_argnums, int)
@@ -528,9 +526,17 @@ class SimpleJitWrapped(tp.Generic[P, R]):
         else donate_argnames or ()
     )
     self.jitted_fn = jax.jit(
-        SimpleJitFn(fun, out_shardings, donate_argnums_set, donate_argnames_set, graph),
+        SimpleJitFn(
+            fun,
+            self.in_shardings,
+            out_shardings,
+            donate_argnums_set,
+            donate_argnames_set,
+            graph,
+            tuple(update_shardings),
+        ),
         in_shardings=in_shardings,
-        out_shardings=jit_out_shardings,
+        out_shardings=(out_shardings, update_shardings),
         static_argnums=static_argnums,
         static_argnames=static_argnames,
         donate_argnums=donate_argnums,
@@ -560,10 +566,9 @@ class SimpleJitWrapped(tp.Generic[P, R]):
   def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
     args = (*self.partial_args, *args)  # type: ignore[assignment]
     args, kwargs = self._maybe_to_tree(args, kwargs)
-    if not self.graph:  # skip check for graph mode
-      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
+    variables = extract.check_no_aliases('jit', args=args, kwargs=kwargs)
     out, updates = self.jitted_fn(*args, **kwargs)
-    extract.apply_variable_updates((args, kwargs), updates)
+    extract.apply_updates(variables, updates)
     return self._maybe_from_tree(out)
 
   def __get__(self, obj, objtype=None):
@@ -599,6 +604,8 @@ def jit_partial(
     *partial_args: tp.Any,
     in_shardings: tp.Any = None,
     out_shardings: tp.Any = None,
+    static_argnums: int | tp.Sequence[int] | None = None,
+    static_argnames: str | tp.Iterable[str] | None = None,
     donate_argnums: int | tp.Sequence[int] | None = None,
     donate_argnames: str | tp.Iterable[str] | None = None,
     keep_unused: bool = False,
@@ -674,6 +681,10 @@ def jit_partial(
     raise ValueError(
       '`graph_updates` not supported by `jit_partial`'
     )
+  update_shardings = extract.check_prefix(
+      in_shardings, 'in_shardings', 'jit_partial', graph, graph_updates
+  )
+  update_shardings[None] = None  # kwargs sharding
   if any(isinstance(x, StateSharding) for x in jax.tree.leaves(in_shardings)):
     raise ValueError(
       '`in_shardings` cannot contain `StateSharding` objects '
@@ -734,6 +745,8 @@ def jit_partial(
     wrapped_fun,
     in_shardings=jit_in_shardings,
     out_shardings=out_shardings,
+    static_argnums=static_argnums,
+    static_argnames=static_argnames,
     donate_argnums=donate_argnums,
     donate_argnames=donate_argnames,
     keep_unused=keep_unused,
@@ -742,6 +755,7 @@ def jit_partial(
     inline=inline,
     partial_args=flat_partial_args,
     graph=graph,
+    update_shardings=update_shardings,
   )
 
 
@@ -1164,10 +1178,9 @@ class SimpleCompiled(Stage):
   def __call__(self, *args, **kwargs):
     args = (*self.jit_wrapped.partial_args, *args)
     args, kwargs = self.jit_wrapped._maybe_to_tree(args, kwargs)
-    if not self.jit_wrapped.graph:
-      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
+    variables = extract.check_no_aliases('jit', args=args, kwargs=kwargs)
     out, updates = self.compiled(*args, **kwargs)
-    extract.apply_variable_updates((args, kwargs), updates)
+    extract.apply_updates(variables, updates)
     return self.jit_wrapped._maybe_from_tree(out)
 
   @property
@@ -1265,23 +1278,26 @@ class SimpleTraced(Stage):
 class SimpleShardMapFn:
   f: tp.Callable[..., tp.Any]
   graph: bool
+  in_specs: tp.Any
   out_specs: tp.Any
+  update_specs: tuple[tp.Any, ...]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
   def __call__(self, *args):
-    updates, snapshot = extract.updates_and_snapshot(args)
+    current, snapshot = extract.snapshot(labeled(args=args))
     if self.graph:
       args = extract.from_tree2(args)
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_specs)
-    extract.check_no_aliases(
-        'shard_map', args=updates, out=out, check_can_update=['out']
+    extract.check_no_aliases('shard_map', **current, out=out, check=['out'])
+    updates = extract.get_updates(
+        current, snapshot, prefix=labeled(args=self.in_specs),
+        known_prefixes=self.update_specs
     )
-    updates = extract.mask_variable_updates(updates, snapshot)
     return out, updates
 
 
@@ -1535,9 +1551,10 @@ def shard_map(
   if was_bound:
     _raise_bound_method_error('shard_map')
 
-  extract.check_prefix(
-    in_specs, 'in_specs', 'shard_map', graph, graph_updates
+  update_specs = extract.check_prefix(
+    in_specs, 'in_specs', 'shard_map', graph, graph_updates, none_leaf=False
   )
+  assert None not in update_specs
   extract.check_prefix(
     out_specs, 'out_specs', 'shard_map', graph, graph_updates
   )
@@ -1545,10 +1562,16 @@ def shard_map(
   if not (graph and graph_updates):
 
     shard_map_fn = jax.shard_map(
-        SimpleShardMapFn(f_unbound, graph=graph, out_specs=out_specs),
+        SimpleShardMapFn(
+            f_unbound,
+            graph=graph,
+            in_specs=in_specs,
+            out_specs=out_specs,
+            update_specs=tuple(update_specs),
+        ),
         mesh=mesh,
         in_specs=in_specs,
-        out_specs=(out_specs, in_specs),
+        out_specs=(out_specs, update_specs),
         axis_names=axis_names,
         check_vma=check_vma,
     )
@@ -1561,9 +1584,9 @@ def shard_map(
             prefix=in_specs,
             check_aliasing=in_specs is not None,
         )
-      extract.check_no_aliases('shard_map', args=args)
+      variables = extract.check_no_aliases('shard_map', args=args)
       out, updates = shard_map_fn(*args, **kwargs)
-      extract.apply_variable_updates(args, updates)
+      extract.apply_updates(variables, updates)
       if graph:
         out = extract.from_tree2(out)
       return out

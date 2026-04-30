@@ -23,6 +23,7 @@ from flax import struct
 from flax import typing
 from flax.core.frozen_dict import FrozenDict
 from flax.nnx import extract, filterlib, graphlib, spmd, variablelib
+from flax.nnx.extract import labeled
 from flax.nnx import statelib
 from flax.nnx.module import Module
 from flax.nnx.statelib import State
@@ -127,26 +128,26 @@ def transform_metadata(
   extract.check_prefix(out_axes, 'out_axes', 'transform_metadata', graph, True)
 
   @functools.wraps(f)
-  def wrapper(*in_args, **in_kwargs):
-    in_args = resolve_kwargs(f, in_args, in_kwargs)
+  def wrapper(*args, **kwargs):
+    args = resolve_kwargs(f, args, kwargs)
     if graph:
-      in_args = extract.to_tree2(in_args, prefix=in_axes)
-    extract.check_no_aliases('transform_metadata', args=in_args)
-    args = graphlib.clone(in_args, graph=graph)
+      args = extract.to_tree2(args, prefix=in_axes)
+    variables = extract.check_no_aliases('transform_metadata', args=args)
+    args = graphlib.clone(args, graph=graph)
     _apply_axis_fn(args, in_axes, metadata, spmd.remove_axis)
-    updates, snapshot = extract.updates_and_snapshot(args)
+    current, snapshot = extract.snapshot(labeled(args=args))
     if graph:
       args = extract.from_tree2(args)
     out = f(*args)
     if graph:
       out = extract.to_tree2(out, prefix=out_axes)
     extract.check_no_aliases(
-        'transform_metadata', args=updates, out=out, check_can_update=['out']
+        'transform_metadata', **current, out=out, check=['out']
     )
     _apply_axis_fn(args, in_axes, metadata, spmd.add_axis)
     _apply_axis_fn(out, out_axes, metadata, spmd.add_axis)
-    updates = extract.mask_variable_updates(updates, snapshot)
-    extract.apply_variable_updates(in_args, updates)
+    updates = extract.get_updates(current, snapshot)
+    extract.apply_updates(variables, updates)
     if graph:
       out = extract.from_tree2(out)
     return out
@@ -269,27 +270,29 @@ def _vmap_split_fn(ctx: graphlib.SplitContext, path, prefix, x):
 class SimpleVmapFn:
   f: tp.Callable[..., tp.Any]
   graph: bool
+  in_axes: tp.Any
   out_axes: tp.Any
+  update_axes: tuple[tp.Any, ...]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
-  @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
-    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    current, snapshot = extract.snapshot(
+        labeled(args=args, kwargs=kwargs)
+    )
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_axes)
     extract.check_no_aliases(
-        'vmap',
-        args=updates[0],
-        kwargs=updates[1],
-        out=out,
-        check_can_update=['out'],
+        'vmap', **current, out=out, check=['out'],
     )
-    updates = extract.mask_variable_updates(updates, snapshot)
+    updates = extract.get_updates(
+        current, snapshot, prefix=labeled(args=self.in_axes, kwargs=0),
+        known_prefixes=self.update_axes
+    )
     return out, updates
 
 
@@ -297,27 +300,30 @@ class SimpleVmapFn:
 class SimplePmapFn:
   f: tp.Callable[..., tp.Any]
   graph: bool
+  in_axes: tp.Any
   out_axes: tp.Any
+  update_axes: tuple[tp.Any, ...]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
-    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    current, snapshot = extract.snapshot(
+        labeled(args=args, kwargs=kwargs)
+    )
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_axes)
     extract.check_no_aliases(
-        'pmap',
-        args=updates[0],
-        kwargs=updates[1],
-        out=out,
-        check_can_update=['out'],
+        'pmap', **current, out=out, check=['out'],
     )
-    updates = extract.mask_variable_updates(updates, snapshot)
+    updates = extract.get_updates(
+        current, snapshot, prefix=labeled(args=self.in_axes, kwargs=0),
+        known_prefixes=self.update_axes
+    )
     return out, updates
 
 
@@ -510,15 +516,22 @@ def vmap(
   if was_bound:
     _raise_bound_method_error('vmap')
 
-  extract.check_prefix(in_axes, 'in_axes', 'vmap', graph, graph_updates)
+  update_axes = extract.check_prefix(in_axes, 'in_axes', 'vmap', graph, graph_updates)
+  update_axes[0] = 0  # kwargs axes
   extract.check_prefix(out_axes, 'out_axes', 'vmap', graph, graph_updates)
 
   if not (graph and graph_updates):
 
     vmapped_fn = jax.vmap(
-      SimpleVmapFn(f_unbound, graph=graph, out_axes=out_axes),
+      SimpleVmapFn(
+        f_unbound,
+        graph=graph,
+        in_axes=in_axes,
+        out_axes=out_axes,
+        update_axes=tuple(update_axes),
+      ),
       in_axes=in_axes,
-      out_axes=(out_axes, (in_axes, 0)),
+      out_axes=(out_axes, update_axes),
       axis_name=axis_name,
       axis_size=axis_size,
       spmd_axis_name=spmd_axis_name,
@@ -529,20 +542,16 @@ def vmap(
       if graph:
         args, kwargs = extract.to_tree2(
             (args, kwargs),
-            prefix=(in_axes, None)
-            if in_axes is not None
-            else None,
-            check_aliasing=in_axes is not None,
+            prefix=(in_axes, 0),
         )
-      extract.check_no_aliases('vmap', args=args, kwargs=kwargs)
+      variables = extract.check_no_aliases('vmap', args=args, kwargs=kwargs)
       out, updates = vmapped_fn(*args, **kwargs)
-      extract.apply_variable_updates((args, kwargs), updates)
+      extract.apply_updates(variables, updates)
       if graph:
         out = extract.from_tree2(out)
       return out
 
     return simple_vmap_wrapper  # type: ignore[return-value]
-
 
   jax_in_axes = jax.tree.map(
     lambda x: extract.NodeStates.from_prefixes(x.axes, metadata=x)
@@ -761,40 +770,44 @@ def pmap(
   if was_bound:
     _raise_bound_method_error('pmap')
 
-  extract.check_prefix(in_axes, 'in_axes', 'pmap', graph, graph_updates)
+  update_axes = extract.check_prefix(in_axes, 'in_axes', 'pmap', graph, graph_updates)
+  update_axes[0] = 0  # kwargs axes
   extract.check_prefix(out_axes, 'out_axes', 'pmap', graph, graph_updates)
-
+ 
   if not (graph and graph_updates):
-
+ 
     pmapped_fn = jax.pmap(
-      SimplePmapFn(f_unbound, graph=graph, out_axes=out_axes),
+      SimplePmapFn(
+        f_unbound,
+        graph=graph,
+        in_axes=in_axes,
+        out_axes=out_axes,
+        update_axes=tuple(update_axes),
+      ),
       axis_name=axis_name,
       in_axes=in_axes,
-      out_axes=(out_axes, (in_axes, 0)),
+      out_axes=(out_axes, update_axes),
       static_broadcasted_argnums=static_broadcasted_argnums,
       devices=devices,
       backend=backend,
       axis_size=axis_size,
       donate_argnums=donate_argnums,
     )
-
+ 
     @functools.wraps(f_unbound)
     def simple_pmap_wrapper(*args, **kwargs):
       if graph:
         args, kwargs = extract.to_tree2(
             (args, kwargs),
-            prefix=(in_axes, None)
-            if in_axes is not None
-            else None,
-            check_aliasing=in_axes is not None,
+            prefix=(in_axes, 0),
         )
-      extract.check_no_aliases('pmap', args=args, kwargs=kwargs)
+      variables = extract.check_no_aliases('pmap', args=args, kwargs=kwargs)
       out, updates = pmapped_fn(*args, **kwargs)
-      extract.apply_variable_updates((args, kwargs), updates)
+      extract.apply_updates(variables, updates)
       if graph:
         out = extract.from_tree2(out)
       return out
-
+ 
     return simple_pmap_wrapper  # type: ignore[return-value]
 
   jax_in_axes = jax.tree.map(
@@ -1394,61 +1407,50 @@ class SimpleScanFn:
   in_axes: tp.Any
   out_axes: tp.Any
   out_is_tuple: bool
-  carry_arg_index: int | None
-  carry_out_index: int | None
+  carry_idx: int | None
+  carry_out_idx: int | None
+  update_axes: tuple[tp.Any, ...]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
-  def __call__(self, full_carry: tp.Any, x_args: tp.Any):
+  def __call__(self, full_carry: tp.Any, args: tp.Any):
     carry, broadcasts = full_carry
-    updates, snapshot = extract.updates_and_snapshot(x_args)
-    x_args = extract.insert(
-        x_args,
-        broadcasts,
-        is_leaf=lambda x: isinstance(x, variablelib.Variable),
-    )
-
+    carry_in = extract.copy_var_structure(carry)
+    args = extract.insert(args, broadcasts)
+    current, snapshot = extract.snapshot(labeled(args=args))
     if self.graph:
-      x_args = extract.from_tree2(x_args)
+      args = extract.from_tree2(args)
       carry = extract.from_tree2(carry)
-
-    # Reconstruct full args
-    if self.carry_arg_index is not None:
-      args = extract.insert_at(x_args, self.carry_arg_index, carry)
-    else:
-      args = x_args
+    args = extract.replace_at(args, self.carry_idx, carry)
 
     out = self.f(*args)
 
-    if self.graph:
-      # check consistent aliasing, temporarily convert `out` to tree
-      # to check aliasing, but the real tree convertion is done later
-      check_out = extract.to_tree2(out, prefix=self.out_axes)
-    else:
-      check_out = out
-
-    extract.check_no_aliases(
-        'scan', args=updates, out=check_out, check_can_update=['out']
-    )
-    updates = extract.mask_variable_updates(updates, snapshot)
-    if self.carry_arg_index is not None:  # has carry
-      if self.out_is_tuple:
-        carry_out, ys = extract.slice_at(out, self.carry_out_index)
-      else:
-        carry_out = out
-        ys = None
-      extract.check_same_variables(carry, carry_out, 'scan')
-    else:
-      ys = out
+    if self.carry_idx is None:  # has carry
       carry_out = None
+      ys = out
+    elif self.out_is_tuple:
+      carry_out, ys = extract.mask_at(out, self.carry_out_idx)
+    else:
+      carry_out = out
+      ys = None
 
     if self.graph:
-      # convert the carry to tree separately to ensure a consistent
-      # graph structure for the carry in and carry out
+      ys = extract.to_tree2(ys, prefix=self.out_axes)
       carry_out = extract.to_tree2(carry_out)
-      ys = extract.to_tree2(ys)
+
+    extract.check_same_variables(carry_in, carry_out, 'scan')
+    extract.check_no_aliases(
+        'scan', **current, carry=carry_out, out=ys, check=['out']
+    )
+    updates = extract.get_updates(
+        current, snapshot,
+        prefix=labeled(args=self.in_axes),
+        known_prefixes=self.update_axes,
+        keep_fn=lambda _, prefix, cur, snap: isinstance(prefix, int)
+        and extract.variable_changed(cur, snap),
+    )
 
     return (carry_out, broadcasts), (ys, updates)
 
@@ -1624,8 +1626,8 @@ def scan(
   if graph_updates is None:
     graph_updates = graphlib.set_graph_updates.current_value()
 
-  extract.check_prefix(in_axes, 'in_axes', 'scan', graph, graph_updates)
   extract.check_prefix(out_axes, 'out_axes', 'scan', graph, graph_updates)
+  updates_axes = extract.check_prefix(in_axes, 'in_axes', 'scan', graph, graph_updates)
   _check_out_axes(out_axes)
 
   if not graph or not graph_updates:
@@ -1634,6 +1636,7 @@ def scan(
       in_axes=in_axes, out_axes=out_axes,
       length=length, reverse=reverse, unroll=unroll,
       _split_transpose=_split_transpose,
+      updates_axes=updates_axes,
     )
 
   return _graph_updates_scan(
@@ -1659,108 +1662,84 @@ def _simple_scan(
   f, f_unbound, *,
   graph, in_axes, out_axes,
   length, reverse, unroll, _split_transpose,
+  updates_axes: extract.OrderedDict,
 ):
   _validate_scan_axes(in_axes, out_axes)
+  # None and Carry aren't valid update axes
+  updates_axes.pop(None, None)
+  updates_axes.pop(Carry, None)
 
   out_is_tuple = isinstance(out_axes, tuple)
   was_carry = in_axes is Carry
   if in_axes is Carry:
     in_axes = (Carry,)
-  if isinstance(in_axes, tuple):
-    carry_arg_index = extract.find(in_axes, Carry)
-    _, sliced_in_axes = extract.slice_at(in_axes, carry_arg_index)
-  else:
-    carry_arg_index = None
-    sliced_in_axes = in_axes
-
-  if isinstance(out_axes, tuple):
-    carry_out_index = extract.find(out_axes, Carry)
-    _, sliced_out_axes = extract.slice_at(out_axes, carry_out_index)
-  else:
-    carry_out_index = None
-    sliced_out_axes = out_axes
+  carry_idx = extract.find(in_axes, Carry)
+  carry_out_idx = extract.find(out_axes, Carry)
 
   simple_scan_fn = SimpleScanFn(
       f_unbound, graph=graph,
       in_axes=in_axes, out_axes=out_axes,
       out_is_tuple=out_is_tuple,
-      carry_arg_index=carry_arg_index,
-      carry_out_index=carry_out_index,
+      carry_idx=carry_idx,
+      carry_out_idx=carry_out_idx,
+      update_axes=tuple(updates_axes),
   )
 
   @functools.wraps(f)
   def simple_scan_wrapper(*args):
-    args = resolve_kwargs(f, args, {})
     if was_carry and len(args) != 1:
       raise ValueError(
           'When in_axes=Carry, the function must take exactly one argument, '
           f'got {len(args)} arguments.'
       )
-    if graph:
-      # check consistent aliasing, temporarily convert args to tree
-      # to check aliasing, but the real tree convertion is done later
-      check_args = extract.to_tree2(args, prefix=in_axes)
-    else:
-      check_args = args
+    if graph:  # check consistent aliasing
+      extract.to_tree2(args, prefix=in_axes)
 
-    extract.check_no_aliases('scan', args=check_args)
-    carry, x_args = extract.slice_at(args, carry_arg_index)
-
+    carry, args = extract.mask_at(args, carry_idx)
     if graph:
-      # convert the carry to tree separately to ensure a consistent
-      # graph structure for the carry in and carry out
+      args = extract.to_tree2(args, prefix=in_axes)
       carry = extract.to_tree2(carry)
-      x_args = extract.to_tree2(x_args)
-
-    def extract_broadcasts(path, prefix_leaf, leaf):
-      return leaf is not None and (
-          prefix_leaf is None
-          or (
-              isinstance(prefix_leaf, variablelib.Variable)
-              and prefix_leaf.get_value() is None
-          )
-      )
-    x_args, broadcasts = extract.extract(
-        extract_broadcasts, sliced_in_axes, x_args,
-        is_leaf=lambda x: x is None or isinstance(x, variablelib.Variable),
+    variables = extract.check_no_aliases('scan', args=args, carry=carry)
+    args, broadcasts = extract.extract(
+        lambda _, axes, x: axes is None,
+        in_axes, args,
+        is_leaf=lambda x: isinstance(x, variablelib.Variable),
+        prefix_leaf=lambda x: x is None,
     )
-
-    x_args_transposed = _move_axis(
+    args_t = _move_axis(
         lambda ax, leaf: jnp.moveaxis(leaf, ax, 0),
-        sliced_in_axes, x_args,
+        in_axes, args,
     )
-
     (carry_out, final_broadcasts), (ys, updates) = jax.lax.scan(
         simple_scan_fn,
         (carry, broadcasts),
-        x_args_transposed,
+        args_t,
         length=length,
         reverse=reverse,
         unroll=unroll,
         _split_transpose=_split_transpose,
     )
-
     ys, updates = _move_axis(
         lambda ax, leaf: jnp.moveaxis(leaf, 0, ax),
-        (sliced_out_axes, sliced_in_axes),
+        (out_axes, updates_axes),
         (ys, updates),
     )
-
-    extract.apply_variable_updates(x_args, updates)
-    extract.apply_variable_updates(broadcasts, final_broadcasts)
     carry = extract.update_carry_variables(carry, carry_out)
+    extract.apply_updates(variables, updates)
+    for broadcast, update in zip(broadcasts, final_broadcasts, strict=True):
+      if isinstance(broadcast, variablelib.Variable):
+        broadcast.update_from_state(update)
 
     if graph:
       ys = extract.from_tree2(ys)
       carry = extract.from_tree2(carry)
 
-    if carry_arg_index is not None:
-      if out_is_tuple:
-        out = extract.insert_at(ys, carry_out_index, carry)
-      else:
-        out = carry
-    else:
+    if carry_idx is None:
       out = ys
+    elif out_is_tuple:
+      out = extract.replace_at(ys, carry_out_idx, carry)
+    else:
+      out = carry
 
     return out
 
@@ -1907,13 +1886,13 @@ class SimpleWhileLoopBodyFn:
 
   @extract.treemap_copy_args
   def __call__(self, val):
-    val_variables, _ = extract.updates_and_snapshot(val)
+    val_in = extract.copy_var_structure(val)
     if self.graph:
       val = extract.from_tree2(val)
     out = self.f(val)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_same_variables(val_variables, out, 'while_loop')
+    extract.check_same_variables(val_in, out, 'while_loop')
     return out
 
 
@@ -2104,13 +2083,13 @@ class SimpleForiLoopBodyFn:
 
   @extract.treemap_copy_args
   def __call__(self, i, val):
-    val_variables, _ = extract.updates_and_snapshot(val)
+    val_in = extract.copy_var_structure(val)
     if self.graph:
       val = extract.from_tree2(val)
     out = self.f(i, val)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_same_variables(val_variables, out, 'fori_loop')
+    extract.check_same_variables(val_in, out, 'fori_loop')
     return out
 
 

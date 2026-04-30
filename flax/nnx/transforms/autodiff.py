@@ -25,6 +25,7 @@ from flax.nnx import (
   graphlib,
   variablelib,
 )
+from flax.nnx.extract import labeled
 from flax.nnx.statelib import State
 import jax
 
@@ -77,20 +78,14 @@ class SimpleGradFn:
 
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
-    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    current, snapshot = extract.snapshot(labeled(args=args, kwargs=kwargs))
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(
-        'grad',
-        args=updates[0],
-        kwargs=updates[1],
-        out=out,
-        check_can_update=['out'],
-    )
-    updates = extract.mask_variable_updates(updates, snapshot)
+    extract.check_no_aliases('grad', **current, out=out, check=['out'])
+    updates = extract.get_updates(current, snapshot)
 
     if self.has_aux:
       loss, aux = out
@@ -174,7 +169,7 @@ def _grad_general(
           (args, kwargs), prefix=(args_prefix, False),
         )
 
-      extract.check_no_aliases('grad', args=args, kwargs=kwargs)
+      variables = extract.check_no_aliases('grad', args=args, kwargs=kwargs)
 
       fn_out = gradded_fn(*args, **kwargs)
 
@@ -197,7 +192,7 @@ def _grad_general(
           if graph: grads = extract.from_tree2(grads)
           result = grads
 
-      extract.apply_variable_updates((args, kwargs), updates)
+      extract.apply_updates(variables, updates)
       return result
 
     return tree_grad_wrapper
@@ -571,17 +566,15 @@ class SimpleVjpFn:
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
-  def __call__(self, *args):
-    updates, snapshot = extract.updates_and_snapshot(args)
+  def __call__(self, *primals):
+    current, snapshot = extract.snapshot(labeled(primals=primals))
     if self.graph:
-      args = extract.from_tree2(args)
-    out = self.f(*args)
+      primals = extract.from_tree2(primals)
+    out = self.f(*primals)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(
-        'vjp', args=updates, out=out, check_can_update=['out']
-    )
-    updates = extract.mask_variable_updates(updates, snapshot)
+    extract.check_no_aliases('vjp', **current, out=out, check=['out'])
+    updates = extract.get_updates(current, snapshot)
     if self.has_aux:
       primals_out, aux = out
       return primals_out, (updates, aux)
@@ -701,7 +694,7 @@ def vjp(
 
   if graph:
     primals = extract.to_tree2(primals)
-  extract.check_no_aliases('vjp', primals=primals)
+  variables = extract.check_no_aliases('vjp', primals=primals)
   primals_out, vjp_fn, aux = jax.vjp(
     SimpleVjpFn(f_unbound, has_aux=has_aux, graph=graph),
     *primals,
@@ -717,7 +710,7 @@ def vjp(
     raw_vjp_fn = vjp_fn
     def vjp_fn(g):
       return extract.from_tree2(raw_vjp_fn(g))
-  extract.apply_variable_updates(primals, updates)
+  extract.apply_updates(variables, updates)
   if has_aux:
     return primals_out, vjp_fn, user_aux
   else:
@@ -739,17 +732,15 @@ class SimpleJvpFn:
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
-  def __call__(self, *args):
-    updates, snapshot = extract.updates_and_snapshot(args)
+  def __call__(self, *primals):
+    current, snapshot = extract.snapshot(labeled(primals=primals))
     if self.graph:
-      args = extract.from_tree2(args)
-    out = self.f(*args)
+      primals = extract.from_tree2(primals)
+    out = self.f(*primals)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(
-        'jvp', args=updates, out=out, check_can_update=['out']
-    )
-    updates = extract.mask_variable_updates(updates, snapshot)
+    extract.check_no_aliases('jvp', **current, out=out, check=['out'])
+    updates = extract.get_updates(current, snapshot)
     if self.has_aux:
       primals_out, aux = out
       return (primals_out, updates), aux
@@ -878,7 +869,7 @@ def jvp(
   if graph:
     primals = extract.to_tree2(primals)
     tangents = extract.to_tree2(tangents)
-  extract.check_no_aliases('jvp', primals=primals)
+  variables = extract.check_no_aliases('jvp', primals=primals)
   extract.check_no_aliases('jvp', tangents=tangents)
   if has_aux:
     (primals_out, updates), (tangent_out, _updates_tangent), aux = jax.jvp(
@@ -896,7 +887,7 @@ def jvp(
   if graph:
     primals_out = extract.from_tree2(primals_out)
     tangent_out = extract.from_tree2(tangent_out)
-  extract.apply_variable_updates(primals, updates)
+  extract.apply_updates(variables, updates)
   if has_aux:
     return primals_out, tangent_out, aux
   else:
@@ -912,41 +903,20 @@ def jvp(
 class SimpleCustomVjpFn:
   f: tp.Callable[..., tp.Any]
   graph: bool
-  nondiff_argnums: tuple[int, ...]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
   def __call__(self, *args):
-    updates, snapshot = extract.updates_and_snapshot(args)
+    current, snapshot = extract.snapshot(labeled(args=args))
     if self.graph:
       args = extract.from_tree2(args)
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases(
-        'custom_vjp', args=updates, out=out, check_can_update=['out']
-    )
-    diff_prefix = tuple(
-      i not in self.nondiff_argnums for i in range(len(args))
-    )
-    def keep_fn(path, diff_arg, cur, snap):
-      assert isinstance(diff_arg, bool)
-      changed = extract.variable_changed(cur, snap)
-      if diff_arg and changed:
-        raise ValueError(
-          f'Variables in differentiable argument were mutated inside '
-          f'custom_vjp at {jax.tree_util.keystr(path)}.\n'
-          f'This is not supported when '
-          f'graph_updates=False because the gradient for the Variable '
-          f'updates would be silently dropped. Move the Variable mutation '
-          f'to a non-differentiable argument, or use graph_updates=True.'
-        )
-      return changed
-    updates = extract.mask_variable_updates(
-      updates, snapshot, prefix=diff_prefix, keep_fn=keep_fn,
-    )
+    extract.check_no_aliases('custom_vjp', **current, out=out, check=['out'])
+    updates = extract.get_updates(current, snapshot)
     return out, updates
 
 
@@ -960,18 +930,20 @@ class SimpleFwdFn:
 
   @extract.treemap_copy_args
   def __call__(self, *args):
-    updates, snapshot = extract.updates_and_snapshot(args)
+    current, snapshot = extract.snapshot(labeled(args=args))
     if self.graph:
       args = extract.from_tree2(args)
     out, residual = self.fwd(*args)
     if self.graph:
       out = extract.to_tree2(out)
       residual = extract.to_tree2(residual)
-    extract.check_no_aliases(
-        'custom_vjp', args=updates, out=out, check_can_update=['out']
+    extract.check_no_aliases('custom_vjp', **current, out=out, check=['out'])
+    updates = extract.get_updates(current, snapshot)
+    masked_args = jax.tree.map(
+      lambda _: None, current,
+      is_leaf=lambda x: isinstance(x, variablelib.Variable),
     )
-    updates = extract.mask_variable_updates(updates, snapshot)
-    return (out, updates), residual
+    return (out, updates), (residual, masked_args)
 
 
 @dataclasses.dataclass(eq=False)
@@ -984,12 +956,15 @@ class SimpleBwdFn:
 
   @extract.treemap_copy_args
   def __call__(self, *args):
-    *nondiff, residual, (out_g, _updates_g) = args
+    *nondiff, (residual, masked_args), (out_g, updates_g) = args
+    updates_g = extract.to_masked(masked_args, updates_g).args
     if self.graph:
       nondiff = extract.from_tree2(nondiff)
       residual = extract.from_tree2(residual)
       out_g = extract.from_tree2(out_g)
-    result = self.bwd(*nondiff, residual, out_g)
+      updates_g = extract.from_tree2(updates_g, recreate_variables=False)
+    kwargs = extract.filter_kwargs(self.bwd, updates_g=updates_g)
+    result = self.bwd(*nondiff, residual, out_g, **kwargs)
     if self.graph:
       result = extract.to_tree2(result)
     return result
@@ -1007,7 +982,7 @@ class SimpleCustomVjp(tp.Generic[A]):
     self.nondiff_argnums = nondiff_argnums
     self.graph = graph
     self.custom_vjp_fn = jax.custom_vjp(
-      fun=SimpleCustomVjpFn(fun, graph=graph, nondiff_argnums=nondiff_argnums),
+      fun=SimpleCustomVjpFn(fun, graph=graph),
       nondiff_argnums=nondiff_argnums,
     )
 
@@ -1017,15 +992,12 @@ class SimpleCustomVjp(tp.Generic[A]):
     args = resolve_kwargs(self.fun, args, kwargs)
     del kwargs
     if self.graph:
-      prefix = tuple(
-        i not in self.nondiff_argnums for i in range(len(args))
-      )
-      args = extract.to_tree2(args, prefix=prefix)
-    extract.check_no_aliases('custom_vjp', args=args)
+      args = extract.to_tree2(args)
+    variables = extract.check_no_aliases('custom_vjp', args=args)
     (out, updates) = self.custom_vjp_fn(*args)
     if self.graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(args, updates)
+    extract.apply_updates(variables, updates)
     return out
 
   def defvjp(
@@ -1495,10 +1467,7 @@ def custom_vjp(
   ``jax.custom_vjp``: the ``bwd`` function receives ``out_g`` directly, and
   tangent types are the same as the input types, this means the tangent for a
   Module is a Module instance with gradient values set on its attributes.
-  This mode does not support ``DiffState`` in ``nondiff_argnums``. Additionally,
-  Variables in differentiable arguments cannot be mutated inside ``f``. If
-  mutations are needed, pass the relevant Variables through a non-differentiable
-  argument instead.
+  This mode does not support ``DiffState`` in ``nondiff_argnums``.
 
   Example::
 
@@ -1517,6 +1486,45 @@ def custom_vjp(
     ...   return (m_g,)
     ...
     >>> f.defvjp(f_fwd, f_bwd)
+
+  **updates_g**
+
+  When Variables are mutated inside ``f`` or ``f_fwd``, NNX tracks these
+  updates and propagates their gradients. The ``bwd`` function can optionally
+  receive these gradients by declaring an ``updates_g`` keyword argument.
+  ``updates_g`` is a pytree with the same structure as the input ``args``,
+  where mutated Variables have their gradient values and all other leaves are
+  ``None``.
+
+  Example::
+
+    >>> class Bar(nnx.Module):
+    ...   def __init__(self, x, y, z):
+    ...     self.x = nnx.Param(x)
+    ...     self.y = nnx.Param(y)
+    ...     self.z = nnx.BatchStat(z)
+    ...
+    >>> @nnx.custom_vjp(graph_updates=False)
+    ... def f(m: Bar):
+    ...   m.z[...] *= 2.0  # mutation tracked as an update
+    ...   return jnp.sin(m.x) * m.y
+    ...
+    >>> def f_fwd(m: Bar):
+    ...   return f(m), (jnp.cos(m.x), jnp.sin(m.x), m)
+    ...
+    >>> def f_bwd(res, g, *, updates_g):
+    ...   cos_x, sin_x, m = res
+    ...   # updates_g is a tuple matching args: (m_updates_g,)
+    ...   # m_updates_g.z contains the gradient for the z mutation
+    ...   m_g = nnx.clone(m)
+    ...   m_g.x[...] = cos_x * g * m.y
+    ...   m_g.y[...] = sin_x * g
+    ...   return (m_g,)
+    ...
+    >>> f.defvjp(f_fwd, f_bwd)
+
+  If ``bwd`` does not declare ``updates_g``, the update gradients are
+  silently discarded.
 
   Args:
     fun: Callable base function.
@@ -1577,14 +1585,14 @@ class SimpleRematFn:
 
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
-    updates, snapshot = extract.updates_and_snapshot((args, kwargs))
+    current, snapshot = extract.snapshot(labeled(args=args, kwargs=kwargs))
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases('remat', args=updates[0], kwargs=updates[1], out=out)
-    updates = extract.mask_variable_updates(updates, snapshot)
+    extract.check_no_aliases('remat', **current, out=out, check=['out'])
+    updates = extract.get_updates(current, snapshot)
     return out, updates
 
 @tp.overload
@@ -1677,11 +1685,11 @@ def remat(
     def simple_remat_wrapper(*args, **kwargs):
       if graph:
         args, kwargs = extract.to_tree2((args, kwargs))
-      extract.check_no_aliases('remat', args=args, kwargs=kwargs)
+      variables = extract.check_no_aliases('remat', args=args, kwargs=kwargs)
       out, updates = checkpointed_fn(*args, **kwargs)
       if graph:
         out = extract.from_tree2(out)
-      extract.apply_variable_updates((args, kwargs), updates)
+      extract.apply_updates(variables, updates)
       return out
 
     return simple_remat_wrapper  # type: ignore[return-value]
