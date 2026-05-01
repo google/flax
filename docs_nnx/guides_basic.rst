@@ -11,4 +11,5 @@ Basic Guides
    guides/filters_guide
    guides/randomness
    guides/checkpointing
+   guides/data_loaders
    guides/jax_and_nnx_transforms
