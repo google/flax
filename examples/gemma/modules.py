@@ -127,33 +127,31 @@ class Attention(nnx.Module):
       self.q_einsum = nnx.Einsum(
           einsum_str='BTD,NDH->BTNH',
           kernel_shape=(num_heads, features, head_dim),
-          kernel_metadata={
-              'out_sharding': shd_config.q_weight_ndh,
-          },
+          kernel_metadata={'out_sharding': shd_config.q_weight_ndh},
           dtype=dtype,
           param_dtype=weight_dtype,
           rngs=rngs,
       )
-      self.kv_einsum = nnx.Einsum(
-          einsum_str='BTD,CKDH->CBTKH',
-          kernel_shape=(2, num_kv_heads, features, head_dim),
-          kernel_metadata={
-              'out_sharding': (
-                  shd_config.kv_weight_cndh
-                  if num_kv_heads > 1
-                  else jax.P(None, None, shd_config.fsdp_axis_name, None)
-              ),
-          },
-          dtype=dtype,
-          param_dtype=weight_dtype,
-          rngs=rngs,
-      )
+      kv_kernel_sharding = None
       if shd_config.kv_weight_cndh:
         self.act_cbtkh_shd = (
             self.shd_config.act_sbtnh
             if num_kv_heads > 1
             else jax.P(None, shd_config.fsdp_axis_name, None, None, None)
         )
+        kv_kernel_sharding = (
+            shd_config.kv_weight_cndh
+            if num_kv_heads > 1
+            else jax.P(None, None, shd_config.fsdp_axis_name, None)
+        )
+      self.kv_einsum = nnx.Einsum(
+          einsum_str='BTD,CKDH->CBTKH',
+          kernel_shape=(2, num_kv_heads, features, head_dim),
+          kernel_metadata={'out_sharding': kv_kernel_sharding},
+          dtype=dtype,
+          param_dtype=weight_dtype,
+          rngs=rngs,
+      )
 
     if self.use_qk_norm:
       self._query_norm = layers.RMSNorm(

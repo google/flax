@@ -180,9 +180,10 @@ class TokenizeOpNumpy:
   def __call__(self, features: dict[str, Any]) -> dict[str, Any]:
     for k in self.data_keys:
       features[k] = self.sp_processor.EncodeAsIds(features[k])
-      features[k].insert(0, self.sp_processor.bos_id)
-      features[k].append(self.sp_processor.eos_id)
-      features[k] = np.array(features[k], dtype=np.int32)
+      features[k] = np.array(
+          [self.sp_processor.bos_id()] + features[k] + [self.sp_processor.eos_id()],
+          dtype=np.int32
+      )
     return features
 
 

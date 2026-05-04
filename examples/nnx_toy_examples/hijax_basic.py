@@ -68,7 +68,7 @@ def train_step(model, optimizer, x, y):
     model = nnx.merge(graphdef, params, nondiff)
     return jnp.mean((y - model(x)) ** 2)
 
-  grads = jax.grad(loss_fn)(nnx.vars_as(params, is_mutable=False))
+  grads = jax.grad(loss_fn)(nnx.with_vars(params, is_mutable=False))
   optimizer.update(model, grads)
 
 @jax.jit

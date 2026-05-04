@@ -396,7 +396,7 @@ class Cursor(Generic[A]):
       - If the ``cond_fn`` evaluates to True at a particular key path, this method will not recurse
         any further down that branch; i.e. this method will find and return the "earliest" child node
         that fulfills the condition in ``cond_fn`` in a particular key path
-      - ``.find`` WILL NOT search the the value at the top-most level of the pytree (i.e. the root
+      - ``.find`` WILL NOT search the value at the top-most level of the pytree (i.e. the root
         node). The ``cond_fn`` will be evaluated recursively, starting at the root node's children.
 
     Example::
@@ -484,7 +484,7 @@ class Cursor(Generic[A]):
       - If the ``cond_fn`` evaluates to True at a particular key path, this method will not recurse
         any further down that branch; i.e. this method will find and return the "earliest" child nodes
         that fulfill the condition in ``cond_fn`` in a particular key path
-      - ``.find_all`` WILL NOT search the the value at the top-most level of the pytree (i.e. the root
+      - ``.find_all`` WILL NOT search the value at the top-most level of the pytree (i.e. the root
         node). The ``cond_fn`` will be evaluated recursively, starting at the root node's children.
 
     Example::

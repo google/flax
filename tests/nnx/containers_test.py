@@ -20,26 +20,32 @@ import jax.numpy as jnp
 
 class TestContainers(absltest.TestCase):
   def test_unbox(self):
-    x = nnx.Param(
-      jnp.array(1),
-      on_get_value=lambda c, x: x + 3,  # type: ignore
-    )
+    class CustomParam(nnx.Param):
+      def get_value(self, **kwargs):
+        return super().get_value(**kwargs) + 3
+
+    x = CustomParam(jnp.array(1))
 
     assert x[...] == 4
 
   def test_on_set_value(self):
-    x = nnx.Param(
-      jnp.array(1),  # type: ignore
-      on_set_value=lambda c, x: x + 7,  # type: ignore
-    )
+    class CustomParam(nnx.Param):
+      def set_value(self, value, **kwargs):
+        super().set_value(value + 7, **kwargs)
+
+    x = CustomParam(jnp.array(1))
     x[...] = 5
 
     assert x.get_raw_value() == 12
 
   def test_module_unbox(self):
+    class CustomParam(nnx.Param):
+      def get_value(self, **kwargs):
+        return super().get_value(**kwargs) + 3
+
     class Foo(nnx.Module):
       def __init__(self) -> None:
-        self.x = nnx.Param(1, on_get_value=lambda c, x: x + 3)
+        self.x = CustomParam(1)
 
     module = Foo()
 
@@ -47,12 +53,13 @@ class TestContainers(absltest.TestCase):
     assert vars(module)['x'].get_raw_value() == 1
 
   def test_module_box(self):
+    class CustomParam(nnx.Param):
+      def set_value(self, value, **kwargs):
+        super().set_value(value + 7, **kwargs)
+
     class Foo(nnx.Module):
       def __init__(self) -> None:
-        self.x = nnx.Param(
-          jnp.array(1),
-          on_set_value=lambda c, x: x + 7,  # type: ignore
-        )
+        self.x = CustomParam(jnp.array(1))
 
     module = Foo()
     module.x[...] = 5

@@ -413,14 +413,18 @@ def check_pytree(pytree):
     pytree._check_value(name, value, new_status=None)
 
 
-class PytreeMeta(ABCMeta):
-  if not tp.TYPE_CHECKING:
+if not tp.TYPE_CHECKING:
+  class PytreeMeta(ABCMeta):
 
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
       return _graph_node_meta_call(cls, *args, **kwargs)
 
-  def _pytree_meta_construct(cls, self, *args, **kwargs):
-    self.__init__(*args, **kwargs)
+    def _pytree_meta_construct(cls, self, *args, **kwargs):
+      self.__init__(*args, **kwargs)
+else:
+  class PytreeMeta(ABCMeta):
+    def _pytree_meta_construct(cls, self, *args, **kwargs):
+      self.__init__(*args, **kwargs)
 
 ObjectMeta = PytreeMeta
 

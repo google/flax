@@ -1525,7 +1525,7 @@ def reseed(
       NNX feature set including shared references. If ``False``, uses
       tree-mode which treats Modules as regular JAX pytrees, avoiding
       the overhead of the graph protocol.
-    policy: defines how the the new scalar key is for each RngStream is used to
+    policy: defines how the new scalar key is for each RngStream is used to
       reseed the stream. If ``'scalars_only'`` is given (the default), an error is raised
       if the target stream key is not a scalar. If ``'match_shape'`` is given, the new
       scalar key is split to match the shape of the target stream key. A callable

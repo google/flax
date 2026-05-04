@@ -43,7 +43,7 @@ os.environ['FLAX_DOC_BUILD'] = 'true'
 # -- Project information -----------------------------------------------------
 
 project = 'Flax'
-copyright = '2023, The Flax authors'  # pylint: disable=redefined-builtin
+copyright = '2023-Present, The Flax authors'  # pylint: disable=redefined-builtin
 author = 'The Flax authors'
 
 

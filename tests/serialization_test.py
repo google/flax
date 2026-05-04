@@ -29,6 +29,7 @@ from jax import random
 from jax.tree_util import Partial
 
 from flax import linen as nn
+from flax import nnx
 from flax import serialization, struct
 from flax.core import freeze
 from flax.training import train_state
@@ -86,6 +87,25 @@ class WrongModule(nn.Module):
 
 
 class SerializationTest(parameterized.TestCase):
+
+  # Regression test for https://github.com/google/flax/issues/5438
+  def test_list_serialization(self):
+    def make_model(rngs):
+      return nnx.Sequential(
+                nnx.Linear(2, 3, rngs=rngs),
+                nnx.Linear(3, 1, rngs=rngs))
+    model = make_model(nnx.Rngs(0))
+    graphdef, state = nnx.split(model)
+    pure = nnx.to_pure_dict(state)
+    data = serialization.msgpack_serialize(pure)
+    restored : dict = serialization.msgpack_restore(data) # type: ignore
+    model2 = make_model(nnx.Rngs(2))
+    _, state2 = nnx.split(model2)
+    nnx.replace_by_pure_dict(state2, restored)
+    model2 = nnx.merge(graphdef, state2)
+    x = nnx.Rngs(0).normal(2)
+    self.assertEqual(model2(x), model(x))
+
   def test_dataclass_serialization(self):
     p = Point(x=1, y=2, meta={'dummy': True})
     state_dict = serialization.to_state_dict(p)

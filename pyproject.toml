@@ -46,10 +46,10 @@ testing = [
     "ml-collections",
     "mypy",
     "opencv-python",
-    # Set protobuf version for python 3.13+ to prevent error in
+    # Set protobuf version to prevent error in
     # examples/mnist/train_test.py::TrainTest::test_train_and_evaluate
     # Failed to construct dataset "mnist", builder_kwargs "{}": Value out of range: 11594722
-    "protobuf<6; python_version>='3.13'",
+    "protobuf<6",
     "pytest",
     "pytest-cov",
     "pytest-custom_exit_code",
@@ -59,8 +59,8 @@ testing = [
     "sentencepiece==0.2.0",  # Segfault bug in 0.2.1
     "tensorflow_text>=2.11.0; platform_system!='Darwin' and python_version < '3.13'",
     "tensorflow_datasets",
-    "tensorflow>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
-    "tensorflow>=2.20.0; python_version>='3.13' and python_version<'3.14'",
+    "tensorflow_cpu>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
+    "tensorflow_cpu>=2.20.0; python_version>='3.13' and python_version<'3.14'",
     # Temporary fix for https://github.com/google/flax/issues/5143
     "keras<3.13",
     "torch",

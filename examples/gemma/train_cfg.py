@@ -105,7 +105,7 @@ class TrainConfig:
   use_nnx_tree_mode: bool = False
   use_nnx_transforms: str = "no"  # ["all", "no", "grad-only", "jit-only"]
 
-  sow_config: tuple[str, ...] | None = None
+  sow_config: dict = dataclasses.field(default_factory=dict)
 
   def replace(self, **kwargs):
     return dataclasses.replace(self, **kwargs)

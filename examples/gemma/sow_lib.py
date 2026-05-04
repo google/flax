@@ -18,6 +18,7 @@ import dataclasses
 from flax import nnx
 import jax
 import jax.numpy as jnp
+from jax.sharding import auto_axes
 
 
 @jax.tree_util.register_dataclass
@@ -35,7 +36,7 @@ class LayerIntermediates:
   attn_logits_topk_values: jax.Array | None = None
   attn_logits_topk_indices: jax.Array | None = None
 
-  def merge(self, decoding_step, layer: nnx.Module):
+  def merge(self, decoding_step, layer: nnx.State):
     """Merges the intermediate activations from one step."""
 
     for field in dataclasses.fields(self.__class__):
@@ -47,9 +48,7 @@ class LayerIntermediates:
       # sub-module.
       try:
         if field.name.startswith('attn_'):
-          step_value = getattr(
-              layer.attn, field.name.replace('attn_', '')
-          )[0]
+          step_value = getattr(layer.attn, field.name.replace('attn_', ''))[0]
         elif field.name.startswith('mlp_'):
           step_value = getattr(layer.mlp, field.name.replace('mlp_', ''))[0]
         else:
@@ -86,24 +85,25 @@ class TransformerIntermediates:
   # Intermediate activations of each layer.
   layers: list[LayerIntermediates] = dataclasses.field(default_factory=list)
 
-  def merge(self, decoding_step, transformer: nnx.Module):
+  def merge(self, decoding_step, intermediates: nnx.State):
     """Merges the intermediate activations from one step."""
     if self.embeddings is not None:
       try:
         self.embeddings = self.embeddings.at[:, decoding_step + 1, ...].set(
-            transformer.embeddings[0][:, 0, ...]
+            intermediates.embeddings[0][:, 0, ...]
         )
       except AttributeError as exc:
         raise ValueError(
             'Embeddings are not in the step intermediates.'
         ) from exc
-    if len(self.layers) != len(transformer.layers):
+    if len(self.layers) != len(intermediates.layers):
       raise ValueError(
           'Number of layers in the transformer and intermediates do not match.'
       )
-    for layer_intermediates, layer_module in zip(
-        self.layers, transformer.layers
+    for layer_intermediates, layer_idx in zip(
+        self.layers, intermediates.layers
     ):
+      layer_module = intermediates.layers[layer_idx]
       layer_intermediates.merge(decoding_step, layer_module)
 
   def trim(self, max_length: int):
@@ -135,6 +135,15 @@ class SowConfig:
   # If non-zero, top-k attention logits are sowed.
   # We use a sparse representation here to save memory.
   attn_logits_topk: int = 0
+
+  def is_enabled(self):
+    return any([
+        self.embeddings,
+        self.rs_after_attention,
+        self.rs_after_ffw,
+        self.mlp_hidden_topk,
+        self.attn_logits_topk,
+    ])
 
   def maybe_sow_embeddings(
       self,
@@ -170,8 +179,13 @@ class SowConfig:
   ):
     """Sows top-absolute-k activations in a mlp hidden layer if configured."""
     if self.mlp_hidden_topk:
-      _, indices = jax.lax.top_k(jnp.abs(activations), self.mlp_hidden_topk)
-      values = jnp.take_along_axis(activations, indices, axis=-1)
+      shd = jax.typeof(activations).sharding
+      top_k = lambda x: jax.lax.top_k(x, self.mlp_hidden_topk)
+      _, indices = auto_axes(out_sharding=shd)(top_k)(jnp.abs(activations))
+      take_aa = lambda x, i, axis: jnp.take_along_axis(x, i, axis)
+      values = auto_axes(out_sharding=shd)(take_aa)(
+          activations, indices, axis=-1
+      )
       module.sow(nnx.Intermediate, 'hidden_topk_values', values)
       module.sow(nnx.Intermediate, 'hidden_topk_indices', indices)
 
@@ -182,6 +196,64 @@ class SowConfig:
   ):
     """Sows top-k attention logits if configured."""
     if self.attn_logits_topk:
-      values, indices = jax.lax.top_k(logits, self.attn_logits_topk)
+      shd = jax.typeof(logits).sharding
+      top_k = lambda x: jax.lax.top_k(x, self.attn_logits_topk)
+      values, indices = auto_axes(out_sharding=shd)(top_k)(logits)
       module.sow(nnx.Intermediate, 'logits_topk_values', values)
       module.sow(nnx.Intermediate, 'logits_topk_indices', indices)
+
+
+def init_intermediates(
+    batch_size: int,
+    buffer_size: int,
+    embed_dim: int,
+    num_layers: int,
+    num_heads: int,
+    sow_config: SowConfig,
+    dtype: jnp.dtype = jnp.float32,
+) -> TransformerIntermediates:
+  """Initializes the intermediate activations that will be filled."""
+  intermediates = TransformerIntermediates()
+  residual_stream_dummy = jnp.zeros(
+      (batch_size, buffer_size, embed_dim),
+      dtype=dtype,
+  )
+  if sow_config.embeddings:
+    intermediates.embeddings = residual_stream_dummy
+  for _ in range(num_layers):
+    layer_intermediates = LayerIntermediates()
+    if sow_config.rs_after_attention:
+      layer_intermediates.rs_after_attention = residual_stream_dummy
+    if sow_config.rs_after_ffw:
+      layer_intermediates.rs_after_ffw = residual_stream_dummy
+    if sow_config.attn_logits_topk:
+      shape = (
+          batch_size,
+          buffer_size,
+          num_heads,
+          sow_config.attn_logits_topk,
+      )
+      layer_intermediates.attn_logits_topk_values = jnp.zeros(
+          shape,
+          dtype=dtype,
+      )
+      layer_intermediates.attn_logits_topk_indices = jnp.zeros(
+          shape,
+          dtype=jnp.int32,
+      )
+    if sow_config.mlp_hidden_topk:
+      shape = (
+          batch_size,
+          buffer_size,
+          sow_config.mlp_hidden_topk,
+      )
+      layer_intermediates.mlp_hidden_topk_values = jnp.zeros(
+          shape,
+          dtype=dtype,
+      )
+      layer_intermediates.mlp_hidden_topk_indices = jnp.zeros(
+          shape,
+          dtype=jnp.int32,
+      )
+    intermediates.layers.append(layer_intermediates)
+  return intermediates
