@@ -5,6 +5,7 @@ PYTEST_OPTS=
 RUN_DOCTEST=false
 RUN_MYPY=false
 RUN_PYTEST=false
+RUN_PYREFLY=false
 RUN_PYTYPE=false
 GH_VENV=false
 
@@ -30,6 +31,9 @@ case $flag in
   --only-mypy)
   RUN_MYPY=true
   ;;
+  --only-pyrefly)
+  RUN_PYREFLY=true
+  ;;
   --use-venv)
   GH_VENV=true
   ;;
@@ -40,12 +44,13 @@ case $flag in
 esac
 done
 
-# if neither --only-doctest, --only-pytest, --only-pytype, --only-mypy is set, run all tests
-if ! $RUN_DOCTEST && ! $RUN_PYTEST && ! $RUN_PYTYPE && ! $RUN_MYPY; then
+# if neither --only-doctest, --only-pytest, --only-pytype, --only-mypy, --only-pyrefly is set, run all tests
+if ! $RUN_DOCTEST && ! $RUN_PYTEST && ! $RUN_PYTYPE && ! $RUN_MYPY && ! $RUN_PYREFLY; then
   RUN_DOCTEST=true
   RUN_PYTEST=true
   RUN_PYTYPE=true
   RUN_MYPY=true
+  RUN_PYREFLY=true
 fi
 
 # Activate cached virtual env for github CI
@@ -58,6 +63,7 @@ echo "PYTEST_OPTS: $PYTEST_OPTS"
 echo "RUN_DOCTEST: $RUN_DOCTEST"
 echo "RUN_PYTEST: $RUN_PYTEST"
 echo "RUN_MYPY: $RUN_MYPY"
+echo "RUN_PYREFLY: $RUN_PYREFLY"
 echo "RUN_PYTYPE: $RUN_PYTYPE"
 echo "GH_VENV: $GH_VENV"
 echo "WHICH PYTHON: $(which python)"
@@ -153,6 +159,12 @@ if $RUN_MYPY; then
   echo "=== RUNNING MYPY ==="
   # Validate types in library code.
   mypy --config pyproject.toml flax/ --show-error-codes
+fi
+
+if $RUN_PYREFLY; then
+  echo "=== RUNNING PYREFLY ==="
+  # Type-check using pyrefly.toml (currently scoped to flax/linen/linear.py).
+  pyrefly check
 fi
 
 # Return error code 0 if no real failures happened.

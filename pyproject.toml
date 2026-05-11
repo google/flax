@@ -45,6 +45,7 @@ testing = [
     "jraph>=0.0.6dev0",
     "ml-collections",
     "mypy",
+    "pyrefly",
     "opencv-python",
     # Set protobuf version to prevent error in
     # examples/mnist/train_test.py::TrainTest::test_train_and_evaluate

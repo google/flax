@@ -189,6 +189,7 @@ class DenseGeneral(Module):
     inputs, kernel, bias = self.promote_dtype(
       inputs, kernel, bias, dtype=self.dtype
     )
+    assert inputs is not None and kernel is not None
 
     if self.dot_general_cls is not None:
       dot_general = self.dot_general_cls()

@@ -1,0 +1,26 @@
+# Pyrefly configuration - migrated from mypy
+# Only type-check flax/linen/linear.py for now; expand as issues are resolved.
+project-includes = ["flax/linen/linear.py"]
+
+preset = "legacy"
+ignore-missing-imports = [
+    "tensorflow.*",
+    "tensorboard.*",
+    "absl.*",
+    "jax.*",
+    "rich.*",
+    "jaxlib.cuda.*",
+    "jaxlib.cpu.*",
+    "msgpack",
+    "numpy.*",
+    "optax.*",
+    "orbax.*",
+    "opt_einsum.*",
+    "scipy.*",
+    "libtpu.*",
+    "jaxlib.mlir.*",
+    "yaml",
+]
+
+[errors]
+missing-attribute = "ignore"
