@@ -1163,7 +1163,7 @@ def restore_checkpoint(
     else:
       checkpoint_contents = fp.read()
 
-  state_dict = serialization.msgpack_restore(checkpoint_contents)
+  state_dict = serialization.msgpack_restore(bytes(checkpoint_contents))
   state_dict = _restore_mpas(
     state_dict,
     target,
