@@ -719,6 +719,165 @@ class RMSNorm(Module):
     )
 
 
+class DyT(Module):
+  """Dynamic Tanh (DyT) normalization (https://arxiv.org/abs/2503.10622).
+
+  DyT is a normalization-free alternative to LayerNorm/RMSNorm that replaces
+  statistical normalization (mean/variance reduction) with a learned pointwise
+  bounding function:
+
+  .. math::
+
+    y = \\gamma \\cdot \\tanh(\\alpha \\cdot x) + \\beta
+
+  where ``alpha`` is a learnable scalar controlling input scaling, ``gamma`` is
+  a per-feature scale, and ``beta`` is a per-feature bias. Unlike LayerNorm
+  and RMSNorm, DyT requires **no reduction operations** across the feature
+  dimension, making it particularly efficient for tensor-parallel training
+  where reductions require cross-device communication.
+
+  Example usage::
+
+    >>> from flax import nnx
+    >>> import jax
+
+    >>> x = jax.random.normal(jax.random.key(0), (5, 6))
+    >>> layer = nnx.DyT(num_features=6, rngs=nnx.Rngs(0))
+
+    >>> nnx.state(layer, nnx.Param)
+    State({
+      'alpha': Param(
+        value=Array(0.5, dtype=float32)
+      ),
+      'bias': Param(
+        value=Array([0., 0., 0., 0., 0., 0.], dtype=float32)
+      ),
+      'scale': Param(
+        value=Array([1., 1., 1., 1., 1., 1.], dtype=float32)
+      )
+    })
+
+    >>> y = layer(x)
+
+  Reference: *Transformers without normalization* (Zhu et al., 2025).
+
+  Args:
+    num_features: the number of input features.
+    alpha_init: initial value for the learnable scalar ``alpha`` that controls
+      the input scaling before tanh (default: 0.5).
+    dtype: the dtype of the result (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    use_bias: If True, bias (beta) is added.
+    use_scale: If True, multiply by scale (gamma). When the next layer is
+      linear (also e.g. nn.relu), this can be disabled since the scaling
+      will be done by the next layer.
+    bias_init: Initializer for bias, by default, zero.
+    scale_init: Initializer for scale, by default, one.
+    feature_axes: Feature axes for learned scale and bias parameters. All
+      specified axes will have independent learned parameters.
+    promote_dtype: function to promote the dtype of all input array arguments
+      (including Variables accessed through ``self``) to the desired dtype. The
+      function should accept a tuple of ``(inputs, scale, bias)`` and a
+      ``dtype`` keyword argument, and return a tuple of arrays with the
+      promoted dtype.
+    rngs: rng key.
+    bias_metadata: Optional metadata dictionary to set when initializing
+      the bias.
+    scale_metadata: Optional metadata dictionary to set when initializing
+      the scale.
+    alpha_metadata: Optional metadata dictionary to set when initializing
+      the alpha.
+  """
+
+  def __init__(
+    self,
+    num_features: int,
+    *,
+    alpha_init: float = 0.5,
+    dtype: tp.Optional[Dtype] = None,
+    param_dtype: Dtype = jnp.float32,
+    use_bias: bool = True,
+    use_scale: bool = True,
+    bias_init: Initializer = initializers.zeros,
+    scale_init: Initializer = initializers.ones,
+    feature_axes: Axes = -1,
+    promote_dtype: PromoteDtypeFn = dtypes.promote_dtype,
+    rngs: rnglib.Rngs,
+    bias_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    scale_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+    alpha_metadata: tp.Mapping[str, tp.Any] = MappingProxyType({}),
+  ):
+    feature_shape = (num_features,)
+
+    self.alpha = nnx.Param(
+      jnp.array(alpha_init, dtype=param_dtype), **alpha_metadata
+    )
+
+    self.scale: nnx.Param[jax.Array] | None
+    if use_scale:
+      key = rngs.params()
+      self.scale = nnx.Param(
+        scale_init(key, feature_shape, param_dtype), **scale_metadata
+      )
+    else:
+      self.scale = nnx.data(None)
+
+    self.bias: nnx.Param[jax.Array] | None
+    if use_bias:
+      key = rngs.params()
+      self.bias = nnx.Param(
+        bias_init(key, feature_shape, param_dtype), **bias_metadata
+      )
+    else:
+      self.bias = nnx.data(None)
+
+    self.num_features = num_features
+    self.dtype = dtype
+    self.param_dtype = param_dtype
+    self.use_bias = use_bias
+    self.use_scale = use_scale
+    self.feature_axes = feature_axes
+    self.promote_dtype = promote_dtype
+
+  def __call__(self, x):
+    """Applies Dynamic Tanh normalization on the input.
+
+    Args:
+      x: the inputs.
+
+    Returns:
+      Normalized inputs (the same shape as inputs).
+    """
+    feature_axes = _canonicalize_axes(x.ndim, self.feature_axes)
+    feature_shape = [1] * x.ndim
+    for ax in feature_axes:
+      feature_shape[ax] = x.shape[ax]
+
+    # Promote dtypes for input and all Variables
+    alpha = self.alpha[...]
+    scale = self.scale[...] if self.scale else None
+    bias = self.bias[...] if self.bias else None
+    x, alpha, scale, bias = self.promote_dtype(
+      (x, alpha, scale, bias), dtype=self.dtype
+    )
+
+    # Core DyT operation: y = gamma * tanh(alpha * x) + beta
+    y = jnp.tanh(alpha * x)
+
+    args = [x]
+    if scale is not None:
+      scale = scale.reshape(feature_shape)
+      y = y * scale
+      args.append(scale)
+    if bias is not None:
+      bias = bias.reshape(feature_shape)
+      y = y + bias
+      args.append(bias)
+
+    dtype = dtypes.canonicalize_dtype(*args, dtype=self.dtype)
+    return jnp.asarray(y, dtype)
+
+
 class GroupNorm(Module):
   """Group normalization (arxiv.org/abs/1803.08494).
 

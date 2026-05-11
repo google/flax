@@ -136,6 +136,7 @@ from .nn.lora import LoRAParam as LoRAParam
 from .nn.normalization import BatchNorm as BatchNorm
 from .nn.normalization import LayerNorm as LayerNorm
 from .nn.normalization import RMSNorm as RMSNorm
+from .nn.normalization import DyT as DyT
 from .nn.normalization import GroupNorm as GroupNorm
 from .nn.normalization import InstanceNorm as InstanceNorm
 from .nn.normalization import SpectralNorm as SpectralNorm

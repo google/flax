@@ -590,5 +590,161 @@ class TestLinenConsistency(parameterized.TestCase):
     )
 
 
+class TestDyT(parameterized.TestCase):
+  """Tests for DyT (Dynamic Tanh) normalization module."""
+
+  def test_dyt_default_initialization(self):
+    """Test that DyT initializes with correct default parameter values."""
+    layer = nnx.DyT(num_features=6, rngs=nnx.Rngs(0))
+    state = nnx.state(layer, nnx.Param)
+
+    # alpha should be a scalar initialized to 0.5
+    np.testing.assert_allclose(state['alpha'].value, 0.5)
+    # scale (gamma) should be ones
+    np.testing.assert_array_equal(
+      state['scale'].value, np.ones(6, dtype=np.float32)
+    )
+    # bias (beta) should be zeros
+    np.testing.assert_array_equal(
+      state['bias'].value, np.zeros(6, dtype=np.float32)
+    )
+
+  def test_dyt_forward_pass_manual(self):
+    """Test DyT forward pass matches manual computation."""
+    layer = nnx.DyT(num_features=4, rngs=nnx.Rngs(0))
+    x = jnp.array([[1.0, -2.0, 3.0, -4.0]])
+
+    y = layer(x)
+    # With default params: y = 1.0 * tanh(0.5 * x) + 0.0
+    expected = jnp.tanh(0.5 * x)
+    np.testing.assert_allclose(y, expected, atol=1e-6)
+
+  def test_dyt_output_shape(self):
+    """Test that DyT preserves input shape."""
+    layer = nnx.DyT(num_features=6, rngs=nnx.Rngs(0))
+    x = jax.random.normal(jax.random.key(0), (5, 6))
+    y = layer(x)
+    self.assertEqual(x.shape, y.shape)
+
+  def test_dyt_output_bounded(self):
+    """Test that DyT output is bounded by scale (gamma) values."""
+    layer = nnx.DyT(num_features=4, rngs=nnx.Rngs(0))
+    # Large inputs should be bounded by tanh saturation
+    x = jnp.array([[100.0, -100.0, 1000.0, -1000.0]])
+    y = layer(x)
+    # With default scale=1 and bias=0, output should be in [-1, 1]
+    self.assertTrue(jnp.all(jnp.abs(y) <= 1.0 + 1e-6))
+
+  def test_dyt_gradient_flow(self):
+    """Test that gradients flow through all learnable parameters."""
+    layer = nnx.DyT(num_features=4, rngs=nnx.Rngs(0))
+    x = jax.random.normal(jax.random.key(0), (3, 4))
+
+    def loss_fn(model):
+      return jnp.sum(model(x) ** 2)
+
+    grads = nnx.grad(loss_fn)(layer)
+    grad_state = nnx.state(grads, nnx.Param)
+
+    # All parameters should have non-zero gradients
+    self.assertFalse(jnp.allclose(grad_state['alpha'].value, 0.0))
+    self.assertFalse(jnp.allclose(grad_state['scale'].value, 0.0))
+    self.assertFalse(jnp.allclose(grad_state['bias'].value, 0.0))
+
+  @parameterized.product(
+    dtype=[jnp.float32, jnp.float16],
+    param_dtype=[jnp.float32, jnp.float16],
+  )
+  def test_dyt_dtype_handling(
+    self,
+    dtype: Dtype,
+    param_dtype: Dtype,
+  ):
+    """Test DyT with different input and parameter dtypes."""
+    layer = nnx.DyT(
+      num_features=6,
+      dtype=dtype,
+      param_dtype=param_dtype,
+      rngs=nnx.Rngs(0),
+    )
+    x = jax.random.normal(jax.random.key(0), (5, 6))
+    y = layer(x)
+    self.assertEqual(y.dtype, dtype)
+
+  def test_dyt_no_scale(self):
+    """Test DyT with use_scale=False."""
+    layer = nnx.DyT(
+      num_features=4, use_scale=False, rngs=nnx.Rngs(0)
+    )
+    x = jnp.array([[1.0, -2.0, 3.0, -4.0]])
+    y = layer(x)
+    # Without scale: y = tanh(0.5 * x) + 0.0
+    expected = jnp.tanh(0.5 * x)
+    np.testing.assert_allclose(y, expected, atol=1e-6)
+
+  def test_dyt_no_bias(self):
+    """Test DyT with use_bias=False."""
+    layer = nnx.DyT(
+      num_features=4, use_bias=False, rngs=nnx.Rngs(0)
+    )
+    x = jnp.array([[1.0, -2.0, 3.0, -4.0]])
+    y = layer(x)
+    # Without bias: y = 1.0 * tanh(0.5 * x)
+    expected = jnp.tanh(0.5 * x)
+    np.testing.assert_allclose(y, expected, atol=1e-6)
+
+  def test_dyt_no_scale_no_bias(self):
+    """Test DyT with both use_scale=False and use_bias=False."""
+    layer = nnx.DyT(
+      num_features=4,
+      use_scale=False,
+      use_bias=False,
+      rngs=nnx.Rngs(0),
+    )
+    x = jnp.array([[1.0, -2.0, 3.0, -4.0]])
+    y = layer(x)
+    expected = jnp.tanh(0.5 * x)
+    np.testing.assert_allclose(y, expected, atol=1e-6)
+
+  def test_dyt_custom_alpha(self):
+    """Test DyT with a custom alpha initialization."""
+    layer = nnx.DyT(
+      num_features=4, alpha_init=1.0, rngs=nnx.Rngs(0)
+    )
+    x = jnp.array([[1.0, -2.0, 3.0, -4.0]])
+    y = layer(x)
+    expected = jnp.tanh(1.0 * x)
+    np.testing.assert_allclose(y, expected, atol=1e-6)
+
+  def test_dyt_multidim_input(self):
+    """Test DyT with higher-dimensional inputs (e.g., image-like)."""
+    # (batch, height, width, channels)
+    layer = nnx.DyT(num_features=8, rngs=nnx.Rngs(0))
+    x = jax.random.normal(jax.random.key(0), (2, 4, 4, 8))
+    y = layer(x)
+    self.assertEqual(y.shape, (2, 4, 4, 8))
+
+  def test_dyt_jit_compatible(self):
+    """Test that DyT works correctly under jax.jit."""
+    layer = nnx.DyT(num_features=4, rngs=nnx.Rngs(0))
+    x = jax.random.normal(jax.random.key(0), (3, 4))
+
+    @nnx.jit
+    def forward(model, x):
+      return model(x)
+
+    y_jit = forward(layer, x)
+    y_eager = layer(x)
+    np.testing.assert_allclose(y_jit, y_eager, atol=1e-6)
+
+  def test_dyt_zero_input(self):
+    """Test DyT with zero input produces zero output (with default params)."""
+    layer = nnx.DyT(num_features=4, rngs=nnx.Rngs(0))
+    x = jnp.zeros((2, 4))
+    y = layer(x)
+    # tanh(0) = 0, so with scale=1 and bias=0, output should be 0
+    np.testing.assert_allclose(y, jnp.zeros_like(x), atol=1e-7)
+
+
 if __name__ == '__main__':
   absltest.main()
