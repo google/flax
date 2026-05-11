@@ -98,6 +98,9 @@ jobs:
           - python-version: '3.12'
             test-type: mypy
             jax-version: 'newest'
+          - python-version: '3.12'
+            test-type: pyrefly
+            jax-version: 'newest'
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - name: Setup uv
@@ -128,6 +131,8 @@ jobs:
           uv run --no-sync tests/run_all_tests.sh --only-pytype
         elif [[ "${{ matrix.test-type }}" == "mypy" ]]; then
           uv run --no-sync tests/run_all_tests.sh --only-mypy
+        elif [[ "${{ matrix.test-type }}" == "pyrefly" ]]; then
+          uv run --no-sync tests/run_all_tests.sh --only-pyrefly
         else
           echo "Unknown test type: ${{ matrix.test-type }}"
           exit 1
