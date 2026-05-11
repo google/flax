@@ -25,7 +25,7 @@ from flax import config
 # Whether to filter flax frames from traceback.
 _flax_filter_tracebacks = config.flax_filter_frames
 # Flax specific set of paths to exclude from tracebacks.
-_flax_exclusions = set()
+_flax_exclusions: set[str] = set()
 
 
 # re-import JAX symbol for convenience.

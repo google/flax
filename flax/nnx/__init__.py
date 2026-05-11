@@ -181,6 +181,7 @@ from .training.optimizer import OptVariable as OptVariable
 from .training.optimizer import Optimizer as Optimizer
 from .training.optimizer import ModelAndOptimizer as ModelAndOptimizer
 from .training.optimizer import OptState as OptState
+from .training.ema import EMA as EMA
 from .transforms.autodiff import DiffState as DiffState
 from .transforms.autodiff import grad as grad
 from .transforms.autodiff import value_and_grad as value_and_grad
