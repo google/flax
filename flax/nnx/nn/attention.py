@@ -585,7 +585,9 @@ class MultiHeadAttention(Module):
     rngs: rnglib.Rngs | rnglib.RngStream | None = None,
     sow_weights: bool = False,
     decode: bool | None = None,
-    is_causal=False
+    is_causal=False,
+    out_sharding = None,
+    qkv_sharding = None,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -618,6 +620,10 @@ class MultiHeadAttention(Module):
         flag passed into the constructor.
       is_causal: whether to overlay a causal attention mask. Passed as an argument to the
         underlying attention funcion.
+      out_sharding: Optional sharding specification to pass to
+        the output linear layer for the output arrays.
+      qkv_sharding: Optional sharding specification to pass to
+        the QKV linear layers for the output arrays.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
@@ -644,9 +650,9 @@ class MultiHeadAttention(Module):
         f'but module expects {self.in_features}.'
       )
 
-    query = self.query(inputs_q)
-    key = self.key(inputs_k)
-    value = self.value(inputs_v)
+    query = self.query(inputs_q, out_sharding=qkv_sharding)
+    key = self.key(inputs_k, out_sharding=qkv_sharding)
+    value = self.value(inputs_v, out_sharding=qkv_sharding)
 
     if self.normalize_qk:
       assert self.query_ln is not None and self.key_ln is not None
@@ -745,7 +751,7 @@ class MultiHeadAttention(Module):
       is_causal=is_causal
     )
     # back to the original inputs dimensions
-    out = self.out(x)
+    out = self.out(x, out_sharding=out_sharding)
     return out
 
   def init_cache(self, input_shape: Shape, dtype: Dtype = jnp.float32):
