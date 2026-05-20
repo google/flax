@@ -95,6 +95,7 @@ from .linear import (
     Conv as Conv,
     DenseGeneral as DenseGeneral,
     Dense as Dense,
+    TernaryDense as TernaryDense,
     Einsum as Einsum,
     Embed as Embed,
 )

@@ -295,6 +295,102 @@ class Dense(Module):
     return y
 
 
+class TernaryDense(Module):
+  """A linear transformation with weights quantized to {-1, 0, +1}.
+
+  Drop-in replacement for :class:`Dense` for ternary-weight models such as
+  BitNet b1.58. On every forward pass the kernel is quantized on-the-fly to
+  ``{-1, 0, +1}`` before the matrix multiply; the underlying float parameters
+  remain in the variable collection so that gradient-based optimisers can
+  update them between steps.
+
+  Quantization rule (BitNet b1.58, https://arxiv.org/abs/2402.17764 §3.1)::
+
+    kernel_t[i, j] = sign(kernel[i, j])   if |kernel[i, j]| > threshold
+                     0                     otherwise
+
+  where ``threshold`` defaults to ``mean(|kernel|)`` per call.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> layer = nn.TernaryDense(features=4)
+    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
+    >>> jax.tree_util.tree_map(jnp.shape, params)
+    {'params': {'bias': (4,), 'kernel': (3, 4)}}
+
+  Attributes:
+    features: the number of output features.
+    threshold: quantization boundary applied element-wise to ``|kernel|``.
+      ``None`` (default) uses ``mean(|kernel|)`` per call, matching the
+      BitNet b1.58 §3.1 rule. ``0.0`` maps all weights to ±1. Large values
+      (e.g. ``1e9``) yield an all-zero effective kernel.
+    use_bias: whether to add a bias to the output (default: True).
+    dtype: the dtype of the computation (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    precision: numerical precision of the computation; see ``jax.lax.Precision``.
+    kernel_init: initializer function for the weight matrix.
+    bias_init: initializer function for the bias.
+    promote_dtype: function to promote array dtypes before computation.
+  """
+
+  features: int
+  threshold: float | None = None
+  use_bias: bool = True
+  dtype: Dtype | None = None
+  param_dtype: Dtype = jnp.float32
+  precision: PrecisionLike = None
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = initializers.zeros_init()
+  promote_dtype: PromoteDtypeFn = promote_dtype
+
+  @compact
+  def __call__(self, inputs: Array) -> Array:
+    """Applies a ternary-weight linear transformation along the last dimension.
+
+    Args:
+      inputs: The nd-array to be transformed.
+
+    Returns:
+      The transformed input.
+    """
+    kernel = self.param(
+      'kernel',
+      self.kernel_init,
+      (jnp.shape(inputs)[-1], self.features),
+      self.param_dtype,
+    )
+    if self.use_bias:
+      bias = self.param(
+        'bias', self.bias_init, (self.features,), self.param_dtype
+      )
+    else:
+      bias = None
+
+    inputs, kernel, bias = self.promote_dtype(
+      inputs, kernel, bias, dtype=self.dtype
+    )
+    assert inputs is not None
+    assert kernel is not None
+
+    # Quantize kernel to {-1, 0, +1}
+    abs_k = jnp.abs(kernel)
+    t = jnp.mean(abs_k) if self.threshold is None else self.threshold
+    kernel = jnp.sign(kernel) * (abs_k > t).astype(kernel.dtype)
+
+    y = lax.dot_general(
+      inputs,
+      kernel,
+      (((inputs.ndim - 1,), (0,)), ((), ())),
+      precision=self.precision,
+    )
+    if bias is not None:
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
+    return y
+
+
 class Einsum(Module):
   """An einsum transformation with learnable kernel and bias.
 
