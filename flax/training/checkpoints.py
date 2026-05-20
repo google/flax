@@ -497,8 +497,9 @@ def _save_commit(
   ocp.utils.record_saved_duration(ckpt_start_time)
   if async_manager:
     jax.monitoring.record_event_duration_secs(
-      '/jax/checkpoint/write/async/total_duration_secs',
-      time.time() - ckpt_start_time,
+        '/jax/checkpoint/write/async/total_duration_secs',
+        time.time() - ckpt_start_time,
+        storage_type='unknown',
     )
 
 
