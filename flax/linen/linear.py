@@ -375,10 +375,14 @@ class TernaryDense(Module):
     assert inputs is not None
     assert kernel is not None
 
-    # Quantize kernel to {-1, 0, +1}
+    # Quantize kernel to {-1, 0, +1} with STE and beta scale (BitNet b1.58 §3.1)
     abs_k = jnp.abs(kernel)
     t = jnp.mean(abs_k) if self.threshold is None else self.threshold
-    kernel = jnp.sign(kernel) * (abs_k > t).astype(kernel.dtype)
+    kernel_q = jnp.sign(kernel) * (abs_k > t).astype(kernel.dtype)
+    # STE: forward uses kernel_q; backward treats quantizer as identity
+    kernel = kernel + lax.stop_gradient(kernel_q - kernel)
+    # beta restores activation scale; only applied when using auto threshold
+    beta = jnp.mean(abs_k) if self.threshold is None else None
 
     y = lax.dot_general(
       inputs,
@@ -386,6 +390,8 @@ class TernaryDense(Module):
       (((inputs.ndim - 1,), (0,)), ((), ())),
       precision=self.precision,
     )
+    if beta is not None:
+      y = y * beta
     if bias is not None:
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
