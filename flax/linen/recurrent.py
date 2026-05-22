@@ -136,7 +136,8 @@ class LSTMCell(RNNCellBase):
     r"""A long short-term memory (LSTM) cell.
 
     Args:
-      carry: the hidden state of the LSTM cell,
+      carry: a tuple ``(c, h)`` of the cell state ``c`` and the hidden
+        state ``h``, both of shape ``(*batch, features)``. Typically
         initialized using ``LSTMCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
@@ -285,8 +286,9 @@ class OptimizedLSTMCell(RNNCellBase):
     r"""An optimized long short-term memory (LSTM) cell.
 
     Args:
-      carry: the hidden state of the LSTM cell, initialized using
-        ``LSTMCell.initialize_carry``.
+      carry: a tuple ``(c, h)`` of the cell state ``c`` and the hidden
+        state ``h``, both of shape ``(*batch, features)``. Typically
+        initialized using ``OptimizedLSTMCell.initialize_carry``.
       inputs: an ndarray with the input for the current time step. All
         dimensions except the final are considered batch dimensions.
 
