@@ -424,6 +424,10 @@ def vmap(
       axis so that parallel collectives can be applied.
     axis_size: Optional, an integer indicating the size of the axis to be
       mapped. If not provided, the mapped axis size is inferred from arguments.
+    spmd_axis_name: Optional, axis name added to any pjit sharding constraints
+      appearing in ``f``. See also
+      https://github.com/google/flax/blob/main/flax/linen/partitioning.py.
+    transform_metadata: Optional mapping of metadata for the transform.
     graph: If ``True`` (default), uses graph-mode which supports the full
       NNX feature set including shared references and reference semantics.
       If ``False``, uses tree-mode which treats Modules as regular JAX
