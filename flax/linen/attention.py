@@ -351,14 +351,18 @@ class MultiHeadDotProductAttention(Module):
       should be divisible by the number of heads.
     dtype: The dtype of the computation (default: infer from inputs and params)
     param_dtype: The dtype passed to parameter initializers (default: float32)
-    qkv_features: Dimension of the key, query, and value.
-    out_features: Dimension of the last projection
+    qkv_features: Dimension of the key, query, and value. If None,
+      ``inputs_q.shape[-1]`` is used.
+    out_features: Dimension of the last projection. If None,
+      ``inputs_q.shape[-1]`` is used.
     broadcast_dropout: Use a broadcasted dropout along batch dims.
     dropout_rate: Dropout rate.
     deterministic: If False, the attention weight is masked randomly using
-      dropout, whereas if True, the attention weights are deterministic.
+      dropout, whereas if True, the attention weights are deterministic. If
+      None, the ``deterministic`` argument passed to ``__call__`` is used
+      instead.
     precision: Numerical precision of the computation see ``jax.lax.Precision``
-      for details.
+      for details. If None, ``jax.lax.Precision.DEFAULT`` is used.
     kernel_init: Initializer for the kernel of the Dense layers.
     out_kernel_init: Optional Initializer for the kernel of the output Dense layer,
       if None, ``kernel_init`` will be used.
@@ -753,14 +757,18 @@ class MultiHeadAttention(MultiHeadDotProductAttention):
       should be divisible by the number of heads.
     dtype: the dtype of the computation (default: infer from inputs and params)
     param_dtype: the dtype passed to parameter initializers (default: float32)
-    qkv_features: dimension of the key, query, and value.
-    out_features: dimension of the last projection
+    qkv_features: dimension of the key, query, and value. If None,
+      ``inputs_q.shape[-1]`` is used.
+    out_features: dimension of the last projection. If None,
+      ``inputs_q.shape[-1]`` is used.
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rate: dropout rate
     deterministic: if false, the attention weight is masked randomly using
-      dropout, whereas if true, the attention weights are deterministic.
+      dropout, whereas if true, the attention weights are deterministic. If
+      None, the ``deterministic`` argument passed to ``__call__`` is used
+      instead.
     precision: numerical precision of the computation see ``jax.lax.Precision``
-      for details.
+      for details. If None, ``jax.lax.Precision.DEFAULT`` is used.
     kernel_init: initializer for the kernel of the Dense layers.
     bias_init: initializer for the bias of the Dense layers.
     use_bias: bool: whether pointwise QKVO dense transforms use bias.
