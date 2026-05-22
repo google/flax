@@ -307,6 +307,7 @@ def dataclass(
     kw_only=kw_only,
     slots=slots,
     weakref_slot=weakref_slot,
+    repr=False,
   )
 
 def _collect_stats(

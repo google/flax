@@ -27,6 +27,7 @@ from flax.nnx import (
   graphlib,
   variablelib,
 )
+from flax.nnx.extract import labeled
 from flax.nnx.module import Module
 from flax.nnx.proxy_caller import (
   CallableProxy,
@@ -363,14 +364,14 @@ class SimpleCheckifyFn:
 
   @extract.treemap_copy_args
   def __call__(self, *args):
-    updates, snapshot = extract.updates_and_snapshot(args)
+    current, snapshot = extract.snapshot(labeled(args=args))
     if self.graph:
       args = extract.from_tree2(args)
     out = self.f(*args)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases('checkify', args=updates, out=out)
-    updates = extract.mask_variable_updates(updates, snapshot)
+    extract.check_no_aliases('checkify', **current, out=out, check=['out'])
+    updates = extract.get_updates(current, snapshot)
     return out, updates
 
 def checkify(
@@ -434,11 +435,11 @@ def checkify(
     def simple_checkify_wrapper(*args):
       if graph:
         args = extract.to_tree2(args)
-      extract.check_no_aliases('checkify', args=args)
+      variables = extract.check_no_aliases('checkify', args=args)
       error, (out, updates) = checkify_fn(*args)
       if graph:
         out = extract.from_tree2(out)
-      extract.apply_variable_updates(args, updates)
+      extract.apply_updates(variables, updates)
       return error, out
 
     return simple_checkify_wrapper  # type: ignore
@@ -570,14 +571,17 @@ class SimpleCondFn:
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
-  def __call__(self, *args):
-    updates, _snapshot = extract.updates_and_snapshot(args)
+  def __call__(self, *operands):
+    current, snapshot = extract.snapshot(labeled(operands=operands))
     if self.graph:
-      args = extract.from_tree2(args)
-    out = self.f(*args)
+      operands = extract.from_tree2(operands)
+    out = self.f(*operands)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases('switch', args=updates, out=out)
+    extract.check_no_aliases('switch', **current, out=out, check=['out'])
+    updates = extract.get_updates(
+        current, snapshot, keep_fn=lambda *_: True
+    )
     return out, updates
 
 
@@ -615,7 +619,7 @@ def cond(
   if not graph or not graph_updates:
     if graph:
       operands = extract.to_tree2(operands)
-    extract.check_no_aliases('cond', operands=operands)
+    variables = extract.check_no_aliases('cond', operands=operands)
     out, updates = jax.lax.cond(
       pred,
       SimpleCondFn(true_fun, graph=graph),
@@ -624,7 +628,7 @@ def cond(
     )
     if graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(operands, updates)
+    extract.apply_updates(variables, updates)
     return out
 
   @general.split_inputs(ctxtag='cond')
@@ -670,7 +674,7 @@ def switch(
   if not graph or not graph_updates:
     if graph:
       operands = extract.to_tree2(operands)
-    extract.check_no_aliases('switch', operands=operands)
+    variables = extract.check_no_aliases('switch', operands=operands)
     out, updates = jax.lax.switch(
       index,
       [SimpleCondFn(f, graph=graph) for f in branches],
@@ -678,7 +682,7 @@ def switch(
     )
     if graph:
       out = extract.from_tree2(out)
-    extract.apply_variable_updates(operands, updates)
+    extract.apply_updates(variables, updates)
     return out
 
   @general.split_inputs(ctxtag='switch')
