@@ -2878,8 +2878,20 @@ def pop(
     return states
 
 
-def clone(node: Node, variables: bool = True, *, graph: bool | None = None) -> Node:
+def clone(
+  node: Node,
+  variables: bool = True,
+  *,
+  arrays: bool = False,
+  graph: bool | None = None,
+) -> Node:
   """Create a deep copy of the given graph node.
+
+  By default the cloned :class:`Variable` wrappers are new objects but
+  share their underlying ``jax.Array`` buffers with the original. This
+  is cheap, but ``jit(donate_argnums=...)`` will reject the clone
+  because JAX refuses to donate the same buffer twice. Pass
+  ``arrays=True`` to also copy the underlying buffers.
 
   Example usage::
 
@@ -2894,6 +2906,11 @@ def clone(node: Node, variables: bool = True, *, graph: bool | None = None) -> N
     node: A graph node object.
     variables: If ``True`` (default) copies of the :class:`Variable` objects are created,
       otherwise the Variables are shared between the original and cloned node.
+    arrays: If ``True``, the underlying ``jax.Array`` buffers of each
+      :class:`Variable` are also copied so the clone has independent
+      memory and is compatible with ``jit(donate_argnums=...)``. If True,
+      ``variables`` should be also ``True``, otherwise a ValueError is raised.
+      Defaults to ``False`` (buffers shared with the original).
     graph: If ``True`` (default), uses graph-mode which supports the full
       NNX feature set including shared references. If ``False``, uses
       tree-mode which treats Modules as regular JAX pytrees, avoiding
@@ -2902,6 +2919,13 @@ def clone(node: Node, variables: bool = True, *, graph: bool | None = None) -> N
     A deep copy of the :class:`Module` object.
   """
   graphdef, state = split(node, graph=graph)
+  if arrays:
+    if not variables:
+      raise ValueError("If arrays is True, variables should be also True")
+    state = jax.tree.map(jax.numpy.copy, state)
+    # Optimization: as state is already a copy,
+    # set variables to False to avoid another copy
+    variables = False
   return merge(graphdef, state, copy=variables)
 
 

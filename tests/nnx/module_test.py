@@ -574,6 +574,33 @@ class TestModule(parameterized.TestCase):
     assert m.b.c.get_value() == m2.b.c.get_value()
     assert m.b.d.get_value() == m2.b.d.get_value()
 
+  def test_clone_arrays_distinct_buffers(self):
+    m = nnx.Linear(in_features=4, out_features=2, rngs=nnx.Rngs(0))
+
+    shared = nnx.clone(m)
+    distinct = nnx.clone(m, arrays=True)
+
+    # Default: buffers shared with the original.
+    assert m.kernel[...] is shared.kernel[...]
+    assert m.kernel[...] is not distinct.kernel[...]
+    # Values still match.
+    np.testing.assert_array_equal(m.kernel[...], distinct.kernel[...])
+
+  def test_clone_arrays_donate_argnums(self):
+    class TestModule(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(in_features=4, out_features=2, rngs=rngs)
+        self.linear_copy = nnx.clone(self.linear, arrays=True)
+
+    m = TestModule(nnx.Rngs(0))
+
+    def update(state):
+      return jax.tree.map(lambda x: x + 0.01, state)
+
+    update_donate = jax.jit(update, donate_argnums=(0,))
+    state = update_donate(nnx.state(m))
+    assert state is not None
+
   def test_sow_existing_non_variable_field(self):
     class Foo(nnx.Module):
       def __init__(self) -> None:
