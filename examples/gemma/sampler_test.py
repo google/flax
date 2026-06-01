@@ -553,7 +553,7 @@ class SamplerTest(parameterized.TestCase):
       import kagglehub
 
       has_kagglehub_dep = True
-    except ModuleNotFoundError:
+    except (ImportError, ModuleNotFoundError):
       has_kagglehub_dep = False
 
     if not (has_kaggle_creds and has_kagglehub_dep):
