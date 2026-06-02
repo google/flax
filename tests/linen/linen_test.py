@@ -134,6 +134,16 @@ class PoolTest(parameterized.TestCase):
 
     assert y.shape == (16, 16, 3)
 
+  def test_pooling_window_shape_too_long_raises(self):
+    # window_shape must have at most inputs.ndim - 1 entries, one per spatial
+    # dimension. A longer window_shape should raise a clear error instead of a
+    # cryptic internal assertion (see GitHub issue #4494).
+    x = jnp.zeros((4, 3), dtype=jnp.float32)
+    with self.assertRaisesRegex(
+      ValueError, 'window_shape .* too many dimensions'
+    ):
+      nn.max_pool(x, (2, 2, 2))
+
 
 class NormalizationTest(parameterized.TestCase):
   def test_layer_norm_mask(self):

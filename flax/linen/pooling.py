@@ -43,6 +43,14 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
     The output of the reduction for each window slice.
   """
   num_batch_dims = inputs.ndim - (len(window_shape) + 1)
+  if num_batch_dims < 0:
+    raise ValueError(
+      f'window_shape {window_shape} has too many dimensions for input with '
+      f'shape {inputs.shape}. Pooling expects inputs laid out as '
+      '(batch_dims..., spatial_dims..., features), so window_shape must have '
+      'one entry per spatial dimension, which is at most inputs.ndim - 1 '
+      f'entries ({inputs.ndim - 1} for this input).'
+    )
   strides = strides or (1,) * len(window_shape)
   assert len(window_shape) == len(
     strides
