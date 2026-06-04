@@ -17,6 +17,7 @@ from collections import namedtuple
 import dataclasses
 import functools
 import inspect
+import types
 import typing as tp
 
 from flax import struct
@@ -675,6 +676,19 @@ def copy_var_structure(tree: A) -> A:
       lambda x: x, tree, is_leaf=lambda x: isinstance(x, variablelib.Variable)
   )
 
+def collect_variables(
+    **kwargs,
+) -> dict[jax.tree_util.KeyPath, variablelib.Variable]:
+  """Collect all Variables from the given keyword arguments, allowing duplicates."""
+  container = labeled(**kwargs)
+  is_leaf = lambda x: isinstance(x, variablelib.Variable)
+  all_variables: dict[jax.tree_util.KeyPath, variablelib.Variable] = {}
+  for path, leaf in jax.tree.leaves_with_path(container, is_leaf=is_leaf):
+    if isinstance(leaf, variablelib.Variable):
+      all_variables[path] = leaf
+  return all_variables
+
+
 def check_no_aliases(
     fn_name: str, /, *, check: tp.Iterable[str] = (), **kwargs
 ) -> dict[jax.tree_util.KeyPath, variablelib.Variable]:
@@ -1118,6 +1132,124 @@ def to_masked(tree, all_updates: OrderedDict[tp.Any, Updates]):
       lambda path, _: combined.get(path, None), tree,
       is_leaf=lambda x: x is None
   )
+
+@dataclasses.dataclass(frozen=True)
+class CapturedInfo:
+  """Info about closure-captured graph nodes/Variables."""
+  nodes: tuple[object, ...]
+  freevar_indices: tuple[int, ...]
+
+  def __len__(self):
+    return len(self.nodes)
+
+  def __bool__(self):
+    return len(self.nodes) > 0
+
+  def exclude_from_args(
+      self,
+      args: tuple,
+      kwargs: dict | tp.Mapping,
+  ) -> 'CapturedInfo':
+    """Remove captured nodes that also appear in explicit args (by id)."""
+    if not self.nodes:
+      return self
+    arg_ids: set[int] = set()
+    for _, value in graphlib.iter_graph((args, kwargs), graph=True):
+      if isinstance(value, variablelib.Variable):
+        arg_ids.add(id(value))
+    keep = [(node, idx) for node, idx in zip(self.nodes, self.freevar_indices)
+            if id(node) not in arg_ids]
+    if len(keep) == len(self.nodes):
+      return self
+    if not keep:
+      return CapturedInfo((), ())
+    nodes, indices = zip(*keep)
+    return CapturedInfo(tuple(nodes), tuple(indices))
+
+
+_EMPTY_CAPTURED = CapturedInfo((), ())
+
+
+def _unwrap(f):
+  """Unwrap functools.partial and __wrapped__ decorators to the inner function."""
+  while True:
+    if isinstance(f, functools.partial):
+      f = f.func
+    elif hasattr(f, '__wrapped__'):
+      f = f.__wrapped__
+    else:
+      return f
+
+
+def find_captured_nodes(f) -> CapturedInfo:
+  """Find top-level nnx Variables and graph nodes in f's closure."""
+  f = _unwrap(f)
+  if not hasattr(f, '__closure__') or f.__closure__ is None:
+    return _EMPTY_CAPTURED
+  closure = f.__closure__
+  seen: set[int] = set()
+  captured_nodes: list[object] = []
+  captured_indices: list[int] = []
+  for i, cell in enumerate(closure):
+    try:
+      obj = cell.cell_contents
+    except ValueError:
+      continue
+    if graphlib.is_graph_node(obj) or isinstance(obj, variablelib.Variable):
+      obj_id = id(obj)
+      if obj_id not in seen:
+        seen.add(obj_id)
+        captured_nodes.append(obj)
+        captured_indices.append(i)
+  return CapturedInfo(tuple(captured_nodes), tuple(captured_indices))
+
+
+def _make_cell(val):
+  """Create a closure cell containing val."""
+  x = val
+  return (lambda: x).__closure__[0]  # type: ignore
+
+
+def replace_closure_cells(
+    f: tp.Callable,
+    captured_info: CapturedInfo,
+    replacements: tuple,
+) -> tp.Callable:
+  """Return a copy of f with captured closure cells replaced by replacements."""
+  if isinstance(f, functools.partial):
+    new_func = replace_closure_cells(f.func, captured_info, replacements)
+    return functools.partial(new_func, *f.args, **f.keywords)
+  if hasattr(f, '__wrapped__'):
+    old_inner = f.__wrapped__
+    new_inner = replace_closure_cells(old_inner, captured_info, replacements)
+    # Rebuild the wrapper's closure, replacing the cell that held the old inner.
+    if f.__closure__:
+      cells = list(f.__closure__)
+      for i, cell in enumerate(cells):
+        try:
+          if cell.cell_contents is old_inner:
+            cells[i] = _make_cell(new_inner)
+            break
+        except ValueError:
+          continue
+      new_f = types.FunctionType(
+        f.__code__, f.__globals__, f.__name__,
+        f.__defaults__, tuple(cells),
+      )
+    else:
+      new_f = f
+    new_f.__wrapped__ = new_inner
+    return new_f
+  if not captured_info or not f.__closure__:
+    return f
+  cells = list(f.__closure__)
+  for idx, new_val in zip(captured_info.freevar_indices, replacements):
+    cells[idx] = _make_cell(new_val)
+  return types.FunctionType(
+    f.__code__, f.__globals__, f.__name__,
+    f.__defaults__, tuple(cells),
+  )
+
 
 def filter_kwargs(f, **kwargs):
   sig = inspect.signature(f)

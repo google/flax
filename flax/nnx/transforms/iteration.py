@@ -273,6 +273,7 @@ class SimpleVmapFn:
   in_axes: tp.Any
   out_axes: tp.Any
   update_axes: tuple[tp.Any, ...]
+  captured_info: extract.CapturedInfo = extract._EMPTY_CAPTURED
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -283,7 +284,14 @@ class SimpleVmapFn:
     )
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
-    out = self.f(*args, **kwargs)
+    n_captured = len(self.captured_info)
+    user_args = args[n_captured:]
+    if self.captured_info:
+      f = extract.replace_closure_cells(
+          self.f, self.captured_info, args[:n_captured])
+    else:
+      f = self.f
+    out = f(*user_args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_axes)
     extract.check_no_aliases(
@@ -522,15 +530,29 @@ def vmap(
 
   if not (graph and graph_updates):
 
+    captured_info = extract.find_captured_nodes(f_unbound)
+    n_captured = len(captured_info)
+
+    # Prepend None (broadcast) axes for captured nodes
+    full_in_axes: tp.Any
+    if n_captured > 0 and isinstance(in_axes, (tuple, list)):
+      full_in_axes = (None,) * n_captured + tuple(in_axes)
+    else:
+      full_in_axes = in_axes
+
+    if n_captured > 0:
+      update_axes[None] = None  # captured nodes are broadcast
+
     vmapped_fn = jax.vmap(
       SimpleVmapFn(
         f_unbound,
         graph=graph,
-        in_axes=in_axes,
+        in_axes=full_in_axes,
         out_axes=out_axes,
         update_axes=tuple(update_axes),
+        captured_info=captured_info,
       ),
-      in_axes=in_axes,
+      in_axes=full_in_axes,
       out_axes=(out_axes, update_axes),
       axis_name=axis_name,
       axis_size=axis_size,
@@ -539,13 +561,16 @@ def vmap(
 
     @functools.wraps(f_unbound)
     def simple_vmap_wrapper(*args, **kwargs):
+      captured = captured_info.exclude_from_args(args, kwargs)
+      all_args = (*captured.nodes, *args)
       if graph:
-        args, kwargs = extract.to_tree2(
-            (args, kwargs),
-            prefix=(in_axes, 0),
+        _in_axes = full_in_axes if captured else in_axes
+        all_args, kwargs = extract.to_tree2(
+            (all_args, kwargs),
+            prefix=(_in_axes, 0),
         )
-      variables = extract.check_no_aliases('vmap', args=args, kwargs=kwargs)
-      out, updates = vmapped_fn(*args, **kwargs)
+      variables = extract.check_no_aliases('vmap', args=all_args, kwargs=kwargs)
+      out, updates = vmapped_fn(*all_args, **kwargs)
       extract.apply_updates(variables, updates)
       if graph:
         out = extract.from_tree2(out)
@@ -1410,6 +1435,7 @@ class SimpleScanFn:
   carry_idx: int | None
   carry_out_idx: int | None
   update_axes: tuple[tp.Any, ...]
+  captured_info: extract.CapturedInfo = extract._EMPTY_CAPTURED
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -1425,7 +1451,14 @@ class SimpleScanFn:
       carry = extract.from_tree2(carry)
     args = extract.replace_at(args, self.carry_idx, carry)
 
-    out = self.f(*args)
+    n_captured = len(self.captured_info)
+    user_args = args[n_captured:]
+    if self.captured_info:
+      f = extract.replace_closure_cells(
+          self.f, self.captured_info, args[:n_captured])
+    else:
+      f = self.f
+    out = f(*user_args)
 
     if self.carry_idx is None:  # has carry
       carry_out = None
@@ -1673,16 +1706,27 @@ def _simple_scan(
   was_carry = in_axes is Carry
   if in_axes is Carry:
     in_axes = (Carry,)
-  carry_idx = extract.find(in_axes, Carry)
+
+  captured_info = extract.find_captured_nodes(f_unbound)
+  n_captured = len(captured_info)
+
+  # Prepend None (broadcast) axes for captured nodes
+  if n_captured > 0 and isinstance(in_axes, tuple):
+    full_in_axes = (None,) * n_captured + in_axes
+  else:
+    full_in_axes = in_axes
+
+  carry_idx = extract.find(full_in_axes, Carry)
   carry_out_idx = extract.find(out_axes, Carry)
 
   simple_scan_fn = SimpleScanFn(
       f_unbound, graph=graph,
-      in_axes=in_axes, out_axes=out_axes,
+      in_axes=full_in_axes, out_axes=out_axes,
       out_is_tuple=out_is_tuple,
       carry_idx=carry_idx,
       carry_out_idx=carry_out_idx,
       update_axes=tuple(updates_axes),
+      captured_info=captured_info,
   )
 
   @functools.wraps(f)
@@ -1692,23 +1736,27 @@ def _simple_scan(
           'When in_axes=Carry, the function must take exactly one argument, '
           f'got {len(args)} arguments.'
       )
-    if graph:  # check consistent aliasing
-      extract.to_tree2(args, prefix=in_axes)
 
-    carry, args = extract.mask_at(args, carry_idx)
+    captured = captured_info.exclude_from_args(args, {})
+    all_args = (*captured.nodes, *args)
+
+    if graph:  # check consistent aliasing
+      extract.to_tree2(all_args, prefix=full_in_axes)
+
+    carry, all_args = extract.mask_at(all_args, carry_idx)
     if graph:
-      args = extract.to_tree2(args, prefix=in_axes)
+      all_args = extract.to_tree2(all_args, prefix=full_in_axes)
       carry = extract.to_tree2(carry)
-    variables = extract.check_no_aliases('scan', args=args, carry=carry)
-    args, broadcasts = extract.extract(
+    variables = extract.check_no_aliases('scan', args=all_args, carry=carry)
+    all_args, broadcasts = extract.extract(
         lambda _, axes, x: axes is None,
-        in_axes, args,
+        full_in_axes, all_args,
         is_leaf=lambda x: isinstance(x, variablelib.Variable),
         prefix_leaf=lambda x: x is None,
     )
     args_t = _move_axis(
         lambda ax, leaf: jnp.moveaxis(leaf, ax, 0),
-        in_axes, args,
+        full_in_axes, all_args,
     )
     (carry_out, final_broadcasts), (ys, updates) = jax.lax.scan(
         simple_scan_fn,

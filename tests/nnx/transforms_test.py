@@ -6352,7 +6352,7 @@ class TestVmap(parameterized.TestCase):
     if graph_updates:
       error_regex = 'Cannot extract graph node from different trace level'
     else:
-      error_regex = 'Cannot return captured Variable'
+      error_regex = 'Cannot return captured Variable|Duplicate'
 
     with self.assertRaisesRegex(ValueError, error_regex):
       f(jnp.zeros((4,)))
@@ -8014,6 +8014,68 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     assert module.dropout.rngs.count[0] == 2
     assert not jnp.allclose(y, y2)
+
+
+class TestClosureCapture(parameterized.TestCase):
+  """Tests for auto-capture of closure Variables in tree-mode transforms."""
+
+  def test_jit_closure_state_update(self):
+    """Mutations to captured Variables propagate back."""
+    count = nnx.Variable(jnp.array(0))
+
+    @nnx.jit(graph=False)
+    def forward():
+      count[...] += 1
+
+    forward()
+    self.assertEqual(count[...], 1)
+    forward()
+    self.assertEqual(count[...], 2)
+
+  def test_jit_closure_duplicate_state_update(self):
+    """Mutations to captured and passed Variables propagate back."""
+    count = nnx.Variable(jnp.array(0))
+
+    @nnx.jit(graph=False)
+    def forward(x):
+      count[...] += 1
+
+    forward(count)
+    self.assertEqual(count[...], 1)
+    forward(count)
+    self.assertEqual(count[...], 2)
+
+  def test_jit_passed_duplicate_state_update(self):
+    """Mutations to captured and passed Variables propagate back."""
+    count = nnx.Variable(jnp.array(0))
+
+    @nnx.jit(graph=False)
+    def forward(x):
+      count[...] + 1
+      x[...] += 1
+
+    forward(count)
+    self.assertEqual(count[...], 1)
+    forward(count)
+    self.assertEqual(count[...], 2)
+
+  def test_jit_closure_no_recompilation(self):
+    """nnx.jit with a captured variable does not recompile on repeated calls."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit(graph=False)
+    def forward(x):
+      return model(x)
+
+    x = jnp.ones((4, 2))
+    forward(x)
+    cache_size_after_first = forward.jitted_fn._cache_size()
+    model.kernel[...] = jnp.zeros(2,3)
+    forward(x)
+    cache_size_after_second = forward.jitted_fn._cache_size()
+
+    self.assertEqual(cache_size_after_first, cache_size_after_second,
+                     'nnx.jit recompiled on the second call with a closure capture')
 
 
 if __name__ == '__main__':

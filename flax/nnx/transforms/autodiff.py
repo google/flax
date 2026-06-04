@@ -72,6 +72,7 @@ class SimpleGradFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
   graph: bool
+  captured_info: extract.CapturedInfo = extract._EMPTY_CAPTURED
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -81,7 +82,14 @@ class SimpleGradFn:
     current, snapshot = extract.snapshot(labeled(args=args, kwargs=kwargs))
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
-    out = self.f(*args, **kwargs)
+    n_captured = len(self.captured_info)
+    user_args = args[n_captured:]
+    if self.captured_info:
+      f = extract.replace_closure_cells(
+          self.f, self.captured_info, args[:n_captured])
+    else:
+      f = self.f
+    out = f(*user_args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
     extract.check_no_aliases('grad', **current, out=out, check=['out'])
@@ -151,8 +159,9 @@ def _grad_general(
 
   if not graph or not graph_updates:
 
+    captured_info = extract.find_captured_nodes(f)
     gradded_fn = transform(
-        SimpleGradFn(f, has_aux, graph=graph),
+        SimpleGradFn(f, has_aux, graph=graph, captured_info=captured_info),
         argnums=argnums,  # type: ignore[arg-type]
         has_aux=True,
         holomorphic=holomorphic,

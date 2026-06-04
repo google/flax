@@ -453,6 +453,7 @@ class SimpleJitFn:
   donate_argnames: frozenset[str]
   graph: bool
   update_shardings: tuple[tp.Any, ...]
+  captured_info: extract.CapturedInfo = extract._EMPTY_CAPTURED
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
@@ -464,7 +465,14 @@ class SimpleJitFn:
     )
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
-    out = self.f(*args, **kwargs)
+    n_captured = len(self.captured_info)
+    user_args = args[n_captured:]
+    if self.captured_info:
+      f = extract.replace_closure_cells(
+          self.f, self.captured_info, args[:n_captured])
+    else:
+      f = self.f
+    out = f(*user_args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_shardings)
     extract.check_no_aliases('jit', **current, out=out, check=['out'])
@@ -508,6 +516,9 @@ class SimpleJitWrapped(tp.Generic[P, R]):
     self.partial_args = partial_args
     self.graph = graph
 
+    # Capture closure nodes once at construction time
+    self._captured_info = extract.find_captured_nodes(fun)
+
     resolved = _resolve_argnums(fun, static_argnums, static_argnames)
     if isinstance(in_shardings, (tuple, list)) and resolved:
       expanded = list(in_shardings)
@@ -516,6 +527,13 @@ class SimpleJitWrapped(tp.Generic[P, R]):
       self.in_shardings = tuple(expanded)
     else:
       self.in_shardings = in_shardings
+
+    # Prepend None shardings for captured nodes
+    n_captured = len(self._captured_info)
+    if n_captured > 0 and isinstance(in_shardings, (tuple, list)):
+      jit_in_shardings = (None,) * n_captured + tuple(in_shardings)
+    else:
+      jit_in_shardings = in_shardings
 
     donate_argnums_set = frozenset(
         (donate_argnums,) if isinstance(donate_argnums, int)
@@ -528,14 +546,15 @@ class SimpleJitWrapped(tp.Generic[P, R]):
     self.jitted_fn = jax.jit(
         SimpleJitFn(
             fun,
-            self.in_shardings,
+            jit_in_shardings if n_captured > 0 else self.in_shardings,
             out_shardings,
             donate_argnums_set,
             donate_argnames_set,
             graph,
             tuple(update_shardings),
+            captured_info=self._captured_info,
         ),
-        in_shardings=in_shardings,
+        in_shardings=jit_in_shardings,
         out_shardings=(out_shardings, update_shardings),
         static_argnums=static_argnums,
         static_argnames=static_argnames,
@@ -565,9 +584,13 @@ class SimpleJitWrapped(tp.Generic[P, R]):
 
   def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
     args = (*self.partial_args, *args)  # type: ignore[assignment]
-    args, kwargs = self._maybe_to_tree(args, kwargs)
-    variables = extract.check_no_aliases('jit', args=args, kwargs=kwargs)
-    out, updates = self.jitted_fn(*args, **kwargs)
+    n_captured = len(self._captured_info.nodes)
+    all_args = (*self._captured_info.nodes, *args)
+    all_args, kwargs = self._maybe_to_tree(all_args, kwargs)
+    # Check aliases only among user args; captured-user duplicates are OK.
+    extract.check_no_aliases('jit', args=all_args[n_captured:], kwargs=kwargs)
+    variables = extract.collect_variables(args=all_args, kwargs=kwargs)
+    out, updates = self.jitted_fn(*all_args, **kwargs)
     extract.apply_updates(variables, updates)
     return self._maybe_from_tree(out)
 
@@ -578,26 +601,32 @@ class SimpleJitWrapped(tp.Generic[P, R]):
 
   def eval_shape(self, *args, **kwargs):
     args = (*self.partial_args, *args)
-    args, kwargs = self._maybe_to_tree(args, kwargs)
+    n_captured = len(self._captured_info.nodes)
+    all_args = (*self._captured_info.nodes, *args)
+    all_args, kwargs = self._maybe_to_tree(all_args, kwargs)
     if not self.graph:
-      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
-    out, updates = self.jitted_fn.eval_shape(*args, **kwargs)
+      extract.check_no_aliases('jit', args=all_args[n_captured:], kwargs=kwargs)
+    out, updates = self.jitted_fn.eval_shape(*all_args, **kwargs)
     return self._maybe_from_tree(out)
 
   def trace(self, *args, **kwargs):
     args = (*self.partial_args, *args)
-    args, kwargs = self._maybe_to_tree(args, kwargs)
+    n_captured = len(self._captured_info.nodes)
+    all_args = (*self._captured_info.nodes, *args)
+    all_args, kwargs = self._maybe_to_tree(all_args, kwargs)
     if not self.graph:
-      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
-    traced = self.jitted_fn.trace(*args, **kwargs)
+      extract.check_no_aliases('jit', args=all_args[n_captured:], kwargs=kwargs)
+    traced = self.jitted_fn.trace(*all_args, **kwargs)
     return SimpleTraced(traced, self)
 
   def lower(self, *args, **kwargs):
     args = (*self.partial_args, *args)
-    args, kwargs = self._maybe_to_tree(args, kwargs)
+    n_captured = len(self._captured_info.nodes)
+    all_args = (*self._captured_info.nodes, *args)
+    all_args, kwargs = self._maybe_to_tree(all_args, kwargs)
     if not self.graph:
-      extract.check_no_aliases('jit', args=args, kwargs=kwargs)
-    lowered = self.jitted_fn.lower(*args, **kwargs)
+      extract.check_no_aliases('jit', args=all_args[n_captured:], kwargs=kwargs)
+    lowered = self.jitted_fn.lower(*all_args, **kwargs)
     return SimpleLowered(lowered, self)
 def jit_partial(
     fun: tp.Callable[..., R],
