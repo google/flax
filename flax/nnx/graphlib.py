@@ -2910,8 +2910,8 @@ def clone(
     >>> model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
     >>> cloned_model = nnx.clone(model, arrays=True)
     >>> # The buffers are now independent — safe to donate separately.
-    >>> model_ptr = model.bias.value.unsafe_buffer_pointer()
-    >>> clone_ptr = cloned_model.bias.value.unsafe_buffer_pointer()
+    >>> model_ptr = model.bias[...].unsafe_buffer_pointer()
+    >>> clone_ptr = cloned_model.bias[...].unsafe_buffer_pointer()
     >>> assert model_ptr != clone_ptr
 
   Args:
