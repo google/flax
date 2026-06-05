@@ -18,6 +18,7 @@ Example notebooks guide you through applying Flax models to a variety of differe
    ./digits_diffusion_model
    ./minigpt
    ./vit_training
+   ./image_segmentation
 
 
 Example Projects
