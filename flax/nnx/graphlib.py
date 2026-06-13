@@ -1517,7 +1517,8 @@ class StaticCache(tp.NamedTuple):
   graphdef: GraphDef[tp.Any]
   final_graphdef: GraphDef[tp.Any]
   paths: tuple[PathParts, ...]
-  variables: list[Variable[tp.Any]]
+  # Variables or raw array leaves (e.g. jax.Array attributes)
+  variables: list[Variable[tp.Any] | tp.Any]
   new_ref_index: RefMap
   new_index_ref: IndexMap
 
@@ -1525,7 +1526,7 @@ class StaticCache(tp.NamedTuple):
   def create(
     graphdef: GraphDef[tp.Any],
     paths: tuple[PathParts, ...],
-    variables: list[Variable[tp.Any]],
+    variables: list[Variable[tp.Any] | tp.Any],
     new_ref_index: RefMap,
   ):
     new_index_ref = IndexMap.from_refmap(new_ref_index)
@@ -1629,6 +1630,12 @@ def _cached_partial(
   after each call to the cached function, otherwise an error will be raised. Temporary
   mutations are allowed (e.g. the use of ``Module.sow``) as long as they are cleaned up before
   the function returns (e.g. via ``nnx.pop``).
+
+  Raw array attributes (e.g. ``jax.Array`` or ``numpy.ndarray`` values not wrapped in a
+  ``Variable``) found in the cached graph nodes are treated as read-only: their values are
+  visible inside the function but any updates to them are not propagated back to the
+  original graph nodes. Attributes that must change across cached calls should be
+  wrapped in an ``nnx.Variable``.
 
   Args:
     f: A function to cache.
@@ -1832,8 +1839,12 @@ class SplitContext:
         leaves = node_static_cache.variables
       else:
         paths = None
+        # non-Variable leaves (e.g. raw arrays) are passed through as-is
         leaves = [
-          variable.get_raw_value() for variable in node_static_cache.variables
+          variable.get_raw_value()
+          if isinstance(variable, Variable)
+          else variable
+          for variable in node_static_cache.variables
         ]
     else:
       graphdef, flat_state = flatten(
@@ -1967,6 +1978,10 @@ class MergeContext:
               f'leaves in the state, got {len(leaves)}'
             )
           for variable, leaf in zip(static_cache_node.variables, leaves):
+            if not isinstance(variable, Variable):
+              # raw array attributes are read-only under cached_partial,
+              # updates are not propagated back to the original graph nodes
+              continue
             if isinstance(leaf, Variable):
               variable.update_from_state(leaf)
             else:
