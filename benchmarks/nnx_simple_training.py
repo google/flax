@@ -13,6 +13,9 @@
 # limitations under the License.
 
 # %%
+import cProfile
+import pstats
+import io
 from functools import partial
 import jax
 import jax.numpy as jnp
@@ -27,12 +30,13 @@ from absl import app
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum(
-  'mode', 'all', ['all', 'nnx', 'jax'], 'Mode to run the script in'
+  'mode', 'all', ['all', 'nnx', 'jax', 'jit_partial'], 'Mode to run the script in'
 )
 flags.DEFINE_integer('total_steps', 10_000, 'Total number of training steps')
 flags.DEFINE_integer('batch_size', 32, 'Batch size')
 flags.DEFINE_integer('width', 32, 'Hidden layer size')
 flags.DEFINE_integer('depth', 5, 'Depth of the model')
+flags.DEFINE_bool('profile', False, 'Enable cProfile profiling')
 
 
 def dataset(X, Y, batch_size):
@@ -67,13 +71,13 @@ class MLP(nnx.Module):
   def __init__(self, din, dhidden, dout, depth, *, rngs: nnx.Rngs):
     self.count = Count(jnp.array(0))
     self.linear_in = Block(din, dhidden, rngs=rngs)
-    self.intermediates = [
+    self.intermediates = nnx.List([
       Block(dhidden, dhidden, rngs=rngs) for _ in range(depth - 2)
-    ]
+    ])
     self.linear_out = Block(dhidden, dout, rngs=rngs)
 
   def __call__(self, x):
-    self.count.value += 1
+    self.count[...] += 1
     x = nnx.relu(self.linear_in(x))
     for layer in self.intermediates:
       x = nnx.relu(layer(x))
@@ -118,6 +122,7 @@ def main(argv):
       loss = jnp.mean((y - y_pred) ** 2)
       return {'loss': loss}
 
+    logs = {'loss': jnp.array(0.0)}
     for step, batch in enumerate(dataset(X, Y, batch_size)):
       train_step_nnx(model, optimizer, batch)
 
@@ -132,7 +137,73 @@ def main(argv):
     total_time = time() - t0
     print('total time:', total_time)
     print(f'time per step: {total_time / total_steps * 1e6:.2f} µs')
-    print('times called:', model.count.value)
+    print('times called:', model.count[...])
+    print()
+
+  if mode == 'jit_partial' or mode == 'all':
+    model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
+    tx = optax.sgd(1e-3)
+    optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
+    t0 = time()
+
+    def train_step(model: MLP, optimizer: nnx.Optimizer, batch):
+      x, y = batch
+
+      def loss_fn(model: MLP):
+        y_pred = model(x)
+        return jnp.mean((y - y_pred) ** 2)
+
+      grads = nnx.grad(loss_fn)(model)
+      optimizer.update(model, grads)
+
+    def test_step(model: MLP, batch):
+      x, y = batch
+      y_pred = model(x)
+      loss = jnp.mean((y - y_pred) ** 2)
+      return {'loss': loss}
+
+    train_step_fn = nnx.jit_partial(
+        train_step, model, optimizer, graph=False
+    )
+    test_step_fn = nnx.jit_partial(test_step, model, graph=False)
+
+    logs = {'loss': jnp.array(0.0)}
+    # Warmup
+    for step, batch in enumerate(dataset(X, Y, batch_size)):
+      train_step_fn(batch)
+      if step >= 10:
+        break
+
+    pr = None
+    if FLAGS.profile:
+      pr = cProfile.Profile()
+      pr.enable()
+
+    for step, batch in enumerate(dataset(X, Y, batch_size)):
+      train_step_fn(batch)
+
+      if step % 1000 == 0:
+        logs = test_step_fn((X, Y))
+
+      if step >= total_steps - 1:
+        break
+
+    if pr is not None:
+      pr.disable()
+      for sort_key in ('cumulative', 'tottime'):
+        s = io.StringIO()
+        ps = pstats.Stats(pr, stream=s)
+        ps.sort_stats(sort_key)
+        ps.print_stats(40)
+        print(s.getvalue())
+
+    print('### JIT PARTIAL ###')
+    print(f'final loss: {logs["loss"]}')
+    total_time = time() - t0
+    print('total time:', total_time)
+    print(f'time per step: {total_time / total_steps * 1e6:.2f} µs')
+    print('times called:', model.count[...])
+    print()
 
   if mode == 'jax' or mode == 'all':
     model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
@@ -165,6 +236,7 @@ def main(argv):
 
     graphdef, state = nnx.split((model, optimizer))
 
+    logs = {'loss': jnp.array(0.0)}
     for step, batch in enumerate(dataset(X, Y, batch_size)):
       state = train_step_jax(state, batch)
 
@@ -181,7 +253,7 @@ def main(argv):
     total_time = time() - t0
     print('total time:', total_time)
     print(f'time per step: {total_time / total_steps * 1e6:.2f} µs')
-    print('times called:', model.count.value)
+    print('times called:', model.count[...])
 
 
 if __name__ == '__main__':

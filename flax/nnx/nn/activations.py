@@ -43,7 +43,7 @@ from jax.nn import (
 import jax.numpy as jnp
 from jax.numpy import tanh
 
-from flax import nnx
+from flax.nnx import src as nnx
 from flax.nnx.nn import dtypes
 from flax.typing import Array, Dtype, PromoteDtypeFn
 

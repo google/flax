@@ -23,7 +23,7 @@ from jax import lax
 import opt_einsum
 
 from flax.core.frozen_dict import FrozenDict
-from flax import nnx
+from flax.nnx import src as nnx
 from flax.nnx import rnglib, variablelib
 from flax.nnx.module import Module, first_from
 from flax.nnx.nn import dtypes, initializers

@@ -20,7 +20,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from flax import nnx
+from flax.nnx import src as nnx
 from flax.nnx import filterlib
 from flax.nnx.pytreelib import Pytree
 from flax.nnx.variablelib import Param, Variable

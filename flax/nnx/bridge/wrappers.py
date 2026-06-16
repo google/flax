@@ -20,7 +20,7 @@ import dataclasses
 
 from flax import linen
 from flax import core
-from flax import nnx
+from flax.nnx import src as nnx
 from flax.core import FrozenDict
 from flax.core import meta
 from flax.nnx import graphlib

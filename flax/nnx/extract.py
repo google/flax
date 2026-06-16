@@ -732,7 +732,7 @@ def check_prefix(
   graph_updates: bool,
   none_leaf: bool = True,
 ):
-  unique_prefixes: OrderedDict[tp.Any, tp.Any] = OrderedDict()
+  unique_prefixes: set[tp.Any] = set()
 
   def _check_prefix(path, leaf):
     if isinstance(leaf, variablelib.Variable):
@@ -798,12 +798,12 @@ def check_prefix(
   )
 
   def _collect_prefix(_, leaf):
-    unique_prefixes[leaf] = leaf
+    unique_prefixes.add(leaf)
 
   jax.tree.map_with_path(
       _collect_prefix, prefix, is_leaf=lambda x: x is None and none_leaf
   )
-  return unique_prefixes
+  return list(unique_prefixes)
 
 
 def variable_changed(post: variablelib.Variable, pre: variablelib.Variable) -> bool:
@@ -818,27 +818,28 @@ KeepFn = tp.Callable[
 ]
 
 
+@dataclasses.dataclass(slots=True)
 class Updates(
     tp.Sequence[tuple[jax.tree_util.KeyPath, variablelib.Variable]],
     reprlib.Representable,
 ):
-  __slots__ = ('_keys', '_values')
+  _keys: list[tp.Any] = dataclasses.field(default_factory=list)
+  _values: list[variablelib.Variable] = dataclasses.field(default_factory=list)
 
-  _keys: list[jax.tree_util.KeyPath]
-  _values: list[variablelib.Variable]
-
-  def __init__(
-      self,
+  @classmethod
+  def create(
+      cls,
       items: tp.Iterable[
           tuple[jax.tree_util.KeyPath, variablelib.Variable]
       ] = (),
-  ):
-    self._keys, self._values = [], []
+  ) -> 'Updates':
+    keys, values = [], []
     for key, value in items:
-      self._keys.append(key)
-      self._values.append(value)
+      keys.append(key)
+      values.append(value)
+    return cls(_keys=keys, _values=values)
 
-  def append(self, key: jax.tree_util.KeyPath, value: variablelib.Variable):
+  def append(self, key: tp.Any, value: variablelib.Variable):
     self._keys.append(key)
     self._values.append(value)
 
@@ -880,7 +881,7 @@ class Updates(
     return len(self._keys)
 
   def __iter__(self):
-    return iter(zip(self._keys, self._values))
+    return zip(self._keys, self._values)
 
   def __nnx_repr__(self):
     yield reprlib.Object(type=type(self), kv_sep=': ', start='({', end='})')
@@ -892,30 +893,10 @@ class Updates(
       )
 
 
-def _updates_flatten_with_keys(x: Updates):
-  key_children = [
-      (jax.tree_util.FlattenedIndexKey(i), v)
-      for i, v in enumerate(x._values)
-  ]
-  return key_children, x._keys
-
-
-def _updates_flatten(x: Updates):
-  return x._values, x._keys
-
-
-def _updates_unflatten(keys, values) -> Updates:
-  updates = object.__new__(Updates)
-  updates._keys = keys
-  updates._values = list(values)
-  return updates
-
-
-jax.tree_util.register_pytree_with_keys(
+jax.tree_util.register_dataclass(
     Updates,
-    _updates_flatten_with_keys,
-    _updates_unflatten,
-    flatten_func=_updates_flatten,
+    data_fields=['_values'],
+    meta_fields=['_keys'],
 )
 
 def get_updates(
@@ -929,7 +910,7 @@ def get_updates(
   if keep_fn is None:
     keep_fn = lambda _, _pfx, cur, snap: variable_changed(cur, snap)
 
-  updates = OrderedDict((pfx, Updates()) for pfx in known_prefixes)
+  updates = {pfx: Updates.create() for pfx in known_prefixes}
 
   def _mask_updates(path, prefix_leaf, current, snapshot):
     if isinstance(current, variablelib.Variable):
@@ -944,14 +925,14 @@ def get_updates(
       _mask_updates, prefix, current_tree, snapshot_tree, is_leaf=is_leaf,
       prefix_leaf=prefix_leaf,
   )
-  return updates
+  return list(updates.values())
 
 
 def apply_updates(
     variables: dict[jax.tree_util.KeyPath, variablelib.Variable],
-    updates: OrderedDict[tp.Any, Updates],
+    updates: list[Updates],
 ):
-  for _, flat_state in updates.items():
+  for flat_state in updates:
     for path, update in flat_state:
       if path in variables:
         variable = variables[path]
@@ -963,6 +944,7 @@ def apply_updates(
             f'Variable not found at path {path_str}. This is a bug in NNX, '
             f'please report it. Variable: {update}'
         )
+
 
 
 def treemap_copy_args(f: F) -> F:
@@ -1017,7 +999,7 @@ def prefix(
 
   Example usage::
 
-    from flax import nnx
+    from flax.nnx import src as nnx
     import jax.numpy as jnp
 
     d = {'a': nnx.Param(jnp.array(2)), 'b': nnx.BatchStat(jnp.arange(5))}
@@ -1110,9 +1092,9 @@ def prefix(
 
   return jax.tree.map_with_path(_apply_prefix, node, is_leaf=is_leaf)
 
-def to_masked(tree, all_updates: OrderedDict[tp.Any, Updates]):
-  combined: OrderedDict[tp.Any, tp.Any] = OrderedDict()
-  for updates in all_updates.values():
+def to_masked(tree, all_updates: list[Updates]):
+  combined: dict[tp.Any, tp.Any] = {}
+  for updates in all_updates:
     combined.update(updates)
   return jax.tree.map_with_path(
       lambda path, _: combined.get(path, None), tree,

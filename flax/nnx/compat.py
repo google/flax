@@ -20,7 +20,7 @@ default values to ``graph=True`` and ``graph_updates=True``.
 
 Example::
 
-  from flax import nnx
+  from flax.nnx import src as nnx
 
   graphdef, state = nnx.compat.split(model)  # graph=True by default
 

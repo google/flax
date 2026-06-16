@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from flax.core.spmd import logical_axis_rules as logical_axis_rules
 from flax.linen.pooling import avg_pool as avg_pool
 from flax.linen.pooling import max_pool as max_pool
