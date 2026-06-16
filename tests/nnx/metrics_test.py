@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
+
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import nnx
@@ -128,6 +130,42 @@ class TestMetrics(parameterized.TestCase):
     values = metrics.compute()
     self.assertTrue(jnp.isnan(values['accuracy']))
     self.assertTrue(jnp.isnan(values['loss']))
+
+  def test_multimetric_graphdef_hashable_after_split(self):
+    metrics = nnx.MultiMetric(
+        loss=nnx.metrics.Average('loss'),
+        accuracy=nnx.metrics.Average('accuracy'),
+    )
+    graphdef, _ = nnx.split(metrics)
+
+    hash(graphdef)
+
+  @parameterized.named_parameters(
+    ('jax_jit', jax.jit),
+    ('nnx_jit', nnx.jit),
+  )
+  def test_multimetric_split_merge_under_jit(self, jit_fn):
+    metrics = nnx.MultiMetric(
+        loss=nnx.metrics.Average('loss'),
+        accuracy=nnx.metrics.Average('accuracy'),
+    )
+    graphdef, state = nnx.split(metrics)
+
+    @partial(jit_fn, static_argnames=('graphdef',))
+    def update_metric(graphdef, state, loss_value, accuracy_value):
+      metrics = nnx.merge(graphdef, state)
+      metrics.update(loss=loss_value, accuracy=accuracy_value)
+      _, new_state = nnx.split(metrics)
+      return new_state
+
+    new_state = update_metric(
+        graphdef, state, jnp.array(2.0), jnp.array(0.8)
+    )
+    metrics = nnx.merge(graphdef, new_state)
+    values = metrics.compute()
+    np.testing.assert_allclose(values['loss'], 2.0)
+    np.testing.assert_allclose(values['accuracy'], 0.8)
+    self.assertEqual(list(values), ['loss', 'accuracy'])
 
   @parameterized.product(with_mask=[True, False])
   def test_multimetric_with_custom_metric(self, with_mask):

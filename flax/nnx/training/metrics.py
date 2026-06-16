@@ -402,9 +402,8 @@ class MultiMetric(Metric):
         the corresponding ``Metric``.
     """
     # TODO: raise error if a kwarg is passed that is in ('reset', 'update', 'compute'), since these names are reserved for methods
-    self._metric_names = []
+    self._metric_names = tuple(metrics.keys())
     for metric_name, metric in metrics.items():
-      self._metric_names.append(metric_name)
       setattr(self, metric_name, metric)
 
   def reset(self) -> None:
