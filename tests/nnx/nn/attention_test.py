@@ -383,6 +383,23 @@ class TestGQADotProductAttention(parameterized.TestCase):
     np.testing.assert_allclose(nnx_out, jax_out, atol=1e-3, rtol=1e-3)
 
 
+class TestDropoutRateValidation(parameterized.TestCase):
+
+  @parameterized.parameters(
+    (-0.5, jax.random.key(1), r'dropout_rate must be in the range \[0, 1\)'),
+    (1.0, jax.random.key(1), r'dropout_rate must be in the range \[0, 1\)'),
+    (1.5, jax.random.key(1), r'dropout_rate must be in the range \[0, 1\)'),
+    (float('nan'), jax.random.key(1), r'dropout_rate must be in the range \[0, 1\)'),
+    (float('inf'), jax.random.key(1), r'dropout_rate must be in the range \[0, 1\)'),
+    (0.5, None, r'dropout_rng is required'),
+  )
+  def test_invalid_dropout_args(self, rate, rng, match):
+    q = jnp.ones((2, 4, 2, 8))
+    with self.assertRaisesRegex(ValueError, match):
+      nnx.dot_product_attention(q, q, q, dropout_rate=rate,
+                                deterministic=False, dropout_rng=rng)
+
+
 if __name__ == '__main__':
   absltest.main()
 
