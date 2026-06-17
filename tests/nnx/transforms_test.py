@@ -16,7 +16,7 @@ import os
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 
 import dataclasses
-from functools import partial
+from functools import partial, wraps
 import typing as tp
 
 from absl.testing import absltest
@@ -8015,6 +8015,186 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 
     assert module.dropout.rngs.count[0] == 2
     assert not jnp.allclose(y, y2)
+
+
+class TestClosureCapture(parameterized.TestCase):
+  """Tests for auto-capture of closure Variables in tree-mode transforms."""
+
+  def test_jit_closure_state_update(self):
+    """Mutations to captured Variables propagate back."""
+    count = nnx.Variable(jnp.array(0))
+
+    @nnx.jit(graph=False)
+    def forward():
+      count[...] += 1
+
+    forward()
+    self.assertEqual(count[...], 1)
+    forward()
+    self.assertEqual(count[...], 2)
+
+  def test_jit_closure_pytree_state_update(self):
+      """Mutations to captured pytrees of Variables propagate back."""
+      count = [nnx.Variable(jnp.array(0))]
+
+      @nnx.jit(graph=False)
+      def forward():
+        count[0][...] += 1
+
+      forward()
+      self.assertEqual(count[0][...], 1)
+      forward()
+      self.assertEqual(count[0][...], 2)
+
+  def test_jit_closure_duplicate_raises(self):
+    """Passing a captured Variable as an explicit arg raises a duplicate error."""
+    count = nnx.Variable(jnp.array(0))
+
+    @nnx.jit(graph=False)
+    def forward(x):
+      count[...] += 1
+
+    with self.assertRaisesRegex(ValueError, 'Duplicate'):
+      forward(count)
+
+  def test_jit_closure_nested(self):
+    count = nnx.Variable(jnp.array(0))
+
+    def forward(x):
+      count[...] += 1
+
+    f = partial(forward, 2)
+    nnx.jit(f, graph_updates=False)()
+    self.assertEqual(count[...], 1)
+
+  def test_jit_closure_in_decorator(self):
+    count = nnx.Variable(jnp.array(0))
+
+    def my_decorator(f):
+      @wraps(f)
+      def wrapper(x):
+        count[...] += 1
+        f(x)
+      return wrapper
+
+    def silly(x):
+      count[...] += 1
+
+    nnx.jit(my_decorator(silly), graph_updates=False)(2)
+    self.assertEqual(count[...], 2)
+
+  def test_jit_closure_no_recompilation(self):
+    """nnx.jit with a captured variable does not recompile on repeated calls."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit(graph=False)
+    def forward(x):
+      return model(x)
+
+    x = jnp.ones((4, 2))
+    forward(x)
+    cache_size_after_first = forward.jitted_fn._cache_size()
+    model.kernel[...] = jnp.zeros((2,3))
+    forward(x)
+    cache_size_after_second = forward.jitted_fn._cache_size()
+
+    self.assertEqual(cache_size_after_first, cache_size_after_second,
+                     'nnx.jit recompiled on the second call with a closure capture')
+
+  def test_jit_closure_static_argnums(self):
+    """static_argnums indices refer to user args, not shifted by captures."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit(graph=False, static_argnums=1)
+    def forward(x, mode):
+      if mode == 'train':
+        return model(x)
+      return model(x) * 0
+
+    self.assertTrue(forward._captured_info, 'expected non-empty captures')
+
+    x = jnp.ones((4, 2))
+    y_train = forward(x, 'train')
+    y_eval = forward(x, 'eval')
+    np.testing.assert_array_equal(y_eval, jnp.zeros_like(y_eval))
+    self.assertFalse(jnp.allclose(y_train, jnp.zeros_like(y_train)))
+
+  def test_jit_closure_static_argnums_sequence(self):
+    """static_argnums as a sequence is offset correctly with captures."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    def make_forward():
+      @nnx.jit(graph=False, static_argnums=(1, 2))
+      def forward(x, mode, scale):
+        out = model(x)
+        if mode == 'scale':
+          return out * scale
+        return out
+      return forward
+
+    forward = make_forward()
+    self.assertTrue(forward._captured_info, 'expected non-empty captures')
+
+    x = jnp.ones((4, 2))
+    y1 = forward(x, 'scale', 2.0)
+    y2 = forward(x, 'noscale', 1.0)
+    np.testing.assert_allclose(y1, y2 * 2.0)
+
+  def test_jit_closure_donates_captured_variables(self):
+    """Captured nnx.Variable buffers are donated to the jit call."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+
+    @nnx.jit(graph=False)
+    def forward(x):
+      return model(x)
+
+    self.assertTrue(forward._captured_info, 'expected non-empty captures')
+
+    x = jnp.ones((4, 2))
+
+    # Grab references to the raw JAX arrays backing the captured variables
+    old_kernel = model.kernel.get_value()
+    old_bias = model.bias.get_value()
+
+    _ = forward(x)
+
+    # After the jit call the original buffers should have been donated
+    # (invalidated), and the variables should hold new buffers.
+    self.assertTrue(old_kernel.is_deleted(),
+                    'captured kernel buffer was not donated')
+    self.assertTrue(old_bias.is_deleted(),
+                    'captured bias buffer was not donated')
+
+  def test_jit_closure_duplicate_error_mentions_captured_args(self):
+    """Error for duplicate Variable mentions 'captured_args' in the path."""
+    count = nnx.Variable(jnp.array(0))
+
+    def make_forward():
+      @nnx.jit(graph=False)
+      def forward(x):
+        count[...] += 1
+      return forward
+
+    forward = make_forward()
+    self.assertTrue(forward._captured_info, 'expected non-empty captures')
+
+    with self.assertRaisesRegex(ValueError, 'captured_args'):
+      forward(count)
+
+  def test_double_transform_closure(self):
+     x = nnx.Variable(jnp.array(0))
+
+     @nnx.jit(graph_updates=False)
+     def f():
+       x[...] += 1
+       @nnx.jit(graph_updates=False)
+       def g():
+         x[...] += 1
+       g()
+     f()
+     self.assertEqual(x[...], 2)
+     f()
+     self.assertEqual(x[...], 4)
 
 
 if __name__ == '__main__':
