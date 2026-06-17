@@ -21,7 +21,7 @@ from jax import lax, random
 
 from flax.nnx import rnglib
 from flax.nnx.module import Module, first_from
-from flax import nnx
+from flax.nnx import src as nnx
 
 
 class Dropout(Module):

@@ -19,7 +19,7 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 
-from flax import nnx
+from flax.nnx import src as nnx
 from flax.nnx import rnglib
 from flax.nnx.module import Module, first_from
 from flax.nnx.nn import dtypes, initializers

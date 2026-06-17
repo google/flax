@@ -29,7 +29,8 @@ import numpy as np
 import treescope  # type: ignore[import-untyped]
 from treescope import rendering_parts
 
-from flax import errors, nnx
+from flax import errors
+from flax.nnx import src as nnx
 from flax.nnx import (
   graphlib,
   reprlib,
@@ -78,7 +79,7 @@ def data(value: tp.Any = MISSING, /, **kwargs) -> tp.Any:
 
   Example::
 
-    from flax import nnx
+    from flax.nnx import src as nnx
     import jax
 
     class Foo(nnx.Pytree):
@@ -123,7 +124,7 @@ def register_data_type(type_: T, /) -> T:
 
   Example::
 
-    from flax import nnx
+    from flax.nnx import src as nnx
     from dataclasses import dataclass
 
     @dataclass(frozen=True)
@@ -240,7 +241,7 @@ def static(value: tp.Any = MISSING, /, **kwargs) -> tp.Any:
 
   Example::
 
-    from flax import nnx
+    from flax.nnx import src as nnx
 
     class Foo(nnx.Pytree):
       def __init__(self, a, b):
@@ -837,7 +838,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
         OBJECT_CONTEXT.node_stats = None
 
   def __treescope_repr__(self, path, subtree_renderer):
-    from flax import nnx
+    from flax.nnx import src as nnx
 
     if OBJECT_CONTEXT.node_stats is None or id(self) not in OBJECT_CONTEXT.node_stats:
       node_stats: dict[int, dict[type[Variable], SizeBytes]] = {}

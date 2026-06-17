@@ -26,7 +26,7 @@ from absl import logging
 import jax
 import jax.numpy as jnp
 
-from flax import nnx
+from flax.nnx import src as nnx
 from flax.nnx import filterlib, rnglib
 from flax.nnx.module import Module
 from flax.nnx.nn import initializers, dtypes

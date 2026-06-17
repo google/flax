@@ -199,7 +199,7 @@ def as_abstract(
 
   Example usage::
 
-    from flax import nnx
+    from flax.nnx import src as nnx
     import jax
 
     mesh = jax.make_mesh((2, 2), ('a', 'b'),

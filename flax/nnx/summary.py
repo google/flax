@@ -30,7 +30,7 @@ import rich.text
 import yaml
 import jax.numpy as jnp
 
-from flax import nnx
+from flax.nnx import src as nnx
 from flax import typing
 from flax.nnx import graphlib, statelib, variablelib
 
