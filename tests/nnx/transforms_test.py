@@ -1087,7 +1087,7 @@ class TestTreeJIT(parameterized.TestCase):
     y = f_partial(jnp.array(3.0))
     np.testing.assert_allclose(y, 6.0)
 
-  @parameterized.parameters((False,))
+  @parameterized.parameters(True, False)
   def test_jit_partial_in_shardings_none_broadcast(self, graph_mode):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
@@ -1103,7 +1103,7 @@ class TestTreeJIT(parameterized.TestCase):
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 3))
 
-  @parameterized.parameters((False,))
+  @parameterized.parameters(True, False)
   def test_jit_partial_in_shardings_named(self, graph_mode):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
@@ -1124,7 +1124,7 @@ class TestTreeJIT(parameterized.TestCase):
     y = f_jit(x)
     self.assertEqual(y.shape, (n_devices, 4))
 
-  @parameterized.parameters((False,))
+  @parameterized.parameters(True, False)
   def test_jit_partial_mixed_shardings(self, graph_mode):
     n_devices = jax.local_device_count()
     devices = mesh_utils.create_device_mesh((n_devices,))
@@ -1196,11 +1196,12 @@ class TestTreeJIT(parameterized.TestCase):
       c1.v[...] += x
       return c1.v[...] + c2.v[...]
 
-    f_jit = nnx.jit_partial(f, c1, c2, graph=graph, graph_updates=False)
     if not graph:
       with self.assertRaisesRegex(ValueError, 'Duplicate Param'):
-        f_jit(jnp.array(1.0))
+        nnx.jit_partial(f, c1, c2, graph=graph, graph_updates=False)
       return
+
+    f_jit = nnx.jit_partial(f, c1, c2, graph=graph, graph_updates=False)
 
     y = f_jit(jnp.array(1.0))
     np.testing.assert_allclose(y, 4.0)

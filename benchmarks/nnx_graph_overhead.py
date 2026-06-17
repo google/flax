@@ -25,7 +25,7 @@ from absl import app
 
 FLAGS = flags.FLAGS
 flags.DEFINE_enum(
-  'mode', 'nnx', ['all', 'nnx', 'jax'], 'Mode to run the script in'
+  'mode', 'nnx', ['all', 'nnx', 'jax', 'jit_partial'], 'Mode to run the script in'
 )
 flags.DEFINE_integer('total_steps', 100, 'Total number of training steps')
 flags.DEFINE_integer('width', 32, 'Hidden layer size')
@@ -91,7 +91,6 @@ def main(argv):
     model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
     tx = optax.sgd(1e-3)
     optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
-    t0 = time()
 
     @nnx.jit
     def step_nnx(model: MLP, optimizer: nnx.Optimizer):
@@ -108,6 +107,35 @@ def main(argv):
     print('total time:', total_time)
     print(f'time per step: {time_per_step * 1e6:.2f} µs')
     print(f'time per layer: {time_per_layer * 1e6:.2f} µs')
+    print()
+
+  # ------------------------------------------------------------
+  # JIT Partial
+  # ------------------------------------------------------------
+  if mode in ['all', 'jit_partial']:
+    model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
+    tx = optax.sgd(1e-3)
+    optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
+
+    def step_partial(model: MLP, optimizer: nnx.Optimizer):
+      pass
+
+    step_partial_jit = nnx.jit_partial(
+        step_partial, model, optimizer, graph=False
+    )
+
+    t0 = time()
+    for _ in range(total_steps):
+      step_partial_jit()
+
+    total_time = time() - t0
+    time_per_step = total_time / total_steps
+    time_per_layer = time_per_step / depth
+    print('### JIT PARTIAL ###')
+    print('total time:', total_time)
+    print(f'time per step: {time_per_step * 1e6:.2f} µs')
+    print(f'time per layer: {time_per_layer * 1e6:.2f} µs')
+    print()
 
   # ------------------------------------------------------------
   # JAX
@@ -117,7 +145,6 @@ def main(argv):
     model = MLP(din=1, dhidden=width, dout=1, depth=depth, rngs=nnx.Rngs(0))
     tx = optax.sgd(1e-3)
     optimizer = nnx.Optimizer(model, tx, wrt=nnx.Param)
-    t0 = time()
 
     @jax.jit
     def step_jax(graphdef, state):
