@@ -46,10 +46,7 @@ testing = [
     "ml-collections",
     "mypy",
     "opencv-python",
-    # Set protobuf version to prevent error in
-    # examples/mnist/train_test.py::TrainTest::test_train_and_evaluate
-    # Failed to construct dataset "mnist", builder_kwargs "{}": Value out of range: 11594722
-    "protobuf<6",
+    "protobuf",
     "pytest",
     "pytest-cov",
     "pytest-custom_exit_code",
@@ -61,13 +58,17 @@ testing = [
     "tensorflow_datasets",
     "tensorflow_cpu>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
     "tensorflow_cpu>=2.20.0; python_version>='3.13' and python_version<'3.14'",
+    "tensorboard",
     # Temporary fix for https://github.com/google/flax/issues/5143
     "keras<3.13",
     "torch",
     "treescope>=0.1.1; python_version>='3.10'",
     "cloudpickle>=3.0.0",
     "ale-py>=0.10.2; python_version<'3.14'",
-    "grain>=0.2",
+    # Pinned grain version to 0.2.16 to prevent the error:
+    # absl.flags._exceptions.UnparsedFlagAccessError: Trying to access flag --grain_enable_multiprocess_worker_profiling before flags were parsed.
+    # in the test: examples/gemma/input_pipeline_test.py::InputPipelineTest::test_eval_ds0
+    "grain==0.2.16",
 ]
 docs = [
     "sphinx==6.2.1",
