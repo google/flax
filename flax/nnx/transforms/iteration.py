@@ -54,6 +54,14 @@ Leaves = list[Leaf]
 Index = int
 
 
+def _default_transform_metadata(
+  transform_metadata: tp.Mapping[str, tp.Any],
+) -> tp.Mapping[str, tp.Any]:
+  if spmd.PARTITION_NAME in transform_metadata:
+    return transform_metadata
+  return FrozenDict({spmd.PARTITION_NAME: None, **transform_metadata})
+
+
 class Carry:
   """Helper class for :func:`flax.nnx.scan` function to mark input and output axis as carry.
   """
@@ -424,6 +432,9 @@ def vmap(
       axis so that parallel collectives can be applied.
     axis_size: Optional, an integer indicating the size of the axis to be
       mapped. If not provided, the mapped axis size is inferred from arguments.
+    transform_metadata: Optional mapping of tuple-valued axis metadata. If
+      ``nnx.PARTITION_NAME`` is omitted, the mapped axis is added to
+      ``out_sharding`` as an unsharded axis when graph updates are enabled.
     graph: If ``True`` (default), uses graph-mode which supports the full
       NNX feature set including shared references and reference semantics.
       If ``False``, uses tree-mode which treats Modules as regular JAX
@@ -495,6 +506,7 @@ def vmap(
            [0, 2, 4, 6],
            [0, 3, 6, 9]], dtype=int32)
   """
+  transform_metadata = _default_transform_metadata(transform_metadata)
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
   if graph_updates is None:
@@ -733,7 +745,9 @@ def pmap(
       result. You should not reuse buffers that you donate to a computation,
       JAX will raise an error if you try to. Note that donate_argnums only
       work for positional arguments, and keyword arguments will not be donated.
-    transform_metadata: Optional mapping of metadata for the transform.
+    transform_metadata: Optional mapping of tuple-valued axis metadata. If
+      ``nnx.PARTITION_NAME`` is omitted, the mapped axis is added to
+      ``out_sharding`` as an unsharded axis when graph updates are enabled.
     graph: if True, use graph-mode (default). If False, use tree-mode.
       If None, uses the value of ``nnx_graph_mode`` config.
     graph_updates: If ``True``, propagates updates on graph structure
@@ -746,6 +760,7 @@ def pmap(
     ``f`` but with extra array axes at positions indicated by ``in_axes`` and
     with output that has an additional leading array axis (with the same size).
   """
+  transform_metadata = _default_transform_metadata(transform_metadata)
   if graph is None:
     graph = graphlib.set_graph_mode.current_value()
   if graph_updates is None:
@@ -1596,6 +1611,9 @@ def scan(
     out_axes: integer, None, :class:`flax.nnx.Carry` or sequence of values specifying
       the kind of output args. See ``in_axes`` for details. Note that If ``in_axes``
       contains :class:`flax.nnx.Carry` then ``out_axes`` must also contain :class:`flax.nnx.Carry`.
+    transform_metadata: Optional mapping of tuple-valued axis metadata. If
+      ``nnx.PARTITION_NAME`` is omitted, the scanned axis is added to
+      ``out_sharding`` as an unsharded axis when graph updates are enabled.
     graph_updates: If ``True``, propagates updates on graph structure
       that happen inside the transform to the input graphs, has no
       effect when ``graph=False``. When ``False``, using ``StateAxes``
@@ -1603,6 +1621,7 @@ def scan(
 
   .. _jax.lax.scan: https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html>
   """
+  transform_metadata = _default_transform_metadata(transform_metadata)
   if f is Missing:
     return functools.partial(
         scan,
