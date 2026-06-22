@@ -56,8 +56,8 @@ testing = [
     "sentencepiece==0.2.0",  # Segfault bug in 0.2.1
     "tensorflow_text>=2.11.0; platform_system!='Darwin' and python_version < '3.13'",
     "tensorflow_datasets",
-    "tensorflow_cpu>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
-    "tensorflow_cpu>=2.20.0; python_version>='3.13' and python_version<'3.14'",
+    "tensorflow>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
+    "tensorflow>=2.20.0; python_version>='3.13' and python_version<'3.14'",
     "tensorboard",
     # Temporary fix for https://github.com/google/flax/issues/5143
     "keras<3.13",
