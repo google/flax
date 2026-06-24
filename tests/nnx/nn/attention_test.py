@@ -383,7 +383,41 @@ class TestGQADotProductAttention(parameterized.TestCase):
     np.testing.assert_allclose(nnx_out, jax_out, atol=1e-3, rtol=1e-3)
 
 
+class TestRoPE(absltest.TestCase):
+
+  def test_relative_position_invariance(self):
+    """Dot product of RoPE-rotated vectors depends only on relative position.
+
+    For any offset d, <RoPE(q, pos=i), RoPE(k, pos=j)> should equal
+    <RoPE(q, pos=i+d), RoPE(k, pos=j+d)>.
+    """
+    head_dim = 64
+    max_len = 128
+    rope = nnx.RoPE()
+
+    k1, k2 = jax.random.split(jax.random.key(7))
+    q_vec = jax.random.normal(k1, (head_dim,))
+    k_vec = jax.random.normal(k2, (head_dim,))
+
+    # Place q at position i and k at position j, then shift both by d.
+    i, j = 5, 12
+    d = 37
+
+    def rope_at(vec, pos):
+      # Build a dummy sequence long enough, apply RoPE, extract one position.
+      seq = jnp.zeros((pos + 1, head_dim)).at[pos].set(vec)
+      return rope(seq)[pos]
+
+    q_rot = rope_at(q_vec, i)
+    k_rot = rope_at(k_vec, j)
+    dot_original = jnp.dot(q_rot, k_rot)
+
+    q_rot_shifted = rope_at(q_vec, i + d)
+    k_rot_shifted = rope_at(k_vec, j + d)
+    dot_shifted = jnp.dot(q_rot_shifted, k_rot_shifted)
+
+    np.testing.assert_allclose(dot_original, dot_shifted, atol=1e-5)
+
+
 if __name__ == '__main__':
   absltest.main()
-
-
