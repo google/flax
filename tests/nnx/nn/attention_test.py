@@ -325,6 +325,23 @@ class TestGQADotProductAttention(parameterized.TestCase):
     with self.assertRaisesRegex(ValueError, "must be a multiple"):
         nnx.dot_product_attention(query, key, value)
 
+  def test_rank_mismatch_raises_under_dropout_path(self):
+    # Regression test for https://github.com/google/flax/issues/5496
+    # The dropout_rate > 0 path used `assert` for q/k/v rank and shape
+    # invariants. `assert` is compiled out under `python -O`, which let a
+    # rank mismatch fall through to the einsum and silently return a
+    # wrong-shaped output instead of raising. The fast path (dropout_rate==0,
+    # module=None) isn't affected since jax.nn.dot_product_attention does
+    # its own validation, so this exercises the slow path specifically.
+    query = jax.random.normal(jax.random.key(0), (2, 16, 4, 8))  # rank 4
+    key = jax.random.normal(jax.random.key(1), (16, 4, 8))  # rank 3
+    value = jax.random.normal(jax.random.key(2), (16, 4, 8))  # rank 3
+
+    with self.assertRaisesRegex(ValueError, "must have same rank"):
+      nnx.dot_product_attention(
+        query, key, value, dropout_rate=0.1, dropout_rng=jax.random.key(3)
+      )
+
   def test_gqa_multihead_attention(self):
     in_feat = 128
     n_heads = 32
