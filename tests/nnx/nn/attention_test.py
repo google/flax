@@ -383,6 +383,23 @@ class TestGQADotProductAttention(parameterized.TestCase):
     np.testing.assert_allclose(nnx_out, jax_out, atol=1e-3, rtol=1e-3)
 
 
+class TestDotProductAttentionValidation(parameterized.TestCase):
+
+  @parameterized.parameters(
+    ((2, 16, 4, 8), (16, 4, 8), (16, 4, 8), 'same rank'),
+    ((2, 16, 4, 8), (3, 16, 4, 8), (3, 16, 4, 8), 'batch dims'),
+    ((2, 16, 4, 8), (2, 16, 4, 8), (2, 15, 4, 8), 'lengths must match'),
+    ((2, 16, 4, 8), (2, 16, 4, 7), (2, 16, 4, 8), 'depths must match'),
+  )
+  def test_invalid_shapes(self, q_shape, k_shape, v_shape, match):
+    q = jnp.ones(q_shape)
+    k = jnp.ones(k_shape)
+    v = jnp.ones(v_shape)
+    with self.assertRaisesRegex(ValueError, match):
+      nnx.dot_product_attention(q, k, v, dropout_rate=0.1,
+                                dropout_rng=jax.random.key(0))
+
+
 if __name__ == '__main__':
   absltest.main()
 
