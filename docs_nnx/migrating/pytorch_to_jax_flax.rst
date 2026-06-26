@@ -773,7 +773,7 @@ in normalization layers.
     .. code-block:: python
 
       model = nnx.view(model, deterministic=False, use_running_average=False)
-      eval_model = nnx.view(model, deterministic=False, use_running_average=False)
+      eval_model = nnx.view(model, deterministic=True, use_running_average=True)
 
       for epoch in range(num_epochs):
         # run model single epoch training
@@ -1030,7 +1030,7 @@ Let us first provide an NNX implementation of ResNet50:
   model = nnx.eval_shape(lambda : ResNet50(rngs=nnx.Rngs(0)))
   graph_def, abs_state = nnx.split(model)
   jax_state = nnx.to_pure_dict(abs_state)
-  print(len(jax_state), list(jax_state.paths)[:3], type(next(iter(jax_state.leaves))))
+  print(len(jax_state), list(jax_state.keys())[:3], type(next(iter(jax_state.values()))))
   # 6 ['fc', 'layer0', 'layer1'] <class 'dict'>
 
 We have to manually create a mapping between pretrained weights keys and our NNX model state keys.
