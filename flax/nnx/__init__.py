@@ -115,6 +115,8 @@ from .nn.activations import PReLU as PReLU
 from .nn.attention import MultiHeadAttention as MultiHeadAttention
 from .nn.attention import combine_masks as combine_masks
 from .nn.attention import dot_product_attention as dot_product_attention
+from .nn.attention import dot_product_attention_with_rope as dot_product_attention_with_rope
+from .nn.attention import RoPE as RoPE
 from .nn.attention import make_attention_mask as make_attention_mask
 from .nn.attention import make_causal_mask as make_causal_mask
 from .nn.recurrent import RNNCellBase as RNNCellBase
