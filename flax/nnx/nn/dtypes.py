@@ -52,19 +52,22 @@ def canonicalize_dtype(
 
 
 def promote_dtype(args: T, /, *, dtype=None, inexact=True) -> T:
-  """ "Promotes input arguments to a specified or inferred dtype.
+  """Promotes input arguments to a specified or inferred dtype.
 
   All args are cast to the same dtype. See ``canonicalize_dtype`` for how
   this dtype is determined.
 
-  The behavior of promote_dtype is mostly a convinience wrapper around
+  The behavior of promote_dtype is mostly a convenience wrapper around
   ``jax.numpy.promote_types``. The differences being that it automatically casts
   all input to the inferred dtypes, allows inference to be overridden by a
-  forced dtype, and has an optional check to garantuee the resulting dtype is
+  forced dtype, and has an optional check to guarantee the resulting dtype is
   inexact.
 
+  Note: unlike ``flax.linen.dtypes.promote_dtype``, this function is not
+  variadic. It takes a single tuple of values as its first argument.
+
   Args:
-    *args: JAX array compatible values. None values
+    args: A tuple of JAX array compatible values. None values
       are returned as is.
     dtype: Optional dtype override. If specified the arguments are cast to
       the specified dtype instead and dtype inference is disabled.
