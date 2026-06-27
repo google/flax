@@ -574,6 +574,43 @@ class TestModule(parameterized.TestCase):
     assert m.b.c.get_value() == m2.b.c.get_value()
     assert m.b.d.get_value() == m2.b.d.get_value()
 
+  def test_clone_arrays_true_creates_independent_buffers(self):
+    """Regression test for https://github.com/google/flax/issues/5461.
+
+    nnx.clone() with the default arrays=False uses copy-on-write semantics:
+    new Variable wrappers are created but the underlying jax.Array buffers
+    are shared.  This breaks donate_argnums because JAX sees the same buffer
+    donated twice.
+
+    With arrays=True, all array buffers are physically independent.
+    """
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    cloned = nnx.clone(model, arrays=True)
+
+    # Values must be equal.
+    np.testing.assert_array_equal(
+        model.kernel[...], cloned.kernel[...])
+    np.testing.assert_array_equal(
+        model.bias[...], cloned.bias[...])
+
+    # Physical buffers must be distinct.
+    assert (model.kernel.get_value().unsafe_buffer_pointer() !=
+            cloned.kernel.get_value().unsafe_buffer_pointer()), (
+        'arrays=True should produce independent buffers, but kernel still '
+        'shares memory with the original')
+    assert (model.bias.get_value().unsafe_buffer_pointer() !=
+            cloned.bias.get_value().unsafe_buffer_pointer()), (
+        'arrays=True should produce independent buffers, but bias still '
+        'shares memory with the original')
+
+  def test_clone_arrays_false_default_preserves_copy_on_write(self):
+    """Default clone (arrays=False) still diverges on mutation."""
+    model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    cloned = nnx.clone(model)           # arrays=False is the default
+    model.bias[...] += 1
+    assert (model.bias[...] != cloned.bias[...]).all(), (
+        'Default clone should diverge after in-place mutation')
+
   def test_sow_existing_non_variable_field(self):
     class Foo(nnx.Module):
       def __init__(self) -> None:
