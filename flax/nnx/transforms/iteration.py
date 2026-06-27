@@ -517,7 +517,8 @@ def vmap(
     _raise_bound_method_error('vmap')
 
   update_axes = extract.check_prefix(in_axes, 'in_axes', 'vmap', graph, graph_updates)
-  update_axes[0] = 0  # kwargs axes
+  if 0 not in update_axes:
+    update_axes.append(0)  # kwargs axes
   extract.check_prefix(out_axes, 'out_axes', 'vmap', graph, graph_updates)
 
   if not (graph and graph_updates):
@@ -771,7 +772,8 @@ def pmap(
     _raise_bound_method_error('pmap')
 
   update_axes = extract.check_prefix(in_axes, 'in_axes', 'pmap', graph, graph_updates)
-  update_axes[0] = 0  # kwargs axes
+  if 0 not in update_axes:
+    update_axes.append(0)  # kwargs axes
   extract.check_prefix(out_axes, 'out_axes', 'pmap', graph, graph_updates)
 
   if not (graph and graph_updates):
@@ -1662,12 +1664,11 @@ def _simple_scan(
   f, f_unbound, *,
   graph, in_axes, out_axes,
   length, reverse, unroll, _split_transpose,
-  updates_axes: extract.OrderedDict,
+  updates_axes: list[tp.Any],
 ):
   _validate_scan_axes(in_axes, out_axes)
   # None and Carry aren't valid update axes
-  updates_axes.pop(None, None)
-  updates_axes.pop(Carry, None)
+  updates_axes = [ax for ax in updates_axes if ax is not None and ax is not Carry]
 
   out_is_tuple = isinstance(out_axes, tuple)
   was_carry = in_axes is Carry

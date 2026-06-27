@@ -26,10 +26,6 @@ Throughout the guide, you will be able to compare code examples with and without
   import jax.numpy as jnp
   import numpy as np
 
-  # Orbax needs to have asyncio enabled in the Colab environment.
-  import nest_asyncio
-  nest_asyncio.apply()
-
   # Set up the directory.
   import os
   import shutil
