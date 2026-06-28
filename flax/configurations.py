@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Global configuration flags for Flax."""
 
-import os
+"""Global configuration flags for Flax."""
 from contextlib import contextmanager
+import os
 from typing import Any, Generic, NoReturn, TypeVar, overload
+from typing import TYPE_CHECKING
 
 _T = TypeVar('_T')
 
@@ -32,6 +33,13 @@ class Config:
   nnx_graph_updates: bool
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
+  if TYPE_CHECKING:
+
+    def __getattr__(self, name: str) -> Any:
+      ...
+
+    def __setattr__(self, name: str, value: Any) -> None:
+      ...
 
   def __init__(self):
     self._values = {}
