@@ -608,6 +608,32 @@ class TestJIT(parameterized.TestCase):
     cached_m2 = cached_f(m)
     self.assertIs(cached_m, cached_m2)
 
+  def test_cache_args_raw_arrays(self):
+    class Foo(nnx.Module):
+      def __init__(self):
+        self.a = jnp.arange(3, dtype=jnp.float32)  # raw jax.Array
+        self.b = np.arange(3, dtype=np.float32)  # raw np.ndarray
+        self.count = nnx.Variable(jnp.array(0))
+
+      def __call__(self, x):
+        self.count[...] += 1
+        return self.a * x + self.b
+
+    m = Foo()
+
+    @nnx.jit(graph=True, graph_updates=True)
+    def f(m: Foo, x):
+      return m(x) + 1
+
+    x = jnp.ones(3)
+    expected = f(m, x)
+
+    cached_f = nnx.compat.cached_partial(f, m)
+    np.testing.assert_allclose(cached_f(x), expected)
+    np.testing.assert_allclose(cached_f(x), expected)
+    # Variable updates are propagated back to the original node
+    self.assertEqual(m.count[...], 3)
+
   @parameterized.parameters(True, False)
   def test_cache_args_functional(self, graph_mode):
     m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
