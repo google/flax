@@ -1,28 +1,7 @@
-Changelog
+# Changelog
 ----------
+>**Please Note: We are now using the [Github Release Notes](https://github.com/google/flax/releases), so this file is legacy only.**
 
-vNext
-------
-(Add your change to a random empty line to avoid merge conflicts)
--
--
--
--
-- removed GeGLU simplistic activation, it should be implemented manually.
--
--
--
-- removed FLAX_LAZY_RNG flag support for old non-lazy PRNG derivation mode
--
--
--
--
--
--
--
--
--
--
 
 0.8.2
 -----
