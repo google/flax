@@ -624,7 +624,7 @@ class MGUCell(RNNCellBase):
       \begin{array}{ll}
       f = \sigma(W_{if} x + b_{if} + W_{hf} h) \\
       n = \tanh(W_{in} x + b_{in} + f * (W_{hn} h + b_{hn})) \\
-      h' = (1 - f) * n + f * h \\
+      h' = (1 - f) * h + f * n \\
       \end{array}
 
   where x is the input and h is the output of the previous time step.
@@ -636,7 +636,7 @@ class MGUCell(RNNCellBase):
       \begin{array}{ll}
       f = \sigma(W_{if} x + b_{if} + W_{hf} h) \\
       n = \tanh(W_{in} x + b_{in} + W_{hn} h) \\
-      h' = (1 - f) * n + f * h \\
+      h' = (1 - f) * h + f * n \\
       \end{array}
 
   Example usage::
@@ -726,7 +726,7 @@ class MGUCell(RNNCellBase):
     n = self.activation_fn(
       dense_i(name="in", bias_init=self.activation_bias_init)(inputs) + x
     )
-    new_h = (1.0 - f) * n + f * h
+    new_h = (1.0 - f) * h + f * n
     return new_h, new_h
 
   @nowrap
