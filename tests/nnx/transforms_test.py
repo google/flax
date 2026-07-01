@@ -1792,6 +1792,88 @@ class TestGrad(parameterized.TestCase):
     assert m['c'] == 7
     assert m['d'] == 5.0
 
+  def test_grad_captures(self):
+    v = nnx.Variable(jnp.array(1.0))
+    n = 0
+
+    @nnx.grad(graph=True, graph_updates=False)
+    def g(x):
+      nonlocal n
+      n += 1
+      v[...] += 1.0
+      return x * v[...]
+
+    x = jnp.array(2.0)
+    grads = g(x)
+
+    self.assertEqual(n, 1)
+    self.assertEqual(v.get_value(), 2.0)
+    self.assertEqual(grads, 2.0)
+
+    grads = g(x)
+    self.assertEqual(n, 2)
+    self.assertEqual(v.get_value(), 3.0)
+    self.assertEqual(grads, 3.0)
+
+  @nnx.set_graph_mode(False)
+  @nnx.set_graph_updates(False)
+  def test_unpack_capture(self):
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 2, rngs=rngs)
+        self.bn = nnx.BatchNorm(2, use_running_average=False, rngs=rngs)
+        self.count = nnx.Variable(jnp.array(0))
+
+      def __call__(self, x):
+        self.count[...] += 1
+        return nnx.relu(self.bn(self.linear(x)))
+
+    model = Foo(nnx.Rngs(0))
+    optimizer = nnx.Optimizer(model, optax.adamw(0.1), wrt=nnx.Param)
+
+    @nnx.jit
+    def train_step(model: Foo, optimizer, x, y):
+      params, nondiff = nnx.unpack(model, nnx.Param, ...)
+
+      def loss_fn(params):
+        model = nnx.merge(params, nondiff)
+        return jnp.mean((model(x) - y) ** 2)
+
+      grads = nnx.grad(loss_fn)(params)
+      optimizer.update(grads, model)
+
+    x, y = jnp.ones((1,2)), jnp.ones((1,2))
+    train_step(model, optimizer, x, y)
+    self.assertEqual(model.count[...], 1)
+    train_step(model, optimizer, x, y)
+    self.assertEqual(model.count[...], 2)
+
+  def test_grad_capture_alias_input_error(self):
+    v = nnx.Variable(jnp.array(1.0))
+
+    @nnx.grad(graph=True, graph_updates=False)
+    def g(x):
+      v[...] += 1.0
+      return x * v[...]
+
+    with self.assertRaisesRegex(
+        ValueError, 'Cannot mutate captured Variable'
+    ):
+      g(v)
+
+  def test_grad_capture_alias_output_error(self):
+    v = nnx.Variable(jnp.array(1.0))
+
+    @nnx.grad(graph=True, graph_updates=False)
+    def g(x):
+      v[...] += 1.0
+      return x, v
+
+    with self.assertRaisesRegex(
+        ValueError, 'Duplicate'
+    ):
+      g(jnp.array(1.0))
+
   @parameterized.parameters(True, False)
   def test_grad_with_multiple_ref_types(self, graph_updates: bool):
     m = nnx.Dict(
