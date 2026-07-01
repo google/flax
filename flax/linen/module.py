@@ -2088,6 +2088,30 @@ class Module(ModuleBase):
     module = self.clone(_deep_clone=True, _reset_names=True, name=None)
     return module, variables
 
+  @overload
+  def apply(
+    self,
+    variables: VariableDict,
+    *args,
+    rngs: PRNGKey | RNGSequences | None = None,
+    method: Callable[..., Any] | str | None = None,
+    mutable: Literal[False] = False,
+    capture_intermediates: bool | Callable[['Module', str], bool] = False,
+    **kwargs,
+  ) -> Any: ...
+
+  @overload
+  def apply(
+    self,
+    variables: VariableDict,
+    *args,
+    rngs: PRNGKey | RNGSequences | None = None,
+    method: Callable[..., Any] | str | None = None,
+    mutable: CollectionFilter,
+    capture_intermediates: bool | Callable[['Module', str], bool] = False,
+    **kwargs,
+  ) -> tuple[Any, FrozenVariableDict | dict[str, Any]]: ...
+
   @traceback_util.api_boundary
   def apply(
     self,
