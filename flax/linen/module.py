@@ -991,7 +991,7 @@ class Module(ModuleBase):
   which is automatically called to initialize the module.
 
   Modules can contain submodules, and in this way can be nested in a tree
-  structure. Submodels can be assigned as regular attributes inside the
+  structure. Submodules can be assigned as regular attributes inside the
   :meth:`setup` method.
 
   You can define arbitrary "forward pass" methods on your Module subclass.
