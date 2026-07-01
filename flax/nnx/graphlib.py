@@ -3651,7 +3651,7 @@ class Static(tp.Generic[A]):
 class GenericPytree: ...
 
 
-from jax._src.tree_util import _registry as JAX_PYTREE_REGISTRY
+
 
 
 def is_pytree_node(
@@ -3661,7 +3661,7 @@ def is_pytree_node(
     return False
   elif isinstance(x, Variable):
     return False
-  elif type(x) in JAX_PYTREE_REGISTRY:
+  elif jax.tree_util.is_tree_node(type(x)):
     return True
   elif isinstance(x, tuple):
     return True
