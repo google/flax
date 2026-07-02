@@ -197,7 +197,7 @@ class TextDataset:
 
     # Convert the sentences to sequences of token IDs and compute length.
     if tokenizer is None:
-       tokenizer = text.WhitespaceTokenizer()
+       tokenizer = text.WhitespaceTokenizer()  # pyrefly: ignore[unknown-name]
     self.tokenizer = tokenizer
     self.tf_vocab = vocab_to_hashtable(self.vocab, unk_idx=self.vocab.unk_idx)
     self.examples = self.dataset.map(

@@ -26,9 +26,9 @@ def add_graphs_tuples(
 ) -> jraph.GraphsTuple:
   """Adds the nodes, edges and global features from other_graphs to graphs."""
   return graphs._replace(
-      nodes=graphs.nodes + other_graphs.nodes,
-      edges=graphs.edges + other_graphs.edges,
-      globals=graphs.globals + other_graphs.globals,
+      nodes=graphs.nodes + other_graphs.nodes,  # pyrefly: ignore[unsupported-operation]
+      edges=graphs.edges + other_graphs.edges,  # pyrefly: ignore[unsupported-operation]
+      globals=graphs.globals + other_graphs.globals,  # pyrefly: ignore[unsupported-operation]
   )
 
 
@@ -105,9 +105,9 @@ class GraphNet(nn.Module):
       )
 
       graph_net = jraph.GraphNetwork(
-          update_node_fn=update_node_fn,
-          update_edge_fn=update_edge_fn,
-          update_global_fn=update_global_fn,
+          update_node_fn=update_node_fn,  # pyrefly: ignore[bad-argument-type]
+          update_edge_fn=update_edge_fn,  # pyrefly: ignore[bad-argument-type]
+          update_global_fn=update_global_fn,  # pyrefly: ignore[bad-argument-type]
       )
 
       if self.skip_connections:
@@ -148,7 +148,7 @@ class GraphConvNet(nn.Module):
   pooling_fn: Callable[
       [jnp.ndarray, jnp.ndarray, jnp.ndarray],  # pytype: disable=annotation-type-mismatch  # jax-ndarray
       jnp.ndarray,
-  ] = jraph.segment_mean
+  ] = jraph.segment_mean  # pyrefly: ignore[bad-assignment]
 
   def pool(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     """Pooling operation, taken from Jraph."""
@@ -186,7 +186,7 @@ class GraphConvNet(nn.Module):
           )
       )
       graph_conv = jraph.GraphConvolution(
-          update_node_fn=update_node_fn, add_self_edges=True
+          update_node_fn=update_node_fn, add_self_edges=True  # pyrefly: ignore[bad-argument-type]
       )
 
       if self.skip_connections:

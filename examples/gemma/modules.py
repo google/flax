@@ -267,7 +267,7 @@ class Attention(nnx.Module):
       )
       encoded = jnp.einsum('BTKGS,BSKH->BTKGH', probs, value_proj)
       encoded = encoded.reshape(
-        (batch_size, seq_size, self.num_heads, head_dim)
+        (batch_size, seq_size, self.num_heads, head_dim)  # pyrefly: ignore[unbound-name]
       )
     else:
       encoded = jnp.einsum('BTNS,BSNH->BTNH', probs, value_proj)

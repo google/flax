@@ -97,7 +97,7 @@ def get_datasets(
         n_graph=budget.n_graph,
     )
     dataset_split = tf.data.Dataset.from_generator(
-        batching_fn, output_signature=padded_graphs_spec
+        batching_fn, output_signature=padded_graphs_spec  # pyrefly: ignore[bad-argument-type]
     )
 
     # We cache the validation and test sets, since these are small.
@@ -157,8 +157,8 @@ def convert_to_graphs_tuple(
   return jraph.GraphsTuple(
       n_node=tf.expand_dims(num_nodes, 0),
       n_edge=tf.expand_dims(num_edges, 0),
-      nodes=nodes,
-      edges=edges,
+      nodes=nodes,  # pyrefly: ignore[bad-argument-type]
+      edges=edges,  # pyrefly: ignore[bad-argument-type]
       senders=senders,
       receivers=receivers,
       globals=tf.expand_dims(labels, axis=0),

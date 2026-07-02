@@ -135,7 +135,7 @@ class Embedder(nn.Module):
     )
     self.dropout_layer = nn.Dropout(rate=self.dropout_rate)
     self.word_dropout_layer = WordDropout(
-        dropout_rate=self.word_dropout_rate, unk_idx=self.unk_idx
+        dropout_rate=self.word_dropout_rate, unk_idx=self.unk_idx  # pyrefly: ignore[bad-argument-type]
     )
 
   def __call__(
@@ -169,7 +169,7 @@ class SimpleLSTM(nn.Module):
 
   hidden_size: int
 
-  @functools.partial(
+  @functools.partial(  # pyrefly: ignore[bad-specialization]
       nn.transforms.scan,
       variable_broadcast='params',
       in_axes=1,

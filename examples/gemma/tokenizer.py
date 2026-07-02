@@ -99,8 +99,8 @@ def _train_sentencepiece(
   Returns:
     path to the trained sentencepiece vocabulary model.
   """
-  model_path = Path(model_path)
-  abs_model_path = model_path.expanduser().absolute().resolve()
+  model_path = Path(model_path)  # pyrefly: ignore[bad-assignment]
+  abs_model_path = model_path.expanduser().absolute().resolve()  # pyrefly: ignore[missing-attribute]
   fname, _ = _dump_chars_to_textfile(
       dataset, maxchars=maxchars, data_keys=data_keys
   )
