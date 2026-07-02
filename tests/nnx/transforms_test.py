@@ -8102,7 +8102,7 @@ class TestClosureCapture(parameterized.TestCase):
     self.assertTrue(old_bias.is_deleted(),
                     'captured bias buffer was not donated')
 
-  @parameterized.parameters('jit', 'scan')
+  @parameterized.parameters('jit', 'scan', 'grad')
   def test_closure_state_update(self, transform):
     """Mutations to captured Variables propagate back."""
     count = nnx.Variable(jnp.array(0))
@@ -8117,12 +8117,21 @@ class TestClosureCapture(parameterized.TestCase):
       self.assertEqual(count[...], 1)
       forward(jnp.array(1.0))
       self.assertEqual(count[...], 2)
-    else:
+    elif transform == 'scan':
       forward = nnx.scan(body, in_axes=0, out_axes=0, graph=False)
       forward(jnp.ones((3,)))
       self.assertEqual(count[...], 3)
+    elif transform == 'grad':
+      def loss(x):
+        count[...] += 1
+        return jnp.sum(x ** 2)
+      grad_fn = nnx.grad(loss, graph_updates=False)
+      grad_fn(jnp.array([1.0]))
+      self.assertEqual(count[...], 1)
+      grad_fn(jnp.array([1.0]))
+      self.assertEqual(count[...], 2)
 
-  @parameterized.parameters('jit', 'scan')
+  @parameterized.parameters('jit', 'scan', 'grad')
   def test_closure_pytree_state_update(self, transform):
     """Mutations to captured pytrees of Variables propagate back."""
     count = [nnx.Variable(jnp.array(0))]
@@ -8137,12 +8146,21 @@ class TestClosureCapture(parameterized.TestCase):
       self.assertEqual(count[0][...], 1)
       forward(jnp.array(1.0))
       self.assertEqual(count[0][...], 2)
-    else:
+    elif transform == 'scan':
       forward = nnx.scan(body, in_axes=0, out_axes=0, graph=False)
       forward(jnp.ones((3,)))
       self.assertEqual(count[0][...], 3)
+    elif transform == 'grad':
+      def loss(x):
+        count[0][...] += 1
+        return jnp.sum(x ** 2)
+      grad_fn = nnx.grad(loss, graph_updates=False)
+      grad_fn(jnp.array([1.0]))
+      self.assertEqual(count[0][...], 1)
+      grad_fn(jnp.array([1.0]))
+      self.assertEqual(count[0][...], 2)
 
-  @parameterized.parameters('jit', 'scan')
+  @parameterized.parameters('jit', 'scan', 'grad')
   def test_double_closure(self, transform):
     x = nnx.Variable(jnp.array(0))
 
@@ -8156,8 +8174,16 @@ class TestClosureCapture(parameterized.TestCase):
     elif transform == 'scan':
       nnx.scan(f, in_axes=0, out_axes=0, graph=False)(jnp.ones((4,)))
       self.assertEqual(x[...], 4)
+    elif transform == 'grad':
+      def loss(y):
+        def g():
+          x[...] += 1
+        g()
+        return jnp.sum(y ** 2)
+      nnx.grad(loss, graph_updates=False)(jnp.array([1.0]))
+      self.assertEqual(x[...], 1)
 
-  @parameterized.parameters('jit', 'scan')
+  @parameterized.parameters('jit', 'scan', 'grad')
   def test_closure_nested(self, transform):
     """Captures through functools.partial work."""
     count = nnx.Variable(jnp.array(0))
@@ -8173,8 +8199,15 @@ class TestClosureCapture(parameterized.TestCase):
     elif transform == 'scan':
       nnx.scan(f, in_axes=0, out_axes=0, graph=False)(jnp.ones((4,)))
       self.assertEqual(count[...], 4)
+    elif transform == 'grad':
+      def loss(scale, x):
+        count[...] += 1
+        return jnp.sum(x * scale)
+      g = partial(loss, 2.0)
+      nnx.grad(g, graph_updates=False)(jnp.array([1.0]))
+      self.assertEqual(count[...], 1)
 
-  @parameterized.parameters('jit', 'scan')
+  @parameterized.parameters('jit', 'scan', 'grad')
   def test_closure_in_decorator(self, transform):
     """Captures through @wraps decorator chains work."""
     count = nnx.Variable(jnp.array(0))
@@ -8188,7 +8221,7 @@ class TestClosureCapture(parameterized.TestCase):
 
     def silly(x):
       count[...] += 1
-      return x * 2
+      return jnp.sum(x ** 2)
 
     decorated = my_decorator(silly)
     if transform == 'jit':
@@ -8197,8 +8230,11 @@ class TestClosureCapture(parameterized.TestCase):
     elif transform == 'scan':
       nnx.scan(decorated, in_axes=0, out_axes=0, graph=False)(jnp.ones((3,)))
       self.assertEqual(count[...], 6)
+    elif transform == 'grad':
+      nnx.grad(decorated, graph_updates=False)(jnp.array([1.0]))
+      self.assertEqual(count[...], 2)
 
-  @parameterized.parameters('jit', 'scan')
+  @parameterized.parameters('jit', 'scan', 'grad')
   def test_closure_duplicate_error_mentions_captured_args(self, transform):
     """Error for duplicate Variable mentions 'captured_args' in the path."""
     count = nnx.Variable(jnp.array(0))
@@ -8211,6 +8247,11 @@ class TestClosureCapture(parameterized.TestCase):
       forward = nnx.jit(body, graph=False)
     elif transform == 'scan':
       forward = nnx.scan(body, in_axes=0, out_axes=0, graph=False)
+    elif transform == 'grad':
+      def loss(x):
+        count[...] += 1
+        return jnp.sum(x ** 2)
+      forward = nnx.grad(loss, graph_updates=False)
 
     with self.assertRaisesRegex(ValueError, 'captured_args'):
       forward(count)
