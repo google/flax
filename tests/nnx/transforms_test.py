@@ -8020,69 +8020,6 @@ class TestBoundMethodTransforms(parameterized.TestCase):
 class TestClosureCapture(parameterized.TestCase):
   """Tests for auto-capture of closure Variables in tree-mode transforms."""
 
-  def test_jit_closure_state_update(self):
-    """Mutations to captured Variables propagate back."""
-    count = nnx.Variable(jnp.array(0))
-
-    @nnx.jit(graph=False)
-    def forward():
-      count[...] += 1
-
-    forward()
-    self.assertEqual(count[...], 1)
-    forward()
-    self.assertEqual(count[...], 2)
-
-  def test_jit_closure_pytree_state_update(self):
-      """Mutations to captured pytrees of Variables propagate back."""
-      count = [nnx.Variable(jnp.array(0))]
-
-      @nnx.jit(graph=False)
-      def forward():
-        count[0][...] += 1
-
-      forward()
-      self.assertEqual(count[0][...], 1)
-      forward()
-      self.assertEqual(count[0][...], 2)
-
-  def test_jit_closure_duplicate_raises(self):
-    """Passing a captured Variable as an explicit arg raises a duplicate error."""
-    count = nnx.Variable(jnp.array(0))
-
-    @nnx.jit(graph=False)
-    def forward(x):
-      count[...] += 1
-
-    with self.assertRaisesRegex(ValueError, 'Duplicate'):
-      forward(count)
-
-  def test_jit_closure_nested(self):
-    count = nnx.Variable(jnp.array(0))
-
-    def forward(x):
-      count[...] += 1
-
-    f = partial(forward, 2)
-    nnx.jit(f, graph_updates=False)()
-    self.assertEqual(count[...], 1)
-
-  def test_jit_closure_in_decorator(self):
-    count = nnx.Variable(jnp.array(0))
-
-    def my_decorator(f):
-      @wraps(f)
-      def wrapper(x):
-        count[...] += 1
-        f(x)
-      return wrapper
-
-    def silly(x):
-      count[...] += 1
-
-    nnx.jit(my_decorator(silly), graph_updates=False)(2)
-    self.assertEqual(count[...], 2)
-
   def test_jit_closure_no_recompilation(self):
     """nnx.jit with a captured variable does not recompile on repeated calls."""
     model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
@@ -8165,21 +8102,135 @@ class TestClosureCapture(parameterized.TestCase):
     self.assertTrue(old_bias.is_deleted(),
                     'captured bias buffer was not donated')
 
-  def test_jit_closure_duplicate_error_mentions_captured_args(self):
+  @parameterized.parameters('jit', 'scan')
+  def test_closure_state_update(self, transform):
+    """Mutations to captured Variables propagate back."""
+    count = nnx.Variable(jnp.array(0))
+
+    def body(x):
+      count[...] += 1
+      return x
+
+    if transform == 'jit':
+      forward = nnx.jit(body, graph=False)
+      forward(jnp.array(1.0))
+      self.assertEqual(count[...], 1)
+      forward(jnp.array(1.0))
+      self.assertEqual(count[...], 2)
+    else:
+      forward = nnx.scan(body, in_axes=0, out_axes=0, graph=False)
+      forward(jnp.ones((3,)))
+      self.assertEqual(count[...], 3)
+
+  @parameterized.parameters('jit', 'scan')
+  def test_closure_pytree_state_update(self, transform):
+    """Mutations to captured pytrees of Variables propagate back."""
+    count = [nnx.Variable(jnp.array(0))]
+
+    def body(x):
+      count[0][...] += 1
+      return x * 2
+
+    if transform == 'jit':
+      forward = nnx.jit(body, graph=False)
+      forward(jnp.array(1.0))
+      self.assertEqual(count[0][...], 1)
+      forward(jnp.array(1.0))
+      self.assertEqual(count[0][...], 2)
+    else:
+      forward = nnx.scan(body, in_axes=0, out_axes=0, graph=False)
+      forward(jnp.ones((3,)))
+      self.assertEqual(count[0][...], 3)
+
+  @parameterized.parameters('jit', 'scan')
+  def test_double_closure(self, transform):
+    x = nnx.Variable(jnp.array(0))
+
+    def f(y):
+      def g():
+        x[...] += 1
+      g()
+    if transform == 'jit':
+      nnx.jit(f, graph_updates=False)(jnp.array(1.0))
+      self.assertEqual(x[...], 1)
+    elif transform == 'scan':
+      nnx.scan(f, in_axes=0, out_axes=0, graph=False)(jnp.ones((4,)))
+      self.assertEqual(x[...], 4)
+
+  @parameterized.parameters('jit', 'scan')
+  def test_closure_nested(self, transform):
+    """Captures through functools.partial work."""
+    count = nnx.Variable(jnp.array(0))
+
+    def forward(scale, x):
+      count[...] += 1
+      return x * scale
+
+    f = partial(forward, 2)
+    if transform == 'jit':
+      nnx.jit(f, graph_updates=False)(jnp.array(1.0))
+      self.assertEqual(count[...], 1)
+    elif transform == 'scan':
+      nnx.scan(f, in_axes=0, out_axes=0, graph=False)(jnp.ones((4,)))
+      self.assertEqual(count[...], 4)
+
+  @parameterized.parameters('jit', 'scan')
+  def test_closure_in_decorator(self, transform):
+    """Captures through @wraps decorator chains work."""
+    count = nnx.Variable(jnp.array(0))
+
+    def my_decorator(f):
+      @wraps(f)
+      def wrapper(x):
+        count[...] += 1
+        return f(x)
+      return wrapper
+
+    def silly(x):
+      count[...] += 1
+      return x * 2
+
+    decorated = my_decorator(silly)
+    if transform == 'jit':
+      nnx.jit(decorated, graph_updates=False)(jnp.array(1.0))
+      self.assertEqual(count[...], 2)
+    elif transform == 'scan':
+      nnx.scan(decorated, in_axes=0, out_axes=0, graph=False)(jnp.ones((3,)))
+      self.assertEqual(count[...], 6)
+
+  @parameterized.parameters('jit', 'scan')
+  def test_closure_duplicate_error_mentions_captured_args(self, transform):
     """Error for duplicate Variable mentions 'captured_args' in the path."""
     count = nnx.Variable(jnp.array(0))
 
-    def make_forward():
-      @nnx.jit(graph=False)
-      def forward(x):
-        count[...] += 1
-      return forward
+    def body(x):
+      count[...] += 1
+      return x
 
-    forward = make_forward()
-    self.assertTrue(forward._captured_info, 'expected non-empty captures')
+    if transform == 'jit':
+      forward = nnx.jit(body, graph=False)
+    elif transform == 'scan':
+      forward = nnx.scan(body, in_axes=0, out_axes=0, graph=False)
 
     with self.assertRaisesRegex(ValueError, 'captured_args'):
       forward(count)
+
+  @parameterized.parameters('jit', 'scan')
+  def test_closure_duplicate_error_no_captured_args_without_captures(self, transform):
+    """Without captures, duplicate error shows 'args' paths, not 'captured_args'."""
+    v = nnx.Variable(jnp.array(0))
+
+    def body(x, y):
+      return x[...] + y[...]
+
+    if transform == 'jit':
+      forward = nnx.jit(body, graph=False)
+    elif transform == 'scan':
+      forward = nnx.scan(body, in_axes=(0, 0), out_axes=0, graph=False)
+
+    with self.assertRaisesRegex(ValueError, r"args\[") as cm:
+      forward(v, v)
+    self.assertNotIn('captured_args', str(cm.exception))
 
   def test_double_transform_closure(self):
      x = nnx.Variable(jnp.array(0))

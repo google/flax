@@ -1412,13 +1412,14 @@ class SimpleScanFn:
   carry_idx: int | None
   carry_out_idx: int | None
   update_axes: tuple[tp.Any, ...]
+  captured_info: list[tp.Any]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
   def __call__(self, full_carry: tp.Any, args: tp.Any):
-    carry, broadcasts = full_carry
+    carry, broadcasts, captured_args = full_carry
     carry_in = extract.copy_var_structure(carry)
     args = extract.insert(args, broadcasts)
     current, snapshot = extract.snapshot(labeled(args=args))
@@ -1427,7 +1428,9 @@ class SimpleScanFn:
       carry = extract.from_tree2(carry)
     args = extract.replace_at(args, self.carry_idx, carry)
 
-    out = self.f(*args)
+    f = extract.replace_closure_cells(
+        self.f, self.captured_info, captured_args)
+    out = f(*args)
 
     if self.carry_idx is None:  # has carry
       carry_out = None
@@ -1454,7 +1457,7 @@ class SimpleScanFn:
         and extract.variable_changed(cur, snap),
     )
 
-    return (carry_out, broadcasts), (ys, updates)
+    return (carry_out, broadcasts, captured_args), (ys, updates)
 
 
 @tp.overload
@@ -1677,6 +1680,8 @@ def _simple_scan(
   carry_idx = extract.find(in_axes, Carry)
   carry_out_idx = extract.find(out_axes, Carry)
 
+  captured_info = extract.find_captured_nodes(f_unbound)
+
   simple_scan_fn = SimpleScanFn(
       f_unbound, graph=graph,
       in_axes=in_axes, out_axes=out_axes,
@@ -1684,6 +1689,7 @@ def _simple_scan(
       carry_idx=carry_idx,
       carry_out_idx=carry_out_idx,
       update_axes=tuple(updates_axes),
+      captured_info=captured_info,
   )
 
   @functools.wraps(f)
@@ -1700,7 +1706,8 @@ def _simple_scan(
     if graph:
       args = extract.to_tree2(args, prefix=in_axes)
       carry = extract.to_tree2(carry)
-    variables = extract.check_no_aliases('scan', args=args, carry=carry)
+    variables = extract.check_no_aliases(
+        'scan', args=args, carry=carry, captured_args=captured_info)
     args, broadcasts = extract.extract(
         lambda _, axes, x: axes is None,
         in_axes, args,
@@ -1711,9 +1718,9 @@ def _simple_scan(
         lambda ax, leaf: jnp.moveaxis(leaf, ax, 0),
         in_axes, args,
     )
-    (carry_out, final_broadcasts), (ys, updates) = jax.lax.scan(
+    (carry_out, final_broadcasts, captured_out), (ys, updates) = jax.lax.scan(
         simple_scan_fn,
-        (carry, broadcasts),
+        (carry, broadcasts, captured_info),
         args_t,
         length=length,
         reverse=reverse,
@@ -1730,6 +1737,13 @@ def _simple_scan(
     for broadcast, update in zip(broadcasts, final_broadcasts, strict=True):
       if isinstance(broadcast, variablelib.Variable):
         broadcast.update_from_state(update)
+
+    # Write back captured variable values from the scan output.
+    # captured_out contains unflattened Variables (rebuilt by JAX pytree),
+    # so extract their raw values and write back to the originals.
+    for node, new_var in zip(captured_info, captured_out):
+      if isinstance(node, variablelib.Variable):
+        node.set_value(new_var.get_value())
 
     if graph:
       ys = extract.from_tree2(ys)
