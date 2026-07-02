@@ -96,35 +96,18 @@ partially reinitialize the model with new RNGs. To do this, you can use ``nnx.ji
 
 .. code-block:: python
 
+  class MLP(nnx.Module): # Your model class
+    ...
+  
   # load checkpoint
   checkpointer = ocp.StandardCheckpointer()
   checkpoint = checkpointer.restore(path / "state")
-
-  @jax.jit
-  def fix_checkpoint(checkpoint, rngs: nnx.Rngs):
-    # drop rngs keys
-    flat_paths = nnx.traversals.flatten_mapping(checkpoint)
-    flat_paths = {
-        path[:-1] if path[-1] == "value" else path: value  # remove "value" suffix
-        for path, value in flat_paths.items()
-        if "rngs" not in path  # remove rngs paths
-    }
-    checkpoint = nnx.traversals.unflatten_mapping(flat_paths)
-
-    # initialize new model with given rngs
-    model = MyModel(rngs=rngs)
-    # overwrite model parameters with checkpoint
-    nnx.update(model, checkpoint)
-    # get full checkpoint with new rngs
-    new_checkpoint = nnx.state(model)
-
-    return new_checkpoint
-
-  checkpoint = fix_checkpoint(checkpoint, rngs=nnx.Rngs(params=0, dropout=1))
+  checkpoint = nnx.fix_checkpoint(checkpoint, MLP, rngs=nnx.Rngs(params=0, dropout=1))
   checkpointer.save(path.with_name(path.name + "_new"), checkpoint)
 
-The previous code is efficient because ``jit`` performs dead code elimination (DCE) so it will not
-actually initialize the existing model parameters in memory.
+The previous code is efficient because ``nnx.fix_checkpoint`` uses ``jit`` to perform
+dead code elimination (DCE) so it will not actually initialize the existing model 
+parameters in memory.
 
 Optimizer Updates
 ====================================
