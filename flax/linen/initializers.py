@@ -27,6 +27,7 @@ from jax.nn.initializers import kaiming_uniform as kaiming_uniform
 from jax.nn.initializers import lecun_normal as lecun_normal
 from jax.nn.initializers import lecun_uniform as lecun_uniform
 from jax.nn.initializers import normal as normal
+from jax.nn.initializers import truncated_normal as truncated_normal
 from jax.nn.initializers import ones as ones
 from jax.nn.initializers import orthogonal as orthogonal
 from jax.nn.initializers import truncated_normal as truncated_normal
