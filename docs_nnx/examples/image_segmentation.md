@@ -1147,8 +1147,8 @@ class ConfusionMatrix(nnx.Metric):
         self.count = nnx.metrics.MetricState(jnp.array(0, dtype=jnp.int32))
 
     def reset(self):
-        self.confusion_matrix.value = jnp.zeros((self.num_classes, self.num_classes), dtype=jnp.int32)
-        self.count.value = jnp.array(0, dtype=jnp.int32)
+        self.confusion_matrix[...] = jnp.zeros((self.num_classes, self.num_classes), dtype=jnp.int32)
+        self.count[...] = jnp.array(0, dtype=jnp.int32)
 
     def _check_shape(self, y_pred: jax.Array, y: jax.Array):
         if y_pred.shape[-1] != self.num_classes:
