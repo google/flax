@@ -39,7 +39,7 @@ class MLP(nnx.Module):
     self.count = Count(0)  # stateful variables are defined as attributes
 
   def __call__(self, x):
-    self.count.value += 1  # in-place stateful updates
+    self.count[...] += 1  # in-place stateful updates
     for block in self.blocks:
       x = block(x)
     return x
@@ -113,7 +113,7 @@ y, state = forward(graphdef,state, x)
 model.update(state)
 
 print(f'{y.shape = }')
-print(f'{model.count.value = }')
+print(f'{model.count[...] = }')
 ```
 
 ```{code-cell} ipython3
@@ -160,7 +160,7 @@ parent = Parent(model)
 y = parent(jnp.ones((2, 4)))
 
 print(f'{y.shape = }')
-print(f'{parent.model.count.value = }')
+print(f'{parent.model.count[...] = }')
 ```
 
 ```{code-cell} ipython3
