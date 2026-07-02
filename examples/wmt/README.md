@@ -156,3 +156,41 @@ Please don't forget to disconnect and delete your vm after you are done:
 gcloud alpha compute tpus tpu-vm delete $VM_NAME \
   --zone $ZONE
 ```
+
+#### Training with FP8 on NVIDIA Hopper GPUs
+
+NVIDIA H100 GPU introduced support for a new datatype, FP8(8-bit floating point), 
+enabling higher throughput of matrix multiplies and convolutions. To start 
+training with FP8, append command line arguments as
+```
+python3 main.py --workdir=$HOME/logs/wmt_256 \
+    --config.per_device_batch_size=32 \
+    --jax_backend_target="grpc://192.168.0.2:8470" \
+    --config.use_fp8=True
+```
+
+##### Layer configuration
+Users can utilize the FP8 feature of nn.Dense or nn.DenseGeneral by passing in 
+our custom quantization op nn.Fp8DenseGeneralOp to dot_general_cls.[#3322](https://github.com/google/flax/pull/3322).
+More generally, the dot_general_cls from any GEMM-based FLAX layers can be 
+injected with the FP8 quantization op if FP8 GEMM is desired. For the 
+transformer-based models, we recommend users to configure the QKV projection, 
+attention output projection, and linear layers in MLP to utilize the FP8 custom 
+op, as demonstrated in this example.
+
+##### TrainState configuration
+FP8 usage introduces extra model variables to scale the to-be-quantized 
+inputs/outputs of the GEMM. These variables are categorized under the parameter 
+collection fp8_params which is in the same level of params. Therefore, the 
+pytree structure will be like:
+
+```
+{'params': {'kernel':..., ...},
+ 'fp8_params': {'input_scale':..., ...}}.
+```
+
+##### Precision issue
+To ensure the numerical stability, the usage of FP8 often requires the wider 
+type being fp32 or BFloat16.
+
+To start fp 
