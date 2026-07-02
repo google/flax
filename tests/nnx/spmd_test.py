@@ -605,6 +605,30 @@ class TestSPMD(parameterized.TestCase):
         getattr(abs_model.kernel.get_value(), 'sharding', None)
     )
 
+  def test_jit_closure_partition_spec_in_shardings(self):
+    """A PartitionSpec in_shardings applies to the arg but not captures."""
+    mesh = jax.make_mesh((4,), ('data',))
+    data_sharding = NamedSharding(mesh, P('data'))
+
+    with jax.set_mesh(mesh):
+      model = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+      observed_specs = []
+
+      def callback(sharding):
+        observed_specs.append(sharding.spec)
+
+      @nnx.jit(in_shardings=(P('data'),), graph=False)
+      def forward(x):
+        jax.debug.inspect_array_sharding(model.kernel[...], callback=callback)
+        jax.debug.inspect_array_sharding(x, callback=callback)
+        return model(x)
+
+      x = jax.device_put(jnp.ones((4, 2)), data_sharding)
+      forward(x)
+      self.assertEqual(observed_specs[0], P())
+      self.assertEqual(observed_specs[1], P('data'))
+
+
 def has_sharding_spec(array):
     sharding = array.sharding
     if hasattr(sharding, 'spec'):
