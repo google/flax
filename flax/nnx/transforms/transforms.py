@@ -19,6 +19,7 @@ import dataclasses
 import functools
 import inspect
 import typing as tp
+import weakref
 
 from jax._src import checkify as checkify_lib
 
@@ -585,6 +586,38 @@ class SimpleCondFn:
     return out, updates
 
 
+_simple_cond_fn_cache: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _get_simple_cond_fn(f: tp.Callable[..., tp.Any], graph: bool) -> SimpleCondFn:
+  """Returns a cached ``SimpleCondFn`` for ``(f, graph)``.
+
+  ``jax.lax.cond`` / ``jax.lax.switch`` key their tracing cache on the identity
+  of the callables they trace. Constructing a fresh ``SimpleCondFn`` on every
+  ``cond``/``switch`` call gives each branch a new identity, defeating that
+  cache and forcing re-tracing (and blocking the persistent compilation cache);
+  see https://github.com/google/flax/issues/5512. Reusing the same wrapper for
+  a given ``(f, graph)`` keeps a stable identity so repeated calls hit the
+  cache.
+
+  ``f`` is held weakly so locally-defined branches stay collectable. Callables
+  that do not support weak references fall back to a freshly constructed
+  wrapper.
+  """
+  try:
+    by_graph = _simple_cond_fn_cache.get(f)
+    if by_graph is None:
+      by_graph = {}
+      _simple_cond_fn_cache[f] = by_graph
+  except TypeError:
+    return SimpleCondFn(f, graph=graph)
+  wrapper = by_graph.get(graph)
+  if wrapper is None:
+    wrapper = SimpleCondFn(f, graph=graph)
+    by_graph[graph] = wrapper
+  return wrapper
+
+
 def cond(
   pred,
   true_fun: tp.Callable[..., A],
@@ -622,8 +655,8 @@ def cond(
     variables = extract.check_no_aliases('cond', operands=operands)
     out, updates = jax.lax.cond(
       pred,
-      SimpleCondFn(true_fun, graph=graph),
-      SimpleCondFn(false_fun, graph=graph),
+      _get_simple_cond_fn(true_fun, graph),
+      _get_simple_cond_fn(false_fun, graph),
       *operands,
     )
     if graph:
@@ -677,7 +710,7 @@ def switch(
     variables = extract.check_no_aliases('switch', operands=operands)
     out, updates = jax.lax.switch(
       index,
-      [SimpleCondFn(f, graph=graph) for f in branches],
+      [_get_simple_cond_fn(f, graph) for f in branches],
       *operands,
     )
     if graph:

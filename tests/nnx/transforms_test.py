@@ -7121,6 +7121,61 @@ class TestCond(parameterized.TestCase):
     with self.assertRaises(ValueError):
       nnx.cond(True, true_fn, false_fn, m, graph=False)
 
+  def test_get_simple_cond_fn_reuses_wrapper(self):
+    from flax.nnx.transforms import transforms as nnx_transforms
+
+    def f(x):
+      return x
+
+    w1 = nnx_transforms._get_simple_cond_fn(f, True)
+    self.assertIs(w1, nnx_transforms._get_simple_cond_fn(f, True))
+    self.assertIsNot(w1, nnx_transforms._get_simple_cond_fn(f, False))
+    self.assertIsNot(w1, nnx_transforms._get_simple_cond_fn(lambda x: x, True))
+
+  def test_get_simple_cond_fn_non_weakref_fallback(self):
+    from flax.nnx.transforms import transforms as nnx_transforms
+
+    class Slotted:
+      __slots__ = ()
+
+      def __call__(self, x):
+        return x
+
+    f = Slotted()
+    w1 = nnx_transforms._get_simple_cond_fn(f, True)
+    w2 = nnx_transforms._get_simple_cond_fn(f, True)
+    self.assertIsNot(w1, w2)
+
+  def test_cond_reuses_branch_wrappers(self):
+    from flax.nnx.transforms import transforms as nnx_transforms
+
+    def true_fn(x):
+      x[...] += 1
+
+    def false_fn(x):
+      x[...] -= 1
+
+    created = []
+    original = nnx_transforms.SimpleCondFn
+
+    def counting_factory(f, graph):
+      instance = original(f, graph=graph)
+      created.append(instance)
+      return instance
+
+    nnx_transforms.SimpleCondFn = counting_factory
+    try:
+      x = nnx.Variable(jnp.array(0))
+      for i in range(3):
+        nnx.cond(
+          jnp.array(i % 2 == 0), true_fn, false_fn, x, graph_updates=False
+        )
+    finally:
+      nnx_transforms.SimpleCondFn = original
+
+    self.assertLen(created, 2)
+
+
 class TestSwitch(parameterized.TestCase):
   @parameterized.parameters(
     (True, False),
@@ -7217,6 +7272,35 @@ class TestSwitch(parameterized.TestCase):
 
     with self.assertRaises(ValueError):
       nnx.switch(0, (add_a, add_b), m, graph=False)
+
+  def test_switch_reuses_branch_wrappers(self):
+    from flax.nnx.transforms import transforms as nnx_transforms
+
+    def add_1(x):
+      x[...] += 1
+
+    def add_10(x):
+      x[...] += 10
+
+    branches = (add_1, add_10)
+    created = []
+    original = nnx_transforms.SimpleCondFn
+
+    def counting_factory(f, graph):
+      instance = original(f, graph=graph)
+      created.append(instance)
+      return instance
+
+    nnx_transforms.SimpleCondFn = counting_factory
+    try:
+      x = nnx.Variable(jnp.array(0))
+      for i in range(3):
+        nnx.switch(i % 2, branches, x, graph_updates=False)
+    finally:
+      nnx_transforms.SimpleCondFn = original
+
+    self.assertLen(created, 2)
+
 
 class TestWhileLoop(parameterized.TestCase):
   @parameterized.parameters(
