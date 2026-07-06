@@ -7121,6 +7121,31 @@ class TestCond(parameterized.TestCase):
     with self.assertRaises(ValueError):
       nnx.cond(True, true_fn, false_fn, m, graph=False)
 
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_cond_no_retrace(self, graph, graph_updates):
+    # regression test for #5512: repeated cond calls with the same branch
+    # functions must hit JAX's tracing cache instead of retracing
+    n_traces = {'true_fn': 0, 'false_fn': 0}
+
+    def true_fn(x):
+      n_traces['true_fn'] += 1
+      return x + 1
+
+    def false_fn(x):
+      n_traces['false_fn'] += 1
+      return x - 1
+
+    x = jnp.zeros(())
+    for i in range(3):
+      nnx.cond(
+        jnp.bool_(i % 2 == 0), true_fn, false_fn, x,
+        graph=graph, graph_updates=graph_updates,
+      )
+
+    self.assertEqual(n_traces, {'true_fn': 1, 'false_fn': 1})
+
 class TestSwitch(parameterized.TestCase):
   @parameterized.parameters(
     (True, False),
@@ -7217,6 +7242,30 @@ class TestSwitch(parameterized.TestCase):
 
     with self.assertRaises(ValueError):
       nnx.switch(0, (add_a, add_b), m, graph=False)
+
+  @parameterized.parameters(
+    (True, True), (True, False), (False, False),
+  )
+  def test_switch_no_retrace(self, graph, graph_updates):
+    # regression test for #5512, see TestCond.test_cond_no_retrace
+    n_traces = {'branch_0': 0, 'branch_1': 0}
+
+    def branch_0(x):
+      n_traces['branch_0'] += 1
+      return x + 1
+
+    def branch_1(x):
+      n_traces['branch_1'] += 1
+      return x - 1
+
+    x = jnp.zeros(())
+    for i in range(3):
+      nnx.switch(
+        jnp.int32(i % 2), (branch_0, branch_1), x,
+        graph=graph, graph_updates=graph_updates,
+      )
+
+    self.assertEqual(n_traces, {'branch_0': 1, 'branch_1': 1})
 
 class TestWhileLoop(parameterized.TestCase):
   @parameterized.parameters(
