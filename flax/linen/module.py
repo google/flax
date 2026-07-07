@@ -2695,11 +2695,11 @@ class Module(ModuleBase):
     so you can easily disable the behavior when not needed::
 
       >>> model.apply(variables, x) # works as expected
-      Array([[-0.04579116,  0.50412744],
-             [-0.04579116,  0.50412744]], dtype=float32)
+      Array([[-0.0457912,  0.50412744],
+             [-0.0457912,  0.50412744]], dtype=float32)
       >>> model.apply({'params': variables['params']}, x) # behaves like a no-op
-      Array([[-0.04579116,  0.50412744],
-             [-0.04579116,  0.50412744]], dtype=float32)
+      Array([[-0.0457912,  0.50412744],
+             [-0.0457912,  0.50412744]], dtype=float32)
       >>> intm_grads = jax.grad(loss, argnums=0)({'params': variables['params']}, x, y)
       >>> 'perturbations' not in intm_grads
       True
