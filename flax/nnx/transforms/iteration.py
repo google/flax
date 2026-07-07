@@ -273,24 +273,32 @@ class SimpleVmapFn:
   in_axes: tp.Any
   out_axes: tp.Any
   update_axes: tuple[tp.Any, ...]
+  captured_info: list[tp.Any]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
-  def __call__(self, *args, **kwargs):
+  def __call__(self, captured_args, args, kwargs):
     current, snapshot = extract.snapshot(
-        labeled(args=args, kwargs=kwargs)
+        labeled(args=args, kwargs=kwargs, captured_args=captured_args)
     )
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
-    out = self.f(*args, **kwargs)
+    if not self.graph and captured_args is not None:
+      f = extract.replace_closure_cells(
+          self.f, self.captured_info, captured_args)
+    else:
+      f = self.f
+    out = f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out, prefix=self.out_axes)
     extract.check_no_aliases(
-        'vmap', **current, out=out, check=['out'],
+        'vmap', args=current.args, kwargs=current.kwargs, out=out,
+        check=['out'],
     )
     updates = extract.get_updates(
-        current, snapshot, prefix=labeled(args=self.in_axes, kwargs=0),
+        current, snapshot,
+        prefix=labeled(args=self.in_axes, kwargs=0, captured_args=None),
         known_prefixes=self.update_axes
     )
     return out, updates
@@ -523,6 +531,11 @@ def vmap(
 
   if not (graph and graph_updates):
 
+    captured_info = extract.find_captured_nodes(f_unbound)
+
+    if captured_info and None not in update_axes:
+      update_axes.append(None)
+
     vmapped_fn = jax.vmap(
       SimpleVmapFn(
         f_unbound,
@@ -530,8 +543,9 @@ def vmap(
         in_axes=in_axes,
         out_axes=out_axes,
         update_axes=tuple(update_axes),
+        captured_info=captured_info,
       ),
-      in_axes=in_axes,
+      in_axes=(None, in_axes, 0),
       out_axes=(out_axes, update_axes),
       axis_name=axis_name,
       axis_size=axis_size,
@@ -545,8 +559,10 @@ def vmap(
             (args, kwargs),
             prefix=(in_axes, 0),
         )
-      variables = extract.check_no_aliases('vmap', args=args, kwargs=kwargs)
-      out, updates = vmapped_fn(*args, **kwargs)
+      variables = extract.check_no_aliases(
+          'vmap', args=args, kwargs=kwargs, captured_args=captured_info)
+
+      out, updates = vmapped_fn(captured_info, args, kwargs)
       extract.apply_updates(variables, updates)
       if graph:
         out = extract.from_tree2(out)

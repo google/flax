@@ -8102,7 +8102,7 @@ class TestClosureCapture(parameterized.TestCase):
     self.assertTrue(old_bias.is_deleted(),
                     'captured bias buffer was not donated')
 
-  @parameterized.parameters('jit', 'scan', 'grad')
+  @parameterized.parameters('jit', 'scan', 'grad', 'vmap')
   def test_closure_state_update(self, transform):
     """Mutations to captured Variables propagate back."""
     count = nnx.Variable(jnp.array(0))
@@ -8130,8 +8130,12 @@ class TestClosureCapture(parameterized.TestCase):
       self.assertEqual(count[...], 1)
       grad_fn(jnp.array([1.0]))
       self.assertEqual(count[...], 2)
+    elif transform == 'vmap':
+      forward = nnx.vmap(body, in_axes=0, out_axes=0, graph=False)
+      forward(jnp.ones((3,)))
+      self.assertEqual(count[...], 1)
 
-  @parameterized.parameters('jit', 'scan', 'grad')
+  @parameterized.parameters('jit', 'scan', 'grad', 'vmap')
   def test_closure_pytree_state_update(self, transform):
     """Mutations to captured pytrees of Variables propagate back."""
     count = [nnx.Variable(jnp.array(0))]
@@ -8159,8 +8163,12 @@ class TestClosureCapture(parameterized.TestCase):
       self.assertEqual(count[0][...], 1)
       grad_fn(jnp.array([1.0]))
       self.assertEqual(count[0][...], 2)
+    elif transform == 'vmap':
+      forward = nnx.vmap(body, in_axes=0, out_axes=0, graph=False)
+      forward(jnp.ones((3,)))
+      self.assertEqual(count[0][...], 1)
 
-  @parameterized.parameters('jit', 'scan', 'grad')
+  @parameterized.parameters('jit', 'scan', 'grad', 'vmap')
   def test_double_closure(self, transform):
     x = nnx.Variable(jnp.array(0))
 
@@ -8182,8 +8190,11 @@ class TestClosureCapture(parameterized.TestCase):
         return jnp.sum(y ** 2)
       nnx.grad(loss, graph_updates=False)(jnp.array([1.0]))
       self.assertEqual(x[...], 1)
+    elif transform == 'vmap':
+      nnx.vmap(f, in_axes=0, out_axes=0, graph=False)(jnp.ones((4,)))
+      self.assertEqual(x[...], 1)
 
-  @parameterized.parameters('jit', 'scan', 'grad')
+  @parameterized.parameters('jit', 'scan', 'grad', 'vmap')
   def test_closure_nested(self, transform):
     """Captures through functools.partial work."""
     count = nnx.Variable(jnp.array(0))
@@ -8206,8 +8217,11 @@ class TestClosureCapture(parameterized.TestCase):
       g = partial(loss, 2.0)
       nnx.grad(g, graph_updates=False)(jnp.array([1.0]))
       self.assertEqual(count[...], 1)
+    elif transform == 'vmap':
+      nnx.vmap(f, in_axes=0, out_axes=0, graph=False)(jnp.ones((4,)))
+      self.assertEqual(count[...], 1)
 
-  @parameterized.parameters('jit', 'scan', 'grad')
+  @parameterized.parameters('jit', 'scan', 'grad', 'vmap')
   def test_closure_in_decorator(self, transform):
     """Captures through @wraps decorator chains work."""
     count = nnx.Variable(jnp.array(0))
@@ -8233,8 +8247,11 @@ class TestClosureCapture(parameterized.TestCase):
     elif transform == 'grad':
       nnx.grad(decorated, graph_updates=False)(jnp.array([1.0]))
       self.assertEqual(count[...], 2)
+    elif transform == 'vmap':
+      nnx.vmap(decorated, in_axes=0, out_axes=0, graph=False)(jnp.ones((3,)))
+      self.assertEqual(count[...], 2)
 
-  @parameterized.parameters('jit', 'scan', 'grad')
+  @parameterized.parameters('jit', 'scan', 'grad', 'vmap')
   def test_closure_duplicate_error_mentions_captured_args(self, transform):
     """Error for duplicate Variable mentions 'captured_args' in the path."""
     count = nnx.Variable(jnp.array(0))
@@ -8252,11 +8269,13 @@ class TestClosureCapture(parameterized.TestCase):
         count[...] += 1
         return jnp.sum(x ** 2)
       forward = nnx.grad(loss, graph_updates=False)
+    elif transform == 'vmap':
+      forward = nnx.vmap(body, in_axes=0, out_axes=0, graph=False)
 
     with self.assertRaisesRegex(ValueError, 'captured_args'):
       forward(count)
 
-  @parameterized.parameters('jit', 'scan')
+  @parameterized.parameters('jit', 'scan', 'vmap')
   def test_closure_duplicate_error_no_captured_args_without_captures(self, transform):
     """Without captures, duplicate error shows 'args' paths, not 'captured_args'."""
     v = nnx.Variable(jnp.array(0))
@@ -8268,6 +8287,8 @@ class TestClosureCapture(parameterized.TestCase):
       forward = nnx.jit(body, graph=False)
     elif transform == 'scan':
       forward = nnx.scan(body, in_axes=(0, 0), out_axes=0, graph=False)
+    elif transform == 'vmap':
+      forward = nnx.vmap(body, in_axes=(0, 0), out_axes=0, graph=False)
 
     with self.assertRaisesRegex(ValueError, r"args\[") as cm:
       forward(v, v)
