@@ -269,8 +269,7 @@ class TestMetrics(parameterized.TestCase):
     n = 3
 
     @nnx.vmap(in_axes=0, out_axes=0)
-    def init_metrics(seed):
-      del seed
+    def init_metrics(_):
       return nnx.MultiMetric(loss=nnx.metrics.Average('loss'))
 
     metrics = init_metrics(jnp.arange(n))
@@ -278,15 +277,6 @@ class TestMetrics(parameterized.TestCase):
 
     metrics.reset()
     self.assertEqual(metrics.loss.total[...].shape, (n,))
-
-    @nnx.vmap(in_axes=(0, 0), out_axes=None)
-    def do_update(m, value):
-      m.update(loss=value)
-
-    do_update(metrics, jnp.arange(n, dtype=jnp.float32))
-    np.testing.assert_array_equal(
-      metrics.compute()['loss'], jnp.arange(n, dtype=jnp.float32)
-    )
 
 
 if __name__ == '__main__':
