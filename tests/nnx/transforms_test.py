@@ -7146,12 +7146,7 @@ class TestCond(parameterized.TestCase):
     w2 = nnx_transforms._get_simple_cond_fn(f, True)
     self.assertIsNot(w1, w2)
 
-  @parameterized.named_parameters(
-    ('cond', 'cond'),
-    ('switch', 'switch'),
-    ('while_loop', 'while_loop'),
-    ('fori_loop', 'fori_loop'),
-  )
+  @parameterized.parameters('cond', 'switch', 'while_loop', 'fori_loop')
   def test_control_flow_reuses_branch_wrappers(self, control_flow):
     trace_count = 0
 
