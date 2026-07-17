@@ -159,10 +159,23 @@ class Dropout(Module):
     broadcast_shape = list(inputs.shape)
     for dim in self.broadcast_dims:
       broadcast_shape[dim] = 1
+    inputs_sharding = jax.typeof(inputs).sharding
+    # The mask has size 1 along the broadcast dims, so it cannot be
+    # partitioned there; drop those axes from the mask's sharding.
+    mask_spec = list(inputs_sharding.spec) + [None] * (
+      inputs.ndim - len(inputs_sharding.spec)
+    )
+    for dim in self.broadcast_dims:
+      mask_spec[dim] = None
+    mask_sharding = inputs_sharding.update(
+      spec=jax.sharding.PartitionSpec(*mask_spec)
+    )
     mask = random.bernoulli(
-      key, p=keep_prob, shape=broadcast_shape, out_sharding=jax.typeof(inputs).sharding
+      key, p=keep_prob, shape=broadcast_shape, out_sharding=mask_sharding
     )
     mask = jnp.broadcast_to(mask, inputs.shape)
+    if mask_sharding != inputs_sharding:
+      mask = jax.sharding.reshard(mask, inputs_sharding)
     return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
 
   def set_view(
