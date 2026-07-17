@@ -410,12 +410,16 @@ class Rngs(Pytree):
         rngs['default'] = default
 
     for tag, key in rngs.items():
+      count = None
       if isinstance(key, RngStream):
+        count = key.count.get_value()
         key = key.key.get_value()
       stream = RngStream(
         key=key,
         tag=tag,
       )
+      if count is not None:
+        stream.count.set_value(count)
       setattr(self, tag, stream)
 
   def _get_stream(self, name: str, error_type: type[Exception]) -> RngStream:
