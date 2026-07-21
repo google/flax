@@ -265,6 +265,19 @@ class TestMetrics(parameterized.TestCase):
       )
     )
 
+  def test_vmap_reset_preserves_shape(self):
+    n = 3
+
+    @nnx.vmap(in_axes=0, out_axes=0)
+    def init_metrics(_):
+      return nnx.MultiMetric(loss=nnx.metrics.Average('loss'))
+
+    metrics = init_metrics(jnp.arange(n))
+    self.assertEqual(metrics.loss.total[...].shape, (n,))
+
+    metrics.reset()
+    self.assertEqual(metrics.loss.total[...].shape, (n,))
+
 
 if __name__ == '__main__':
   absltest.main()
