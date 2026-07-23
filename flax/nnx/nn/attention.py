@@ -115,6 +115,15 @@ def dot_product_attention_weights(
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
   """
+  if not 0.0 <= dropout_rate < 1.0:
+    raise ValueError(
+      f'dropout_rate must be in the range [0, 1), got {dropout_rate!r}.'
+    )
+  if not deterministic and dropout_rate > 0.0 and dropout_rng is None:
+    raise ValueError(
+      'dropout_rng is required when dropout_rate > 0 and deterministic=False.'
+    )
+
   query, key = promote_dtype((query, key), dtype=dtype)  # type: ignore[bad-unpacking]
   dtype = query.dtype
 
