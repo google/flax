@@ -500,6 +500,41 @@ class TestRoPE(absltest.TestCase):
 
     np.testing.assert_allclose(out_flax, out_torch, atol=1e-5)
 
+  def test_dot_product_attention_with_rope_input_positions(self):
+    """Explicit input_positions work and default positions match arange."""
+    batch, seq_len, num_heads, head_dim = 2, 6, 4, 8
+
+    key = jax.random.key(0)
+    k1, k2, k3 = jax.random.split(key, 3)
+    query = jax.random.normal(k1, (batch, seq_len, num_heads, head_dim))
+    kv = jax.random.normal(k2, (batch, seq_len, num_heads, head_dim))
+    value = jax.random.normal(k3, (batch, seq_len, num_heads, head_dim))
+
+    rope = nnx.RoPE(theta=10000.0)
+    out_default = nnx.dot_product_attention_with_rope(
+      query, kv, value, rope=rope
+    )
+    # Positions are shared by every head, so arange must match the default.
+    out_arange = nnx.dot_product_attention_with_rope(
+      query, kv, value, rope=rope, input_positions=jnp.arange(seq_len)
+    )
+    np.testing.assert_allclose(out_arange, out_default, atol=1e-6)
+
+    # RoPE encodes relative position: a uniform shift preserves every pairwise
+    # difference, so the attention output must not change.
+    out_shifted = nnx.dot_product_attention_with_rope(
+      query, kv, value, rope=rope, input_positions=jnp.arange(seq_len) + 3
+    )
+    np.testing.assert_allclose(out_shifted, out_default, atol=1e-5)
+
+    # Non-uniform positions change the relative differences, so they must
+    # produce a different result — proving the positions take effect.
+    out_scaled = nnx.dot_product_attention_with_rope(
+      query, kv, value, rope=rope, input_positions=jnp.arange(seq_len) * 2
+    )
+    self.assertEqual(out_scaled.shape, out_default.shape)
+    self.assertFalse(jnp.allclose(out_scaled, out_default, atol=1e-3))
+
   def test_with_mha(self):
     """RoPE integrates correctly as attention_fn in MultiHeadAttention."""
     with jax.numpy_rank_promotion("raise"):
