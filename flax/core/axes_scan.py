@@ -182,16 +182,14 @@ def scan(
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
         lu.wrap_init(broadcast_body, debug_info=debug_info), in_tree
     )
-    in_pvals = list(map(pe.PartialVal.unknown, in_avals))
-    _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
-
-    out_flat = []
-    for pv, const in out_pvals:
-      if pv is not None:
-        raise ValueError(
-            'broadcasted variable has a data dependency on the scan body.'
-        )
-      out_flat.append(const)
+    jaxpr, _, consts = pe.trace_to_jaxpr_dynamic(f_flat, in_avals)
+    jaxpr, used_inputs = pe.dce_jaxpr(jaxpr, [True] * len(jaxpr.outvars))
+    used_consts, used_args = used_inputs[:len(consts)], used_inputs[len(consts):]
+    if any(used_args):
+      raise ValueError(
+          'broadcasted variable has a data dependency on the scan body.')
+    out_flat = core.eval_jaxpr(
+        jaxpr, [c for c, u in zip(consts, used_consts) if u])
     broadcast_in, constants_out = jax.tree_util.tree_unflatten(
         out_tree(), out_flat
     )
