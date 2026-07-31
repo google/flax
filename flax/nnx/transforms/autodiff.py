@@ -78,20 +78,24 @@ class SimpleGradFn:
 
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
+    ctx = variablelib.current_capture_context(True)
+    ctx.set_trace_state()
     current, snapshot = extract.snapshot(labeled(args=args, kwargs=kwargs))
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
     out = self.f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
-    extract.check_no_aliases('grad', **current, out=out, check=['out'])
+    extract.check_no_aliases(
+        'grad', **current, captures=ctx.captures, out=out, check=['out']
+    )
     updates = extract.get_updates(current, snapshot)
 
     if self.has_aux:
       loss, aux = out
-      return loss, (updates, aux)
+      return loss, (updates, ctx.captures, aux)
     else:
-      return out, updates
+      return out, (updates, ctx.captures)
 
 
 @dataclasses.dataclass(eq=False)
@@ -159,7 +163,7 @@ def _grad_general(
         allow_int=allow_int,
     )
 
-    def tree_grad_wrapper(*args, **kwargs):
+    def simple_grad_wrapper(*args, **kwargs):
       if graph:
         diff_argnums = (argnums,) if isinstance(argnums, int) else argnums
         args_prefix = tuple(
@@ -171,31 +175,33 @@ def _grad_general(
 
       variables = extract.check_no_aliases('grad', args=args, kwargs=kwargs)
 
-      fn_out = gradded_fn(*args, **kwargs)
+      with variablelib.capture_context(variables): 
+        fn_out = gradded_fn(*args, **kwargs)
 
       if return_value:
         if has_aux:
-          (loss, (updates, aux)), grads = fn_out
+          (loss, (updates, captures, aux)), grads = fn_out
           if graph: grads, aux = extract.from_tree2((grads, aux))
           result = (loss, aux), grads
         else:
-          (loss, updates), grads = fn_out
+          (loss, (updates, captures)), grads = fn_out
           if graph: grads = extract.from_tree2(grads)
           result = loss, grads
       else:
         if has_aux:
-          grads, (updates, aux) = fn_out
+          grads, (updates, captures, aux) = fn_out
           if graph: grads, aux = extract.from_tree2((grads, aux))
           result = grads, aux
         else:
-          grads, updates = fn_out
+          grads, (updates, captures) = fn_out
           if graph: grads = extract.from_tree2(grads)
           result = grads
 
+      extract.update_captures(captures)
       extract.apply_updates(variables, updates)
       return result
 
-    return tree_grad_wrapper
+    return simple_grad_wrapper
 
   jax_argnums: int | tuple[int, ...]
   if isinstance(argnums, (int, DiffState)):
@@ -288,6 +294,8 @@ def _grad_general(
 
 
 @tp.overload
+
+
 def grad(
   f: tp.Callable[..., tp.Any],
   *,
@@ -300,6 +308,8 @@ def grad(
   graph_updates: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 @tp.overload
+
+
 def grad(
   *,
   argnums: int | DiffState | tp.Sequence[int | DiffState] = 0,
@@ -437,6 +447,8 @@ def grad(
 
 
 @tp.overload
+
+
 def value_and_grad(
   f: tp.Callable[..., tp.Any],
   *,
@@ -449,6 +461,8 @@ def value_and_grad(
   graph_updates: bool | None = None,
 ) -> tp.Callable[..., tp.Any]: ...
 @tp.overload
+
+
 def value_and_grad(
   *,
   argnums: int | DiffState | tp.Sequence[int | DiffState] = 0,
@@ -581,6 +595,8 @@ class SimpleVjpFn:
 
 
 @tp.overload
+
+
 def vjp(
   f: tp.Callable[..., tp.Any],
   *primals: tp.Any,
@@ -590,6 +606,8 @@ def vjp(
   graph_updates: bool | None = None,
 ) -> tuple[tp.Any, tp.Callable] | tuple[tp.Any, tp.Callable, tp.Any]: ...
 @tp.overload
+
+
 def vjp(
   *,
   has_aux: bool = False,
@@ -747,6 +765,8 @@ class SimpleJvpFn:
 
 
 @tp.overload
+
+
 def jvp(
   f: tp.Callable[..., tp.Any],
   primals: tuple[tp.Any, ...],
@@ -757,6 +777,8 @@ def jvp(
   graph_updates: bool | None = None,
 ) -> tuple[tp.Any, ...]: ...
 @tp.overload
+
+
 def jvp(
   *,
   has_aux: bool = False,
@@ -764,6 +786,8 @@ def jvp(
   graph_updates: bool | None = None,
 ) -> tp.Callable[[tp.Callable[..., tp.Any]], tp.Callable[..., tp.Any]]: ...
 @tp.overload
+
+
 def jvp(
   f: tp.Callable[..., tp.Any],
   *,
@@ -1338,6 +1362,8 @@ class CustomVjp(tp.Generic[A]):
 
 
 @tp.overload
+
+
 def custom_vjp(
   fun: tp.Callable[..., A],
   *,
@@ -1346,6 +1372,8 @@ def custom_vjp(
   graph_updates: bool | None = None,
 ) -> CustomVjp[A] | SimpleCustomVjp[A]: ...
 @tp.overload
+
+
 def custom_vjp(
   *,
   nondiff_argnums: tuple[int | DiffState, ...] = (),
@@ -1595,6 +1623,8 @@ class SimpleRematFn:
     return out, updates
 
 @tp.overload
+
+
 def remat(
   *,
   prevent_cse: bool = True,
@@ -1604,6 +1634,8 @@ def remat(
   graph_updates: bool | None = None,
 ) -> tp.Callable[[F], F]: ...
 @tp.overload
+
+
 def remat(
   f: F,
   *,

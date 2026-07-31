@@ -14,6 +14,7 @@
 # pytype: skip-file
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import functools
 from functools import partial
@@ -62,16 +63,85 @@ else:
   # JAX v0.7.0 or older
   from jax.experimental import MutableArray as Ref  # type: ignore[no-redef]
 
+@dataclasses.dataclass(eq=False, slots=True)
+class Reference(tp.Generic[A]):
+  obj: A
+
+@jtu.register_dataclass
+@dataclasses.dataclass(frozen=True, slots=True)
+class Capture:
+  ref: Reference[Variable] = jax.tree.static()
+  variable: Variable
+
+  @classmethod
+  def create(cls, value: A):
+    return cls(Reference(value), value)
+
+@dataclasses.dataclass(slots=True)
+class VariableCaptureContext:
+  input_variables: dict[int, tuple]  # id -> path
+  trace_state: tracers.TraceState | None
+  captures: list[Capture]
+
+  def set_trace_state(self):
+    assert self.trace_state is None
+    self.trace_state = tracers.TraceState()
+
+  def is_valid(self):
+    return self.trace_state is not None and self.trace_state.is_valid()
+
+  def capture(self, variable: Variable):
+    if id(variable) in self.input_variables:
+      path = self.input_variables[id(variable)]
+      raise ValueError(
+          f'Cannot mutate captured Variable {variable!r} because it is an alias of '
+          f'input Variable at {jtu.keystr(path)}.'
+      )
+    self.captures.append(Capture.create(variable))
 
 @dataclasses.dataclass
 class VariableContext(threading.local):
   variable_hijax_stack: list[bool] = dataclasses.field(default_factory=list)
   variable_ref_stack: list[bool] = dataclasses.field(default_factory=list)
   eager_shard_stack: list[bool] = dataclasses.field(default_factory=list)
+  capture_stack: list[VariableCaptureContext] = dataclasses.field(default_factory=list)
 
 
 VARIABLE_CONTEXT = VariableContext()
 
+
+@tp.overload
+def current_capture_context(check: tp.Literal[True]) -> VariableCaptureContext:
+  ...
+
+@tp.overload
+def current_capture_context(
+    check: bool = False,
+) -> VariableCaptureContext | None:
+  ...
+
+def current_capture_context(
+    check: bool = False,
+) -> VariableCaptureContext | None:
+  if not VARIABLE_CONTEXT.capture_stack:
+    if check:
+      raise ValueError('No capture context found.')
+    return None
+  return VARIABLE_CONTEXT.capture_stack[-1]
+
+
+@contextlib.contextmanager
+def capture_context(variables: dict[jtu.KeyPath, Variable]):
+  ctx = VariableCaptureContext(
+    input_variables={id(v): path for path, v in variables.items()},
+    trace_state=None,
+    captures=[],
+  )
+  VARIABLE_CONTEXT.capture_stack.append(ctx)
+  try:
+    yield ctx
+  finally:
+    VARIABLE_CONTEXT.capture_stack.pop()
 
 class use_eager_sharding(BaseConfigContext):
   """Sets whether Variables should use eager sharding by default or not.
@@ -147,10 +217,18 @@ class VarDefaults(tp.Mapping[str, tp.Any]):
 
 
 @tp.overload
+
+
+
+
 def var_defaults() -> VarDefaults: ...
 
 
 @tp.overload
+
+
+
+
 def var_defaults(
   *, hijax: bool | None = None, ref: bool | None = None
 ) -> VarDefaultsContext: ...
@@ -1388,16 +1466,26 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
   @property
   def _can_update(self) -> bool:
     """Whether the Variable can be updated in-place in the current trace context."""
-    if self.hijax:
-      return True
-    else:
-      return self._trace_state.is_valid()
+    can_update, _ = self._can_update_and_captured()
+    return can_update
 
   def _check_can_update(self):
-    if not self.hijax and not self._trace_state.is_valid():
+    can_update, got_captured = self._can_update_and_captured()
+    if not can_update:
       raise errors.TraceContextError(
         f'Cannot mutate {type(self).__name__} from a different trace level'
       )
+    if got_captured:
+      current_capture_context(True).capture(self)
+
+  def _can_update_and_captured(self):
+    if self.hijax:
+      return True, False
+    elif self._trace_state.is_valid():
+      return True, False
+    elif (capture_ctx := current_capture_context()) and capture_ctx.is_valid():
+      return True, True
+    return False, False
 
   def __getattr__(self, name: str) -> tp.Any:
     if name in object.__getattribute__(self, '_var_metadata'):
@@ -2381,6 +2469,10 @@ def variable_name_from_type(
 
 
 @tp.overload
+
+
+
+
 def register_variable_name(
   name: str,
   typ: type[Variable[tp.Any]],
@@ -2390,6 +2482,10 @@ def register_variable_name(
 
 
 @tp.overload
+
+
+
+
 def register_variable_name(
   name: str,
   *,
