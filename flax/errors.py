@@ -359,7 +359,7 @@ class ImmutableVariableError(FlaxError):
   changed after creation.
 
   To fix this error, either:
-  1. Use a different variable mode (e.g., 'qdd' or 'pytree')
+  1. Use a mutable variable configuration (e.g., set ref=True)
   2. Or ensure you're not trying to modify the variable's value
   """
 

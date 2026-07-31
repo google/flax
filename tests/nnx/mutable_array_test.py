@@ -656,8 +656,8 @@ class TestOptimizer(absltest.TestCase):
     self.assertEqual(model.count[...], 1)
     self.assertEqual(optimizer.step[...], 1)
 
-  @nnx.var_defaults(hijax=True)
-  def test_optimize_hijax(self):
+  @nnx.var_defaults(ref=True)
+  def test_optimize_ref(self):
     class Model(nnx.Module):
       def __init__(self, rngs):
         self.w = nnx.Variable(jax.random.uniform(rngs(), (2, 4)))
@@ -682,7 +682,9 @@ class TestOptimizer(absltest.TestCase):
         model = nnx.merge(graphdef, params, nondiff)
         return jnp.mean((model(x) - y) ** 2)
 
-      loss, grads = jax.value_and_grad(loss_fn)(nnx.with_vars(params, hijax=False))
+      loss, grads = jax.value_and_grad(loss_fn)(
+          nnx.with_vars(params, ref=False)
+      )
       optimizer.update(params, grads)
       return loss
 
@@ -690,12 +692,14 @@ class TestOptimizer(absltest.TestCase):
 
     self.assertNotEqual(loss, 0.0)
 
-class TestHijaxVariables(parameterized.TestCase):
-  def test_variable_to_hijax(self):
-    v_low = nnx.Param(jnp.array(1), a='hi')
-    v_hi = nnx.with_vars(v_low, hijax=True)
 
-    self.assertTrue(v_hi.hijax)
+class TestHijaxVariables(parameterized.TestCase):
+
+  def test_variable_to_ref(self):
+    v_low = nnx.Param(jnp.array(1), a='hi')
+    v_hi = nnx.with_vars(v_low, ref=True)
+
+    self.assertTrue(v_hi.ref)
     self.assertEqual(v_hi[...], 1)
     self.assertIsInstance(v_hi, nnx.Param)
 
@@ -707,7 +711,7 @@ class TestHijaxVariables(parameterized.TestCase):
       self.assertIsInstance(v_hi, nnx.Param)
       v_hi[...] = a
       self.assertEqual(v_hi.a, 'hi')
-      self.assertTrue(v_hi.hijax)
+      self.assertTrue(v_hi.ref)
       v_hi[...] += 5
       return v_hi + 2
 
@@ -715,9 +719,9 @@ class TestHijaxVariables(parameterized.TestCase):
     self.assertEqual(v_hi[...], 15)
     self.assertEqual(y, 17)
 
-    v_low = nnx.with_vars(v_hi, hijax=False)
+    v_low = nnx.with_vars(v_hi, ref=False)
     self.assertIsInstance(v_low, nnx.Param)
-    self.assertFalse(v_low.hijax)
+    self.assertFalse(v_low.ref)
     self.assertEqual(v_low[...], 15)
 
   def test_from_metadata(self):
@@ -736,14 +740,14 @@ class TestHijaxVariables(parameterized.TestCase):
     self.assertIsInstance(v_hi, nnx.Param)
     self.assertTrue(v_hi.hijax)
 
-  def test_variable_to_hijax_clean(self):
+  def test_variable_to_ref_clean(self):
     v_low = nnx.Param(jnp.array([1]), tag='hello')
     print()
     print(v_low)
-    assert not v_low.hijax
-    v_hi = nnx.with_vars(v_low, hijax=True)
+    assert not v_low.ref
+    v_hi = nnx.with_vars(v_low, ref=True)
     v_hi[...] = jnp.array([2])
-    assert v_hi.hijax
+    assert v_hi.ref
     print(v_hi)
     assert v_hi[...] == 2
 
@@ -753,44 +757,16 @@ class TestHijaxVariables(parameterized.TestCase):
       print(v_hi)
       assert v_hi.tag == 'hello'
 
-    set(v_hi, 10)
+    set(v_hi, jnp.array([10]))
 
     assert v_hi[...] == 10
 
-    v_low = nnx.with_vars(v_hi, hijax=False)
+    v_low = nnx.with_vars(v_hi, ref=False)
 
-    assert not v_low.hijax
+    assert not v_low.ref
     assert v_low[...] == 10
 
-
-
-  def test_pytree_value(self):
-    v = nnx.Variable({'a': jnp.array(0), 'b': jnp.array(2)}, hijax=True)
-
-    @jax.jit
-    def inc_and_double(v):
-      v['a'] += 1
-      v['b'] *= 2
-
-    inc_and_double(v)
-
-    self.assertEqual(v['a'], 1)
-    self.assertEqual(v['b'], 4)
-
-  def test_hijax_dynamic_structure(self):
-    x = jnp.ones((4, 5))
-    metrics = nnx.Variable({}, hijax=True)
-
-    @jax.jit
-    def f(x, metrics: nnx.Variable):
-      metrics['x_sum'] = jnp.sum(x)
-
-    self.assertEmpty(metrics)
-    f(x, metrics)
-    self.assertIn('x_sum', metrics)
-    self.assertEqual(metrics['x_sum'], 20)
-
-  def test_hijax_and_pytree(self):
+  def test_ref_and_pytree(self):
     class Foo(nnx.Pytree):
       def __init__(self, din, dout, rngs: nnx.Rngs):
         self.w = nnx.Param(rngs.uniform((din, dout)))
@@ -798,18 +774,18 @@ class TestHijaxVariables(parameterized.TestCase):
         self.count = nnx.Variable(0)
 
     foo = Foo(2, 4, nnx.Rngs(1))
-    assert not foo.w.hijax
-    assert not foo.b.hijax
+    assert not foo.w.ref
+    assert not foo.b.ref
 
-    foo = nnx.with_vars(foo, hijax=True)
+    foo = nnx.with_vars(foo, ref=True)
 
-    assert foo.w.hijax
-    assert foo.b.hijax
+    assert foo.w.ref
+    assert foo.b.ref
 
     @jax.jit
     def forward(foo, x):
       foo.count[...] += 1
-      return x @ foo.w + foo.b[None]
+      return x @ foo.w + foo.b[...][None]
 
     x = jnp.ones((1, 2))
     y = forward(foo, x)
@@ -828,11 +804,11 @@ class TestHijaxVariables(parameterized.TestCase):
       self.assertIs(type(v2), nnx.variablelib.HijaxVariable)
       self.assertTrue(v2.hijax)
 
-  @nnx.var_defaults(hijax=True)
-  def test_hijax_rngs(self):
+  @nnx.var_defaults(ref=True)
+  def test_ref_rngs(self):
     rngs = nnx.Rngs(0)
-    self.assertIs(type(rngs.default.key), nnx.variablelib.HijaxVariable)
-    self.assertIs(type(rngs.default.count), nnx.variablelib.HijaxVariable)
+    self.assertIsInstance(rngs.default.key.get_raw_value(), jax.Ref)
+    self.assertIsInstance(rngs.default.count.get_raw_value(), jax.Ref)
 
     @jax.jit
     def f(rngs: nnx.Rngs):
@@ -866,7 +842,7 @@ class TestHijaxVariables(parameterized.TestCase):
     y = e.out_info[2]
     self.assertEqual(y.shape, ())
 
-  @nnx.var_defaults(hijax=True)
+  @nnx.var_defaults(ref=True)
   def test_eval_shape(self):
     v = nnx.Param(jnp.array(0))
 
@@ -879,10 +855,9 @@ class TestHijaxVariables(parameterized.TestCase):
     self.assertEqual(y.shape, ())
 
   @nnx.var_defaults(hijax=True)
-  def test_no_qdd_grad(self):
-    v = nnx.Param(jnp.array(3.0), hijax=False)
-
-    self.assertFalse(v.hijax)
+  def test_hijax_grad(self):
+    v = nnx.Param(jnp.array(3.0))
+    self.assertTrue(v.hijax)
 
     def f(v):
       return v[...] ** 2
@@ -893,18 +868,45 @@ class TestHijaxVariables(parameterized.TestCase):
     self.assertEqual(grad[...], 6.0)
 
   @nnx.var_defaults(hijax=True)
-  def test_no_qdd_grad_new(self):
+  def test_hijax_grad_new(self):
     x = jnp.array(3.0)
 
     def f(x):
-      v = nnx.Param(x, hijax=False)
-      self.assertFalse(v.hijax)
+      v = nnx.Param(x, hijax=True)
+      self.assertTrue(v.hijax)
       return v[...] ** 2
 
     grad = jax.grad(f)(x)
 
     self.assertIsInstance(grad, jax.Array)
     self.assertEqual(grad, 6.0)
+
+  def test_hijax_immutable_error(self):
+    v = nnx.Variable(jnp.array(1.0), hijax=True, ref=False)
+    # Eager local mutation succeeds outside transformations
+    v[...] = jnp.array(2.0)
+    self.assertEqual(v[...], 2.0)
+
+    # Attempting mutation inside a JAX transformation raises ImmutableVariableError
+    @jax.jit
+    def f(v):
+      v[...] = jnp.array(3.0)
+      return v
+
+    with self.assertRaises(flax.errors.ImmutableVariableError):
+      f(v)
+
+  def test_hijax_str_and_repr(self):
+    @jax.jit
+    def f(v):
+      s = str(v)
+      r = repr(v)
+      self.assertIn('Param', s)
+      self.assertIn('Param', r)
+      return v[...]
+
+    v = nnx.Param(jnp.array([1.0, 2.0]), hijax=True)
+    f(v)
 
   @parameterized.product(
     hijax=[True, False],
@@ -1040,7 +1042,7 @@ class HijaxTransformCoverageTest(absltest.TestCase):
   # ------------
   # with differentiable hijax arguments (immutable variable)
   def test_hitypes_as_grad_args(self):
-    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=False)
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True)
 
     def loss_fn(v):
       x = v[0]
@@ -1050,7 +1052,7 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     np.testing.assert_allclose(grads[0], 4.0)
 
   def test_hitypes_as_nondiff_grad_args(self):
-    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=False)
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True)
     x = jnp.array(3.0)
 
     def loss_fn(x, v):
@@ -1061,7 +1063,7 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     np.testing.assert_allclose(grad, 6.0)
 
   def test_hitypes_as_captured_args(self):
-    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=False)
+    v = nnx.Variable((jnp.array(2.0), jnp.array(3.0)), hijax=True)
 
     def loss_fn(x):
       y = v[1]
@@ -1073,7 +1075,7 @@ class HijaxTransformCoverageTest(absltest.TestCase):
   # with differentiable mutable hijax arguments
   @absltest.skip("Not yet implemented")
   def test_mutable_hitypes_as_grad_args(self):
-    v = nnx.Variable(jnp.array(2.0), hijax=True)
+    v = nnx.Variable(jnp.array(2.0), ref=True)
 
     def loss_fn(v):
       return v[...] ** 2
@@ -1082,8 +1084,8 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     # NOTE: unclear what the tangent type will be here
 
   # with non-differentiable mutable hijax arguments
-  def test_mutable_hitypes_as_nondiff_grad_args(self):
-    v = nnx.Variable(jnp.array(2.0), hijax=True)
+  def test_mutable_refs_as_nondiff_grad_args(self):
+    v = nnx.Variable(jnp.array(2.0), ref=True)
     x = jnp.array(3.0)
 
     def loss_fn(x, v):
@@ -1095,8 +1097,8 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     np.testing.assert_allclose(grad, 6.0)
 
   # with mutable hijax captured arguments
-  def test_mutable_hitypes_as_captured_args(self):
-    v = nnx.Variable(jnp.array(2.0), hijax=True)
+  def test_mutable_refs_as_captured_args(self):
+    v = nnx.Variable(jnp.array(2.0), ref=True)
 
     def loss_fn(x):
       v[...] = jax.lax.stop_gradient(x * 3)
@@ -1106,9 +1108,9 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     np.testing.assert_allclose(v[...], 12.0)
     np.testing.assert_allclose(grad, 8.0)
 
-  #------------
+  # ------------
   # scan
-  #------------
+  # ------------
   # with hijax carry arguments (immutable variable)
   @absltest.skip("scan not yet supported for hijax Variables")
   def test_hitypes_as_scan_carry(self):
@@ -1157,9 +1159,9 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     np.testing.assert_allclose(ys, 3.0 * xs + 4.0)
 
   # with mutable hijax carry arguments
-  @absltest.skip("has_qdd not yet supported for mutable Variable in scan carry")
+  @absltest.skip('ref not yet supported for mutable Variable in scan carry')
   def test_mutable_hitypes_as_scan_carry(self):
-    v = nnx.Variable(jnp.array(1.0), hijax=True)
+    v = nnx.Variable(jnp.array(1.0), ref=True)
 
     def body(v, _):
       v[...] = v[...] * 2
@@ -1171,7 +1173,7 @@ class HijaxTransformCoverageTest(absltest.TestCase):
   # with mutable hijax extensive arguments
   @absltest.skip("Variable doesn't have shape attribute needed for scan extensive")
   def test_mutable_hitypes_as_scan_extensive(self):
-    vs = [nnx.Variable(jnp.float32(i), hijax=True) for i in range(5)]
+    vs = [nnx.Variable(jnp.float32(i), ref=True) for i in range(5)]
 
     def body(_, v_i):
       val = v_i[...]
@@ -1184,7 +1186,7 @@ class HijaxTransformCoverageTest(absltest.TestCase):
 
   # with mutable hijax captured arguments
   def test_mutable_hitypes_as_scan_captured(self):
-    v = nnx.Variable(jnp.array(3.0), hijax=True)
+    v = nnx.Variable(jnp.array(3.0), ref=True)
 
     def body(_, __):
       v[...] = v[...] + 1.0
@@ -1193,8 +1195,8 @@ class HijaxTransformCoverageTest(absltest.TestCase):
     jax.lax.scan(body, None, None, length=5)
     np.testing.assert_allclose(v[...], 8.0)
 
-  def test_hijax_variable_in_jit_graph_updates_false(self):
-    v = nnx.Variable(jnp.array(1.0), hijax=True)
+  def test_ref_variable_in_jit_graph_updates_false(self):
+    v = nnx.Variable(jnp.array(1.0), ref=True)
 
     @nnx.jit(graph=True, graph_updates=False)
     def f(v, v2):

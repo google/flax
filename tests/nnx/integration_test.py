@@ -506,7 +506,7 @@ class TestIntegration(parameterized.TestCase):
       nnx.update(model, restored_pure_dict)
       assert model(x).shape == (3, 4)  # The model still works!
 
-  @nnx.var_defaults(hijax=True)
+  @nnx.var_defaults(ref=True)
   def test_example_mutable_arrays(self):
     class Model(nnx.Module):
       def __init__(self, din, dmid, dout, rngs: nnx.Rngs):
@@ -530,7 +530,7 @@ class TestIntegration(parameterized.TestCase):
         return ((model(x) - y) ** 2).mean()  # call methods directly
 
       loss, grads = jax.value_and_grad(loss_fn)(
-        nnx.with_vars(params, hijax=False)
+          nnx.with_vars(params, ref=False)
       )
       optimizer.update(model, grads)  # in-place updates
 
