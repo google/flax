@@ -130,9 +130,18 @@ class Average(Metric):
     """Compute and return the average."""
     return self.total / self.count
 
-
 @struct.dataclass
 class Statistics:
+  """Summary statistics returned by :meth:`Welford.compute`.
+
+  Attributes:
+    mean: The running mean of the values seen so far.
+    standard_error_of_mean: The standard error of the mean, i.e. the standard
+      deviation divided by the square root of the number of values seen.
+    standard_deviation: The (population) standard deviation of the values seen
+      so far.
+  """
+
   mean: jnp.float32
   standard_error_of_mean: jnp.float32
   standard_deviation: jnp.float32
