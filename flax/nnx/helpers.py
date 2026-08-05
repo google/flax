@@ -37,7 +37,7 @@ class Dict(reprlib.MappingReprMixin, Module, tp.MutableMapping[str, A]):
   """A Module that implements a mutable mapping.
 
   This class provides a way to store and manipulate a mapping of keys to values
-  contained a mixed set of data (e.g. Array, Variables, Modules) and static
+  containing a mixed set of data (e.g. Array, Variables, Modules) and static
   (e.g. functions, strings) types.
 
   Example:
@@ -100,7 +100,7 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
   """A Module that implements a mutable sequence.
 
   This class provides a way to store and manipulate a sequence of values
-  contained a mixed set of data (e.g. Array, Variables, Modules) and static
+  containing a mixed set of data (e.g. Array, Variables, Modules) and static
   (e.g. functions, strings) types.
 
   Example:

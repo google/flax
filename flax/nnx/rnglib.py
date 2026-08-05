@@ -96,6 +96,32 @@ NotKey = filterlib.All(RngState, filterlib.Not(RngKey))
 
 
 class RngStream(Pytree):
+  """A named stream of PRNG keys.
+
+  An ``RngStream`` holds a base ``key`` and a ``count``. Each call to the
+  stream derives a fresh, unique key by folding the current count into the
+  base key and then incrementing the count, so repeated calls never return
+  the same key.
+
+  Streams are usually created and accessed through :class:`Rngs` (e.g.
+  ``rngs.params`` or ``rngs.dropout``) rather than constructed directly.
+
+  Example::
+
+    >>> from flax import nnx
+    ...
+    >>> stream = nnx.RngStream(0, tag='dropout')
+    >>> key1 = stream()
+    >>> key2 = stream()
+    >>> bool((key1 != key2).any())
+    True
+
+  Attributes:
+    tag: the name of the stream (e.g. ``'params'`` or ``'dropout'``).
+    key: the base PRNG key wrapped in an ``RngKey`` Variable.
+    count: the number of keys generated so far, wrapped in an ``RngCount``
+      Variable.
+  """
 
   def __init__(
     self,
