@@ -46,7 +46,7 @@ class TrainTest(parameterized.TestCase):
     batch = {'token_ids': token_ids, 'length': lengths, 'label': labels}
     rngs = {'dropout': rng}
     train_step_fn = jax.jit(train.train_step)
-    new_state, metrics = train_step_fn(state, batch, rngs)
+    new_state, metrics = train_step_fn(state, batch, rngs)  # pyrefly: ignore[bad-argument-type]
     self.assertIsInstance(new_state, train.TrainState)
     self.assertIsInstance(metrics, train.Metrics)
     old_param_values = jax.tree_util.tree_leaves(state.params)
