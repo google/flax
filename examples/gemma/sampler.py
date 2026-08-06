@@ -519,6 +519,7 @@ class Sampler:
       num_input_tokens = num_input_tokens[:num_inputs]
 
     logits_buffer = sampling_state.logits_buffer
+    assert logits_buffer is not None
     if not logits_buffer.is_fully_addressable:
       logits_buffer = process_allgather(logits_buffer, tiled=True)
     logits_buffer = np.asarray(logits_buffer)
