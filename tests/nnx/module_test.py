@@ -183,6 +183,71 @@ class PytreeTest(absltest.TestCase):
     ):
       foo = Foo()
 
+  def test_property_setter(self):
+    class Foo(nnx.Pytree):
+
+      def __init__(self):
+        self.x = jnp.zeros(5)
+
+      @property
+      def value(self) -> jax.Array:
+        return self.x
+
+      @value.setter
+      def value(self, value) -> None:
+        self.x = value
+
+    foo = Foo()
+    self.assertNotIn('value', foo._pytree__nodes)
+    self.assertIn('x', foo._pytree__nodes)
+    foo.value = jnp.zeros(3)
+    self.assertNotIn('value', foo._pytree__nodes)
+    self.assertIn('x', foo._pytree__nodes)
+    np.testing.assert_array_equal(foo.x, jnp.zeros(3))
+
+  def test_property_readonly_raises(self):
+    class Foo(nnx.Pytree):
+
+      def __init__(self):
+        self.x = jnp.zeros(5)
+
+      @property
+      def value(self) -> jax.Array:
+        return self.x
+
+    foo = Foo()
+    with self.assertRaises(AttributeError):
+      foo.value = jnp.zeros(3)
+
+  def test_custom_data_descriptor(self):
+    class Descriptor:
+
+      def __init__(self, name):
+        self.name = name
+
+      def __get__(self, instance, owner):
+        if instance is None:
+          return self
+        return getattr(instance, self.name)
+
+      def __set__(self, instance, value):
+        setattr(instance, self.name, value)
+
+    class Foo(nnx.Pytree):
+      val = Descriptor('_val')
+
+      def __init__(self, val):
+        self.val = val
+
+    foo = Foo(10)
+    self.assertNotIn('val', foo._pytree__nodes)
+    self.assertIn('_val', foo._pytree__nodes)
+    self.assertEqual(foo.val, 10)
+    foo.val = 20
+    self.assertNotIn('val', foo._pytree__nodes)
+    self.assertEqual(foo.val, 20)
+
+
 class TestCapture(parameterized.TestCase):
 
   def test_vmap(self):

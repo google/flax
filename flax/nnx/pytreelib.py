@@ -650,6 +650,10 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
       self._setattr(name, value)
 
   def _setattr(self, name, value: tp.Any) -> None:
+    desc = inspect.getattr_static(type(self), name, None)
+    if desc is not None and hasattr(desc, '__set__'):
+      super().__setattr__(name, value)
+      return
     self._check_valid_context(
       lambda: f"Cannot mutate '{type(self).__name__}' from different trace level"
     )
