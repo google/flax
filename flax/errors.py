@@ -98,12 +98,10 @@ class LazyInitError(FlaxError):
     Foo().lazy_init(random.key(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
   """
 
-  def __init__(self, arg_name):
+  def __init__(self, partial_val):
     super().__init__(
-      f'Lazy init encountered an output that depends on the argument '
-      f'{arg_name!r}, which was passed as a ``jax.ShapeDtypeStruct`` with no '
-      'concrete data. Make sure initialization only uses the shape and dtype '
-      'of this argument, or pass an actual JAX array instead.'
+      'Lazy init encountered a value that could with '
+      f'the given inputs (shape: {partial_val}).'
     )
 
 

@@ -22,8 +22,8 @@ from collections.abc import Iterable  # pylint: disable=g-importing-member
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import lax
-from jax.extend import core as jex_core
+from jax import core, lax
+from jax.extend import linear_util as lu
 from jax.interpreters import partial_eval as pe
 
 
@@ -97,31 +97,27 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   Returns:
     A pair consisting of the model output and an instance of Model
   """
-  # Trace the function to a jaxpr with the abstract inputs as jaxpr inputs
-  # (args and kwargs are closed over), then use dead code elimination to find
-  # and evaluate the outputs that don't depend on the abstract inputs. The
-  # remaining outputs are returned as jax.ShapeDtypeStruct.
-  # TODO(mattjj): dce_jaxpr_consts is not a public API, use one when possible
+  # output cannot be returned in lazy_create because jax.eval_shape will only
+  # return the shape and dtype.
+  # TODO(mattjj,jheek): use a public JAX API
   f = lambda *inputs: fn(*inputs, *args, **kwargs)
   input_structs = [_parse_spec(spec) for spec in input_spec]
-  traced = jax.jit(f).trace(*input_structs)
-  jaxpr = traced.jaxpr.jaxpr
-  num_outs = len(jaxpr.outvars)
-  computable = []
-  for i in range(num_outs):
-    _, _, used_inputs = pe.dce_jaxpr_consts(
-      jaxpr, [j == i for j in range(num_outs)]
-    )
-    computable.append(not any(used_inputs))
-  dced_jaxpr, used_consts, used_inputs = pe.dce_jaxpr_consts(jaxpr, computable)
-  assert not any(used_inputs)
-  consts = [c for c, used in zip(traced.jaxpr.consts, used_consts) if used]
-  outs = iter(jex_core.jaxpr_as_fun(jex_core.ClosedJaxpr(dced_jaxpr, consts))())
-  out_flat = [
-    next(outs) if c else jax.ShapeDtypeStruct(x.shape, x.dtype)
-    for c, x in zip(computable, jax.tree_util.tree_leaves(traced.out_info))
+  inputs_flat, in_tree = jax.tree_util.tree_flatten(input_structs)
+
+  debug_info = jax.api_util.debug_info("flax partial_eval_by_shape", f,
+                                        (in_tree,), {})
+  f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
+    lu.wrap_init(f, debug_info=debug_info), in_tree)
+  in_pvals = [
+    pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
+    for x in inputs_flat
   ]
-  return jax.tree_util.tree_unflatten(traced.out_tree, out_flat)
+  _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
+  out_flat = [
+    const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
+    for pv, const in out_pvals
+  ]
+  return jax.tree_util.tree_unflatten(out_tree(), out_flat)
 
 
 def _parse_spec(spec):

@@ -2472,11 +2472,12 @@ class Module(ModuleBase):
     mutable: CollectionFilter = DenyList('intermediates'),
     **kwargs,
   ) -> FrozenVariableDict:
-    """Initializes a module without computing on an actual input.
+    """Initializes a module without providing actual input data.
 
-    lazy_init will initialize the variables without doing unnecessary compute.
-    The input data should be passed as a ``jax.ShapeDtypeStruct`` which
-    specifies the shape and dtype of the input but no concrete data.
+    Input data that is not needed for initialization can be passed as a
+    ``jax.ShapeDtypeStruct``, which specifies the shape and dtype of the
+    input but no concrete data. Each ``ShapeDtypeStruct`` is replaced with
+    an all-zeros array of that shape and dtype before initialization runs.
 
     Example::
 
@@ -2486,11 +2487,13 @@ class Module(ModuleBase):
 
     The args and kwargs args passed to ``lazy_init`` can be a mix of
     concrete (jax arrays, scalars, bools) and abstract (ShapeDtypeStruct)
-    values. Concrete values are only necessary for arguments that affect
-    the initialization of variables. For example, the model might expect
-    a keyword arg that enables/disables a subpart of the model.
-    In this case, an explicit value (True/Flase) should be passed otherwise
-    ``lazy_init`` cannot infer which variables should be initialized.
+    values. Concrete values are necessary for arguments that affect the
+    initialization of variables. For example, the model might expect a
+    keyword arg that enables/disables a subpart of the model; an explicit
+    value (True/False) should be passed for it. If a variable's
+    initialization depends on the value of an argument given as a
+    ``ShapeDtypeStruct``, the variable is silently initialized as if that
+    argument were all zeros.
 
     Args:
       rngs: The rngs for the variable collections.
