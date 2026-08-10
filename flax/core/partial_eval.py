@@ -13,21 +13,12 @@
 # limitations under the License.
 
 import functools
-from typing import Any
 
 import jax
-from jax import core
-from jax.extend import linear_util as lu
+from jax.extend import core as jex_core
 from jax.interpreters import partial_eval as pe
 
 from flax import errors
-
-
-def _maybe_unknown(x: Any) -> pe.PartialVal:
-  if isinstance(x, jax.ShapeDtypeStruct):
-    return pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
-  else:
-    return pe.PartialVal.known(x)
 
 
 def lazy_init(fn):
@@ -50,26 +41,49 @@ def lazy_init(fn):
 
   @functools.wraps(fn)
   def wrapper(*args, **kwargs):
-    # TODO(mattjj,jheek): use a public JAX API
-    # flatten fn and prepare for internal JAX transform
-    inputs_flat, in_tree = jax.tree_util.tree_flatten((args, kwargs))
-    debug_info = jax.api_util.debug_info("lazy_init", fn, (in_tree,), {})
-    f_flat, out_tree = jax.api_util.flatten_fun(
-      lu.wrap_init(fn, debug_info=debug_info), in_tree)
-    # map inputs to PartialVal known/unknown
-    # only the computations depending on knowns will be executed
-    in_pvals = [_maybe_unknown(x) for x in inputs_flat]
-    _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
-    # all outputs should be knowns. If this fails
-    # the user is creating variables that depend on a
-    # argument that was passed as a ShapeDtypeStruct.
-    out_flat = []
-    for pv, const in out_pvals:
-      if pv is None:
-        # const is the actual value of the known output
-        out_flat.append(const)
-      else:
-        raise errors.LazyInitError(pv)
-    return jax.tree_util.tree_unflatten(out_tree(), out_flat)
+    # Trace the function to a jaxpr, taking only the ShapeDtypeStruct
+    # arguments as jaxpr inputs and closing over the concrete arguments. The
+    # concrete arguments stay concrete during tracing (so e.g. Python control
+    # flow on a concrete bool argument works), and any jax arrays among them
+    # become constants of the jaxpr. Then use dead code elimination to check
+    # that no output depends on an abstract input, and evaluate the jaxpr.
+    paths_and_leaves, treedef = jax.tree_util.tree_flatten_with_path(
+      (args, kwargs)
+    )
+    paths = [p for p, _ in paths_and_leaves]
+    leaves = [x for _, x in paths_and_leaves]
+    abstract_idxs = [
+      i for i, x in enumerate(leaves) if isinstance(x, jax.ShapeDtypeStruct)
+    ]
+
+    def fn_closing_over_concrete(*abstract_leaves):
+      leaves_ = list(leaves)
+      for i, x in zip(abstract_idxs, abstract_leaves):
+        leaves_[i] = x
+      args_, kwargs_ = jax.tree_util.tree_unflatten(treedef, leaves_)
+      return fn(*args_, **kwargs_)
+
+    abstract_leaves = [leaves[i] for i in abstract_idxs]
+    traced = jax.jit(fn_closing_over_concrete).trace(*abstract_leaves)
+    jaxpr = traced.jaxpr.jaxpr
+    # TODO(mattjj): dce_jaxpr_consts is not a public API, use one when possible
+    dced_jaxpr, used_consts, used_inputs = pe.dce_jaxpr_consts(
+      jaxpr, [True] * len(jaxpr.outvars)
+    )
+    assert len(used_inputs) == len(abstract_idxs)
+    for used, i in zip(used_inputs, abstract_idxs):
+      if used:
+        raise errors.LazyInitError(_arg_name(paths[i]))
+    consts = [c for c, used in zip(traced.jaxpr.consts, used_consts) if used]
+    out_flat = jex_core.jaxpr_as_fun(jex_core.ClosedJaxpr(dced_jaxpr, consts))()
+    return jax.tree_util.tree_unflatten(traced.out_tree, out_flat)
 
   return wrapper
+
+
+def _arg_name(path) -> str:
+  # path is a key path into the (args, kwargs) pair, e.g. the path
+  # (SequenceKey(0), SequenceKey(1)) refers to the second positional argument.
+  root, *rest = path
+  prefix = 'args' if root.idx == 0 else 'kwargs'
+  return prefix + jax.tree_util.keystr(tuple(rest))
