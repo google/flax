@@ -13,36 +13,34 @@
 # limitations under the License.
 
 import functools
-from typing import Any
 
 import jax
-from jax import core
-from jax.extend import linear_util as lu
-from jax.interpreters import partial_eval as pe
-
-from flax import errors
+import jax.numpy as jnp
 
 
-def _maybe_unknown(x: Any) -> pe.PartialVal:
+def _zeros_like_sds(x):
   if isinstance(x, jax.ShapeDtypeStruct):
-    return pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
-  else:
-    return pe.PartialVal.known(x)
+    return jnp.zeros(x.shape, x.dtype, device=x.sharding)
+  return x
 
 
 def lazy_init(fn):
-  """Lazily evaluates a function by using the shapes of the inputs.
+  """Evaluates a function with zeros arrays in place of ShapeDtypeStructs.
 
-  The returned function accepts a combination of JAX values and
-  ``jax.ShapeDtypeStruct`` instances for the inputs for which we
-  don't need concrete values (only the shape and dtype).
+  The returned function accepts the same arguments as ``fn``, except any
+  argument may instead be given as a ``jax.ShapeDtypeStruct`` specifying only
+  its shape and dtype. Each ``ShapeDtypeStruct`` is replaced with an all-zeros
+  array before evaluating ``fn`` as usual.
 
   This API is used by ``core.lazy_init`` or ``Module.lazy_init``
-  to initialize variables without doing any actual computation on the
-  inputs.
+  to initialize variables without providing concrete input data.
+
+  Note that if the result of ``fn`` depends on the values (rather than just
+  the shape or dtype) of an argument given as a ``ShapeDtypeStruct``, the
+  result is silently computed as if that argument were all zeros.
 
   Args:
-    fn: the function to be lazily evaluated.
+    fn: the function to be evaluated.
   Returns:
     A new function that accepts a mix of concrete values and
     ``jax.ShapeDtypeStruct`` instances.
@@ -50,26 +48,7 @@ def lazy_init(fn):
 
   @functools.wraps(fn)
   def wrapper(*args, **kwargs):
-    # TODO(mattjj,jheek): use a public JAX API
-    # flatten fn and prepare for internal JAX transform
-    inputs_flat, in_tree = jax.tree_util.tree_flatten((args, kwargs))
-    debug_info = jax.api_util.debug_info("lazy_init", fn, (in_tree,), {})
-    f_flat, out_tree = jax.api_util.flatten_fun(
-      lu.wrap_init(fn, debug_info=debug_info), in_tree)
-    # map inputs to PartialVal known/unknown
-    # only the computations depending on knowns will be executed
-    in_pvals = [_maybe_unknown(x) for x in inputs_flat]
-    _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
-    # all outputs should be knowns. If this fails
-    # the user is creating variables that depend on a
-    # argument that was passed as a ShapeDtypeStruct.
-    out_flat = []
-    for pv, const in out_pvals:
-      if pv is None:
-        # const is the actual value of the known output
-        out_flat.append(const)
-      else:
-        raise errors.LazyInitError(pv)
-    return jax.tree_util.tree_unflatten(out_tree(), out_flat)
+    args, kwargs = jax.tree_util.tree_map(_zeros_like_sds, (args, kwargs))
+    return fn(*args, **kwargs)
 
   return wrapper
