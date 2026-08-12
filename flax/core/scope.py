@@ -558,6 +558,8 @@ class Scope:
     )
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
+    if self.parent is None and hasattr(self, '_submodule_adoption_cache'):
+      scope._submodule_adoption_cache = self._submodule_adoption_cache  # pylint: disable=protected-access
     return scope
 
   def name_reserved(self, name: str, col: str | None = None) -> bool:

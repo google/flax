@@ -15,6 +15,7 @@
 """Flax Module."""
 
 import contextlib
+import contextvars
 import dataclasses
 import enum
 import functools
@@ -56,7 +57,7 @@ from flax.core.scope import (
   Variable,
   union_filters,
 )
-from flax.ids import FlaxId, uuid
+from flax.ids import uuid
 from flax.linen import kw_only_dataclasses
 from flax.typing import (
   RNGSequences,
@@ -223,7 +224,9 @@ _unspecified_parent = _Sentinel()
 
 # Enable automatic named_call wrapping for labelling profile traces.
 # -----------------------------------------------------------------------------
-_use_named_call = config.flax_profile
+_use_named_call: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    '_use_named_call', default=config.flax_profile
+)
 
 
 def _derive_profiling_name(module, fn):
@@ -244,8 +247,7 @@ def enable_named_call():
   Note that ``jax.named_scope`` only works for
   compiled functions (e.g.: using jax.jit or jax.pmap).
   """
-  global _use_named_call
-  _use_named_call = True
+  _use_named_call.set(True)
 
 
 def disable_named_call():
@@ -253,8 +255,7 @@ def disable_named_call():
 
   See ``enable_named_call``
   """
-  global _use_named_call
-  _use_named_call = False
+  _use_named_call.set(False)
 
 
 @contextlib.contextmanager
@@ -267,13 +268,11 @@ def override_named_call(enable: bool = True):
       (see ``enabled_named_call``).
   """
   # pylint: enable=g-doc-return-or-yield
-  global _use_named_call
-  use_named_call_prev = _use_named_call
-  _use_named_call = enable
+  token = _use_named_call.set(enable)
   try:
     yield
   finally:
-    _use_named_call = use_named_call_prev
+    _use_named_call.reset(token)
 
 
 # Intercept module methods.
@@ -848,9 +847,6 @@ _UNDEFINED_COPY_PICKLE_METHODS = (
 )
 
 
-_caches: 'weakref.WeakKeyDictionary[Scope, weakref.WeakValueDictionary[FlaxId, Module]]' = weakref.WeakKeyDictionary()
-
-
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
@@ -1214,7 +1210,7 @@ class Module(ModuleBase):
         run_fun = fun
 
       # call method
-      if _use_named_call:
+      if _use_named_call.get():
         with jax.named_scope(_derive_profiling_name(self, fun)):
           y = run_fun(self, *args, **kwargs)
       else:
@@ -1431,8 +1427,10 @@ class Module(ModuleBase):
     """Registers a submodule."""
     assert self.scope, 'Trying to register submodules on unbound scope.'
     root = self.scope.root
-    cache = _caches.get(root, weakref.WeakValueDictionary())
-    _caches[root] = cache
+    cache = getattr(root, '_submodule_adoption_cache', None)
+    if cache is None:
+      cache = weakref.WeakValueDictionary()  # pylint: disable=abstract-class-instantiated
+      root._submodule_adoption_cache = cache
     queue = []
     preserve_adopted_names = config.flax_preserve_adopted_names
     if hasattr(type(self), 'preserve_adopted_names'):
