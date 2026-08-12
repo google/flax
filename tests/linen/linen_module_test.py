@@ -14,7 +14,6 @@
 
 """Tests for flax.linen."""
 
-import concurrent.futures
 import contextlib
 import copy
 import dataclasses
@@ -25,7 +24,6 @@ import inspect
 import operator
 import sys
 from tempfile import TemporaryDirectory
-import time
 from typing import (
   Any,
   Generic,
@@ -3203,94 +3201,6 @@ class FrozenDictTests(absltest.TestCase):
       layer = nn.Dense(5)
       params = layer.init(random.key(0), x)
       self.assertTrue(isinstance(params, dict))
-
-  def test_concurrent_multithreaded_tracing(self):
-    class SharedBlock(nn.Module):
-      features: int
-
-      @compact
-      def __call__(self, x):
-        h = nn.Dense(self.features)(x)
-        return nn.Dense(self.features)(h)
-
-    class MultiThreadedModel(nn.Module):
-      shared: nn.Module
-      other_shared: nn.Module
-
-      @compact
-      def __call__(self, x):
-        h1 = self.shared(x)
-        h2 = self.other_shared(h1)
-        h3 = self.shared(h2)
-        return h3
-
-    shared_block = SharedBlock(features=8)
-    other_block = SharedBlock(features=8)
-    model = MultiThreadedModel(shared=shared_block, other_shared=other_block)
-
-    rng = random.key(42)
-    x = jnp.ones((2, 8))
-
-    expected_params = model.init(rng, x)
-    expected_out = model.apply(expected_params, x)
-
-    def worker_fn(seed):
-      thread_rng = random.key(seed)
-      params = model.init(thread_rng, x)
-      out = model.apply(params, x)
-      fixed_params = model.init(rng, x)
-      fixed_out = model.apply(fixed_params, x)
-      return params, out, fixed_params, fixed_out
-
-    num_workers = 16
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=num_workers
-    ) as executor:
-      futures = [executor.submit(worker_fn, i) for i in range(num_workers)]
-      results = [f.result() for f in futures]
-
-    for _, out, fixed_params, fixed_out in results:
-      self.assertEqual(out.shape, expected_out.shape)
-      np.testing.assert_allclose(fixed_out, expected_out)
-      jax.tree_util.tree_map(
-          np.testing.assert_allclose, fixed_params, expected_params
-      )
-
-  def test_concurrent_override_named_call(self):
-    class LabeledModel(nn.Module):
-
-      @compact
-      def __call__(self, x):
-        return nn.Dense(features=4)(x)
-
-    model = LabeledModel()
-    key = random.key(0)
-    x = jnp.ones((2, 4))
-    params = model.init(key, x)
-
-    def worker(enable_setting: bool):
-      for _ in range(10):
-        time.sleep(0)  # Yield thread to force interleaving across workers
-        with nn.override_named_call(enable_setting):
-          jaxpr = jax.make_jaxpr(lambda p, val: model.apply(p, val))(params, x)
-          has_name = any(
-              'LabeledModel' in str(e.source_info.name_stack)
-              for e in jaxpr.jaxpr.eqns
-          )
-          if has_name != enable_setting:
-            return False
-      return True
-
-    num_workers = 16
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=num_workers
-    ) as executor:
-      futures = [
-          executor.submit(worker, bool(i % 2)) for i in range(num_workers)
-      ]
-      results = [f.result() for f in futures]
-
-    self.assertTrue(all(results))
 
 
 class ShareScopeTest(absltest.TestCase):

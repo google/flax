@@ -2113,7 +2113,7 @@ def named_call(class_fn, force=True):
   # We use JAX's dynamic name-stack named_call. No transform boundary needed!
   @functools.wraps(class_fn)
   def wrapped_fn(self, *args, **kwargs):
-    if (not force and not linen_module._use_named_call.get()) or self._state.in_setup:  # pylint: disable=protected-access  # pylint: disable=protected-access
+    if (not force and not linen_module._use_named_call) or self._state.in_setup:  # pylint: disable=protected-access  # pylint: disable=protected-access
       return class_fn(self, *args, **kwargs)
     full_name = _derive_profiling_name(self, class_fn)
     return jax.named_call(class_fn, name=full_name)(self, *args, **kwargs)

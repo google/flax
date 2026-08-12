@@ -5,7 +5,7 @@ vNext
 ------
 (Add your change to a random empty line to avoid merge conflicts)
 -
-- Make 'enable_named_call', 'disable_named_call', and 'override_named_call' thread-safe and context-isolated via 'contextvars.ContextVar'. Submodule adoption caching is now attached to 'flax.core.Scope', guaranteeing thread-isolated tracing without global lock contention or data races under Python free-threading (no-GIL).
+-
 -
 -
 - removed GeGLU simplistic activation, it should be implemented manually.
