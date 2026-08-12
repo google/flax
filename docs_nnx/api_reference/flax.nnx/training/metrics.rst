@@ -12,7 +12,7 @@ Metrics
    :members: __init__, reset, update, compute
 
 .. autoclass:: Accuracy
-   :members: update
+   :members: __init__, reset, update, compute
 
 .. autoclass:: Welford
    :members: __init__, reset, update, compute

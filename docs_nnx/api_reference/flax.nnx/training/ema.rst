@@ -5,4 +5,4 @@ EMA
 .. currentmodule:: flax.nnx
 
 .. autoclass:: EMA
-   :members: __init__, update
+   :members: __init__, update, apply_to

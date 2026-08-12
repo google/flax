@@ -1,3 +1,4 @@
+
 Changelog
 ----------
 
@@ -5,9 +6,8 @@ vNext
 ------
 (Add your change to a random empty line to avoid merge conflicts)
 -
--
--
--
+
+- Fixed several `flax.nnx.training` API reference inconsistencies (`EMA.apply_to`, `Accuracy` members, `Statistics` docstring).
 - removed GeGLU simplistic activation, it should be implemented manually.
 -
 -
@@ -26,6 +26,7 @@ vNext
 
 0.8.2
 -----
+
 - fixed rng guide outputs by @chiamp in https://github.com/google/flax/pull/3685
 - enforce mask kwarg in norm layers by @chiamp in https://github.com/google/flax/pull/3663
 - added kwargs to self.param and self.variable by @chiamp in https://github.com/google/flax/pull/3675
