@@ -2133,6 +2133,44 @@ def with_metadata(
   ] = (),
   **metadata: tp.Any,
 ) -> F:
+  """Wraps a `Variable` initializer to attach metadata to the initialized value.
+
+  The returned function calls ``initializer`` and boxes its output in a
+  :class:`VariableMetadata` object carrying the given ``**metadata``. When the
+  result is used to create a :class:`Variable` (e.g. inside a Module), the
+  metadata is stored on the Variable and can be retrieved with
+  ``Variable.get_metadata()``.
+
+  This is the mechanism used by :func:`flax.nnx.with_partitioning` to attach
+  sharding annotations to parameters.
+
+  Example::
+
+    >>> from flax import nnx
+    >>> import jax, jax.numpy as jnp
+    ...
+    >>> init_fn = nnx.with_metadata(
+    ...   nnx.initializers.lecun_normal(), custom_tag='dense'
+    ... )
+    >>> layer = nnx.Linear(2, 3, kernel_init=init_fn, rngs=nnx.Rngs(0))
+    >>> layer.kernel.get_metadata()['custom_tag']
+    'dense'
+
+  Args:
+    initializer: an initializer function to wrap.
+    on_set_value: deprecated Variable hook(s); prefer subclassing
+      :class:`Variable` and overriding ``set_value`` instead.
+    on_get_value: deprecated Variable hook(s); prefer subclassing
+      :class:`Variable` and overriding ``get_value`` instead.
+    on_create_value: deprecated Variable hook(s).
+    on_add_axis: deprecated Variable hook(s).
+    on_remove_axis: deprecated Variable hook(s).
+    **metadata: arbitrary keyword metadata to attach to the created Variable.
+
+  Returns:
+    A wrapped initializer with the same signature as ``initializer`` whose
+    output carries the given metadata.
+  """
   if on_set_value or on_get_value or on_create_value or on_add_axis or on_remove_axis:
     warnings.warn(
       'Variable hooks are deprecated in favor of users creating their own '
