@@ -93,6 +93,15 @@ def _flatten(xs, prefix, keep_empty_nodes, is_leaf, sep):
   for key, value in xs.items():
     is_empty = False
     path = prefix + (key,)
+    # With a separator, the flattened key is ``sep``-joined, so a key that is
+    # not a string, or that already contains the separator, cannot be restored
+    # unambiguously by ``unflatten_dict``. Reject it here rather than silently
+    # producing a key that round-trips to a different structure.
+    if sep is not None and (not isinstance(key, str) or sep in key):
+      raise ValueError(
+        f'flatten_dict with sep={sep!r} requires string keys that do not '
+        f'contain the separator; got key {key!r} at path {path}'
+      )
     result.update(_flatten(value, path, keep_empty_nodes, is_leaf, sep))
   if keep_empty_nodes and is_empty:
     if prefix == ():  # when the whole input is empty
