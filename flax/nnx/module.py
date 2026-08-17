@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import inspect
 import typing as tp
 
@@ -24,6 +25,7 @@ from flax.nnx import (
   filterlib,
   graphlib,
   pytreelib,
+  sow as sow_lib,
 )
 from flax.nnx import variablelib as variableslib
 from flax.nnx.pytreelib import Pytree, PytreeMeta
@@ -43,6 +45,16 @@ F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
 StateMapping = tp.Mapping[Path, tp.Any]
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
+
+# Set by 'nnx.capture(functional=...)'; read by 'Module.sow'/'Module.perturb'.
+_functional_sow: contextvars.ContextVar[bool] = contextvars.ContextVar(
+  'nnx_functional_sow', default=False
+)
+# Names of the module methods currently on the stack. Maintained by the wrappers
+# '_add_path_tracking' installs during a functional capture.
+_sow_path: contextvars.ContextVar[PathParts] = contextvars.ContextVar(
+  'nnx_sow_path', default=()
+)
 
 
 class ModuleMeta(PytreeMeta):
@@ -149,6 +161,16 @@ class Module(Pytree, metaclass=ModuleMeta):
           variable_type, allow_register=True
       )
 
+    if _functional_sow.get():
+      if reduce_fn is not tuple_reduce or init_fn is not tuple_init:
+        raise ValueError(
+          "'reduce_fn'/'init_fn' are not supported under "
+          "'nnx.capture(functional=True)': values are always collected into "
+          'a tuple in call order.'
+        )
+      sow_lib.sow(value, name=(variable_type, *_sow_path.get(), name))
+      return True
+
     if hasattr(self, '__captures__'):
       for var in self.__captures__:
         if type(var) == variable_type:
@@ -244,6 +266,11 @@ class Module(Pytree, metaclass=ModuleMeta):
     if isinstance(variable_type, str):
       variable_type = variableslib.variable_type_from_name(
           variable_type, allow_register=True
+      )
+
+    if _functional_sow.get():
+      return sow_lib.perturb(
+        value, name=(variable_type, *_sow_path.get(), name)
       )
 
     if hasattr(self, '__captures__'):
@@ -775,7 +802,8 @@ def capture(
   fn: tp.Callable[P, R],
   *var_types: type[variableslib.Variable],
   init: tp.Optional[State] = None,
-  method_outputs: tp.Optional[type[variableslib.Variable]] = None
+  method_outputs: tp.Optional[type[variableslib.Variable]] = None,
+  functional: bool = False,
 ) -> tp.Callable[P, tuple[R, State]]: ...
 
 @tp.overload
@@ -783,12 +811,14 @@ def capture(
   fn: type[variableslib.Variable],
   *var_types: type[variableslib.Variable],
   init: tp.Optional[State] = None,
-  method_outputs: tp.Optional[type[variableslib.Variable]] = None
+  method_outputs: tp.Optional[type[variableslib.Variable]] = None,
+  functional: bool = False,
 ) -> tp.Callable[[tp.Callable[P, R]], tp.Callable[P, tuple[R, State]]]: ...
 
 def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: type[variableslib.Variable],
   init : tp.Optional[State] = None,
-  method_outputs : tp.Optional[type[variableslib.Variable]] = None
+  method_outputs : tp.Optional[type[variableslib.Variable]] = None,
+  functional: bool = False,
 ) -> tp.Callable[P, tuple[R, State]] | tp.Callable[[tp.Callable[P, R]], tp.Callable[P, tuple[R, State]]]:
     """Wraps a function to capture intermediate values from a module during execution.
 
@@ -806,6 +836,12 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
       init: MutableMapping used to initialize perturbation values. This is useful for gradient extraction.
       method_outputs: If provided, automatically sows the output of each method
         in the module and its submodules using this variable type.
+      functional: If ``True``, use the functional implementation: ``fn`` is
+        traced and sown values are collected from the trace (see
+        :func:`flax.nnx.sow`) instead of being stored on the modules.
+        Experimental: only tree mode is supported, ``init`` and custom
+        ``reduce_fn``/``init_fn`` are not, and ``perturb`` collects cotangents
+        from a differentiated function rather than needing initialization.
 
     Returns:
       A wrapped function that returns
@@ -860,7 +896,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
       # Partial application: return a function that waits for the actual fn
       all_var_types = (fn,) + var_types
       def partial_capture(actual_fn: tp.Callable[P, R] | Module) -> tp.Callable[P, tuple[R, State]]:
-        return capture(actual_fn, *all_var_types, init=init, method_outputs=method_outputs)
+        return capture(actual_fn, *all_var_types, init=init,
+                       method_outputs=method_outputs, functional=functional)
       return partial_capture
 
     # Handle bound methods and callable Modules
@@ -877,53 +914,114 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
       else:
         module = module_instance
 
-      # Extract initial values from state
-      state_by_path = _collect_state_by_path(init) if init else {}
-
-      # Initialize __captures__ as a tuple of Variables (one per type)
-      for path, m in iter_modules(module):
-        # Create initial dicts for each variable type
-        initial_dicts = {}
-        for var_type in var_types:
-          initial_dicts[var_type] = {}
-
-        # Populate from state if available
-        if path in state_by_path:
-          for name, var in state_by_path[path].items():
-            var_type = type(var)
-            if var_type not in initial_dicts:
-              initial_dicts[var_type] = {}
-            initial_dicts[var_type][name] = var.get_value()
-
-        # Create the captures tuple
-        captures_tuple = tuple(k(v) for (k,v) in initial_dicts.items())
-        m.__captures__ = pytreelib.data(captures_tuple)
-
-      # Wrap methods with capturing if required
-      if method_outputs:
-        for _, m in iter_modules(module):
-          _add_capturing(type(m), method_outputs)
-
+      token = _functional_sow.set(functional)
       try:
-        result = fn(*fn_args, **kwargs)
+        if functional:
+          return _functional_capture(
+            fn, module, var_types, init, method_outputs, fn_args, kwargs
+          )
+        return _stateful_capture(
+          fn, module, var_types, init, method_outputs, fn_args, kwargs
+        )
       finally:
-
-        # Undo method sowing modification
-        for _, m in iter_modules(module):
-          _remove_capturing(type(m))
-
-      # Extract intermediates manually from __captures__
-      interms = State({})
-      _extract_captures(module, interms, set(var_types))
-      if len(var_types) == 0:
-          return result
-      split_states = split_state(interms, *var_types)
-      if len(var_types) == 1:
-        return result, split_states
-      else:
-        return (result, *split_states)
+        _functional_sow.reset(token)
 
     return wrapper
+
+def _stateful_capture(fn, module, var_types, init, method_outputs, fn_args, kwargs):
+  # Extract initial values from state
+  state_by_path = _collect_state_by_path(init) if init else {}
+
+  # Initialize __captures__ as a tuple of Variables (one per type)
+  for path, m in iter_modules(module):
+    # Create initial dicts for each variable type
+    initial_dicts = {}
+    for var_type in var_types:
+      initial_dicts[var_type] = {}
+
+    # Populate from state if available
+    if path in state_by_path:
+      for name, var in state_by_path[path].items():
+        var_type = type(var)
+        if var_type not in initial_dicts:
+          initial_dicts[var_type] = {}
+        initial_dicts[var_type][name] = var.get_value()
+
+    # Create the captures tuple
+    captures_tuple = tuple(k(v) for (k,v) in initial_dicts.items())
+    m.__captures__ = pytreelib.data(captures_tuple)
+
+  # Wrap methods with capturing if required
+  if method_outputs:
+    for _, m in iter_modules(module):
+      _add_capturing(type(m), method_outputs)
+
+  try:
+    result = fn(*fn_args, **kwargs)
+  finally:
+
+    # Undo method sowing modification
+    for _, m in iter_modules(module):
+      _remove_capturing(type(m))
+
+  # Extract intermediates manually from __captures__
+  interms = State({})
+  _extract_captures(module, interms, set(var_types))
+  if len(var_types) == 0:
+      return result
+  split_states = split_state(interms, *var_types)
+  if len(var_types) == 1:
+    return result, split_states
+  else:
+    return (result, *split_states)
+
+def _functional_capture(fn, module, var_types, init, method_outputs, fn_args, kwargs):
+  """``capture(functional=True)``: instead of storing sown
+  values on the modules, trace ``fn`` and collect the values sown by the ``sow``
+  jax transform (see ``flax.nnx.sow``).
+
+  Only tree mode is supported: nested NNX transforms must use ``graph=False``, and
+  graph structure updates are not propagated. A module that updates its own state
+  (``BatchNorm`` statistics, ``Rngs`` counts) needs ref-backed Variables, created
+  inside ``nnx.var_defaults(ref=True)``: being jax refs, those writes cross the
+  trace boundary natively, whereas a plain Variable raises ``TraceContextError``.
+  ``perturb`` sows the cotangent of a value, so perturbations come from capturing
+  a differentiated function rather than from an ``init`` state.
+  """
+  if init is not None:
+    raise ValueError(
+      "'init' is not supported under 'nnx.capture(functional=True)': "
+      'capture a differentiated function instead to collect perturbations.'
+    )
+
+  modules = list(iter_modules(module))
+  for _, m in modules:
+    if method_outputs:
+      _add_capturing(type(m), method_outputs)
+    _add_path_tracking(type(m))
+
+  try:
+    result, collected = sow_lib.capture(lambda: fn(*fn_args, **kwargs))()
+  finally:
+    for _, m in modules:
+      _remove_capturing(type(m))
+
+  if len(var_types) == 0:
+    return result
+  states = tuple(_collected_to_state(collected, t) for t in var_types)
+  return (result, *states)
+
+def _collected_to_state(collected: dict, var_type: type) -> State:
+  """Reshape ``sow.capture``'s flat {(var_type, *path, name): values} into a
+  nested State holding only the entries of ``var_type``."""
+  state: State = State({})
+  for key, values in collected.items():
+    # keys sown by anything other than Module.sow/perturb are not ours
+    if not isinstance(key, tuple) or key[0] is not var_type:
+      continue
+    *path, name = key[1:]
+    _navigate_to_path(state, path)[name] = var_type(values, ref=False)
+  return state
 
 def _collect_state_by_path(state):
   """Build a mapping from module path to state Variables."""
@@ -966,26 +1064,55 @@ def _extract_captures(module, state, var_types):
       delattr(mod, '__captures__')
 
 
+def _is_capturable(name, method):
+  return callable(method) and (not name.startswith('_') or name == '__call__')
+
 def _add_capturing(cls, variable_type):
   """Adds capturing to methods of a Module.
   Does not instrument superclass methods."""
   for name, method in cls.__dict__.items():
-    if callable(method) and (not name.startswith('_') or name == '__call__'):
+    if _is_capturable(name, method):
       if not hasattr(method, '_does_capturing'):
         def closure(name, method): # Necessary to make 'name' immutable during iteration
           @ft.wraps(method)
           def wrapper(self, *args, **kwargs):
             result = method(self, *args, **kwargs)
-            self.sow(variable_type, name, result)
+            # under a functional capture '_add_path_tracking' has already put
+            # this method's name in the path, so the leaf is just 'output';
+            # otherwise the name is the key within the module's '__captures__'
+            self.sow(
+              variable_type, 'output' if _functional_sow.get() else name, result
+            )
             return result
           wrapper._does_capturing = True
           setattr(cls, name, wrapper)
         closure(name, method)
   return cls
 
-def _remove_capturing(cls):
-  """Remove capturing methods from a Module."""
+def _add_path_tracking(cls):
+  """Wraps the methods of a Module so that, while one of them runs, the
+  '_sow_path' contextvar holds the names of the methods currently on the stack.
+  A method inherited from a superclass is not instrumented (same as
+  '_add_capturing'), and keeps the path of its caller."""
   for name, method in cls.__dict__.items():
-    if hasattr(method, '_does_capturing'):
-      setattr(cls, name, method.__wrapped__)
+    if _is_capturable(name, method) and not hasattr(method, '_tracks_path'):
+      def closure(name, method):  # bind per iteration
+        @ft.wraps(method)
+        def wrapper(self, *args, **kwargs):
+          token = _sow_path.set((*_sow_path.get(), name))
+          try:
+            return method(self, *args, **kwargs)
+          finally:
+            _sow_path.reset(token)
+        wrapper._tracks_path = True
+        setattr(cls, name, wrapper)
+      closure(name, method)
+  return cls
+
+def _remove_capturing(cls):
+  """Remove the wrappers added by '_add_capturing'/'_add_path_tracking'."""
+  for name, method in cls.__dict__.items():
+    while hasattr(method, '_does_capturing') or hasattr(method, '_tracks_path'):
+      method = method.__wrapped__
+      setattr(cls, name, method)
   return cls
