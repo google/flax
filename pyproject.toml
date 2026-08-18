@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flax"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 description = "Flax: A neural network library for JAX designed for flexibility"
 keywords = []
 authors = [
@@ -13,7 +13,7 @@ authors = [
 dependencies = [
     "numpy>=1.23.2",
     # keep in sync with jax-version in .github/workflows/build.yml
-    "jax>=0.10.0",
+    "jax>=0.11.1",
     "msgpack",
     "optax",
     "orbax-checkpoint",
@@ -28,7 +28,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]

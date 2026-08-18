@@ -443,6 +443,7 @@ class TestRoPE(absltest.TestCase):
 
   def test_matches_torch_single_head(self):
     """RoPE.__call__ matches torch.onnx.ops.rotary_embedding on a single (seq, dim) input."""
+    self.skipTest('Seg fault in CI due to _torch_rope')
 
     seq_len, head_dim = 32, 64
     x = jax.random.normal(jax.random.key(0), (seq_len, head_dim))
@@ -459,6 +460,7 @@ class TestRoPE(absltest.TestCase):
 
   def test_matches_torch_multi_head(self):
     """RoPE applied per-head via vmap matches torch.onnx.ops.rotary_embedding with heads."""
+    self.skipTest('Seg fault in CI due to _torch_rope')
     seq_len, num_heads, head_dim = 16, 4, 32
     x = jax.random.normal(jax.random.key(1), (seq_len, num_heads, head_dim))
 
@@ -475,6 +477,7 @@ class TestRoPE(absltest.TestCase):
 
   def test_dot_product_attention_with_rope_matches_torch(self):
     """Full attention with RoPE matches manual torch-RoPE + standard attention."""
+    self.skipTest('Seg fault in CI due to _torch_rope')
     batch, seq_len, num_heads, head_dim = 2, 16, 4, 32
 
     key = jax.random.key(42)
