@@ -18,8 +18,6 @@ import jax
 import jax, jax.numpy as jnp
 from jax.lax import Precision
 
-import torch
-import torch.onnx.ops
 
 from flax import linen
 from flax import nnx
@@ -426,58 +424,57 @@ class TestDotProductAttentionValidation(parameterized.TestCase):
 
 class TestRoPE(absltest.TestCase):
 
-  def _torch_rope(self, x_np, theta, seq_len, head_dim):
-    """Apply RoPE using torch.onnx.ops.rotary_embedding as reference."""
-    freqs = 1.0 / (theta ** (torch.arange(0, head_dim, 2, dtype=torch.float32) / head_dim))
-    angles = torch.outer(torch.arange(seq_len, dtype=torch.float32), freqs)
-    cos_cache = torch.cos(angles)
-    sin_cache = torch.sin(angles)
-    # torch expects (batch, heads, seq, dim)
-    x_torch = torch.from_numpy(np.array(x_np))
-    batch_size = x_torch.shape[0]
-    position_ids = torch.arange(seq_len).unsqueeze(0).expand(batch_size, -1)
-    out = torch.onnx.ops.rotary_embedding(
-      x_torch, cos_cache, sin_cache, position_ids, interleaved=False
+  def _math_rope(self, x_np, theta):
+    """Apply RoPE using its mathematical definition (2D rotation per frequency band)."""
+    # x_np: (..., seq_len, head_dim)
+    seq_len, head_dim = x_np.shape[-2], x_np.shape[-1]
+    d_2 = head_dim // 2
+    positions = np.arange(seq_len, dtype=np.float32)
+    freqs = 1.0 / (
+      theta ** (np.arange(0, head_dim, 2, dtype=np.float32) / head_dim)
     )
-    return out.numpy()
+    angles = np.outer(positions, freqs)  # (seq_len, d_2)
+    cos = np.cos(angles)
+    sin = np.sin(angles)
+    # Broadcast across any leading dimensions
+    n_prefix = x_np.ndim - 2
+    if n_prefix > 0:
+      cos = np.reshape(cos, (1,) * n_prefix + cos.shape)
+      sin = np.reshape(sin, (1,) * n_prefix + sin.shape)
+    x1 = x_np[..., :d_2]
+    x2 = x_np[..., d_2:]
+    y1 = x1 * cos - x2 * sin
+    y2 = x1 * sin + x2 * cos
+    return np.concatenate([y1, y2], axis=-1)
 
-  def test_matches_torch_single_head(self):
-    """RoPE.__call__ matches torch.onnx.ops.rotary_embedding on a single (seq, dim) input."""
-    self.skipTest('Seg fault in CI due to _torch_rope')
-
+  def test_matches_math_single_head(self):
+    """RoPE.__call__ matches mathematical RoPE definition on a single (seq, dim) input."""
     seq_len, head_dim = 32, 64
     x = jax.random.normal(jax.random.key(0), (seq_len, head_dim))
 
     flax_rope = nnx.RoPE(theta=10000.0)
     out_flax = flax_rope(x)
 
-    # torch 4D: (batch=1, heads=1, seq, dim)
-    out_torch = self._torch_rope(
-      x[None, None], theta=10000.0, seq_len=seq_len, head_dim=head_dim
-    )[0, 0]
+    out_math = self._math_rope(np.array(x), theta=10000.0)
 
-    np.testing.assert_allclose(out_flax, out_torch, atol=1e-5)
+    np.testing.assert_allclose(out_flax, out_math, atol=1e-5)
 
-  def test_matches_torch_multi_head(self):
-    """RoPE applied per-head via vmap matches torch.onnx.ops.rotary_embedding with heads."""
-    self.skipTest('Seg fault in CI due to _torch_rope')
+  def test_matches_math_multi_head(self):
+    """RoPE applied per-head via vmap matches mathematical RoPE definition with heads."""
     seq_len, num_heads, head_dim = 16, 4, 32
     x = jax.random.normal(jax.random.key(1), (seq_len, num_heads, head_dim))
 
     flax_rope = nnx.RoPE(theta=10000.0)
     out_flax = jax.vmap(flax_rope, in_axes=1, out_axes=1)(x)
 
-    # torch 4D: (batch=1, heads, seq, dim) — need to transpose from (seq, heads, dim)
-    x_torch_4d = np.array(x).transpose(1, 0, 2)[None]  # (1, heads, seq, dim)
-    out_torch = self._torch_rope(
-      x_torch_4d, theta=10000.0, seq_len=seq_len, head_dim=head_dim
-    )[0].transpose(1, 0, 2)  # back to (seq, heads, dim)
+    # x is (seq, heads, dim); transpose to (heads, seq, dim) for mathematical rope over seq
+    x_np = np.array(x).transpose(1, 0, 2)
+    out_math = self._math_rope(x_np, theta=10000.0).transpose(1, 0, 2)
 
-    np.testing.assert_allclose(out_flax, out_torch, atol=1e-5)
+    np.testing.assert_allclose(out_flax, out_math, atol=1e-5)
 
-  def test_dot_product_attention_with_rope_matches_torch(self):
-    """Full attention with RoPE matches manual torch-RoPE + standard attention."""
-    self.skipTest('Seg fault in CI due to _torch_rope')
+  def test_dot_product_attention_with_rope_matches_math(self):
+    """Full attention with RoPE matches manual math-RoPE + standard attention."""
     batch, seq_len, num_heads, head_dim = 2, 16, 4, 32
 
     key = jax.random.key(42)
@@ -486,22 +483,21 @@ class TestRoPE(absltest.TestCase):
     kv = jax.random.normal(k2, (batch, seq_len, num_heads, head_dim))
     value = jax.random.normal(k3, (batch, seq_len, num_heads, head_dim))
 
-    # torch expects (batch, heads, seq, dim)
-    def apply_torch_rope(x):
+    def apply_math_rope(x):
       x_np = np.array(x).transpose(0, 2, 1, 3)  # (batch, heads, seq, dim)
-      out = self._torch_rope(x_np, theta=10000.0, seq_len=seq_len, head_dim=head_dim)
+      out = self._math_rope(x_np, theta=10000.0)
       return jnp.array(out.transpose(0, 2, 1, 3))  # back to (batch, seq, heads, dim)
 
-    q_torch = apply_torch_rope(query)
-    k_torch = apply_torch_rope(kv)
-    out_torch = nnx.dot_product_attention(q_torch, k_torch, value)
+    q_math = apply_math_rope(query)
+    k_math = apply_math_rope(kv)
+    out_math = nnx.dot_product_attention(q_math, k_math, value)
 
     flax_rope = nnx.RoPE(theta=10000.0)
     out_flax = nnx.dot_product_attention_with_rope(
       query, kv, value, rope=flax_rope
     )
 
-    np.testing.assert_allclose(out_flax, out_torch, atol=1e-5)
+    np.testing.assert_allclose(out_flax, out_math, atol=1e-5)
 
   def test_with_mha(self):
     """RoPE integrates correctly as attention_fn in MultiHeadAttention."""
