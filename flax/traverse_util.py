@@ -91,6 +91,12 @@ def _flatten(xs, prefix, keep_empty_nodes, is_leaf, sep):
   result = {}
   is_empty = True
   for key, value in xs.items():
+    if sep is not None:
+      if not isinstance(key, str) or sep in key:
+        raise ValueError(
+          f"flatten_dict with sep='{sep}' requires string keys that do not "
+          f"contain the separator; got key {key!r} at path {prefix + (key,)}"
+        )
     is_empty = False
     path = prefix + (key,)
     result.update(_flatten(value, path, keep_empty_nodes, is_leaf, sep))
@@ -130,9 +136,13 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
       leaf (i.e., should not be flattened further).
     sep: if specified, then the keys of the returned
       dictionary will be ``sep``-joined strings (if
-      ``None``, then keys will be tuples).
+      ``None``, then keys will be tuples). When specified,
+      all keys must be strings that do not contain ``sep``.
   Returns:
     The flattened dictionary.
+  Raises:
+    ValueError: if ``sep`` is specified and any dictionary key is not a string
+      or contains the separator ``sep``.
   """
   assert isinstance(
     xs, (flax.core.FrozenDict, dict)

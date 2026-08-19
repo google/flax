@@ -175,6 +175,43 @@ class TraversalTest(absltest.TestCase):
       },
     )
 
+  def test_flatten_dict_sep_key_containing_sep(self):
+    xs = {'a/b': 1, 'c': {'d': 2}}
+    with self.assertRaisesRegex(
+      ValueError,
+      r"flatten_dict with sep='/' requires string keys that do not contain the separator; got key 'a/b' at path \('a/b',\)",
+    ):
+      traverse_util.flatten_dict(xs, sep='/')
+
+    xs_nested = {'a': {'b/c': 2}}
+    with self.assertRaisesRegex(
+      ValueError,
+      r"flatten_dict with sep='/' requires string keys that do not contain the separator; got key 'b/c' at path \('a', 'b/c'\)",
+    ):
+      traverse_util.flatten_dict(xs_nested, sep='/')
+
+  def test_flatten_dict_sep_non_string_key(self):
+    xs = {1: {2: 3}}
+    with self.assertRaisesRegex(
+      ValueError,
+      r"flatten_dict with sep='/' requires string keys that do not contain the separator; got key 1 at path \(1,\)",
+    ):
+      traverse_util.flatten_dict(xs, sep='/')
+
+    xs_nested = {'a': {42: 'foo'}}
+    with self.assertRaisesRegex(
+      ValueError,
+      r"flatten_dict with sep='/' requires string keys that do not contain the separator; got key 42 at path \('a', 42\)",
+    ):
+      traverse_util.flatten_dict(xs_nested, sep='/')
+
+  def test_flatten_dict_none_sep_preserves_non_string_and_sep_keys(self):
+    xs = {'a/b': 1, 1: {2: 3}}
+    flat = traverse_util.flatten_dict(xs)
+    self.assertEqual(flat, {('a/b',): 1, (1, 2): 3})
+    back = traverse_util.unflatten_dict(flat)
+    self.assertEqual(back, xs)
+
   def test_unflatten_dict(self):
     expected_xs = {'foo': 1, 'bar': {'a': 2}}
     xs = traverse_util.unflatten_dict(
