@@ -351,14 +351,20 @@ class MultiHeadDotProductAttention(Module):
       should be divisible by the number of heads.
     dtype: The dtype of the computation (default: infer from inputs and params)
     param_dtype: The dtype passed to parameter initializers (default: float32)
-    qkv_features: Dimension of the key, query, and value.
-    out_features: Dimension of the last projection
+    qkv_features: Dimension of the key, query, and value. If None (the default),
+      it defaults to the feature dimension of the query inputs
+      (i.e. ``inputs_q.shape[-1]``).
+    out_features: Dimension of the last projection. If None (the default),
+      it defaults to the feature dimension of the query inputs
+      (i.e. ``inputs_q.shape[-1]``).
     broadcast_dropout: Use a broadcasted dropout along batch dims.
     dropout_rate: Dropout rate.
     deterministic: If False, the attention weight is masked randomly using
-      dropout, whereas if True, the attention weights are deterministic.
-    precision: Numerical precision of the computation see ``jax.lax.Precision``
-      for details.
+      dropout, whereas if True, the attention weights are deterministic. If None
+      (the default), ``deterministic`` must be passed to ``__call__`` when
+      ``dropout_rate > 0.0``; if ``dropout_rate == 0.0``, it defaults to True.
+    precision: Numerical precision of the computation, see ``jax.lax.Precision``
+      for details. If None (the default), default precision of JAX operations is used.
     kernel_init: Initializer for the kernel of the Dense layers.
     out_kernel_init: Optional Initializer for the kernel of the output Dense layer,
       if None, ``kernel_init`` will be used.
@@ -466,8 +472,10 @@ class MultiHeadDotProductAttention(Module):
       mask: attention mask of shape ``[batch_sizes..., num_heads, query_length,
         key/value_length]``. Attention weights are masked out if their
         corresponding mask value is ``False``.
-      deterministic: if false, the attention weight is masked randomly using
-        dropout, whereas if true, the attention weights are deterministic.
+      deterministic: If False, the attention weight is masked randomly using
+        dropout, whereas if True, the attention weights are deterministic.
+        If None (the default), the module-level attribute ``self.deterministic``
+        is used if set, or defaults to True when ``dropout_rate == 0.0``.
       dropout_rng: optional rng key to pass to the attention layer's dropout
         mask. Otherwise, self.make_rng('dropout') is used instead.
       sow_weights: if ``True``, the attention weights are sowed into the
@@ -753,14 +761,20 @@ class MultiHeadAttention(MultiHeadDotProductAttention):
       should be divisible by the number of heads.
     dtype: the dtype of the computation (default: infer from inputs and params)
     param_dtype: the dtype passed to parameter initializers (default: float32)
-    qkv_features: dimension of the key, query, and value.
-    out_features: dimension of the last projection
+    qkv_features: Dimension of the key, query, and value. If None (the default),
+      it defaults to the feature dimension of the query inputs
+      (i.e. ``inputs_q.shape[-1]``).
+    out_features: Dimension of the last projection. If None (the default),
+      it defaults to the feature dimension of the query inputs
+      (i.e. ``inputs_q.shape[-1]``).
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rate: dropout rate
-    deterministic: if false, the attention weight is masked randomly using
-      dropout, whereas if true, the attention weights are deterministic.
-    precision: numerical precision of the computation see ``jax.lax.Precision``
-      for details.
+    deterministic: If False, the attention weight is masked randomly using
+      dropout, whereas if True, the attention weights are deterministic. If None
+      (the default), ``deterministic`` must be passed to ``__call__`` when
+      ``dropout_rate > 0.0``; if ``dropout_rate == 0.0``, it defaults to True.
+    precision: Numerical precision of the computation, see ``jax.lax.Precision``
+      for details. If None (the default), default precision of JAX operations is used.
     kernel_init: initializer for the kernel of the Dense layers.
     bias_init: initializer for the bias of the Dense layers.
     use_bias: bool: whether pointwise QKVO dense transforms use bias.
@@ -802,8 +816,10 @@ class SelfAttention(MultiHeadDotProductAttention):
       mask: attention mask of shape ``[batch_sizes..., num_heads, query_length,
         key/value_length]``. Attention weights are masked out if their
         corresponding mask value is ``False``.
-      deterministic: if false, the attention weight is masked randomly using
-        dropout, whereas if true, the attention weights are deterministic.
+      deterministic: If False, the attention weight is masked randomly using
+        dropout, whereas if True, the attention weights are deterministic.
+        If None (the default), the module-level attribute ``self.deterministic``
+        is used if set, or defaults to True when ``dropout_rate == 0.0``.
 
     Returns:
       output of shape ``[batch_sizes..., length, features]``.
