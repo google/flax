@@ -175,6 +175,27 @@ class TraversalTest(absltest.TestCase):
       },
     )
 
+  def test_flatten_dict_sep_rejects_unrestorable_keys(self):
+    # A key that contains the separator would flatten to the same joined form
+    # as a genuine nested path, so it cannot be restored unambiguously.
+    with self.assertRaisesRegex(ValueError, 'do not contain the separator'):
+      traverse_util.flatten_dict({'a/b': 1}, sep='/')
+
+    # A non-string key cannot be joined with a separator at all.
+    with self.assertRaisesRegex(ValueError, 'requires string keys'):
+      traverse_util.flatten_dict({1: {2: 3}}, sep='/')
+
+    # Without a separator (tuple-key mode) both inputs are still supported,
+    # since the tuple keys restore faithfully.
+    self.assertEqual(
+      traverse_util.flatten_dict({'a/b': 1}),
+      {('a/b',): 1},
+    )
+    self.assertEqual(
+      traverse_util.flatten_dict({1: {2: 3}}),
+      {(1, 2): 3},
+    )
+
   def test_unflatten_dict(self):
     expected_xs = {'foo': 1, 'bar': {'a': 2}}
     xs = traverse_util.unflatten_dict(
