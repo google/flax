@@ -553,7 +553,7 @@ class TestVariableRefMode(absltest.TestCase):
     @jax.jit
     def linear(params: Params, x: jax.Array):
       params.count[...] += 1
-      return x @ params.w[...] + params.b[...][None]
+      return x @ params.w[...] + params.b[None]
 
     x = jnp.ones((1, 3))
     y = linear(params, x)
