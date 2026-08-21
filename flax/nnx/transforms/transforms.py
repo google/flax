@@ -622,8 +622,8 @@ def cond(
     variables = extract.check_no_aliases('cond', operands=operands)
     out, updates = jax.lax.cond(
       pred,
-      SimpleCondFn(true_fun, graph=graph),
-      SimpleCondFn(false_fun, graph=graph),
+      general.get_fn_wrapper(SimpleCondFn, true_fun, graph),
+      general.get_fn_wrapper(SimpleCondFn, false_fun, graph),
       *operands,
     )
     if graph:
@@ -677,7 +677,7 @@ def switch(
     variables = extract.check_no_aliases('switch', operands=operands)
     out, updates = jax.lax.switch(
       index,
-      [SimpleCondFn(f, graph=graph) for f in branches],
+      [general.get_fn_wrapper(SimpleCondFn, f, graph) for f in branches],
       *operands,
     )
     if graph:
