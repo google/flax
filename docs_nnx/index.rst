@@ -19,7 +19,7 @@ API, and it took years of experience to bring a simpler and more user-friendly A
 .. note::
    Flax Linen API is not going to be deprecated in the near future as most of Flax users still rely on this API. However, new users are encouraged to use Flax NNX. Check out `Why Flax NNX <why.html>`_ for a comparison between Flax NNX and Linen, and our reasoning to make the new API.
 
-   To move your Flax Linen codebase to Flax NNX, get familiarized with the API in `NNX Basics <https://flax.readthedocs.io/en/latest/nnx_basics.html>`_ and then start your move following the `evolution guide <guides/linen_to_nnx.html>`_.
+   To move your Flax Linen codebase to Flax NNX, get familiarized with the API in `NNX Basics <https://flax.readthedocs.io/en/latest/nnx_basics.html>`_ and then start your move following the `evolution guide <migrating/linen_to_nnx.html>`_.
 
 Features
 ^^^^^^^^^
@@ -164,7 +164,7 @@ Learn more
 
       .. card:: :material-regular:`transform;2em` Flax Linen to Flax NNX
          :class-card: sd-text-black sd-bg-light
-         :link: guides/linen_to_nnx.html
+         :link: migrating/linen_to_nnx.html
 
    .. grid-item::
       :columns: 6 6 6 4
