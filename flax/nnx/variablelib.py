@@ -295,98 +295,213 @@ def _new_hijax_from_variable(variable: Variable) -> HijaxVariable:
   return hijax_var
 
 
-class NewVariable(hjx.HiPrimitive):
+class NewVariable(hjx.VJPHiPrimitive):
+  def __init__(self, *leaf_avals, treedef, var_type, ref=False):
+    self.in_avals = tuple(leaf_avals)
+    self.out_aval = AbstractVariable(
+        var_type, treedef, tuple(leaf_avals), ref=ref
+    )
+    self.params = dict(treedef=treedef, var_type=var_type, ref=ref)
+    super().__init__()
 
-  def is_high(self, *leaves, treedef, var_type, ref) -> bool:
-    return True  # type: ignore
+  def expand(self, *leaves):
+    return HijaxVariable._new(leaves, self.treedef, self.var_type, ref=self.ref)  # type: ignore
 
-  def impl(self, *leaves, treedef, var_type, ref):
-    return HijaxVariable._new(leaves, treedef, var_type, ref=ref)
-
-  def abstract_eval(self, *leaves, treedef, var_type, ref):
-    aval = AbstractVariable(var_type, treedef, leaves, ref=ref)
-    return aval, set()
-
-  def to_lojax(self, *leaves, treedef, var_type, ref):
-    return HijaxVariable._new(leaves, treedef, var_type, ref=ref)
-
-  def jvp(_, primals, tangents, *, treedef, var_type, ref):
+  def jvp(self, primals, tangents):
     primal_hijax_var = _bind_new_variable(
-        *primals, treedef=treedef, var_type=var_type, ref=ref
+        *primals, treedef=self.treedef, var_type=self.var_type, ref=self.ref  # type: ignore
     )
     tangent_hijax_var = _bind_new_variable(
-        *tangents, treedef=treedef, var_type=var_type, ref=ref
+        *tangents, treedef=self.treedef, var_type=self.var_type, ref=self.ref  # type: ignore
     )
     return primal_hijax_var, tangent_hijax_var
 
-  def transpose(
-      _, out_var: HijaxVariable, *input_leaves, treedef, var_type, ref
-  ):
-    avals = tuple(
-      map(
-        lambda x: x.aval if hjx.is_undefined_primal(x) else jax.typeof(x),
-        input_leaves,
-      )
+  def vjp_fwd(self, nzs_in, *leaves):
+    return self(*leaves), None
+
+  def vjp_bwd_retval(self, _res, out_var):
+    avals = tuple(self.out_aval._leaves)
+    return _bind_get_variable(
+        out_var, treedef=self.treedef, avals=avals, var_type=self.var_type  # type: ignore
     )
-    leaves_dot = get_variable_p.bind(
-      out_var,
-      treedef=treedef,
-      avals=avals,
-      var_type=var_type,
+
+  def transpose(self, out_var, *accums):
+    avals = tuple(self.out_aval._leaves)
+    leaves_dot = _bind_get_variable(
+        out_var, treedef=self.treedef, avals=avals, var_type=self.var_type  # type: ignore
     )
-    return leaves_dot
+    for leaf_dot, accum in zip(leaves_dot, accums):
+      if hasattr(accum, 'accum'):
+        accum.accum(leaf_dot)
 
 
-new_variable_p = NewVariable(f'new_variable')
+def _bind_new_variable(*leaves, treedef, var_type, ref) -> HijaxVariable:
+  """Binds NewVariable after instantiating any Zero tangents."""
+  leaves = tuple(hjx.instantiate_zeros(leaf) for leaf in leaves)
+  leaf_avals = tuple(map(jax.typeof, leaves))
+  return NewVariable(
+      *leaf_avals, treedef=treedef, var_type=var_type, ref=ref
+  )(*leaves)
+
+
+class _NewVariableShim:
+  def bind(self, *leaves, treedef, var_type, ref=False):
+    return _bind_new_variable(
+        *leaves, treedef=treedef, var_type=var_type, ref=ref
+    )
+
+
+new_variable_p = _NewVariableShim()
+
+
+class SetVariable(hjx.VJPHiPrimitive):
+  def __init__(self, hijax_var_aval, *leaf_avals, treedef, var_type):
+    self.in_avals = (hijax_var_aval, *leaf_avals)
+    self.out_aval = ()
+    self.params = dict(treedef=treedef, var_type=var_type)
+    super().__init__()
+
+  def expand(self, hijax_var, *leaves):
+    if not isinstance(hijax_var, (jax.core.Tracer, AbstractVariable)):
+      assert self.var_type is hijax_var._var_type  # type: ignore
+      object.__setattr__(hijax_var, '_leaves', leaves)
+      object.__setattr__(hijax_var, '_treedef', self.treedef)  # type: ignore
+      return ()
+    raise errors.ImmutableVariableError(
+        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
+        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
+        ' ref=True.'
+    )
+
+  def staging(self, trace, source_info, *args):
+    raise errors.ImmutableVariableError(
+        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
+        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
+        ' ref=True.'
+    )
+
+  def jvp(self, primals, tangents):
+    raise errors.ImmutableVariableError(
+        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
+        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
+        ' ref=True.'
+    )
+
+  def vjp_fwd(self, nzs_in, *args):
+    raise errors.ImmutableVariableError(
+        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
+        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
+        ' ref=True.'
+    )
+
+  def vjp_bwd_retval(self, res, outgrad):
+    raise errors.ImmutableVariableError(
+        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
+        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
+        ' ref=True.'
+    )
+
+
+def _bind_set_variable(hijax_var, *leaves, treedef, var_type):
+  if isinstance(hijax_var, (jax.core.Tracer, AbstractVariable)):
+    raise errors.ImmutableVariableError(
+        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
+        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
+        ' ref=True.'
+    )
+  var_aval = jax.typeof(hijax_var)
+  leaf_avals = tuple(map(jax.typeof, leaves))
+  return SetVariable(
+      var_aval, *leaf_avals, treedef=treedef, var_type=var_type
+  )(hijax_var, *leaves)
+
+
+class _SetVariableShim:
+  def bind(self, hijax_var, *leaves, treedef, var_type):
+    return _bind_set_variable(
+        hijax_var, *leaves, treedef=treedef, var_type=var_type
+    )
+
+
+set_variable_p = _SetVariableShim()
 
 
 def _set_hijax_state(hijax_var, variable: Variable):
   leaves, treedef = jax.tree.flatten(variable)
-  set_variable_p.bind(
-    hijax_var, *leaves, treedef=treedef, var_type=type(variable)
+  _bind_set_variable(
+      hijax_var, *leaves, treedef=treedef, var_type=type(variable)
   )
 
 
-class SetVariable(hjx.HiPrimitive):
-  multiple_results = True
+class GetVariable(hjx.VJPHiPrimitive):
+  def __init__(self, abstract_var, *, treedef, avals, var_type):
+    self.in_avals = (abstract_var,)
+    self.out_aval = tuple(avals)
+    self.params = dict(treedef=treedef, avals=tuple(avals), var_type=var_type)
+    super().__init__()
 
-  def is_high(_, *leaf_avals, treedef, var_type) -> bool:
-    return True  # type: ignore
+  def expand(self, hijax_var):
+    return hijax_var._leaves
 
-  def impl(_, hijax_var: HijaxVariable, *leaves, treedef, var_type):
-    assert var_type is hijax_var._var_type
-    object.__setattr__(hijax_var, '_leaves', leaves)
-    object.__setattr__(hijax_var, '_treedef', treedef)
-    return []
+  def jvp(self, primals, tangents):
+    (hijax_var,), (hijax_var_dot,) = primals, tangents
+    primal_out = _bind_get_variable(
+        hijax_var, treedef=self.treedef, avals=self.avals, var_type=self.var_type  # type: ignore
+    )
+    tangent_avals = tuple(a.to_tangent_aval() for a in self.avals)  # type: ignore
+    tangent_out = _bind_get_variable(
+        hijax_var_dot,
+        treedef=self.treedef,  # type: ignore
+        avals=tangent_avals,
+        var_type=self.var_type,  # type: ignore
+    )
+    return primal_out, tangent_out
 
-  def abstract_eval(_, *args, treedef, var_type):
-    raise errors.ImmutableVariableError(
-        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
-        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
-        ' ref=True.'
+  def vjp_fwd(self, nzs_in, hijax_var):
+    return self(hijax_var), None
+
+  def vjp_bwd_retval(self, _res, out):
+    abstract_var: AbstractVariable = self.in_avals[0]
+    hijax_var_dot = _bind_new_variable(
+        *out,
+        treedef=abstract_var._treedef,
+        var_type=self.var_type,  # type: ignore
+        ref=abstract_var.ref,
+    )
+    return (hijax_var_dot,)
+
+  def transpose(self, out, accum):
+    abstract_var: AbstractVariable = self.in_avals[0]
+    if hasattr(accum, 'accum'):
+      hijax_var_dot = _bind_new_variable(
+          *out,
+          treedef=abstract_var._treedef,
+          var_type=self.var_type,  # type: ignore
+          ref=abstract_var.ref,
+      )
+      accum.accum(hijax_var_dot)
+
+
+def _bind_get_variable(hijax_var, *, treedef, avals, var_type):
+  if isinstance(hijax_var, AbstractVariable):
+    return hijax_var._leaves
+  if isinstance(hijax_var, jax.core.Tracer):
+    var_aval = hijax_var.aval
+  else:
+    var_aval = jax.typeof(hijax_var)
+  return GetVariable(
+      var_aval, treedef=treedef, avals=avals, var_type=var_type
+  )(hijax_var)
+
+
+class _GetVariableShim:
+  def bind(self, hijax_var, *, treedef, avals, var_type):
+    return _bind_get_variable(
+        hijax_var, treedef=treedef, avals=avals, var_type=var_type
     )
 
-  def to_lojax(self, hijax_var, *leaves, treedef, var_type):
-    if not isinstance(hijax_var, (jax.core.Tracer, AbstractVariable)):
-      return self.impl(hijax_var, *leaves, treedef=treedef, var_type=var_type)
-    raise errors.ImmutableVariableError(
-        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
-        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
-        ' ref=True.'
-    )
 
-  def jvp(_, primals, tangents, *, treedef, var_type):
-    raise errors.ImmutableVariableError(
-        'Cannot update a non-ref HijaxVariable inside JAX transformations. To'
-        ' mutate variables within jit, grad, scan, or other JAX transforms, use'
-        ' ref=True.'
-    )
-
-  def transpose(_, *args, treedef, var_type):
-    raise NotImplementedError('transpose not implemented for SetHijaxVariable')
-
-
-set_variable_p = SetVariable(f'set_variable')
+get_variable_p = _GetVariableShim()
 
 
 def _get_hijax_state(hijax_var: HijaxVariable | AbstractVariable) -> Variable:
@@ -396,7 +511,7 @@ def _get_hijax_state(hijax_var: HijaxVariable | AbstractVariable) -> Variable:
     leaf_avals = hijax_var._leaves
   else:
     leaf_avals = tuple(map(jax.typeof, hijax_var._leaves))
-  leaf_vals = get_variable_p.bind(
+  leaf_vals = _bind_get_variable(
       hijax_var,
       treedef=hijax_var._treedef,
       avals=leaf_avals,
@@ -405,53 +520,6 @@ def _get_hijax_state(hijax_var: HijaxVariable | AbstractVariable) -> Variable:
   variable = jax.tree.unflatten(hijax_var._treedef, leaf_vals)
 
   return variable
-
-
-class GetVariable(hjx.HiPrimitive):
-  multiple_results = True
-
-  def impl(self, hijax_var: HijaxVariable, *, treedef, avals, var_type):
-    return hijax_var._leaves
-
-  def abstract_eval(self, abstract_var, *, treedef, avals, var_type):
-    return avals, set()
-
-  def to_lojax(_, hijax_var: HijaxVariable, *, treedef, avals, var_type):
-    return hijax_var._leaves
-
-  def jvp(_, primals, tangents, *, treedef, avals, var_type):
-    (hijax_var,), (hijax_var_dot,) = primals, tangents
-    return (
-      get_variable_p.bind(
-        hijax_var,
-        treedef=treedef,
-        avals=avals,
-        var_type=var_type,
-      ),
-      get_variable_p.bind(
-        hijax_var_dot,
-        treedef=treedef,
-        avals=tuple(a.to_tangent_aval() for a in avals),
-        var_type=var_type,
-      ),
-    )
-
-  def transpose(_, out, hijax_var, *, treedef, avals, var_type):
-    abstract_var: AbstractVariable = (
-      hijax_var.aval
-      if hjx.is_undefined_primal(hijax_var)
-      else jax.typeof(hijax_var)
-    )
-    hijax_var_dot = _bind_new_variable(
-      *out,
-      treedef=abstract_var._treedef,
-      var_type=var_type,
-      ref=abstract_var.ref,
-    )
-    return (hijax_var_dot,)
-
-
-get_variable_p = GetVariable(f'get_variable')
 
 
 # ---------------------------------
