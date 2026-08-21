@@ -294,8 +294,10 @@ def _new_hijax_from_variable(variable: Variable) -> HijaxVariable:
   )
   return hijax_var
 
+HiPrim = (hjx.VJPHiPrimitive if jax.__version_info__ <= (0, 11, 1) else
+          hjx.HiPrim)
 
-class NewVariable(hjx.VJPHiPrimitive):
+class NewVariable(HiPrim):
   def __init__(self, *leaf_avals, treedef, var_type, ref=False):
     self.in_avals = tuple(leaf_avals)
     self.out_aval = AbstractVariable(
@@ -354,7 +356,7 @@ class _NewVariableShim:
 new_variable_p = _NewVariableShim()
 
 
-class SetVariable(hjx.VJPHiPrimitive):
+class SetVariable(HiPrim):
   def __init__(self, hijax_var_aval, *leaf_avals, treedef, var_type):
     self.in_avals = (hijax_var_aval, *leaf_avals)
     self.out_aval = ()
@@ -433,7 +435,7 @@ def _set_hijax_state(hijax_var, variable: Variable):
   )
 
 
-class GetVariable(hjx.VJPHiPrimitive):
+class GetVariable(HiPrim):
   def __init__(self, abstract_var, *, treedef, avals, var_type):
     self.in_avals = (abstract_var,)
     self.out_aval = tuple(avals)
