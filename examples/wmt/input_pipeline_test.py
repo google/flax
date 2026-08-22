@@ -51,7 +51,7 @@ class InputPipelineTest(absltest.TestCase):
     vocab_path = os.path.join(tempfile.mkdtemp(), 'sentencepiece_model')
 
     # Go two directories up to the root of the flax directory.
-    flax_root_dir = pathlib.Path(__file__).parents[2]
+    flax_root_dir = pathlib.Path(__file__).absolute().parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'  # pylint: disable=unused-variable
 
     with tfds.testing.mock_data(num_examples=128, data_dir=data_dir):
