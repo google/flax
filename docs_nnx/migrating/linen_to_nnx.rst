@@ -111,8 +111,8 @@ If you want to access Flax NNX model parameters in the stateless, dictionary-lik
 
   # Parameters were already initialized during model instantiation.
 
-  assert model.linear.bias.value.shape == (10,)
-  assert model.block.linear.kernel.value.shape == (784, 256)
+  assert model.linear.bias[...].shape == (10,)
+  assert model.block.linear.kernel[...].shape == (784, 256)
 
 
 Training step and compilation
@@ -255,7 +255,7 @@ For all the built-in Flax Linen layers and collections, Flax NNX already creates
     def __call__(self, x):
       x = self.linear(x)
       x = self.batchnorm(x)
-      self.count.value += 1
+      self.count[...] += 1
       x = jax.nn.relu(x)
       return x
 
