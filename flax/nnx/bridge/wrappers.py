@@ -323,6 +323,13 @@ class ToLinen(linen.Module):
   skip_rng: bool = False
   metadata_fn: tp.Callable[[variablelib.Variable], tp.Any] | None = bv.to_linen_var
 
+  def __post_init__(self):
+    if not isinstance(self.args, tuple):
+      object.__setattr__(self, 'args', tuple(self.args))
+    if not isinstance(self.kwargs, FrozenDict):
+      object.__setattr__(self, 'kwargs', FrozenDict(self.kwargs))
+    super().__post_init__()
+
   @linen.compact
   def __call__(
     self, *args, nnx_method: tp.Callable[..., Any] | str | None = None, **kwargs

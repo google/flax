@@ -266,6 +266,28 @@ class TestCompatibility(absltest.TestCase):
     assert y.shape == (1, 64)
     np.testing.assert_allclose(y, x @ variables['params']['kernel'])
 
+  def test_tolinen_hashable(self):
+    # Test that ToLinen is hashable with various arguments (issue #4156)
+    model1 = bridge.ToLinen(nnx.Linear, args=(32, 64))
+    model2 = bridge.ToLinen(nnx.Linear, args=[32, 64], kwargs={'use_bias': True})
+    model3 = bridge.to_linen(nnx.Linear, 32, out_features=64)
+
+    self.assertEqual(hash(model1), hash(bridge.ToLinen(nnx.Linear, args=(32, 64))))
+    self.assertEqual(hash(model2), hash(bridge.ToLinen(nnx.Linear, args=(32, 64), kwargs={'use_bias': True})))
+    self.assertEqual(hash(model3), hash(bridge.to_linen(nnx.Linear, 32, out_features=64)))
+
+    # Test can be used in set / dict key
+    module_set = {model1, model2, model3}
+    self.assertIn(model1, module_set)
+    self.assertIn(model2, module_set)
+    self.assertIn(model3, module_set)
+
+    # Test to_linen_class dynamic wrapper is also hashable
+    LinenLinear = bridge.to_linen_class(nnx.Linear, out_features=64)
+    model4 = LinenLinear(32)
+    self.assertEqual(hash(model4), hash(LinenLinear(32)))
+    self.assertIn(model4, {model4})
+
   def test_nnx_to_linen_multiple_rngs(self):
     class NNXInner(nnx.Module):
       def __init__(self, din, dout, rngs):
