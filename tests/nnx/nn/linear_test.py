@@ -69,6 +69,21 @@ class TestLinearGeneral(parameterized.TestCase):
     assert module.bias is not None
     assert module.bias.shape == (3, 4)
 
+  def test_batch_axis_mapping_order(self):
+    inputs = jnp.arange(60, dtype=jnp.float32).reshape(3, 4, 5)
+    module = nnx.LinearGeneral(
+      5,
+      2,
+      batch_axis={1: 4, 0: 3},
+      use_bias=False,
+      kernel_init=nnx.initializers.ones,
+      rngs=nnx.Rngs(0),
+    )
+
+    assert module.kernel.shape == (3, 4, 5, 2)
+    expected = jnp.repeat(inputs.sum(axis=-1, keepdims=True), 2, axis=-1)
+    np.testing.assert_array_equal(module(inputs), expected)
+
 
 class TestLinenConsistency(parameterized.TestCase):
   @parameterized.product(

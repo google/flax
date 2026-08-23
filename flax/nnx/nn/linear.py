@@ -177,7 +177,7 @@ class LinearGeneral(Module):
     self.in_features = _canonicalize_tuple(in_features)
     self.out_features = _canonicalize_tuple(out_features)
     self.axis = _canonicalize_tuple(axis)
-    self.batch_axis = FrozenDict[Axis, Size](batch_axis)
+    self.batch_axis = FrozenDict[Axis, Size](dict(sorted(batch_axis.items())))
     self.use_bias = use_bias
     self.dtype = dtype
     self.param_dtype = param_dtype
