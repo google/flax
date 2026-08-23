@@ -17,6 +17,7 @@ from collections import namedtuple
 import dataclasses
 import functools
 import inspect
+import types
 import typing as tp
 
 from flax import struct
@@ -1100,6 +1101,135 @@ def to_masked(tree, all_updates: list[Updates]):
       lambda path, _: combined.get(path, None), tree,
       is_leaf=lambda x: x is None
   )
+
+
+def find_captured_nodes(f) -> list[object]:
+  """Find nnx Variables and graph nodes in f's closure chain.
+
+  Recursively searches through ``__closure__`` attributes at each level
+  and follows ``__wrapped__`` and ``functools.partial`` chains so that
+  Variables captured by decorators are also discovered.
+  """
+  seen: set[int] = set()
+  captured_nodes: list[object] = []
+
+  def _collect_from_pytree(obj):
+    for _, value in graphlib.iter_graph(obj, graph=True):
+      if isinstance(value, variablelib.Variable):
+        obj_id = id(value)
+        if obj_id not in seen:
+          seen.add(obj_id)
+          captured_nodes.append(value)
+
+  def _search(func):
+    if isinstance(func, functools.partial):
+      _collect_from_pytree((func.args, func.keywords))
+      _search(func.func)
+      return
+    if hasattr(func, '__closure__') and func.__closure__ is not None:
+      for cell in func.__closure__:
+        obj = cell.cell_contents
+        _collect_from_pytree(obj)
+    if hasattr(func, '__wrapped__'):
+      _search(func.__wrapped__)
+
+  _search(f)
+  return captured_nodes
+
+
+def _make_cell(val):
+  """Create a closure cell containing val."""
+  x = val
+  return (lambda: x).__closure__[0]  # type: ignore
+
+
+def replace_closure_cells(
+    f: tp.Callable,
+    captured_info: list[object],
+    replacements: tuple,
+) -> tp.Callable:
+  """Return a copy of f with captured closure cells replaced by replacements.
+
+  Uses identity matching to replace Variables at every level of the
+  ``__wrapped__`` / ``functools.partial`` chain, so that Variables captured
+  by intermediate decorators are also replaced.
+  """
+  if not captured_info:
+    return f
+  id_to_replacement = {
+      id(node): new_val
+      for node, new_val in zip(captured_info, replacements)
+  }
+  return _replace_closure_cells(f, id_to_replacement)
+
+
+def _replace_variables_in_pytree(
+    obj: tp.Any,
+    id_to_replacement: dict[int, tp.Any],
+) -> tp.Any:
+  """Replace Variables nested inside a pytree, returning the original if unchanged."""
+  is_leaf = lambda x: isinstance(x, variablelib.Variable)
+  def _replace(x):
+    if isinstance(x, variablelib.Variable) and id(x) in id_to_replacement:
+      return id_to_replacement[id(x)]
+    return x
+  return jax.tree.map(_replace, obj, is_leaf=is_leaf)
+
+
+def _replace_closure_cells(
+    f: tp.Callable,
+    id_to_replacement: dict[int, tp.Any],
+) -> tp.Callable:
+  if isinstance(f, functools.partial):
+    new_func = _replace_closure_cells(f.func, id_to_replacement)
+    new_args = _replace_variables_in_pytree(f.args, id_to_replacement)
+    new_keywords = _replace_variables_in_pytree(f.keywords, id_to_replacement)
+    if new_func is f.func and new_args is f.args and new_keywords is f.keywords:
+      return f
+    return functools.partial(new_func, *new_args, **new_keywords)
+
+  cells: list | None = None
+
+  # Replace captured Variables in this function's closure.
+  if hasattr(f, '__closure__') and f.__closure__ is not None:
+    cells = list(f.__closure__)
+    for i, cell in enumerate(cells):
+      try:
+        obj = cell.cell_contents
+      except ValueError:
+        continue
+      if id(obj) in id_to_replacement:
+        cells[i] = _make_cell(id_to_replacement[id(obj)])
+      else:
+        # Search inside pytree cell contents for nested Variables.
+        new_obj = _replace_variables_in_pytree(obj, id_to_replacement)
+        if new_obj is not obj:
+          cells[i] = _make_cell(new_obj)
+
+  # Recurse into __wrapped__ and update the cell referencing the old inner.
+  if hasattr(f, '__wrapped__'):
+    old_inner = f.__wrapped__
+    new_inner = _replace_closure_cells(old_inner, id_to_replacement)
+    if new_inner is not old_inner:
+      if cells is None and hasattr(f, '__closure__') and f.__closure__ is not None:
+        cells = list(f.__closure__)
+      if cells is not None:
+        for i, cell in enumerate(cells):
+          try:
+            if cell.cell_contents is old_inner:
+              cells[i] = _make_cell(new_inner)
+              break
+          except ValueError:
+            continue
+
+  new_f = types.FunctionType(
+    f.__code__, f.__globals__, f.__name__,
+    f.__defaults__, tuple(cells) if cells else f.__closure__,
+  )
+  if hasattr(f, '__wrapped__'):
+    new_f.__wrapped__ = new_inner
+  return new_f
+
 
 def filter_kwargs(f, **kwargs):
   sig = inspect.signature(f)
