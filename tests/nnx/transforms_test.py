@@ -7121,6 +7121,73 @@ class TestCond(parameterized.TestCase):
     with self.assertRaises(ValueError):
       nnx.cond(True, true_fn, false_fn, m, graph=False)
 
+  def test_get_simple_cond_fn_reuses_wrapper(self):
+    from flax.nnx.transforms import transforms as nnx_transforms
+
+    def f(x):
+      return x
+
+    w1 = nnx_transforms._get_simple_cond_fn(f, True)
+    self.assertIs(w1, nnx_transforms._get_simple_cond_fn(f, True))
+    self.assertIsNot(w1, nnx_transforms._get_simple_cond_fn(f, False))
+    self.assertIsNot(w1, nnx_transforms._get_simple_cond_fn(lambda x: x, True))
+
+  def test_get_simple_cond_fn_non_weakref_fallback(self):
+    from flax.nnx.transforms import transforms as nnx_transforms
+
+    class Slotted:
+      __slots__ = ()
+
+      def __call__(self, x):
+        return x
+
+    f = Slotted()
+    w1 = nnx_transforms._get_simple_cond_fn(f, True)
+    w2 = nnx_transforms._get_simple_cond_fn(f, True)
+    self.assertIsNot(w1, w2)
+
+  @parameterized.parameters('cond', 'switch', 'while_loop', 'fori_loop')
+  def test_control_flow_reuses_branch_wrappers(self, control_flow):
+    trace_count = 0
+
+    def branch(*args):
+      nonlocal trace_count
+      trace_count += 1
+      return jnp.logical_not(args[-1])
+
+    init_value = jnp.array(False)
+    expected_trace_count = 1
+    if control_flow == 'while_loop':
+      expected_trace_count = 2
+
+    for _ in range(2):
+      if control_flow == 'cond':
+        nnx.cond(
+          jnp.array(True), branch, branch, init_value,
+          graph=False, graph_updates=False,
+        )
+
+      elif control_flow == 'switch':
+        nnx.switch(
+          jnp.array(0), (branch, branch), init_value,
+          graph=False, graph_updates=False,
+        )
+
+      elif control_flow == 'while_loop':
+        nnx.while_loop(
+          branch, branch, init_value, graph=False, graph_updates=False
+        )
+
+      elif control_flow == 'fori_loop':
+        nnx.fori_loop(
+          0, 2, branch, init_value, graph=False, graph_updates=False
+        )
+
+      else:
+        raise AssertionError(f'Unknown control flow: {control_flow}')
+      self.assertEqual(trace_count, expected_trace_count)
+
+
 class TestSwitch(parameterized.TestCase):
   @parameterized.parameters(
     (True, False),

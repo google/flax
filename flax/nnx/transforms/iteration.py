@@ -17,6 +17,7 @@ from collections import deque
 import dataclasses
 import functools
 import typing as tp
+import weakref
 
 
 from flax import struct
@@ -30,6 +31,7 @@ from flax.nnx.statelib import State
 from flax.nnx.transforms.transforms import (
   resolve_kwargs,
   _resolve_bound_callable,
+  _get_cached_wrapper,
   _raise_bound_method_error,
 )
 from flax.typing import Leaf, Missing, PytreeDeque
@@ -1911,6 +1913,14 @@ class SimpleWhileLoopCondFn:
     return self.f(val)
 
 
+_SIMPLE_WHILE_LOOP_BODY_FN_CACHE: weakref.WeakKeyDictionary = (
+  weakref.WeakKeyDictionary()
+)
+_SIMPLE_WHILE_LOOP_COND_FN_CACHE: weakref.WeakKeyDictionary = (
+  weakref.WeakKeyDictionary()
+)
+
+
 @dataclasses.dataclass(eq=False)
 class WhileLoopCondFn:
   f: tp.Callable[..., tp.Any]
@@ -2050,8 +2060,18 @@ def while_loop(cond_fun: tp.Callable[[T], tp.Any],
   if graph_updates is None:
     graph_updates = graphlib.set_graph_updates.current_value()
   if not graph or not graph_updates:
-    simple_body_fn = SimpleWhileLoopBodyFn(body_fun, graph=graph)
-    simple_cond_fn = SimpleWhileLoopCondFn(cond_fun, graph=graph)
+    simple_body_fn = _get_cached_wrapper(
+      _SIMPLE_WHILE_LOOP_BODY_FN_CACHE,
+      SimpleWhileLoopBodyFn,
+      body_fun,
+      graph,
+    )
+    simple_cond_fn = _get_cached_wrapper(
+      _SIMPLE_WHILE_LOOP_COND_FN_CACHE,
+      SimpleWhileLoopCondFn,
+      cond_fun,
+      graph,
+    )
 
     if graph:
       init_val = extract.to_tree2(init_val)
@@ -2092,6 +2112,11 @@ class SimpleForiLoopBodyFn:
       out = extract.to_tree2(out)
     extract.check_same_variables(val_in, out, 'fori_loop')
     return out
+
+
+_SIMPLE_FORI_LOOP_BODY_FN_CACHE: weakref.WeakKeyDictionary = (
+  weakref.WeakKeyDictionary()
+)
 
 
 @dataclasses.dataclass(eq=False)
@@ -2166,7 +2191,12 @@ def fori_loop(lower: int, upper: int,
   if graph_updates is None:
     graph_updates = graphlib.set_graph_updates.current_value()
   if not graph or not graph_updates:
-    simple_body_fn = SimpleForiLoopBodyFn(body_fun, graph=graph)
+    simple_body_fn = _get_cached_wrapper(
+      _SIMPLE_FORI_LOOP_BODY_FN_CACHE,
+      SimpleForiLoopBodyFn,
+      body_fun,
+      graph,
+    )
 
     if graph:
       init_val = extract.to_tree2(init_val)
