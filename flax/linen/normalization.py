@@ -24,7 +24,7 @@ import jax.numpy as jnp
 from jax import lax
 from jax.nn import initializers
 
-from flax.linen import dtypes, module, transforms
+from flax.linen import dtypes, module, tanh, transforms
 from flax.typing import (
   Array,
   PRNGKey as PRNGKey,
@@ -1389,3 +1389,85 @@ class WeightNorm(Module):
 
     dtype = dtypes.canonicalize_dtype(*args, dtype=self.dtype)
     return jnp.asarray(value_bar, dtype)
+
+
+class DynamicTanh(Module):
+  """Dynamic tanh (https://arxiv.org/pdf/2503.10622).
+
+  Dynamic Tanh (DyT) is an element-wise operation DyT(x) = tanh(αx), and is a
+  drop-in replacement for normalization layers in Transformers. DyT is inspired
+  by the observation that layer normalization in Transformers often produces
+  tanh-like, S-shaped input-output mappings. By incorporating DyT, Transformers
+  without normalization can match or exceed the performance of their normalized
+  counterparts, mostly without hyperparameter tuning.
+
+  Example usage::
+
+  >>> import flax.linen as nn
+  >>> import jax
+  >>> import numpy as np
+
+  >>> # Some module
+  >>> ...
+  >>> x = nn.LayerNorm(**kwargs)(x)
+  >>> ...
+
+  >>> # Replace LayerNorm with DyT
+  >>> ...
+  >>> x = nn.DynamicTanh(**kwargs)(x)
+  >>> ...
+
+  Attributes:
+    dtype: the dtype of the result (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    use_bias: If True, creates a learnable variable ``bias`` that is added to
+      the ``layer_instance`` variables after tanh.
+    use_bias:  If True, bias (beta) is added.
+    use_scale: If True, multiply by scale (gamma). When the next layer is linear
+      (also e.g. nn.relu), this can be disabled since the scaling will be done
+      by the next layer.
+    bias_init: Initializer for bias, by default, zero.
+    scale_init: Initializer for scale, by default, one.
+    alpha_init: Initializer for alpha, by default, 0.5.
+    feature_axes: Feature axes for learned bias and scaling.
+  """
+
+  dtype: Dtype | None = None
+  param_dtype: Dtype = jnp.float32
+  use_bias: bool = True
+  use_scale: bool = True
+  bias_init: Initializer = initializers.zeros
+  scale_init: Initializer = initializers.ones
+  alpha_init: Initializer = initializers.constant(0.5)
+  feature_axes: Axes = -1
+
+  @compact
+  def __call__(self, x: Array) -> Array:
+    feature_axes = _canonicalize_axes(x.ndim, self.feature_axes)
+    scale_and_bias_shape = []
+    for axis in range(x.ndim):
+      size = x.shape[axis] if axis in feature_axes else 1
+      scale_and_bias_shape.append(size)
+
+    args = [x]
+
+    alpha = self.param('alpha', self.alpha_init, (1,), self.param_dtype)
+    y = tanh(alpha * x)
+    args.append(alpha)
+
+    if self.use_scale:
+      scale = self.param(
+          'scale', self.scale_init, scale_and_bias_shape, self.param_dtype
+      )
+      y = y * scale
+      args.append(scale)
+
+    if self.use_bias:
+      bias = self.param(
+          'bias', self.bias_init, scale_and_bias_shape, self.param_dtype
+      )
+      y = y + bias
+      args.append(bias)
+
+    dtype = dtypes.canonicalize_dtype(*args, dtype=self.dtype)
+    return jnp.asarray(y, dtype)

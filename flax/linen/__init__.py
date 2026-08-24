@@ -116,6 +116,7 @@ from .module import (
 )
 from .normalization import (
     BatchNorm as BatchNorm,
+    DynamicTanh as DynamicTanh,
     GroupNorm as GroupNorm,
     InstanceNorm as InstanceNorm,
     LayerNorm as LayerNorm,
