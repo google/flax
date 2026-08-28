@@ -882,6 +882,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
       # Initialize __captures__ as a tuple of Variables (one per type)
       for path, m in iter_modules(module):
+        if getattr(m, '_pytree__has_int_keys', False):
+          continue
         # Create initial dicts for each variable type
         initial_dicts = {}
         for var_type in var_types:

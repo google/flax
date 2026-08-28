@@ -287,6 +287,34 @@ class TestCapture(parameterized.TestCase):
       jnp.broadcast_to(model.w.get_value()[None, :], (3, 4)))
     self.assertEqual(intermediates['y'].get_value()[0].shape, (3,))
 
+  def test_scan_with_list(self):
+    class Model(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.layers = nnx.List([
+          nnx.Linear(4, 4, rngs=rngs) for _ in range(2)
+        ])
+
+      def __call__(self, x):
+        for layer in self.layers:
+          x = layer(x)
+        self.sow(nnx.Intermediate, 'out', x)
+        return x
+
+    def rollout(model, x):
+      state_axes = nnx.StateAxes({nnx.Intermediate: 0, ...: nnx.Carry})
+      return nnx.scan(
+        lambda m, x: m(x),
+        in_axes=(state_axes, nnx.Carry),
+        out_axes=nnx.Carry,
+        length=3,
+      )(model, x)
+
+    model = Model(nnx.Rngs(0))
+    _, intermediates = nnx.capture(rollout, nnx.Intermediate)(model, jnp.ones(4))
+
+    self.assertEqual(intermediates['out'][0].shape, (3, 4))
+    self.assertFalse(hasattr(model.layers, '__captures__'))
+
 
   @parameterized.parameters(True, False)
   def test_fwd_bwd(self, graph_mode):
