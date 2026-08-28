@@ -520,6 +520,9 @@ class TestIntegration(parameterized.TestCase):
         return self.linear_out(x)
 
     model = Model(2, 64, 3, rngs=nnx.Rngs(0))  # eager initialization
+    # Params default to ref=False, opt them in: this example updates them
+    # in-place from inside jit.
+    model = nnx.with_vars(model, ref=True, only=nnx.Param)
     optimizer = nnx.Optimizer(model, optax.adam(1e-3), wrt=nnx.Param)
 
     @jax.jit  # automatic state management for JAX transforms
