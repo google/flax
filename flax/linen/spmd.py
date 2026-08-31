@@ -41,6 +41,7 @@ from flax.core.spmd import (
 )
 from flax.typing import (
   Array,
+  AxisName,
   LogicalNames,
   LogicalRules,
   ArrayPytree,  # pylint: disable=invalid-name
@@ -74,7 +75,7 @@ def _mesh_assignment_free(new_assignment, existing_assignments):
 
 
 def _logical_to_mesh_axes(
-    array_dim_names: Sequence[str | None] | None,
+    array_dim_names: Sequence[AxisName] | None,
     rules: LogicalRules | None = None,
 ) -> list[_UnassignedAxis | None | str | tuple[str, ...]] | None:
   """Same as logical_to_mesh_axes, but doesn't fill in _unassigned_axis."""
@@ -112,7 +113,7 @@ def _logical_to_mesh_axes(
 
 
 def logical_to_mesh_axes(
-  array_dim_names: Sequence[str | None] | None,
+  array_dim_names: Sequence[AxisName] | None,
   rules: LogicalRules | None = None,
 ) -> jax.sharding.PartitionSpec | None:
   """Compute layout for an array.
