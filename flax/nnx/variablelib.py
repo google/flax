@@ -283,7 +283,15 @@ def _new_hijax_from_variable(variable: Variable) -> HijaxVariable:
   )
   return hijax_var
 
-HiPrim = getattr(hjx, 'HiPrim', None) or hjx.VJPHiPrimitive
+if tp.TYPE_CHECKING:
+  # mypy needs a single, unconditional assignment to treat this as a type alias
+  # usable as a base class, and cannot evaluate jax.__version_info__. Pin the
+  # branch matching the locked jax; drop this whole conditional once jax
+  # > 0.11.1 is the floor.
+  HiPrim = hjx.HiPrim
+else:
+  HiPrim = (hjx.VJPHiPrimitive if jax.__version_info__ <= (0, 11, 1) else
+            hjx.HiPrim)
 
 class NewVariable(HiPrim):
   def __init__(self, *leaf_avals, treedef, var_type, ref=False):

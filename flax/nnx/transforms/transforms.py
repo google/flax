@@ -375,11 +375,11 @@ class SimpleCheckifyFn:
     return out, updates
 
 def checkify(
-  f: tp.Callable[..., checkify_lib.Out],
+  f: tp.Callable[..., A],
   errors: frozenset[type[checkify_lib.JaxException]] = checkify_lib.user_checks,  # type: ignore
   graph: bool | None = None,
   graph_updates: bool | None = None,
-) -> tp.Callable[..., tuple[checkify_lib.Error, checkify_lib.Out]]:
+) -> tp.Callable[..., tuple[checkify_lib.Error, A]]:
   """Reference-aware version of `jax.experimental.checkify
   <https://flax.readthedocs.io/en/latest/nnx_basics.html#the-flax-functional-api>`_.
 
