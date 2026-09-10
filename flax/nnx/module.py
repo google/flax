@@ -31,7 +31,7 @@ from flax.nnx.pytreelib import Pytree, PytreeMeta
 from flax.nnx.statelib import split_state, State
 import functools as ft
 from flax.typing import Key, Path, PathParts
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping, Sequence
 import warnings
 
 A = tp.TypeVar('A')
@@ -894,6 +894,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
       # Initialize __captures__ as a tuple of Variables (one per type)
       for path, m in iter_modules(module):
+        if isinstance(m, Sequence):
+          continue
         # Create initial dicts for each variable type
         initial_dicts = {}
         for var_type in var_types:
@@ -914,6 +916,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
       # Wrap methods with capturing if required
       if method_outputs:
         for _, m in iter_modules(module):
+          if isinstance(m, Sequence):
+            continue
           _add_capturing(type(m), method_outputs)
 
       try:
@@ -922,6 +926,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
         # Undo method sowing modification
         for _, m in iter_modules(module):
+          if isinstance(m, Sequence):
+            continue
           _remove_capturing(type(m))
 
       # Extract intermediates manually from __captures__
