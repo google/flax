@@ -590,5 +590,37 @@ class TestLinenConsistency(parameterized.TestCase):
     )
 
 
+class TestWeightNorm(parameterized.TestCase):
+  def test_scales_is_param(self):
+    rngs = nnx.Rngs(42)
+    linear = nnx.Linear(3, 2, rngs=rngs)
+    wn = nnx.WeightNorm(linear, use_scale=True, rngs=rngs)
+
+    self.assertIn(('kernel',), wn.scales)
+    self.assertIsInstance(wn.scales[('kernel',)], nnx.Param)
+
+    param_state = nnx.state(wn, nnx.Param)
+    self.assertIn('scales', param_state)
+    self.assertIn(('kernel',), param_state['scales'])
+
+    x = jnp.ones((4, 3))
+
+    @nnx.jit
+    def loss(model, x):
+      return jnp.sum(model(x))
+
+    grads = nnx.grad(loss)(wn, x)
+    self.assertIn('scales', grads)
+    self.assertIn(('kernel',), grads['scales'])
+    self.assertFalse(jnp.all(grads['scales'][('kernel',)][...] == 0))
+
+  def test_use_scale_false(self):
+    rngs = nnx.Rngs(42)
+    wn = nnx.WeightNorm(nnx.Linear(3, 2, rngs=rngs), use_scale=False, rngs=rngs)
+    self.assertIsNone(wn.scales)
+    self.assertNotIn('scales', nnx.state(wn, nnx.Param))
+
+
 if __name__ == '__main__':
   absltest.main()
+

@@ -1017,8 +1017,10 @@ class WeightNorm(nnx.Module):
         scale_shape = tuple(param.shape[ax] for ax in feature_axes)
         return scale_init(rngs['params'], scale_shape)
       self.scales = nnx.data({
-        path: init_scales(param) for path, param in nnx.to_flat_state(state)
-        if self.variable_filter(path, param)})
+        path: nnx.Param(init_scales(param))
+        for path, param in nnx.to_flat_state(state)
+        if self.variable_filter(path, param)
+      })
 
   def _weightnorm_inplace(self, path, param):
     if not self.variable_filter(path, param):
