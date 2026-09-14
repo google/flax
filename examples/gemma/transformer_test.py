@@ -195,7 +195,7 @@ class TransformerTest(parameterized.TestCase):
       cache = transformer.init_cache(
           cache_size=cache_size,
           batch_size=batch_size,
-          dtype=jnp.float32,
+          dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
       )
 
       outputs, cache = transformer(
@@ -260,7 +260,7 @@ class TransformerTest(parameterized.TestCase):
         cache = transformer.init_cache(
             cache_size=cache_size,
             batch_size=batch_size,
-            dtype=jnp.float32,
+            dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
         )
 
         outputs, _ = transformer(
@@ -310,7 +310,7 @@ class TransformerTest(parameterized.TestCase):
       cache = transformer.init_cache(
           cache_size=cache_size,
           batch_size=1,
-          dtype=jnp.float32,
+          dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
       )
       self.assertEqual(list(cache.keys()), keys)
       self.assertEqual(cache['layer_0']['k'].shape, k_shape)
@@ -351,7 +351,7 @@ class TransformerTest(parameterized.TestCase):
       empty_cache = transformer.init_cache(
           cache_size=cache_size,
           batch_size=batch_size,
-          dtype=jnp.float32,
+          dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
       )
       attention_mask = jnp.ones(
           (batch_size, seq_size, cache_size), dtype=jnp.bool
@@ -395,7 +395,7 @@ class TransformerTest(parameterized.TestCase):
       cache = transformer.init_cache(
           cache_size=6,
           batch_size=1,
-          dtype=jnp.float32,
+          dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
       )
       self.assertTrue(cache)
 

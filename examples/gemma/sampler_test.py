@@ -300,7 +300,7 @@ class SamplerTest(parameterized.TestCase):
       cache = transformer.init_cache(
           cache_size=cache_size,
           batch_size=batch_size,
-          dtype=jnp.float32,
+          dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
       )
       input_mask = token_input != vocab.pad_id()
       positions = transformer_lib.build_positions_from_mask(input_mask)

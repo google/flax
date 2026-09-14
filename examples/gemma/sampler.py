@@ -85,7 +85,7 @@ class _SamplingState:
   """Internal sampling state."""
 
   # Decoding step.
-  decoding_step: jnp.int32
+  decoding_step: jnp.int32  # pyrefly: ignore[not-a-type]
 
   # Number of tokens in the prompt.
   num_input_tokens: jnp.ndarray  # [B]
