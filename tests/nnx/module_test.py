@@ -438,6 +438,34 @@ class TestCapture(parameterized.TestCase):
     np.testing.assert_allclose(intms['__call__'][0], y)
     np.testing.assert_allclose(jnp.sin(intms['intermediate'][0]), y)
 
+  def test_capture_scan_with_int_keyed_container(self):
+    # nnx.List keys its children by int; adding __captures__ gives the state
+    # dict mixed int/str keys, which JAX refuses to sort unless the captures
+    # key orders itself against ints.
+    class Model(nnx.Module):
+      def __init__(self, rngs):
+        self.layers = nnx.List([nnx.Linear(4, 4, rngs=rngs) for _ in range(2)])
+
+      def __call__(self, x):
+        for layer in self.layers:
+          x = layer(x)
+        self.sow(nnx.Intermediate, 'out', x)
+        return x
+
+    def rollout(model, x):
+      state_axes = nnx.StateAxes({nnx.Intermediate: 0, ...: nnx.Carry})
+      return nnx.scan(
+        lambda m, x: m(x),
+        in_axes=(state_axes, nnx.Carry),
+        out_axes=nnx.Carry,
+        length=3,
+      )(model, x)
+
+    _, intms = nnx.capture(rollout, nnx.Intermediate)(
+      Model(nnx.Rngs(0)), jnp.ones(4)
+    )
+    self.assertEqual(intms['out'][0].shape, (3, 4))
+
 class SowMod(nnx.Module):
     def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(4, 4, rngs=rngs)

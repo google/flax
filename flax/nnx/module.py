@@ -770,6 +770,47 @@ iter_module_children = graphlib.iter_module_children
 P = tp.ParamSpec("P")
 R = tp.TypeVar("R")
 
+
+class _CapturesKey(str):
+  """Attribute name for ``__captures__`` that sorts after integer keys.
+
+  Containers like ``nnx.List`` key their children by ``int``, so once a
+  ``__captures__`` attribute is added the resulting state dict has mixed
+  ``int``/``str`` keys. JAX sorts dict keys when flattening a pytree and its
+  comparator is not overridable, so plain ``str`` would raise
+  ``'<' not supported between instances of 'str' and 'int'``. Ordering after
+  every ``int`` matches ``graphlib._type_aware_sort``, which Flax's own
+  flatteners use for the same mixed-key case.
+
+  Equality and ``hash`` are inherited from ``str``, so lookups, ``hasattr`` and
+  ``delattr`` with the plain ``'__captures__'`` literal keep working.
+  """
+
+  __slots__ = ()
+
+  def __lt__(self, other):
+    if isinstance(other, int):
+      return False
+    return str.__lt__(self, other)
+
+  def __gt__(self, other):
+    if isinstance(other, int):
+      return True
+    return str.__gt__(self, other)
+
+  def __le__(self, other):
+    if isinstance(other, int):
+      return False
+    return str.__le__(self, other)
+
+  def __ge__(self, other):
+    if isinstance(other, int):
+      return True
+    return str.__ge__(self, other)
+
+
+CAPTURES = _CapturesKey('__captures__')
+
 @tp.overload
 def capture(
   fn: tp.Callable[P, R],
@@ -897,7 +938,7 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
         # Create the captures tuple
         captures_tuple = tuple(k(v) for (k,v) in initial_dicts.items())
-        m.__captures__ = pytreelib.data(captures_tuple)
+        setattr(m, CAPTURES, pytreelib.data(captures_tuple))
 
       # Wrap methods with capturing if required
       if method_outputs:
