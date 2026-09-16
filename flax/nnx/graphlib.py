@@ -899,7 +899,11 @@ def _graph_flatten(
 
   is_graph_node_ = type(node_impl) is GraphNodeImpl
   is_variable = isinstance(node, Variable)
-  is_array_ref = variablelib.is_array_ref(node)
+  is_array_ref = (
+    False
+    if is_graph_node_ or is_variable or is_pytree_node_
+    else variablelib.is_array_ref(node)
+  )
 
   # only cache graph nodes, we don't add array refs here
   # as they are added in the make_mutable_arraydef function
