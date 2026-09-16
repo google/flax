@@ -124,8 +124,8 @@ Axes = Union[int, Sequence[int]]
 
 # SPMD
 
-LogicalNames = tuple[Union[str, None], ...]
 AxisName = str | tuple[str, ...] | None
+LogicalNames = tuple[AxisName, ...]
 
 # Maps each logical axis  to physical mesh, can be either None (replicated),
 # one physical axis or a tuple of physical axes.
