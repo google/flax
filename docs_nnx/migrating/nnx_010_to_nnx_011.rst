@@ -88,7 +88,7 @@ from the ``__init__`` method and use ``Rngs.fork`` directly before passing the R
 Loading Checkpoints with RNGs
 ==================================================
 
-When loading checkpoints in the new version, you need to drop the old RNGs structure and
+When loading checkpoints from an older version in the new version, you need to drop the old RNGs structure and
 partially reinitialize the model with new RNGs. To do this, you can use ``nnx.jit`` to
 
 1. Remove the RNGs from the checkpoint.
