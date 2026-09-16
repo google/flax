@@ -23,6 +23,14 @@ import jax.numpy as jnp
 # The default End-of-Sentence token id is 2 (SentencePiece).
 EOS_ID = 2
 
+def shift_right(x, axis=1):
+  """Shift the input to the right by padding and slicing on axis."""
+  pad_widths = [(0, 0)] * len(x.shape)
+  pad_widths[axis] = (1, 0)
+  padded = jnp.pad(
+      x, pad_widths, mode='constant', constant_values=x.dtype.type(0))
+  return lax.dynamic_slice_in_dim(padded, 0, padded.shape[axis] - 1, axis)
+
 
 def temperature_sample(
     prompt_inputs,
@@ -64,9 +72,9 @@ def temperature_sample(
   token0 = jnp.zeros((batch_size, 1), dtype=jnp.int32)
   # per batch-item state bit indicating if sentence has finished.
   ended0 = jnp.zeros((batch_size, 1), dtype=jnp.bool_)
-  # (batch, length) array containing prefix prompt tokens for sampling loop
-  # as well as the generated output of newly sampled tokens.
-  sequences0 = prompt_inputs
+  # (batch, length+1) array containing padded prefix prompt tokens for sampling
+  # loop as well as the generated output of newly sampled tokens.
+  sequences0 = jnp.concatenate((token0, prompt_inputs), axis=1)
   # Sampling loop state is stored in a simple tuple.
   sampling_loop_init_state = (i0, sequences0, init_cache, token0, ended0, rng0)
 
@@ -124,4 +132,4 @@ def temperature_sample(
 
   # Pick part of the state corresponding to the sampled sequences.
   final_sequences = final_state[1]
-  return final_sequences
+  return final_sequences[:, 1:]
