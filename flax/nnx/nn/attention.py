@@ -1012,20 +1012,33 @@ def make_attention_mask(
 ):
   """Mask-making helper for attention weights.
 
-  In case of 1d inputs (i.e., `[batch..., len_q]`, `[batch..., len_kv]`, the
-  attention weights will be `[batch..., heads, len_q, len_kv]` and this
-  function will produce `[batch..., 1, len_q, len_kv]`.
+  In case of 1D sequence inputs (i.e., `[batch..., len_q]`, `[batch..., len_kv]`),
+  the attention weights will be `[batch..., heads, len_q, len_kv]` and this
+  function produces a mask of shape `[batch..., 1, len_q, len_kv]` which
+  broadcasts across the attention heads dimension.
+
+  Example::
+
+    >>> import jax.numpy as jnp
+    >>> from flax.nnx import make_attention_mask
+    >>> # Padding masks for queries and keys
+    >>> q_mask = jnp.array([[1, 1, 1, 0]])  # shape (1, 4)
+    >>> kv_mask = jnp.array([[1, 1, 0, 0]])  # shape (1, 4)
+    >>> mask = make_attention_mask(q_mask, kv_mask)
+    >>> mask.shape
+    (1, 1, 4, 4)
 
   Args:
-    query_input: a batched, flat input of query_length size
-    key_input: a batched, flat input of key_length size
-    pairwise_fn: broadcasting elementwise comparison function
-    extra_batch_dims: number of extra batch dims to add singleton axes for, none
-      by default
-    dtype: mask return dtype
+    query_input: A batched, flat input of shape `[batch..., len_q]`.
+    key_input: A batched, flat input of shape `[batch..., len_kv]`.
+    pairwise_fn: Broadcasting elementwise comparison function, by default
+      `jnp.multiply`.
+    extra_batch_dims: Number of extra leading batch dims to add singleton axes for,
+      none by default.
+    dtype: Mask return data type (defaults to `jnp.float32`).
 
   Returns:
-    A `[batch..., 1, len_q, len_kv]` shaped mask for 1d attention.
+    A `[batch..., 1, len_q, len_kv]` shaped mask for attention layers.
   """
   mask = pairwise_fn(
     jnp.expand_dims(query_input, axis=-1), jnp.expand_dims(key_input, axis=-2)
@@ -1038,20 +1051,46 @@ def make_attention_mask(
 def make_causal_mask(
   x: Array, extra_batch_dims: int = 0, dtype: Dtype = jnp.float32
 ) -> Array:
-  """Make a causal mask for self-attention.
+  """Make a causal (lower-triangular) mask for self-attention.
 
-  In case of 1d inputs (i.e., `[batch..., len]`, the self-attention weights
-  will be `[batch..., heads, len, len]` and this function will produce a
-  causal mask of shape `[batch..., 1, len, len]`.
+  In case of 1D sequence inputs (e.g., token IDs of shape `[batch..., len]`),
+  the self-attention weights will be `[batch..., heads, len, len]` and this
+  function produces a lower-triangular causal mask of shape `[batch..., 1, len, len]`.
+  This mask broadcasts across the attention heads dimension.
+
+  .. note::
+    `make_causal_mask` infers the sequence length `len` from the trailing
+    dimension of `x` (i.e., `x.shape[-1]`). If your inputs are already embedded
+    features of shape `[batch..., len, num_features]`, pass an un-embedded slice
+    such as `x[..., 0]` or `jnp.ones(x.shape[:-1], dtype=jnp.int32)` rather than
+    passing the embedded feature tensor directly.
+
+  Example::
+
+    >>> import jax.numpy as jnp
+    >>> from flax.nnx import make_causal_mask
+    >>> # From token IDs (batch=2, seq_len=4):
+    >>> tokens = jnp.ones((2, 4), dtype=jnp.int32)
+    >>> mask = make_causal_mask(tokens)
+    >>> mask.shape
+    (2, 1, 4, 4)
+
+    >>> # From embedded features (batch=2, seq_len=4, num_features=64):
+    >>> embeddings = jnp.ones((2, 4, 64))
+    >>> # Extract sequence length using slice:
+    >>> mask = make_causal_mask(embeddings[..., 0])
+    >>> mask.shape
+    (2, 1, 4, 4)
 
   Args:
-    x: input array of shape `[batch..., len]`
-    extra_batch_dims: number of batch dims to add singleton axes for, none by
-      default
-    dtype: mask return dtype
+    x: Input array of shape `[batch..., len]` where the last axis represents
+      the sequence length.
+    extra_batch_dims: Number of extra leading batch dims to add singleton axes for,
+      none by default.
+    dtype: Mask return data type (defaults to `jnp.float32`).
 
   Returns:
-    A `[batch..., 1, len, len]` shaped causal mask for 1d attention.
+    A `[batch..., 1, len, len]` shaped causal mask for self-attention.
   """
   idxs = jnp.broadcast_to(jnp.arange(x.shape[-1], dtype=jnp.int32), x.shape)
   return make_attention_mask(
