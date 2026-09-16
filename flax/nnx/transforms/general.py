@@ -13,6 +13,7 @@
 # limitations under the License.
 import functools
 import typing as tp
+import weakref
 
 from flax.nnx import (
   extract,
@@ -158,6 +159,9 @@ def split_inputs(
 
   return split_inputs_wrapper  # type: ignore
 
+_merge_inputs_cache: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
 @tp.overload
 def merge_inputs(
   *,
@@ -192,6 +196,15 @@ def merge_inputs(
   if isinstance(f, Missing):
     return functools.partial(merge_inputs, ctxtag=ctxtag)  # type: ignore[return-value]
 
+  try:
+    inner = _merge_inputs_cache.get(f)
+  except TypeError:
+    inner = None
+  if inner is not None:
+    wrapper = inner.get(ctxtag)
+    if wrapper is not None:
+      return wrapper  # type: ignore
+
   @functools.wraps(f)
   def merge_inputs_wrapper(*pure_args):
     args = extract.from_tree(pure_args, ctxtag=ctxtag, is_inner=True)
@@ -200,4 +213,11 @@ def merge_inputs(
     pure_args_out, pure_out = extract.to_tree((args_out, out), ctxtag=ctxtag)
     return pure_args_out, pure_out
 
+  if inner is None:
+    try:
+      inner = {}
+      _merge_inputs_cache[f] = inner
+    except TypeError:
+      return merge_inputs_wrapper  # type: ignore
+  inner[ctxtag] = merge_inputs_wrapper
   return merge_inputs_wrapper  # type: ignore

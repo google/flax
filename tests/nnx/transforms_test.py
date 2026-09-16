@@ -7121,6 +7121,42 @@ class TestCond(parameterized.TestCase):
     with self.assertRaises(ValueError):
       nnx.cond(True, true_fn, false_fn, m, graph=False)
 
+  @parameterized.parameters(True, False)
+  def test_cond_wrapper_identity_stable(self, graph):
+    from flax.nnx.transforms.transforms import _get_simple_cond_fn
+
+    def true_fn(x):
+      return x + 1.0
+
+    def false_fn(x):
+      return x - 1.0
+
+    self.assertIs(
+        _get_simple_cond_fn(true_fn, graph),
+        _get_simple_cond_fn(true_fn, graph),
+    )
+    self.assertIsNot(
+        _get_simple_cond_fn(true_fn, graph),
+        _get_simple_cond_fn(false_fn, graph),
+    )
+    self.assertIsNot(
+        _get_simple_cond_fn(true_fn, True),
+        _get_simple_cond_fn(true_fn, False),
+    )
+
+  def test_cond_repeated_calls_correct(self):
+    def true_fn(x):
+      return x + 1.0
+
+    def false_fn(x):
+      return x - 1.0
+
+    for _ in range(3):
+      np.testing.assert_allclose(
+          nnx.cond(True, true_fn, false_fn, 1.0, graph_updates=False), 2.0)
+      np.testing.assert_allclose(
+          nnx.cond(False, true_fn, false_fn, 1.0, graph_updates=False), 0.0)
+
 class TestSwitch(parameterized.TestCase):
   @parameterized.parameters(
     (True, False),
