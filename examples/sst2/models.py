@@ -124,7 +124,7 @@ class Embedder(nn.Module):
   word_dropout_rate: float = 0.0
   unk_idx: int | None = None
   deterministic: bool | None = None
-  dtype: jnp.dtype = jnp.float32
+  dtype: jnp.dtype = jnp.float32  # pyrefly: ignore[bad-assignment]
 
   def setup(self):
     self.embedding = self.param(

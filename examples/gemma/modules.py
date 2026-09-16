@@ -76,8 +76,8 @@ class Attention(nnx.Module):
       use_qk_norm: bool = False,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
       shd_config: ShardingConfig,
-      dtype: jnp.dtype = jnp.float32,
-      weight_dtype: jnp.dtype = jnp.float32,
+      dtype: jnp.dtype = jnp.float32,  # pyrefly: ignore[bad-function-definition]
+      weight_dtype: jnp.dtype = jnp.float32,  # pyrefly: ignore[bad-function-definition]
       dropout_rate: float = 0.0,
   ):
     if attn_type == AttentionType.LOCAL_SLIDING and sliding_window_size is None:
@@ -314,7 +314,7 @@ class Attention(nnx.Module):
       self,
       cache_size: int,
       batch_size: int,
-      dtype: jnp.dtype = jnp.float32,
+      dtype: jnp.dtype = jnp.float32,  # pyrefly: ignore[bad-function-definition]
   ) -> LayerCache:
     out_sharding = (
         None if self.act_cbtkh_shd is None else jax.P(*self.act_cbtkh_shd[1:])
@@ -346,8 +346,8 @@ class FeedForward(nnx.Module):
       rngs: nnx.Rngs,
       sow_config: sow_lib.SowConfig = sow_lib.SowConfig(),
       shd_config: ShardingConfig,
-      dtype: jnp.dtype = jnp.float32,
-      weight_dtype: jnp.dtype = jnp.float32,
+      dtype: jnp.dtype = jnp.float32,  # pyrefly: ignore[bad-function-definition]
+      weight_dtype: jnp.dtype = jnp.float32,  # pyrefly: ignore[bad-function-definition]
       dropout_rate: float = 0.0,
   ):
     self.gate_proj = nnx.Linear(
@@ -535,7 +535,7 @@ class Block(nnx.Module):
       self,
       cache_size: int,
       batch_size: int,
-      dtype: jnp.dtype = jnp.float32,
+      dtype: jnp.dtype = jnp.float32,  # pyrefly: ignore[bad-function-definition]
   ) -> LayerCache:
     return self.attn.init_cache(
         cache_size=cache_size,

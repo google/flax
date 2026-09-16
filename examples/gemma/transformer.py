@@ -203,7 +203,7 @@ class Transformer(nnx.Module):
       self,
       cache_size: int,
       batch_size: int,
-      dtype: jnp.dtype = jnp.float32,
+      dtype: jnp.dtype = jnp.float32,  # pyrefly: ignore[bad-function-definition]
   ) -> Cache:
     """Initializes a new Transformer cache."""
     return {

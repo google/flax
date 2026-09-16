@@ -158,7 +158,7 @@ class AttentionTest(parameterized.TestCase):
     cache = attn.init_cache(
         cache_size=cache_size,
         batch_size=batch_size,
-        dtype=jnp.float32,
+        dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
     )
     x = jnp.ones((batch_size, 1, features))
     cache, output = attn(x, jnp.array([[segment_pos]]), cache, attn_mask)
@@ -193,7 +193,7 @@ class AttentionTest(parameterized.TestCase):
     cache = attn.init_cache(
         cache_size=cache_size,
         batch_size=batch_size,
-        dtype=jnp.float32,
+        dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
     )
     _, output = attn(x, jnp.array([[segment_pos]]), cache, attn_mask)
     sliding_attn = modules.Attention(
@@ -305,7 +305,7 @@ class BlockTest(parameterized.TestCase):
       cache = block.init_cache(
           cache_size=cache_size,
           batch_size=batch_size,
-          dtype=jnp.float32,
+          dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
       )
 
       new_cache, outputs = block(inputs, jnp.array([[0]]), cache, attn_mask)
@@ -372,7 +372,7 @@ class BlockTest(parameterized.TestCase):
       cache = normed_block.init_cache(
           cache_size=cache_size,
           batch_size=batch_size,
-          dtype=jnp.float32,
+          dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
       )
       all_outputs = []
       for block in (normed_block, unnormed_block):
@@ -438,7 +438,7 @@ class BlockTest(parameterized.TestCase):
       cache = normed_block.init_cache(
           cache_size=cache_size,
           batch_size=batch_size,
-          dtype=jnp.float32,
+          dtype=jnp.float32,  # pyrefly: ignore[bad-argument-type]
       )
 
       all_outputs = []
