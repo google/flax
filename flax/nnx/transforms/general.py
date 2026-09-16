@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import functools
+import types
 import typing as tp
 
 from flax.nnx import (
@@ -22,6 +23,32 @@ from flax.typing import MISSING, Missing
 
 A = tp.TypeVar('A')
 F = tp.TypeVar('F', bound=tp.Callable[..., tp.Any])
+
+_FN_WRAPPERS_ATTR = '_nnx_fn_wrappers'
+
+
+def get_fn_wrapper(cls: type, f: tp.Callable[..., tp.Any], *keys):
+  """Creates a ``cls(f, *keys)`` wrapper, reusing instances across calls.
+
+  JAX's control-flow tracing caches hold a weakref to the traced callable
+  and evict the entry when it is garbage collected, so creating a transient
+  wrapper on every call guarantees a tracing cache miss (see issue #5512).
+  For plain functions the wrapper is stored in the function's ``__dict__``,
+  giving it the same lifetime as the function itself. Other callables (bound
+  methods, partials, callable objects) get a fresh wrapper per call.
+  """
+  if type(f) is types.FunctionType:
+    cache = f.__dict__.setdefault(_FN_WRAPPERS_ATTR, {})
+    key = (cls, *keys)
+    entry = cache.get(key)
+    # functools.wraps can copy this cache dict onto other functions, so
+    # validate that the entry was created for this exact function.
+    if entry is not None and entry[0] is f:
+      return entry[1]
+    wrapper = cls(f, *keys)
+    cache[key] = (f, wrapper)
+    return wrapper
+  return cls(f, *keys)
 
 
 # -------------------------------
@@ -158,6 +185,35 @@ def split_inputs(
 
   return split_inputs_wrapper  # type: ignore
 
+class MergeInputsFn:
+  # __slots__ keeps the instance __dict__-free: outer decorators that apply
+  # ``functools.wraps`` to this wrapper (e.g. jax.checkpoint) copy the wrapped
+  # callable's __dict__, and leaked ``f``/``ctxtag`` entries would corrupt
+  # other wrapper dataclasses further up the chain (e.g. CustomVjpFnWrapper).
+  # __weakref__ is required by jax's weakref-based tracing caches.
+  __slots__ = ('f', 'ctxtag', '__weakref__')
+
+  def __init__(self, f: tp.Callable[..., tp.Any], ctxtag: str):
+    self.f = f
+    self.ctxtag = ctxtag
+
+  @property
+  def __wrapped__(self):
+    return self.f
+
+  @property
+  def __name__(self):
+    return getattr(self.f, '__name__', repr(self.f))
+
+  def __call__(self, *pure_args):
+    args = extract.from_tree(pure_args, ctxtag=self.ctxtag, is_inner=True)
+    out = self.f(*args)
+    args_out = extract.clear_non_graph_nodes(args)
+    pure_args_out, pure_out = extract.to_tree(
+      (args_out, out), ctxtag=self.ctxtag
+    )
+    return pure_args_out, pure_out
+
 @tp.overload
 def merge_inputs(
   *,
@@ -192,12 +248,4 @@ def merge_inputs(
   if isinstance(f, Missing):
     return functools.partial(merge_inputs, ctxtag=ctxtag)  # type: ignore[return-value]
 
-  @functools.wraps(f)
-  def merge_inputs_wrapper(*pure_args):
-    args = extract.from_tree(pure_args, ctxtag=ctxtag, is_inner=True)
-    out = f(*args)
-    args_out = extract.clear_non_graph_nodes(args)
-    pure_args_out, pure_out = extract.to_tree((args_out, out), ctxtag=ctxtag)
-    return pure_args_out, pure_out
-
-  return merge_inputs_wrapper  # type: ignore
+  return get_fn_wrapper(MergeInputsFn, f, ctxtag)  # type: ignore
