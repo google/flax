@@ -469,11 +469,9 @@ def dot_product_attention_with_rope(
     Output of shape ``[batch..., q_length, num_heads, v_dim]``.
   """
   # query/key: [batch..., seq_length, num_heads, head_dim]
-  # RoPE.__call__ expects (..., seq_length, head_dim), so vmap over heads.
-  if input_positions is None:
-    apply = jax.vmap(rope, in_axes=-2, out_axes=-2)
-  else:
-    apply = jax.vmap(rope, in_axes=(-2, -1), out_axes=(-2, -1))
+  # RoPE.__call__ expects (..., seq_length, head_dim), so vmap over the heads
+  # axis and broadcast the positions, which are shared by every head.
+  apply = jax.vmap(rope, in_axes=(-2, None), out_axes=-2)
   query = apply(query, input_positions)
   key = apply(key, input_positions)
   return dot_product_attention(query, key, value, **kwargs)
