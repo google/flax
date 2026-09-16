@@ -509,8 +509,10 @@ class MultiHeadAttention(Module):
     num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
       should be divisible by the number of heads.
     in_features: int or tuple with number of input features.
-    qkv_features: dimension of the key, query, and value.
-    out_features: dimension of the last projection.
+    qkv_features: Dimension of the key, query, and value. If None (the default),
+      it defaults to ``in_features``.
+    out_features: Dimension of the last projection. If None (the default),
+      it defaults to ``in_features``.
     in_kv_features: number of input features for computing key and value.
     num_kv_heads: number of key and value heads. If None, it defaults to
       ``num_heads``. If set to a value smaller than ``num_heads``, Grouped Query
@@ -520,10 +522,12 @@ class MultiHeadAttention(Module):
     param_dtype: the dtype passed to parameter initializers (default: float32)
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rate: dropout rate
-    deterministic: if false, the attention weight is masked randomly using
-      dropout, whereas if true, the attention weights are deterministic.
-    precision: numerical precision of the computation see `jax.lax.Precision`
-      for details.
+    deterministic: If False, the attention weight is masked randomly using
+      dropout, whereas if True, the attention weights are deterministic. If None
+      (the default), ``deterministic`` is required when ``keep_rngs=False`` and
+      ``dropout_rate > 0.0``; otherwise defaults to False when RNG stream is available.
+    precision: Numerical precision of the computation, see `jax.lax.Precision`
+      for details. If None (the default), default precision of JAX operations is used.
     kernel_init: initializer for the kernel of the Dense layers.
     out_kernel_init: optional initializer for the kernel of the output Dense layer,
       if None, the kernel_init is used.
