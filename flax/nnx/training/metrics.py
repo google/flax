@@ -123,6 +123,9 @@ class Average(Metric):
       self.total[...] += values.sum()
       self.count[...] += values.size
     else:
+      # The mask may be smaller than ``values``, so broadcast it first and
+      # count the entries it keeps rather than the entries it has.
+      mask = jnp.broadcast_to(mask, values.shape)
       self.total[...] += (values * mask.astype(values.dtype)).sum()
       self.count[...] += mask.sum().astype(self.count.dtype)
 
