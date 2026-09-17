@@ -294,6 +294,30 @@ class TestMetrics(parameterized.TestCase):
     self.assertEqual(accuracy.total, 3.0)
     self.assertEqual(accuracy.compute(), 0.75)
 
+  @parameterized.named_parameters(
+    ('jax_jit', jax.jit),
+    ('nnx_jit', nnx.jit),
+  )
+  def test_average_broadcast_mask_under_jit(self, jit_fn):
+    average = nnx.metrics.Average()
+    graphdef, state = nnx.split(average)
+
+    @partial(jit_fn, static_argnames=('graphdef',))
+    def update_average(graphdef, state, values, mask):
+      average = nnx.merge(graphdef, state)
+      average.update(values=values, mask=mask)
+      _, new_state = nnx.split(average)
+      return new_state
+
+    # values are [[0, 1, 2], [3, 4, 5]] and the (3,) mask keeps 0, 2, 3 and 5
+    values = jnp.arange(6, dtype=jnp.float32).reshape(2, 3)
+    mask = jnp.array([True, False, True])
+    new_state = update_average(graphdef, state, values, mask)
+    average = nnx.merge(graphdef, new_state)
+    self.assertEqual(average.count, 4)
+    self.assertEqual(average.total, 10.0)
+    self.assertEqual(average.compute(), 2.5)
+
   def test_vmap_reset_preserves_shape(self):
     n = 3
 
