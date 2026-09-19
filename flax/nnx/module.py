@@ -45,6 +45,23 @@ tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
 
+class _CaptureKey(str):
+  """String key that remains orderable beside integer container keys."""
+
+  def __lt__(self, other: tp.Any) -> bool:
+    if isinstance(other, int):
+      return False
+    return super().__lt__(other)
+
+  def __gt__(self, other: tp.Any) -> bool:
+    if isinstance(other, int):
+      return True
+    return super().__gt__(other)
+
+
+_CAPTURE_KEY = _CaptureKey('__captures__')
+
+
 class ModuleMeta(PytreeMeta):
   # we keep a trivial derived class just in case we need to
   # add more functionality in the future
@@ -897,7 +914,7 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
         # Create the captures tuple
         captures_tuple = tuple(k(v) for (k,v) in initial_dicts.items())
-        m.__captures__ = pytreelib.data(captures_tuple)
+        setattr(m, _CAPTURE_KEY, pytreelib.data(captures_tuple))
 
       # Wrap methods with capturing if required
       if method_outputs:
