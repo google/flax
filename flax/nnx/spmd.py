@@ -46,12 +46,12 @@ def add_axis(tree: A, index: int, transform_metadata: tp.Mapping) -> A:
   def _add_axis(x: tp.Any):
     if isinstance(x, variablelib.Variable):
       metadata = x.get_metadata()
-      if 'out_sharding' in metadata and metadata['out_sharding']:
+      if metadata.get('out_sharding') is not None:
         sharding = metadata['out_sharding']
         x.set_metadata(out_sharding=insert_field(sharding, index, axis_name))
 
       for k, v in other_meta.items():
-        if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
+        if isinstance(t := getattr(x, k, None), tuple):
           x.set_metadata(k, insert_field(t, index, v))
 
       assert isinstance(x, variablelib.Variable)
@@ -86,7 +86,7 @@ def remove_axis(
         )
 
       for k, v in other_meta.items():
-        if hasattr(x, k) and (t := getattr(x, k)) and isinstance(t, tuple):
+        if isinstance(t := getattr(x, k, None), tuple):
           x.set_metadata(k, remove_field(t, index, v))
 
       x.remove_axis(index, axis_name)
