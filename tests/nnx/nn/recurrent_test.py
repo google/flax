@@ -204,6 +204,72 @@ class TestLSTMCell(absltest.TestCase):
       np.testing.assert_allclose(c_nnx, c_linen, atol=1e-5)
 
 
+  def test_gru_equivalence_with_flax_linen(self):
+    """nnx.GRUCell must match flax.linen.GRUCell, including `b_hn`.
+
+    The class docstring specifies
+    `n = tanh(W_in x + b_in + r * (W_hn h + b_hn))`, and linen builds `b_hn`
+    as the bias of its `hn` layer. nnx fuses r, z and n into one biasless
+    `dense_h`, so `b_hn` has to be carried separately; without it the two
+    implementations disagree as soon as that bias is non-zero.
+    """
+    in_features = 3
+    hidden_features = 4
+    x = random.normal(random.PRNGKey(42), (1, in_features))
+
+    rngs_nnx = nnx.Rngs(0)
+    module_nnx = nnx.GRUCell(
+      in_features=in_features,
+      hidden_features=hidden_features,
+      rngs=rngs_nnx,
+    )
+    carry_nnx = module_nnx.initialize_carry(x.shape, rngs_nnx)
+
+    # A non-zero bias init: the default is zeros, which hides a missing bias.
+    module_linen = linen.GRUCell(
+      features=hidden_features,
+      bias_init=initializers.normal(stddev=1.0),
+    )
+    carry_linen = module_linen.initialize_carry(random.PRNGKey(0), x.shape)
+    variables_linen = module_linen.init(random.PRNGKey(1), carry_linen, x)
+    params_linen = variables_linen['params']
+
+    # nnx splits the fused projections as r, z, n.
+    module_nnx.dense_i.kernel[...] = jnp.concatenate(
+      [params_linen[g]['kernel'] for g in ('ir', 'iz', 'in')], axis=-1
+    )
+    module_nnx.dense_i.bias[...] = jnp.concatenate(
+      [params_linen[g]['bias'] for g in ('ir', 'iz', 'in')]
+    )
+    module_nnx.dense_h.kernel[...] = jnp.concatenate(
+      [params_linen[g]['kernel'] for g in ('hr', 'hz', 'hn')], axis=-1
+    )
+    module_nnx.hn_bias[...] = params_linen['hn']['bias']
+
+    new_carry_nnx, y_nnx = module_nnx(carry_nnx, x)
+    new_carry_linen, y_linen = module_linen.apply(
+      variables_linen, carry_linen, x
+    )
+
+    np.testing.assert_allclose(y_nnx, y_linen, atol=1e-5)
+    np.testing.assert_allclose(new_carry_nnx, new_carry_linen, atol=1e-5)
+
+  def test_gru_has_the_hidden_bias_from_its_docstring(self):
+    """`b_hn` must exist as a parameter, not only in the documented formula."""
+    module = nnx.GRUCell(in_features=3, hidden_features=4, rngs=nnx.Rngs(0))
+    self.assertEqual(module.hn_bias.shape, (4,))
+
+    # It is the only hidden bias: r and z take none, matching linen.
+    module.hn_bias[...] = jnp.ones((4,))
+    x = random.normal(random.PRNGKey(0), (1, 3))
+    carry = module.initialize_carry(x.shape, nnx.Rngs(0))
+    biased, _ = module(carry, x)
+
+    module.hn_bias[...] = jnp.zeros((4,))
+    unbiased, _ = module(carry, x)
+    self.assertFalse(np.allclose(biased, unbiased))
+
+
 class TestRNN(absltest.TestCase):
   def test_rnn_with_lstm_cell(self):
     """Test RNN module using LSTMCell."""
