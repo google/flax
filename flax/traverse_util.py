@@ -136,7 +136,10 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
       leaf (i.e., should not be flattened further).
     sep: if specified, then the keys of the returned
       dictionary will be ``sep``-joined strings (if
-      ``None``, then keys will be tuples).
+      ``None``, then keys will be tuples). If ``sep``
+      is specified, keys cannot be non-strings and
+      cannot contain the ``sep`` string, otherwise a
+      ``ValueError`` is raised.
   Returns:
     The flattened dictionary.
   """
