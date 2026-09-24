@@ -49,6 +49,7 @@ class TransformerConfig:
   attention_dropout_rate: float = 0.1
   deterministic: bool = False
   decode: bool = False
+  use_fp8: bool = False
   kernel_init: Callable = nn.initializers.xavier_uniform()
   bias_init: Callable = nn.initializers.normal(stddev=1e-6)
   posemb_init: Callable | None = None
@@ -176,6 +177,7 @@ class MlpBlock(nn.Module):
         dtype=config.dtype,
         kernel_init=config.kernel_init,
         bias_init=config.bias_init,
+        dot_general_cls=nn.Fp8DenseGeneralOp if config.use_fp8 else None
     )(inputs)
     x = nn.relu(x)
     x = nn.Dropout(rate=config.dropout_rate)(
@@ -186,6 +188,7 @@ class MlpBlock(nn.Module):
         dtype=config.dtype,
         kernel_init=config.kernel_init,
         bias_init=config.bias_init,
+        dot_general_cls=nn.Fp8DenseGeneralOp if config.use_fp8 else None
     )(x)
     output = nn.Dropout(rate=config.dropout_rate)(
         output, deterministic=config.deterministic
