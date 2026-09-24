@@ -272,17 +272,6 @@ Leaf = tp.Any
 # ---------------------------------
 
 
-def _bind_new_variable(*leaves, treedef, var_type, ref) -> HijaxVariable:
-  """Binds new_variable_p after instantiating any Zero tangents."""
-  leaves = tuple(hjx.instantiate_zeros(leaf) for leaf in leaves)
-  return new_variable_p.bind(
-    *leaves,
-    treedef=treedef,
-    var_type=var_type,
-    ref=ref,
-  )
-
-
 def _new_hijax_from_variable(variable: Variable) -> HijaxVariable:
   leaves, treedef = jax.tree.flatten(variable)
   var_type = type(variable)
@@ -294,8 +283,7 @@ def _new_hijax_from_variable(variable: Variable) -> HijaxVariable:
   )
   return hijax_var
 
-HiPrim = (hjx.VJPHiPrimitive if jax.__version_info__ <= (0, 11, 1) else
-          hjx.HiPrim)
+HiPrim = getattr(hjx, 'HiPrim', None) or hjx.VJPHiPrimitive
 
 class NewVariable(HiPrim):
   def __init__(self, *leaf_avals, treedef, var_type, ref=False):
