@@ -19,6 +19,7 @@ import dataclasses
 import functools
 import inspect
 import typing as tp
+import weakref
 
 from jax._src import checkify as checkify_lib
 
@@ -585,6 +586,27 @@ class SimpleCondFn:
     return out, updates
 
 
+_simple_cond_fn_cache: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _get_simple_cond_fn(f, graph):
+  try:
+    inner = _simple_cond_fn_cache.get(f)
+  except TypeError:
+    return SimpleCondFn(f, graph=graph)
+  if inner is None:
+    inner = {}
+    try:
+      _simple_cond_fn_cache[f] = inner
+    except TypeError:
+      return SimpleCondFn(f, graph=graph)
+  wrapper = inner.get(graph)
+  if wrapper is None:
+    wrapper = SimpleCondFn(f, graph=graph)
+    inner[graph] = wrapper
+  return wrapper
+
+
 def cond(
   pred,
   true_fun: tp.Callable[..., A],
@@ -622,8 +644,8 @@ def cond(
     variables = extract.check_no_aliases('cond', operands=operands)
     out, updates = jax.lax.cond(
       pred,
-      SimpleCondFn(true_fun, graph=graph),
-      SimpleCondFn(false_fun, graph=graph),
+      _get_simple_cond_fn(true_fun, graph=graph),
+      _get_simple_cond_fn(false_fun, graph=graph),
       *operands,
     )
     if graph:
@@ -677,7 +699,7 @@ def switch(
     variables = extract.check_no_aliases('switch', operands=operands)
     out, updates = jax.lax.switch(
       index,
-      [SimpleCondFn(f, graph=graph) for f in branches],
+      [_get_simple_cond_fn(f, graph=graph) for f in branches],
       *operands,
     )
     if graph:
