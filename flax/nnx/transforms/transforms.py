@@ -19,6 +19,7 @@ import dataclasses
 import functools
 import inspect
 import typing as tp
+import weakref
 
 from jax._src import checkify as checkify_lib
 
@@ -47,6 +48,7 @@ G = tp.TypeVar('G', bound=tp.Callable[..., tp.Any])
 M = tp.TypeVar('M', bound=Module)
 MA = tp.TypeVar('MA', bound=Module)
 N = tp.TypeVar('N', bound=Module)
+W = tp.TypeVar('W')
 StrInt = tp.TypeVar('StrInt', str, int)
 AxisName = tp.Hashable
 Leaves = list[Leaf]
@@ -585,6 +587,56 @@ class SimpleCondFn:
     return out, updates
 
 
+_SIMPLE_COND_FN_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _get_cached_wrapper(
+  cache: weakref.WeakKeyDictionary,
+  wrapper_type: tp.Callable[..., W],
+  f: tp.Callable[..., tp.Any],
+  graph: bool,
+) -> W:
+  """Returns a cached wrapper for ``(f, graph)``.
+
+  Only weak-referenceable, hashable callables can be cached; other callables
+  fall back to a freshly constructed wrapper.
+  """
+  try:
+    weakref.ref(f)
+    hash(f)
+  except TypeError:
+    return wrapper_type(f, graph=graph)
+
+  by_graph = cache.get(f)
+  if by_graph is None:
+    by_graph = {}
+    cache[f] = by_graph
+  wrapper = by_graph.get(graph)
+  if wrapper is None:
+    wrapper = wrapper_type(f, graph=graph)
+    by_graph[graph] = wrapper
+  return wrapper
+
+
+def _get_simple_cond_fn(f: tp.Callable[..., tp.Any], graph: bool) -> SimpleCondFn:
+  """Returns a cached ``SimpleCondFn`` for ``(f, graph)``.
+
+  ``jax.lax.cond`` / ``jax.lax.switch`` key their tracing cache on the identity
+  of the callables they trace. Constructing a fresh ``SimpleCondFn`` on every
+  ``cond``/``switch`` call gives each branch a new identity, defeating that
+  cache and forcing re-tracing (and blocking the persistent compilation cache);
+  see https://github.com/google/flax/issues/5512. Reusing the same wrapper for
+  a given ``(f, graph)`` keeps a stable identity so repeated calls hit the
+  cache.
+
+  ``f`` is held weakly so locally-defined branches stay collectable. Only
+  weak-referenceable, hashable callables can be cached. Callable instances whose
+  classes define ``__slots__`` must include ``'__weakref__'`` in ``__slots__``;
+  otherwise this function falls back to constructing a fresh wrapper.
+  """
+  return _get_cached_wrapper(_SIMPLE_COND_FN_CACHE, SimpleCondFn, f, graph)
+
+
 def cond(
   pred,
   true_fun: tp.Callable[..., A],
@@ -622,8 +674,8 @@ def cond(
     variables = extract.check_no_aliases('cond', operands=operands)
     out, updates = jax.lax.cond(
       pred,
-      SimpleCondFn(true_fun, graph=graph),
-      SimpleCondFn(false_fun, graph=graph),
+      _get_simple_cond_fn(true_fun, graph),
+      _get_simple_cond_fn(false_fun, graph),
       *operands,
     )
     if graph:
@@ -677,7 +729,7 @@ def switch(
     variables = extract.check_no_aliases('switch', operands=operands)
     out, updates = jax.lax.switch(
       index,
-      [SimpleCondFn(f, graph=graph) for f in branches],
+      [_get_simple_cond_fn(f, graph) for f in branches],
       *operands,
     )
     if graph:
