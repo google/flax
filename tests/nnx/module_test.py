@@ -438,6 +438,31 @@ class TestCapture(parameterized.TestCase):
     np.testing.assert_allclose(intms['__call__'][0], y)
     np.testing.assert_allclose(jnp.sin(intms['intermediate'][0]), y)
 
+  def test_scan_with_nnx_list(self):
+    class Model(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        self.layers = nnx.List([nnx.Linear(4, 4, rngs=rngs) for _ in range(2)])
+
+      def __call__(self, x):
+        for layer in self.layers:
+          x = layer(x)
+        self.sow(nnx.Intermediate, 'out', x)
+        return x
+
+    def rollout(model, x):
+      state_axes = nnx.StateAxes({nnx.Intermediate: 0, ...: nnx.Carry})
+      return nnx.scan(
+        lambda m, x: m(x), in_axes=(state_axes, nnx.Carry), out_axes=nnx.Carry, length=3
+      )(model, x)
+
+    x = jnp.ones(4)
+    model = Model(nnx.Rngs(0))
+    out, interms = nnx.capture(rollout, nnx.Intermediate)(model, x)
+    self.assertEqual(out.shape, (4,))
+    self.assertIn('out', interms)
+    self.assertEqual(interms['out'][0].shape, (3, 4))
+
+
 class SowMod(nnx.Module):
     def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(4, 4, rngs=rngs)
