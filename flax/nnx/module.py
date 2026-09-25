@@ -89,6 +89,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       value: A,
       reduce_fn: tp.Callable[[B, A], B] = tuple_reduce,
       init_fn: tp.Callable[[], B] = tuple_init,  # type: ignore
+      capture_noop: bool = False
   ) -> bool:
     """Store intermediate values during module execution for later extraction.
 
@@ -143,6 +144,9 @@ class Module(Pytree, metaclass=ModuleMeta):
         to a tuple.
       init_fn: Function providing initial value for first ``reduce_fn`` call.
         Default is an empty tuple.
+      capture_noop: If True, this call becomes a no-op if we're not in a ``nnx.capture`` context.
+        If False, calls to ``sow`` outside of a capture context will set the corresponding module attribute.
+        This behavior is deprecated, but still supported for now for backwards compatibility.
     """
     if isinstance(variable_type, str):
       variable_type = variableslib.variable_type_from_name(
@@ -172,15 +176,16 @@ class Module(Pytree, metaclass=ModuleMeta):
           )
         variable.set_value(reduce_fn(variable.get_value(), value))
     else:
-      reduced_value = reduce_fn(init_fn(), value)
-      setattr(self, name, variable_type(reduced_value))
-    warnings.warn(
-        """Using 'Module.sow()' outside of 'nnx.capture()' is deprecated; see
-        https://flax.readthedocs.io/en/latest/guides/extracting_intermediates.html for more information.
-        """,
-        DeprecationWarning,
-        stacklevel=2,
-      )
+      if not capture_noop:
+        reduced_value = reduce_fn(init_fn(), value)
+        setattr(self, name, variable_type(reduced_value))
+        warnings.warn(
+            """Using 'Module.sow()' outside of 'nnx.capture()' is deprecated; see
+            https://flax.readthedocs.io/en/latest/guides/extracting_intermediates.html for more information.
+            """,
+            DeprecationWarning,
+            stacklevel=2,
+          )
     return True
 
   def perturb(
