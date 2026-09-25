@@ -269,8 +269,8 @@ is a simplified version of a ``BatchNorm`` layer that updates the mean and varia
     mean = jax.numpy.mean(x, axis=-1)
     var = jax.numpy.var(x, axis=-1)
     # ema updates
-    self.mean.value = self.mu * self.mean + (1 - self.mu) * mean
-    self.var.value = self.mu * self.var + (1 - self.mu) * var
+    self.mean[...] = self.mu * self.mean[...] + (1 - self.mu) * mean
+    self.var[...] = self.mu * self.var[...] + (1 - self.mu) * var
     # normalize and scale
     x = (x - mean) / jax.numpy.sqrt(var + 1e-5)
     return x * self.scale + self.bias
@@ -430,5 +430,4 @@ rewritten as follows:
 
   x = jax.random.normal(random.key(1), (10, 2))
   y = weights(x)
-
 

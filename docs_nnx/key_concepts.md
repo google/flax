@@ -62,12 +62,12 @@ linear = nnx.Linear(in_features=4, out_features=2, rngs=nnx.Rngs(42))
 
 # Flax created a `Param` wrapper over the actual `jax.Array` parameter to track metadata
 print(type(linear.kernel))        # flax.nnx.Param
-print(type(linear.kernel.value))  # jax.Array
+print(type(linear.kernel[...]))   # jax.Array
 
 # The computation of the two are the same
 x = jax.random.normal(jax.random.key(0), (2, 4))
 flax_y = linear(x)
-jax_y = jax_linear(x, linear.kernel.value, linear.bias.value)
+jax_y = jax_linear(x, linear.kernel[...], linear.bias[...])
 assert jnp.array_equal(flax_y, jax_y)
 ```
 
@@ -156,11 +156,11 @@ When compiling a function using this pytree, you'll notice the difference betwee
 @jax.jit
 def jitted(model):
   print(f'{model.dim = }')
-  print(f'{model.traced_dim.value = }')  # This is being traced
+  print(f'{model.traced_dim.get_value() = }')  # This is being traced
   if model.dim == 4:
     print('Code path based on static data value works fine.')
   try:
-    if model.traced_dim.value == 4:
+    if model.traced_dim.get_value() == 4:
       print('This will never run :(')
   except jax.errors.TracerBoolConversionError as e:
     print(f'Code path based on JAX data value throws error: {e}')
@@ -169,10 +169,10 @@ jitted(foo)
 ```
 
     model.dim = 4
-    model.traced_dim.value = JitTracer<~int32[]>
+    model.traced_dim.get_value() = JitTracer<~int32[]>
     Code path based on static data value works fine.
     Code path based on JAX data value throws error: Attempted boolean conversion of traced array with shape bool[].
-    The error occurred while tracing the function jitted at /var/folders/4c/ylxxyg_n67957jf6616c7z5000gbn1/T/ipykernel_69242/584946237.py:1 for jit. This concrete value was not available in Python because it depends on the value of the argument model.traced_dim.value.
+    The error occurred while tracing the function jitted at /var/folders/4c/ylxxyg_n67957jf6616c7z5000gbn1/T/ipykernel_69242/584946237.py:1 for jit. This concrete value was not available in Python because it depends on the value of the argument model.traced_dim.get_value().
     See https://docs.jax.dev/en/latest/errors.html#jax.errors.TracerBoolConversionError
 
 
@@ -270,7 +270,7 @@ def sharded_init(dim, nlayers):
   model = MLP(dim, nlayers, nnx.Rngs(0))
   return jax.lax.with_sharding_constraint(model, model_shardings)
 model = sharded_init(dim, nlayers)
-jax.debug.visualize_array_sharding(model.blocks[0].kernel.value)
+jax.debug.visualize_array_sharding(model.blocks[0].kernel[...])
 ```
 
     [38;2;79;201;177mParam[0m[38;2;255;213;3m([0m[38;2;105;105;105m[0m
