@@ -19,6 +19,7 @@ import jax.numpy as jnp
 from absl.testing import absltest
 from absl.testing import parameterized
 import numpy as np
+import optax
 
 from flax import linen
 from flax import nnx
@@ -588,6 +589,70 @@ class TestLinenConsistency(parameterized.TestCase):
       nnx_model.norm_layer.batch_stats[("layers", 0, "kernel", "sigma")],
       linen_out[1]['batch_stats']['norm_layer']['seq/layers_0/kernel/sigma'],
     )
+
+
+class TestWeightNorm(parameterized.TestCase):
+  @parameterized.product(
+    param_dtype=[jnp.float32, jnp.float16],
+    feature_axes=[-1, (0, 1)],
+  )
+  def test_scales_are_trainable_params(self, param_dtype, feature_axes):
+    rngs = nnx.Rngs(0)
+    model = nnx.WeightNorm(
+      nnx.Linear(2, 3, param_dtype=param_dtype, rngs=rngs),
+      feature_axes=feature_axes,
+      param_dtype=param_dtype,
+      rngs=rngs,
+    )
+    scale = model.scales[('kernel',)]
+    self.assertIsInstance(scale, nnx.Param)
+    self.assertEqual(scale.dtype, param_dtype)
+    expected_shape = (3,) if feature_axes == -1 else (2, 3)
+    self.assertEqual(scale.shape, expected_shape)
+
+    # the scales must show up in the Param state so that optimizers built
+    # with ``wrt=nnx.Param`` can see them.
+    params = nnx.state(model, nnx.Param)
+    self.assertIn(('kernel',), params['scales'])
+
+    x = jnp.ones((4, 2))
+
+    def loss_fn(model):
+      return jnp.sum(model(x) ** 2)
+
+    grads = nnx.grad(loss_fn)(model)
+    scale_grad = grads['scales'][('kernel',)][...]
+    self.assertEqual(scale_grad.shape, expected_shape)
+    self.assertTrue(jnp.any(scale_grad != 0))
+
+    optimizer = nnx.Optimizer(model, optax.sgd(0.1), wrt=nnx.Param)
+    scale_before = jnp.array(model.scales[('kernel',)][...])
+    optimizer.update(model, grads)
+    scale_after = model.scales[('kernel',)][...]
+    self.assertTrue(jnp.any(scale_before != scale_after))
+
+  def test_variable_filter_selects_scaled_params(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.WeightNorm(
+      nnx.Linear(2, 3, rngs=rngs),
+      variable_filter=nnx.PathContains('bias'),
+      rngs=rngs,
+    )
+    self.assertEqual(list(model.scales), [('bias',)])
+    self.assertIsInstance(model.scales[('bias',)], nnx.Param)
+    self.assertEqual(model.scales[('bias',)].shape, (3,))
+    params = nnx.state(model, nnx.Param)
+    self.assertEqual(list(params['scales']), [('bias',)])
+
+  def test_no_scales_without_use_scale(self):
+    rngs = nnx.Rngs(0)
+    model = nnx.WeightNorm(
+      nnx.Linear(2, 3, rngs=rngs), use_scale=False, rngs=rngs
+    )
+    self.assertIsNone(model.scales)
+    params = nnx.state(model, nnx.Param)
+    self.assertNotIn('scales', params)
+    self.assertEqual(model(jnp.ones((4, 2))).shape, (4, 3))
 
 
 if __name__ == '__main__':

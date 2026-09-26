@@ -942,6 +942,12 @@ class WeightNorm(nnx.Module):
   each wrapped layer will have its params l2-normalized before computing
   its ``__call__`` output.
 
+  When ``use_scale`` is ``True``, a learnable scale is created for each
+  normalized param and stored in ``self.scales``, a dict mapping the param's
+  path in ``layer_instance`` to an :class:`nnx.Param`. These scales are
+  part of the module's ``nnx.Param`` state, so they receive gradients and
+  are updated by optimizers alongside the wrapped layer's params.
+
   Example usage::
 
     >>> import jax
@@ -971,10 +977,19 @@ class WeightNorm(nnx.Module):
     >>> col_norms = np.linalg.norm(np.array(w), axis=0)
     >>> np.testing.assert_allclose(col_norms, np.ones(4))
 
+    >>> # the scales are trainable params
+    >>> model.normed_linear.scales[('kernel',)].shape
+    (4,)
+    >>> nnx.state(model, nnx.Param)['normed_linear']['scales'][('kernel',)]
+    Param( # 4 (16 B)
+      value=Array([1., 1., 1., 1.], dtype=float32)
+    )
+
   Args:
     layer_instance: The layer instance to wrap.
     feature_axes: The axes to normalize.
-    use_scale: Whether to use a scale parameter.
+    use_scale: Whether to use a learnable scale parameter for each
+      normalized param.
     scale_init: The initializer for the scale parameter, by default ones.
     epsilon: The epsilon value for the normalization, by default 1e-12.
     dtype: The dtype of the result, by default infer from input and params.
@@ -1008,14 +1023,16 @@ class WeightNorm(nnx.Module):
     self.param_dtype = param_dtype
     self.variable_filter = nnx.filterlib.to_predicate(variable_filter)
     self.promote_dtype = promote_dtype
-    self.scales : tp.Optional[dict] = None
+    self.scales: tp.Optional[dict] = None
 
     if use_scale:
       state = nnx.state(self.layer_instance, nnx.Param)
       def init_scales(param):
         feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
         scale_shape = tuple(param.shape[ax] for ax in feature_axes)
-        return scale_init(rngs['params'], scale_shape)
+        return nnx.Param(
+          scale_init(rngs['params'], scale_shape, self.param_dtype)
+        )
       self.scales = nnx.data({
         path: init_scales(param) for path, param in nnx.to_flat_state(state)
         if self.variable_filter(path, param)})
@@ -1041,7 +1058,7 @@ class WeightNorm(nnx.Module):
           f'Could not find the scale corresponding to the param {path} '
           'in scales dict. Parameters of the layer_instance should not change!'
         )
-      scale_value = self.scales[path]
+      scale_value = self.scales[path][...]
 
       if len(feature_axes) < param.ndim:
         broadcast_shape = [1] * param.ndim
