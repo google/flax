@@ -128,9 +128,9 @@ def _bind(context, eqn, invals):
   prim = eqn.primitive
   if any(_contains_sow(sj, context["contains_sow_cache"])
          for sj in core.jaxprs_in_params(eqn.params)):
+    handled = ", ".join(sorted(p.name for p in _DISPATCH if p is not sow_p))
     raise NotImplementedError(
-        f"sow inside {prim} is not supported (handled: top level, jit, "
-        f"closed_call, custom_jvp/vjp, scan, cond, remat; not: while_loop)"
+        f"sow inside {prim} is not supported (handled: top level, {handled})"
     )
   ans = prim.bind(*invals, **eqn.params)
   return (ans if prim.multiple_results else [ans]), {}
