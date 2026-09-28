@@ -18,6 +18,7 @@ import typing as tp
 from flax.nnx import filterlib
 from flax.nnx import graphlib
 from flax.nnx import pytreelib
+from flax.nnx import rnglib
 from flax.nnx import statelib
 from flax.nnx import variablelib
 import jax
@@ -97,7 +98,7 @@ class EMA(pytreelib.Pytree):
       params: tp.Any,
       decay: float,
       *,
-      only: filterlib.Filter = ...,
+      only: filterlib.Filter = filterlib.Not(rnglib.RngState),
       graph: bool | None = None,
   ):
     """Initializes the EMA module.
@@ -107,8 +108,9 @@ class EMA(pytreelib.Pytree):
         will be tracked.
       decay: The decay rate for the moving average.
       only: A filter indicating which variables should be included in the
-        EMA tracking. Defaults to matching everything. Note that EMA only
-        tracks ``nnx.Variable`` instances.
+        EMA tracking. Defaults to every Variable except ``nnx.RngState``
+        (the RNG keys and counts held by modules such as ``nnx.Dropout``).
+        Note that EMA only tracks ``nnx.Variable`` instances.
       graph: If ``True``, uses graph-mode which supports the full NNX
         feature set including shared references. If ``False``, uses
         tree-mode which treats Modules as regular JAX pytrees, avoiding

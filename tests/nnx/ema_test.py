@@ -113,5 +113,34 @@ class TestEMA(absltest.TestCase):
     np.testing.assert_allclose(ema_model.kernel[...], ema.params.kernel[...])
     self.assertFalse(jnp.allclose(ema_model.kernel[...], model.kernel[...]))
 
+  def test_ema_skips_rng_state(self):
+    class Model(nnx.Module):
+
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 2, use_bias=False, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.temperature = nnx.Param(1.0)
+
+    model = Model(nnx.Rngs(0))
+    initial_kernel = jnp.copy(model.linear.kernel[...])
+    ema = nnx.EMA(model, decay=0.9)
+    ema_model = ema.apply_to(model)
+
+    self.assertEqual(
+        [path for path, _ in nnx.to_flat_state(ema.params)],
+        [('linear', 'kernel'), ('temperature',)],
+    )
+
+    model.linear.kernel[...] *= 2.0
+    model.temperature.set_value(2.0)
+    model.dropout.rngs.count[...] += 3
+    ema.update(model)
+
+    np.testing.assert_allclose(
+        ema.params['linear']['kernel'][...], 1.1 * initial_kernel
+    )
+    np.testing.assert_allclose(ema.params['temperature'].get_value(), 1.1)
+    self.assertIs(ema_model.dropout.rngs.count, model.dropout.rngs.count)
+
 if __name__ == '__main__':
   absltest.main()
