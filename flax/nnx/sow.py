@@ -13,8 +13,10 @@ from contextvars import ContextVar
 from functools import partial
 
 import jax
+from jax import lax
 from jax._src import core, effects, pjit
 from jax._src.custom_derivatives import custom_jvp_call_p, custom_vjp_call_p
+from jax._src.lax.control_flow.loops import scan_p
 from jax.interpreters import ad, batching, mlir
 from jax.tree_util import tree_flatten, tree_structure, tree_unflatten
 
@@ -153,11 +155,36 @@ def _run(jaxpr: core.Jaxpr, consts, *args, context: dict | None = None):
 
   for eqn in jaxpr.eqns:
     invals = [read(v) for v in eqn.invars]
-    outs, sub_coll = _DISPATCH.get(eqn.primitive, _bind)(context, eqn, invals)
+    if (eqn.primitive is scan_p
+        and _contains_sow(eqn.params["jaxpr"].jaxpr, context["contains_sow_cache"])):
+      outs, sub_coll = _scan_with_sow(context, eqn.params, invals)
+    else:
+      outs, sub_coll = _DISPATCH.get(eqn.primitive, _bind)(context, eqn, invals)
     _merge(collected, sub_coll)
     env.update(zip(eqn.outvars, outs))
 
   return [read(v) for v in jaxpr.outvars], collected
+
+def _scan_with_sow(context, params, invals):
+  """Sows inside a scan body become extra `ys`, so scan stacks them along the
+  scan axis. Each per-iteration sow appears as one stacked pytree entry."""
+  body = params["jaxpr"]
+  # ft_in.update(args).unpack() splits operands into (consts, carry, xs) — the
+  # same call scan's own impl uses (loops.py `_scan_impl`).
+  consts, init, xs = map(list, params["ft_in"].update(invals).unpack())
+  ncarry = len(init)
+  meta_box: list = []
+
+  def new_body(carry, x):
+    outs, coll = _run(body.jaxpr, body.consts, *consts, *carry, *x, context=context)
+    leaves, meta = _flatten_collected(coll)
+    meta_box.append(meta)
+    return outs[:ncarry], (outs[ncarry:], leaves)
+
+  final_carry, (stacked_ys, stacked_leaves) = lax.scan(
+      new_body, init, xs, length=params["length"],
+      reverse=params["reverse"], unroll=params["unroll"])
+  return [*final_carry, *stacked_ys], _unflatten_collected(stacked_leaves, meta_box[0])
 
 def _nest(collected: dict) -> dict:
   """{(a, b): [v, ...]} -> {a: {b: (v, ...)}}."""

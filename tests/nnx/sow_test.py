@@ -48,3 +48,17 @@ def test_plain_jit_and_grad_still_work():
   assert jnp.allclose(jax.grad(f)(jnp.float32(1.0)), jnp.cos(1.0))
   xs = jnp.arange(3, dtype=jnp.float32)
   assert jnp.allclose(jax.vmap(f)(xs), jnp.sin(xs))
+
+def test_sow_inside_scan_is_stacked():
+  # A per-iteration sow is stacked along the scan axis as one entry.
+  def f(x):
+    def body(c, _):
+      sow(c, name="step")
+      return c + 1, c
+    c, _ = jax.lax.scan(body, x, None, length=4)
+    return c
+
+  out, collected = capture(f)(jnp.float32(0.0))
+  assert out == 4.0
+  (steps,) = collected["step"]
+  assert jnp.array_equal(steps, jnp.arange(4, dtype=jnp.float32))
