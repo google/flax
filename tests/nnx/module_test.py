@@ -30,6 +30,7 @@ import flax
 
 A = TypeVar('A')
 
+import contextlib
 from contextlib import contextmanager
 
 @contextmanager
@@ -437,6 +438,205 @@ class TestCapture(parameterized.TestCase):
     self.assertIn('intermediate', intms)
     np.testing.assert_allclose(intms['__call__'][0], y)
     np.testing.assert_allclose(jnp.sin(intms['intermediate'][0]), y)
+
+class TestCaptureFunctional(parameterized.TestCase):
+  """The 'functional=True' style: 'nnx.capture' traces the function it wraps
+  and collects sown values from the trace, so it only supports tree mode."""
+
+  def setUp(self):
+    super().setUp()
+    stack = contextlib.ExitStack()
+    stack.enter_context(set_graph_mode(False))
+    self.addCleanup(stack.close)
+
+  @parameterized.parameters(True, False)
+  def test_state_updates(self, ref):
+    # capture traces the function, so a module that mutates its state needs
+    # ref-backed Variables: as jax refs they write through the trace. A plain
+    # Variable cannot be written from a deeper trace level at all.
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.bn = nnx.BatchNorm(4, use_running_average=False, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, deterministic=False, rngs=rngs)
+
+      def __call__(self, x):
+        y = self.dropout(self.bn(x))
+        self.sow(nnx.Intermediate, 'ymean', y.mean())
+        return y
+
+    with nnx.var_defaults(ref=ref):
+      model = Foo(nnx.Rngs(0))
+
+    count = model.dropout.rngs.count.get_value()
+    forward = nnx.capture(model, nnx.Intermediate, functional=True)
+
+    if not ref:
+      with self.assertRaisesRegex(
+        errors.TraceContextError, 'Cannot mutate BatchStat'
+      ):
+        forward(jnp.ones((8, 4)))
+      return
+
+    _, intermediates = forward(jnp.ones((8, 4)))
+    self.assertIn('ymean', intermediates['__call__'])
+    self.assertFalse(jnp.allclose(model.bn.mean.get_value(), 0.0))
+    self.assertEqual(model.dropout.rngs.count.get_value(), count + 1)
+
+  def test_refs_only_for_mutable_vars(self):
+    # refs for state that is written inside the trace, plain Variables for
+    # params so they can still be differentiated.
+    class Foo(nnx.Module):
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(4, 4, rngs=rngs)
+        self.bn = nnx.BatchNorm(4, use_running_average=False, rngs=rngs)
+
+      def __call__(self, x):
+        y = self.bn(self.linear(x))
+        self.sow(nnx.Intermediate, 'ymean', y.mean())
+        return y
+
+    with nnx.var_defaults(ref=True):
+      model = Foo(nnx.Rngs(0))
+    self.assertTrue(model.linear.kernel.ref)
+    self.assertTrue(model.bn.mean.ref)
+
+    def loss_grads(model, x, y):
+      # params must be plain Variables to differentiate with respect to them
+      model = nnx.with_vars(model, ref=False, only=nnx.Param)
+      graphdef, params, nondiff = nnx.split(model, nnx.Param, ...)
+      def loss_fn(params):
+        return jnp.mean((nnx.merge(graphdef, params, nondiff)(x) - y) ** 2)
+      return jax.grad(loss_fn)(params)
+
+    grads, intermediates = nnx.capture(
+      loss_grads, nnx.Intermediate, functional=True
+    )(
+      model, jnp.ones((8, 4)), jnp.zeros((8, 4))
+    )
+
+    self.assertIn('ymean', intermediates['__call__'])
+    self.assertEqual(grads['linear']['kernel'].shape, (4, 4))
+    # the ref-backed running stats were still updated through the trace
+    self.assertFalse(jnp.allclose(model.bn.mean.get_value(), 0.0))
+
+  def test_vmap(self):
+
+    class Foo(nnx.Module):
+      def __init__(self, dim):
+        self.w = nnx.Param(jax.random.normal(jax.random.key(0), dim))
+
+      def __call__(self, x):
+        x = self.perturb('grad_of_x', x)
+        y = jnp.dot(x, self.w)
+        self.sow(nnx.Intermediate, 'y', y)
+        return y
+
+    model, x = Foo(4), jnp.ones((3, 4))
+
+    def loss(model, x):
+      return model(x)
+
+    # perturb sows the cotangent, so the differentiated function is captured
+    _, intermediates, perturbations = nnx.capture(
+      nnx.vmap(nnx.grad(loss, argnums=1), in_axes=(None, 0)),
+      nnx.Intermediate, nnx.Perturbation, functional=True,
+    )(model, x)
+
+    # d(dot(x, w))/dx is w, and is batch independent, so jax keeps it unbatched
+    np.testing.assert_allclose(
+      perturbations['__call__']['grad_of_x'][0], model.w.get_value()
+    )
+    # the forward sow does vary per example, so it comes back batched
+    self.assertEqual(intermediates['__call__']['y'][0].shape, (3,))
+
+  def test_fwd_bwd(self):
+        class Foo(nnx.Module):
+          @nnx.jit
+          def __call__(self, x):
+            x = self.perturb('grad_of_x', x)
+            y = 3 * x
+            self.sow(nnx.Intermediate, 'y', y)
+            return y
+
+        model = Foo()
+        x = 1.0
+
+        def loss(model, x):
+          return model(x)
+
+        _, intermediates, perturbations = nnx.capture(
+          nnx.grad(loss, argnums=1), nnx.Intermediate, nnx.Perturbation,
+          functional=True,
+        )(model, x)
+
+        self.assertEqual(perturbations['__call__']['grad_of_x'][0], 3)
+        self.assertEqual(intermediates['__call__']['y'][0], 3)
+
+  def test_nested_modules(self):
+      class Foo(nnx.Module):
+        def __call__(self, x):
+          x = self.perturb('grad_of_x', x)
+          y = 3 * x
+          self.sow(nnx.Intermediate, 'y', y)
+          return y
+      class Bar(nnx.Module):
+        def __init__(self):
+          self.foos = nnx.data([Foo() for _ in range(3)])
+        def __call__(self, x):
+          for block in self.foos:
+            x = block(x)
+          return x
+
+      model = Bar()
+      x = 1.0
+
+      def loss(model, x):
+        return model(x)
+
+      _, intermediates, perturbations = nnx.capture(
+        nnx.grad(loss, argnums=1), nnx.Intermediate, nnx.Perturbation,
+        functional=True,
+      )(model, x)
+
+      # the three blocks run the same method, so they share a path and their
+      # values accumulate under it
+      perts = perturbations['__call__']['__call__']['grad_of_x']
+      interms = intermediates['__call__']['__call__']['y']
+      for i in range(3):
+        self.assertEqual(perts[i], 3**(i+1))
+        self.assertEqual(interms[i], 3**(i+1))
+
+  def test_method_outputs(self):
+    class Foo(nnx.Module):
+      def helper(self, x):
+        return jnp.sin(x)
+      def __call__(self, x):
+        return self.helper(x)
+
+    y, intms = nnx.capture(
+      Foo(), nnx.Intermediate, method_outputs=nnx.Intermediate,
+      functional=True,
+    )(jnp.ones((2,)))
+
+    np.testing.assert_allclose(intms['__call__']['helper']['output'][0], y)
+    np.testing.assert_allclose(intms['__call__']['output'][0], y)
+
+  def test_init_is_rejected(self):
+    with self.assertRaisesRegex(ValueError, "'init' is not supported"):
+      nnx.capture(
+        SowMod(nnx.Rngs(0)), nnx.Intermediate, init=nnx.State({}),
+        functional=True,
+      )(jnp.ones((2, 4)))
+
+  def test_reduce_fn_is_rejected(self):
+    class Foo(nnx.Module):
+      def __call__(self, x):
+        self.sow(nnx.Intermediate, 'sum', x, init_fn=lambda: 0,
+                 reduce_fn=lambda prev, curr: prev + curr)
+        return x
+
+    with self.assertRaisesRegex(ValueError, "'reduce_fn'/'init_fn'"):
+      nnx.capture(Foo(), nnx.Intermediate, functional=True)(jnp.ones((2, 4)))
 
 class SowMod(nnx.Module):
     def __init__(self, rngs: nnx.Rngs):

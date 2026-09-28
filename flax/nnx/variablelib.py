@@ -1162,7 +1162,6 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
   required_metadata = frozenset(
     ['hijax', 'ref', 'eager_sharding']
   )
-
   @property
   def var_type(self):
     return type(self)
@@ -2051,8 +2050,6 @@ class Param(Variable[A]):
       )
     })
   """
-
-  pass
 
 
 class BatchStat(Variable[A]):
