@@ -18,10 +18,8 @@ from jax._src.custom_derivatives import custom_jvp_call_p, custom_vjp_call_p
 from jax.interpreters import ad, batching, mlir
 from jax.tree_util import tree_flatten, tree_structure, tree_unflatten
 
-
 class SowEffect(effects.Effect):
   pass
-
 
 sow_effect = SowEffect()
 effects.lowerable_effects.add_type(SowEffect)
@@ -48,15 +46,12 @@ def sow(value, *, name):
   out = sow_p.bind(*leaves, name=name, tree=treedef)
   return tree_unflatten(treedef, out)
 
-
 @partial(jax.custom_vjp, nondiff_argnums=(1,))
 def _perturb(value, name):
   return value
 
-
 _perturb.defvjp(lambda value, name: (value, None),
                 lambda name, _res, g: (sow(g, name=name),))
-
 
 def perturb(value, *, name):
   """Identity on the forward pass; sows the incoming cotangent under `name` on
@@ -73,21 +68,15 @@ def perturb(value, *, name):
   `capture(jax.grad(...))` picks it up (see test_sow_in_custom_vjp_backward)."""
   return _perturb(value, name)
 
-# Call primitives whose sub-jaxpr we inline (sows collected directly). For
-# custom_jvp/vjp we inline the primal call_jaxpr; their differentiation rules
-# already staged any backward-pass sow into the enclosing jaxpr at trace time.
-_CALL_PRIMS = {
-    pjit.jit_p: "jaxpr",
-    core.closed_call_p: "call_jaxpr",
-    custom_jvp_call_p: "call_jaxpr",
-    custom_vjp_call_p: "call_jaxpr",
-}
-
-def _contains_sow(jaxpr: core.Jaxpr) -> bool:
-  return any(
-      eqn.primitive is sow_p or any(map(_contains_sow, core.jaxprs_in_params(eqn.params)))
-      for eqn in jaxpr.eqns
-  )
+def _contains_sow(jaxpr: core.Jaxpr, cache: dict) -> bool:
+  hit = cache.get(id(jaxpr))
+  if hit is None:
+    hit = cache[id(jaxpr)] = any(
+        eqn.primitive is sow_p
+        or any(_contains_sow(sj, cache) for sj in core.jaxprs_in_params(eqn.params))
+        for eqn in jaxpr.eqns
+    )
+  return hit
 
 def _merge(dst: dict, src: dict) -> None:
   for name, vals in src.items():
@@ -111,8 +100,48 @@ def _unflatten_collected(leaves, meta) -> dict:
     i += n
   return out
 
-def _run(jaxpr: core.Jaxpr, consts, *args):
-  """Interpret a jaxpr, returning (outputs, {name: [pytree, ...]})."""
+# Dispatch rules: prim -> rule(context, eqn, invals) -> (outs, collected).
+_DISPATCH: dict = {}
+
+def _call_rule(param, context, eqn, invals):
+  """Inline a call primitive's sub-jaxpr (sows collected directly)."""
+  sub = eqn.params[param]  # ClosedJaxpr or open Jaxpr
+  jx, cs = (sub.jaxpr, sub.consts) if isinstance(sub, core.ClosedJaxpr) else (sub, [])
+  return _run(jx, cs, *invals, context=context)
+
+_DISPATCH[pjit.jit_p] = partial(_call_rule, "jaxpr")
+_DISPATCH[core.closed_call_p] = partial(_call_rule, "call_jaxpr")
+
+# For custom_jvp/vjp we inline the primal call_jaxpr; their differentiation
+# rules already staged any backward-pass sow into the enclosing jaxpr at trace
+# time.
+_DISPATCH[custom_jvp_call_p] = partial(_call_rule, "call_jaxpr")
+_DISPATCH[custom_vjp_call_p] = partial(_call_rule, "call_jaxpr")
+
+def _sow_rule(context, eqn, invals):
+  pytree = tree_unflatten(eqn.params["tree"], invals)
+  return invals, {eqn.params["name"]: [pytree]}  # invals pass through
+
+_DISPATCH[sow_p] = _sow_rule
+
+def _bind(context, eqn, invals):
+  prim = eqn.primitive
+  if any(_contains_sow(sj, context["contains_sow_cache"])
+         for sj in core.jaxprs_in_params(eqn.params)):
+    raise NotImplementedError(
+        f"sow inside {prim} is not supported (handled: top level, jit, "
+        f"closed_call, custom_jvp/vjp, scan, cond, remat; not: while_loop)"
+    )
+  ans = prim.bind(*invals, **eqn.params)
+  return (ans if prim.multiple_results else [ans]), {}
+
+def _run(jaxpr: core.Jaxpr, consts, *args, context: dict | None = None):
+  """Interpret a jaxpr, returning (outputs, {name: [pytree, ...]}).
+
+  `context` carries per-interpretation state shared by dispatch rules (e.g.
+  "contains_sow_cache"); it is created on the outermost call."""
+  if context is None:
+    context = {"contains_sow_cache": {}}
   env: dict = {}
   collected: dict = {}
 
@@ -124,24 +153,8 @@ def _run(jaxpr: core.Jaxpr, consts, *args):
 
   for eqn in jaxpr.eqns:
     invals = [read(v) for v in eqn.invars]
-    prim = eqn.primitive
-    if prim is sow_p:
-      pytree = tree_unflatten(eqn.params["tree"], invals)
-      collected.setdefault(eqn.params["name"], []).append(pytree)
-      outs = invals  # pass through
-    elif prim in _CALL_PRIMS:
-      sub = eqn.params[_CALL_PRIMS[prim]]  # ClosedJaxpr or open Jaxpr
-      jx, cs = (sub.jaxpr, sub.consts) if isinstance(sub, core.ClosedJaxpr) else (sub, [])
-      outs, sub_coll = _run(jx, cs, *invals)
-      _merge(collected, sub_coll)
-    else:
-      if any(_contains_sow(sj) for sj in core.jaxprs_in_params(eqn.params)):
-        raise NotImplementedError(
-            f"sow inside {prim} is not supported (handled: top level, jit, "
-            f"closed_call, custom_jvp/vjp, scan, cond, remat; not: while_loop)"
-        )
-      ans = prim.bind(*invals, **eqn.params)
-      outs = ans if prim.multiple_results else [ans]
+    outs, sub_coll = _DISPATCH.get(eqn.primitive, _bind)(context, eqn, invals)
+    _merge(collected, sub_coll)
     env.update(zip(eqn.outvars, outs))
 
   return [read(v) for v in jaxpr.outvars], collected
