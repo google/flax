@@ -126,6 +126,13 @@ def _sow_rule(context, eqn, invals):
 
 _DISPATCH[sow_p] = _sow_rule
 
+def _scan_rule(context, eqn, invals):
+  if not _contains_sow(eqn.params["jaxpr"].jaxpr, context["contains_sow_cache"]):
+    return _bind(context, eqn, invals)
+  return _scan_with_sow(context, eqn.params, invals)
+
+_DISPATCH[scan_p] = _scan_rule
+
 def _bind(context, eqn, invals):
   prim = eqn.primitive
   if any(_contains_sow(sj, context["contains_sow_cache"])
@@ -155,11 +162,7 @@ def _run(jaxpr: core.Jaxpr, consts, *args, context: dict | None = None):
 
   for eqn in jaxpr.eqns:
     invals = [read(v) for v in eqn.invars]
-    if (eqn.primitive is scan_p
-        and _contains_sow(eqn.params["jaxpr"].jaxpr, context["contains_sow_cache"])):
-      outs, sub_coll = _scan_with_sow(context, eqn.params, invals)
-    else:
-      outs, sub_coll = _DISPATCH.get(eqn.primitive, _bind)(context, eqn, invals)
+    outs, sub_coll = _DISPATCH.get(eqn.primitive, _bind)(context, eqn, invals)
     _merge(collected, sub_coll)
     env.update(zip(eqn.outvars, outs))
 
