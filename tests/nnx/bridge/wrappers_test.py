@@ -416,8 +416,34 @@ class TestCompatibility(absltest.TestCase):
     np.testing.assert_allclose(y, x @ variables['params']['kernel'].value)
 
   def test_nnx_to_linen_metadata_transform(self):
-    # TODO: add support and testing after axis add/remove in transform is fixed.
-    pass
+    model = nn.vmap(
+        bridge.ToLinen,
+        variable_axes={'params': 0},
+        split_rngs={'params': True},
+        metadata_params={nn.meta.PARTITION_NAME: 'layers'},
+    )(
+        nnx.Linear, args=(4, 4), kwargs={
+            'use_bias': False,
+            'kernel_init': nnx.with_partitioning(
+                nnx.initializers.lecun_normal(), ('in', 'out')
+            ),
+        }
+    )
+    x = jnp.ones((3, 4))
+    mesh = jax.sharding.Mesh(
+        self.mesh.devices.reshape(1, *self.mesh.devices.shape),
+        ('layers', 'in', 'out'),
+    )
+    with jax.set_mesh(mesh):
+      y, variables = model.init_with_output(jax.random.key(0), x)
+      actual = jax.jit(model.apply)(variables, x)
+      spec = nn.get_partition_spec(variables)['params']['kernel']
+    kernel = variables['params']['kernel']
+    self.assertEqual(kernel.value.shape, (3, 4, 4))
+    self.assertEqual(kernel.metadata['out_sharding'], ('layers', 'in', 'out'))
+    self.assertEqual(spec, jax.sharding.PartitionSpec('layers', 'in', 'out'))
+    np.testing.assert_allclose(y, jnp.einsum('bi,bij->bj', x, kernel.value))
+    np.testing.assert_allclose(actual, y)
 
   def test_nnx_to_linen_pytree_structure_consistency(self):
     class NNXInner(nnx.Module):
