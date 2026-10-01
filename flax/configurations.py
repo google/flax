@@ -31,6 +31,7 @@ class Config:
   flax_hijax_variable: bool
   nnx_graph_mode: bool
   nnx_graph_updates: bool
+  nnx_sow_capture_noop: bool
   # See https://google.github.io/pytype/faq.html.
   _HAS_DYNAMIC_ATTRIBUTES = True
   if TYPE_CHECKING:
@@ -317,5 +318,13 @@ nnx_graph_updates = bool_flag(
   help=(
       'Whether graph-mode uses dynamic (True) or simple (False) graph'
       ' traversal.'
+  ),
+)
+nnx_sow_capture_noop = bool_flag(
+  name='nnx_sow_capture_noop',
+  default=False,
+  help=(
+      'Whether `nnx.Module.sow` is a no-op when called outside of'
+      ' `nnx.capture`.'
   ),
 )
