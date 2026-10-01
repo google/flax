@@ -919,8 +919,8 @@ class GroupNorm(Module):
       use_fast_variance=self.use_fast_variance,
       mask=mask,
     )
-    mean = jnp.repeat(mean, self.group_size, axis=1)
-    var = jnp.repeat(var, self.group_size, axis=1)
+    mean = jnp.repeat(mean, self.group_size, axis=-1)
+    var = jnp.repeat(var, self.group_size, axis=-1)
 
     return _normalize(
       x,
