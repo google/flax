@@ -693,6 +693,15 @@ class GRUCell(RNNCellBase):
       kernel_metadata=recurrent_kernel_metadata,
     )
 
+    # `b_hn` from the docstring. Only the reset-gated term carries a hidden
+    # bias, which the fused `dense_h` above cannot express: a bias there would
+    # reach r and z as well. `flax.linen.GRUCell` builds it as a separate `hn`
+    # bias for the same reason.
+    self.hn_bias = nnx.Param(
+      bias_init(rngs.params(), (hidden_features,), self.param_dtype),
+      **bias_metadata,
+    )
+
     if carry_init:
       warnings.warn(
         "carry_init is provided in __init__. "
@@ -730,7 +739,7 @@ class GRUCell(RNNCellBase):
     z = self.gate_fn(xi_z + hh_z)
 
     # Compute n with an additional linear transformation on h
-    n = self.activation_fn(xi_n + r * hh_n)
+    n = self.activation_fn(xi_n + r * (hh_n + self.hn_bias[...]))
 
     # Update hidden state
     new_h = (1.0 - z) * n + z * h
