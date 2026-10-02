@@ -127,7 +127,7 @@ If you need to to train different parts of the model separately, you have three 
 2. Filter the parameters for `jax.grad`.
 3. Use multiple optimizers for different parameters.
 
-For most situations we recommend using multiple optimizers via [Optax](https://optax.readthedocs.io/)'s [`multi_transform`](https://optax.readthedocs.io/en/latest/api.html#optax.multi_transform) as its both efficient and can be easily extended to implement many fine-tunning strategies. 
+For most situations we recommend using multiple optimizers via [Optax](https://optax.readthedocs.io/)'s [`multi_transform`](https://optax.readthedocs.io/en/latest/api/combining_optimizers.html) as its both efficient and can be easily extended to implement many fine-tunning strategies. 
 
 ### **optax.multi_transform**
 
@@ -158,7 +158,7 @@ flat = list(traverse_util.flatten_dict(param_partitions).items())
 traverse_util.unflatten_dict(dict(flat[:2] + flat[-2:]))
 ```
 
-To implement [differential learning rates](https://blog.slavv.com/differential-learning-rates-59eff5209a4f), the `optax.set_to_zero` can be replaced with any other optimizer, different optimizers and partitioning schemes can be selected depending on the task. For more information on advanced optimizers, refer to Optax's [Combining Optimizers](https://optax.readthedocs.io/en/latest/api.html#combining-optimizers) documentation.
+To implement [differential learning rates](https://medium.com/slavv/differential-learning-rates-59eff5209a4f), the `optax.set_to_zero` can be replaced with any other optimizer, different optimizers and partitioning schemes can be selected depending on the task. For more information on advanced optimizers, refer to Optax's [Combining Optimizers](https://optax.readthedocs.io/en/latest/api/combining_optimizers.html) documentation.
 
 ## Creating the `TrainState`
 
