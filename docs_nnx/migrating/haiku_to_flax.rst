@@ -128,8 +128,8 @@ If you want to access Flax model parameters in the stateless, dictionary-like fa
 
   # Parameters were already initialized during model instantiation.
 
-  assert model.linear.bias.value.shape == (10,)
-  assert model.block.linear.kernel.value.shape == (784, 256)
+  assert model.linear.bias[...].shape == (10,)
+  assert model.block.linear.kernel[...].shape == (784, 256)
 
 Training step and compilation
 =============================
@@ -692,15 +692,14 @@ be set and accessed as normal using regular Python class semantics.
         nnx.initializers.ones(rngs.params(), [1,], jnp.float32)
       )
     def __call__(self, x):
-      output = x + self.multiplier * self.counter.value
+      output = x + self.multiplier * self.counter[...]
 
-      self.counter.value += 1
+      self.counter[...] += 1
       return output
 
   model = FooModule(rngs=nnx.Rngs(0))
 
   _, params, counter = nnx.split(model, nnx.Param, Counter)
-
 
 
 
