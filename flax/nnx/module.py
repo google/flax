@@ -867,6 +867,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
       grads, sowed = nnx.grad(loss, has_aux=True)(model, perturbations, x)
     """
 
+    from flax.nnx.helpers import List
+
     # Handle partial evaluation when first arg is a Variable type
     if isinstance(fn, type) and issubclass(fn, variableslib.Variable):
       # Partial application: return a function that waits for the actual fn
@@ -894,6 +896,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
       # Initialize __captures__ as a tuple of Variables (one per type)
       for path, m in iter_modules(module):
+        if isinstance(m, List):
+          continue
         # Create initial dicts for each variable type
         initial_dicts = {}
         for var_type in var_types:
@@ -914,6 +918,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
       # Wrap methods with capturing if required
       if method_outputs:
         for _, m in iter_modules(module):
+          if isinstance(m, List):
+            continue
           _add_capturing(type(m), method_outputs)
 
       try:
@@ -922,6 +928,8 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
         # Undo method sowing modification
         for _, m in iter_modules(module):
+          if isinstance(m, List):
+            continue
           _remove_capturing(type(m))
 
       # Extract intermediates manually from __captures__
