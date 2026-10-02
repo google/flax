@@ -642,6 +642,7 @@ def pmap(
     backend: str | None = None,
     axis_size: int | None = None,
     donate_argnums: int | tp.Iterable[int] = (),
+    global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
@@ -662,6 +663,7 @@ def pmap(
     backend: str | None = None,
     axis_size: int | None = None,
     donate_argnums: int | tp.Iterable[int] = (),
+    global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
     # nnx specific
     transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
     graph: bool | None = None,
@@ -681,6 +683,7 @@ def pmap(
   backend: str | None = None,
   axis_size: int | None = None,
   donate_argnums: int | tp.Iterable[int] = (),
+  global_arg_shapes: tuple[tuple[int, ...], ...] | None = None,
   # nnx specific
   transform_metadata: tp.Mapping[str, tp.Any] = FrozenDict({}),
   graph: bool | None = None,
@@ -764,6 +767,7 @@ def pmap(
         backend=backend,
         axis_size=axis_size,
         donate_argnums=donate_argnums,
+        global_arg_shapes=global_arg_shapes,
         transform_metadata=transform_metadata,
         graph=graph,
         graph_updates=graph_updates,
@@ -796,6 +800,7 @@ def pmap(
       backend=backend,
       axis_size=axis_size,
       donate_argnums=donate_argnums,
+      global_arg_shapes=global_arg_shapes,
     )
 
     @functools.wraps(f_unbound)
@@ -836,6 +841,7 @@ def pmap(
       backend=backend,
       axis_size=axis_size,
       donate_argnums=donate_argnums,
+      global_arg_shapes=global_arg_shapes,
   )
 
   @functools.wraps(f)
