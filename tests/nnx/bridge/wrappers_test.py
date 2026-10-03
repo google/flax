@@ -325,6 +325,38 @@ class TestCompatibility(absltest.TestCase):
     assert updates['Count']['count'] == 1
     _ = model.apply(variables | updates)
 
+  def test_to_linen_hashable(self):
+    # Default ToLinen
+    model1 = bridge.ToLinen(nnx.Linear, args=(32, 64))
+    hash1 = hash(model1)
+    self.assertIsInstance(hash1, int)
+
+    # ToLinen with mutable dict kwargs should be auto-frozen and hashable
+    model2 = bridge.ToLinen(
+        nnx.Linear, args=(32, 64), kwargs={'use_bias': False}
+    )
+    hash2 = hash(model2)
+    self.assertIsInstance(hash2, int)
+    self.assertIsInstance(model2.kwargs, flax.core.FrozenDict)
+
+    # ToLinen with list args should be converted to tuple and hashable
+    model3 = bridge.ToLinen(
+        nnx.Linear, args=[32, 64], kwargs={'use_bias': False}
+    )
+    hash3 = hash(model3)
+    self.assertEqual(hash2, hash3)
+    self.assertIsInstance(model3.args, tuple)
+
+    # Usable in jax.jit as static argument
+    def apply_fn(module, variables, x):
+      return module.apply(variables, x)
+
+    jitted_apply = jax.jit(apply_fn, static_argnums=(0,))
+    x = jax.numpy.ones((1, 32))
+    variables = model2.init(jax.random.key(0), x)
+    out = jitted_apply(model2, variables, x)
+    self.assertEqual(out.shape, (1, 64))
+
   def test_to_linen_method_call(self):
     class Foo(nn.Module):
       def setup(self):
