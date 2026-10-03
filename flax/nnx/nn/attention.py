@@ -978,9 +978,9 @@ class MultiHeadAttention(Module):
     if decode is not None:
       self.decode = decode
       if (
-          not hasattr(self, 'cached_key')
-          or not hasattr(self, 'cached_value')
-          or not hasattr(self, 'cache_index')
+          self.cached_key is None
+          or self.cached_value is None
+          or self.cache_index is None
       ):
         if batch_size is None:
           raise TypeError(
