@@ -17,8 +17,6 @@
 This script trains a Transformer on a WMT dataset.
 """
 
-# pytype: disable=wrong-arg-count
-# pytype: disable=attribute-error
 
 import collections
 import functools
@@ -208,7 +206,7 @@ def train_step(
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
 
-  dropout_rng = jax.random.fold_in(dropout_rng, state.step)
+  dropout_rng = jax.random.fold_in(dropout_rng, state.step)  # pyrefly: ignore[bad-argument-type]
 
   def loss_fn(params):
     """loss function used for training."""
@@ -250,7 +248,7 @@ def train_step(
   if state.dynamic_scale:
     # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
     # params should be restored (= skip this step).
-    select_fn = functools.partial(jnp.where, is_fin)  # pylint: disable=undefined-variable
+    select_fn = functools.partial(jnp.where, is_fin)  # pylint: disable=undefined-variable  # pyrefly: ignore[unbound-name]
     new_state = new_state.replace(
         opt_state=jax.tree_util.tree_map(
             select_fn, new_state.opt_state, state.opt_state
@@ -259,7 +257,7 @@ def train_step(
             select_fn, new_state.params, state.params
         ),
     )
-    metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]  # pylint: disable=undefined-variable
+    metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]  # pylint: disable=undefined-variable  # pyrefly: ignore[unbound-name]
 
   return new_state, metrics
 
@@ -382,7 +380,7 @@ def evaluate(
   """Evaluate the params an return a dictionary with the metrics."""
   logging.info("Gathering evaluation metrics.")
   eval_metrics = []
-  eval_iter = iter(eval_ds)  # pytype: disable=wrong-arg-types
+  eval_iter = iter(eval_ds)
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
     eval_batch = jax.tree_util.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
     eval_batch = common_utils.shard(eval_batch)
@@ -524,8 +522,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       kernel_init=nn.initializers.xavier_uniform(),
       bias_init=nn.initializers.normal(stddev=1e-6),
   )
-  eval_config = train_config.replace(deterministic=True)
-  predict_config = train_config.replace(deterministic=True, decode=True)
+  eval_config = train_config.replace(deterministic=True)  # pyrefly: ignore[missing-attribute]
+  predict_config = train_config.replace(deterministic=True, decode=True)  # pyrefly: ignore[missing-attribute]
 
   start_step = 0
   rng = jax.random.key(config.seed)
@@ -588,7 +586,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       ),
       axis_name="batch",
       donate_argnums=(0,),
-  )  # pytype: disable=wrong-arg-types
+  )
   p_eval_step = jax.pmap(
       functools.partial(eval_step, config=eval_config), axis_name="batch"
   )

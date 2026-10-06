@@ -169,7 +169,7 @@ class SimpleLSTM(nn.Module):
 
   hidden_size: int
 
-  @functools.partial(  # pyrefly: ignore[bad-specialization]
+  @functools.partial(
       nn.transforms.scan,
       variable_broadcast='params',
       in_axes=1,

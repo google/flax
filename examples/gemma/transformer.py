@@ -175,7 +175,7 @@ class Transformer(nnx.Module):
           rngs=rngs,
       )
       if cache is not None:
-        new_cache[layer_name] = layer_cache  # pytype: disable=container-type-mismatch
+        new_cache[layer_name] = layer_cache  # pyrefly: ignore[unsupported-operation]
 
     x = self.final_norm(x)
     x = self.final_dropout(x, rngs=rngs)
@@ -185,7 +185,7 @@ class Transformer(nnx.Module):
       logits /= self.final_logits_softcap
       logits = jnp.tanh(logits) * self.final_logits_softcap
 
-    return logits, new_cache  # pytype: disable=bad-return-type
+    return logits, new_cache
 
   @property
   def embed_dim(self) -> int:

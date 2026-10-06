@@ -15,7 +15,6 @@
 """Flax implementation of ResNet V1.5."""
 
 # See issue #620.
-# pytype: disable=wrong-arg-count
 
 from functools import partial
 from typing import Any, Tuple

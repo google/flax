@@ -15,7 +15,6 @@
 """seq2seq addition example."""
 
 # See issue #620.
-# pytype: disable=wrong-keyword-args
 
 import functools
 from typing import Any, Dict, Tuple

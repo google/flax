@@ -19,9 +19,6 @@ Reusing decoder only model from examples/wmt.
 
 # pylint: disable=attribute-defined-outside-init
 # See issue #620.
-# pytype: disable=wrong-arg-count
-# pytype: disable=wrong-keyword-args
-# pytype: disable=attribute-error
 
 from typing import Any, Optional
 from collections.abc import Callable
