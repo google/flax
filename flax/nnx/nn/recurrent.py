@@ -739,7 +739,11 @@ class GRUCell(RNNCellBase):
     z = self.gate_fn(xi_z + hh_z)
 
     # Compute n with an additional linear transformation on h
-    n = self.activation_fn(xi_n + r * (hh_n + self.hn_bias[...]))
+    hh_n, hn_bias = self.promote_dtype(
+      (hh_n, self.hn_bias[...]), dtype=self.dtype
+    )
+    hh_n += jnp.reshape(hn_bias, (1,) * (hh_n.ndim - 1) + (-1,))
+    n = self.activation_fn(xi_n + r * hh_n)
 
     # Update hidden state
     new_h = (1.0 - z) * n + z * h
