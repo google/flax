@@ -1016,9 +1016,12 @@ class WeightNorm(nnx.Module):
         feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
         scale_shape = tuple(param.shape[ax] for ax in feature_axes)
         return scale_init(rngs['params'], scale_shape)
+      # Store as Param so scales are trainable (Weight Normalization paper).
       self.scales = nnx.data({
-        path: init_scales(param) for path, param in nnx.to_flat_state(state)
-        if self.variable_filter(path, param)})
+        path: nnx.Param(init_scales(param))
+        for path, param in nnx.to_flat_state(state)
+        if self.variable_filter(path, param)
+      })
 
   def _weightnorm_inplace(self, path, param):
     if not self.variable_filter(path, param):
@@ -1041,7 +1044,7 @@ class WeightNorm(nnx.Module):
           f'Could not find the scale corresponding to the param {path} '
           'in scales dict. Parameters of the layer_instance should not change!'
         )
-      scale_value = self.scales[path]
+      scale_value = self.scales[path][...]
 
       if len(feature_axes) < param.ndim:
         broadcast_shape = [1] * param.ndim
