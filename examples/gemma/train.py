@@ -159,7 +159,7 @@ def jax_train_step(
   )
 
   input_mask = inputs > pad_id  # pyrefly: ignore[unsupported-operation]
-  weights = input_mask.astype(jnp.float32)  # pyrefly: ignore[missing-attribute]
+  weights = jnp.astype(input_mask, jnp.float32)
   attention_mask = transformer_lib.make_causal_attn_mask(
       input_mask  # pyrefly: ignore[bad-argument-type]
   )  # (B, L, L)
@@ -236,7 +236,7 @@ def nnx_train_step(
   )
 
   input_mask = inputs > pad_id  # pyrefly: ignore[unsupported-operation]
-  weights = input_mask.astype(jnp.float32)  # pyrefly: ignore[missing-attribute]
+  weights = jnp.astype(input_mask, jnp.float32)
   attention_mask = transformer_lib.make_causal_attn_mask(
       input_mask  # pyrefly: ignore[bad-argument-type]
   )  # (B, L, L)

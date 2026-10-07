@@ -203,6 +203,8 @@ filterwarnings = [
     "ignore:.*Implicit conversion of an array to a dtype is deprecated; rather than dtype=arr use dtype=arr.dtype.*:DeprecationWarning",
     # DeprecationWarning: Setting `jax_pmap_shmap_merge` is deprecated in JAX v0.9.0 and will be removed in JAX v0.10.0
     "ignore:.*Setting `jax_pmap_shmap_merge` is deprecated in JAX.*:DeprecationWarning",
+    # DeprecationWarning: Using 'Module.sow()' outside of 'nnx.capture()' is deprecated
+    "ignore:.*Using 'Module.sow\\(\\)' outside of 'nnx.capture\\(\\)' is deprecated.*:DeprecationWarning",
 ]
 doctest_optionflags = ["NUMBER", "ELLIPSIS"]
 
