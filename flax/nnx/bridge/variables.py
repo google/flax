@@ -16,7 +16,7 @@ from typing import Any, TypeVar
 import typing as tp
 
 import jax
-from flax import struct
+from flax import errors, struct
 from flax.core import meta
 from flax.nnx import spmd
 from flax.nnx import traversals
@@ -54,12 +54,33 @@ class NNXMeta(struct.PyTreeNode, meta.AxisMetadata[A]):
     return self.replace(value=val)  # type: ignore
 
   def add_axis(self, index: int, params: dict[Any, Any]) -> 'NNXMeta[A]':
-    # TODO: implement this, supporting hooks
-    return self
+    return self._update_axis(index, params, spmd.add_axis)
 
   def remove_axis(self, index: int, params: dict[Any, Any]) -> 'NNXMeta[A]':
-    # TODO: implement this, supporting hooks
-    return self
+    return self._update_axis(index, params, spmd.remove_axis)
+
+  def _update_axis(
+      self,
+      index: int,
+      params: dict[Any, Any],
+      update: tp.Callable[..., variablelib.Variable],
+  ) -> 'NNXMeta[A]':
+    if (
+        meta.PARTITION_NAME not in params
+        and self.metadata.get('out_sharding') is not None
+    ):
+      raise errors.PartitioningUnspecifiedError(self)
+    # Unpartitioned variables can still carry metadata and axis hooks.
+    params = {meta.PARTITION_NAME: None, **params}
+    # Linen calls both methods with the mapped array: before slicing on input,
+    # and after stacking on output. Normalize negative axes against that shape.
+    if index < 0:
+      index += self.value.ndim
+    # AxisMetadata updates must not initialize or shard the value again. Linen
+    # updates metadata separately from changing the array's dimensions.
+    variable = self.var_type.from_metadata(self.value, self.metadata)
+    update(variable, index, params)
+    return self.replace(metadata=variable.get_metadata())
 
   def get_partition_spec(self) -> jax.sharding.PartitionSpec:
     """Returns the ``Partitionspec`` for this partitioned value."""
@@ -95,7 +116,7 @@ def to_linen_var(vs: variablelib.Variable) -> meta.AxisMetadata:
     return linen_type(vs.get_value(), **metadata)
   if is_vanilla_variable(vs):
     return vs.get_value()
-  return NNXMeta(type(vs), vs.get_value(), metadata)
+  return NNXMeta(vs.type, vs.get_value(), metadata)
 
 
 def get_col_name(keypath: tp.Sequence[Any]) -> str:
