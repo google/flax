@@ -15,15 +15,39 @@
 import os
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 
+from typing import Any
+
+from absl.testing import absltest
 import jax
 import jax.numpy as jnp
 import numpy as np
-from absl.testing import absltest
 
 import flax
 from flax import linen as nn
 from flax import nnx
+from flax import struct
+from flax.core import meta
 from flax.nnx import bridge
+from flax.nnx.bridge import variables as bv
+
+
+class _CustomMeta(struct.PyTreeNode, meta.AxisMetadata):
+  """Simple Linen metadata subclass for testing NNX -> Linen wrapping."""
+
+  value: Any = struct.field(pytree_node=True)
+  tag: str = struct.field(pytree_node=False, default='')
+
+  def unbox(self):
+    return self.value
+
+  def replace_boxed(self, val):
+    return self.replace(value=val)
+
+  def add_axis(self, index, params):
+    return self
+
+  def remove_axis(self, index, params):
+    return self
 
 
 class TestCompatibility(absltest.TestCase):
@@ -188,6 +212,30 @@ class TestCompatibility(absltest.TestCase):
       jax.sharding.NamedSharding(self.mesh, jax.sharding.PartitionSpec('out')),
       ndim=1,
     )
+
+  def test_linen_to_nnx_external_metadata(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        init = nn.with_partitioning(nn.initializers.lecun_normal(), ('in', 'out'))
+        w = self.param('w', init, (x.shape[-1], 4))
+        return x @ w
+
+    x = jax.random.normal(jax.random.key(0), (2, 4))
+    with jax.set_mesh(self.mesh):
+      model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0)).lazy_init(x)
+
+      # Linen -> NNX: box fields become NNX metadata, and the box type is kept.
+      self.assertIsInstance(model.w, nnx.Param)
+      self.assertEqual(model.w.out_sharding, ('in', 'out'))
+      self.assertIs(model.w.get_metadata('linen_meta_type'), nn.Partitioned)
+      raw_w = model.w[...]
+
+      # NNX -> Linen: the original box type is rebuilt.
+      boxed = bv.to_linen_var(model.w)
+      self.assertIsInstance(boxed, nn.Partitioned)
+      self.assertEqual(boxed.names, ('in', 'out'))
+      np.testing.assert_array_equal(boxed.value, raw_w)
 
   def test_linen_to_nnx_state_structure_consistency(self):
     class LinenInner(nn.Module):
@@ -418,6 +466,29 @@ class TestCompatibility(absltest.TestCase):
   def test_nnx_to_linen_metadata_transform(self):
     # TODO: add support and testing after axis add/remove in transform is fixed.
     pass
+
+  def test_nnx_to_linen_external_metadata(self):
+    class NNXInner(nnx.Module):
+      def __init__(self, din, dout, *, rngs: nnx.Rngs):
+        self.w = nnx.Param(
+            nnx.initializers.lecun_normal()(rngs.params(), (din, dout)),
+            linen_meta_type=_CustomMeta,
+            tag='my_tag',
+        )
+
+      def __call__(self, x):
+        return x @ self.w
+
+    model = bridge.to_linen(NNXInner, 4, 4)
+    x = jax.random.normal(jax.random.key(0), (2, 4))
+    variables = model.init(jax.random.key(0), x)
+
+    # The Linen param tree holds the custom box, built from the NNX metadata.
+    self.assertEqual(set(variables['params'].keys()), {'w'})
+    w_box = variables['params']['w']
+    self.assertIsInstance(w_box, _CustomMeta)
+    self.assertEqual(w_box.tag, 'my_tag')
+    self.assertEqual(w_box.value.shape, (4, 4))
 
   def test_nnx_to_linen_pytree_structure_consistency(self):
     class NNXInner(nnx.Module):
