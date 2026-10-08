@@ -349,6 +349,15 @@ class TestLinenConsistency(parameterized.TestCase):
     assert isinstance(linen_out, jax.Array)
     np.testing.assert_array_equal(linen_out, nnx_out)
 
+  def test_groupnorm_per_position_stats(self):
+    x = jax.random.normal(jax.random.key(0), (2, 3, 6))
+    linen_norm = linen.GroupNorm(num_groups=3, reduction_axes=-1)
+    linen_out = linen_norm.apply(linen_norm.init(jax.random.key(1), x), x)
+    nnx_norm = nnx.GroupNorm(
+      6, num_groups=3, reduction_axes=-1, rngs=nnx.Rngs(0)
+    )
+    np.testing.assert_allclose(nnx_norm(x), linen_out, rtol=1e-6, atol=1e-6)
+
   @parameterized.product(
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
