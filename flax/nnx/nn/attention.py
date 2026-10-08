@@ -780,7 +780,9 @@ class MultiHeadAttention(Module):
         flag passed into the call method will take precedence over the ``decode``
         flag passed into the constructor.
       is_causal: whether to overlay a causal attention mask. Passed as an argument to the
-        underlying attention funcion.
+        underlying attention function. Ignored when ``decode=True``: decode already
+        installs a cache-occupancy mask, and a query-length-1 causal tril would
+        keep only key position 0.
       out_sharding: Optional sharding specification to pass to
         the output linear layer for the output arrays.
       qkv_sharding: Optional sharding specification to pass to
@@ -903,6 +905,10 @@ class MultiHeadAttention(Module):
     attn_kwargs = {}
     if input_positions is not None:
        attn_kwargs["input_positions"] = input_positions
+    # Decode already installs a cache-occupancy mask (attend to written
+    # slots only). ``is_causal`` builds ``tril((q_len, kv_len))``; during
+    # decode ``q_len`` is 1 so that mask keeps only key position 0 and
+    # silently drops every later cached token.
     x = self.attention_fn(
       query,
       key,
@@ -915,7 +921,7 @@ class MultiHeadAttention(Module):
       dtype=self.dtype,
       precision=self.precision,
       module=self if sow_weights else None,
-      is_causal=is_causal,
+      is_causal=is_causal and not decode,
       **attn_kwargs
     )
     # back to the original inputs dimensions
