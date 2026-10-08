@@ -222,6 +222,32 @@ class TraversalTest(absltest.TestCase):
     xs_restore = traverse_util.unflatten_dict(flat_xs)
     self.assertEqual(xs, xs_restore)
 
+  def test_flatten_dict_is_leaf_at_root(self):
+    xs = {'foo': {'bar': 1}}
+    is_root = lambda path, _: path == ()
+
+    flat_xs = traverse_util.flatten_dict(xs, is_leaf=is_root)
+    xs_restore = traverse_util.unflatten_dict(flat_xs)
+    self.assertEqual(xs, xs_restore)
+
+    with self.assertRaisesRegex(
+      ValueError,
+      'Cannot flatten the root as a leaf when a separator is specified.',
+    ):
+      traverse_util.flatten_dict(xs, is_leaf=is_root, sep='/')
+
+  def test_flatten_dict_empty_string_key_with_separator(self):
+    xs = {'': 1}
+    flat_xs = traverse_util.flatten_dict(xs, sep='/')
+    xs_restore = traverse_util.unflatten_dict(flat_xs, sep='/')
+    self.assertEqual(xs, xs_restore)
+
+  def test_unflatten_dict_rejects_root_with_other_paths(self):
+    with self.assertRaisesRegex(
+      ValueError, 'Cannot unflatten a root path alongside other paths.'
+    ):
+      traverse_util.unflatten_dict({(): {'foo': 1}, ('bar',): 2})
+
 
 class ModelParamTraversalTest(absltest.TestCase):
   def test_only_works_on_model_params(self):
