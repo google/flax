@@ -123,7 +123,8 @@ class Average(Metric):
       self.total[...] += values.sum()
       self.count[...] += values.size
     else:
-      self.total[...] += (values * mask.astype(values.dtype)).sum()
+      # 0 * nan is nan, so drop masked entries instead of zeroing them
+      self.total[...] += jnp.where(mask, values * mask.astype(values.dtype), 0).sum()
       self.count[...] += mask.sum().astype(self.count.dtype)
 
   def compute(self) -> jax.Array:
