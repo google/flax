@@ -167,6 +167,24 @@ class TestMetrics(parameterized.TestCase):
     np.testing.assert_allclose(values['accuracy'], 0.8)
     self.assertEqual(list(values), ['loss', 'accuracy'])
 
+  def test_multimetric_unknown_mask_key(self):
+    metrics = nnx.MultiMetric(
+        accuracy=nnx.metrics.Accuracy(), loss=nnx.metrics.Average()
+    )
+    logits = jnp.array([[-1.0, 1.0], [1.0, -1.0]])
+    labels = jnp.array([1, 1])
+    batch_loss = jnp.array([1.0, 2.0])
+    with self.assertRaisesRegex(ValueError, "'acuracy'"):
+      metrics.update(
+          logits=logits,
+          labels=labels,
+          values=batch_loss,
+          mask={'acuracy': labels > 0},
+      )
+    # the failed update must not have modified any metric
+    self.assertTrue(jnp.isnan(metrics.compute()['accuracy']))
+    self.assertTrue(jnp.isnan(metrics.compute()['loss']))
+
   @parameterized.product(with_mask=[True, False])
   def test_multimetric_with_custom_metric(self, with_mask):
     class CustomAccuracy(nnx.metrics.Accuracy):
