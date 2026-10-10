@@ -11,9 +11,9 @@ Using Rngs in NNX Transforms
 NNX layers that use RNGs like Dropout or MultiHeadAttention now hold a ``fork``-ed copy of the ``Rngs``
 object given at construction time instead of a shared reference to the original ``Rngs`` object. This has
 two consequences:
+
 * It changes the checkpoint structure, as each layer will have unique RNG state.
-* It changes how ``nnx.split_rngs`` interacts with transforms like ``nnx.vmap`` and ``nnx.scan``,
-  as the resulting RNG state will now not be stored in scalar form.
+* It changes how ``nnx.split_rngs`` interacts with transforms like ``nnx.vmap`` and ``nnx.scan``, as the resulting RNG state will now not be stored in scalar form.
 
 Here is how a "scan over layers" looks like in the new version:
 
