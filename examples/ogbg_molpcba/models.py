@@ -146,7 +146,7 @@ class GraphConvNet(nn.Module):
   layer_norm: bool = True
   deterministic: bool = True
   pooling_fn: Callable[
-      [jnp.ndarray, jnp.ndarray, jnp.ndarray],  # pytype: disable=annotation-type-mismatch  # jax-ndarray
+      [jnp.ndarray, jnp.ndarray, jnp.ndarray],
       jnp.ndarray,
   ] = jraph.segment_mean  # pyrefly: ignore[bad-assignment]
 
@@ -154,7 +154,7 @@ class GraphConvNet(nn.Module):
     """Pooling operation, taken from Jraph."""
 
     # Equivalent to jnp.sum(n_node), but JIT-able.
-    sum_n_node = graphs.nodes.shape[0]  # pytype: disable=attribute-error  # jax-ndarray
+    sum_n_node = graphs.nodes.shape[0]  # pyrefly: ignore[missing-attribute]
     # To aggregate nodes from each graph to global features,
     # we first construct tensors that map the node to the corresponding graph.
     # Example: if you have `n_node=[1,2]`, we construct the tensor [0, 1, 1].
@@ -166,7 +166,7 @@ class GraphConvNet(nn.Module):
         total_repeat_length=sum_n_node,
     )
     # We use the aggregation function to pool the nodes per graph.
-    pooled = self.pooling_fn(graphs.nodes, node_graph_indices, n_graph)  # pytype: disable=wrong-arg-types  # jax-ndarray
+    pooled = self.pooling_fn(graphs.nodes, node_graph_indices, n_graph)  # pyrefly: ignore[bad-argument-type]
     return graphs._replace(globals=pooled)
 
   @nn.compact

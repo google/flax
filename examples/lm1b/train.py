@@ -17,8 +17,6 @@
 This script trains a Transformer on a LM1B dataset.
 """
 
-# pytype: disable=wrong-arg-count
-# pytype: disable=attribute-error
 
 import collections
 import os
@@ -188,7 +186,7 @@ def train_step(
 
   weights = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)
 
-  dropout_rng = jax.random.fold_in(dropout_rng, state.step)
+  dropout_rng = jax.random.fold_in(dropout_rng, state.step)  # pyrefly: ignore[bad-argument-type]
 
   def loss_fn(params):
     """loss function used for training."""
@@ -290,7 +288,7 @@ def evaluate(
   """Evaluate the target an return a dictionary with the metrics."""
   logging.info("Gathering evaluation metrics.")
   eval_metrics = []
-  eval_iter = iter(eval_ds)  # pytype: disable=wrong-arg-types
+  eval_iter = iter(eval_ds)
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
     eval_batch = jax.tree_util.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
     metrics = jit_eval_step(params, eval_batch, config)
@@ -356,7 +354,7 @@ def generate_prediction(
     exemplars = ""
     for prediction in predictions:
       exemplars += f"{prediction}\n\n"
-  return exemplars
+  return exemplars  # pyrefly: ignore[unbound-name]
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
@@ -423,8 +421,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       kernel_init=nn.initializers.xavier_uniform(),
       bias_init=nn.initializers.normal(stddev=1e-6),
   )
-  eval_config = train_config.replace(deterministic=True)
-  predict_config = train_config.replace(deterministic=True, decode=True)
+  eval_config = train_config.replace(deterministic=True)  # pyrefly: ignore[missing-attribute]
+  predict_config = train_config.replace(deterministic=True, decode=True)  # pyrefly: ignore[missing-attribute]
 
   # Mesh definition
   devices_array = utils.create_device_mesh(config)

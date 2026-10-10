@@ -92,7 +92,7 @@ class SamplerTest(parameterized.TestCase):
   def test_samples(self):
     vocab = MockVocab()
     num_layers = 6
-    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+    transformer_config = transformer_lib.TransformerConfig(
         num_layers=num_layers,
         num_embed=vocab.GetPieceSize(),
         embed_dim=768,
@@ -142,7 +142,7 @@ class SamplerTest(parameterized.TestCase):
   def test_state_update(self):
     vocab = MockVocab()
     num_layers = 6
-    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+    transformer_config = transformer_lib.TransformerConfig(
         num_layers=num_layers,
         num_embed=vocab.GetPieceSize(),
         embed_dim=768,
@@ -182,7 +182,7 @@ class SamplerTest(parameterized.TestCase):
     vocab = MockVocab()
 
     def make_config(num_layers, embed_dim):
-      return transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+      return transformer_lib.TransformerConfig(
           num_layers=num_layers,
           num_embed=vocab.GetPieceSize(),
           embed_dim=embed_dim,
@@ -224,7 +224,7 @@ class SamplerTest(parameterized.TestCase):
 
   def test_forbidden_tokens(self):
     vocab = MockVocab()
-    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+    transformer_config = transformer_lib.TransformerConfig(
         num_layers=0,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,
@@ -274,7 +274,7 @@ class SamplerTest(parameterized.TestCase):
   def test_forward_equivalence(self):
     vocab = MockVocab()
     num_layers = 2
-    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+    transformer_config = transformer_lib.TransformerConfig(
         num_layers=num_layers,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,
@@ -335,7 +335,7 @@ class SamplerTest(parameterized.TestCase):
 
   def test_sampler_init_sample_state(self):
     vocab = MockVocab()
-    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+    transformer_config = transformer_lib.TransformerConfig(
         num_layers=0,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,
@@ -377,7 +377,7 @@ class SamplerTest(parameterized.TestCase):
 
   def test_sampler_mask_tokens_after_eos_ids(self):
     vocab = MockVocab()
-    transformer_config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+    transformer_config = transformer_lib.TransformerConfig(
         num_layers=0,
         num_embed=vocab.GetPieceSize(),
         embed_dim=32,
@@ -426,7 +426,7 @@ class SamplerTest(parameterized.TestCase):
   def test_sampler_sows_intermediates(self):
     vocab = MockVocab()
     num_layers = 3
-    config = transformer_lib.TransformerConfig(  # pytype: disable=wrong-arg-types
+    config = transformer_lib.TransformerConfig(
         num_layers=num_layers,
         num_embed=vocab.GetPieceSize(),
         embed_dim=64,
