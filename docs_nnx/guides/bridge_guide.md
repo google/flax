@@ -90,7 +90,7 @@ y = model(x)                            # => `y = model.apply(var, x)` in Linen
 nnx.display(model)
 
 # In-place swap your weight array and the model still works!
-model.w.value = jax.random.normal(jax.random.key(1), (32, 64))
+model.w[...] = jax.random.normal(jax.random.key(1), (32, 64))
 assert not jnp.allclose(y, model(x))
 ```
 
@@ -116,7 +116,7 @@ We will talk more about different collections and types in the [NNX Variable <->
 
 ```{code-cell} ipython3
 assert isinstance(model.dot.w, nnx.Param)
-assert isinstance(model.dot.w.value, jax.Array)
+assert isinstance(model.dot.w[...], jax.Array)
 ```
 
 If you create this model witout using `nnx.bridge.lazy_init`, the NNX variables defined outside will be initialized as usual, but the Linen part (wrapped inside `ToNNX`) will not.
@@ -311,8 +311,8 @@ class NNXMultiCollections(nnx.Module):
     self.count = Count(jnp.array(0))
 
   def __call__(self, x):
-    self.count.value += 1
-    return (x @ self.w.value) + self.lora(x)
+    self.count[...] += 1
+    return (x @ self.w[...]) + self.lora(x)
 
 xkey, pkey, dkey = jax.random.split(jax.random.key(0), 3)
 x = jax.random.normal(xkey, (2, 4))
@@ -375,7 +375,7 @@ with jax.set_mesh(mesh):
 
 print(type(model.w))           # `nnx.Param`
 print(model.w.sharding)        # The partition annotation attached with `w`
-print(model.w.value.sharding)  # The underlying JAX array is sharded across the 2x4 mesh
+print(model.w[...].sharding)   # The underlying JAX array is sharded across the 2x4 mesh
 ```
 
     We have 8 fake JAX devices now to partition this model...
