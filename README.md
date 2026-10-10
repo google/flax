@@ -27,7 +27,7 @@ You can learn more about Flax NNX on the [dedicated Flax documentation site](htt
 * [Flax NNX basics](https://flax.readthedocs.io/en/latest/nnx_basics.html)
 * [MNIST tutorial](https://flax.readthedocs.io/en/latest/mnist_tutorial.html)
 * [Why Flax NNX](https://flax.readthedocs.io/en/latest/why.html)
-* [Evolution from Flax Linen to Flax NNX](https://flax.readthedocs.io/en/latest/guides/linen_to_nnx.html)
+* [Evolution from Flax Linen to Flax NNX](https://flax.readthedocs.io/en/latest/migrating/linen_to_nnx.html)
 
 **Note:** Flax Linen's [documentation has its own site](https://flax-linen.readthedocs.io/).
 
