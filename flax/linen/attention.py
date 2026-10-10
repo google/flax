@@ -864,15 +864,34 @@ def make_causal_mask(
 ) -> Array:
   """Make a causal mask for self-attention.
 
-  In case of 1d inputs (i.e., ``[batch..., len]``, the self-attention weights
+  This utility creates a boolean mask used to prevent attention mechanisms from
+  looking at future tokens (e.g., in autoregressive language modeling).
+
+  ``x`` is used only for its shape; its values are never read. The trailing
+  dimension is treated as the sequence length, and any leading dimensions
+  are treated as batch dimensions.
+
+  In case of inputs with shape ``[batch..., len]``, the self-attention weights
   will be ``[batch..., heads, len, len]`` and this function will produce a
-  causal mask of shape ``[batch..., 1, len, len]``.
+  causal mask of shape ``[batch..., 1, len, len]``, which cleanly broadcasts
+  across the head dimension inside MultiHeadAttention.
+
+  Example::
+
+    >>> import jax.numpy as jnp
+    >>> from flax.linen.attention import make_causal_mask
+    >>> # Simulating a batch of 2 sequences, each of length 3
+    >>> x = jnp.ones((2, 3))
+    >>> mask = make_causal_mask(x)
+    >>> mask.shape
+    (2, 1, 3, 3)
 
   Args:
-    x: input array of shape ``[batch..., len]``
-    extra_batch_dims: number of batch dims to add singleton axes for, none by
-      default
-    dtype: mask return dtype
+    x: A reference array whose shape ``[batch..., len]`` determines the
+      shape of the returned mask. Its values are not used.
+    extra_batch_dims: Number of batch dims to add singleton axes for, none by
+      default.
+    dtype: The data type of the returned mask array (defaults to ``jnp.float32``).
 
   Returns:
     A ``[batch..., 1, len, len]`` shaped causal mask for 1d attention.
