@@ -8,7 +8,7 @@ Where to search for an answer to a Flax-related question?
 
 There are a number of official Flax resources to search for information:
 
-- `Flax Documentation on ReadTheDocs <https://flax.readthedocs.io/en/latest/>`__ (this site): Use the `search bar <https://flax.readthedocs.io/en/search.html>`__ or the table of contents on the left-hand side.
+- `Flax Documentation on ReadTheDocs <https://flax.readthedocs.io/en/latest/>`__ (this site): Use the `search bar <https://flax.readthedocs.io/en/latest/search.html>`__ or the table of contents on the left-hand side.
 - `google/flax GitHub Discussions <https://github.com/google/flax/discussions>`__: Search for an existing topic or start a new one. If you can't find what you're looking for, feel free to ask the Flax team or community a question.
 - `google/flax GitHub Issues <https://github.com/google/flax/issues>`__: Use the search bar to look for an existing issue or a feature request, or start a new one.
 
