@@ -175,6 +175,15 @@ class TraversalTest(absltest.TestCase):
       },
     )
 
+  def test_flatten_dict_invalid_keys(self):
+    xs1 = {'a/b': 1, 'c': {'d': 2}}
+    with self.assertRaisesRegex(ValueError, "requires string keys that do not contain the separator; got key 'a/b'"):
+      traverse_util.flatten_dict(xs1, sep='/')
+
+    xs2 = {1: {'a': 2}}
+    with self.assertRaisesRegex(ValueError, "requires string keys that do not contain the separator; got key 1"):
+      traverse_util.flatten_dict(xs2, sep='/')
+
   def test_unflatten_dict(self):
     expected_xs = {'foo': 1, 'bar': {'a': 2}}
     xs = traverse_util.unflatten_dict(
