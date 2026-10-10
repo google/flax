@@ -76,10 +76,10 @@ Tutorials
       - Author
       - Task type
       - Reference
-    * -
-      -
-      -
-      -
+    * - `Build Mini GPT from Scratch <https://github.com/yilunyu/miniGPT-Jax>`__
+      - `@yilunyu <https://github.com/yilunyu>`__
+      - Text Generation
+      - N/A
 
 Contributing policy
 *******************
