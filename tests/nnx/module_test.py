@@ -469,7 +469,8 @@ class TestCapture(parameterized.TestCase):
       self.assertEqual(intms['y'].get_value(), (3,))
       self.assertFalse(hasattr(m, 'y'))
 
-      m(2, capture_noop=False)
+      with self.assertWarns(DeprecationWarning):
+        m(2, capture_noop=False)
       self.assertTrue(hasattr(m, 'y'))
       self.assertEqual(m.y.get_value(), (3,))
     finally:
