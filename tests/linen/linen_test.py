@@ -1243,8 +1243,12 @@ class RecurrentTest(parameterized.TestCase):
     np.testing.assert_allclose(y, y_opt, rtol=1e-6)
     check_eq(lstm_params, lstm_opt_params)
 
-  def test_mgu_reset_gate(self):
-    module = nn.MGUCell(features=4, reset_gate=False)
+  @parameterized.parameters(
+    {'reset_gate': True},
+    {'reset_gate': False},
+  )
+  def test_mgu_cell_matches_manual_recurrence(self, reset_gate):
+    module = nn.MGUCell(features=4, reset_gate=reset_gate)
     rng = random.key(0)
     rng, key1, key2 = random.split(rng, 3)
     x = random.normal(key1, (2, 3))
@@ -1252,20 +1256,28 @@ class RecurrentTest(parameterized.TestCase):
     (carry, y), v = module.init_with_output(key2, carry0, x)
 
     self.assertIn('kernel', v['params']['hn'])
-    self.assertNotIn('bias', v['params']['hn'])
+    if reset_gate:
+      self.assertIn('bias', v['params']['hn'])
+    else:
+      self.assertNotIn('bias', v['params']['hn'])
 
     f = jax.nn.sigmoid(
       jnp.dot(x, v['params']['if']['kernel'])
       + v['params']['if']['bias'].reshape(1, -1)
       + jnp.dot(carry0, v['params']['hf']['kernel'])
     )
+    recurrent_update = jnp.dot(carry0, v['params']['hn']['kernel'])
+    if reset_gate:
+      recurrent_update += v['params']['hn']['bias'].reshape(1, -1)
+      recurrent_update *= f
     n = jax.nn.tanh(
       jnp.dot(x, v['params']['in']['kernel'])
       + v['params']['in']['bias'].reshape(1, -1)
-      + jnp.dot(carry0, v['params']['hn']['kernel'])
+      + recurrent_update
     )
-    expected_out = (1 - f) * n + f * carry0
+    expected_out = (1 - f) * carry0 + f * n
     np.testing.assert_allclose(y, expected_out)
+    np.testing.assert_allclose(carry, expected_out)
 
 
 class IdsTest(absltest.TestCase):
