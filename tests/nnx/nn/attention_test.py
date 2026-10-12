@@ -112,6 +112,40 @@ class TestMultiHeadAttention(parameterized.TestCase):
       assert y1.shape == (1, 1, 4)
       assert y2.shape == (1, 1, 4)
 
+  def test_decode_with_is_causal_matches_cache_mask(self):
+    """``is_causal=True`` during decode must not keep only key position 0."""
+
+    def make_model():
+      return nnx.MultiHeadAttention(
+        num_heads=2,
+        in_features=4,
+        qkv_features=4,
+        decode=True,
+        rngs=nnx.Rngs(0),
+        kernel_init=nnx.initializers.normal(),
+        bias_init=nnx.initializers.zeros_init(),
+      )
+
+    model_cache_mask = make_model()
+    model_causal = make_model()
+
+    seq = jax.random.normal(jax.random.key(1), (1, 4, 4))
+    model_cache_mask.init_cache(seq.shape)
+    model_causal.init_cache(seq.shape)
+
+    outs_cache = []
+    outs_causal = []
+    for t in range(4):
+      token = seq[:, t : t + 1, :]
+      outs_cache.append(model_cache_mask(token, decode=True, is_causal=False))
+      outs_causal.append(model_causal(token, decode=True, is_causal=True))
+
+    np.testing.assert_allclose(
+      jnp.concatenate(outs_cache, axis=1),
+      jnp.concatenate(outs_causal, axis=1),
+      atol=1e-5,
+    )
+
   @parameterized.product(keep_rngs=[True, False])
   def test_keep_rngs(self, keep_rngs):
     rngs = nnx.Rngs(42)
