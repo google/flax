@@ -113,5 +113,65 @@ class TestEMA(absltest.TestCase):
     np.testing.assert_allclose(ema_model.kernel[...], ema.params.kernel[...])
     self.assertFalse(jnp.allclose(ema_model.kernel[...], model.kernel[...]))
 
+  def test_ema_default_tracks_inexact_variables(self):
+    class Model(nnx.Module):
+
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 2, use_bias=False, rngs=rngs)
+        self.dropout = nnx.Dropout(0.5, rngs=rngs)
+        self.temperature = nnx.Param(1.0)
+        self.step = nnx.Variable(jnp.array(0, jnp.int32))
+        self.flag = nnx.Variable(jnp.array(False))
+
+      def __call__(self, x):
+        return self.dropout(self.linear(x)) * self.temperature
+
+    model = Model(nnx.Rngs(0))
+    initial_kernel = jnp.copy(model.linear.kernel[...])
+    ema = nnx.EMA(model, decay=0.9)
+    ema_model = ema.apply_to(model)
+
+    self.assertEqual(
+        [path for path, _ in nnx.to_flat_state(ema.params)],
+        [('linear', 'kernel'), ('temperature',)],
+    )
+
+    @nnx.jit
+    def train_step(model, ema, x):
+      model(x)
+      model.linear.kernel[...] *= 2.0
+      model.temperature[...] = 2.0
+      model.step[...] += 5
+      model.flag[...] = True
+      ema.update(model)
+
+    train_step(model, ema, jnp.ones((1, 2)))
+
+    self.assertEqual(model.dropout.rngs.count[...], 1)
+    np.testing.assert_allclose(
+        ema.params['linear']['kernel'][...], 1.1 * initial_kernel
+    )
+    np.testing.assert_allclose(ema.params['temperature'][...], 1.1)
+    self.assertIs(ema_model.dropout.rngs.count, model.dropout.rngs.count)
+    self.assertIs(ema_model.step, model.step)
+    self.assertEqual(ema_model.step[...], 5)
+    self.assertTrue(ema_model.flag[...])
+
+  def test_ema_default_skips_non_array_variables(self):
+    class Model(nnx.Module):
+
+      def __init__(self, rngs):
+        self.linear = nnx.Linear(2, 2, rngs=rngs)
+        self.cache = nnx.Variable((jnp.zeros(2), jnp.ones(2)))
+
+    model = Model(nnx.Rngs(0))
+    ema = nnx.EMA(model, decay=0.9)
+    ema.update(model)
+
+    self.assertEqual(
+        [path for path, _ in nnx.to_flat_state(ema.params)],
+        [('linear', 'bias'), ('linear', 'kernel')],
+    )
+
 if __name__ == '__main__':
   absltest.main()
