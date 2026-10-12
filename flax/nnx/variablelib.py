@@ -248,9 +248,15 @@ class VarDefaultsContext:
 
 
 def is_array_ref(x) -> tp.TypeGuard[Ref]:
-  return isinstance(x, jax.Array | AbstractRef | Ref) and isinstance(
-    jax.typeof(x), AbstractRef | Ref
-  )
+  if isinstance(x, Ref):
+    return True
+  if isinstance(x, AbstractRef):
+    return isinstance(jax.typeof(x), AbstractRef | Ref)
+  if not isinstance(x, jax.Array):
+    return False
+  if not isinstance(x, jax.core.Tracer):
+    return False
+  return isinstance(jax.typeof(x), AbstractRef | Ref)
 
 
 @dataclasses.dataclass
