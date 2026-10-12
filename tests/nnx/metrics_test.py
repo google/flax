@@ -265,6 +265,16 @@ class TestMetrics(parameterized.TestCase):
       )
     )
 
+  def test_average_mask_skips_nonfinite(self):
+    # a padded position can hold nan or inf (e.g. a loss over -inf logits);
+    # the mask must keep it out of the total
+    average = nnx.metrics.Average()
+    values = jnp.array([[1.0, 2.0, jnp.nan], [3.0, jnp.inf, 6.0]])
+    average.update(values=values, mask=jnp.array([[1, 1, 0], [1, 0, 1]]))
+    self.assertEqual(average.count, 4)
+    self.assertEqual(average.total, 12.0)
+    self.assertEqual(average.compute(), 3.0)
+
   def test_vmap_reset_preserves_shape(self):
     n = 3
 
