@@ -590,5 +590,41 @@ class TestLinenConsistency(parameterized.TestCase):
     )
 
 
+class TestBatchNorm(parameterized.TestCase):
+  @parameterized.parameters(
+    {'use_fast_variance': True}, {'use_fast_variance': False}
+  )
+  def test_mask_axis_name(self, use_fast_variance):
+    # Device 0 has three unmasked 0s and device 1 has one unmasked 10, so the
+    # statistics are those of [0, 0, 0, 10]: mean 2.5 and variance 18.75.
+    x = jnp.array(
+      [[[0.0], [0.0], [0.0], [7.0]], [[10.0], [-3.0], [5.0], [8.0]]]
+    )
+    m = jnp.array([[[1], [1], [1], [0]], [[1], [0], [0], [0]]], dtype=bool)
+    model = nnx.BatchNorm(
+      1,
+      axis_name='batch',
+      momentum=0.0,
+      use_fast_variance=use_fast_variance,
+      rngs=nnx.Rngs(0),
+    )
+    graphdef, state = nnx.split(model)
+
+    def batch_stats(state, x, m):
+      model = nnx.merge(graphdef, state)
+      model(x, mask=m)
+      return model.mean[...], model.var[...]
+
+    vmapped = jax.vmap(batch_stats, in_axes=(None, 0, 0), axis_name='batch')
+    mean, var = vmapped(state, x, m)
+    np.testing.assert_allclose(mean, 2.5)
+    np.testing.assert_allclose(var, 18.75)
+
+    # With device 0 fully masked, the statistics are those of [10].
+    mean, var = vmapped(state, x, m.at[0].set(False))
+    np.testing.assert_allclose(mean, 10.0)
+    np.testing.assert_allclose(var, 0.0)
+
+
 if __name__ == '__main__':
   absltest.main()
