@@ -421,6 +421,30 @@ class TestRngs(parameterized.TestCase):
     self.assertEqual(broadcasted_rngs_mapped.params.key.shape, (5,))
     self.assertEqual(broadcasted_rngs_mapped.dropout.key.shape, ())
 
+  def test_split_none_preserves_count(self):
+    # Streams passed through split (value None / unmatched) must keep their
+    # counter so already-consumed keys are not re-emitted.
+    rngs = nnx.Rngs(params=1, dropout=2)
+    consumed_key1 = rngs.dropout()
+    consumed_key2 = rngs.dropout()
+
+    new_rngs = rngs.split({'params': 5, 'dropout': None})
+
+    self.assertEqual(new_rngs.params.key.shape, (5,))
+    self.assertEqual(new_rngs.dropout.count[...], 2)
+    self.assertFalse(jnp.array_equal(new_rngs.dropout(), consumed_key1))
+    self.assertFalse(jnp.array_equal(new_rngs.dropout(), consumed_key2))
+
+  def test_broadcast_none_preserves_count(self):
+    rngs = nnx.Rngs(params=1, dropout=2)
+    consumed_key = rngs.dropout()
+
+    new_rngs = rngs.broadcast({'params': 5, 'dropout': None})
+
+    self.assertEqual(new_rngs.params.key.shape, (5,))
+    self.assertEqual(new_rngs.dropout.count[...], 1)
+    self.assertFalse(jnp.array_equal(new_rngs.dropout(), consumed_key))
+
   @parameterized.parameters(True, False)
   def test_with_rngs_decorator(self, graph):
     rngs = nnx.Rngs(params=0, dropout=1)
