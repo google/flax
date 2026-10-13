@@ -38,6 +38,8 @@ def add_axis(tree: A, index: int, transform_metadata: tp.Mapping) -> A:
 
   def insert_field(fields, index, value):
     iterable = list(fields)
+    if index < 0:
+      index += len(iterable) + 1
     while len(iterable) < index:
       iterable.append(None)
     iterable.insert(index, value)
