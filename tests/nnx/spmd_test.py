@@ -353,6 +353,27 @@ class TestSPMD(parameterized.TestCase):
 
         assert 'float32[2@X,4]' in str(jax.typeof(func(sharded_array, nnx.Rngs(0))))
 
+  def test_out_sharding_dropout_broadcast_sharded_axis(self):
+    mesh = jax.make_mesh((2, 2), ("X", "Y"), axis_types=(AxisType.Explicit, AxisType.Explicit))
+    with jax.set_mesh(mesh):
+      replicated_array = (jnp.arange(8) + 1).reshape(2, 4).astype(jnp.float32)
+      sharded_array = reshard(replicated_array, P("X", None))
+      # broadcast_dims includes the sharded axis 0
+      layer = nnx.Dropout(
+        rate=0.5, deterministic=False, broadcast_dims=(0,), rngs=nnx.Rngs(0)
+      )
+      out = layer(sharded_array)
+      assert 'float32[2@X,4]' in str(jax.typeof(out))
+      # the dropout mask must be shared along the broadcast axis
+      out_host = jax.device_get(out)
+      assert ((out_host[0] == 0.0) == (out_host[1] == 0.0)).all()
+
+      @jax.jit
+      def func(x, rngs):
+        return layer(x, rngs=rngs)
+
+      assert 'float32[2@X,4]' in str(jax.typeof(func(sharded_array, nnx.Rngs(0))))
+
   def test_out_sharding_mha(self):
     mesh = jax.make_mesh((2, 2), ("fsdp", "tp"), axis_types=(AxisType.Explicit, AxisType.Explicit))
     with jax.set_mesh(mesh):
