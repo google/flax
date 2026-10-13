@@ -106,14 +106,14 @@ gdef, abs_state = nnx.split(abs_model)
 pprint(abs_state)
 ```
 
-When you fill every `nnx.Variable` pytree leaf's `value` attributes with real `jax.Array`s, the abstract model becomes equivalent to a real model.
+When you fill every `nnx.Variable` pytree leaf with real `jax.Array`s, the abstract model becomes equivalent to a real model.
 
 ```{code-cell} ipython3
 model = TwoLayerMLP(4, rngs=nnx.Rngs(0))
-abs_state['linear1']['kernel'].value = model.linear1.kernel.value
-abs_state['linear1']['bias'].value = model.linear1.bias.value
-abs_state['linear2']['kernel'].value = model.linear2.kernel.value
-abs_state['linear2']['bias'].value = model.linear2.bias.value
+abs_state['linear1']['kernel'][...] = model.linear1.kernel[...]
+abs_state['linear1']['bias'][...] = model.linear1.bias[...]
+abs_state['linear2']['kernel'][...] = model.linear2.kernel[...]
+abs_state['linear2']['bias'][...] = model.linear2.bias[...]
 nnx.update(abs_model, abs_state)
 np.testing.assert_allclose(abs_model(x), model(x))  # They are equivalent now!
 ```
