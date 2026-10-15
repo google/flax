@@ -324,7 +324,7 @@ nnx_sow_capture_noop = bool_flag(
   name='nnx_sow_capture_noop',
   default=False,
   help=(
-      'Whether `nnx.Module.sow` is a no-op when called outside of'
-      ' `nnx.capture`.'
+      'Whether `nnx.Module.sow` and `nnx.Module.perturb` are no-ops when called'
+      ' outside of `nnx.capture`.'
   ),
 )
