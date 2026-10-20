@@ -210,7 +210,7 @@ def init_intermediates(
     num_layers: int,
     num_heads: int,
     sow_config: SowConfig,
-    dtype: jnp.dtype = jnp.float32,
+    dtype: jnp.dtype = jnp.float32,  # pyrefly: ignore[bad-function-definition]
 ) -> TransformerIntermediates:
   """Initializes the intermediate activations that will be filled."""
   intermediates = TransformerIntermediates()

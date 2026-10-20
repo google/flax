@@ -16,9 +16,6 @@
 
 # pylint: disable=attribute-defined-outside-init,g-bare-generic
 # See issue #620.
-# pytype: disable=wrong-arg-count
-# pytype: disable=wrong-keyword-args
-# pytype: disable=attribute-error
 
 from collections.abc import Callable
 from typing import Any

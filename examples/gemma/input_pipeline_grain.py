@@ -104,7 +104,7 @@ def padded_batch(
     return jax.tree.map(map_fn, *values)
 
   return dataset.batch(
-      batch_size, batch_fn=padded_batching, drop_remainder=drop_remainder  # pytype: disable=wrong-arg-types
+      batch_size, batch_fn=padded_batching, drop_remainder=drop_remainder  # pyrefly: ignore[bad-argument-type]
   )
 
 
