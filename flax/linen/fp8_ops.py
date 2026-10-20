@@ -119,8 +119,8 @@ class fp8_meta_dtype_wrapper(dtypes.ExtendedDType):
     return f'fp8_meta{nbits}'
   name = property(__repr__)
 
-fm32 = fp8_meta_dtype_wrapper(jnp.float32)
-fp32_max_grad = fp8_meta_dtype_wrapper(jnp.float32)
+fm32 = fp8_meta_dtype_wrapper(jnp.dtype(jnp.float32))
+fp32_max_grad = fp8_meta_dtype_wrapper(jnp.dtype(jnp.float32))
 
 def get_fp8_max(fp8_dtype, out_dtype):
   assert fp8_dtype in (jnp.float8_e4m3fn, jnp.float8_e5m2,

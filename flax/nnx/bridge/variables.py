@@ -87,9 +87,9 @@ def is_vanilla_variable(vs: variablelib.Variable) -> bool:
 
 
 def to_linen_var(vs: variablelib.Variable) -> meta.AxisMetadata:
-  metadata = vs.get_metadata()
+  metadata = vs.get_metadata(exclude_required=True)
   if 'linen_meta_type' in metadata:
-    linen_type = metadata['linen_meta_type']
+    linen_type = metadata.pop('linen_meta_type')
     if hasattr(linen_type, 'from_nnx_metadata'):
       return linen_type.from_nnx_metadata({'value': vs.get_value(), **metadata})
     return linen_type(vs.get_value(), **metadata)
@@ -163,12 +163,12 @@ def nnx_attrs_to_linen_vars(nnx_attrs: dict) -> dict:
   return variables
 
 
-
 def with_partitioning(
     fn: tp.Callable[..., tp.Any],
     names: LogicalNames,
     mesh: jax.sharding.Mesh | None = None,
 ) -> tp.Callable[..., meta.Partitioned[tp.Any]]:
   """Same interface as Linen, but calls NNX `with_partitioning` within."""
-  return spmd.with_partitioning(fn, names, mesh,
-                                linen_meta_type=meta.Partitioned)
+  return spmd.with_partitioning(
+      fn, names, mesh, linen_meta_type=meta.Partitioned
+  )

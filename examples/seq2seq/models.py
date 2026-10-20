@@ -15,7 +15,6 @@
 """seq2seq example: Mode code."""
 
 # See issue #620.
-# pytype: disable=wrong-keyword-args
 
 from typing import Tuple
 

@@ -20,6 +20,7 @@ import typing as tp
 import jax
 import jax.numpy as jnp
 
+from flax import config
 from flax.nnx import (
   filterlib,
   graphlib,
@@ -89,6 +90,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       value: A,
       reduce_fn: tp.Callable[[B, A], B] = tuple_reduce,
       init_fn: tp.Callable[[], B] = tuple_init,  # type: ignore
+      capture_noop: bool | None = None,
   ) -> bool:
     """Store intermediate values during module execution for later extraction.
 
@@ -143,7 +145,15 @@ class Module(Pytree, metaclass=ModuleMeta):
         to a tuple.
       init_fn: Function providing initial value for first ``reduce_fn`` call.
         Default is an empty tuple.
+      capture_noop: If True, this call becomes a no-op if we're not in a
+        ``nnx.capture`` context. If False, calls to ``sow`` outside of a capture
+        context will set the corresponding module attribute. This behavior is
+        deprecated, but still supported for now for backwards compatibility. If
+        None, uses the ``nnx_sow_capture_noop`` config value.
     """
+    if capture_noop is None:
+      capture_noop = config.nnx_sow_capture_noop
+
     if isinstance(variable_type, str):
       variable_type = variableslib.variable_type_from_name(
           variable_type, allow_register=True
@@ -159,6 +169,8 @@ class Module(Pytree, metaclass=ModuleMeta):
           return True
       else:
         return False
+    elif capture_noop:
+      return False
     elif hasattr(self, name):
         variable = getattr(self, name)
         if not isinstance(variable, variableslib.Variable):
@@ -190,6 +202,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       variable_type: (
           str | type[variableslib.Variable[tp.Any]]
       ) = variableslib.Perturbation,
+      capture_noop: bool | None = None,
   ):
     """Extract gradients of intermediate values during training.
 
@@ -240,7 +253,15 @@ class Module(Pytree, metaclass=ModuleMeta):
         the returned value (not the original) for gradient capturing to work.
       variable_type: The :class:`Variable` type for the stored perturbation.
         Default is :class:`nnx.Perturbation`.
+      capture_noop: If True, this call becomes a no-op if we're not in a
+        ``nnx.capture`` context. If False, calls to ``perturb`` outside of a
+        capture context will set the corresponding module attribute. This
+        behavior is deprecated, but still supported for now for backwards
+        compatibility. If None, uses the ``nnx_sow_capture_noop`` config value.
     """
+    if capture_noop is None:
+      capture_noop = config.nnx_sow_capture_noop
+
     if isinstance(variable_type, str):
       variable_type = variableslib.variable_type_from_name(
           variable_type, allow_register=True
@@ -256,6 +277,8 @@ class Module(Pytree, metaclass=ModuleMeta):
           return old_value + value
       else:
         return value
+    elif capture_noop:
+      return value
     elif hasattr(self, name):
       var = getattr(self, name)
       if not isinstance(var, variable_type):
@@ -267,12 +290,13 @@ class Module(Pytree, metaclass=ModuleMeta):
     else:
       old_value = jax.tree.map(jnp.zeros_like, value)
       setattr(self, name, variable_type(old_value))
-    warnings.warn("""
-      Using 'Module.perturb()' outside of 'nnx.capture()' is deprecated; see
-      https://flax.readthedocs.io/en/latest/guides/extracting_intermediates.html for more information.
-      """,
-      DeprecationWarning,
-      stacklevel=2)
+    warnings.warn(
+        """Using 'Module.perturb()' outside of 'nnx.capture()' is deprecated; see
+        https://flax.readthedocs.io/en/latest/guides/extracting_intermediates.html for more information.
+        """,
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return old_value + value
 
   def iter_modules(self) -> tp.Iterator[tuple[PathParts, Module]]:
