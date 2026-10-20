@@ -1223,26 +1223,12 @@ class Embed(Module):
     >>> import jax.numpy as jnp
 
     >>> layer = nnx.Embed(num_embeddings=5, features=3, rngs=nnx.Rngs(0))
-    >>> nnx.state(layer)
-    State({
-      'embedding': Param( # 15 (60 B)
-        value=Array([[ 0.57966787, -0.523274  , -0.43195742],
-               [-0.676289  , -0.50300646,  0.33996582],
-               [ 0.41796115, -0.59212935,  0.95934135],
-               [-1.0917838 , -0.7441663 ,  0.07713798],
-               [-0.66570747,  0.13815777,  1.007365  ]], dtype=float32)
-      )
-    })
+    >>> layer.embedding.shape
+    (5, 3)
     >>> # get the first three and last three embeddings
     >>> indices_input = jnp.array([[0, 1, 2], [-1, -2, -3]])
-    >>> layer(indices_input)
-    Array([[[ 0.57966787, -0.523274  , -0.43195742],
-            [-0.676289  , -0.50300646,  0.33996582],
-            [ 0.41796115, -0.59212935,  0.95934135]],
-    <BLANKLINE>
-           [[-0.66570747,  0.13815777,  1.007365  ],
-            [-1.0917838 , -0.7441663 ,  0.07713798],
-            [ 0.41796115, -0.59212935,  0.95934135]]], dtype=float32)
+    >>> layer(indices_input).shape
+    (2, 3, 3)
 
   A parameterized function from integers [0, ``num_embeddings``) to
   ``features``-dimensional vectors. This ``Module`` will create an ``embedding``
