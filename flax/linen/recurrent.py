@@ -1295,6 +1295,8 @@ class Bidirectional(Module):
       time_major = self.time_major
     if return_carry is None:
       return_carry = self.return_carry
+    key_forward: PRNGKey | None
+    key_backward: PRNGKey | None
     if init_key is not None:
       key_forward, key_backward = random.split(init_key)
     else:

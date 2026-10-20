@@ -133,9 +133,9 @@ class Average(Metric):
 
 @struct.dataclass
 class Statistics:
-  mean: jnp.float32
-  standard_error_of_mean: jnp.float32
-  standard_deviation: jnp.float32
+  mean: jax.Array
+  standard_error_of_mean: jax.Array
+  standard_deviation: jax.Array
 
 
 class Welford(Metric):
