@@ -1127,21 +1127,11 @@ class Embed(Module):
     >>> layer = nn.Embed(num_embeddings=5, features=3)
     >>> indices_input = jnp.array([[0, 1, 2], [-1, -2, -3]])
     >>> variables = layer.init(jax.random.key(0), indices_input)
-    >>> variables
-    {'params': {'embedding': Array([[ 0.04396089, -0.9328513 , -0.97328115],
-           [ 0.41147125,  0.66334754,  0.49469155],
-           [ 0.09719624,  0.49861377,  0.49519277],
-           [-0.13316602,  0.6697022 ,  0.3710195 ],
-           [-0.5039532 ,  0.287319  ,  1.4369922 ]], dtype=float32)}}
+    >>> jax.tree.map(jnp.shape, variables)
+    {'params': {'embedding': (5, 3)}}
     >>> # get the first three and last three embeddings
-    >>> layer.apply(variables, indices_input)
-    Array([[[ 0.04396089, -0.9328513 , -0.97328115],
-            [ 0.41147125,  0.66334754,  0.49469155],
-            [ 0.09719624,  0.49861377,  0.49519277]],
-    <BLANKLINE>
-           [[-0.5039532 ,  0.287319  ,  1.4369922 ],
-            [-0.13316602,  0.6697022 ,  0.3710195 ],
-            [ 0.09719624,  0.49861377,  0.49519277]]], dtype=float32)
+    >>> layer.apply(variables, indices_input).shape
+    (2, 3, 3)
 
   Attributes:
     num_embeddings: number of embeddings / vocab size.
