@@ -17,8 +17,6 @@
 This script trains a Gemma transformer on the LM1B dataset.
 """
 
-# pytype: disable=wrong-arg-count
-# pytype: disable=attribute-error
 import contextlib
 import dataclasses
 import time
@@ -160,10 +158,10 @@ def jax_train_step(
       batch.get(k, None) for k in train_keys
   )
 
-  input_mask = inputs > pad_id
-  weights = input_mask.astype(jnp.float32)
+  input_mask = inputs > pad_id  # pyrefly: ignore[unsupported-operation]
+  weights = jnp.astype(input_mask, jnp.float32)
   attention_mask = transformer_lib.make_causal_attn_mask(
-      input_mask
+      input_mask  # pyrefly: ignore[bad-argument-type]
   )  # (B, L, L)
   if inputs_segmentation is not None:
     # inputs_segmentation: (B, L)
@@ -237,10 +235,10 @@ def nnx_train_step(
       batch.get(k, None) for k in train_keys
   )
 
-  input_mask = inputs > pad_id
-  weights = input_mask.astype(jnp.float32)
+  input_mask = inputs > pad_id  # pyrefly: ignore[unsupported-operation]
+  weights = jnp.astype(input_mask, jnp.float32)
   attention_mask = transformer_lib.make_causal_attn_mask(
-      input_mask
+      input_mask  # pyrefly: ignore[bad-argument-type]
   )  # (B, L, L)
   if inputs_segmentation is not None:
     # inputs_segmentation: (B, L)
@@ -357,7 +355,7 @@ def evaluate(
 ):
   """Evaluate the target an return a dictionary with the metrics."""
   logging.info('Gathering evaluation metrics.')
-  eval_iter = iter(eval_ds)  # pytype: disable=wrong-arg-types
+  eval_iter = iter(eval_ds)
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
     output = jit_eval_step(model, eval_batch, eval_metrics)
     if output is not None:
@@ -421,15 +419,15 @@ def train_and_evaluate(
   if config.use_nnx_transforms in ("all", "jit-only", "grad-only"):
     logging.info(f"Use NNX transforms: {config.use_nnx_transforms}")
 
-  workdir = Path(workdir).absolute().resolve()
-  workdir.mkdir(parents=True, exist_ok=True)
+  workdir = Path(workdir).absolute().resolve()  # pyrefly: ignore[bad-assignment]
+  workdir.mkdir(parents=True, exist_ok=True)  # pyrefly: ignore[missing-attribute]
 
   if config.vocab_path is None:
-    config.vocab_path = str(workdir / "sentencepiece_model")
+    config.vocab_path = str(workdir / "sentencepiece_model")  # pyrefly: ignore[unsupported-operation]
   vocab_path = Path(config.vocab_path).absolute().resolve()
   vocab_path.parent.mkdir(parents=True, exist_ok=True)
   checkpoint_path = (
-      workdir / "checkpoints" if chpt_bucket is None else chpt_bucket
+      workdir / "checkpoints" if chpt_bucket is None else chpt_bucket  # pyrefly: ignore[unsupported-operation]
   )
 
   workdir, vocab_path = str(workdir), str(vocab_path)
@@ -679,11 +677,11 @@ def train_and_evaluate(
               top_p=config.sampling_top_p,
               seed=jnp.array(config.seed),
               echo=True,
-              dtype=dtype,
+              dtype=dtype,  # pyrefly: ignore[bad-argument-type]
               transformer=eval_model,
               data_sharding=data_sharding,
           )
-          writer.write_texts(step, {"samples": exemplars.text})  # pytype: disable=wrong-arg-types
+          writer.write_texts(step, {"samples": exemplars.text})  # pyrefly: ignore[bad-assignment]
 
         with report_progress.timed('eval'):
           eval_results = evaluate(

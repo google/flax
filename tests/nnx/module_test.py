@@ -438,6 +438,85 @@ class TestCapture(parameterized.TestCase):
     np.testing.assert_allclose(intms['__call__'][0], y)
     np.testing.assert_allclose(jnp.sin(intms['intermediate'][0]), y)
 
+  def test_sow_capture_noop(self):
+    class Foo(nnx.Module):
+      def __call__(self, x, capture_noop=None):
+        self.sow(nnx.Intermediate, 'y', x + 1, capture_noop=capture_noop)
+        return x
+
+    m = Foo()
+    m(2, capture_noop=True)
+    self.assertFalse(hasattr(m, 'y'))
+
+    _, intms = nnx.capture(m, nnx.Intermediate)(2, capture_noop=True)
+    self.assertEqual(intms['y'].get_value(), (3,))
+    self.assertFalse(hasattr(m, 'y'))
+
+  def test_sow_capture_noop_config_flag(self):
+    class Foo(nnx.Module):
+      def __call__(self, x, capture_noop=None):
+        self.sow(nnx.Intermediate, 'y', x + 1, capture_noop=capture_noop)
+        return x
+
+    old_val = flax.config._read('nnx_sow_capture_noop')
+    try:
+      flax.config.update('nnx_sow_capture_noop', True)
+      m = Foo()
+      m(2)
+      self.assertFalse(hasattr(m, 'y'))
+
+      _, intms = nnx.capture(m, nnx.Intermediate)(2)
+      self.assertEqual(intms['y'].get_value(), (3,))
+      self.assertFalse(hasattr(m, 'y'))
+
+      m(2, capture_noop=False)
+      self.assertTrue(hasattr(m, 'y'))
+      self.assertEqual(m.y.get_value(), (3,))
+    finally:
+      flax.config.update('nnx_sow_capture_noop', old_val)
+
+  def test_perturb_capture_noop(self):
+    class Foo(nnx.Module):
+      def __call__(self, x, capture_noop=None):
+        x = self.perturb('grad_of_x', x, capture_noop=capture_noop)
+        return 3 * x
+
+    m = Foo()
+    y = m(2.0, capture_noop=True)
+    self.assertEqual(y, 6.0)
+    self.assertFalse(hasattr(m, 'grad_of_x'))
+
+    y, perturbations = nnx.capture(m, nnx.Perturbation)(2.0, capture_noop=True)
+    self.assertEqual(y, 6.0)
+    self.assertEqual(perturbations['grad_of_x'].get_value(), 0.0)
+    self.assertFalse(hasattr(m, 'grad_of_x'))
+
+  def test_perturb_capture_noop_config_flag(self):
+    class Foo(nnx.Module):
+      def __call__(self, x, capture_noop=None):
+        x = self.perturb('grad_of_x', x, capture_noop=capture_noop)
+        return 3 * x
+
+    old_val = flax.config._read('nnx_sow_capture_noop')
+    try:
+      flax.config.update('nnx_sow_capture_noop', True)
+      m = Foo()
+      y = m(2.0)
+      self.assertEqual(y, 6.0)
+      self.assertFalse(hasattr(m, 'grad_of_x'))
+
+      y, perturbations = nnx.capture(m, nnx.Perturbation)(2.0)
+      self.assertEqual(y, 6.0)
+      self.assertEqual(perturbations['grad_of_x'].get_value(), 0.0)
+      self.assertFalse(hasattr(m, 'grad_of_x'))
+
+      y = m(2.0, capture_noop=False)
+      self.assertEqual(y, 6.0)
+      self.assertTrue(hasattr(m, 'grad_of_x'))
+      self.assertEqual(m.grad_of_x.get_value(), 0.0)
+    finally:
+      flax.config.update('nnx_sow_capture_noop', old_val)
+
 class SowMod(nnx.Module):
     def __init__(self, rngs: nnx.Rngs):
         self.linear = nnx.Linear(4, 4, rngs=rngs)

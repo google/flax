@@ -910,7 +910,7 @@ class RNN(Module):
       # number of dimensions of the carry.
       carry = _select_last_carry(carries, seq_lengths)
     else:
-      carry, outputs = scan_output
+      carry, outputs = scan_output  # type: ignore[assignment]
 
     if reverse and keep_order:
       outputs = jax.tree_util.tree_map(

@@ -286,7 +286,7 @@ def evaluate_model(
         split_metrics = split_metrics.merge(split_metrics_update)
     eval_metrics[split] = split_metrics
 
-  return eval_metrics  # pytype: disable=bad-return-type
+  return eval_metrics
 
 
 def train_and_evaluate(
