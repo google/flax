@@ -26,6 +26,16 @@ import jax.numpy as jnp
 A = tp.TypeVar('A')
 
 
+def _is_inexact(path, x) -> bool:
+  if not isinstance(x, variablelib.Variable):
+    return True
+  value = x.get_value()
+  if isinstance(value, (float, complex)):
+    return True
+  dtype = getattr(value, 'dtype', None)
+  return dtype is not None and jnp.issubdtype(dtype, jnp.inexact)
+
+
 def _to_ema_param(node: tp.Any):
   def ema_param(path, x):
     if not isinstance(x, variablelib.Variable):
@@ -97,7 +107,7 @@ class EMA(pytreelib.Pytree):
       params: tp.Any,
       decay: float,
       *,
-      only: filterlib.Filter = ...,
+      only: filterlib.Filter = _is_inexact,
       graph: bool | None = None,
   ):
     """Initializes the EMA module.
@@ -107,8 +117,10 @@ class EMA(pytreelib.Pytree):
         will be tracked.
       decay: The decay rate for the moving average.
       only: A filter indicating which variables should be included in the
-        EMA tracking. Defaults to matching everything. Note that EMA only
-        tracks ``nnx.Variable`` instances.
+        EMA tracking. Defaults to every Variable with a floating point or
+        complex value, which leaves out integer and boolean state such as
+        step counters and the RNG keys and counts held by modules like
+        ``nnx.Dropout``. Note that EMA only tracks ``nnx.Variable`` instances.
       graph: If ``True``, uses graph-mode which supports the full NNX
         feature set including shared references. If ``False``, uses
         tree-mode which treats Modules as regular JAX pytrees, avoiding
