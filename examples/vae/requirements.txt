@@ -2,6 +2,6 @@ absl-py==1.4.0
 flax==0.6.9
 numpy==1.23.5
 optax==0.1.5
-Pillow==10.2.0
-tensorflow==2.12.0
+Pillow==10.3.0
+tensorflow==2.12.1
 tensorflow-datasets==4.9.2
