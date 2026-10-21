@@ -93,6 +93,39 @@ class TestMetrics(parameterized.TestCase):
     )
     self.assertAlmostEqual(computed.standard_deviation, 1.0, places=2)
 
+  @parameterized.product(use_multimetric=[True, False])
+  def test_welford_mask(self, use_multimetric):
+    # the first batch is fully masked and the masked entries hold junk, so
+    # only the kept entries [1, 2, 3, 4] and [3, 2, 1, 0] may count
+    batches = [
+      (jnp.array([100.0, 100.0]), jnp.array([False, False])),
+      (
+        jnp.array([[1.0, 2.0, 100.0], [3.0, 4.0, 100.0]]),
+        jnp.array([[True, True, False], [True, True, False]]),
+      ),
+      (
+        jnp.array([[3.0, 2.0, 1.0, 0.0], [100.0, 100.0, 100.0, 100.0]]),
+        jnp.array([[True], [False]]),
+      ),
+    ]
+    kept = jnp.array([1.0, 2.0, 3.0, 4.0, 3.0, 2.0, 1.0, 0.0])
+
+    welford = nnx.metrics.Welford()
+    metrics = nnx.MultiMetric(stats=welford) if use_multimetric else welford
+    for values, mask in batches:
+      metrics.update(values=values, mask=mask)
+    expected = nnx.metrics.Statistics(
+        mean=kept.mean(),
+        standard_deviation=kept.std(),
+        standard_error_of_mean=kept.std() / jnp.sqrt(kept.size),
+    )
+    computed = welford.compute()
+    self.assertAlmostEqual(computed.mean, expected.mean)
+    self.assertAlmostEqual(computed.standard_deviation, expected.standard_deviation)
+    self.assertAlmostEqual(
+        computed.standard_error_of_mean, expected.standard_error_of_mean
+    )
+
   @parameterized.product(with_mask=[True, False])
   def test_multimetric(self, with_mask):
     logits = jnp.array(
