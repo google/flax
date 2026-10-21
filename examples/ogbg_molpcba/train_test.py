@@ -339,7 +339,7 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     workdir = tempfile.mkdtemp()
 
     # Go two directories up to the root of the flax directory.
-    flax_root_dir = pathlib.Path(__file__).parents[2]
+    flax_root_dir = pathlib.Path(__file__).absolute().parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'  # pylint: disable=unused-variable
 
     # Get the test configuration.
