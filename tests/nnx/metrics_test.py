@@ -167,6 +167,19 @@ class TestMetrics(parameterized.TestCase):
     np.testing.assert_allclose(values['accuracy'], 0.8)
     self.assertEqual(list(values), ['loss', 'accuracy'])
 
+  @parameterized.parameters('reset', 'update', 'compute', 'split', '_metric_names')
+  def test_multimetric_reserved_names(self, name):
+    with self.assertRaisesRegex(ValueError, f"'{name}'"):
+      nnx.MultiMetric(**{name: nnx.metrics.Average()})
+
+  def test_multimetric_subclass_reserved_names(self):
+    class MyMultiMetric(nnx.MultiMetric):
+      def summary(self):
+        return self.compute()
+
+    with self.assertRaisesRegex(ValueError, "'summary'"):
+      MyMultiMetric(summary=nnx.metrics.Average())
+
   @parameterized.product(with_mask=[True, False])
   def test_multimetric_with_custom_metric(self, with_mask):
     class CustomAccuracy(nnx.metrics.Accuracy):
