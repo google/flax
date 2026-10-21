@@ -52,7 +52,7 @@ def to_predicate(filter: Filter) -> Predicate:
   elif isinstance(filter, (list, tuple)):
     return Any(*filter)
   else:
-    raise TypeError(f'Invalid collection filter: {filter:!r}. ')
+    raise TypeError(f'Invalid collection filter: {filter!r}. ')
 
 def filters_to_predicates(
   filters: tp.Sequence[Filter],
