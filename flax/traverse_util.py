@@ -82,6 +82,10 @@ def _flatten(xs, prefix, keep_empty_nodes, is_leaf, sep):
   def _key(path):
     if sep is None:
       return path
+    if not path:
+      raise ValueError(
+        'Cannot flatten the root as a leaf when a separator is specified.'
+      )
     return sep.join(path)
 
   if not isinstance(xs, (flax.core.FrozenDict, dict)) or (
@@ -130,7 +134,9 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
       leaf (i.e., should not be flattened further).
     sep: if specified, then the keys of the returned
       dictionary will be ``sep``-joined strings (if
-      ``None``, then keys will be tuples).
+      ``None``, then keys will be tuples). The root cannot be selected by
+      ``is_leaf`` when ``sep`` is specified because an empty path has no
+      unambiguous string encoding.
   Returns:
     The flattened dictionary.
   """
@@ -163,6 +169,14 @@ def unflatten_dict(xs, sep=None):
     The nested dictionary.
   """
   assert isinstance(xs, dict), f'input is not a dict; it is a {type(xs)}'
+  if sep is None and () in xs:
+    if len(xs) != 1:
+      raise ValueError(
+        'Cannot unflatten a root path alongside other paths.'
+      )
+    value = xs[()]
+    return {} if value is empty_node else value
+
   result = {}
   for path, value in xs.items():
     if sep is not None:
