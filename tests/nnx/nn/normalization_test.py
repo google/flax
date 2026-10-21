@@ -413,8 +413,12 @@ class TestLinenConsistency(parameterized.TestCase):
 
     np.testing.assert_array_equal(
       variables['params']['weight_norm']['dense/kernel/scale'],
-      nnx_model.normed.scales[('kernel',)])
+      nnx_model.normed.scales[('kernel',)][...])
     np.testing.assert_array_equal(linen_out, nnx_out)
+
+    # scales must be Params so they train (issue #5577)
+    assert isinstance(nnx_model.normed.scales[('kernel',)], nnx.Param)
+    assert 'scales' in nnx.state(nnx_model.normed, nnx.Param)
 
   @parameterized.product(
     dtype=[jnp.float32, jnp.float16],
