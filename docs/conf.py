@@ -73,6 +73,11 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
+# haiku is incompatible with newest jax (jax.core.DropVar removed);
+# skip its doctests only, keep the page in the html build.
+if 'doctest' in sys.argv:
+  exclude_patterns.append('guides/converting_and_upgrading/haiku_migration_guide.rst')
+
 # The suffix(es) of source filenames.
 # Note: important to list ipynb before md here: we have both md and ipynb
 # copies of each notebook, and myst will choose which to convert based on
