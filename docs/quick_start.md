@@ -160,7 +160,7 @@ A function that:
 - Evaluates the neural network given the parameters and a batch of input images
   with [`TrainState.apply_fn`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.train_state.TrainState) (which contains the [`Module.apply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.apply)
   method (forward pass)).
-- Computes the cross entropy loss, using the predefined [`optax.softmax_cross_entropy_with_integer_labels()`](https://optax.readthedocs.io/en/latest/api.html#optax.softmax_cross_entropy_with_integer_labels). Note that this function expects integer labels, so there is no need to convert labels to onehot encoding.
+- Computes the cross entropy loss, using the predefined [`optax.softmax_cross_entropy_with_integer_labels()`](https://optax.readthedocs.io/en/latest/api/losses.html). Note that this function expects integer labels, so there is no need to convert labels to onehot encoding.
 - Evaluates the gradient of the loss function using
   [`jax.grad`](https://jax.readthedocs.io/en/latest/jax.html#jax.grad).
 - Applies a
