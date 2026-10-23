@@ -7,8 +7,8 @@ _**N**eural **N**etworks for JA**X**_ - | [docs](https://flax.readthedocs.io/en/
 NNX is a JAX-based neural network library that focuses on providing the best development experience to make
 building and experimenting with neural networks as easy and intuitive as possible.
 
-* **Pythonic**: Modules are standard Python classes, promoting ease of use and a more familiar
-  development experience.
+* **Pythonic**: Modules are standard Python classes, promoting ease of use and a more
+  familiar development experience.
 * **Easy-to-use**: NNX provides a set of transforms that take care of state management, allowing
   users to focus on building their models and training loops.
 * **Expressive**: NNX allows fine-grained over the Module state with lifted transforms, enabling
