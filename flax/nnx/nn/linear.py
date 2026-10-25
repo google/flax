@@ -686,7 +686,8 @@ class Conv(Module):
       kernel (default: 1). Convolution with kernel dilation
       is also known as 'atrous convolution'.
     feature_group_count: integer, default 1. If specified divides the input
-      features into groups.
+      features into groups. Must be a positive integer that divides
+      ``in_features``.
     use_bias: whether to add a bias to the output (default: True).
     mask: Optional mask for the weights during masked convolution. The mask must
           be the same shape as the convolution weight matrix.
@@ -741,6 +742,17 @@ class Conv(Module):
       kernel_size = (kernel_size,)
     else:
       kernel_size = tuple(kernel_size)
+
+    if feature_group_count < 1:
+      raise ValueError(
+        'feature_group_count must be a positive integer, but got '
+        f'{feature_group_count}.'
+      )
+    if in_features % feature_group_count != 0:
+      raise ValueError(
+        f'in_features ({in_features}) must be divisible by '
+        f'feature_group_count ({feature_group_count}).'
+      )
 
     kernel_shape = kernel_size + (
       in_features // feature_group_count,
@@ -859,8 +871,6 @@ class Conv(Module):
     dimension_numbers = _conv_dimension_numbers(inputs.shape)
 
     # One shared convolutional kernel for all pixels in the output.
-    assert self.in_features % self.feature_group_count == 0
-
     if self.mask is not None and self.mask.shape != self.kernel_shape:
       raise ValueError(
         'Mask needs to have the same shape as weights. '
