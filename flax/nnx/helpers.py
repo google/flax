@@ -24,7 +24,6 @@ from flax.nnx import graphlib, reprlib
 from flax.nnx.graphlib import GraphDef
 from flax.nnx.module import Module
 from flax.nnx.proxy_caller import ApplyCaller
-from flax.nnx.rnglib import Rngs
 from flax.nnx.statelib import State
 from flax.training.train_state import struct
 from flax.nnx.variablelib import Variable
@@ -227,11 +226,14 @@ class List(reprlib.SequenceReprMixin, Module, tp.MutableSequence[A]):
   _pytree__has_int_keys = True
 
 
-class Sequential(Module):
+class Sequential(Module, tp.Iterable[tp.Callable[..., tp.Any]]):
   """A Module that applies a sequence of callables.
 
   This class provides a way to store and manipulate a sequence of callables
-  (e.g. layers, activation functions) and apply them in order.
+  (e.g. layers, activation functions) and apply them in order. ``Sequential``
+  is iterable over ``self.layers``, and keyword arguments passed to ``__call__``
+  (including ``rngs``) are forwarded to every layer whose signature accepts
+  them.
 
   Example::
 
@@ -255,9 +257,12 @@ class Sequential(Module):
     Args:
       *fns: A sequence of callables to apply.
     """
-    self.layers = List(fns)
+    self.layers: List[tp.Callable[..., tp.Any]] = List(fns)
 
-  def __call__(self, *args, rngs: tp.Optional[Rngs] = None, **kwargs) -> tp.Any:
+  def __iter__(self) -> tp.Iterator[tp.Callable[..., tp.Any]]:
+    return self.layers.__iter__()
+
+  def __call__(self, *args, **kwargs) -> tp.Any:
     if len(self.layers) == 0:
       if len(args) == 1:
         return args[0]
@@ -276,17 +281,26 @@ class Sequential(Module):
       if i > 0:
         if isinstance(output, tuple):
           args = output
-          kwargs = {}
+          new_kwargs = None
         elif isinstance(output, dict):
           args = ()
-          kwargs = output
+          new_kwargs = dict(output)
         else:
           args = (output,)
-          kwargs = {}
-      if rngs is not None and has_keyword_arg(f, 'rngs'):
-        kwargs['rngs'] = rngs
+          new_kwargs = None
+      else:
+        new_kwargs = None
 
-      output = f(*args, **kwargs)
+      layer_kwargs = _filter_kwargs(f, len(args), kwargs) if kwargs else {}
+      if new_kwargs is not None:
+        if repeated_kwargs := set(new_kwargs).intersection(layer_kwargs):
+          raise TypeError(
+              f'Got multiple values for arguments {repeated_kwargs} in'
+              f' Sequential[{i}]'
+          )
+        layer_kwargs = {**new_kwargs, **layer_kwargs}
+
+      output = f(*args, **layer_kwargs)
 
     return output
 
@@ -358,10 +372,45 @@ class TrainState(tp.Generic[M], struct.PyTreeNode):
     )
 
 
+def _filter_kwargs(
+    func: tp.Callable[..., tp.Any],
+    num_pos_args: int,
+    kwargs: dict[str, tp.Any],
+) -> dict[str, tp.Any]:
+  """Return the subset of ``kwargs`` accepted by ``func`` given ``num_pos_args``."""
+  try:
+    params = inspect.signature(func).parameters.values()
+  except (ValueError, TypeError):
+    return {}
+
+  pos_index = 0
+  bound_pos_or_kw: set[str] = set()
+  accepted_kw: set[str] = set()
+  has_var_kw = False
+
+  for param in params:
+    if param.kind == param.POSITIONAL_ONLY:
+      pos_index += 1
+    elif param.kind == param.POSITIONAL_OR_KEYWORD:
+      if pos_index < num_pos_args:
+        bound_pos_or_kw.add(param.name)
+      else:
+        accepted_kw.add(param.name)
+      pos_index += 1
+    elif param.kind == param.KEYWORD_ONLY:
+      accepted_kw.add(param.name)
+    elif param.kind == param.VAR_KEYWORD:
+      has_var_kw = True
+
+  if has_var_kw:
+    return {k: v for k, v in kwargs.items() if k not in bound_pos_or_kw}
+  return {k: v for k, v in kwargs.items() if k in accepted_kw}
+
+
 def has_keyword_arg(func: tp.Callable[..., tp.Any], name: str) -> bool:
   """Return True if func has keyword-only arguments with the given name."""
   return any(
-    param.name == name
-    and param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
-    for param in inspect.signature(func).parameters.values()
+      param.name == name
+      and param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
+      for param in inspect.signature(func).parameters.values()
   )
