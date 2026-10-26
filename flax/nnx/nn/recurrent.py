@@ -14,10 +14,9 @@
 
 """RNN modules for Flax."""
 import warnings
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 from collections.abc import Mapping
 from types import MappingProxyType
-from collections.abc import Mapping
 from collections.abc import Callable
 from functools import partial
 from typing_extensions import Protocol
@@ -910,7 +909,7 @@ class RNN(Module):
       # number of dimensions of the carry.
       carry = _select_last_carry(carries, seq_lengths)
     else:
-      carry, outputs = scan_output  # type: ignore[assignment]
+      carry, outputs = cast(tuple[Carry, Array], scan_output)  # type: ignore[assignment]
 
     if reverse and keep_order:
       outputs = jax.tree_util.tree_map(

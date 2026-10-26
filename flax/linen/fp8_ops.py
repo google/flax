@@ -110,7 +110,7 @@ class fp8_meta_dtype(dtypes.extended): pass
 # parameterized datatype for use in e.g. lax.convert_element_type
 @dataclasses.dataclass(frozen=True)
 class fp8_meta_dtype_wrapper(dtypes.ExtendedDType):
-  float_dtype: dtypes.DType
+  float_dtype: DTypeLike
   _rules: type = Fp8MetaTyRules
   type: type = fp8_meta_dtype
 
