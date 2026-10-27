@@ -99,6 +99,22 @@ def _compute_stats(
   axes = _canonicalize_axes(x.ndim, axes)
 
   def maybe_distributed_mean(*xs, mask=None):
+    if axis_name is not None and mask is not None:
+      # Devices can hold different numbers of unmasked entries, so pool the
+      # sums and counts instead of averaging the per-device means.
+      out_dtype = jnp.result_type(*xs, float)
+      acc_dtype = jnp.promote_types(out_dtype, jnp.float32)
+      count = jnp.broadcast_to(mask, xs[0].shape).sum(axes, dtype=acc_dtype)
+      sums = [x.sum(axes, where=mask, dtype=acc_dtype) for x in xs]
+      reduced = lax.psum(
+        jnp.stack([*sums, count], axis=0),
+        axis_name,
+        axis_index_groups=axis_index_groups,
+      )
+      mus = tuple(
+        (reduced[i] / reduced[-1]).astype(out_dtype) for i in range(len(xs))
+      )
+      return mus if len(xs) > 1 else mus[0]
     mus = tuple(x.mean(axes, where=mask) for x in xs)
     if axis_name is None:
       return mus if len(xs) > 1 else mus[0]
