@@ -161,9 +161,8 @@ class DotReluDot(nnx.Module):
 
 class MultiDotReluDot(nnx.Module):
   def __init__(self, depth: int, num_layers: int, rngs: nnx.Rngs):
-    # Annotate the additional axis with sharding=None, meaning it will be
-    # replicated across all devices.
-    @nnx.vmap(transform_metadata={nnx.PARTITION_NAME: None})
+    # The additional axis is unsharded by default.
+    @nnx.vmap
     def create_sublayers(r):
       return DotReluDot(depth, r)
     self.layers = create_sublayers(rngs.fork(split=num_layers))
@@ -276,7 +275,7 @@ class LogicalDotReluDot(nnx.Module):
 
 class LogicalMultiDotReluDot(nnx.Module):
   def __init__(self, depth: int, num_layers: int, rngs: nnx.Rngs):
-    @nnx.vmap(transform_metadata={nnx.PARTITION_NAME: None})
+    @nnx.vmap
     def create_sublayers(r):
       return LogicalDotReluDot(depth, r)
     self.layers = create_sublayers(rngs.fork(split=num_layers))
