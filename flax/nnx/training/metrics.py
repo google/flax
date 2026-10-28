@@ -184,27 +184,43 @@ class Welford(Metric):
     self.mean[...] = jnp.array(0, dtype=jnp.float32)
     self.m2[...] = jnp.array(0, dtype=jnp.float32)
 
-  def update(self, **kwargs) -> None:
+  def update(self, mask: jax.Array | None = None, **kwargs) -> None:
     """In-place update this ``Metric``. This method will use the value from
     ``kwargs[self.argname]`` to update the metric, where ``self.argname`` is
     defined on construction.
 
     Args:
+      mask: optional mask to ignore the values from the computation. Values
+        where the mask is zero are skipped, and the mask shape should be
+        broadcastable to the shape of values array.
       **kwargs: the key-word arguments that contains a ``self.argname``
         entry that maps to the value we want to use to update this metric.
     """
     if self.argname not in kwargs:
       raise TypeError(f"Expected keyword argument '{self.argname}'")
     values: tp.Union[int, float, jax.Array] = kwargs[self.argname]
-    count = 1 if isinstance(values, (int, float)) else values.size
+    if mask is not None and isinstance(values, (int, float)):
+      raise ValueError(f"If mask is provided, {self.argname} should be a jax array")
+    count: int | jax.Array
+    batch_mean: float | jax.Array
+    m2: float | jax.Array
+    if isinstance(values, (int, float)):
+      count, batch_mean, m2 = 1, values, 0.0
+    elif mask is None:
+      count, batch_mean = values.size, values.mean()
+      m2 = values.var() * count
+    else:
+      mask = jnp.broadcast_to(mask, values.shape).astype(bool)
+      count = mask.sum().astype(self.count.dtype)
+      batch_mean = jnp.where(mask, values, 0).sum() / jnp.maximum(count, 1)
+      m2 = jnp.where(mask, (values - batch_mean) ** 2, 0).sum()
     original_count = self.count[...]
     self.count[...] += count
-    delta = (
-      values if isinstance(values, (int, float)) else values.mean()
-    ) - self.mean
-    self.mean[...] += delta * count / self.count
-    m2 = 0.0 if isinstance(values, (int, float)) else values.var() * count
-    self.m2[...] += m2 + delta * delta * count * original_count / self.count
+    # a fully masked batch can leave the count at zero
+    new_count = jnp.maximum(self.count[...], 1)
+    delta = batch_mean - self.mean
+    self.mean[...] += delta * count / new_count
+    self.m2[...] += m2 + delta * delta * count * original_count / new_count
 
   def compute(self) -> Statistics:
     """Compute and return the mean and variance statistics in a
