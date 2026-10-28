@@ -123,7 +123,7 @@ y_samples = jnp.dot(x_samples, W) + b + 0.1 * random.normal(key_noise,(n_samples
 print('x shape:', x_samples.shape, '; y shape:', y_samples.shape)
 ```
 
-We copy the same training loop that we used in the JAX pytree linear regression example with `jax.value_and_grad()`, but here we can use `model.apply()` instead of having to define our own feed-forward function (`predict_pytree()` in the [JAX example](https://flax.readthedocs.io/en/latest/guides/jax_for_the_impatient.html#linear-regression-with-pytrees)).
+We copy the same training loop that we used in the JAX pytree linear regression example with `jax.value_and_grad()`, but here we can use `model.apply()` instead of having to define our own feed-forward function (`predict_pytree()` in the [JAX example](https://docs.jax.dev/en/latest/pytrees.html)).
 
 ```{code-cell}
 # Same as JAX version but using model.apply().
@@ -170,7 +170,7 @@ this was deprecated in favor of
 Basic usage of Optax is straightforward:
 
 1.   Choose an optimization method (e.g. `optax.adam`).
-2.   Create optimizer state from parameters (for the Adam optimizer, this state will contain the [momentum values](https://optax.readthedocs.io/en/latest/api.html#optax.adam)).
+2.   Create optimizer state from parameters (for the Adam optimizer, this state will contain the [momentum values](https://optax.readthedocs.io/en/latest/api/optimizers.html)).
 3.   Compute the gradients of your loss with `jax.value_and_grad()`.
 4.   At every iteration, call the Optax `update` function to update the internal
      optimizer state and create an update to the parameters. Then add the update
@@ -469,4 +469,4 @@ Flax provides a handy wrapper - `TrainState` - that simplifies the above code. C
 
 ### Exporting to Tensorflow's SavedModel with jax2tf
 
-JAX released an experimental converter called [jax2tf](https://github.com/jax-ml/jax/tree/main/jax/jax2tf), which allows converting trained Flax models into Tensorflow's SavedModel format (so it can be used for [TF Hub](https://www.tensorflow.org/hub), [TF.lite](https://www.tensorflow.org/lite), [TF.js](https://www.tensorflow.org/js), or other downstream applications). The repository contains more documentation and has various examples for Flax.
+JAX released an experimental converter called [jax2tf](https://github.com/jax-ml/jax/tree/main/jax/experimental/jax2tf), which allows converting trained Flax models into Tensorflow's SavedModel format (so it can be used for [TF Hub](https://www.tensorflow.org/hub), [TF.lite](https://www.tensorflow.org/lite), [TF.js](https://www.tensorflow.org/js), or other downstream applications). The repository contains more documentation and has various examples for Flax.
