@@ -181,6 +181,7 @@ from .training.optimizer import OptState as OptState
 from .training.optimizer import OptArray as OptArray
 from .training.optimizer import OptVariable as OptVariable
 from .training.optimizer import Optimizer as Optimizer
+from .training.optimizer import BacktrackingLinesearch as BacktrackingLinesearch
 from .training.optimizer import ModelAndOptimizer as ModelAndOptimizer
 from .training.optimizer import OptState as OptState
 from .training.ema import EMA as EMA
