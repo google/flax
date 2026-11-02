@@ -234,7 +234,11 @@ def _grad_general(
         nondiff_states.append(nondiff)  # type: ignore[container-type-mismatch]
         return extract.NodeStates.from_split(graphdef, diff)
 
-    arg_filters = tuple(index_filter.get(i) for i in range(len(args)))
+    # Match JAX's negative argument indices when selecting state filters.
+    arg_filters = tuple(
+      index_filter.get(i, index_filter.get(i - len(args)))
+      for i in range(len(args))
+    )
     pure_args = extract.to_tree(
       args, prefix=arg_filters, split_fn=_grad_split_fn, ctxtag='grad'
     )
