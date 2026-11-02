@@ -86,9 +86,19 @@ jobs:
         path: ./flaxlib/dist
         merge-multiple: true
 
-    - name: Build and publish
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.FLAXLIB_PYPI_TOKEN }}
+    - name: Authenticate to Google Cloud (OSS Exit Gate)
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+      with:
+        workload_identity_provider: 'projects/305452601764/locations/global/workloadIdentityPools/builders/providers/github'
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+    - name: Build and publish via OSS Exit Gate
       run: |
-        twine upload flaxlib/dist/*
+        python -m twine upload \
+          --repository-url "https://us-python.pkg.dev/oss-exit-gate-prod/flax--pypi/" \
+          -u oauth2accesstoken \
+          -p "$(gcloud auth print-access-token)" \
+          flaxlib/dist/*
+        echo '{"publish_all": true}' > manifest.json
+        gcloud storage cp manifest.json \
+          "gs://oss-exit-gate-prod-projects-bucket/flax/pypi/manifests/manifest-${{ github.run_id }}-${{ github.run_attempt }}.json"
