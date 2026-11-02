@@ -8,6 +8,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   build_wheels:
     if: github.event_name == 'push' && contains(github.event.head_commit.modified, 'flaxlib/')
