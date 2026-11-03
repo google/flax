@@ -337,7 +337,7 @@ def get_node_impl(x: Node) -> NodeImpl[Node, tp.Any, tp.Any] | None:
     return GRAPH_REGISTRY[node_type]
   elif node_type in PYTREE_REGISTRY:
     return PYTREE_REGISTRY[node_type]
-  elif node_type in JAX_PYTREE_REGISTRY or issubclass(node_type, tuple):
+  elif jax.tree_util.is_tree_node(node_type):
     return PYTREE_NODE_IMPL  # type: ignore
   else:
     return None
@@ -3651,9 +3651,6 @@ class Static(tp.Generic[A]):
 class GenericPytree: ...
 
 
-from jax._src.tree_util import _registry as JAX_PYTREE_REGISTRY
-
-
 def is_pytree_node(
   x: tp.Any, *, check_graph_registry: bool = True,
 ) -> bool:
@@ -3661,9 +3658,7 @@ def is_pytree_node(
     return False
   elif isinstance(x, Variable):
     return False
-  elif type(x) in JAX_PYTREE_REGISTRY:
-    return True
-  elif isinstance(x, tuple):
+  elif jax.tree_util.is_tree_node(type(x)):
     return True
   else:
     return False
