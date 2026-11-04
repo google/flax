@@ -1738,6 +1738,37 @@ class TestGrad(parameterized.TestCase):
 
   @parameterized.product(
     transform=('grad', 'value_and_grad'),
+    indices=((1, -1), (-1, 1), (0, -2), (-2, 0)),
+    filters=('default', 'mixed', 'distinct'),
+    jit=(False, True),
+  )
+  def test_grad_repeated_argument_slot(self, transform, indices, filters, jit):
+    argnums = indices
+    if filters == 'mixed':
+      argnums = (indices[0], nnx.DiffState(indices[1], nnx.Param))
+    elif filters == 'distinct':
+      argnums = (
+        nnx.DiffState(indices[0], nnx.PathContains('weight')),
+        nnx.DiffState(indices[1], nnx.PathContains('bias')),
+      )
+
+    def loss(a, b):
+      return a.weight[...] + b.bias[...]
+
+    models = tuple(
+      nnx.Dict(weight=nnx.Param(jnp.array(2.0)), bias=nnx.Param(jnp.array(3.0)))
+      for _ in range(2)
+    )
+    with self.assertRaisesRegex(ValueError, 'argnum [01] is repeated in argnums'):
+      grad_fn = getattr(nnx, transform)(
+        loss, argnums=argnums, graph=True, graph_updates=True
+      )
+      if jit:
+        grad_fn = nnx.jit(grad_fn, graph=True, graph_updates=True)
+      grad_fn(*models)
+
+  @parameterized.product(
+    transform=('grad', 'value_and_grad'),
     argnum=(-1, 1),
     custom_filter=(False, True),
     jit=(False, True),

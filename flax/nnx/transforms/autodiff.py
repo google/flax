@@ -221,6 +221,14 @@ def _grad_general(
   def grad_wrapper(*args, **kwargs):
     args = resolve_kwargs(f, args, kwargs)
     del kwargs
+    resolved_index_filter = {}
+    for index, state_filter in index_filter.items():
+      # Normalize valid negative indices once the argument count is known.
+      if -len(args) <= index < 0:
+        index += len(args)
+      if index in resolved_index_filter:
+        raise ValueError(f'argnum {index} is repeated in argnums')
+      resolved_index_filter[index] = state_filter
     nondiff_states: deque[State | variablelib.Variable | None] = deque()
 
     def _grad_split_fn(
@@ -234,11 +242,7 @@ def _grad_general(
         nondiff_states.append(nondiff)  # type: ignore[container-type-mismatch]
         return extract.NodeStates.from_split(graphdef, diff)
 
-    # Match JAX's negative argument indices when selecting state filters.
-    arg_filters = tuple(
-      index_filter.get(i, index_filter.get(i - len(args)))
-      for i in range(len(args))
-    )
+    arg_filters = tuple(resolved_index_filter.get(i) for i in range(len(args)))
     pure_args = extract.to_tree(
       args, prefix=arg_filters, split_fn=_grad_split_fn, ctxtag='grad'
     )
