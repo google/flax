@@ -1070,11 +1070,16 @@ class ConvTranspose(Module):
         for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
       ]
       if self.transpose_kernel:
-        # If the kernel is transposed, the "+1" is put on the right to
-        # mirror the regular convolution. If the same kernel parameters are used
-        # as for Conv, this layer then computes the proper transpose convolution.
+        # Conv pads its input on the left with (k - 1) * d // 2 wrapped
+        # entries, so that many leading entries of y wrap around to the end of
+        # the period. With the same kernel parameters as Conv, this layer then
+        # computes the proper transpose convolution for any stride.
+        conv_pads = [
+          (k - 1) * d // 2 for k, d in zip(kernel_size, kernel_dilation)
+        ]
         total_pad = [
-          (size_diff // 2, (size_diff + 1) // 2) for size_diff in size_diffs
+          (-pad % x_dim, (pad - y_dim) % x_dim)
+          for pad, y_dim, x_dim in zip(conv_pads, y.shape[1:-1], scaled_x_dims)
         ]
       else:
         # Divide the padding equally between left and right. The choice to put
