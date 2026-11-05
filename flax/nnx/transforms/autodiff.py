@@ -72,16 +72,24 @@ class SimpleGradFn:
   f: tp.Callable[..., tp.Any]
   has_aux: bool
   graph: bool
+  captured_info: list[tp.Any]
 
   def __post_init__(self):
     functools.update_wrapper(self, self.f, updated=())
 
   @extract.treemap_copy_args
   def __call__(self, *args, **kwargs):
-    current, snapshot = extract.snapshot(labeled(args=args, kwargs=kwargs))
+    captured_args = kwargs.pop('__captures__', None)
+    current, snapshot = extract.snapshot(
+        labeled(args=args, kwargs=kwargs, captured_args=captured_args))
     if self.graph:
       args, kwargs = extract.from_tree2((args, kwargs))
-    out = self.f(*args, **kwargs)
+    if captured_args is not None:
+      f = extract.replace_closure_cells(
+          self.f, self.captured_info, captured_args)
+    else:
+      f = self.f
+    out = f(*args, **kwargs)
     if self.graph:
       out = extract.to_tree2(out)
     extract.check_no_aliases('grad', **current, out=out, check=['out'])
@@ -151,8 +159,10 @@ def _grad_general(
 
   if not graph or not graph_updates:
 
+    captured_info = extract.find_captured_nodes(f)
+
     gradded_fn = transform(
-        SimpleGradFn(f, has_aux, graph=graph),
+        SimpleGradFn(f, has_aux, graph=graph, captured_info=captured_info),
         argnums=argnums,  # type: ignore[arg-type]
         has_aux=True,
         holomorphic=holomorphic,
@@ -169,7 +179,11 @@ def _grad_general(
           (args, kwargs), prefix=(args_prefix, False),
         )
 
-      variables = extract.check_no_aliases('grad', args=args, kwargs=kwargs)
+      variables = extract.check_no_aliases(
+          'grad', args=args, kwargs=kwargs, captured_args=captured_info)
+
+      if captured_info:
+        kwargs = {**kwargs, '__captures__': captured_info}
 
       fn_out = gradded_fn(*args, **kwargs)
 
