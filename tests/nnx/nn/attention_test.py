@@ -146,6 +146,15 @@ class TestMultiHeadAttention(parameterized.TestCase):
       atol=1e-5,
     )
 
+  def test_view_decode_initializes_cache(self):
+    module = nnx.MultiHeadAttention(
+      in_features=4, num_heads=2, qkv_features=4, decode=False,
+      rngs=nnx.Rngs(0),
+    )
+    view = nnx.view(module, decode=True, batch_size=1, max_length=3)
+    assert view.cached_key.shape == (1, 3, 2, 2)
+    assert view(jnp.ones((1, 1, 4))).shape == (1, 1, 4)
+
   @parameterized.product(keep_rngs=[True, False])
   def test_keep_rngs(self, keep_rngs):
     rngs = nnx.Rngs(42)
