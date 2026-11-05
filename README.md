@@ -68,7 +68,7 @@ comes with everything you need to start your research, including:
 
 Flax uses JAX, so do check out [JAX installation instructions on CPUs, GPUs and TPUs](https://jax.readthedocs.io/en/latest/installation.html).
 
-You will need Python 3.8 or later. Install Flax from PyPi:
+You will need Python 3.12 or later. Install Flax from PyPi:
 
 ```
 pip install flax

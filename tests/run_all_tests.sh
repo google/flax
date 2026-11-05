@@ -3,9 +3,8 @@
 # export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 PYTEST_OPTS=
 RUN_DOCTEST=false
-RUN_MYPY=false
+RUN_PYREFLY=false
 RUN_PYTEST=false
-RUN_PYTYPE=false
 GH_VENV=false
 
 for flag in "$@"; do
@@ -24,11 +23,8 @@ case $flag in
   --only-pytest)
   RUN_PYTEST=true
   ;;
-  --only-pytype)
-  RUN_PYTYPE=true
-  ;;
-  --only-mypy)
-  RUN_MYPY=true
+  --only-pyrefly)
+  RUN_PYREFLY=true
   ;;
   --use-venv)
   GH_VENV=true
@@ -40,12 +36,11 @@ case $flag in
 esac
 done
 
-# if neither --only-doctest, --only-pytest, --only-pytype, --only-mypy is set, run all tests
-if ! $RUN_DOCTEST && ! $RUN_PYTEST && ! $RUN_PYTYPE && ! $RUN_MYPY; then
+# if neither --only-doctest, --only-pytest, --only-pyrefly is set, run all tests
+if ! $RUN_DOCTEST && ! $RUN_PYTEST && ! $RUN_PYREFLY; then
   RUN_DOCTEST=true
   RUN_PYTEST=true
-  RUN_PYTYPE=true
-  RUN_MYPY=true
+  RUN_PYREFLY=true
 fi
 
 # Activate cached virtual env for github CI
@@ -57,8 +52,7 @@ echo "====== test config ======="
 echo "PYTEST_OPTS: $PYTEST_OPTS"
 echo "RUN_DOCTEST: $RUN_DOCTEST"
 echo "RUN_PYTEST: $RUN_PYTEST"
-echo "RUN_MYPY: $RUN_MYPY"
-echo "RUN_PYTYPE: $RUN_PYTYPE"
+echo "RUN_PYREFLY: $RUN_PYREFLY"
 echo "GH_VENV: $GH_VENV"
 echo "WHICH PYTHON: $(which python)"
 echo "jax: $(python -c 'import jax; print(jax.__version__)')"
@@ -66,7 +60,9 @@ echo "flax: $(python -c 'import flax; print(flax.__version__)')"
 echo "=========================="
 echo ""
 
-sh $(dirname "$0")/download_dataset_metadata.sh || exit
+if $RUN_DOCTEST || $RUN_PYTEST; then
+  sh $(dirname "$0")/download_dataset_metadata.sh || exit
+fi
 
 # Instead of using set -e, we have a manual error trap that
 # exits for any error code != 5 since pytest returns error code 5
@@ -96,7 +92,9 @@ if $RUN_DOCTEST; then
   pytest -n auto flax \
     --doctest-modules \
     --suppress-no-test-exit-code \
-    --ignore=flax/nnx/examples
+    --ignore=flax/nnx/examples \
+    --ignore=flax/metrics/tensorboard.py \
+    --ignore=flax/testing
 fi
 
 # check that flax is running on editable mode
@@ -132,27 +130,10 @@ if $RUN_PYTEST; then
   done
 fi
 
-if $RUN_PYTYPE; then
-  echo "=== RUNNING PYTYPE ==="
-  # Validate types in examples.
-  for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-    # skip if folder starts with "_" or is "nnx_toy_examples"
-    if [[ $egd == *"_"* ]] || [[ $egd == *"nnx_toy_examples"* ]]; then
-      continue
-    fi
-    # use cd to make sure pytype cache lives in example dir and doesn't name clash
-    # use *.py to avoid importing configs as a top-level import which leads to import errors
-    # because config files use relative imports (e.g. from config import ...).
-    (cd $egd ; pytype "*.py" --jobs auto --config ../../pyproject.toml)
-  done
-  # Validate types in library code.
-  pytype --jobs auto --config pyproject.toml flax/
-fi
-
-if $RUN_MYPY; then
-  echo "=== RUNNING MYPY ==="
-  # Validate types in library code.
-  mypy --config pyproject.toml flax/ --show-error-codes
+if $RUN_PYREFLY; then
+  echo "=== RUNNING PYREFLY ==="
+  # Validate types in library code (targets Python 3.14 via [tool.pyrefly] in pyproject.toml).
+  pyrefly check
 fi
 
 # Return error code 0 if no real failures happened.

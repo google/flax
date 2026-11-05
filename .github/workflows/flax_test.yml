@@ -16,6 +16,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   pre-commit:
     name: Test pre-commit hooks
@@ -62,55 +65,68 @@ jobs:
     name: Test import standalone
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ['3.12', '3.13', '3.14']
+        python-version: ['3.12', '3.13', '3.14', '3.15']
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+    - name: Setup uv
+      uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
       with:
+        version: "0.13.7"
         python-version: ${{ matrix.python-version }}
-    - uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
-      with:
-        version: "0.8.13"
+        enable-cache: true
     - name: Install standalone dependencies only
       run: |
+        rm -fr .venv
         uv sync
     - name: Test importing Flax
       run: |
-        uv run --no-sync python -c "import flax"
+        uv run --no-sync python -c "import flax; from flax import nnx, linen"
 
   tests:
     name: Run Tests
     needs: [pre-commit, commit-count]
     runs-on: ubuntu-24.04-16core
+    permissions:
+      contents: read
+      statuses: write
     strategy:
+      fail-fast: false
       # Make sure to change `github_check_runs` in `copy.bara.sky` if you change the tests here.
       matrix:
-        python-version: ['3.12', '3.13']
-        test-type: [doctest, pytest]
+        python-version: ['3.12', '3.13', '3.14', '3.15']
+        test-type: [pytest]
         jax-version: [newest]
         include:
-          # keep in sync with internal type checking
-          - python-version: '3.12'
-            test-type: pytype
+          # Doctest and default type checking (pyrefly) run on Python 3.14.
+          - python-version: '3.14'
+            test-type: doctest
             jax-version: 'newest'
-          - python-version: '3.12'
-            test-type: mypy
+          - python-version: '3.14'
+            test-type: pyrefly
             jax-version: 'newest'
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - name: Setup uv
       uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
       with:
-        version: "0.8.13"
+        version: "0.13.7"
         python-version: ${{ matrix.python-version }}
         enable-cache: true
 
     - name: Install dependencies
       run: |
         rm -fr .venv
-        uv sync --extra testing --extra docs
+        if [[ "${{ matrix.test-type }}" == "pyrefly" ]]; then
+          uv venv
+          uv pip install -e . jaxlib pyrefly clu einops jaxtyping ml-collections cloudpickle
+        elif [[ "${{ matrix.python-version }}" == "3.15" ]]; then
+          uv venv
+          uv pip install --only-binary grpcio -e . jaxlib pytest pytest-xdist clu einops jaxtyping ml-collections cloudpickle
+        else
+          uv sync --extra testing --extra docs
+        fi
     - name: Install JAX
       run: |
         if [[ "${{ matrix.jax-version }}" == "newest" ]]; then
@@ -122,18 +138,27 @@ jobs:
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
           uv run --no-sync tests/run_all_tests.sh --only-doctest
+        elif [[ "${{ matrix.test-type }}" == "pyrefly" ]]; then
+          uv run --no-sync tests/run_all_tests.sh --only-pyrefly
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
-          uv run --no-sync tests/run_all_tests.sh --only-pytest
-        elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
-          uv run --no-sync tests/run_all_tests.sh --only-pytype
-        elif [[ "${{ matrix.test-type }}" == "mypy" ]]; then
-          uv run --no-sync tests/run_all_tests.sh --only-mypy
+          if [[ "${{ matrix.python-version }}" == "3.12" || "${{ matrix.python-version }}" == "3.13" ]]; then
+            uv run --no-sync tests/run_all_tests.sh --only-pytest
+          elif [[ "${{ matrix.python-version }}" == "3.14" ]]; then
+            export XLA_FLAGS='--xla_force_host_platform_device_count=4'
+            find tests/ -name "*_test.py" | grep -vE 'io_test|tensorboard' | sort | xargs uv run --no-sync pytest -n auto
+          elif [[ "${{ matrix.python-version }}" == "3.15" ]]; then
+            export XLA_FLAGS='--xla_force_host_platform_device_count=4'
+            find tests/ -name "*_test.py" | grep -vE 'io_test|tensorboard|checkpoints_test|nnx/integration_test' | sort | xargs uv run --no-sync pytest -n auto
+          else
+            echo "Unknown Python version: ${{ matrix.python-version }}"
+            exit 1
+          fi
         else
           echo "Unknown test type: ${{ matrix.test-type }}"
           exit 1
         fi
     - name: Upload coverage to Codecov
-      if: matrix.test-type == 'pytest'
+      if: matrix.test-type == 'pytest' && (matrix.python-version == '3.12' || matrix.python-version == '3.13')
       uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # v5.1.2
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -144,42 +169,20 @@ jobs:
     - name: Report success or failure as github status
       if: always()
       shell: bash
+      env:
+        JOB_STATUS: ${{ job.status }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        status="${{ job.status }}"
-        lowercase_status=$(echo $status | tr '[:upper:]' '[:lower:]')
+        status="${JOB_STATUS}"
+        lowercase_status=$(echo "$status" | tr '[:upper:]' '[:lower:]')
         curl -sS --request POST \
-        --url https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
-        --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+        --url "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+        --header "authorization: Bearer ${GH_TOKEN}" \
         --header 'content-type: application/json' \
         --data '{
-           "state": "'$lowercase_status'",
-           "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-           "description": "'$status'",
+           "state": "'"$lowercase_status"'",
+           "target_url": "https://github.com/'"${GITHUB_REPOSITORY}"'/actions/runs/'"${GITHUB_RUN_ID}"'",
+           "description": "'"$status"'",
            "context": "github-actions/Build"
            }'
-
-  # This is a temporary workflow to test flax on Python 3.14 and
-  # skipping deps like tensorstore, tensorflow etc
-  tests-python314:
-    name: Run Tests on Python 3.14
-    needs: [pre-commit, commit-count]
-    runs-on: ubuntu-24.04-16core
-    steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-    - name: Setup uv
-      uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
-      with:
-        version: "0.9.2"
-        python-version: "3.14"
-        activate-environment: true
-        enable-cache: true
-
-    - name: Install dependencies
-      run: |
-        rm -fr .venv
-        uv sync --extra testing --extra docs
-    - name: Test with pytest
-      run: |
-        export XLA_FLAGS='--xla_force_host_platform_device_count=4'
-        find tests/ -name "*.py" | grep -vE 'io_test|tensorboard' | xargs pytest -n auto
 

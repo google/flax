@@ -1528,7 +1528,7 @@ class CountsHolder:
   @classmethod
   def make(cls, d):
     flat_d = traverse_util.flatten_dict(d)
-    flat_d = {k: v for k, v in flat_d.items()}
+    flat_d = {**flat_d}
     return cls(flat_d)
 
   def sub(self, other):

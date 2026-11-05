@@ -16,35 +16,33 @@ on:
 
 jobs:
   jax-nightly:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-16core
     permissions:
       contents: read
       issues: write  # for failed-build-issue
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.13"]
     steps:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-    - name: Set up Python ${{ matrix.python-version }}
-      id: setup_python
-      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
-      with:
-        python-version: ${{ matrix.python-version }}
     - name: Setup uv
       uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a  # v5.1.0
       with:
-        version: "0.8.13"
+        version: "0.13.7"
+        python-version: ${{ matrix.python-version }}
+        enable-cache: true
     - name: Install dependencies
       run: |
+        rm -fr .venv
         uv sync --extra testing --extra docs
-    - name: Install JAX
+    - name: Install JAX nightly
       run: |
-        uv pip install -U --pre jax jaxlib -i https://us-python.pkg.dev/ml-oss-artifacts-published/jax/simple/
+        uv pip install -U --pre jax jaxlib --extra-index-url https://us-python.pkg.dev/ml-oss-artifacts-published/jax-public-nightly-artifacts-registry/simple/ --index-strategy unsafe-best-match
     - name: Run test suite
       if: success()
       run: |
-        uv run tests/run_all_tests.sh --only-pytest
+        uv run --no-sync tests/run_all_tests.sh --only-pytest
     - name: Notify failed build
       uses: jayqi/failed-build-issue-action@1a893bbf43ef1c2a8705e2b115cd4f0fe3c5649b  # v1.2.0
       if: failure() && github.event.pull_request == null

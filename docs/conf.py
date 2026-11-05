@@ -29,9 +29,10 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+import doctest
+import importlib.util
 import os
 import sys
-import doctest
 
 sys.path.insert(0, os.path.abspath('..'))
 # Include local extension.
@@ -151,6 +152,10 @@ nb_execution_excludepatterns = [
   'guides/quantization/fp8_basics.ipynb',
   'guides/training_techniques/use_checkpointing.ipynb',  # TODO(IvyZX): needs to be updated
 ]
+if importlib.util.find_spec('tensorflow') is None:
+  nb_execution_excludepatterns.append(
+      'guides/data_preprocessing/loading_datasets.ipynb'
+  )
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False
 nb_execution_raise_on_error = True

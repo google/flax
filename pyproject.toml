@@ -16,8 +16,9 @@ dependencies = [
     "jax>=0.11.1",
     "msgpack",
     "optax",
-    "orbax-checkpoint",
-    "tensorstore",
+    # TODO: remove python_version<'3.15' markers once tensorstore cp315 wheels are available.
+    "orbax-checkpoint; python_version<'3.15'",
+    "tensorstore; python_version<'3.15'",
     "rich>=11.1",
     "typing_extensions>=4.2",
     "PyYAML>=5.4.1",
@@ -29,6 +30,9 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dynamic = ["version", "readme"]
@@ -36,41 +40,40 @@ dynamic = ["version", "readme"]
 [project.optional-dependencies]
 testing = [
     "clu",
-    "clu<=0.0.9; python_version<'3.10'",
     "einops",
     "gymnasium[atari]; python_version<'3.14'",
     "jaxlib",
     "jaxtyping",
     "jraph>=0.0.6dev0",
     "ml-collections",
-    "mypy",
     "opencv-python",
     "protobuf",
+    "pyrefly",
     "pytest",
     "pytest-cov",
     "pytest-custom_exit_code",
     "pytest-xdist",
-    "pytype",
     # WMT/LM1B examples
-    "sentencepiece==0.2.0",  # Segfault bug in 0.2.1
+    "sentencepiece==0.2.0; python_version<'3.13'",  # Segfault/vocab-size bug in 0.2.1+
+    "sentencepiece!=0.2.1; python_version>='3.13' and python_version<'3.15'",
     "tensorflow_text>=2.11.0; platform_system!='Darwin' and python_version < '3.13'",
-    "tensorflow_datasets",
-    "tensorflow>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
+    "tensorflow_datasets; python_version<'3.15'",
     "tensorflow>=2.20.0; python_version>='3.13' and python_version<'3.14'",
+    "tensorflow>=2.12.0; python_version<'3.13'", # to fix Numpy np.bool8 deprecation error
     "tensorboard",
     # Temporary fix for https://github.com/google/flax/issues/5143
-    "keras<3.13",
-    "torch",
-    "treescope>=0.1.1; python_version>='3.10'",
+    "keras<3.13; python_version<'3.15'",
+    "torch; python_version<'3.15'",
+    "treescope>=0.1.1",
     "cloudpickle>=3.0.0",
     "ale-py>=0.10.2; python_version<'3.14'",
     # Pinned grain version to 0.2.16 to prevent the error:
     # absl.flags._exceptions.UnparsedFlagAccessError: Trying to access flag --grain_enable_multiprocess_worker_profiling before flags were parsed.
     # in the test: examples/gemma/input_pipeline_test.py::InputPipelineTest::test_eval_ds0
-    "grain==0.2.16",
+    "grain==0.2.16; python_version<'3.15'",
 ]
 docs = [
-    "sphinx==6.2.1",
+    "sphinx>=7.3,<8",
     "sphinx-book-theme",
     "Pygments>=2.6.1",
     "ipykernel",
@@ -80,7 +83,7 @@ docs = [
     "recommonmark",
     "ipython_genutils",
     "sphinx-design",
-    "jupytext==1.13.8",
+    "jupytext>=1.16.0",
     "dm-haiku>=0.0.14",
     "docutils",
     # The next packages are for notebooks.
@@ -92,9 +95,9 @@ docs = [
     "einops",
     "kagglehub>=0.3.3",
     "ipywidgets>=8.1.5",
-    "orbax-export>=0.0.8",
+    "orbax-export>=0.0.8; python_version<'3.14'",
     "jaxtyping",
-    "grain",
+    "grain; python_version<'3.15'",
 ]
 dev = [
     "nanobind>=2.5.0",
@@ -118,42 +121,98 @@ flax = ["*py.typed"]
 [tool.yapf]
 based_on_style = "yapf"
 
-[tool.pytype]
-# TODO(levskaya): figure out why we get pyi-error from flax's root __init__.py
-# could be a pytype bug.
-disable = "pyi-error"
-
-[tool.mypy]
-show_error_codes = true
-no_implicit_optional = true
-disable_error_code = "attr-defined"
-
-[[tool.mypy.overrides]]
-module = [
-    "tensorflow.*",
-    "tensorboard.*",
-    "absl.*",
-    "jax.*",
-    "rich.*",
-    "flax.*",
-    "jaxlib.cuda.*",
-    "jaxlib.cpu.*",
-    "msgpack",
-    "numpy.*",
-    "optax.*",
-    "orbax.*",
-    "opt_einsum.*",
-    "scipy.*",
-    "libtpu.*",
-    "jaxlib.mlir.*",
-    "yaml",
+[tool.pyrefly]
+python-version = "3.14"
+project-includes = [
+    "flax/**/*.py",
+    "flax/**/*.pyi",
 ]
-ignore_missing_imports = true
-disable_error_code = "annotation-unchecked"
-# exclude nnx examples
-[[tool.mypy.overrides]]
-module = "flax.nnx.examples.*"
-ignore_errors = true
+project-excludes = [
+    "**/*.ipynb",
+    "flax/nnx/examples/**/*.py",
+]
+ignore-missing-imports = [
+    "absl.*",
+    "clu.*",
+    "etils.*",
+    "flaxlib.*",
+    "google.colab.*",
+    "IPython.*",
+    "jaxlib.*",
+    "jraph.*",
+    "libtpu.*",
+    "matplotlib.*",
+    "opt_einsum.*",
+    "orbax.*",
+    "pytest.*",
+    "scipy.*",
+    "tensorboard.*",
+    "tensorflow.*",
+    "tensorstore.*",
+]
+permissive-ignores = true
+untyped-def-behavior = "skip-and-infer-return-any"
+
+# Pre-existing type errors surfaced when migrating from pytype + mypy to pyrefly.
+[[tool.pyrefly.sub-config]]
+matches = "flax/core/nn/attention.py"
+errors = { unbound-name = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/core/scope.py"
+errors = { bad-assignment = "ignore", missing-attribute = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/linen/fp8_ops.py"
+errors = { bad-override = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/linen/linear.py"
+errors = { bad-argument-type = "ignore", unbound-name = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/bridge/*.py"
+errors = { bad-argument-type = "ignore", missing-attribute = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/module.py"
+errors = { bad-argument-type = "ignore", missing-attribute = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/nn/linear.py"
+errors = { unbound-name = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/statelib.py"
+errors = { inconsistent-overload = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/training/*.py"
+errors = { unsupported-operation = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/transforms/autodiff.py"
+errors = { unbound-name = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/transforms/compilation.py"
+errors = { bad-index = "ignore", bad-override = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/transforms/iteration.py"
+errors = { bad-return = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/nnx/variablelib.py"
+errors = { bad-override = "ignore", bad-override-param-name = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/**/*.ipynb"
+errors = { bad-argument-type = "ignore" }
+
+[[tool.pyrefly.sub-config]]
+matches = "flax/training/checkpoints.py"
+errors = { bad-argument-type = "ignore", bad-return = "ignore" }
 
 [tool.pytest.ini_options]
 filterwarnings = [
@@ -222,6 +281,7 @@ line-length = 80
 preview = true
 
 [tool.ruff]
+target-version = "py312"
 # Exclude a variety of commonly ignored directories.
 exclude = [
   "__init__.py",
