@@ -420,6 +420,35 @@ class TestLinenConsistency(parameterized.TestCase):
     assert isinstance(nnx_model.normed.scales[('kernel',)], nnx.Param)
     assert 'scales' in nnx.state(nnx_model.normed, nnx.Param)
 
+  def test_weightnorm_param_not_persisted_after_call(self):
+    # Regression test for #5576: WeightNorm must not write normalized weights
+    # back into params; calling twice must leave params unchanged.
+    rngs = nnx.Rngs(42)
+    dense = nnx.Linear(8, 4, rngs=rngs)
+    normed = nnx.WeightNorm(dense, rngs=rngs)
+    kernel0 = jnp.array(dense.kernel[...])
+    bias0 = jnp.array(dense.bias[...])
+    x = jax.random.normal(jax.random.key(0), (10, 8))
+    normed(x)
+    normed(x)
+    np.testing.assert_array_equal(kernel0, dense.kernel[...])
+    np.testing.assert_array_equal(bias0, dense.bias[...])
+
+  def test_spectralnorm_param_not_persisted_after_call(self):
+    # Regression test for #5576: SpectralNorm must not write normalized
+    # weights back into params; calling twice must leave params unchanged.
+    rngs = nnx.Rngs(42)
+    dense = nnx.Linear(8, 4, rngs=rngs)
+    normed = nnx.SpectralNorm(dense, n_steps=1, rngs=rngs)
+    kernel0 = jnp.array(dense.kernel[...])
+    bias0 = jnp.array(dense.bias[...])
+    x = jax.random.normal(jax.random.key(0), (10, 8))
+    normed(x, update_stats=False)
+    normed(x, update_stats=False)
+    np.testing.assert_array_equal(kernel0, dense.kernel[...])
+    np.testing.assert_array_equal(bias0, dense.bias[...])
+
+
   @parameterized.product(
     dtype=[jnp.float32, jnp.float16],
     param_dtype=[jnp.float32, jnp.float16],
