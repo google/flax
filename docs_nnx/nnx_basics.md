@@ -63,7 +63,7 @@ The above visualization by `nnx.display` is generated using the awesome
 
 ### Stateful computation
 
-Implementing layers, such as `BatchNorm`, requires performing state updates during a forward pass. In Flax NNX, you just need to create a `Variable` and update its `.value` during the forward pass.
+Implementing layers, such as `BatchNorm`, requires performing state updates during a forward pass. In Flax NNX, you just need to create a `Variable` and update its value during the forward pass.
 
 ```{code-cell} ipython3
 class Count(nnx.Variable): pass
@@ -171,7 +171,7 @@ x, y = jnp.ones((5, 2)), jnp.ones((5, 10))
 loss = train_step(model, optimizer, x, y, rngs)
 
 print(f'{loss = }')
-print(f'{optimizer.step.value = }')
+print(f'{optimizer.step[...] = }')
 ```
 
 There are two things happening in this example that are worth mentioning:
@@ -239,7 +239,7 @@ class StatefulLinear(nnx.Module):
     self.count = Count(jnp.array(0, dtype=jnp.uint32))
 
   def __call__(self, x: jax.Array):
-    self.count.value += 1
+    self.count[...] += 1
     return x @ self.w + self.b
 
 model = StatefulLinear(din=3, dout=5, rngs=nnx.Rngs(0))
@@ -270,7 +270,7 @@ Flax's `nnx.merge` is the reverse of `nnx.split`. It takes the `GraphDef` + `Sta
 - This pattern is used to propagate the state from a transform back to the source object outside.
 
 ```{code-cell} ipython3
-print(f'{model.count.value = }')
+print(f'{model.count[...] = }')
 
 # 1. Use `nnx.split` to create a pytree representation of the `nnx.Module`.
 graphdef, state = nnx.split(model)
@@ -289,7 +289,7 @@ y, state = forward(graphdef, state, x=jnp.ones((1, 3)))
 # 5. Update the state of the original `nnx.Module`.
 nnx.update(model, state)
 
-print(f'{model.count.value = }')
+print(f'{model.count[...] = }')
 ```
 
 The key insight of this pattern is that using mutable references is fine within a transform context (including the base eager interpreter) but it is necessary to use the Functional API when crossing boundaries.
