@@ -20,7 +20,7 @@ The MNIST dataset consists of greyscale images of 28x28 pixels of handwritten di
 
 Assuming a CNN-based classifier, the input data should have shape `(B, 28, 28, 1)`, where the trailing singleton dimension denotes the greyscale image channel.
 
-The labels are simply the integer denoting the digit corresponding to the image. Labels should therefore have shape `(B,)`, to enable loss computation with [`optax.softmax_cross_entropy_with_integer_labels`](https://optax.readthedocs.io/en/latest/api.html#optax.softmax_cross_entropy_with_integer_labels).
+The labels are simply the integer denoting the digit corresponding to the image. Labels should therefore have shape `(B,)`, to enable loss computation with [`optax.softmax_cross_entropy_with_integer_labels`](https://optax.readthedocs.io/en/latest/api/losses.html).
 
 ```{code-cell} ipython3
 :tags: [skip-execution]
