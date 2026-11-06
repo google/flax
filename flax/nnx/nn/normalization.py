@@ -1015,7 +1015,7 @@ class WeightNorm(nnx.Module):
       def init_scales(param):
         feature_axes = _canonicalize_axes(param.ndim, self.feature_axes)
         scale_shape = tuple(param.shape[ax] for ax in feature_axes)
-        return scale_init(rngs['params'], scale_shape)
+        return scale_init(rngs['params'](), scale_shape)
       # Store as Param so scales are trainable (Weight Normalization paper).
       self.scales = nnx.data({
         path: nnx.Param(init_scales(param))
