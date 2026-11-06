@@ -1058,7 +1058,7 @@ class WeightNorm(nnx.Module):
       cast_args.append(scale_value)
 
     final_dtype = dtypes.canonicalize_dtype(*cast_args, dtype=self.dtype)
-    param.set_value(jnp.asarray(value_bar, final_dtype))
+    return jnp.asarray(value_bar, final_dtype)
 
   def __call__(self, x: Array, *args, **kwargs) -> Array:
     """Compute the l2-norm of the weights in ``self.layer_instance``
@@ -1075,10 +1075,18 @@ class WeightNorm(nnx.Module):
       Output of the layer using l2-normalized weights.
     """
     state = nnx.state(self.layer_instance)
-    for path, param in nnx.to_flat_state(state):
-      self._weightnorm_inplace(path, param)
-
-    return self.layer_instance(x, *args, **kwargs)  # type: ignore
+    saved = {}
+    try:
+      for path, param in nnx.to_flat_state(state):
+        value_bar = self._weightnorm_inplace(path, param)
+        if value_bar is None:
+          continue
+        saved[path] = (param, jnp.array(param[...]))
+        param[...] = value_bar
+      return self.layer_instance(x, *args, **kwargs)  # type: ignore
+    finally:
+      for param, original in saved.values():
+        param[...] = original
 
 class InstanceNorm(Module):
   """Instance normalization (https://arxiv.org/abs/1607.08022v3).
@@ -1405,9 +1413,18 @@ class SpectralNorm(Module):
         as either a __call__ argument or __init__ argument.""",
     )
     state = nnx.state(self.layer_instance, nnx.Param)
-    for path, param in nnx.to_flat_state(state):
-      self._spectral_normalize_inplace(path, param, update_stats=update_stats)
-    return self.layer_instance(x)
+    saved = {}
+    try:
+      for path, param in nnx.to_flat_state(state):
+        value_bar = self._spectral_normalize_inplace(path, param, update_stats=update_stats)
+        if value_bar is None:
+          continue
+        saved[path] = (param, jnp.array(param[...]))
+        param[...] = value_bar
+      return self.layer_instance(x)
+    finally:
+      for param, original in saved.values():
+        param[...] = original
 
   def _spectral_normalize_inplace(self, path, orig_param, update_stats):
     param = orig_param
@@ -1454,4 +1471,4 @@ class SpectralNorm(Module):
       self.batch_stats[path_sigma][...] = sigma
 
     dtype = dtypes.canonicalize_dtype(param, u, v, sigma, dtype=self.dtype)
-    orig_param[...] = jnp.asarray(param, dtype)
+    return jnp.asarray(param, dtype)
