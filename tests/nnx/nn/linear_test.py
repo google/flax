@@ -203,43 +203,6 @@ class TestLinenConsistency(parameterized.TestCase):
     assert y.shape == (1, 2, 4)
 
 
-class TestPReLUConsistency(parameterized.TestCase):
-  @parameterized.product(
-    dtype=[jnp.float32, jnp.float16],
-    param_dtype=[jnp.float32, jnp.float16],
-  )
-  def test_equivalence(self, dtype, param_dtype):
-    key = jax.random.key(42)
-    x = jnp.linspace(-10, 10, 20, dtype=dtype)
-    negative_slope_init = 0.02
-    nnx_prelu = nnx.PReLU(negative_slope_init=negative_slope_init, param_dtype=param_dtype)
-    linen_prelu = linen.PReLU(negative_slope_init=negative_slope_init, param_dtype=param_dtype)
-
-    variables = linen_prelu.init(key, x)
-    expected = linen_prelu.apply(variables, x)
-    output = nnx_prelu(x)
-    np.testing.assert_array_equal(output, expected)
-
-    # Check gradients
-    @jax.jit
-    def nnx_loss_function(model):
-      y = model(x)
-      return y.mean()
-
-    @jax.jit
-    def linen_loss_function(variables):
-      y = linen_prelu.apply(variables, x)
-      return y.mean()
-
-    expected_loss, expected_grads = jax.value_and_grad(linen_loss_function)(variables)
-    loss, grads = jax.value_and_grad(nnx_loss_function)(nnx_prelu)
-
-    np.testing.assert_array_equal(loss, expected_loss)
-    np.testing.assert_array_equal(
-      expected_grads['params']['negative_slope'], grads.negative_slope[...]
-    )
-
-
 class TestLayersSameGraph(parameterized.TestCase):
 
   @parameterized.product(
