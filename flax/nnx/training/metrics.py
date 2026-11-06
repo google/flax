@@ -421,10 +421,21 @@ class MultiMetric(Metric):
         ``update`` method. It can contain ``mask`` argument as mask to be passed to the underlying metrics.
         ``mask`` can be a ``jax.Array` and it will be passed to all the metrics. ``mask`` can be a dictionary
         with metric name as keys and ``jax.Array`` as values, e.g ``{metric_name1: metric_mask1, ...}``
+
+    Raises:
+      ValueError: if ``mask`` is a dictionary containing keys that do not
+        match any metric name.
     """
     # TODO: should we give the option of updating only some of the metrics and not all? e.g. if for some kwargs==None, don't do update
     # TODO: should we raise an error if a kwarg is passed into **updates that has no match with any underlying metric? e.g. user typo
     mask = updates.pop("mask", None)
+    if isinstance(mask, dict):
+      unknown = [name for name in mask if name not in self._metric_names]
+      if unknown:
+        raise ValueError(
+            f'Mask keys {unknown} do not match any metric. '
+            f'Available metrics: {list(self._metric_names)}.'
+        )
     for metric_name in self._metric_names:
       metric_mask_kwarg = {}
       metric_mask = mask.get(metric_name, None) if isinstance(mask, dict) else mask
