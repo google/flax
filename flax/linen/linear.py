@@ -25,6 +25,7 @@ from flax.linen.module import Module, compact
 from flax.typing import (
     Array,
     ConvGeneralDilatedT,
+    ConvTransposeT,
     DotGeneralT,
     Dtype,
     Initializer,
@@ -955,6 +956,7 @@ class ConvTranspose(Module):
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = initializers.zeros_init()
   transpose_kernel: bool = False
+  conv_transpose: ConvTransposeT = lax.conv_transpose
   promote_dtype: PromoteDtypeFn = promote_dtype
   preferred_element_type: Dtype | None = None
 
@@ -1045,7 +1047,7 @@ class ConvTranspose(Module):
     assert inputs is not None
     assert kernel is not None
 
-    y = lax.conv_transpose(
+    y = self.conv_transpose(
       inputs,
       kernel,
       strides,
