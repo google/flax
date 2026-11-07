@@ -198,5 +198,34 @@ class TestConvLinenConsistency(parameterized.TestCase):
     np.testing.assert_array_equal(out, out_nnx)
 
 
+class TestConvValidation(parameterized.TestCase):
+
+  @parameterized.parameters(
+    (3, 2, r'in_features \(3\) must be divisible by feature_group_count \(2\)'),
+    (8, 3, r'in_features \(8\) must be divisible by feature_group_count \(3\)'),
+    (4, 0, 'feature_group_count must be a positive integer, but got 0'),
+    (4, -2, 'feature_group_count must be a positive integer, but got -2'),
+  )
+  def test_invalid_feature_group_count(
+    self, in_features, feature_group_count, match
+  ):
+    with self.assertRaisesRegex(ValueError, match):
+      nnx.Conv(
+        in_features,
+        6,
+        kernel_size=(3,),
+        feature_group_count=feature_group_count,
+        rngs=nnx.Rngs(0),
+      )
+
+  def test_valid_feature_group_count(self):
+    model = nnx.Conv(
+      4, 6, kernel_size=(3,), feature_group_count=2, rngs=nnx.Rngs(0)
+    )
+    self.assertEqual(model.kernel.shape, (3, 2, 6))
+    y = model(jnp.ones((1, 8, 4)))
+    self.assertEqual(y.shape, (1, 8, 6))
+
+
 if __name__ == '__main__':
   absltest.main()
