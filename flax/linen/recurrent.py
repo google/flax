@@ -822,9 +822,10 @@ class ConvLSTMCell(RNNCellBase):
       A tuple with the new carry and the output.
     """
     c, h = carry
+    features = c.shape[-1]
     input_to_hidden = partial(
       Conv,
-      features=4 * self.features,
+      features=4 * features,
       kernel_size=self.kernel_size,
       strides=self.strides,
       padding=self.padding,
@@ -836,7 +837,7 @@ class ConvLSTMCell(RNNCellBase):
 
     hidden_to_hidden = partial(
       Conv,
-      features=4 * self.features,
+      features=4 * features,
       kernel_size=self.kernel_size,
       strides=self.strides,
       padding=self.padding,
