@@ -877,6 +877,7 @@ def jvp(
       has_aux=True,
     )
   else:
+    aux = None
     (primals_out, updates), (tangent_out, _updates_tangent) = jax.jvp(
       SimpleJvpFn(f_unbound, has_aux=False, graph=graph),
       primals,

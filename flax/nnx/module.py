@@ -163,7 +163,7 @@ class Module(Pytree, metaclass=ModuleMeta):
       for var in self.__captures__:
         if type(var) == variable_type:
           if name in var:
-            var[name] = reduce_fn(var[name], value)
+            var[name] = reduce_fn(tp.cast(B, var[name]), value)
           else:
             var[name] = reduce_fn(init_fn(), value)
           return True
@@ -682,7 +682,7 @@ def view_info(node: Module, /, *, only: filterlib.Filter = ..., graph: bool | No
       the overhead of the graph protocol.
   """
   predicate = filterlib.to_predicate(only)
-  classes: set[Module] = set()
+  classes: set[type[tp.Any]] = set()
 
   def _set_mode_info_fn(path, node):
     if hasattr(node, 'set_view') and predicate(path, node):
@@ -810,10 +810,12 @@ def capture(
   method_outputs: tp.Optional[type[variableslib.Variable]] = None
 ) -> tp.Callable[[tp.Callable[P, R]], tp.Callable[P, tuple[R, State]]]: ...
 
-def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: type[variableslib.Variable],
-  init : tp.Optional[State] = None,
-  method_outputs : tp.Optional[type[variableslib.Variable]] = None
-) -> tp.Callable[P, tuple[R, State]] | tp.Callable[[tp.Callable[P, R]], tp.Callable[P, tuple[R, State]]]:
+def capture(
+    fn: tp.Any,
+    *var_types: type[variableslib.Variable],
+    init: tp.Optional[State] = None,
+    method_outputs: tp.Optional[type[variableslib.Variable]] = None,
+) -> tp.Any:
     """Wraps a function to capture intermediate values from a module during execution.
 
     This function wraps a `Callable`, executing it while collecting intermediate values that were stored using
@@ -826,7 +828,7 @@ def capture(fn: tp.Callable[P, R] | type[variableslib.Variable], *var_types: typ
 
     Args:
       fn: The `Callable` to wrap.
-      var_types: Variable types to capture. If None, defaults to [].
+      *var_types: Variable types to capture. If None, defaults to [].
       init: MutableMapping used to initialize perturbation values. This is useful for gradient extraction.
       method_outputs: If provided, automatically sows the output of each method
         in the module and its submodules using this variable type.

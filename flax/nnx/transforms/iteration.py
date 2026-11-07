@@ -176,13 +176,19 @@ class StateAxes(extract.PrefixMapping, tp.Mapping):
     if isinstance(filter_axes, statelib.State):
       filter_axes = statelib.create_path_filters(filter_axes)  # type: ignore
 
-    iterable = tuple(
-        filter_axes.items()
-        if isinstance(filter_axes, tp.Mapping)
-        else filter_axes
+    if isinstance(filter_axes, tp.Mapping):
+      mapping = tp.cast(
+          tp.Mapping[filterlib.Filter, Index | type[Carry] | None], filter_axes
+      )
+      iterable = tuple(mapping.items())
+    else:
+      iterable = tuple(filter_axes)
+    self._filters: tuple[filterlib.Filter, ...] = tuple(
+        filter for filter, _ in iterable
     )
-    self._filters = tuple(filter for filter, _ in iterable)
-    self._axes = tuple(axis for _, axis in iterable)
+    self._axes: tuple[Index | type[Carry] | None, ...] = tuple(
+        axis for _, axis in iterable
+    )
 
   @property
   def filters(self) -> tuple[filterlib.Filter, ...]:

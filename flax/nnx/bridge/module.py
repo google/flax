@@ -164,7 +164,9 @@ def _module_meta_call(cls: type[M], *args, **kwargs) -> M:
     elif parent_ctx.in_compact:
       name = _auto_submodule_name(parent_ctx, cls)
 
-  module = nnx_module.ModuleMeta.__call__(cls, *args, **kwargs)
+  module = nnx_module.ModuleMeta.__call__(
+      tp.cast(nnx_module.ModuleMeta, cls), *args, **kwargs
+  )
   module.scope = None
   module.attr_priorities = {}
 

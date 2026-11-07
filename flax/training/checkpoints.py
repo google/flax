@@ -165,8 +165,8 @@ class AsyncManager:
 
 
 def _split_mp_arrays(
-  target: dict[str, Any]
-) -> tuple[dict[str, Any], list[tuple[MultiprocessArrayType, str]]]:
+    target: PyTree,
+) -> tuple[PyTree, list[tuple[MultiprocessArrayType, str]]]:
   """Split out the multiprocess arrays from the target pytree to save."""
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(target, (core.FrozenDict, dict)):
@@ -569,6 +569,7 @@ def _get_checkpoint_paths(
 ) -> tuple[str, str, str]:
   """Generate the checkpoint paths used in this save operation."""
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
+  assert isinstance(ckpt_dir, str)
   logging.info('Saving checkpoint at step: %s', step)
   # normalize path because io.glob() can modify path './', '//' ...
   ckpt_dir = safe_normpath(ckpt_dir)
@@ -935,6 +936,7 @@ def _all_checkpoints(
     Sorted list of checkpoint paths or empty list if no checkpoints were found.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
+  assert isinstance(ckpt_dir, str)
   checkpoint_files: list[Any] = [
     pathlib.PurePath(c) for c in _allowempty_listdir(ckpt_dir)
   ]
@@ -1080,6 +1082,7 @@ def restore_checkpoint(
     orbax_checkpointer.wait_until_finished()
 
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
+  assert isinstance(ckpt_dir, str)
   ckpt_dir = safe_normpath(ckpt_dir)
   if step is not None:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)

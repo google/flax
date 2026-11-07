@@ -424,6 +424,7 @@ class Scope:
   """
 
   reservations: dict[str, set[str | None]]
+  _submodule_adoption_cache: Any
 
   def __init__(
     self,
@@ -462,7 +463,7 @@ class Scope:
     self._root = parent.root if parent else None
     self.trace_level = tracers.current_trace()
 
-    self.rng_counters = {key: 0 for key in self.rngs}
+    self.rng_counters: dict[Any, Any] = {key: 0 for key in self.rngs}
     self.reservations = collections.defaultdict(set)
 
     self._invalid = False
@@ -636,10 +637,10 @@ class Scope:
     rngs = {key: LazyRng.create(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
-      rng_counters = self.rng_counters.get(rng_key)  # type: ignore
+      rng_counters = self.rng_counters[rng_key]
     else:
       rng_counters = {key: 0 for key in rngs}
-      self.rng_counters[rng_key] = rng_counters  # type: ignore
+      self.rng_counters[rng_key] = rng_counters
     scope = Scope(
       {},
       name=name,

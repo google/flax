@@ -819,6 +819,7 @@ class Conv(Module):
 
     # Combine all input batch dimensions into a single leading batch axis.
     num_batch_dimensions = inputs.ndim - (len(kernel_size) + 1)
+    input_batch_shape = ()
     if num_batch_dimensions != 1:
       input_batch_shape = inputs.shape[:num_batch_dimensions]
       flat_input_shape = (-1,) + inputs.shape[
@@ -1111,6 +1112,7 @@ class ConvTranspose(Module):
 
     # Combine all input batch dimensions into a single leading batch axis.
     num_batch_dimensions = inputs.ndim - (len(kernel_size) + 1)
+    input_batch_shape = ()
     if num_batch_dimensions != 1:
       input_batch_shape = inputs.shape[:num_batch_dimensions]
       flat_input_shape = (-1,) + inputs.shape[

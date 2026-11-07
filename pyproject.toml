@@ -153,66 +153,9 @@ ignore-missing-imports = [
 permissive-ignores = true
 untyped-def-behavior = "skip-and-infer-return-any"
 
-# Pre-existing type errors surfaced when migrating from pytype + mypy to pyrefly.
-[[tool.pyrefly.sub-config]]
-matches = "flax/core/nn/attention.py"
-errors = { unbound-name = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/core/scope.py"
-errors = { bad-assignment = "ignore", missing-attribute = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/linen/fp8_ops.py"
-errors = { bad-override = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/linen/linear.py"
-errors = { bad-argument-type = "ignore", unbound-name = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/bridge/*.py"
-errors = { bad-argument-type = "ignore", missing-attribute = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/module.py"
-errors = { bad-argument-type = "ignore", missing-attribute = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/nn/linear.py"
-errors = { unbound-name = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/statelib.py"
-errors = { inconsistent-overload = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/training/*.py"
-errors = { unsupported-operation = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/transforms/autodiff.py"
-errors = { unbound-name = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/transforms/compilation.py"
-errors = { bad-index = "ignore", bad-override = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/transforms/iteration.py"
-errors = { bad-return = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/nnx/variablelib.py"
-errors = { bad-override = "ignore", bad-override-param-name = "ignore" }
-
 [[tool.pyrefly.sub-config]]
 matches = "flax/**/*.ipynb"
 errors = { bad-argument-type = "ignore" }
-
-[[tool.pyrefly.sub-config]]
-matches = "flax/training/checkpoints.py"
-errors = { bad-argument-type = "ignore", bad-return = "ignore" }
 
 [tool.pytest.ini_options]
 filterwarnings = [

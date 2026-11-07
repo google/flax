@@ -171,7 +171,7 @@ class ToNNX(Module):
     maybe_method = getattr(type(self.to_nnx__module), name, None)
     if callable(maybe_method):
       method = partial(self.__call__, method=maybe_method)
-      method.__self__ = self
+      setattr(method, '__self__', self)
       return method
     return super().__getattribute__(name)
 
@@ -389,7 +389,7 @@ class ToLinen(linen.Module):
     maybe_method = getattr(self.nnx_class, name, None)
     if callable(maybe_method):
       method = partial(self.__call__, nnx_method=maybe_method)
-      method.__self__ = self
+      setattr(method, '__self__', self)
       return method
     return super().__getattribute__(name)
 

@@ -639,7 +639,7 @@ def _apply_raw_updates(
   trace = tracers.current_jax_trace()
   for flat_state in updates:
     for index, raw_value in flat_state:
-      var = partial_args[index]
+      var = partial_args[tp.cast(int, index)]
       if var._trace_state._jax_trace != trace:
         raise errors.TraceContextError(
             f'Cannot mutate {type(var).__name__} from a different trace level'
@@ -1070,7 +1070,9 @@ class JitWrapped(tp.Generic[P, R]):
 
 
 class Stage:
-  args_info: tp.Any  # PyTree of ArgInfo
+  @property
+  def args_info(self) -> tp.Any:  # PyTree of ArgInfo
+    raise NotImplementedError
 
   @property
   def _inner_obj(self) -> tp.Any:

@@ -189,6 +189,8 @@ class DenseGeneral(Module):
     inputs, kernel, bias = self.promote_dtype(
       inputs, kernel, bias, dtype=self.dtype
     )
+    assert inputs is not None
+    assert kernel is not None
 
     if self.dot_general_cls is not None:
       dot_general = self.dot_general_cls()
@@ -382,6 +384,7 @@ class Einsum(Module):
       bias = self.param('bias', self.bias_init, bias_shape, self.param_dtype)
     else:
       bias = None
+      broadcasted_bias_shape = None
 
     inputs, kernel, bias = self.promote_dtype(
       inputs, kernel, bias, dtype=self.dtype
@@ -396,6 +399,7 @@ class Einsum(Module):
     )
 
     if bias is not None:
+      assert broadcasted_bias_shape is not None
       y += jnp.reshape(bias, broadcasted_bias_shape)
     return y
 
@@ -576,6 +580,7 @@ class _Conv(Module):
 
     # Combine all input batch dimensions into a single leading batch axis.
     num_batch_dimensions = inputs.ndim - (len(kernel_size) + 1)
+    input_batch_shape = ()
     if num_batch_dimensions != 1:
       input_batch_shape = inputs.shape[:num_batch_dimensions]
       flat_input_shape = (-1,) + inputs.shape[
@@ -616,6 +621,7 @@ class _Conv(Module):
     dimension_numbers = _conv_dimension_numbers(inputs.shape)
     in_features = jnp.shape(inputs)[-1]
 
+    conv_output_shape = None
     if self.shared_weights:
       # One shared convolutional kernel for all pixels in the output.
       assert in_features % self.feature_group_count == 0
@@ -678,6 +684,7 @@ class _Conv(Module):
         bias_shape = (self.features,)
       else:
         # One bias weight per output entry, unshared betwen pixels.
+        assert conv_output_shape is not None
         bias_shape = conv_output_shape[1:]
 
       bias = self.param('bias', self.bias_init, bias_shape, self.param_dtype)
@@ -991,6 +998,7 @@ class ConvTranspose(Module):
 
     # Combine all input batch dimensions into a single leading batch axis.
     num_batch_dimensions = inputs.ndim - (len(kernel_size) + 1)
+    input_batch_shape = ()
     if num_batch_dimensions != 1:
       input_batch_shape = inputs.shape[:num_batch_dimensions]
       flat_input_shape = (-1,) + inputs.shape[

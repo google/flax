@@ -314,19 +314,22 @@ class NewVariable(HiPrim):
     )
     return primal_hijax_var, tangent_hijax_var
 
-  def vjp_fwd(self, nzs_in, *leaves):
+  def vjp_fwd(self, nzs_in, /, *leaves):
     return self(*leaves), None
 
-  def vjp_bwd_retval(self, _res, out_var):
+  def vjp_bwd_retval(self, _res, out_var, /):
     avals = tuple(self.out_aval._leaves)
     return _bind_get_variable(
         out_var, treedef=self.treedef, avals=avals, var_type=self.var_type  # type: ignore
     )
 
-  def transpose(self, out_var, *accums):
+  def transpose(self, out_ct, *accums):
     avals = tuple(self.out_aval._leaves)
     leaves_dot = _bind_get_variable(
-        out_var, treedef=self.treedef, avals=avals, var_type=self.var_type  # type: ignore
+        out_ct,
+        treedef=self.treedef,  # pyrefly: ignore[missing-attribute]
+        avals=avals,
+        var_type=self.var_type,  # pyrefly: ignore[missing-attribute]
     )
     for leaf_dot, accum in zip(leaves_dot, accums):
       if hasattr(accum, 'accum'):
@@ -359,7 +362,9 @@ class SetVariable(HiPrim):
     self.params = dict(treedef=treedef, var_type=var_type)
     super().__init__()
 
-  def expand(self, hijax_var, *leaves):
+  def expand(self, *args):
+    hijax_var, *leaves_list = args
+    leaves = tuple(leaves_list)
     if not isinstance(hijax_var, (jax.core.Tracer, AbstractVariable)):
       assert self.var_type is hijax_var._var_type  # type: ignore
       object.__setattr__(hijax_var, '_leaves', leaves)
@@ -438,7 +443,8 @@ class GetVariable(HiPrim):
     self.params = dict(treedef=treedef, avals=tuple(avals), var_type=var_type)
     super().__init__()
 
-  def expand(self, hijax_var):
+  def expand(self, *args):
+    (hijax_var,) = args
     return hijax_var._leaves
 
   def jvp(self, primals, tangents):
@@ -455,10 +461,11 @@ class GetVariable(HiPrim):
     )
     return primal_out, tangent_out
 
-  def vjp_fwd(self, nzs_in, hijax_var):
+  def vjp_fwd(self, nzs_in, /, *args):
+    (hijax_var,) = args
     return self(hijax_var), None
 
-  def vjp_bwd_retval(self, _res, out):
+  def vjp_bwd_retval(self, _res, out, /):
     abstract_var: AbstractVariable = self.in_avals[0]
     hijax_var_dot = _bind_new_variable(
         *out,
@@ -468,11 +475,12 @@ class GetVariable(HiPrim):
     )
     return (hijax_var_dot,)
 
-  def transpose(self, out, accum):
+  def transpose(self, out_ct, *maybe_accums):
+    (accum,) = maybe_accums
     abstract_var: AbstractVariable = self.in_avals[0]
     if hasattr(accum, 'accum'):
       hijax_var_dot = _bind_new_variable(
-          *out,
+          *out_ct,
           treedef=abstract_var._treedef,
           var_type=self.var_type,  # type: ignore
           ref=abstract_var.ref,
@@ -1864,32 +1872,62 @@ class Variable(tp.Generic[A], reprlib.Representable, metaclass=VariableMeta):
   def __contains__(self, item) -> bool:
     return item in self.get_value()  # type: ignore
 
-  __add__ = _variable_operator('__add__')
-  __sub__ = _variable_operator('__sub__')
-  __mul__ = _variable_operator('__mul__')
-  __matmul__ = _variable_operator('__matmul__')
-  __truediv__ = _variable_operator('__truediv__')
-  __floordiv__ = _variable_operator('__floordiv__')
-  __mod__ = _variable_operator('__mod__')
-  __pow__ = _variable_operator('__pow__')
-  __lshift__ = _variable_operator('__lshift__')
-  __rshift__ = _variable_operator('__rshift__')
-  __and__ = _variable_operator('__and__')
-  __xor__ = _variable_operator('__xor__')
-  __or__ = _variable_operator('__or__')
-  __radd__ = _variable_operator('__radd__')
-  __rsub__ = _variable_operator('__rsub__')
-  __rmul__ = _variable_operator('__rmul__')
-  __rmatmul__ = _variable_operator('__rmatmul__')
-  __rtruediv__ = _variable_operator('__rtruediv__')
-  __rfloordiv__ = _variable_operator('__rfloordiv__')
-  __rmod__ = _variable_operator('__rmod__')
-  __rpow__ = _variable_operator('__rpow__')
-  __rlshift__ = _variable_operator('__rlshift__')
-  __rrshift__ = _variable_operator('__rrshift__')
-  __rand__ = _variable_operator('__rand__')
-  __rxor__ = _variable_operator('__rxor__')
-  __ror__ = _variable_operator('__ror__')
+  if tp.TYPE_CHECKING:
+
+    def __add__(self, other: tp.Any) -> A: ...
+    def __sub__(self, other: tp.Any) -> A: ...
+    def __mul__(self, other: tp.Any) -> A: ...
+    def __matmul__(self, other: tp.Any) -> A: ...
+    def __truediv__(self, other: tp.Any) -> A: ...
+    def __floordiv__(self, other: tp.Any) -> A: ...
+    def __mod__(self, other: tp.Any) -> A: ...
+    def __pow__(self, other: tp.Any) -> A: ...
+    def __lshift__(self, other: tp.Any) -> A: ...
+    def __rshift__(self, other: tp.Any) -> A: ...
+    def __and__(self, other: tp.Any) -> A: ...
+    def __xor__(self, other: tp.Any) -> A: ...
+    def __or__(self, other: tp.Any) -> A: ...
+    def __radd__(self, other: tp.Any) -> A: ...
+    def __rsub__(self, other: tp.Any) -> A: ...
+    def __rmul__(self, other: tp.Any) -> A: ...
+    def __rmatmul__(self, other: tp.Any) -> A: ...
+    def __rtruediv__(self, other: tp.Any) -> A: ...
+    def __rfloordiv__(self, other: tp.Any) -> A: ...
+    def __rmod__(self, other: tp.Any) -> A: ...
+    def __rpow__(self, other: tp.Any) -> A: ...
+    def __rlshift__(self, other: tp.Any) -> A: ...
+    def __rrshift__(self, other: tp.Any) -> A: ...
+    def __rand__(self, other: tp.Any) -> A: ...
+    def __rxor__(self, other: tp.Any) -> A: ...
+    def __ror__(self, other: tp.Any) -> A: ...
+
+  else:
+    __add__ = _variable_operator('__add__')
+    __sub__ = _variable_operator('__sub__')
+    __mul__ = _variable_operator('__mul__')
+    __matmul__ = _variable_operator('__matmul__')
+    __truediv__ = _variable_operator('__truediv__')
+    __floordiv__ = _variable_operator('__floordiv__')
+    __mod__ = _variable_operator('__mod__')
+    __pow__ = _variable_operator('__pow__')
+    __lshift__ = _variable_operator('__lshift__')
+    __rshift__ = _variable_operator('__rshift__')
+    __and__ = _variable_operator('__and__')
+    __xor__ = _variable_operator('__xor__')
+    __or__ = _variable_operator('__or__')
+    __radd__ = _variable_operator('__radd__')
+    __rsub__ = _variable_operator('__rsub__')
+    __rmul__ = _variable_operator('__rmul__')
+    __rmatmul__ = _variable_operator('__rmatmul__')
+    __rtruediv__ = _variable_operator('__rtruediv__')
+    __rfloordiv__ = _variable_operator('__rfloordiv__')
+    __rmod__ = _variable_operator('__rmod__')
+    __rpow__ = _variable_operator('__rpow__')
+    __rlshift__ = _variable_operator('__rlshift__')
+    __rrshift__ = _variable_operator('__rrshift__')
+    __rand__ = _variable_operator('__rand__')
+    __rxor__ = _variable_operator('__rxor__')
+    __ror__ = _variable_operator('__ror__')
 
   def __eq__(self, other) -> bool:
     if isinstance(other, Variable):

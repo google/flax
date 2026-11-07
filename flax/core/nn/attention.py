@@ -272,8 +272,8 @@ def multi_head_dot_product_attention(
   key = scope.child(dense, 'key')(inputs_kv)
   value = scope.child(dense, 'value')(inputs_kv)
 
+  cache_entry: Callable[[Any], CacheEntry] | CacheEntry | None = None
   if cache:
-    cache_entry: Callable[[Any], CacheEntry] | CacheEntry
     if not scope.has_variable('cache', 'entry'):
       ndim, tail_shape = (key.ndim, key.shape[-2:])
 

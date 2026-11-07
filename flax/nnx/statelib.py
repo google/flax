@@ -129,11 +129,11 @@ class FlatState(tp.Sequence[tuple[PathParts, V]], reprlib.Representable):
 
   @tp.overload
   def split(
-    self, /, *filters: filterlib.Filter
+      self, first: filterlib.Filter, /, *filters: filterlib.Filter
   ) -> tp.Union[FlatState[V], tuple[FlatState[V], ...]]: ...
 
-  def split(  # type: ignore[misc]
-    self, first: filterlib.Filter, /, *filters: filterlib.Filter
+  def split(
+      self, first: filterlib.Filter, /, *filters: filterlib.Filter
   ) -> tp.Union[FlatState[V], tuple[FlatState[V], ...]]:
     filters = (first, *filters)
     *flat_states_, rest = _split_state(self, *filters)
@@ -369,11 +369,11 @@ class State(MutableMapping[K, V], reprlib.Representable):
 
   @tp.overload
   def split(
-    self, /, *filters: filterlib.Filter
+      self, first: filterlib.Filter, /, *filters: filterlib.Filter
   ) -> tp.Union[State[K, V], tuple[State[K, V], ...]]: ...
 
-  def split(  # type: ignore[misc]
-    self, first: filterlib.Filter, /, *filters: filterlib.Filter
+  def split(
+      self, first: filterlib.Filter, /, *filters: filterlib.Filter
   ) -> tp.Union[State[K, V], tuple[State[K, V], ...]]:
     warnings.warn(
       '`flax.nnx.State` will be deprecated and be replaced by the built-in '
@@ -625,12 +625,12 @@ def split_state(
 
 @tp.overload
 def split_state(
-  state: State, /, *filters: filterlib.Filter
+    state: State, first: filterlib.Filter, /, *filters: filterlib.Filter
 ) -> tp.Union[State, tuple[State, ...]]: ...
 
 
-def split_state(  # type: ignore[misc]
-  state: State, first: filterlib.Filter, /, *filters: filterlib.Filter
+def split_state(
+    state: State, first: filterlib.Filter, /, *filters: filterlib.Filter
 ) -> tp.Union[State, tuple[State, ...]]:
   """Split a :class:`State` into one or more :class:`State`'s. The
   user must pass at least one ``Filter`` (i.e. :class:`Variable`),
