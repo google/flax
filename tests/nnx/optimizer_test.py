@@ -483,6 +483,166 @@ class TestOptimizer(parameterized.TestCase):
     jax.tree.map_with_path(assert_equal, prev_nondiff, nondiff)
 
 
+class LineSearchModel(nnx.Module):
+
+  def __init__(self):
+    self.weight = nnx.Param(jnp.array(2.0))
+    self.offset = nnx.Variable(jnp.array(0.25))
+
+  def __call__(self, x):
+    return self.weight[...] * x + self.offset[...]
+
+
+class TestBacktrackingLinesearch(parameterized.TestCase):
+
+  @parameterized.product(
+      transform=['backtracking', 'lbfgs'],
+      mode=['eager', 'jit', 'tree'],
+  )
+  def test_update(self, transform, mode):
+    graph = mode != 'tree'
+    model = LineSearchModel()
+    if transform == 'backtracking':
+      tx = optax.chain(
+          optax.sgd(1.0),
+          optax.scale_by_backtracking_linesearch(max_backtracking_steps=10),
+      )
+    else:
+      tx = optax.lbfgs()
+    optimizer = nnx.BacktrackingLinesearch(model, tx, wrt=nnx.Param, graph=graph)
+
+    def loss_fn(model, x, y):
+      return ((model(x) - y) ** 2).mean()
+
+    def train_step(model, optimizer, x, y):
+      value, grads = nnx.value_and_grad(loss_fn, graph=graph)(model, x, y)
+      optimizer.update(model, grads, value=value, value_fn=loss_fn, x=x, y=y)
+      return value
+
+    if mode != 'eager':
+      train_step = nnx.jit(train_step, graph=graph)
+    for target in (-1.0, 3.0):
+      model.offset[...] += 0.25
+      x, y = jnp.array([1.0]), jnp.array([target])
+      value = train_step(model, optimizer, x, y)
+      self.assertLess(loss_fn(model, x, y), value)
+    self.assertEqual(int(optimizer.step[...]), 2)
+
+  def test_forwarded_nnx_objects(self):
+    model = LineSearchModel()
+    teacher = LineSearchModel()
+    target = nnx.Variable(jnp.array(1.0))
+    optimizer = nnx.BacktrackingLinesearch(
+        model, optax.lbfgs(), wrt=nnx.Param
+    )
+
+    def loss_fn(model, teacher, target):
+      self.assertIsInstance(teacher.weight, nnx.Param)
+      self.assertIsInstance(target, nnx.Variable)
+      return (model(jnp.array(1.0)) - teacher.weight[...] - target[...]) ** 2
+
+    value, grads = nnx.value_and_grad(loss_fn)(model, teacher, target)
+    optimizer.update(
+        model, grads, value=value, value_fn=loss_fn, teacher=teacher, target=target
+    )
+    self.assertIsInstance(teacher.weight, nnx.Param)
+    self.assertIsInstance(target, nnx.Variable)
+    self.assertLess(loss_fn(model, teacher, target), value)
+
+  def test_wrt(self):
+    class Model(nnx.Module):
+
+      def __init__(self):
+        self.weight = nnx.Param(jnp.array(2.0))
+        self.adapter = nnx.LoRAParam(jnp.array(1.0))
+
+    model = Model()
+    optimizer = nnx.BacktrackingLinesearch(model, optax.lbfgs(), wrt=nnx.LoRAParam)
+
+    def loss_fn(model):
+      return (model.weight[...] + model.adapter[...]) ** 2
+
+    value, grads = nnx.value_and_grad(
+        loss_fn, argnums=nnx.DiffState(0, nnx.LoRAParam)
+    )(model)
+    optimizer.update(model, grads, value=value, value_fn=loss_fn)
+    self.assertLess(loss_fn(model), value)
+    np.testing.assert_array_equal(model.weight[...], 2.0)
+    self.assertNotEqual(model.adapter[...], 1.0)
+
+  def test_trial_mutations_are_isolated(self):
+    class Model(LineSearchModel):
+
+      def __init__(self):
+        super().__init__()
+        self.count = nnx.Variable(jnp.array(0))
+
+      def __call__(self, x):
+        self.count[...] += 1
+        return super().__call__(x)
+
+    model = Model()
+    optimizer = nnx.BacktrackingLinesearch(
+        model,
+        optax.chain(
+            optax.sgd(10.0),
+            optax.scale_by_backtracking_linesearch(
+                max_backtracking_steps=10, decrease_factor=0.5
+            ),
+        ),
+        wrt=nnx.Param,
+    )
+
+    def loss_fn(model):
+      return model(jnp.array(1.0)) ** 2
+
+    value, grads = nnx.value_and_grad(loss_fn)(model)
+    count = model.count[...]
+    optimizer.update(model, grads, value=value, value_fn=loss_fn)
+    np.testing.assert_array_equal(model.count[...], count)
+    self.assertLess(loss_fn(model), value)
+    self.assertLess(nnx.as_pure(optimizer.opt_state)[1].learning_rate, 1.0)
+
+  def test_explicit_gradient(self):
+    model = LineSearchModel()
+    model.adapter = nnx.LoRAParam(jnp.array(1.0))
+    optimizer = nnx.BacktrackingLinesearch(
+        model,
+        optax.chain(
+            optax.sgd(1.0),
+            optax.scale_by_backtracking_linesearch(max_backtracking_steps=10),
+        ),
+        wrt=nnx.LoRAParam,
+    )
+    loss_fn = lambda model: (model.weight[...] + model.adapter[...]) ** 2
+    value, grads = nnx.value_and_grad(
+        loss_fn, argnums=nnx.DiffState(0, nnx.LoRAParam)
+    )(model)
+    grad = jax.tree.map(jnp.zeros_like, nnx.grad(loss_fn)(model))
+    self.assertIn('weight', grad)
+    updates = optimizer.update(
+        model, grads, value=value, value_fn=loss_fn, grad=grad
+    )
+    np.testing.assert_allclose(updates['adapter'], -6.0)
+    np.testing.assert_allclose(model.adapter[...], -5.0)
+    np.testing.assert_array_equal(model.weight[...], 2.0)
+
+  def test_update_without_value_fn(self):
+    model, reference_model = LineSearchModel(), LineSearchModel()
+    tx = optax.adam(0.1)
+    optimizer = nnx.BacktrackingLinesearch(model, tx, wrt=nnx.Param)
+    reference = nnx.Optimizer(reference_model, tx, wrt=nnx.Param)
+    grads = nnx.grad(lambda model: model.weight[...] ** 2)(model)
+    updates = optimizer.update(model, grads)
+    expected = reference.update(reference_model, grads)
+    jax.tree.map(np.testing.assert_array_equal, updates, expected)
+    jax.tree.map(
+        np.testing.assert_array_equal,
+        nnx.as_pure(nnx.state((model, optimizer))),
+        nnx.as_pure(nnx.state((reference_model, reference))),
+    )
+
+
 if __name__ == '__main__':
   absltest.main()
 
