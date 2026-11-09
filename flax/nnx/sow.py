@@ -47,13 +47,7 @@ def sow(value, *, name):
   return tree_unflatten(treedef, out)
 
 @partial(jax.custom_vjp, nondiff_argnums=(1,))
-def _perturb(value, name):
-  return value
-
-_perturb.defvjp(lambda value, name: (value, None),
-                lambda name, _res, g: (sow(g, name=name),))
-
-def perturb(value, *, name):
+def perturb(value, name):
   """Identity on the forward pass; sows the incoming cotangent under `name` on
   the backward pass. Drop it into a function to harvest a gradient:
 
@@ -66,7 +60,10 @@ def perturb(value, *, name):
   Like `sow`, but for cotangents instead of forward values — the custom_vjp's
   backward rule stages the sow into the gradient jaxpr at trace time, so
   `capture(jax.grad(...))` picks it up (see test_sow_in_custom_vjp_backward)."""
-  return _perturb(value, name)
+  return value
+
+perturb.defvjp(lambda value, name: (value, None),
+                lambda name, _res, g: (sow(g, name=name),))
 
 def _contains_sow(jaxpr: core.Jaxpr, cache: dict) -> bool:
   hit = cache.get(id(jaxpr))
