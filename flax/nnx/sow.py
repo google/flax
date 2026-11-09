@@ -79,24 +79,6 @@ def _merge(dst: dict, src: dict) -> None:
   for name, vals in src.items():
     dst.setdefault(name, []).extend(vals)
 
-def _flatten_collected(collected: dict):
-  """collected {name: [pytree,...]} -> (flat leaves, meta) in a stable order."""
-  leaves, meta = [], []
-  for name in sorted(collected, key=str):  # names need not be orderable, just stable
-    for pytree in collected[name]:
-      lvs, treedef = tree_flatten(pytree)
-      meta.append((name, treedef, len(lvs)))
-      leaves.extend(lvs)
-  return leaves, meta
-
-def _unflatten_collected(leaves, meta) -> dict:
-  out: dict = {}
-  i = 0
-  for name, treedef, n in meta:
-    out.setdefault(name, []).append(tree_unflatten(treedef, leaves[i:i + n]))
-    i += n
-  return out
-
 # Dispatch rules: prim -> rule(context, eqn, invals) -> (outs, collected).
 _DISPATCH: dict = {}
 
