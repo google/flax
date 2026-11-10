@@ -113,5 +113,37 @@ class TestEMA(absltest.TestCase):
     np.testing.assert_allclose(ema_model.kernel[...], ema.params.kernel[...])
     self.assertFalse(jnp.allclose(ema_model.kernel[...], model.kernel[...]))
 
+  def test_ema_warmup(self):
+    model = nnx.Linear(
+        1, 1, use_bias=False, kernel_init=nnx.initializers.ones,
+        rngs=nnx.Rngs(0),
+    )
+    ema = nnx.EMA(model, decay=0.9, warmup_steps=4)
+
+    @nnx.jit
+    def update(ema, model):
+      ema.update(model)
+
+    rates = []
+    for _ in range(6):
+      # Reset the EMA to 0 so that after the update it equals the rate.
+      ema.params.kernel[...] = jnp.zeros((1, 1))
+      update(ema, model)
+      rates.append(ema.params.kernel[0, 0])
+
+    # k = 0.9 / (0.1 * 4) = 2.25, rate = max(0.1, 1 / (1 + 2.25 * count)).
+    np.testing.assert_allclose(
+        rates, [1 / 3.25, 1 / 5.5, 1 / 7.75, 0.1, 0.1, 0.1], rtol=1e-6
+    )
+    self.assertEqual(ema.count[...], 6)
+
+  def test_ema_invalid_args(self):
+    model = nnx.Linear(2, 2, rngs=nnx.Rngs(0))
+    for decay in (-0.1, 1.0, 1.5):
+      with self.assertRaisesRegex(ValueError, 'decay'):
+        nnx.EMA(model, decay=decay)
+    with self.assertRaisesRegex(ValueError, 'warmup_steps'):
+      nnx.EMA(model, decay=0.9, warmup_steps=-1)
+
 if __name__ == '__main__':
   absltest.main()

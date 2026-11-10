@@ -87,6 +87,10 @@ class EMA(pytreelib.Pytree):
 
   Attributes:
     decay: The decay rate for the exponential moving average.
+    warmup_steps: The number of updates over which the update rate is
+      warmed up to ``1 - decay``. ``0`` means no warmup.
+    count: A :class:`Variable` that tracks the number of updates, or ``None``
+      if ``warmup_steps`` is ``0``.
     filter: The filter used to select which variables to track.
     params: A pytree of variables holding the current
       moving average values.
@@ -97,6 +101,7 @@ class EMA(pytreelib.Pytree):
       params: tp.Any,
       decay: float,
       *,
+      warmup_steps: int = 0,
       only: filterlib.Filter = ...,
       graph: bool | None = None,
   ):
@@ -105,7 +110,12 @@ class EMA(pytreelib.Pytree):
     Args:
       params: Any object, typically an NNX module/node, whose parameters
         will be tracked.
-      decay: The decay rate for the moving average.
+      decay: The decay rate for the moving average. Must be in ``[0, 1)``.
+      warmup_steps: If positive, the update rate starts higher and decreases
+        to ``1 - decay`` over the first ``warmup_steps`` updates, so that
+        the average is less dominated by the initial parameters early in
+        training. See :meth:`update` for the exact schedule. Defaults to
+        ``0``, which disables warmup.
       only: A filter indicating which variables should be included in the
         EMA tracking. Defaults to matching everything. Note that EMA only
         tracks ``nnx.Variable`` instances.
@@ -114,10 +124,25 @@ class EMA(pytreelib.Pytree):
         tree-mode which treats Modules as regular JAX pytrees, avoiding
         the overhead of the graph protocol. If ``None`` (default), the
         value is determined by the current ``nnx.set_graph_mode`` context.
+
+    Raises:
+      ValueError: If ``decay`` is not in ``[0, 1)`` or ``warmup_steps`` is
+        negative.
+      TypeError: If ``params`` contains non-Variable leaves.
     """
+    if not 0.0 <= decay < 1.0:
+      raise ValueError(f'`decay` must be in [0, 1), got {decay}.')
+    if warmup_steps < 0:
+      raise ValueError(f'`warmup_steps` must be >= 0, got {warmup_steps}.')
     self.graph = graph
     self.decay = decay
+    self.warmup_steps = warmup_steps
     self.filter = only
+    self.count: variablelib.Variable[jax.Array] | None
+    if warmup_steps > 0:
+      self.count = variablelib.Variable(jnp.array(0, dtype=jnp.uint32))
+    else:
+      self.count = pytreelib.data(None)
     self.params: graphlib.State = pytreelib.data(
         _to_ema_param(graphlib.state(params, only, graph=graph))
     )
@@ -129,19 +154,34 @@ class EMA(pytreelib.Pytree):
 
       ema = decay * ema + (1 - decay) * update
 
+    If ``warmup_steps > 0``, the rate ``1 - decay`` is replaced by::
+
+      max(1 - decay, 1 / (1 + count * k))
+
+    where ``count`` is the number of updates so far, including the current
+    one, and ``k = decay / ((1 - decay) * warmup_steps)``, so that the rate
+    reaches ``1 - decay`` at ``count == warmup_steps``.
+
     Args:
       updates: The new parameters or module to blend into the current EMA.
         This should have the same structure as the ``params`` object passed
         during initialization.
     """
+    decay = self.decay
+    if self.count is not None:
+      self.count[...] += 1
+      k = self.decay / ((1.0 - self.decay) * self.warmup_steps)
+      rate = jnp.maximum(1.0 - self.decay, 1.0 / (1.0 + self.count[...] * k))
+      decay = 1.0 - rate
+
     def _update_ema(ema: variablelib.Variable, update: tp.Any) -> tp.Any:
-      ema[...] = self.decay * ema + (1.0 - self.decay) * update
+      ema[...] = decay * ema + (1.0 - decay) * update
 
     jax.tree.map(
-      _update_ema,
-      self.params,
-      graphlib.state(updates, self.filter, graph=self.graph),
-      is_leaf=lambda x: isinstance(x, variablelib.Variable),
+        _update_ema,
+        self.params,
+        graphlib.state(updates, self.filter, graph=self.graph),
+        is_leaf=lambda x: isinstance(x, variablelib.Variable),
     )
 
   def apply_to(self, model: A) -> A:
