@@ -203,6 +203,16 @@ class TestLSTMCell(absltest.TestCase):
     for c_nnx, c_linen in zip(new_carry_nnx, new_carry_linen):
       np.testing.assert_allclose(c_nnx, c_linen, atol=1e-5)
 
+  def test_fused_recurrent_kernel_is_orthogonal_per_gate(self):
+    hidden = 8
+    for cell, gates in [
+      (nnx.OptimizedLSTMCell(3, hidden, rngs=nnx.Rngs(0)), 4),
+      (nnx.GRUCell(3, hidden, rngs=nnx.Rngs(0)), 3),
+    ]:
+      blocks = jnp.split(cell.dense_h.kernel[...], gates, axis=-1)
+      for block in blocks:
+        np.testing.assert_allclose(block.T @ block, jnp.eye(hidden), atol=1e-5)
+
 
 class TestRNN(absltest.TestCase):
   def test_rnn_with_lstm_cell(self):
