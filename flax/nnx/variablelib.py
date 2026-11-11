@@ -248,9 +248,12 @@ class VarDefaultsContext:
 
 
 def is_array_ref(x) -> tp.TypeGuard[Ref]:
-  return isinstance(x, jax.Array | AbstractRef | Ref) and isinstance(
-    jax.typeof(x), AbstractRef | Ref
-  )
+  # Concrete refs are `Ref` instances; traced refs have an `AbstractRef` aval.
+  if type.__instancecheck__(Ref, x):
+    return True
+  if isinstance(x, jax.core.Tracer):
+    return isinstance(x.aval, AbstractRef)
+  return False
 
 
 @dataclasses.dataclass
