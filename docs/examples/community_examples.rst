@@ -33,8 +33,8 @@ Models
       - `@n2cholas <https://github.com/n2cholas>`__
       - Various resnet implementations
       - `torch.hub <https://pytorch.org/docs/stable/hub.html>`__
-    * - `Wav2Vec2 finetuning <https://github.com/vasudevgupta7/speech-jax>`__
-      - `@vasudevgupta7 <https://github.com/vasudevgupta7>`__
+    * - `Wav2Vec2 finetuning <https://github.com/thevasudevgupta/speech-jax>`__
+      - `@vasudevgupta7 <https://github.com/thevasudevgupta>`__
       - Automatic Speech Recognition
       - https://arxiv.org/abs/2006.11477
 
@@ -52,8 +52,8 @@ Examples
       - `@henry-prior <https://github.com/henry-prior>`__
       - Reinforcement learning
       - N/A
-    * - `BigBird Fine-tuning <https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects/big_bird>`__
-      - `@vasudevgupta7 <https://github.com/vasudevgupta7>`__
+    * - `BigBird Fine-tuning <https://github.com/huggingface/transformers-research-projects/tree/main/jax-projects/big_bird>`__
+      - `@vasudevgupta7 <https://github.com/thevasudevgupta>`__
       - Question-Answering
       - https://arxiv.org/abs/2007.14062
     * - `DCGAN <https://github.com/bkkaggle/jax-dcgan>`__
@@ -105,6 +105,6 @@ into consideration:
 
 In all cases mentioned above, the code must work with the latest stable versions of the
 following packages: ``jax``, ``flax``, and ``optax``, and make substantial use of Flax.
-Note that both ``jax`` and ``optax`` are `required packages <https://github.com/google/flax/blob/main/setup.py>`__
+Note that both ``jax`` and ``optax`` are `required packages <https://github.com/google/flax/blob/main/pyproject.toml>`__
 of ``flax`` (refer to the `installation instructions <https://github.com/google/flax/blob/main/README.md#quick-install>`__
 for more details).
