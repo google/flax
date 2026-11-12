@@ -32,7 +32,7 @@ Besides input arguments, state and in particular parameters could affect dtype p
 
 By using the dtype promotion rules already available in JAX we can avoid this issue. A public API is available called `jax.numpy.result_dtype(*args)`, which returns the dtype that JAX would promote the given arguments to, in accordance with the type promotion lattice. For Linen layers the arguments would be the layer inputs together with the parameters. For example, for a linear layer this would be inputs, kernel, and bias.
 
-Note that there is also a `param_dtype` attribute in standard Linen Modules that also defaults to flaot32. This behavior is left untouched and encodes the common case of having float32 parameters.
+Note that there is also a `param_dtype` attribute in standard Linen Modules that also defaults to float32. This behavior is left untouched and encodes the common case of having float32 parameters.
 There are a few reasons why float32 is almost always the correct dtype for parameters:
 1. Storing weights in half-precision often leads to underflow during optimization.
 2. Double precision is rarely used because it severely slows down modern accelerators (GPU, TPU). Therefore, such a cost should be explicitly opted-in for.
