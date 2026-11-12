@@ -101,10 +101,11 @@ will be scalar values. For more details see `JIT mechanics: tracing and static
 variables`_.
 
 Next we simply do the same for the functions ``apply_model()`` and
-``update_model()``. To compute the predictions from the ensemble, we take the
-average of the individual probabilities. We use |jax.lax.pmean()|_ to compute
-the average *across devices*. This also requires us to specify the
-``axis_name`` to both |jax.pmap()|_ and |jax.lax.pmean()|_.
+``update_model()``. To compute the average loss of the ensemble, we take the
+average of the individual losses. Similarly, to compute the predictions from
+the ensemble, we take the average of the individual probabilities. We use
+|jax.lax.pmean()|_ to compute the average *across devices*. This also requires
+us to specify the ``axis_name`` to both |jax.pmap()|_ and |jax.lax.pmean()|_.
 
 .. codediff::
   :title: Single-model, Ensemble
@@ -138,6 +139,7 @@ the average *across devices*. This also requires us to specify the
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (loss, logits), grads = grad_fn(state.params)
+    loss = jax.lax.pmean(loss, axis_name='ensemble')  #!
     probs = jax.lax.pmean(jax.nn.softmax(logits), axis_name='ensemble')  #!
     accuracy = jnp.mean(jnp.argmax(probs, -1) == labels)  #!
     return grads, loss, accuracy
