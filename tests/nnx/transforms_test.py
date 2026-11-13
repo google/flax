@@ -683,6 +683,39 @@ class TestJIT(parameterized.TestCase):
     y_no_relu = f(x, 0.5, False)
     self.assertNotEqual(y_relu, y_no_relu)
 
+  @parameterized.product(
+      (
+          dict(graph_mode=True, graph_updates=True),
+          dict(graph_mode=True, graph_updates=False),
+          dict(graph_mode=False, graph_updates=False),
+      ),
+      use_device=(True, False),
+  )
+  def test_jit_device_or_backend(self, graph_mode, graph_updates, use_device):
+    # https://github.com/google/flax/issues/4774
+    m = nnx.Linear(2, 3, rngs=nnx.Rngs(0))
+    x = jnp.ones((1, 2))
+    if use_device:
+      kwargs = dict(device=jax.local_devices(backend='cpu')[0])
+    else:
+      kwargs = dict(backend='cpu')
+
+    def f(m, x):
+      return m(x)
+
+    with self.assertWarnsRegex(DeprecationWarning, 'backend and device'):
+      f_jit = nnx.jit(
+          f, graph=graph_mode, graph_updates=graph_updates, **kwargs
+      )
+    np.testing.assert_allclose(f_jit(m, x), m(x))
+
+    if not graph_updates:
+      with self.assertWarnsRegex(DeprecationWarning, 'backend and device'):
+        f_partial = nnx.jit_partial(
+            f, m, graph=graph_mode, graph_updates=False, **kwargs
+        )
+      np.testing.assert_allclose(f_partial(x), m(x))
+
   @parameterized.parameters(
     {
       'static_args': {'static_argnums': (2, 3)},

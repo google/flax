@@ -113,6 +113,18 @@ def _jit_merge_fn(ctx: graphlib.MergeContext, path, prefix, leaf) -> tp.Any:
   return ctx.unflatten(leaf.graphdef, *leaf.states)
 
 
+def _jax_out_shardings(
+    jax_out_shardings, in_shardings, out_shardings, device, backend
+):
+  # jax.jit rejects out_shardings when device or backend is set, so only pass
+  # the internal output shardings if the user specified any shardings.
+  if (device is not None or backend is not None) and (
+      in_shardings is None and out_shardings is None
+  ):
+    return None
+  return jax_out_shardings
+
+
 @dataclasses.dataclass(eq=False)
 class JitFn:
   f: tp.Callable[..., tp.Any]
@@ -561,7 +573,13 @@ class SimpleJitWrapped(tp.Generic[P, R]):
             tuple(update_shardings),
         ),
         in_shardings=in_shardings,
-        out_shardings=(out_shardings, update_shardings),
+        out_shardings=_jax_out_shardings(
+            (out_shardings, update_shardings),
+            in_shardings,
+            out_shardings,
+            device,
+            backend,
+        ),
         static_argnums=static_argnums,
         static_argnames=static_argnames,
         donate_argnums=donate_argnums,
@@ -692,7 +710,13 @@ class SimpleJitPartialWrapped(tp.Generic[P, R]):
             tuple(update_shardings),
         ),
         in_shardings=in_shardings,
-        out_shardings=(out_shardings, update_shardings),
+        out_shardings=_jax_out_shardings(
+            (out_shardings, update_shardings),
+            in_shardings,
+            out_shardings,
+            device,
+            backend,
+        ),
         static_argnums=static_argnums,
         static_argnames=static_argnames,
         donate_argnums=donate_argnums,
@@ -973,7 +997,13 @@ class JitWrapped(tp.Generic[P, R]):
     self.jitted_fn = jax.jit(
       JitFn(fun, in_shardings, out_shardings, kwarg_shardings, self),
       in_shardings=self.jax_in_shardings,
-      out_shardings=(jax_out_in_shardings, kwarg_shardings, self.jax_out_shardings),
+      out_shardings=_jax_out_shardings(
+          (jax_out_in_shardings, kwarg_shardings, self.jax_out_shardings),
+          in_shardings,
+          out_shardings,
+          device,
+          backend,
+      ),
       static_argnums=static_argnums,
       static_argnames=static_argnames,
       donate_argnums=donate_argnums,
