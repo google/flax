@@ -86,11 +86,13 @@ class EMA(pytreelib.Pytree):
   ``ema.update`` and can be used directly in ``eval_step``.
 
   Attributes:
-    decay: The decay rate for the exponential moving average.
+    decay: The decay rate for the exponential moving average, either a float
+      in ``[0, 1)`` or a callable mapping the 0-based update count to a
+      decay rate (e.g. an ``optax.Schedule``).
     warmup_steps: The number of updates over which the update rate is
       warmed up to ``1 - decay``. ``0`` means no warmup.
     count: A :class:`Variable` that tracks the number of updates, or ``None``
-      if ``warmup_steps`` is ``0``.
+      if ``decay`` is a float and ``warmup_steps`` is ``0``.
     filter: The filter used to select which variables to track.
     params: A pytree of variables holding the current
       moving average values.
@@ -99,7 +101,7 @@ class EMA(pytreelib.Pytree):
   def __init__(
       self,
       params: tp.Any,
-      decay: float,
+      decay: float | tp.Callable[[jax.Array], jax.typing.ArrayLike],
       *,
       warmup_steps: int = 0,
       only: filterlib.Filter = ...,
@@ -110,12 +112,15 @@ class EMA(pytreelib.Pytree):
     Args:
       params: Any object, typically an NNX module/node, whose parameters
         will be tracked.
-      decay: The decay rate for the moving average. Must be in ``[0, 1)``.
+      decay: The decay rate for the moving average. Either a float in
+        ``[0, 1)``, or a callable mapping the 0-based update count (a scalar
+        ``int32`` ``jax.Array``) to a decay rate (e.g. an ``optax.Schedule``).
       warmup_steps: If positive, the update rate starts higher and decreases
         to ``1 - decay`` over the first ``warmup_steps`` updates, so that
         the average is less dominated by the initial parameters early in
-        training. See :meth:`update` for the exact schedule. Defaults to
-        ``0``, which disables warmup.
+        training. Cannot be combined with a callable ``decay``. See
+        :meth:`update` for the exact schedule. Defaults to ``0``, which
+        disables warmup.
       only: A filter indicating which variables should be included in the
         EMA tracking. Defaults to matching everything. Note that EMA only
         tracks ``nnx.Variable`` instances.
@@ -126,20 +131,28 @@ class EMA(pytreelib.Pytree):
         value is determined by the current ``nnx.set_graph_mode`` context.
 
     Raises:
-      ValueError: If ``decay`` is not in ``[0, 1)`` or ``warmup_steps`` is
-        negative.
+      ValueError: If ``decay`` is a float not in ``[0, 1)``, ``warmup_steps``
+        is negative, or both ``warmup_steps != 0`` and a callable ``decay`` are
+        provided.
       TypeError: If ``params`` contains non-Variable leaves.
     """
-    if not 0.0 <= decay < 1.0:
-      raise ValueError(f'`decay` must be in [0, 1), got {decay}.')
-    if warmup_steps < 0:
-      raise ValueError(f'`warmup_steps` must be >= 0, got {warmup_steps}.')
+    if callable(decay):
+      if warmup_steps != 0:
+        raise ValueError(
+            'Cannot use a callable `decay` and `warmup_steps` together.'
+        )
+    else:
+      if not 0.0 <= decay < 1.0:
+        raise ValueError(f'`decay` must be in [0, 1), got {decay}.')
+      if warmup_steps < 0:
+        raise ValueError(f'`warmup_steps` must be >= 0, got {warmup_steps}.')
+
     self.graph = graph
     self.decay = decay
     self.warmup_steps = warmup_steps
     self.filter = only
     self.count: variablelib.Variable[jax.Array] | None
-    if warmup_steps > 0:
+    if warmup_steps > 0 or callable(decay):
       self.count = variablelib.Variable(jnp.array(0, dtype=jnp.uint32))
     else:
       self.count = pytreelib.data(None)
@@ -147,12 +160,30 @@ class EMA(pytreelib.Pytree):
         _to_ema_param(graphlib.state(params, only, graph=graph))
     )
 
+  def _calculate_decay(self) -> jax.typing.ArrayLike:
+    if callable(self.decay):
+      assert self.count is not None
+      decay = self.decay(jnp.astype(self.count[...], jnp.int32))
+    else:
+      decay = self.decay
+
+    if self.count is not None:
+      self.count[...] += 1
+      if self.warmup_steps > 0:
+        k = decay / ((1.0 - decay) * self.warmup_steps)
+        rate = jnp.maximum(1.0 - decay, 1.0 / (1.0 + self.count[...] * k))
+        decay = 1.0 - rate
+    return decay
+
   def update(self, updates: tp.Any) -> None:
     """Updates the EMA parameters towards the given new parameters.
 
     The update rule for each parameter is::
 
       ema = decay * ema + (1 - decay) * update
+
+    If ``decay`` is callable, ``decay = decay(count)`` is evaluated using the
+    0-based update count before incrementing ``count``.
 
     If ``warmup_steps > 0``, the rate ``1 - decay`` is replaced by::
 
@@ -167,15 +198,12 @@ class EMA(pytreelib.Pytree):
         This should have the same structure as the ``params`` object passed
         during initialization.
     """
-    decay = self.decay
-    if self.count is not None:
-      self.count[...] += 1
-      k = self.decay / ((1.0 - self.decay) * self.warmup_steps)
-      rate = jnp.maximum(1.0 - self.decay, 1.0 / (1.0 + self.count[...] * k))
-      decay = 1.0 - rate
+    decay = self._calculate_decay()
 
     def _update_ema(ema: variablelib.Variable, update: tp.Any) -> tp.Any:
-      ema[...] = decay * ema + (1.0 - decay) * update
+      ema[...] = jnp.astype(
+          decay * ema + (1.0 - decay) * update, ema[...].dtype
+      )
 
     jax.tree.map(
         _update_ema,
