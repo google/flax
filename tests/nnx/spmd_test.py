@@ -605,6 +605,163 @@ class TestSPMD(parameterized.TestCase):
         getattr(abs_model.kernel.get_value(), 'sharding', None)
     )
 
+  def test_vmap_default_transform_metadata(self):
+    mesh = jax.make_mesh((2, 2), ('a', 'b'))
+    rules = (('A', 'a'), ('B', 'b'))
+
+    class Model(nnx.Module):
+      def __init__(self, rngs: nnx.Rngs):
+        @nnx.split_rngs(splits=1)
+        @nnx.vmap(in_axes=(0,), out_axes=0)
+        def create_linear(rngs: nnx.Rngs):
+          return nnx.Param(
+              jnp.ones((4, 4)),
+              out_sharding=('A', 'B'),
+              mesh=mesh,
+              sharding_rules=rules,
+          )
+
+        self.w = create_linear(rngs=rngs)
+
+    @nnx.jit
+    def init():
+      model = Model(rngs=nnx.Rngs(params=0))
+      optimizer = nnx.Optimizer(
+          model, optax.adam(1e-3), wrt=nnx.Param
+      )
+      return model, optimizer
+
+    with jax.set_mesh(mesh):
+      model, optimizer = init()
+
+    self.assertEqual(model.w.shape, (1, 4, 4))
+    self.assertEqual(model.w.out_sharding, (None, 'A', 'B'))
+    self.assertEqual(
+        optimizer.opt_state[0].mu['w'].out_sharding, (None, 'A', 'B')
+    )
+    self.assertEqual(
+        optimizer.opt_state[0].nu['w'].out_sharding, (None, 'A', 'B')
+    )
+
+  @parameterized.parameters(None, 'layers')
+  def test_vmap_explicit_transform_metadata(self, partition_name):
+    @nnx.vmap(
+        in_axes=None,
+        out_axes=0,
+        axis_size=2,
+        transform_metadata={nnx.PARTITION_NAME: partition_name},
+    )
+    def create_param():
+      return nnx.Param(
+          jnp.ones((4, 4)),
+          out_sharding=('din', 'dout'),
+          eager_sharding=False,
+      )
+
+    param = create_param()
+
+    self.assertEqual(
+        param.out_sharding, (partition_name, 'din', 'dout')
+    )
+
+  def test_vmap_merges_default_with_other_transform_metadata(self):
+    @nnx.vmap(
+        in_axes=None,
+        out_axes=0,
+        axis_size=2,
+        transform_metadata={'nickname': 'batch'},
+    )
+    def create_param():
+      return nnx.Param(
+          jnp.ones((3, 4)),
+          out_sharding=('din', 'dout'),
+          nickname=('in', 'out'),
+          eager_sharding=False,
+      )
+
+    param = create_param()
+
+    self.assertEqual(param.out_sharding, (None, 'din', 'dout'))
+    self.assertEqual(param.nickname, ('batch', 'in', 'out'))
+
+  def test_vmap_with_partitioning_default_transform_metadata(self):
+    @nnx.vmap(in_axes=None, out_axes=0, axis_size=2)
+    def create_param():
+      return nnx.Param(
+          nnx.with_partitioning(
+              lambda: jnp.ones((3, 4)), ('din', 'dout')
+          )(),
+          eager_sharding=False,
+      )
+
+    param = create_param()
+
+    self.assertEqual(param.shape, (2, 3, 4))
+    self.assertEqual(param.out_sharding, (None, 'din', 'dout'))
+
+  def test_vmap_default_transform_metadata_negative_out_axis(self):
+    @nnx.vmap(in_axes=None, out_axes=-1, axis_size=2)
+    def create_param():
+      return nnx.Param(
+          jnp.ones((3, 4)),
+          out_sharding=('din', 'dout'),
+          eager_sharding=False,
+      )
+
+    param = create_param()
+
+    self.assertEqual(param[...].shape, (3, 4, 2))
+    self.assertEqual(param.out_sharding, ('din', 'dout', None))
+
+  def test_scan_default_transform_metadata(self):
+    @nnx.split_rngs(splits=3)
+    @nnx.scan(
+        in_axes=(nnx.Carry, 0),
+        out_axes=(nnx.Carry, 0),
+        length=3,
+    )
+    def create_param(_, rngs: nnx.Rngs):
+      return None, nnx.Param(
+          jnp.ones((4, 4)),
+          out_sharding=('din', 'dout'),
+          eager_sharding=False,
+      )
+
+    _, param = create_param(None, nnx.Rngs(0))
+
+    self.assertEqual(param.shape, (3, 4, 4))
+    self.assertEqual(param.out_sharding, (None, 'din', 'dout'))
+
+  def test_pmap_default_transform_metadata(self):
+    @nnx.pmap(
+        in_axes=0,
+        out_axes=0,
+        axis_size=1,
+        devices=jax.devices()[:1],
+    )
+    def create_param(_):
+      return nnx.Param(
+          jnp.ones((3, 4)),
+          out_sharding=('din', 'dout'),
+          eager_sharding=False,
+      )
+
+    param = create_param(jnp.zeros(1))
+
+    self.assertEqual(param.shape, (1, 3, 4))
+    self.assertEqual(param.out_sharding, (None, 'din', 'dout'))
+
+  def test_vmap_no_sharding_metadata_unaffected(self):
+    @nnx.vmap(in_axes=None, out_axes=0, axis_size=2)
+    def create_param():
+      return nnx.Param(jnp.ones((4, 4)))
+
+    param = create_param()
+
+    self.assertEqual(param.shape, (2, 4, 4))
+    self.assertFalse(param.has_metadata('out_sharding'))
+
+
 def has_sharding_spec(array):
     sharding = array.sharding
     if hasattr(sharding, 'spec'):
