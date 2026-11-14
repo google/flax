@@ -359,6 +359,32 @@ class TestRNN(absltest.TestCase):
 
     # Todo: a better test by matching the outputs with the expected values
 
+  def test_rnn_with_seq_lengths_multiple_batch_dims(self):
+    """Test RNN final carry with seq_lengths and more than one batch dim."""
+    cell = nnx.LSTMCell(
+      in_features=3,
+      hidden_features=4,
+      rngs=nnx.Rngs(4),
+    )
+    rnn = nnx.RNN(cell, return_carry=True)
+
+    x = jax.random.normal(jax.random.key(0), (2, 3, 5, 3))
+    seq_lengths = jnp.array([[2, 5, 1], [3, 4, 5]])
+
+    final_carry, outputs = rnn(x, seq_lengths=seq_lengths)
+
+    self.assertEqual(outputs.shape, (2, 3, 5, 4))
+    for c in final_carry:
+      self.assertEqual(c.shape, (2, 3, 4))
+
+    # The final carry of each sequence must match running the RNN on that
+    # sequence alone, truncated to its length.
+    for i in range(2):
+      for j in range(3):
+        expected_carry, _ = rnn(x[i, j, : seq_lengths[i, j]])
+        for c, expected in zip(final_carry, expected_carry):
+          np.testing.assert_allclose(c[i, j], expected, rtol=1e-5, atol=1e-6)
+
   def test_rnn_with_keep_order(self):
     """Test RNN module with reverse=True and keep_order=True."""
     # Initialize the LSTMCell
