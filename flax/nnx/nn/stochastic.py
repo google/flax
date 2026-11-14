@@ -73,7 +73,7 @@ class Dropout(Module):
     rate: float,
     *,
     broadcast_dims: Sequence[int] = (),
-    deterministic: bool | None = False,
+    deterministic: bool | None = None,
     rng_collection: str = 'dropout',
     rngs: rnglib.Rngs | rnglib.RngStream | None = None,
   ):
