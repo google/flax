@@ -97,7 +97,14 @@ def _logical_to_mesh_axes(
   # We assign mesh axes using a priority based ruleset over logical axis names.
   result: list[_UnassignedAxis | None | str | tuple[str, ...]]
   result = [
-      (_unassigned_axis if isinstance(name, str) else name)
+      (
+          _unassigned_axis
+          if (
+              isinstance(name, str)
+              or (isinstance(name, tuple) and len(name) == 1)
+          )
+          else name
+      )
       for name in array_dim_names
   ]
   for rule_model_name, rule_mesh_names in rules:
