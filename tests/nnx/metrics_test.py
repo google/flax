@@ -131,6 +131,11 @@ class TestMetrics(parameterized.TestCase):
     self.assertTrue(jnp.isnan(values['accuracy']))
     self.assertTrue(jnp.isnan(values['loss']))
 
+  @parameterized.parameters('reset', 'update', 'compute', '_metric_names')
+  def test_multimetric_rejects_reserved_names(self, metric_name):
+    with self.assertRaisesRegex(ValueError, metric_name):
+      nnx.MultiMetric(**{metric_name: nnx.metrics.Average()})
+
   def test_multimetric_graphdef_hashable_after_split(self):
     metrics = nnx.MultiMetric(
         loss=nnx.metrics.Average('loss'),
