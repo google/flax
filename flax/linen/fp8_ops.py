@@ -319,7 +319,7 @@ def out_dq_bwd(dq_type, _, g):
 
 out_dq.defvjp(out_dq_fwd, out_dq_bwd)
 
-@partial(custom_vjp, nondiff_argnums=(8, 9))
+@partial(custom_vjp, nondiff_argnums=(8, 9, 10))
 def quantized_dot(
     lhs,
     q_lhs,
@@ -330,7 +330,8 @@ def quantized_dot(
     out_grad_scale, # scale from previous step
     out_grad_amax_history, # amax history from previous step
     dimension_numbers,
-    preferred_element_type=None
+    preferred_element_type=None,
+    out_grad_dtype=jnp.float8_e5m2,
 ):
   return lax.dot_general(
       q_lhs,
@@ -351,6 +352,7 @@ def quantized_dot_fwd(
     out_grad_amax_history,
     dimension_numbers,
     preferred_element_type,
+    out_grad_dtype,
 ):
   out = lax.dot_general(
       q_lhs,
@@ -374,6 +376,7 @@ def quantized_dot_fwd(
 def quantized_dot_bwd(
     dimension_numbers,
     preferred_element_type,
+    out_grad_dtype,
     res,
     g
 ):
@@ -390,14 +393,14 @@ def quantized_dot_bwd(
 
   new_out_grad_scale, new_out_grad_amax_history = update_fp8_meta(
       g,
-      jnp.float8_e5m2,
+      out_grad_dtype,
       out_grad_scale,
       out_grad_amax_history,
   )
 
   q_g = quantize(
       g,
-      jnp.float8_e5m2,
+      out_grad_dtype,
       _fm32_to_float32(new_out_grad_scale),
       preferred_element_type
   )
@@ -461,6 +464,8 @@ def fp8_scaled_dot_general(
     rhs_amax_history=None,
     grad_amax_history=None,
     quantize_compute_type=jnp.float32,
+    e4m3_dtype=jnp.float8_e4m3fn,
+    e5m2_dtype=jnp.float8_e5m2,
 ):
   if precision != None:
     warnings.warn(
@@ -468,10 +473,10 @@ def fp8_scaled_dot_general(
       'disregard any provided "precision" argument.'
     )
   q_lhs, new_lhs_scale = in_q(
-      quantize_compute_type, jnp.float8_e4m3fn, lhs, lhs_scale, lhs_amax_history
+      quantize_compute_type, e4m3_dtype, lhs, lhs_scale, lhs_amax_history
   )
   q_rhs, new_rhs_scale = in_q(
-      quantize_compute_type, jnp.float8_e4m3fn, rhs, rhs_scale, rhs_amax_history
+      quantize_compute_type, e4m3_dtype, rhs, rhs_scale, rhs_amax_history
   )
   y = quantized_dot(
       lhs,
@@ -483,7 +488,8 @@ def fp8_scaled_dot_general(
       grad_scale,
       grad_amax_history,
       dimension_numbers,
-      preferred_element_type
+      preferred_element_type,
+      e5m2_dtype,
   )
   y = out_dq(
       dq_type=preferred_element_type,
@@ -630,6 +636,8 @@ class Fp8DirectDotGeneralOp(Fp8DotGeneralBase):
       rhs_amax_history=self.kernel_amax_history.value,
       grad_amax_history=self.output_grad_amax_history.value,
       quantize_compute_type=comp_dtype,
+      e4m3_dtype=self.e4m3_dtype,
+      e5m2_dtype=self.e5m2_dtype,
     )
 
     return y  # type: ignore
@@ -656,7 +664,9 @@ class Fp8Einsum(Fp8DotGeneralBase):
         lhs_amax_history=self.input_amax_history.value,
         rhs_amax_history=self.kernel_amax_history.value,
         grad_amax_history=self.output_grad_amax_history.value,
-        quantize_compute_type=actual_compute_dtype
+        quantize_compute_type=actual_compute_dtype,
+        e4m3_dtype=self.e4m3_dtype,
+        e5m2_dtype=self.e5m2_dtype,
     )
     out = jnp.einsum(eqn, lhs, rhs, precision=precision,
                      preferred_element_type=preferred_element_type,
