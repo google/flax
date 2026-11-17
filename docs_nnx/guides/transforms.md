@@ -381,9 +381,15 @@ except ValueError as e:
 
 Flax NNX `Variable`s can hold arbitrary metadata, which can be added by simply passing it as keyword arguments to its constructor. This is often used to store `sharding` information, as used by the `nnx.spmd` APIs (like `nnx.get_partition_spec` and `nnx.get_named_sharding`).
 
-However, it is often important to keep this axes-related information in sync to what the actual state of the axes is when transforms are involved. For example, if you vectorize a variable on axis `1`, you should remove the `sharding` information at position `1` when inside a `vmap` or `scan` to reflect the fact that the axes are temporarily removed.
+However, it is often important to keep this axes-related information in sync to what the actual state of the axes is when transforms are involved. For example, if you vectorize a variable on axis `1`, you should remove the `out_sharding` information at position `1` when inside a `vmap` or `scan` to reflect the fact that the axes are temporarily removed.
 
-To achieve this, Flax NNX transforms provide a non-standard `transform_metadata` dictionary argument. And when the `nnx.PARTITION_NAME` key is present, the `sharding` metadata will be updated as specified by `in_axes` and `out_axes`.
+In graph mode with graph updates enabled, Flax NNX transforms automatically
+keep `out_sharding` metadata aligned with `in_axes` and `out_axes`. By default,
+a transform-added axis is annotated with `None`, meaning that it is unsharded.
+You can use the non-standard `transform_metadata` dictionary argument with the
+`nnx.PARTITION_NAME` key to give the transformed axis an explicit logical name
+instead. Other tuple-valued metadata can be transformed by adding it to the
+same dictionary.
 
 Let's see an example of this in action:
 
@@ -407,9 +413,13 @@ print(f'Outter {m.param.shape = }')
 print(f'Outter {m.param.out_sharding = }')
 ```
 
-Here, you added a `sharding` metadata to the `nnx.Param` variables, and used `transform_metadata` to update the `sharding` metadata to reflect the axis changes. Specifically, you can see that the first axis `b` was removed from the `sharding` metadata when inside of `nnx.vmap`, and then added back when outside of `nnx.vmap`.
+Here, you added `out_sharding` metadata to the `nnx.Param` variables and used
+`transform_metadata` to explicitly name the transformed axis `b`. Specifically,
+you can see that `b` was removed from `out_sharding` when inside `nnx.vmap`,
+and then added back when outside `nnx.vmap`. If `transform_metadata` were
+omitted, the same axis would be represented by `None`.
 
-You can verify that this also works when `nnx.Module`s are created inside the transformation - the new `sharding` axes will be added to the `nnx.Module` `nnx.Variable`s outside the transformation, matching the axes of the transformed `nnx.Variable`s.
+You can verify that this also works when `nnx.Module`s are created inside the transformation - the new `out_sharding` axes will be added to the `nnx.Module` `nnx.Variable`s outside the transformation, matching the axes of the transformed `nnx.Variable`s.
 
 ```{code-cell} ipython3
 @nnx.vmap(out_axes=1, axis_size=4, transform_metadata={nnx.PARTITION_NAME: 'b'})
