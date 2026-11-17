@@ -546,6 +546,23 @@ class TestRNN(absltest.TestCase):
     self.assertEqual(outputs.dtype, jnp.float16)
     self.assertEqual(outputs.shape, (2, 5, 4))
 
+  def test_rnn_with_simple_cell_default_dtype(self):
+    # dtype=None must infer from inputs and params, not force float32.
+    cell = nnx.SimpleCell(
+      in_features=3,
+      hidden_features=4,
+      param_dtype=jnp.float16,
+      recurrent_kernel_init=initializers.lecun_normal(),
+      rngs=nnx.Rngs(0),
+    )
+    x = jnp.ones((2, 5, 3), dtype=jnp.float16)
+
+    _, y = cell(cell.initialize_carry((2, 3), nnx.Rngs(0)), x[:, 0])
+    self.assertEqual(y.dtype, jnp.float16)
+
+    outputs = nnx.RNN(cell)(x)
+    self.assertEqual(outputs.dtype, jnp.float16)
+
   def test_rnn_with_variable_batch_size(self):
     """Test RNN module with variable batch sizes."""
     # Initialize the LSTMCell

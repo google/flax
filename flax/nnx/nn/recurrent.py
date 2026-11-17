@@ -475,7 +475,7 @@ class SimpleCell(RNNCellBase):
     in_features: int,
     hidden_features: int,  # not inferred from carry for now
     *,
-    dtype: Dtype = jnp.float32,
+    dtype: Dtype | None = None,
     param_dtype: Dtype = jnp.float32,
     carry_init: Initializer | None = None,
     residual: bool = False,
