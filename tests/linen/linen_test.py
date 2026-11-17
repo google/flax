@@ -260,6 +260,37 @@ class NormalizationTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
+    {'use_fast_variance': True}, {'use_fast_variance': False}
+  )
+  def test_batch_norm_mask_axis_name(self, use_fast_variance):
+    # Device 0 has three unmasked 0s and device 1 has one unmasked 10, so the
+    # statistics are those of [0, 0, 0, 10]: mean 2.5 and variance 18.75.
+    x = jnp.array(
+      [[[0.0], [0.0], [0.0], [7.0]], [[10.0], [-3.0], [5.0], [8.0]]]
+    )
+    m = jnp.array([[[1], [1], [1], [0]], [[1], [0], [0], [0]]], dtype=bool)
+    model = nn.BatchNorm(
+      use_running_average=False,
+      axis_name='batch',
+      momentum=0.0,
+      use_fast_variance=use_fast_variance,
+    )
+    variables = model.init(random.key(0), x[0], mask=m[0])
+
+    def batch_stats(x, m):
+      _, updates = model.apply(variables, x, mask=m, mutable=['batch_stats'])
+      return updates['batch_stats']
+
+    stats = jax.vmap(batch_stats, axis_name='batch')(x, m)
+    np.testing.assert_allclose(stats['mean'], 2.5)
+    np.testing.assert_allclose(stats['var'], 18.75)
+
+    # With device 0 fully masked, the statistics are those of [10].
+    stats = jax.vmap(batch_stats, axis_name='batch')(x, m.at[0].set(False))
+    np.testing.assert_allclose(stats['mean'], 10.0)
+    np.testing.assert_allclose(stats['var'], 0.0)
+
+  @parameterized.parameters(
     {'reduction_axes': -1},
     {'reduction_axes': 1},
     {'reduction_axes': (1, 2)},
