@@ -370,8 +370,8 @@ and the Flax kernel has shape [inC, outC]. Transposing the kernel will do the tr
     x = random.normal(key, (1, 3))
 
     j_fc = nnx.Linear(in_features=3, out_features=4, rngs=nnx.Rngs(0))
-    j_fc.kernel.value = kernel
-    j_fc.bias.value = jnp.array(bias)
+    j_fc.kernel[...] = kernel
+    j_fc.bias[...] = jnp.array(bias)
     j_out = j_fc(x)
 
     t_x = torch.from_numpy(np.array(x))
@@ -402,8 +402,8 @@ and the Flax kernel has shape [kH, kW, inC, outC]. Transposing the kernel will d
     x = random.normal(key, (1, 6, 6, 3))
 
     j_conv = nnx.Conv(3, 4, kernel_size=(2, 2), padding='valid', rngs=nnx.Rngs(0))
-    j_conv.kernel.value = kernel
-    j_conv.bias.value = bias
+    j_conv.kernel[...] = kernel
+    j_conv.bias[...] = bias
     j_out = j_conv(x)
 
     # [N, H, W, C] -> [N, C, H, W]
@@ -489,10 +489,10 @@ Other than the transpose operation before reshaping, we can convert the weights 
   # [outC, inC] -> [inC, outC]
   fc_kernel = jnp.transpose(fc_kernel, (1, 0))
 
-  j_model.conv.kernel.value = conv_kernel
-  j_model.conv.bias.value = conv_bias
-  j_model.linear.kernel.value = fc_kernel
-  j_model.linear.bias.value = fc_bias
+  j_model.conv.kernel[...] = conv_kernel
+  j_model.conv.bias[...] = conv_bias
+  j_model.linear.kernel[...] = fc_kernel
+  j_model.linear.bias[...] = fc_bias
 
   key = random.key(0)
   x = random.normal(key, (1, 6, 6, 3))
@@ -614,8 +614,8 @@ To load ``torch.nn.ConvTranspose2d`` parameters into Flax, we need to use the ``
   # ConvTranspose expects the kernel to be [kH, kW, inC, outC],
   # but with `transpose_kernel=True`, it expects [kH, kW, outC, inC] instead
   j_conv = nnx.ConvTranspose(3, 4, kernel_size=(2, 2), padding='VALID', transpose_kernel=True, rngs=nnx.Rngs(0))
-  j_conv.kernel.value = kernel
-  j_conv.bias.value = bias
+  j_conv.kernel[...] = kernel
+  j_conv.bias[...] = bias
   j_out = j_conv(x)
 
   # [N, H, W, C] -> [N, C, H, W]
@@ -1188,4 +1188,3 @@ outputs as the PyTorch model:
     expected = torch_model(**baseline_inputs).logits.cpu().detach().numpy()
 
   np.testing.assert_allclose(output, expected, rtol=1e-5)
-
