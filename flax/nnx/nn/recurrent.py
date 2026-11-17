@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """RNN modules for Flax."""
+import dataclasses
 import warnings
 from typing import Any, TypeVar
 from collections.abc import Mapping
@@ -27,7 +28,7 @@ import jax
 import jax.numpy as jnp
 
 from flax import nnx
-from flax.nnx import filterlib, rnglib
+from flax.nnx import filterlib, rnglib, variablelib
 from flax.nnx.module import Module
 from flax.nnx.nn import initializers, dtypes
 from flax.nnx.nn.linear import Linear
@@ -38,6 +39,23 @@ from flax.typing import Dtype, Initializer, PromoteDtypeFn, Shape
 
 default_kernel_init = initializers.lecun_normal()
 default_bias_init = initializers.zeros_init()
+
+
+def _per_gate_init(init: Initializer, num_gates: int) -> Initializer:
+  """Initializes a fused gate kernel one gate block at a time, like ``LSTMCell``.
+
+  Applying ``orthogonal`` to the whole fused kernel would only make its rows
+  orthonormal, so no single gate block would be orthogonal.
+  """
+  def init_fn(key, shape, dtype=jnp.float32):
+    *rest, out = shape
+    keys = jax.random.split(key, num_gates)
+    blocks = [init(k, (*rest, out // num_gates), dtype) for k in keys]
+    if isinstance(blocks[0], variablelib.VariableMetadata):  # with_partitioning
+      return dataclasses.replace(blocks[0], raw_value=jnp.concatenate(
+        [b.raw_value for b in blocks], axis=-1))
+    return jnp.concatenate(blocks, axis=-1)
+  return init_fn
 
 A = TypeVar("A")
 Array = jax.Array
@@ -344,7 +362,7 @@ class OptimizedLSTMCell(RNNCellBase):
       in_features=in_features,
       out_features=4 * hidden_features,
       use_bias=False,
-      kernel_init=kernel_init,
+      kernel_init=_per_gate_init(kernel_init, 4),
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
@@ -356,7 +374,7 @@ class OptimizedLSTMCell(RNNCellBase):
       in_features=hidden_features,
       out_features=4 * hidden_features,
       use_bias=True,
-      kernel_init=recurrent_kernel_init,
+      kernel_init=_per_gate_init(recurrent_kernel_init, 4),
       bias_init=bias_init,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
@@ -671,7 +689,7 @@ class GRUCell(RNNCellBase):
       in_features=in_features,
       out_features=3 * hidden_features,  # r, z, n
       use_bias=True,
-      kernel_init=kernel_init,
+      kernel_init=_per_gate_init(kernel_init, 3),
       bias_init=bias_init,
       dtype=self.dtype,
       param_dtype=self.param_dtype,
@@ -685,7 +703,7 @@ class GRUCell(RNNCellBase):
       in_features=hidden_features,
       out_features=3 * hidden_features,  # r, z, n
       use_bias=False,
-      kernel_init=recurrent_kernel_init,
+      kernel_init=_per_gate_init(recurrent_kernel_init, 3),
       dtype=self.dtype,
       param_dtype=self.param_dtype,
       promote_dtype=self.promote_dtype,
