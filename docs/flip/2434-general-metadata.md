@@ -67,7 +67,7 @@ class AxisMetadata(metaclass=abc.ABCMeta):
     metadata. It should simply return value that it wraps directly even
     if that value itself is an instance of AxisMetadata.
 
-    In practise, AxisMetadata subclasses should be registred as PyTree nodes to
+    In practise, AxisMetadata subclasses should be registered as PyTree nodes to
     support passing instances to JAX and Flax APIs. The leaves returned for this
     note should correspond to the value returned by unbox.
 
