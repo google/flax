@@ -399,9 +399,23 @@ class MultiMetric(Metric):
 
     Args:
       **metrics: the key-word arguments that will be used to access
-        the corresponding ``Metric``.
+        the corresponding ``Metric``. Names that clash with existing
+        attributes of the ``MultiMetric`` (e.g. ``reset``, ``update``,
+        ``compute``) are not allowed.
+
+    Raises:
+      ValueError: if a metric name clashes with an existing attribute.
     """
-    # TODO: raise error if a kwarg is passed that is in ('reset', 'update', 'compute'), since these names are reserved for methods
+    reserved = [
+        name
+        for name in metrics
+        if name == '_metric_names' or hasattr(type(self), name)
+    ]
+    if reserved:
+      raise ValueError(
+          f'Metric names {reserved} are reserved by {type(self).__name__} '
+          'and would shadow existing attributes. Please use different names.'
+      )
     self._metric_names = tuple(metrics.keys())
     for metric_name, metric in metrics.items():
       setattr(self, metric_name, metric)
