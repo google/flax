@@ -1736,6 +1736,114 @@ class TestShardMap(parameterized.TestCase):
 
 class TestGrad(parameterized.TestCase):
 
+  @parameterized.product(
+    transform=('grad', 'value_and_grad'),
+    indices=((1, -1), (-1, 1), (0, -2), (-2, 0)),
+    filters=('default', 'mixed', 'distinct'),
+    jit=(False, True),
+  )
+  def test_grad_repeated_argument_slot(self, transform, indices, filters, jit):
+    argnums = indices
+    if filters == 'mixed':
+      argnums = (indices[0], nnx.DiffState(indices[1], nnx.Param))
+    elif filters == 'distinct':
+      argnums = (
+        nnx.DiffState(indices[0], nnx.PathContains('weight')),
+        nnx.DiffState(indices[1], nnx.PathContains('bias')),
+      )
+
+    def loss(a, b):
+      return a.weight[...] + b.bias[...]
+
+    models = tuple(
+      nnx.Dict(weight=nnx.Param(jnp.array(2.0)), bias=nnx.Param(jnp.array(3.0)))
+      for _ in range(2)
+    )
+    with self.assertRaisesRegex(ValueError, 'argnum [01] is repeated in argnums'):
+      grad_fn = getattr(nnx, transform)(
+        loss, argnums=argnums, graph=True, graph_updates=True
+      )
+      if jit:
+        grad_fn = nnx.jit(grad_fn, graph=True, graph_updates=True)
+      grad_fn(*models)
+
+  @parameterized.product(
+    transform=('grad', 'value_and_grad'),
+    argnum=(-1, 1),
+    custom_filter=(False, True),
+    jit=(False, True),
+  )
+  def test_grad_negative_argnums_filter_state(
+    self, transform, argnum, custom_filter, jit
+  ):
+    model = nnx.Dict(
+      weight=nnx.Param(jnp.array(3.0)),
+      bias=nnx.Param(jnp.array(5.0)),
+      count=nnx.BatchStat(jnp.array(0, dtype=jnp.int32)),
+    )
+
+    def loss(x, model):
+      model.count[...] += 1
+      return (x * model.weight[...] + model.bias[...]) ** 2
+
+    argnums = (
+      nnx.DiffState(argnum, nnx.PathContains('weight'))
+      if custom_filter else argnum
+    )
+    grad_fn = getattr(nnx, transform)(
+      loss, argnums=argnums, graph=True, graph_updates=True
+    )
+    if jit:
+      grad_fn = nnx.jit(grad_fn, graph=True, graph_updates=True)
+    result = grad_fn(jnp.array(2.0), model)
+    if transform == 'value_and_grad':
+      value, grads = result
+      self.assertEqual(value, 121.0)
+    else:
+      grads = result
+
+    # For loss=(x*w+b)^2: dloss/dw=2*x*(x*w+b), dloss/db=2*(x*w+b).
+    self.assertEqual(grads.weight[...], 44.0)
+    if custom_filter:
+      self.assertEqual(set(grads), {'weight'})
+    else:
+      self.assertEqual(set(grads), {'weight', 'bias'})
+      self.assertEqual(grads.bias[...], 22.0)
+    self.assertEqual(model.count[...], 1)
+    self.assertEqual(model.weight[...], 3.0)
+    self.assertEqual(model.bias[...], 5.0)
+
+  @parameterized.product(
+    transform=('grad', 'value_and_grad'),
+    argnum=(-1, 1),
+    jit=(False, True),
+  )
+  def test_grad_negative_argnums_sequence(self, transform, argnum, jit):
+    model = nnx.Dict(
+      weight=nnx.Param(jnp.array(3.0)),
+      count=nnx.BatchStat(jnp.array(0, dtype=jnp.int32)),
+    )
+
+    def loss(x, model):
+      model.count[...] += 1
+      return (x * model.weight[...]) ** 2
+
+    grad_fn = getattr(nnx, transform)(
+      loss, argnums=(0, argnum), graph=True, graph_updates=True
+    )
+    if jit:
+      grad_fn = nnx.jit(grad_fn, graph=True, graph_updates=True)
+    result = grad_fn(jnp.array(2.0), model)
+    if transform == 'value_and_grad':
+      value, (x_grad, model_grad) = result
+      self.assertEqual(value, 36.0)
+    else:
+      x_grad, model_grad = result
+    self.assertEqual(x_grad, 36.0)
+    self.assertEqual(model_grad.weight[...], 24.0)
+    self.assertEqual(set(model_grad), {'weight'})
+    self.assertEqual(model.count[...], 1)
+
   def test_prefix_graph_node_error(self):
     m = nnx.Dict(a=nnx.Param(1))
 
