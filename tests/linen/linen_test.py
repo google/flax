@@ -1331,6 +1331,41 @@ class Fp8Test(parameterized.TestCase):
     np.testing.assert_allclose(grads[0], grads_ref[0], atol=1e-02, rtol=1e-02)
     np.testing.assert_allclose(grads[1], grads_ref[1], atol=1e-02, rtol=1e-02)
 
+  @parameterized.parameters({'use_einsum': False}, {'use_einsum': True})
+  def test_fp8_direct_ops_honor_fp8_dtypes(self, use_einsum):
+    e4m3_dtype, e5m2_dtype = get_fp8_dtypes('NANOO')
+    x = jnp.ones((2, 4))
+    k = jnp.ones((4, 3))
+    if use_einsum:
+      p = nn.Fp8Einsum(e4m3_dtype=e4m3_dtype, e5m2_dtype=e5m2_dtype)
+      args = lambda x: ('mk,kn->mn', x, k)
+    else:
+      p = nn.Fp8DotGeneral(e4m3_dtype=e4m3_dtype, e5m2_dtype=e5m2_dtype)
+      args = lambda x: (x, k, (((1,), (0,)), ((), ())))
+
+    # Seed the amax histories so the new input and kernel scales depend on the
+    # e4m3 max, and the output grad scale is 1.
+    owg = fp8_ops.OVERWRITE_WITH_GRADIENT
+    meta = dict(p.init(random.key(0), *args(x))[owg])
+    for name, amax in [
+      ('input_amax_history', 4.0),
+      ('kernel_amax_history', 4.0),
+      ('output_grad_amax_history', float(jnp.finfo(e5m2_dtype).max)),
+    ]:
+      meta[name] = meta[name].at[0].set(amax)
+    vars = {owg: meta}
+
+    # 2**-17 is the smallest e5m2fnuz subnormal but underflows to 0 in e5m2.
+    def loss_fn(vars, x):
+      return jnp.sum(p.apply(vars, *args(x)) * 2.0**-17)
+
+    grads, dx = jax.jit(jax.grad(loss_fn, argnums=(0, 1)))(vars, x)
+    # Falling back to e4m3fn/e5m2 gives scales of 4 / 448 and an all zero dx.
+    expected_scale = 4.0 / jnp.finfo(e4m3_dtype).max.astype(jnp.float32)
+    for name in ('input_scale', 'kernel_scale'):
+      np.testing.assert_allclose(grads[owg][name][0], expected_scale, rtol=1e-6)
+    np.testing.assert_allclose(dx, jnp.full(x.shape, 3 * 2.0**-17), rtol=1e-6)
+
 
   @parameterized.parameters(
     {'fp8_genre': 'OCP'}, {'fp8_genre': 'NANOO'}
