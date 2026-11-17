@@ -255,7 +255,16 @@ def _ndarray_to_bytes(arr) -> bytes:
       'Object and structured dtypes not supported '
       'for serialization of ndarrays.'
     )
-  tpl = (arr.shape, arr.dtype.name, arr.tobytes('C'))
+  dtype_name = arr.dtype.name
+  if not arr.dtype.isnative:
+    # dtype.str preserves byte order, but may lose a registered dtype's identity
+    # (e.g. bfloat16 becomes void) or be unrecognized (e.g. float8_e5m2).
+    try:
+      if np.dtype(arr.dtype.str) == arr.dtype:
+        dtype_name = arr.dtype.str
+    except TypeError:
+      pass
+  tpl = (arr.shape, dtype_name, arr.tobytes('C'))
   return msgpack.packb(tpl, use_bin_type=True)
 
 
