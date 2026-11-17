@@ -198,5 +198,33 @@ class TestConvLinenConsistency(parameterized.TestCase):
     np.testing.assert_array_equal(out, out_nnx)
 
 
+class TestConvTranspose(parameterized.TestCase):
+  @parameterized.product(
+    strides=[1, 2, 3, 4], kernel_size=[2, 3, 4, 5], kernel_dilation=[1, 2]
+  )
+  def test_circular_transpose_kernel_is_conv_transpose(
+    self, strides: int, kernel_size: int, kernel_dilation: int
+  ):
+    # With the same kernel, <g, Conv(x)> == <ConvTranspose(g), x>.
+    kwargs = dict(
+      kernel_size=(kernel_size, kernel_size),
+      strides=strides,
+      kernel_dilation=kernel_dilation,
+      padding='CIRCULAR',
+      use_bias=False,
+      precision=Precision.HIGHEST,
+      rngs=nnx.Rngs(0),
+    )
+    conv = nnx.Conv(2, 3, **kwargs)
+    conv_transpose = nnx.ConvTranspose(3, 2, transpose_kernel=True, **kwargs)
+    conv_transpose.kernel[...] = conv.kernel[...]
+    x = jax.random.normal(jax.random.key(1), (1, 12, 12, 2))
+    y = conv(x)
+    g = jax.random.normal(jax.random.key(2), y.shape)
+    np.testing.assert_allclose(
+      jnp.vdot(g, y), jnp.vdot(conv_transpose(g), x), atol=1e-4
+    )
+
+
 if __name__ == '__main__':
   absltest.main()

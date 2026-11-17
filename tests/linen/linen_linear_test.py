@@ -1282,6 +1282,32 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (6, 6, 4, 3))
     self.assertEqual(y.shape, (1, 30, 30, 4))
 
+  @parameterized.product(
+    strides=(1, 2, 3, 4), kernel_size=(2, 3, 4, 5), kernel_dilation=(1, 2)
+  )
+  def test_circular_transpose_kernel_is_conv_transpose(
+    self, strides, kernel_size, kernel_dilation
+  ):
+    # With the same kernel, <g, Conv(x)> == <ConvTranspose(g), x>.
+    kwargs = dict(
+      kernel_size=(kernel_size, kernel_size),
+      strides=strides,
+      kernel_dilation=kernel_dilation,
+      padding='CIRCULAR',
+      use_bias=False,
+      precision=jax.lax.Precision.HIGHEST,
+    )
+    conv = nn.Conv(features=3, **kwargs)
+    conv_transpose = nn.ConvTranspose(
+      features=2, transpose_kernel=True, **kwargs
+    )
+    x = random.normal(random.key(0), (1, 12, 12, 2))
+    y, variables = conv.init_with_output(random.key(1), x)
+    g = random.normal(random.key(2), y.shape)
+    np.testing.assert_allclose(
+      jnp.vdot(g, y), jnp.vdot(conv_transpose.apply(variables, g), x), atol=1e-4
+    )
+
   @parameterized.product(module=(nn.Conv, nn.ConvLocal, nn.ConvTranspose))
   def test_int_kernel_equality(self, module):
     conv_int = module(features=4, kernel_size=3)
