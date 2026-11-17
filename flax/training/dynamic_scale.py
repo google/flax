@@ -143,7 +143,7 @@ class DynamicScale(struct.PyTreeNode):
       for g in jax.tree_util.tree_leaves(grad):
         finite &= jnp.all(lax.is_finite(g))
 
-      grow = self.fin_steps == self.growth_interval
+      grow = self.fin_steps + 1 == self.growth_interval
       fin_scale = jnp.where(
         grow & finite,
         jnp.minimum(
