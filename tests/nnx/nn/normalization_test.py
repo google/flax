@@ -594,5 +594,56 @@ class TestLinenConsistency(parameterized.TestCase):
     )
 
 
+class TestWeightNormRng(parameterized.TestCase):
+  @parameterized.product(initializer=['normal', 'uniform'], use_jit=[False, True])
+  def test_random_scale_initializer(self, initializer, use_jit):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    linear = nnx.Linear(3, 2, use_bias=False, rngs=rngs)
+    kernel = np.array([[1., -2.], [3., 1.], [-1., 4.]], np.float32)
+    linear.kernel[...] = jnp.asarray(kernel)
+    scale_init = getattr(nnx.initializers, initializer)()
+    count = rngs.params.count[...]
+    expected_key = jax.random.fold_in(rngs.params.key[...], count)
+    expected_scale = scale_init(expected_key, (2,))
+
+    def create(layer, rngs):
+      return nnx.WeightNorm(layer, scale_init=scale_init, rngs=rngs)
+
+    create = nnx.jit(create) if use_jit else create
+    model = create(linear, rngs)
+    np.testing.assert_array_equal(model.scales[('kernel',)][...], expected_scale)
+    self.assertIsInstance(model.scales[('kernel',)], nnx.Param)
+    self.assertIs(model.layer_instance, linear)
+    self.assertEqual(rngs.params.count[...], count + 1)
+    self.assertEqual(rngs.dropout.count[...], 0)
+
+    x = jnp.array([[1., 2., -1.], [.5, -2., 3.]])
+    normalized = kernel / np.sqrt((kernel * kernel).sum(axis=0) + model.epsilon)
+    effective = normalized * np.asarray(expected_scale)
+    gradient_model = nnx.clone(model)
+    np.testing.assert_allclose(model(x), np.asarray(x) @ effective, atol=1e-6)
+    gradient = nnx.grad(lambda m, x: m(x).sum(), argnums=1)(gradient_model, x)
+    expected_grad = np.broadcast_to(effective.sum(axis=1), x.shape)
+    np.testing.assert_allclose(gradient, expected_grad, atol=1e-6)
+
+  def test_default_scale_draws_one_key(self):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    linear = nnx.Linear(3, 2, use_bias=False, rngs=rngs)
+    count = rngs.params.count[...]
+    model = nnx.WeightNorm(linear, rngs=rngs)
+    np.testing.assert_array_equal(model.scales[('kernel',)][...], jnp.ones(2))
+    self.assertEqual(rngs.params.count[...], count + 1)
+    self.assertEqual(rngs.dropout.count[...], 0)
+
+  @parameterized.parameters(({'use_scale': False},), ({'variable_filter': False},))
+  def test_no_selected_scales_does_not_draw_keys(self, options):
+    rngs = nnx.Rngs(params=0, dropout=1)
+    linear = nnx.Linear(3, 2, use_bias=False, rngs=rngs)
+    count = rngs.params.count[...]
+    nnx.WeightNorm(linear, rngs=rngs, **options)
+    self.assertEqual(rngs.params.count[...], count)
+    self.assertEqual(rngs.dropout.count[...], 0)
+
+
 if __name__ == '__main__':
   absltest.main()
