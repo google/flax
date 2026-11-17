@@ -401,7 +401,13 @@ class MultiMetric(Metric):
       **metrics: the key-word arguments that will be used to access
         the corresponding ``Metric``.
     """
-    # TODO: raise error if a kwarg is passed that is in ('reset', 'update', 'compute'), since these names are reserved for methods
+    reserved_names = {'reset', 'update', 'compute', '_metric_names'}
+    conflicts = reserved_names.intersection(metrics)
+    if conflicts:
+      names = ', '.join(sorted(conflicts))
+      raise ValueError(
+        f'Metric names cannot conflict with MultiMetric attributes: {names}'
+      )
     self._metric_names = tuple(metrics.keys())
     for metric_name, metric in metrics.items():
       setattr(self, metric_name, metric)
