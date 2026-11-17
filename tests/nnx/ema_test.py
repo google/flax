@@ -16,13 +16,14 @@ import os
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 
 from absl.testing import absltest
+from absl.testing import parameterized
 from flax import nnx
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
-class TestEMA(absltest.TestCase):
+class TestEMA(parameterized.TestCase):
 
   def test_ema_initialization_and_update(self):
     model = nnx.Linear(2, 2, use_bias=False, rngs=nnx.Rngs(0))
@@ -144,6 +145,59 @@ class TestEMA(absltest.TestCase):
         nnx.EMA(model, decay=decay)
     with self.assertRaisesRegex(ValueError, 'warmup_steps'):
       nnx.EMA(model, decay=0.9, warmup_steps=-1)
+    schedule = optax.constant_schedule(0.9)
+    with self.assertRaisesRegex(
+        ValueError, 'Cannot use a callable `decay` and `warmup_steps` together.'
+    ):
+      nnx.EMA(model, decay=schedule, warmup_steps=1)
+
+  def test_ema_schedule(self):
+    @nnx.jit
+    def update(ema, model):
+      ema.update(model)
+
+    model = nnx.Linear(
+        1, 2, use_bias=False, kernel_init=nnx.initializers.zeros,
+        rngs=nnx.Rngs(0),
+    )
+    schedule = optax.linear_schedule(
+        0.5, 0.75, transition_steps=1, transition_begin=1
+    )
+    ema = nnx.EMA(model, decay=schedule)
+
+    model.kernel[...] = jnp.array([[4.0, 8.0]])
+    update(ema, model)  # decay = 0.5
+    step1 = ema.params.kernel[...]
+
+    model.kernel[...] = jnp.array([[6.0, 12.0]])
+    update(ema, model)  # decay = 0.5
+    step2 = ema.params.kernel[...]
+
+    model.kernel[...] = jnp.array([[8.0, 16.0]])
+    update(ema, model)  # decay = 0.75
+    step3 = ema.params.kernel[...]
+
+    np.testing.assert_allclose(step1, [[2.0, 4.0]])
+    np.testing.assert_allclose(step2, [[4.0, 8.0]])
+    np.testing.assert_allclose(step3, [[5.0, 10.0]])
+    self.assertEqual(ema.count[...], 3)
+
+  @parameterized.parameters(jnp.bfloat16, jnp.float16)
+  def test_ema_schedule_preserves_dtype(self, dtype):
+    model = nnx.Linear(
+        1, 2, use_bias=False, param_dtype=dtype, rngs=nnx.Rngs(0)
+    )
+    model.kernel[...] = jnp.array([[0.0, 4.0]], dtype=dtype)
+    ema = nnx.EMA(
+        model, decay=optax.linear_schedule(0.5, 0.25, transition_steps=1)
+    )
+
+    model.kernel[...] = jnp.array([[4.0, 8.0]], dtype=dtype)
+    ema.update(model)  # decay = 0.5
+
+    self.assertEqual(ema.params.kernel[...].dtype, dtype)
+    np.testing.assert_allclose(ema.params.kernel[...], [[2.0, 6.0]])
+
 
 if __name__ == '__main__':
   absltest.main()
