@@ -278,7 +278,9 @@ class BatchNorm(Module):
       (including Variables accessed through ``self``) to the desired dtype. The
       function should accept a tuple of ``(inputs, mean, var, scale, bias)`` and
       a ``dtype`` keyword argument, and return a tuple of arrays with the promoted
-      dtype.
+      dtype. The promoted ``mean`` and ``var`` are not used: training computes
+      the batch statistics, and ``use_running_average`` uses the running
+      statistics in their own dtype.
     rngs: rng key.
     bias_metadata: Optional metadata dictionary to set when initializing
       the bias.
@@ -385,7 +387,12 @@ class BatchNorm(Module):
     x, mean, var, scale, bias = self.promote_dtype(
       (x, self.mean[...], self.var[...], scale, bias), dtype=self.dtype
     )
-    if not use_running_average:
+    if use_running_average:
+      # Keep the running statistics in their own dtype, like the batch
+      # statistics computed in training. Casting them to a half precision
+      # `dtype` loses precision and can overflow the variance.
+      mean, var = self.mean[...], self.var[...]
+    else:
       mean, var = _compute_stats(
         x,
         reduction_axes,

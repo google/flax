@@ -594,5 +594,22 @@ class TestLinenConsistency(parameterized.TestCase):
     )
 
 
+class TestBatchNorm(parameterized.TestCase):
+  @parameterized.parameters(jnp.bfloat16, jnp.float16)
+  def test_running_average_half_dtype_matches_training(self, dtype):
+    # With momentum 0 the running statistics are the batch statistics, so the
+    # same batch must normalize the same way in both modes.
+    means = np.linspace(-20, 20, 64)
+    stds = np.linspace(0.5, 3, 64)
+    if dtype == jnp.float16:
+      stds[-1] = 300.0  # variance above the float16 maximum
+    x = means + stds * jax.random.normal(jax.random.key(0), (256, 64))
+    bn = nnx.BatchNorm(64, momentum=0.0, dtype=dtype, rngs=nnx.Rngs(0))
+
+    train_out = bn(x, use_running_average=False)
+    eval_out = bn(x, use_running_average=True)
+    np.testing.assert_array_equal(eval_out, train_out)
+
+
 if __name__ == '__main__':
   absltest.main()
