@@ -290,7 +290,7 @@ class BatchNorm(Module):
     self,
     num_features: int,
     *,
-    use_running_average: bool | None = False,
+    use_running_average: bool | None = None,
     axis: int = -1,
     momentum: float = 0.99,
     epsilon: float = 1e-5,
