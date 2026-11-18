@@ -229,6 +229,91 @@ class Optimizer(tp.Generic[M], Pytree):
     self.step[...] += 1
     return updates
 
+class BacktrackingLinesearch(Optimizer[M]):
+  """Optimizer subclass that adapts ``value_fn`` and ``grad`` for Optax line search.
+
+  Wraps ``value_fn`` to accept an :class:`nnx.Module` instead of parameter
+  arrays and forwards ``grads`` as ``grad`` when ``value_fn`` is passed to
+  :meth:`update`.
+
+  Example usage::
+
+    >>> import jax, jax.numpy as jnp
+    >>> from flax import nnx
+    >>> import optax
+    ...
+    >>> model = nnx.Linear(2, 1, rngs=nnx.Rngs(0))
+    >>> tx = optax.chain(
+    ...   optax.sgd(1.0),
+    ...   optax.scale_by_backtracking_linesearch(max_backtracking_steps=10),
+    ... )
+    >>> optimizer = nnx.BacktrackingLinesearch(model, tx, wrt=nnx.Param)
+    ...
+    >>> x = jnp.ones((1, 2))
+    >>> y = jnp.zeros((1, 1))
+    >>> loss_fn = lambda model, x, y: ((model(x) - y) ** 2).mean()
+    >>> loss, grads = nnx.value_and_grad(loss_fn)(model, x, y)
+    >>> _ = optimizer.update(model, grads, value=loss, value_fn=loss_fn, x=x, y=y)
+
+  Attributes:
+    step: An ``OptState`` :class:`Variable` that tracks the step count.
+    tx: An Optax gradient transformation.
+    opt_state: The Optax optimizer state.
+  """
+
+  @_check_grads_arg_passed
+  def update(self, model: M, grads, /, **kwargs) -> optax.Updates:
+    """Updates the optimizer state and model parameters given the gradients.
+
+    If ``value_fn`` is provided, it receives a model reconstructed from the
+    parameters and the remaining state at the start of the update. ``grads``
+    is passed as ``grad`` unless a ``grad`` argument is provided.
+
+    Args:
+      model: An NNX :class:`Module` to update.
+      grads: The gradients derived from ``nnx.grad``.
+      **kwargs: Additional keyword arguments passed to ``tx.update`` to support
+        ``GradientTransformationExtraArgs`` (such as ``value``, ``value_fn``,
+        ``grad``, and any extra arguments forwarded to ``value_fn``).
+
+    Returns:
+      The updates PyTree containing the parameter updates applied to the model.
+    """
+    if 'value_fn' not in kwargs:
+      return super().update(model, grads, **kwargs)
+
+    value_fn = kwargs['value_fn']
+    graphdef, params, *rest = nnx.split(
+      model, self.wrt, ..., graph=self.graph
+    )
+    param_arrays = nnx.as_pure(params)
+    rest_arrays = nnx.as_pure(rest)
+    grad_arrays = nnx.as_pure(nnx.state(grads, self.wrt, graph=self.graph))
+    kwargs = dict(kwargs)
+
+    @functools.wraps(value_fn)
+    def value_fn_wrapper(params, *args, **kwargs):
+      model = nnx.merge(graphdef, params, *rest_arrays)
+      return value_fn(model, *args, **kwargs)
+
+    kwargs['value_fn'] = value_fn_wrapper
+    if 'value' in kwargs:
+      kwargs['value'] = nnx.as_pure(kwargs['value'])
+    if 'grad' in kwargs:
+      kwargs['grad'] = nnx.as_pure(
+        nnx.state(kwargs['grad'], self.wrt, graph=self.graph)
+      )
+    else:
+      kwargs['grad'] = grad_arrays
+    updates, new_opt_state = self.tx.update(
+      grad_arrays, nnx.as_pure(self.opt_state), param_arrays, **kwargs
+    )
+    nnx.update(model, optax.apply_updates(param_arrays, updates))
+    nnx.update(self.opt_state, nnx.state(new_opt_state, graph=self.graph))
+    self.step[...] += 1
+    return updates
+
+
 class ModelAndOptimizer(Optimizer[M]):
   """A convenience class that combines a model and an optimizer.
 
