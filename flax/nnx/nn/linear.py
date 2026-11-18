@@ -255,6 +255,11 @@ class LinearGeneral(Module):
 
     Args:
       inputs: The nd-array to be transformed.
+      out_sharding: Optional sharding specification (e.g.,
+        ``jax.sharding.PartitionSpec``) for the output array. When using JAX's
+        explicit sharding mode with a mesh context with ``AxisType.Explicit``.
+        If ``None`` (default), the compiler automatically determines output
+        sharding.
 
     Returns:
       The transformed input.
@@ -402,6 +407,11 @@ class Linear(Module):
 
     Args:
       inputs: The nd-array to be transformed.
+      out_sharding: Optional sharding specification (e.g.,
+        ``jax.sharding.PartitionSpec``) for the output array. When using JAX's
+        explicit sharding mode with a mesh context with ``AxisType.Explicit``.
+        If ``None`` (default), the compiler automatically determines output
+        sharding.
 
     Returns:
       The transformed input.
@@ -536,6 +546,11 @@ class Einsum(Module):
         the rhs being the learnable kernel. Exactly one of ``einsum_str``
         in the constructor argument and call argument must be not None,
         while the other must be None.
+      out_sharding: Optional sharding specification (e.g.,
+        ``jax.sharding.PartitionSpec``) for the output array. When using JAX's
+        explicit sharding mode with a mesh context with ``AxisType.Explicit``.
+        If ``None`` (default), the compiler automatically determines output
+        sharding.
 
     Returns:
       The transformed input.
