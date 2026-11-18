@@ -12,7 +12,7 @@ of examples. In many cases, you can also find pre-trained weights:
 very popular library for building, training, and deploying state of the art
 machine learning models.
 These models can be applied on text, images, and audio. After organizing the
-`JAX/Flax community week <https://github.com/huggingface/transformers/blob/master/examples/research_projects/jax-projects/README.md>`__,
+`JAX/Flax community week <https://github.com/huggingface/transformers-research-projects/blob/main/jax-projects/README.md>`__,
 they have now over 5,000
 `Flax/JAX models <https://huggingface.co/models?library=jax&sort=downloads>`__ in
 their repository.

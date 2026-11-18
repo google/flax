@@ -96,7 +96,7 @@ To use the schedule, we must create a learning rate function by passing the hype
 For example using this schedule on MNIST would require changing the ``train_step`` function:
 
 .. |Optax| replace:: ``Optax``
-.. _Optax: https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules
+.. _Optax: https://optax.readthedocs.io/en/latest/api/optimizer_schedules.html
 
 .. codediff::
   :title: Default learning rate, Learning rate schedule
