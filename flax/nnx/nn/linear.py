@@ -1275,7 +1275,7 @@ class Embed(Module):
 
     self.num_embeddings = num_embeddings
     self.features = features
-    self.dtype = dtype or self.embedding.dtype
+    self.dtype = dtype
     self.param_dtype = param_dtype
     self.promote_dtype = promote_dtype
 
