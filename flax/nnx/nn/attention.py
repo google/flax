@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import functools
+import inspect
 from typing import Any
 from collections.abc import Mapping
 from types import MappingProxyType
@@ -461,7 +462,9 @@ def dot_product_attention_with_rope(
     input_positions: Optional position array of shape ``(..., seq_len,)``.
       If ``None`` and precomputed tables exist (i.e. ``embedding_size``
       and ``max_seq_len`` were given at init), the cached tables are
-      used. Otherwise positions default to ``jnp.arange(seq_len)``.
+      used. Otherwise positions default to ``jnp.arange(seq_len)``. They
+      apply to the key only when it has the query's length; a longer key
+      (a decode cache) uses the default positions.
     **kwargs: Additional keyword arguments forwarded to
       :func:`dot_product_attention`.
 
@@ -470,12 +473,12 @@ def dot_product_attention_with_rope(
   """
   # query/key: [batch..., seq_length, num_heads, head_dim]
   # RoPE.__call__ expects (..., seq_length, head_dim), so vmap over heads.
-  if input_positions is None:
-    apply = jax.vmap(rope, in_axes=-2, out_axes=-2)
-  else:
-    apply = jax.vmap(rope, in_axes=(-2, -1), out_axes=(-2, -1))
+  apply = jax.vmap(rope, in_axes=(-2, None), out_axes=-2)
+  # During decode the query is one token while the key is the whole cache,
+  # where slot ``i`` holds position ``i``.
+  key_positions = input_positions if query.shape[-3] == key.shape[-3] else None
   query = apply(query, input_positions)
-  key = apply(key, input_positions)
+  key = apply(key, key_positions)
   return dot_product_attention(query, key, value, **kwargs)
 
 
@@ -789,7 +792,8 @@ class MultiHeadAttention(Module):
         the QKV linear layers for the output arrays.
       input_positions: Optional position indices of shape
         ``[batch_sizes..., length]`` forwarded to the ``attention_fn``.
-        Used by :func:`dot_product_attention_with_rope` for RoPE.
+        Used by :func:`dot_product_attention_with_rope` for RoPE. During
+        decode it defaults to the current cache index.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
@@ -867,6 +871,10 @@ class MultiHeadAttention(Module):
       self.cached_key[...] = key
       self.cached_value[...] = value
       self.cache_index[...] += 1
+      if input_positions is None and 'input_positions' in inspect.signature(
+        self.attention_fn
+      ).parameters:
+        input_positions = cur_index.astype(jnp.float32)[None]
       # causal mask for cached decoder self-attention:
       # our single query position should only attend to those key
       # positions that have already been generated and cached,
