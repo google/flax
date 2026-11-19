@@ -457,6 +457,26 @@ class TestDotProductAttentionValidation(parameterized.TestCase):
 
 
 class TestRoPE(absltest.TestCase):
+  def test_mha_decode_matches_full_forward(self):
+    """Each decoded token is rotated at its cache position, not position 0."""
+    x = jax.random.normal(jax.random.key(0), (1, 6, 16))
+    for cache_len in (6, 16):
+      model = nnx.MultiHeadAttention(
+        num_heads=2,
+        in_features=16,
+        decode=False,
+        rngs=nnx.Rngs(0),
+        attention_fn=functools.partial(
+          nnx.dot_product_attention_with_rope, rope=nnx.RoPE()
+        ),
+      )
+      full = model(x, is_causal=True)
+      model.init_cache((1, cache_len, 16))
+      steps = [model(x[:, t : t + 1], decode=True) for t in range(6)]
+      np.testing.assert_allclose(
+        jnp.concatenate(steps, axis=1), full, atol=1e-5
+      )
+
 
   def _math_rope(self, x_np, theta):
     """Apply RoPE using its mathematical definition (2D rotation per frequency band)."""
