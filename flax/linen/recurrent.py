@@ -1165,9 +1165,12 @@ class RNN(Module):
 
 def _select_last_carry(sequence: A, seq_lengths: jnp.ndarray) -> A:
   last_idx = seq_lengths - 1
+  # The carries are stacked along a leading time axis, followed by the batch
+  # axes, so pick time step `last_idx[b]` for every batch index `b`.
+  batch_idx = jnp.indices(jnp.shape(last_idx), sparse=True)
 
   def _slice_array(x: jnp.ndarray):
-    return x[last_idx, jnp.arange(x.shape[1])]
+    return x[(last_idx, *batch_idx)]
 
   return jax.tree_util.tree_map(_slice_array, sequence)
 

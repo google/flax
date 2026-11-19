@@ -221,6 +221,44 @@ class RNNTest(absltest.TestCase):
           carries_t_[batch_idx], carry_[batch_idx], rtol=1e-5
         )
 
+  def test_numerical_equivalence_with_mask_multiple_batch_dims(self):
+    batch_dims = (3, 3)
+    seq_len = 4
+    channels_in = 5
+    channels_out = 6
+
+    seq_lengths = jnp.array([[1, 4, 2], [3, 2, 4], [4, 1, 3]])
+    xs = jax.random.normal(
+      jax.random.key(1), (*batch_dims, seq_len, channels_in)
+    )
+
+    rnn = nn.RNN(nn.LSTMCell(channels_out), return_carry=True)
+    (carry, _), variables = rnn.init_with_output(
+      jax.random.key(0), xs, seq_lengths=seq_lengths
+    )
+
+    for c in carry:
+      self.assertEqual(c.shape, (*batch_dims, channels_out))
+
+    cell_carry = rnn.cell.initialize_carry(
+      jax.random.key(0), xs[..., 0, :].shape
+    )
+    cell_params = variables['params']['cell']
+    carries = []
+    for i in range(seq_len):
+      cell_carry, _ = rnn.cell.apply(
+        {'params': cell_params}, cell_carry, xs[..., i, :]
+      )
+      carries.append(cell_carry)
+
+    for b1 in range(batch_dims[0]):
+      for b2 in range(batch_dims[1]):
+        t = int(seq_lengths[b1, b2]) - 1
+        for carries_t_, carry_ in zip(carries[t], carry):
+          np.testing.assert_allclose(
+            carries_t_[b1, b2], carry_[b1, b2], rtol=1e-5
+          )
+
   def test_numerical_equivalence_single_batch(self):
     batch_size = 3
     seq_len = 4
