@@ -93,7 +93,7 @@ class TrainState(struct.PyTreeNode):
       and ``opt_state`` updated by applying ``grads``, and additional attributes
       replaced as specified by ``kwargs``.
     """
-    if OVERWRITE_WITH_GRADIENT in grads:
+    if not isinstance(grads, jax.Array) and OVERWRITE_WITH_GRADIENT in grads:
       grads_with_opt = grads['params']
       params_with_opt = self.params['params']
     else:
@@ -107,7 +107,7 @@ class TrainState(struct.PyTreeNode):
 
     # As implied by the OWG name, the gradients are used directly to update the
     # parameters.
-    if OVERWRITE_WITH_GRADIENT in grads:
+    if not isinstance(grads, jax.Array) and OVERWRITE_WITH_GRADIENT in grads:
       new_params = {
         'params': new_params_with_opt,
         OVERWRITE_WITH_GRADIENT: grads[OVERWRITE_WITH_GRADIENT],
