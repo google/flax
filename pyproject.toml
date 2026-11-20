@@ -75,6 +75,8 @@ testing = [
 docs = [
     "sphinx>=7.3,<8",
     "sphinx-book-theme",
+    "sphinx-collections",
+    "gitpython",
     "Pygments>=2.6.1",
     "ipykernel",
     "tqdm==4.67.1",
