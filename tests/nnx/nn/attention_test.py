@@ -567,6 +567,25 @@ class TestRoPE(absltest.TestCase):
     out_b = rope_b(x)
     self.assertFalse(jnp.allclose(out_a, out_b, atol=1e-3))
 
+  def test_batched_input_positions(self):
+    """Positions of shape (batch, seq_len) are applied per example."""
+    batch, seq_len, head_dim = 3, 6, 16
+    x = jax.random.normal(jax.random.key(3), (batch, seq_len, head_dim))
+    positions = jnp.stack([
+        jnp.arange(seq_len, dtype=jnp.float32),
+        jnp.arange(seq_len, dtype=jnp.float32) + 4.0,
+        jnp.array([0, 0, 1, 2, 3, 4], dtype=jnp.float32),
+    ])
+    rope = nnx.RoPE()
+
+    out = rope(x, positions)
+
+    self.assertEqual(out.shape, x.shape)
+    for b in range(batch):
+      np.testing.assert_allclose(
+          out[b], rope(x[b], positions[b]), atol=1e-6
+      )
+
   def test_relative_position_invariance(self):
     """Dot product of RoPE-rotated vectors depends only on relative position.
 
