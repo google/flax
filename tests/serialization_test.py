@@ -26,6 +26,7 @@ import optax
 import pytest
 from absl.testing import absltest, parameterized
 from jax import random
+from jax.extend import random as extend_random
 from jax.tree_util import Partial
 
 from flax import linen as nn
@@ -135,6 +136,54 @@ class SerializationTest(parameterized.TestCase):
     restored_box = serialization.from_state_dict(p, 123)
     expected_box = Box(value=123)
     self.assertEqual(restored_box, expected_box)
+
+  @parameterized.product(impl=['threefry2x32', 'rbg'], shape=[(), (2, 3)])
+  def test_dataclass_with_typed_prng_key(self, impl, shape):
+    @struct.dataclass
+    class WithKey:
+      key: jax.Array
+
+    saved = WithKey(random.split(random.key(42, impl=impl), shape))
+    target = WithKey(random.split(random.key(0, impl=impl), shape))
+    restored = serialization.from_bytes(target, serialization.to_bytes(saved))
+
+    self.assertEqual(restored.key.dtype, saved.key.dtype)
+    np.testing.assert_array_equal(
+      random.key_data(restored.key), random.key_data(saved.key)
+    )
+    self.assertIs(
+      serialization.from_state_dict(target, {'key': saved.key}).key, saved.key
+    )
+
+  def test_typed_prng_key_keeps_saved_implementation(self):
+    saved = random.key(42, impl='rbg')
+    target = random.key(0, impl='unsafe_rbg')
+    restored = serialization.from_bytes(target, serialization.to_bytes(saved))
+    self.assertEqual(restored.dtype, saved.dtype)
+    np.testing.assert_array_equal(
+      random.key_data(random.split(restored)),
+      random.key_data(random.split(saved)),
+    )
+
+  def test_unregistered_prng_implementation(self):
+    base = extend_random.threefry_prng_impl
+    impl = extend_random.define_prng_impl(
+      key_shape=base.key_shape,
+      seed=base.seed,
+      split=base.split,
+      random_bits=base.random_bits,
+      fold_in=base.fold_in,
+      name='test_unregistered',
+    )
+    with self.assertRaisesRegex(ValueError, 'JAX-registered PRNG'):
+      serialization.to_bytes(random.key(42, impl=impl))
+
+  def test_legacy_prng_key_stays_uint32(self):
+    saved = random.PRNGKey(42)
+    for target in (random.PRNGKey(0), random.key(0)):
+      restored = serialization.from_bytes(target, serialization.to_bytes(saved))
+      self.assertEqual(restored.dtype, saved.dtype)
+      np.testing.assert_array_equal(restored, saved)
 
   def test_model_serialization(self):
     rng = random.key(0)
