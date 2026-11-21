@@ -64,6 +64,12 @@ def _is_namedtuple(x):
   return isinstance(x, tuple) and hasattr(x, '_fields')
 
 
+def _is_prng_key(x):
+  return isinstance(x, jax.Array) and jax.dtypes.issubdtype(
+    x.dtype, jax.dtypes.prng_key
+  )
+
+
 def from_state_dict(target, state: dict[str, Any], name: str = '.'):
   """Restores the state of the given target using a state dict.
 
@@ -87,6 +93,8 @@ def from_state_dict(target, state: dict[str, Any], name: str = '.'):
   else:
     ty = type(target)
   if ty not in _STATE_DICT_REGISTRY:
+    if _is_prng_key(target) and isinstance(state, dict):
+      return jax.random.wrap_key_data(state['data'], impl=state['impl'])
     return state
   ty_from_state_dict = _STATE_DICT_REGISTRY[ty][1]
   with _record_path(name):
@@ -94,12 +102,22 @@ def from_state_dict(target, state: dict[str, Any], name: str = '.'):
 
 
 def to_state_dict(target) -> dict[str, Any]:
-  """Returns a dictionary with the state of the given target."""
+  """Returns a dictionary with the state of the given target.
+
+  Typed JAX PRNG keys store their registered implementation name and key data.
+  """
   if _is_namedtuple(target):
     ty = _NamedTuple
   else:
     ty = type(target)
   if ty not in _STATE_DICT_REGISTRY:
+    if _is_prng_key(target):
+      impl = jax.random.key_impl(target)
+      if not isinstance(impl, str):
+        raise ValueError(
+          'Serializing a PRNG key requires a JAX-registered PRNG implementation.'
+        )
+      return {'impl': impl, 'data': jax.random.key_data(target)}
     return target
 
   ty_to_state_dict = _STATE_DICT_REGISTRY[ty][0]
