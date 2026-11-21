@@ -68,11 +68,7 @@ def _compute_attention_masks(
       (0, jnp.maximum(time_step - seq_len + 1, 0)),
       (batch_size, max_seq_len),
   )
-  input_mask = (
-      jnp.zeros((batch_size, seq_len), dtype=jnp.bool_)
-      .at[:, :max_seq_len]
-      .set(input_mask)
-  )
+  input_mask = jnp.pad(input_mask, ((0, 0), (0, seq_len - max_seq_len)))
 
   causal_padding = jnp.logical_or(causal_padding, input_mask)
   attention_mask = causal_padding[:, jnp.newaxis, :].astype(jnp.bool_)
@@ -347,7 +343,17 @@ class Sampler:
           dtype=dtype,
       )
       if data_sharding is not None:
-        logits_buffer = jax.device_put(logits_buffer, data_sharding)
+        act_btd = self.transformer.shd_config.act_btd
+        vocab_sharding = (
+            act_btd[2] if act_btd is not None and len(act_btd) > 2 else None
+        )
+        logits_sharding = jax.sharding.NamedSharding(
+            data_sharding.mesh,
+            jax.sharding.PartitionSpec(
+                *data_sharding.spec, None, vocab_sharding
+            ),
+        )
+        logits_buffer = jax.device_put(logits_buffer, logits_sharding)
     else:
       logits_buffer = None
 

@@ -32,6 +32,8 @@ import numpy as np
 
 import sentencepiece as spm
 
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
+
 
 class MockVocab(spm.SentencePieceProcessor):
 
@@ -539,6 +541,56 @@ class SamplerTest(parameterized.TestCase):
     )
 
     self.assertTrue((attn_mask.squeeze(1) == expected_attn_mask).all())
+
+  def test_samples_with_explicit_mesh(self):
+    self.assertGreaterEqual(jax.device_count(), 4)
+    vocab = MockVocab()
+    num_layers = 1
+    shd_config = modules.ShardingConfig.fsdp_tp_sharding(
+        fsdp_axis_name='fsdp', tensor_parallel_axis_name='tensor'
+    )
+    transformer_config = transformer_lib.TransformerConfig(
+        num_layers=num_layers,
+        num_embed=vocab.GetPieceSize(),
+        embed_dim=8,
+        hidden_dim=16,
+        num_heads=4,
+        num_kv_heads=2,
+        head_dim=4,
+        final_logit_softcap=None,
+        attention_types=[modules.AttentionType.GLOBAL] * num_layers,
+        attn_logits_soft_cap=None,
+        use_post_attn_norm=False,
+        use_post_ffw_norm=False,
+        shd_config=shd_config,
+    )
+    mesh = jax.make_mesh(
+        (2, 2), ('fsdp', 'tensor'), (AxisType.Explicit, AxisType.Explicit)
+    )
+    data_sharding = jax.sharding.NamedSharding(
+        mesh, jax.sharding.PartitionSpec('fsdp')
+    )
+    with jax.set_mesh(mesh):
+      transformer = transformer_lib.Transformer(
+          transformer_config, rngs=nnx.Rngs(params=0)
+      )
+      sampler = sampler_lib.Sampler(
+          transformer=transformer,
+          vocab=vocab,
+          cache_size=8,
+      )
+      result = sampler(
+          ['input string', 'hello world'],
+          total_generation_steps=2,
+          return_logits=True,
+          data_sharding=data_sharding,
+      )
+      self.assertLen(result.text, 2)
+      self.assertLen(result.tokens, 2)
+      self.assertLen(result.logits, 2)
+      self.assertEqual(
+          np.asarray(result.logits).shape, (2, 2, vocab.GetPieceSize())
+      )
 
   @parameterized.parameters(
     {"url": "google/gemma/flax/2b"},
