@@ -400,7 +400,11 @@ class RoPE(Module):
     freqs = 1.0 / (
       self.theta ** (jnp.arange(0.0, embedding_size, 2) / embedding_size)
     )
-    freqs_outer = jnp.outer(input_positions, freqs)
+    # Use broadcasting rather than ``jnp.outer``, which flattens its inputs, so
+    # that batched positions of shape ``(..., seq_len)`` keep their leading
+    # dimensions: the result has shape ``(..., seq_len, embedding_size // 2)``.
+    freqs = jnp.reshape(freqs, (1,) * input_positions.ndim + freqs.shape)
+    freqs_outer = input_positions[..., None] * freqs
     return jnp.sin(freqs_outer), jnp.cos(freqs_outer)
 
   def __call__(self, x: Array, input_positions: Array | None = None) -> Array:
