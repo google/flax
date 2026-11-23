@@ -20,6 +20,7 @@ from typing import Any, Optional
 import jax
 from jax import core
 from jax import lax
+from jax.extend import core as jex_core
 from jax.extend import linear_util as lu
 from jax.interpreters import partial_eval as pe
 import jax.numpy as jnp
@@ -55,6 +56,52 @@ def build_shaped_array(x, batch_dim: bool = False) -> core.ShapedArray:
       **{k: getattr(x, k) for k in ["weak_type", "manual_type"]
          if hasattr(x, k)},
   )
+
+
+# Effects of ops that only observe values: jax.debug.*, checkify.check and
+# io_callback. jax does not export these types.
+_OBSERVER_EFFECTS = frozenset({
+    'DebugEffect',
+    'OrderedDebugEffect',
+    'ErrorEffect',
+    'IOEffect',
+    'OrderedIOEffect',
+})
+
+
+def _drop_effects(jaxpr: jex_core.Jaxpr) -> jex_core.Jaxpr:
+  """Erases observer effects from `jaxpr` and its sub-jaxprs.
+
+  DCE keeps every effectful equation, so a `jax.debug.print` or a
+  `checkify.check` that reads the carry would look like a data dependency of
+  the broadcast outputs. Without their effects, DCE removes such equations
+  unless their results are used. Effects that change state, like ref writes,
+  are kept.
+  """
+  if not jaxpr.effects:
+    return jaxpr
+
+  def keep(effects):
+    return frozenset(
+        e for e in effects if type(e).__name__ not in _OBSERVER_EFFECTS
+    )
+
+  def drop(param):
+    if isinstance(param, jex_core.Jaxpr):
+      return _drop_effects(param)
+    if type(param) is tuple and any(
+        isinstance(p, jex_core.Jaxpr) for p in param):
+      return tuple(drop(p) for p in param)  # e.g. cond branches
+    return param
+
+  eqns = [
+      eqn.replace(
+          params={k: drop(v) for k, v in eqn.params.items()},
+          effects=keep(eqn.effects),
+      )
+      for eqn in jaxpr.eqns
+  ]
+  return jaxpr.replace(eqns=eqns, effects=keep(jaxpr.effects))
 
 
 def scan(
@@ -183,7 +230,9 @@ def scan(
         lu.wrap_init(broadcast_body, debug_info=debug_info), in_tree
     )
     jaxpr, _, consts = pe.trace_to_jaxpr_dynamic(f_flat, in_avals)
-    jaxpr, used_inputs = pe.dce_jaxpr(jaxpr, [True] * len(jaxpr.outvars))
+    jaxpr, used_inputs = pe.dce_jaxpr(
+        _drop_effects(jaxpr), [True] * len(jaxpr.outvars)
+    )
     num_const_invars = len(used_inputs) - len(in_avals)
     used_consts, used_args = (used_inputs[:num_const_invars],
                               used_inputs[num_const_invars:])
