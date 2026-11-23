@@ -29,6 +29,7 @@ from flax.core import copy, freeze, AxisMetadata
 from flax.linen.transforms import _HashableProxy
 import jax
 from jax import random
+from jax.experimental import checkify
 import jax.numpy as jnp
 import numpy as np
 
@@ -2790,6 +2791,115 @@ class TransformTest(parameterized.TestCase):
     _ = model.init(random.key(0), jnp.ones((num_patterns, features,)))
     self.assertEqual(trace_counts[0], 2 if retracing_scan else 1)
     self.assertEqual(trace_counts[1], 2 if retracing_scan else 1)
+
+  @parameterized.product(
+      scan_kwargs=(
+          dict(variable_broadcast='params', split_rngs={'params': False}),
+          dict(variable_axes={'params': 0}, split_rngs={'params': True}),
+      ),
+      remat=(False, True),
+  )
+  def test_scan_effectful_body(self, scan_kwargs, remat):
+    # An effectful op that reads the carry is not a data dependency of the
+    # broadcast variables.
+    length = 4
+    hits = []
+
+    class Cell(nn.Module):
+      log: bool = False
+
+      @nn.compact
+      def __call__(self, c, x):
+        if self.log:
+          jax.debug.callback(lambda *args: hits.append(1), c, x)
+        h = nn.Dense(3)(c) + x
+        return jnp.tanh(h), h.sum(-1)
+
+    def make(log):
+      cell = nn.remat(Cell) if remat else Cell
+      return nn.scan(cell, length=length, **scan_kwargs)(log=log)
+
+    c0 = jnp.ones((2, 3))
+    xs = jnp.arange(length * 6, dtype=jnp.float32).reshape(length, 2, 3) / 10
+    key = random.key(0)
+    expected_vars = make(False).init(key, c0, xs)
+    expected = make(False).apply(expected_vars, c0, xs)
+
+    variables = make(True).init(key, c0, xs)
+    self.assertTrue(tree_allclose(variables, expected_vars))
+    hits.clear()
+    out = make(True).apply(variables, c0, xs)
+    jax.effects_barrier()
+    self.assertTrue(tree_allclose(out, expected))
+    self.assertLen(hits, length)
+
+  def test_scan_checkify_body(self):
+    length = 4
+
+    class Cell(nn.Module):
+
+      @nn.compact
+      def __call__(self, c, x):
+        h = nn.Dense(3)(c) + x
+        checkify.check(jnp.all(jnp.isfinite(c)), 'non-finite carry')
+        return h, h.sum(-1)
+
+    model = nn.scan(
+        Cell,
+        length=length,
+        variable_axes={'params': 0},
+        split_rngs={'params': True},
+    )()
+    c0 = jnp.ones((2, 3))
+    xs = jnp.ones((length, 2, 3))
+    err, variables = checkify.checkify(model.init)(random.key(0), c0, xs)
+    self.assertIsNone(err.get())
+    apply = checkify.checkify(model.apply)
+    err, _ = apply(variables, c0, xs)
+    self.assertIsNone(err.get())
+    err, _ = apply(variables, c0.at[0, 0].set(jnp.nan), xs)
+    self.assertIn('non-finite carry', err.get())
+
+  def test_rnn_with_callback_cell(self):
+    hits = []
+
+    class LoggingCell(nn.GRUCell):
+
+      @nn.compact
+      def __call__(self, carry, inputs):
+        carry, y = super().__call__(carry, inputs)
+        jax.debug.callback(lambda c: hits.append(1), carry)
+        return carry, y
+
+    xs = jnp.ones((2, 5, 3))
+    rnn = nn.RNN(LoggingCell(4))
+    variables = rnn.init(random.key(0), xs)
+    hits.clear()
+    out = rnn.apply(variables, xs)
+    jax.effects_barrier()
+    self.assertEqual(out.shape, (2, 5, 4))
+    self.assertLen(hits, 5)
+
+  @parameterized.parameters(False, True)
+  def test_scan_broadcast_depends_on_carry_still_raises(self, log):
+    # The effect must not hide a genuine dependency of a broadcast variable.
+    class Cell(nn.Module):
+
+      @nn.compact
+      def __call__(self, c, x):
+        if log:
+          jax.debug.callback(lambda *args: None, c)
+        w = self.param('w', lambda key: c.sum() * jnp.ones(()))
+        return c * w + x, ()
+
+    model = nn.scan(
+        Cell,
+        length=3,
+        variable_broadcast='params',
+        split_rngs={'params': False},
+    )()
+    with self.assertRaisesRegex(ValueError, 'data dependency'):
+      model.init(random.key(0), jnp.ones((2, 3)), jnp.ones((3, 2, 3)))
 
 
 if __name__ == '__main__':
