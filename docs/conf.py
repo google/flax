@@ -122,8 +122,15 @@ announcement = """
 </a>
 """
 
+# Read the Docs also builds release tags. Use the published notebook for that
+# version and keep the default for local builds and pull request previews.
+repository_branch = 'main'
+if os.environ.get('READTHEDOCS_VERSION_TYPE') in ('branch', 'tag'):
+  repository_branch = os.environ.get('READTHEDOCS_GIT_IDENTIFIER') or 'main'
+
 html_theme_options = {
   'repository_url': 'https://github.com/google/flax',
+  'repository_branch': repository_branch,
   'use_repository_button': True,  # add a 'link to repository' button
   'use_issues_button': False,  # add an 'Open an Issue' button
   'path_to_docs': (
