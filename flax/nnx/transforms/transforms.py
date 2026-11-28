@@ -599,8 +599,13 @@ def _get_cached_wrapper(
   """Returns a cached wrapper for ``(f, graph)``.
 
   Only weak-referenceable, hashable callables can be cached; other callables
-  fall back to a freshly constructed wrapper.
+  fall back to a freshly constructed wrapper. Bound methods are not cached:
+  every attribute access creates a new method object, so a cached wrapper could
+  only be reached through an equal method from an earlier call, and would
+  replay that call's trace with its Variable values baked in.
   """
+  if inspect.ismethod(f):
+    return wrapper_type(f, graph=graph)
   try:
     weakref.ref(f)
     hash(f)
@@ -613,7 +618,9 @@ def _get_cached_wrapper(
     cache[f] = by_graph
   wrapper = by_graph.get(graph)
   if wrapper is None:
-    wrapper = wrapper_type(f, graph=graph)
+    # Reference ``f`` weakly: a strong reference from the cached value would
+    # keep its own weak key, and everything ``f`` closes over, alive forever.
+    wrapper = wrapper_type(weakref.proxy(f), graph=graph)
     by_graph[graph] = wrapper
   return wrapper
 
@@ -629,10 +636,11 @@ def _get_simple_cond_fn(f: tp.Callable[..., tp.Any], graph: bool) -> SimpleCondF
   a given ``(f, graph)`` keeps a stable identity so repeated calls hit the
   cache.
 
-  ``f`` is held weakly so locally-defined branches stay collectable. Only
-  weak-referenceable, hashable callables can be cached. Callable instances whose
-  classes define ``__slots__`` must include ``'__weakref__'`` in ``__slots__``;
-  otherwise this function falls back to constructing a fresh wrapper.
+  ``f`` is held weakly so locally-defined branches stay collectable. Bound
+  methods and callables that are not weak-referenceable or hashable are not
+  cached. Callable instances whose classes define ``__slots__`` must include
+  ``'__weakref__'`` in ``__slots__``; otherwise this function falls back to
+  constructing a fresh wrapper.
   """
   return _get_cached_wrapper(_SIMPLE_COND_FN_CACHE, SimpleCondFn, f, graph)
 
