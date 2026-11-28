@@ -18,6 +18,7 @@ os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 from typing import Any
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -50,7 +51,7 @@ class _CustomMeta(struct.PyTreeNode, meta.AxisMetadata):
     return self
 
 
-class TestCompatibility(absltest.TestCase):
+class TestCompatibility(parameterized.TestCase):
   def setUp(self):
     super().setUp()
     dim1 = max(jax.device_count() // 2, 1)
@@ -149,6 +150,52 @@ class TestCompatibility(absltest.TestCase):
     self.assertEqual(nnx.state(model)['count'][...], 0)
     y = model(x, mutable=True)
     self.assertEqual(nnx.state(model)['count'][...], 1)
+
+  @parameterized.parameters(
+      dict(graph=True, graph_updates=True),
+      dict(graph=True, graph_updates=False),
+      dict(graph=False, graph_updates=False),
+  )
+  def test_linen_to_nnx_mutable_in_jit(self, graph, graph_updates):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Dense(4)(x)
+        return nn.BatchNorm(use_running_average=False, momentum=0.5)(x)
+
+    x = jax.random.normal(jax.random.key(0), (8, 3)) + 3.0
+    expected = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0)).lazy_init(x)
+    model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0)).lazy_init(x)
+    mean = model.BatchNorm_0['mean']
+
+    @nnx.jit(graph=graph, graph_updates=graph_updates)
+    def step(model, x):
+      return model(x, mutable=['batch_stats'])
+
+    for _ in range(2):
+      expected(x, mutable=['batch_stats'])
+      step(model, x)
+
+    self.assertIs(model.BatchNorm_0['mean'], mean)
+    np.testing.assert_allclose(
+        model.BatchNorm_0['mean'][...], expected.BatchNorm_0['mean'][...],
+        rtol=1e-6,
+    )
+
+  def test_linen_to_nnx_mutable_cached_partial(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.BatchNorm(use_running_average=False)(x)
+
+    x = jax.random.normal(jax.random.key(0), (8, 3)) + 3.0
+    model = bridge.ToNNX(Foo(), rngs=nnx.Rngs(0)).lazy_init(x)
+    step = nnx.cached_partial(
+        nnx.jit(lambda model, x: model(x, mutable=['batch_stats'])), model
+    )
+    step(x)
+    mean = model.BatchNorm_0['mean'][...]
+    self.assertGreater(float(jnp.abs(mean).sum()), 0.0)
 
   def test_linen_to_nnx_transform(self):
     class NNXOuter(nnx.Module):
