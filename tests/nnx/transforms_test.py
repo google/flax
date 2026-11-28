@@ -17,7 +17,9 @@ os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
 
 import dataclasses
 from functools import partial
+import gc
 import typing as tp
+import weakref
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -7186,6 +7188,80 @@ class TestCond(parameterized.TestCase):
       else:
         raise AssertionError(f'Unknown control flow: {control_flow}')
       self.assertEqual(trace_count, expected_trace_count)
+
+  @parameterized.named_parameters(
+    ('cond', 'cond'),
+    ('switch', 'switch'),
+    ('while_loop', 'while_loop'),
+    ('fori_loop', 'fori_loop'),
+  )
+  def test_control_flow_does_not_keep_branches_alive(self, control_flow):
+    def branch(*args):
+      return jnp.logical_not(args[-1])
+
+    branch_ref = weakref.ref(branch)
+    init_value = jnp.array(False)
+    if control_flow == 'cond':
+      nnx.cond(
+        jnp.array(True), branch, branch, init_value,
+        graph=False, graph_updates=False,
+      )
+    elif control_flow == 'switch':
+      nnx.switch(
+        jnp.array(0), (branch, branch), init_value,
+        graph=False, graph_updates=False,
+      )
+    elif control_flow == 'while_loop':
+      nnx.while_loop(
+        branch, branch, init_value, graph=False, graph_updates=False
+      )
+    else:
+      nnx.fori_loop(
+        0, 2, branch, init_value, graph=False, graph_updates=False
+      )
+    del branch
+    gc.collect()
+    self.assertIsNone(branch_ref())
+
+  @parameterized.product(
+    control_flow=['cond', 'switch', 'while_loop', 'fori_loop'],
+    graph=[True, False],
+  )
+  def test_control_flow_bound_methods_see_variable_updates(
+    self, control_flow, graph
+  ):
+    class Model(nnx.Module):
+      def __init__(self):
+        self.w = nnx.Param(jnp.array(1.0))
+
+      def scale(self, x):
+        return x * self.w[...]
+
+      def keep_going(self, carry):
+        return carry[0] < 3
+
+      def step(self, carry):
+        return carry[0] + 1, self.scale(carry[1])
+
+      def fori_step(self, i, x):
+        return self.scale(x)
+
+      def __call__(self, x):
+        kwargs = dict(graph=graph, graph_updates=False)
+        if control_flow == 'cond':
+          return nnx.cond(True, self.scale, self.scale, x, **kwargs)
+        elif control_flow == 'switch':
+          return nnx.switch(0, (self.scale, self.scale), x, **kwargs)
+        elif control_flow == 'while_loop':
+          carry = (jnp.array(0), x)
+          return nnx.while_loop(self.keep_going, self.step, carry, **kwargs)[1]
+        return nnx.fori_loop(0, 3, self.fori_step, x, **kwargs)
+
+    model = Model()
+    model(jnp.array(1.0))
+    model.w[...] = 2.0  # e.g. an optimizer step between two eager calls
+    expected = 2.0 if control_flow in ('cond', 'switch') else 8.0
+    np.testing.assert_allclose(model(jnp.array(1.0)), expected)
 
 
 class TestSwitch(parameterized.TestCase):
