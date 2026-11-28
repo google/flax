@@ -120,13 +120,6 @@ def to_nnx_var(col: str, x: meta.AxisMetadata | Any) -> variablelib.Variable:
   return vtype(x)
 
 
-def _recursive_merge(dict1, dict2):
-  """Recursively merge two dicts."""
-  flat_map = traversals.flatten_mapping(dict1)
-  flat_map |= traversals.flatten_mapping(dict2)
-  return traversals.unflatten_mapping(flat_map)
-
-
 def linen_vars_to_nnx_attrs(variables: tp.Mapping[str, Any]) -> dict[str, Any]:
   """Convert a dict of Linen-style variables to NNX variables."""
   nnx_vars = jax.tree_util.tree_map_with_path(

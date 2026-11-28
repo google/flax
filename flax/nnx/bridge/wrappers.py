@@ -229,18 +229,9 @@ class ToNNX(Module):
 
     # Split out the updates if `mutable` is passed into the Flax module
     if updates:
-      nnx_attrs = bv.linen_vars_to_nnx_attrs(updates)
-      # nnx.update(self, nnx_attrs)
-      # TODO(cgarciae): ideally we just do an update but currently dictionaries don't allow
-      # insertion of new keys, we need to enable this in NNX to simplify the code bellow
-      # to the simple nnx.update(self, nnx_attrs) above.
-      for attr_name, value in nnx_attrs.items():
-        if hasattr(self, attr_name) and isinstance(value, dict):
-          original_value = getattr(self, attr_name)
-          new_values = bv._recursive_merge(original_value, value)
-          setattr(self, attr_name, nnx.data(new_values))
-        else:
-          setattr(self, attr_name, nnx.data(value))
+      # Write into the existing Variables in place and only insert new ones,
+      # so transforms that track Variables by identity see the updates.
+      nnx.update(self, bv.linen_vars_to_nnx_attrs(updates))
 
     return out
 
